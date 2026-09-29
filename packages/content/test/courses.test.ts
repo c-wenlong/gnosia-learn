@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { loadCourses, loadTags, loadTopics, parseCourse } from "../src/index";
+import { isSourceUrl, loadCourses, loadTags, loadTopics, parseCourse } from "../src/index";
 import { courseYaml, makeFixture, tagsYaml, topicsYaml, type Fixture } from "./fixture";
 import { SEED } from "./seed";
 
@@ -146,10 +146,19 @@ describe("a course's cover:", () => {
     }
   });
 
+  it("takes as a source only an http(s) URL with a host written out", () => {
+    for (const url of ["https://unsplash.com/photos/a-b", "http://x.test:8080/p?q=1#h", "https://x"]) expect(isSourceUrl(url), url).toBe(true);
+    for (const url of ["https:///", "https:///x", "http://", "https://a b", "https://user@host/", "ftp://x.test", " https://x.test"]) {
+      expect(isSourceUrl(url), url).toBe(false);
+    }
+  });
+
   it("refuses a missing field, an unknown key and a source that is not a URL", () => {
     expect(() => parseCourse(withCover({ file: "xx1000.cover.png", photographer: "P", source: "https://x.test/p" }), "x")).toThrow(/licence/);
     expect(() => parseCourse(withCover({ file: "xx1000.cover.png", ...CREDIT, license: "typo" }), "x")).toThrow(/unknown key\(s\) license/);
-    expect(() => parseCourse(withCover({ file: "xx1000.cover.png", ...CREDIT, source: "example.com/p" }), "x")).toThrow(/http\(s\) URL/);
+    for (const source of ["example.com/p", "https:///", "https:///x", "https://a b", "ftp://x.test/p"]) {
+      expect(() => parseCourse(withCover({ file: "xx1000.cover.png", ...CREDIT, source }), "x"), source).toThrow(/http\(s\) URL/);
+    }
     expect(() => parseCourse(withCover(null), "x")).toThrow(/expected a mapping/);
   });
 });

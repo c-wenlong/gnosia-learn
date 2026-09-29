@@ -129,6 +129,23 @@ export function isCoverFile(name: string): boolean {
 const COVER_KEYS = new Set(["file", "photographer", "source", "licence"]);
 
 /**
+ * Whether a cover's `source` is a real http(s) URL: no whitespace, a host
+ * written out after the `//` (so `https:///` and `https:///x`, which a URL
+ * parser would read as a host named `x`, are refused), and one the WHATWG
+ * parser accepts with that host. The one rule for a source, shared by the
+ * course file's reader and `catalog course cover`.
+ */
+export function isSourceUrl(value: string): boolean {
+  if (!/^https?:\/\/[^/\s?#@]+(?:[/?#]\S*)?$/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname !== "";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A course's `cover:` mapping, or undefined when the file has none. The file
  * name is not free: it is the course code's, with a known image extension,
  * so a cover can only ever name the file beside its own course, and no path
@@ -154,7 +171,7 @@ function readCover(value: unknown, where: string, code: string): CourseCover | u
     throw new ContentError(`${at}: file "${file}" must be one of ${allowed.join(", ")}: the image beside this course's file`);
   }
   const source = requireText(raw.source, at, "source");
-  if (!/^https?:\/\/\S+$/.test(source)) {
+  if (!isSourceUrl(source)) {
     throw new ContentError(`${at}: source "${source}" must be an http(s) URL: the page the photo came from`);
   }
   return {

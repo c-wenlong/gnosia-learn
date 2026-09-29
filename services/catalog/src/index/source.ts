@@ -21,6 +21,7 @@ import type {
   SourceRepo,
 } from "@self-learn/schema";
 
+import type { CoverCredit } from "../content/cover-image";
 import type { ImportedLog } from "../content/session-logs";
 import type { Vocabulary } from "./vocabulary";
 
@@ -96,6 +97,14 @@ export interface IndexContext {
    * that has none.
    */
   knownDiagrams: () => Promise<ReadonlyMap<string, { svgBlobKey: string | null; svgDocumentHash: string | null }>>;
+  /**
+   * Each of the owner's courses that has a cover: its blob key and credit,
+   * by course id. The courses source reads it because a course file from
+   * before covers existed has no `cover:`, and must not take away a cover
+   * the database holds; one whose `cover:` differs is refused, as `course
+   * import` refuses it. Empty for a database with none, or before 0015.
+   */
+  knownCovers: () => Promise<ReadonlyMap<string, { key: string; credit: CoverCredit | null }>>;
 }
 
 /** Rows produced by one source, keyed by the table they belong in. */

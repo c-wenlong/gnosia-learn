@@ -1,16 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { Fragment, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { Placeholder } from "@/components/ui/Placeholder";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
+import { CourseCover } from "@/components/courses/CourseCover";
 import type { ItemStanding } from "@/lib/course-path";
 import {
   ALL_COURSES,
@@ -227,16 +226,7 @@ function CoverCard({ summary, line }: { summary: CourseSummary; line: string[] }
       )}
     >
       <div className="relative aspect-video w-full overflow-hidden rounded-lg">
-        {summary.cover !== null ? (
-          // Unoptimized: the cover route needs the session cookie, and Next's
-          // image optimizer fetches the source server-side without forwarding
-          // any header, so it would get the proxy's 401. The image is stored
-          // at the card's size already (960x540), so there is little to gain.
-          <Image src={summary.cover} alt="" fill unoptimized className="object-cover" />
-        ) : (
-          // No photo for this course yet; the code stands in for it.
-          <Placeholder label={summary.code} height="100%" className="rounded-none text-[13px]" />
-        )}
+        <CourseCover src={summary.cover} code={summary.code} />
       </div>
       <div className="flex flex-1 flex-col px-2 pt-2.5 pb-2">
         <p className="truncate text-[14px] leading-6 text-text">{partnerLine(summary)}</p>

@@ -24,6 +24,7 @@ export {
   coverFileName,
   courseFileName,
   isCoverFile,
+  isSourceUrl,
   loadCourses,
   parseCourse,
   type CourseCoverExtension,

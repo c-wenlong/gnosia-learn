@@ -1,4 +1,5 @@
 import { type BlobStore, key as blobKey } from "@self-learn/blob";
+import { isSourceUrl } from "@self-learn/content";
 import { collection, LOCAL_LEARNER_ID, type RevisionOp } from "@self-learn/schema";
 import { eq } from "drizzle-orm";
 
@@ -100,13 +101,7 @@ function checkCredit(credit: CoverCredit): CoverCredit {
     source: field(credit.source, "source"),
     licence: field(credit.licence, "licence"),
   };
-  let url: URL | null = null;
-  try {
-    url = new URL(out.source);
-  } catch {
-    url = null;
-  }
-  if (url === null || (url.protocol !== "https:" && url.protocol !== "http:") || /\s/.test(out.source)) {
+  if (!isSourceUrl(out.source)) {
     throw new CourseWriteError(`--source "${out.source}" must be an http(s) URL: the page the photo came from`);
   }
   return out;

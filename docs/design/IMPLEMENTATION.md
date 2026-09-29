@@ -655,8 +655,10 @@ cover`, services/catalog/SCHEMA.md "Course covers"), `getCourseCovers()` in
 loads it from `/api/courses/<slug>/cover?v=<hash>`, cached for good since the
 hash names the image. The `<Image>` is `unoptimized`: the route needs the
 session cookie, and Next's optimizer fetches its source without forwarding
-any header. A course with no photo, or a page that cannot read the covers,
-shows its code in a `Placeholder`.
+any header. A course with no photo, a page that cannot read the covers, or
+a photo that fails to load (a deployment without the blob store) shows its
+code in a `Placeholder` (`CourseCover`, which swaps on the image's `onError`
+inside the same 16:9 frame).
 
 | Where | Coursera | Built | Why |
 | --- | --- | --- | --- |

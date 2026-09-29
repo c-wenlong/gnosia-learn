@@ -86,7 +86,9 @@ never here. `course import` lists a new module under that topic's
 is a blob the course row names by key, with its credit in the row's metadata;
 the export writes the image beside the course file as `<code>.cover.<ext>`
 and names it here, and `catalog import <dir>` stores it back under the same
-key. The file name is the course code's and nothing else, and the reader
+key. An import sets a cover the course lacks and never changes one it has: a
+file with no `cover:` keeps the stored cover, and one whose `cover:` differs
+is refused by name. The file name is the course code's and nothing else, and the reader
 refuses any other, so no path is ever built out of what a file says.
 `course import` of a single file carries the cover over and refuses a
 `cover:` that differs from the course's; `catalog course cover` is the one

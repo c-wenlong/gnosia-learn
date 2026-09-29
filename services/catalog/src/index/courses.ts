@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { key as blobKey } from "@self-learn/blob";
@@ -14,7 +15,14 @@ import {
   type NewCurriculumItemTopic,
 } from "@self-learn/schema";
 
-import { CoverImageError, creditOf, readCoverImage } from "../content/cover-image";
+import {
+  type CoverCredit,
+  type CoverImage,
+  CoverImageError,
+  creditOf,
+  keyParts,
+  readCoverImage,
+} from "../content/cover-image";
 import { asIndexError } from "./content-errors";
 import { IndexError, IndexErrors } from "./errors";
 import { ASSET_PREFIX, type Indexer, type SourceBlob, type SourceRows } from "./source";
@@ -65,6 +73,14 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * `cover_blob_key` and carries the credit as `metadata.coverCredit`. An image
  * that is missing, is not a WebP, JPEG or PNG by its bytes, or is not the type
  * its name says, is refused by name, never skipped.
+ *
+ * **An import sets a cover the course lacks, and never changes one it has**
+ * (`knownCovers`), the rule `course import` keeps. A file with no `cover:`
+ * (an export from before covers, say) keeps the stored cover and credit, so
+ * importing an old archive takes no photo away. A `cover:` that names the
+ * stored cover exactly is carried over, its image optional; one that differs
+ * in its credit, its type or its bytes is refused by name, and `catalog course
+ * cover` is how a cover changes.
  */
 
 export { COURSES_DIR };
@@ -82,11 +98,12 @@ export const coursesIndexer: Indexer = {
   assetPrefix: ASSET_PREFIX.courses,
   root: () => COURSES_DIR,
 
-  read: async ({ repoRoot, vocabulary, knownConcepts, owner = LOCAL_LEARNER_ID }) => {
+  read: async ({ repoRoot, vocabulary, knownConcepts, knownCovers, owner = LOCAL_LEARNER_ID }) => {
     const courses = asIndexError(() =>
       loadCourses({ root: repoRoot, topics: vocabulary.entries }),
     );
     const concepts = await knownConcepts();
+    const covers = await knownCovers();
 
     const collections: NewCollection[] = [];
     const curriculumItems: NewCurriculumItem[] = [];
@@ -105,27 +122,44 @@ export const coursesIndexer: Indexer = {
 
     for (const course of courses) {
       const where = `${COURSES_DIR}/${course.code.toLowerCase()}.yaml`;
+      const stored = covers.get(course.id);
       let coverBlobKey: string | null = null;
-      if (course.cover !== undefined) {
+      let coverCredit: CoverCredit | null = null;
+      if (course.cover === undefined) {
+        // A file from before covers existed, or an export cut before this one
+        // was set: it says nothing about the cover, so the stored one stays.
+        if (stored !== undefined) ({ key: coverBlobKey, credit: coverCredit } = stored);
+      } else {
         const named = `${COURSES_DIR}/${course.cover.file}`;
+        const file = path.join(repoRoot, COURSES_DIR, course.cover.file);
+        const credit = creditOf(course.cover);
+        const differs = stored === undefined ? [] : coverDifferences(stored, course.cover.file, credit);
+        let image: CoverImage | null = null;
         try {
-          const image = await readCoverImage(path.join(repoRoot, COURSES_DIR, course.cover.file), named);
-          if (!course.cover.file.endsWith(`.${image.ext}`)) {
-            problems.add(`${where}: cover ${named} holds a ${image.ext.toUpperCase()} image; name it ${course.code.toLowerCase()}.cover.${image.ext}`);
-          } else {
-            coverBlobKey = blobKey(owner, image.sha256, image.ext);
-            blobs.push({
-              file: path.join(repoRoot, COURSES_DIR, course.cover.file),
-              ownerId: owner,
-              mime: image.mime,
-              ext: image.ext,
-              sha256: image.sha256,
-              bytes: image.bytes.length,
-            });
-          }
+          // A file that names the stored cover exactly may leave the image
+          // out; any other must carry it.
+          image = stored !== undefined && differs.length === 0 && !existsSync(file) ? null : await readCoverImage(file, named);
         } catch (error) {
           if (!(error instanceof CoverImageError)) throw error;
           problems.add(`${where}: its cover cannot be stored: ${error.message}`);
+        }
+        if (image !== null && !course.cover.file.endsWith(`.${image.ext}`)) {
+          problems.add(`${where}: cover ${named} holds a ${image.ext.toUpperCase()} image; name it ${course.code.toLowerCase()}.cover.${image.ext}`);
+          image = null;
+        }
+        const key = image === null ? null : blobKey(owner, image.sha256, image.ext);
+        if (stored !== undefined && key !== null && key !== stored.key) differs.push(`${named} is not the stored image`);
+        if (differs.length > 0) {
+          problems.add(
+            `${where}: its cover: is not course "${course.id}"'s cover in the catalog (${differs.join("; ")}). ` +
+              `An import does not change a cover; \`catalog course cover ${course.id}\` sets, replaces or clears it.`,
+          );
+        } else if (stored !== undefined) {
+          ({ key: coverBlobKey, credit: coverCredit } = stored);
+        } else if (image !== null && key !== null) {
+          coverBlobKey = key;
+          coverCredit = credit;
+          blobs.push({ file, ownerId: owner, mime: image.mime, ext: image.ext, sha256: image.sha256, bytes: image.bytes.length });
         }
       }
       collections.push({
@@ -149,7 +183,7 @@ export const coursesIndexer: Indexer = {
           capstone: course.capstone,
           // Only with a cover: a course without one keeps the metadata it
           // had before covers existed, so its snapshot does not move.
-          ...(coverBlobKey === null || course.cover === undefined ? {} : { coverCredit: creditOf(course.cover) }),
+          ...(coverBlobKey === null || coverCredit === null ? {} : { coverCredit }),
         },
         coverBlobKey,
       });
@@ -295,3 +329,14 @@ export const coursesIndexer: Indexer = {
     };
   },
 };
+
+/** How a file's `cover:` differs from the stored cover's type and credit. */
+function coverDifferences(stored: { key: string; credit: CoverCredit | null }, file: string, credit: CoverCredit): string[] {
+  const out: string[] = [];
+  const { ext } = keyParts(stored.key);
+  if (!file.endsWith(`.${ext}`)) out.push(`the stored image is a .${ext}, not ${file}`);
+  for (const field of ["photographer", "source", "licence"] as const) {
+    if (stored.credit?.[field] !== credit[field]) out.push(`${field} is ${JSON.stringify(stored.credit?.[field] ?? null)}`);
+  }
+  return out;
+}

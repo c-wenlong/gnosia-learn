@@ -627,7 +627,10 @@ In the export a cover is `content/courses/<code>.cover.<ext>` beside the
 course file, which names it under `cover:` with the credit. `catalog import
 <dir>` stores it as a blob before the rows, as the diagrams source stores an
 SVG, and refuses by name a cover that is missing, not an image, or not the
-type its name says. `course import` of one file carries the cover over and
+type its name says. It sets a cover the course lacks and never changes one it
+has: a file with no `cover:` (an export from before covers) keeps the stored
+cover and credit with no revision, and a `cover:` whose credit, type or bytes
+differ from the stored cover is refused by name. `course import` of one file carries the cover over and
 refuses a `cover:` that differs from the course's.
 
 ### The mirror ledger

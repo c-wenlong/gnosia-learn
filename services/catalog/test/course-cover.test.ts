@@ -327,7 +327,9 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
       /over the \d+-byte cap/,
     );
     await refuse({ course: "cp4284", set: cover(path.join(files, "missing.webp")), reason: REASON }, /no such file/);
-    await refuse({ course: "cp4284", set: cover(png, { source: "unsplash.com/photo" }), reason: REASON }, /must be an http\(s\) URL/);
+    for (const source of ["unsplash.com/photo", "https:///", "https:///photos/x", "ftp://unsplash.com/p"]) {
+      await refuse({ course: "cp4284", set: cover(png, { source }), reason: REASON }, /must be an http\(s\) URL/);
+    }
     await refuse({ course: "cp4284", set: cover(png, { photographer: " " }), reason: REASON }, /needs --photographer/);
     await refuse({ course: "cp4284", set: cover(png), reason: " " }, /needs a --reason/);
     await refuse({ course: "zz9999", set: cover(png), reason: REASON }, /no course "zz9999"/);
@@ -404,22 +406,72 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
     expect((await parity(second.db, out, ["courses"])).clean).toBe(true);
   });
 
-  it("refuses a tree whose cover is missing, is not an image, or is not the type its name says, writing nothing", async () => {
+  /** Revisions of the course itself: a kept cover appends none. */
+  const courseRevisions = async (db: Scratch) =>
+    (
+      await db.db.execute<{ n: number }>(
+        sql`select count(*)::int as n from content_revision where entity_type = 'collection' and entity_id = 'cp4284'`,
+      )
+    ).rows[0]?.n ?? 0;
+  /** A copy of the export in `bad`, with `edit` applied to its course file. */
+  const variant = async (edit: (yaml: string) => string) => {
+    await rm(bad, { recursive: true, force: true });
     await cp(out, bad, { recursive: true });
-    const image = path.join(bad, "content/courses/cp4284.cover.webp");
-    const before = await second.db.execute(sql`select count(*)::int as n from content_revision`);
+    const yaml = path.join(bad, "content/courses/cp4284.yaml");
+    await writeFile(yaml, edit(await readFile(yaml, "utf8")), "utf8");
+    return path.join(bad, "content/courses/cp4284.cover.webp");
+  };
+  const importBad = (db: Scratch) => runIndex(db.db, { repoRoot: bad, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
+  const noCoverBlock = (yaml: string) => yaml.replace(/^cover:\n(?: {2}.*\n)+/m, "");
+
+  it("keeps the stored cover when the tree has no cover: (an export from before covers), appending no revision", async () => {
+    const image = await variant(noCoverBlock);
+    await rm(image);
+    const before = await coverOf(second);
+    const revisions = await courseRevisions(second);
+    await importBad(second);
+    expect(await coverOf(second)).toEqual(before);
+    expect((before?.metadata as { coverCredit?: unknown }).coverCredit).toEqual(CREDIT);
+    expect(await courseRevisions(second)).toBe(revisions);
+  });
+
+  it("keeps it too for a cover: naming it exactly with the image left out", async () => {
+    await rm(await variant((yaml) => yaml));
+    const revisions = await courseRevisions(second);
+    await importBad(second);
+    expect((await coverOf(second))?.key).toBe(await key());
+    expect(await courseRevisions(second)).toBe(revisions);
+  });
+
+  it("refuses by name a cover: that differs from the stored one, or an image that is not the stored image, writing nothing", async () => {
+    const revisions = await second.db.execute(sql`select count(*)::int as n from content_revision`);
     const refused = async (pattern: RegExp) => {
-      await expect(runIndex(second.db, { repoRoot: bad, only: [...SOURCES], manimkcRoot: NO_MANIMKC })).rejects.toThrow(pattern);
+      await expect(importBad(second)).rejects.toThrow(pattern);
     };
 
-    await rm(image);
-    await refused(/cp4284\.yaml: its cover cannot be stored: content\/courses\/cp4284\.cover\.webp: no such file/);
-    await writeFile(image, "a text file where a photo should be");
-    await refused(/not a WebP, JPEG or PNG/);
-    await writeFile(image, PNG);
+    await variant((yaml) => yaml.replace(CREDIT.photographer, "Someone Else"));
+    await refused(/cp4284\.yaml: its cover: is not course "cp4284"'s cover in the catalog \(photographer is "Brecht Corbeel/);
+    await writeFile(await variant((yaml) => yaml), Buffer.concat([await readFile(COVER), Buffer.from("another photo")]));
+    await refused(/is not the stored image\). An import does not change a cover; `catalog course cover cp4284`/);
+    await writeFile(await variant((yaml) => yaml), "a text file where a photo should be");
+    await refused(/its cover cannot be stored: .*not a WebP, JPEG or PNG/);
+    await writeFile(await variant((yaml) => yaml), PNG);
     await refused(/holds a PNG image; name it cp4284\.cover\.png/);
 
-    expect((await second.db.execute(sql`select count(*)::int as n from content_revision`)).rows).toEqual(before.rows);
+    expect((await second.db.execute(sql`select count(*)::int as n from content_revision`)).rows).toEqual(revisions.rows);
     expect((await coverOf(second))?.key).toBe(await key());
+  });
+
+  it("refuses a tree naming a cover the course lacks when the image is missing", async () => {
+    const third = await createScratchDatabase();
+    try {
+      await applyMigrations(third.db);
+      await rm(await variant((yaml) => yaml));
+      await expect(importBad(third)).rejects.toThrow(
+        /cp4284\.yaml: its cover cannot be stored: content\/courses\/cp4284\.cover\.webp: no such file/,
+      );
+    } finally {
+      await third.drop();
+    }
   });
 });

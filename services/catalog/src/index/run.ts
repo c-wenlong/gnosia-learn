@@ -1,5 +1,6 @@
 import {
   asset,
+  collection,
   concept,
   type ContentType,
   curriculumItem,
@@ -11,7 +12,7 @@ import {
   type SourceRepo,
 } from "@self-learn/schema";
 import { loadCourses } from "@self-learn/content";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -20,6 +21,7 @@ import type { BlobStore } from "@self-learn/blob";
 
 import { openBlobStore, uploadBlob } from "../content/blob";
 import { unhookPosters } from "../content/asset-upload";
+import { type CoverCredit, storedCredit } from "../content/cover-image";
 import { blobContractInForce } from "../content/blob-contract";
 import { databaseIdentity, recordRoot } from "../content/import-root";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
@@ -29,6 +31,7 @@ import { renderType } from "../content/export";
 import { readTopicEntries } from "../content/topics";
 import { CLI_OWNER } from "../content/scope";
 import type { CatalogDatabase } from "../db";
+import { sqlstate } from "../state/errors";
 import { MANIMKC_DIR, MANIMKC_ROOT_ENV, REPO_ROOT, resolveManimkcRoot } from "../env";
 import { conceptsIndexer } from "./concepts";
 import { asIndexError } from "./content-errors";
@@ -378,6 +381,7 @@ export async function runIndex(
   let curriculumCache: Promise<ReadonlySet<string>> | null = null;
   const assetCache = new Map<SourceRepo, Promise<ReadonlyMap<string, string>>>();
   let diagramCache: ReturnType<IndexContext["knownDiagrams"]> | null = null;
+  let coverCache: ReturnType<IndexContext["knownCovers"]> | null = null;
 
   const context: IndexContext = {
     repoRoot,
@@ -417,6 +421,10 @@ export async function runIndex(
         .where(eq(diagram.ownerId, owner))
         .then((rows) => new Map(rows.map((r) => [r.slug, { svgBlobKey: r.svgBlobKey, svgDocumentHash: r.svgDocumentHash }])));
       return diagramCache;
+    },
+    knownCovers: () => {
+      coverCache ??= storedCovers(db, owner);
+      return coverCache;
     },
     knownAssets: (sourceRepo) => {
       let cached = assetCache.get(sourceRepo);
@@ -749,4 +757,25 @@ async function editedExport(
     `Apply the change through the catalog's ${type} command, which records who made it and why, ` +
     `then \`catalog export --only ${type} --out ${root}\` rewrites these files; or discard the edit.`
   );
+}
+
+/**
+ * The owner's course covers as the rows hold them, for the courses source
+ * (`IndexContext.knownCovers`). A database from before 0015 has no column,
+ * and so no covers (undefined_column).
+ */
+async function storedCovers(
+  db: CatalogDatabase,
+  owner: string,
+): Promise<ReadonlyMap<string, { key: string; credit: CoverCredit | null }>> {
+  try {
+    const rows = await db
+      .select({ id: collection.id, key: collection.coverBlobKey, metadata: collection.metadata })
+      .from(collection)
+      .where(and(eq(collection.ownerId, owner), eq(collection.kind, "course"), isNotNull(collection.coverBlobKey)));
+    return new Map(rows.map((row) => [row.id, { key: row.key as string, credit: storedCredit(row.metadata) }] as const));
+  } catch (error) {
+    if (sqlstate(error) === "42703") return new Map();
+    throw error;
+  }
 }
