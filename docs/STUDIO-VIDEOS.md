@@ -1588,17 +1588,28 @@ shipping loop in the root [`AGENTS.md`](../AGENTS.md), and an independent
 security review on every PR that touches the sandbox, the wrapper or the
 permission file. Status key: `[ ]` not started, `[x]` done.
 
-### Phase 0. Three small manimkc PRs
+### Phase 0. Small manimkc PRs
 
-- [ ] `assemble.sh` makes its temporary directory under `$TMPDIR`
-- [ ] `lib/narration.py` treats an unreadable `.env` as absent
-- [ ] `manimkc lint` refuses a `voiceover` whose argument is not a
+- [x] `assemble.sh` makes its temporary directory under `$TMPDIR`
+- [x] `lib/narration.py` treats an unreadable `.env` as absent
+- [x] `manimkc lint` refuses a `voiceover` whose argument is not a
       double-quoted string literal, the form the narration step reads
-- [ ] The submodule pointer bumped here (Workflow 1 of the root `AGENTS.md`)
+- [x] Found while measuring: two parallel renders of the same new `Text` on a
+      fresh ManimGL cache collided on one temporary SVG and could cache an
+      empty one, failing every later render of that string. Every render now
+      gets a `TMPDIR` of its own, and an SVG is validated before it is cached
+- [x] The submodule pointer bumped here (Workflow 1 of the root `AGENTS.md`)
 
 Done when: the ssh-tunnels topic previews and builds inside the measured
 profile with no directory other than `render/` writable, and manimkc's
 `make test` is green.
+
+Done 2026-09-29, in manimkc#31 and manimkc#32. Four fresh sandboxed previews
+of ssh-tunnels all passed (16 to 24 s, no failed scene, no retry, no cache
+entry that is not an SVG), and the sandboxed 1080p build joined 58 s of
+video. A shell write anywhere but `render/` was refused under the same
+profile. manimkc's `make test` is green. The job wrapper has to pass
+`build --no-register`, since a job checkout has no `README.md` (phase 1).
 
 ### Phase 1. The runner half
 
