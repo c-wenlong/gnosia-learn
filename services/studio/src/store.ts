@@ -272,12 +272,45 @@ const atomicWrite = async (file: string, body: string): Promise<void> => {
  * every one of these is terminal. One line here rather than a defensive read
  * at each of the surfaces. Caught by Greptile on the phase 7 PR.
  */
-function normalise(record: JobRecord): JobRecord {
+function normalise<R extends StoredRecord>(record: R): R {
   return { ...record, costSource: record.costSource ?? null, draftId: record.draftId ?? null };
 }
 
-export class JobStore {
-  private readonly records = new Map<string, JobRecord>();
+/**
+ * What the store itself reads off a record, whatever kind of job it is.
+ *
+ * The store keeps one kind of job: the diagram runner's `JobRecord`, or the
+ * video runner's (`video/types.ts`). Both live under `jobs/<id>/`, and each
+ * store loads only the records of its own kind, so a diagram queue never
+ * claims a video job and the other way round (D43 of docs/STUDIO-VIDEOS.md:
+ * two runners, one process, separate queues).
+ */
+export interface StoredRecord {
+  id: string;
+  kind: string;
+  state: JobState;
+  targetPath: string;
+  idempotencyKey: string;
+  requestedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  costUsd: number | null;
+  costSource: CostSource | null;
+  draftId?: string | null;
+  catalogErrors: string[];
+}
+
+export class RecordStore<R extends StoredRecord> {
+  /**
+   * The kind of job this store holds. `load` skips every other kind, and a
+   * record written by a build from before the video kind had `kind:
+   * "diagram"` anyway.
+   */
+  readonly kind: string;
+  constructor(kind: string) {
+    this.kind = kind;
+  }
+  private readonly records = new Map<string, R>();
   private readonly streams = new Map<string, Stream>();
   /**
    * One write at a time per record, chained.
@@ -291,14 +324,14 @@ export class JobStore {
    */
   private readonly writes = new Map<string, Promise<void>>();
   /** Told whenever a job's state changes, after the record carrying it is written. */
-  private readonly stateListeners = new Set<(record: JobRecord, from: JobState) => void>();
+  private readonly stateListeners = new Set<(record: R, from: JobState) => void>();
 
   /**
    * Hear every state change, after `job.json` holds it. The drafts use this to
    * follow their newest job (`drawing` follows the job), without the runner
    * and the review verbs each having to remember to tell them.
    */
-  onStateChange(listener: (record: JobRecord, from: JobState) => void): () => void {
+  onStateChange(listener: (record: R, from: JobState) => void): () => void {
     this.stateListeners.add(listener);
     return () => this.stateListeners.delete(listener);
   }
@@ -315,7 +348,8 @@ export class JobStore {
     for (const entry of entries) {
       try {
         const raw = await readFile(jobJsonPath(entry), "utf8");
-        const record = normalise(JSON.parse(raw) as JobRecord);
+        const record = normalise(JSON.parse(raw) as R);
+        if ((record.kind ?? "diagram") !== this.kind) continue;
         this.records.set(record.id, record);
       } catch {
         // A directory with no readable job.json is a workspace that was created
@@ -325,7 +359,7 @@ export class JobStore {
     }
   }
 
-  async create(record: JobRecord): Promise<JobRecord> {
+  async create(record: R): Promise<R> {
     await mkdir(scratchDir(record.id), { recursive: true });
     await mkdir(tmpDir(record.id), { recursive: true });
     this.records.set(record.id, record);
@@ -333,7 +367,7 @@ export class JobStore {
     return record;
   }
 
-  get(id: string): JobRecord | undefined {
+  get(id: string): R | undefined {
     return this.records.get(id);
   }
 
@@ -352,7 +386,7 @@ export class JobStore {
   }
 
   /** Newest first, which is the order every list in the UI wants. */
-  list(filter: { state?: string; limit?: number } = {}): JobRecord[] {
+  list(filter: { state?: string; limit?: number } = {}): R[] {
     const all = [...this.records.values()]
       .filter((record) => filter.state === undefined || record.state === filter.state)
       .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
@@ -360,7 +394,7 @@ export class JobStore {
   }
 
   /** Every job holding the lease on a committed path: queued, running, awaiting. */
-  activeOn(targetPath: string): JobRecord | undefined {
+  activeOn(targetPath: string): R | undefined {
     return [...this.records.values()].find(
       (record) =>
         record.targetPath === targetPath &&
@@ -368,11 +402,11 @@ export class JobStore {
     );
   }
 
-  byIdempotencyKey(key: string): JobRecord | undefined {
+  byIdempotencyKey(key: string): R | undefined {
     return [...this.records.values()].find((record) => record.idempotencyKey === key);
   }
 
-  async update(id: string, patch: Partial<JobRecord>): Promise<JobRecord> {
+  async update(id: string, patch: Partial<R>): Promise<R> {
     const record = this.records.get(id);
     if (record === undefined) throw new Error(`no job ${id}`);
     const next = { ...record, ...patch };
@@ -384,7 +418,7 @@ export class JobStore {
     return next;
   }
 
-  private async persist(record: JobRecord): Promise<void> {
+  private async persist(record: R): Promise<void> {
     const body = `${JSON.stringify(record, null, 1)}\n`;
     const previous = this.writes.get(record.id) ?? Promise.resolve();
     const next = previous
@@ -404,7 +438,7 @@ export class JobStore {
   async noteCatalogError(id: string, message: string): Promise<void> {
     const record = this.records.get(id);
     if (record === undefined) return;
-    await this.update(id, { catalogErrors: [...record.catalogErrors, message].slice(-20) });
+    await this.update(id, { catalogErrors: [...record.catalogErrors, message].slice(-20) } as Partial<R>);
   }
 
   /* ------------------------------------------------------------------ */
@@ -493,5 +527,12 @@ export class JobStore {
     const start = Math.max(0, Math.min(from, all.length));
     const lines = all.slice(start, start + limit);
     return { lines, from: start, next: start + lines.length, total: all.length };
+  }
+}
+
+/** The diagram runner's store: `RecordStore` over `JobRecord`, kind `diagram`. */
+export class JobStore extends RecordStore<JobRecord> {
+  constructor() {
+    super("diagram");
   }
 }

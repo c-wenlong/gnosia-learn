@@ -117,7 +117,7 @@ path, the cost meter and the cap.
 | Agent's one command | `npm run --silent canvas` | the job's own wrapper, `jobs/<id>/bin/video` (D45) |
 | Where agent-written code runs | nowhere: a snippet runs in tldrawkc's browser page | inside a per-job OS sandbox (D44) |
 | Workspace | `jobs/<id>/candidate/`, `scratch/` | `jobs/<id>/checkout/` (a synthetic manimkc checkout) and `render/` (D46) |
-| Timers | 15 min attempt, 45 min job, 5 min idle | one hang timer: 20 min with no agent output and no file written under `render/` (a guess); no attempt or job timer (D54) |
+| Timers | 15 min attempt, 45 min job, 5 min idle | one hang timer: 20 min with no agent output, no wrapper call ending and none running (a guess); no attempt or job timer (D54, amended) |
 | Gate | candidate, inspect, elements and relations, topic, export, verify | source, lint, script and labels, topic, the finished video, sync, length, poster, looked; it reads the agent's build and renders nothing itself |
 | Model and effort | the brief's `model`, `sonnet` by default | the settings panel, the owner's Claude Code default by default (D53) |
 | Accept | `catalog diagram put --job` | `catalog video put --job` |
@@ -149,7 +149,7 @@ bare tool name anywhere). What differs:
 
 | Tool | Allowed | Why |
 | --- | --- | --- |
-| Bash | exactly one prefix, `Bash(<abs>/jobs/<id>/bin/video:*)`, and the diagram agent's deny list (`cat`, `head`, `ls`, `python3`, `curl`, `git` and the rest), which is what reaches inside a command substitution | The wrapper is the only way to run anything, and it is written per job with the job's paths inside it, so the agent cannot point it at another job |
+| Bash | exactly one prefix, `Bash(<abs>/jobs/<id>/bin/video:*)`, the diagram agent's deny list (`cat`, `head`, `ls`, `python3`, `curl`, `git` and the rest), and a `PreToolUse` hook, `jobs/<id>/bin/bash-guard.cjs`, that refuses any command other than the wrapper's absolute path followed by plain words (`[A-Za-z0-9_.-]`, space-separated). The hook exits 2 to refuse, and on anything it cannot parse | The wrapper is the only way to run anything, and it is written per job with the job's paths inside it, so the agent cannot point it at another job. The hook exists because the matcher's splitting is not a contract and the deny list names spellings, not behaviour. Measured on CLI 2.1.274 with a headless session under these rules and no hook: `<wrapper> lint $(cat <secret>)` was refused by the deny list; `$(/bin/cat …)`, `$(grep …)`, backticks, `<( )`, `;`, `&&`, `\|\|`, a newline, and bare `/bin/cat` or `grep` on a file outside the topic folder all needed approval nobody can give, so were refused; **`<wrapper> lint \| base64` ran**, since the CLI counts a pipe into a read-only command as safe. With the hook, all twelve of those were refused and `<wrapper> lint` still ran. The hook loads from the `--settings` file under `--setting-sources ""` (measured). The diagram agent has no hook; its rules are unchanged |
 | Edit | the scene file, `jobs/<id>/checkout/topics/studio/<slug>/<slug>.py`, and nothing else | `topic.yml` is written by the runner and checked by the gate; `lib/` is a copy the render reads, not a place to fix things |
 | Read | the topic directory, which is its working directory; the checkout's `lib/` copy and `jobs/<id>/render/out/` (the contact sheets), its two `--add-dir`s; and the brief's source note, if any. `blockReadsOutsideWorkingDirectories` is on | It has to look at its sheets; it may read the helpers it calls. The diagram agent runs from the repository root, which leaves the whole repository readable to its Read tool; the video agent does not |
 | WebFetch, WebSearch | denied as whole tools | Clean room, as manimkc's own server rule |
@@ -217,25 +217,19 @@ allows what a render was measured to need. The one measured on 2026-09-29:
 (deny file-read* (subpath "<home>") (subpath "/opt/homebrew/var")
                  (subpath "/usr/local/var") (subpath "/Volumes")
                  (subpath "/private/tmp") (subpath "/private/var/folders")
-                 (subpath "/private/var/tmp"))
+                 (subpath "/private/var/tmp") (subpath "<studio home>")
+                 (subpath "<studio home>/jobs"))
 (allow file-read* (subpath "<manimkc>/manim") (subpath "<manimkc>/.venv")
                   (subpath "<manimkc>/.venv-tts") (subpath "<manimkc>/tools")
                   (subpath "<job>/checkout") (subpath "<job>/render"))
-(allow file-read-metadata)
+(allow file-read-metadata                ; only the directories on the way down
+  (literal "<job>") (literal "<studio home>/jobs") (literal "<home>") ...)
 (allow file-write* (subpath "<job>/render") (literal "/dev/null")
                    (literal "/dev/dtracehelper"))
 (deny file-write-create (vnode-type SYMLINK))
 (allow file-ioctl) (allow sysctl-read) (allow process-info* (target self))
 (allow iokit-open) (allow iokit-get-properties)
-(allow mach-lookup)                      ; Metal and the font system need services nobody has listed
-(deny mach-lookup (global-name "com.apple.dnssd.service")
-                  (global-name "com.apple.pasteboard.1")
-                  (global-name "com.apple.SecurityServer")
-                  (global-name "com.apple.securityd.xpc")
-                  (global-name "com.apple.security.agent")
-                  (global-name "com.apple.coreservices.launchservicesd")
-                  (global-name "com.apple.lsd.mapdb")
-                  (global-name "com.apple.lsd.modifydb"))
+(allow mach-lookup (global-name "com.apple.MTLCompilerService"))   ; the only one
 (allow ipc-posix-shm*) (allow ipc-posix-sem)
 (allow signal (target same-sandbox))
 (allow user-preference-read) (allow system-fsctl)
@@ -291,7 +285,9 @@ processes' information) are in the profile above:
 | Create a hard link in `render/` to a file outside it | blocked |
 | List `/private/tmp/claude-501/`, where every Claude session keeps its scratchpad and saved tool output | **allowed** until the temporary-directory denies, blocked with them |
 | List the per-user `/var/folders` temporary directory | **allowed** until the same denies, blocked with them |
-| Read another process's arguments and environment (`KERN_PROCARGS2`) | blocked |
+| A background `NSURLSession` to a loopback server, through the Objective-C runtime from `ctypes` (review of #201) | **allowed** while `mach-lookup` was a deny list: `nsurlsessiond` fetched the URL outside the sandbox, from the render and the narration profile both. Blocked since `mach-lookup` became an allowlist (render: Metal's shader compiler; narrate and gate: nothing). The suite runs it unsandboxed first, to prove it reaches the server, then under each profile |
+| `stat` a file in the home directory (`~/.claude.json`): whether it exists, its size, when it changed | **allowed** under a filterless `(allow file-read-metadata)`; blocked since that rule names only the directories above what a profile may read |
+| Read another process's arguments and environment (`KERN_PROCARGS2`) | blocked through `ps` (refused at exec); **allowed** when the scene calls the sysctl itself through `ctypes`, measured in phase 1 (see "What is not covered") |
 | Signal the process that started it | blocked |
 
 **Measured: the sandbox costs nothing once one cache is moved.** The first
@@ -346,13 +342,42 @@ PR (phase 0) rather than worked around in the studio:
 
 **What is not covered, named rather than hidden.**
 
-- `mach-lookup` is allowed except for the services named, because Metal and
-  the font system use services nobody has listed. A scene that speaks XPC
-  through `ctypes` could reach a service not on the list. That is the one
-  place the profile trusts a deny list, and phase 3 may narrow it to an
-  allowlist taken from a traced render, if Metal still finds its adapter. The
-  owner's rule is parity with a hand-run session, which has no sandbox at
-  all, so this is not a blocker.
+- `mach-lookup` is an allowlist, taken from a traced run of every step a job
+  takes under `(allow mach-lookup (with report))` and cut to what still
+  renders: Metal's shader compiler for the render profile, nothing for
+  narration or the gate. The first version allowed every service but eight,
+  and a background `NSURLSession` reached a loopback server through
+  `nsurlsessiond` (the review of #201); `cfprefsd`, `coreservicesd`,
+  LaunchServices, `notification_center`, distributed notifications,
+  `configd`, `trustd` and the rest are refused now, measured to cost nothing
+  but a log line. Metal's compiler keeps its shader cache in the per-user
+  cache directory, so a scene can leave compiled shaders there; they stay on
+  the machine. A macOS release whose Metal needs another service shows up as
+  the doctor's fixture failing to render, which answers 503 rather than
+  rendering with more open.
+- **Another process's arguments and environment.** Measured in phase 1: a
+  scene that calls the sysctl `KERN_PROCARGS2` through `ctypes` reads the
+  argv and environment of any process running as this user, other Claude
+  Code sessions included, whose environment names an OAuth token. No
+  Seatbelt rule found blocks it on 26.5.2: `sysctl-name` filters (by name,
+  prefix or pattern), a `sysctl-read` allowlist of five names, and denies of
+  `process-info*`, `system-info` and the task-port operations all leave it
+  readable; denying every sysctl stops Python starting. Like the read deny
+  list below, what it reads has no way out but the video, the render logs
+  and the agent's context, but it is a live credential rather than a file.
+  That reasoning holds only while nothing else carries data out: no socket,
+  no program outside the exec list, and no Mach service that talks to the
+  network on the scene's behalf. The last was open until the review of #201
+  found `nsurlsessiond`; the allowlist closed it, and the suite's background
+  `NSURLSession` probe keeps it closed.
+  *Decided 2026-09-29 by the owner:* accepted for v1 as documented, like the
+  other deny-list gaps. Rejected: rendering under a separate macOS user
+  (D44's reason stands: it moves the problem to file permissions across the
+  whole disk), and scrubbing the environment of the runner and the agent
+  (it would not cover the owner's other sessions, which is where the token
+  was read). The suite still runs the probe and reports it as a named known
+  gap rather than asserting it blocked
+  (`services/studio/test/video-sandbox.test.ts`).
 - Reads outside the home directory are allowed except where the profile names
   a place data lives: Homebrew's `var/` (the Postgres cluster is
   `/opt/homebrew/var/postgresql@17`), `/usr/local/var`, `/Volumes` and the
@@ -1227,7 +1252,7 @@ limit. What remains:
 | Guard | Value | Why |
 | --- | --- | --- |
 | The daily cap | `STUDIO_DAILY_USD`, unset by default. When the owner sets it, a video job and a video planner turn count like any job and turn, in the same window, and a job already running is never stopped | One cap, as D27 and D36; no new limit for videos |
-| Hang timer | 20 minutes with no line from the agent and no file written under `render/`, then the job is stopped as `timeout` | The only timer (D54). A render writes its partial movie files as it goes, so a long render is not a hang; a session that is thinking and writing is not either. 20 minutes is a guess |
+| Hang timer | 20 minutes with no line from the agent, no wrapper call ending (a line in `calls.ndjson`) and none still running (a marker in `inflight/`, counted for at most the Bash tool's 600 s ceiling plus a minute), then the job is stopped as `timeout` | The only timer (D54, amended). A render runs inside one Bash call, which the tool ends at 600 s and then answers on the stream, so a long render is not a hang, even with `STUDIO_VIDEO_HANG_MS` set below one call's length. Files under `render/` do not count: a scene writes them, so a scene touching one kept a hung session alive forever (the review of #201). 20 minutes is a guess |
 | Attempts | three, as for diagrams: a gate failure resumes the agent with the findings | A retry policy, not a limit on work within an attempt |
 | `--max-turns` | not passed; `STUDIO_VIDEO_MAX_TURNS` exists for the owner to set | No limit by default, as a hand-run session has none |
 | Concurrency | one video job, independent of the diagram runner's one | A correctness choice, not a cost one: scenes already render in parallel inside a job, `min(cores / 3, (RAM - 2 GB) / 1.5 GB, 4)`, 4 on this machine, from manimkc's measured 930 MB and three cores per 1080p scene |
@@ -1245,7 +1270,7 @@ V for video, so they do not collide with C, M, E or U.
 | V3 | `sandbox-exec` is missing | As V2 |
 | V4 | The runner is on Linux | The video kind is off until the bubblewrap profile passes the hostile-scene test there |
 | V5 | A scene builds a narration line at run time (an f-string) | Lint refuses it (phase 0 rule). If it got past, the render fails on a missing clip, and the gate's script step names the line |
-| V6 | A render never finishes | The Bash tool stops the call at its 600 s ceiling and the agent sees the timeout, as it would by hand; if the agent itself stops producing anything and nothing is written under `render/` for 20 minutes, the hang timer stops the job |
+| V6 | A render never finishes | The Bash tool stops the call at its 600 s ceiling and the agent sees the timeout, as it would by hand; if the agent itself stops producing anything and runs no command for 20 minutes, the hang timer stops the job, whatever a scene keeps writing |
 | V7 | A scene writes until the disk fills | Only `render/` is writable, so it fills the disk with its own job's files and nothing else; the render fails, the agent sees why. No cap, by the owner's decision |
 | V8 | Two drafts make the same slug | The target lease on `videos/<slug>.mp4` refuses the second with 409, named |
 | V9 | The kokoro model is not downloaded | The video doctor fails. The narration step runs with `HF_HUB_OFFLINE=1` and cannot reach the network anyway, so it never downloads during a job |
@@ -1532,6 +1557,16 @@ narration model tripped on, a failed join, a preview that times out in the
 Bash tool, are the agent's to read and fix inside its loop, as they are the
 owner's when the skill is run by hand.
 
+*Amended 2026-09-29 (the review of #201):* the hang timer's second clause is
+now a wrapper call ending inside the window, not a file written under
+`render/`. A scene writes under `render/`, so a scene that touched a file in
+a loop kept a hung session alive forever; only the agent can add a line to
+`calls.ndjson`, which sits outside everything a profile may write. A call
+still running counts too: the wrapper writes `inflight/<pid>.json` when it
+starts and removes it when it ends, and a marker counts for at most the Bash
+tool's 600 s ceiling plus a minute, so a render is never a hang whatever
+`STUDIO_VIDEO_HANG_MS` is set to, and a killed wrapper's marker expires.
+
 **Why:** rendering is dynamic (code written, compiled, a local model started,
 scenes stitched), and a list of failures in the runner would always be a list
 of yesterday's. The agent already has the error text and the loop to act on
@@ -1616,21 +1651,21 @@ profile. manimkc's `make test` is green. The job wrapper has to pass
 
 ### Phase 1. The runner half
 
-- [ ] `services/studio/src/video/`: the job checkout, the render, narration
+- [x] `services/studio/src/video/`: the job checkout, the render, narration
       and gate profiles, the wrapper with its `narrate` verb, the environment
       allowlist, the job cache and its seeding from the shared cache, the video
       doctor, the settings file, the prompt and the manual (generated listing
       plus static sections)
-- [ ] The video runner: queue, the hang timer, spawn through the shared code
+- [x] The video runner: queue, the hang timer, spawn through the shared code
       with the resolved model and effort, the step tracking from
       `calls.ndjson` and the stream, the gate's ten steps, revise, resume,
       cancel, cleanup of `render/`
-- [ ] Migration: the kinds, `video`, the revision entity type; `catalog video
+- [x] Migration: the kinds, `video`, the revision entity type; `catalog video
       put|list|show|checkout`; `catalog preference get`; `catalog job
       enqueue` for video targets and the one-transaction discard and enqueue
-- [ ] The routes: `POST /api/jobs` with a video brief, sheets, media,
+- [x] The routes: `POST /api/jobs` with a video brief, sheets, media,
       health's `video` and `agent` blocks
-- [ ] Tests: both hostile scenes blocked on every probe (skipped with a named
+- [x] Tests: both hostile scenes blocked on every probe (skipped with a named
       reason off macOS); a narration step under its profile voicing a line of
       shell words, unable to read the Hugging Face token or the shared cache,
       and writing nothing outside the job's audio directory; seeding copying
@@ -1654,6 +1689,19 @@ Accept on a scratch database built from `seed/` lands the rows and blobs and
 the library plays it with chapters; Discard leaves the source and no
 `render/`; and `npm run lint && npm run typecheck && npm test && npm run
 build` is green with Postgres up.
+
+**Measured: the first real jobs (2026-09-29, phase 1's PR).** A hand-written
+three-scene narrated brief (five beats, 709 characters, target 60 s) on a
+scratch database built from `seed/`: `awaiting_review` on the first attempt
+with all ten gate steps passed, a 51.6 s video, **$1.69** (`cost_source:
+result`), `claude-fable-5-1` at effort `high` (both from the owner's Claude
+Code settings, `source: claude-settings`), 11 requests, 22 turns, 2 preview
+rounds and 1 build, **197 s** of wall time. Accept landed the `video` row,
+five asset rows and five blobs; the library played it with its chapters and
+transcript. A picture-only revise of it continued the session with all five
+clips seeded from the parent: $0.55, 10 turns, every gate step passed;
+Discard then left `source/` and the clips, and no `render/` or `candidate/`.
+An earlier run of the same brief, before the merge, cost $2.03 in 220 s.
 
 ### Phase 2. The chat and the panel
 
