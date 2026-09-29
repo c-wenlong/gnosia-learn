@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import type { AssetRef, AssetWithTopics } from "@self-learn/catalog/state";
+import type { AssetRef } from "@self-learn/catalog/state";
 
-import { assetDisplayTitle, assetKindLabel, formatBytes } from "@/components/asset-meta";
+import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
+import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/library/AssetTabs";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
 import { WatchProgress } from "@/components/library/WatchProgress";
 import { MarkWatched } from "@/components/library/MarkWatched";
@@ -12,12 +13,7 @@ import { Notice } from "@/components/library/Notice";
 import { NoteProse } from "@/components/NoteProse";
 import { formatTimecode, type VideoChapter } from "@/components/media";
 import { Button } from "@/components/ui/Button";
-import { Card, CardAction } from "@/components/ui/Card";
-import { Chip } from "@/components/ui/Chip";
-import type { TabItem } from "@/components/ui/Tabs";
-import { Eyebrow } from "@/components/ui/Eyebrow";
-import { MasteryDot } from "@/components/ui/MasteryDot";
-import { Placeholder } from "@/components/ui/Placeholder";
+import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/classes";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import {
@@ -42,34 +38,26 @@ import {
   decodeAssetId,
   explainedConcepts,
   isCompanionKind,
-  libraryHref,
-  type ExplainedConcept,
 } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
 import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/transcript";
 
 /**
  * `/library/[id]` (hi-fi screen 11): one asset, rendered as the thing it
- * actually is, with what it explains beside it.
+ * actually is, with what it explains under it.
  *
- * **A video is laid out like a video site's watch page.** The picture takes
- * the whole width at the top, and everything else sits under it: the title
- * and a line of facts, then one card whose tabs are Transcript, Explains,
- * Related, Files and Details, so the sections do not pile up as separate
- * cards. Chapters are drawn into the scrub bar rather than listed. There is no "Mark watched"
- * button: `LibraryVideo` saves the position and the stretches that played,
- * resumes there on the next visit, and appends the `watched` event itself
- * once most of the video has played.
- *
- * **Everything else is two columns from 1024px.** The main column is the
- * asset itself; the rail is the header card (eyebrow, title, Mark read, Add
- * to note), Explains (the `asset_concept` rows with mastery), Related (other
- * assets under the same topic) and where it came from. On a narrower screen
- * the header comes first, then the asset, then the rest of the rail, which is
- * why the header is its own grid item rather than the top of the rail.
+ * **One layout for every kind, like a video site's watch page.** The asset
+ * takes the whole width at the top, then its title and actions, then one
+ * card of tabs (`AssetTabs`: Explains, Related, Files, Details) rather than
+ * a pile of cards. A video's player draws that card itself, with a live
+ * Transcript tab in front, and its chapters in the scrub bar. There is no
+ * "Mark watched" button on a video: `LibraryVideo` saves the position and
+ * the stretches that played, resumes there on the next visit, and appends
+ * the `watched` event itself once most of it has played. Anything else keeps
+ * "Mark read" beside its title, and Details says when it was last read.
  *
  * **Four shapes, and none of them is a broken version of another.** A video
- * gets a player with its chapter chips and its transcript beneath it. A
+ * gets a player with its chapters on the scrub bar and its transcript beneath it. A
  * diagram gets the drawing, on a light mat. A text asset (a note, a session
  * log, a caption track, a chapter list) gets its own words, read on the
  * server. A link gets the link, because a row with a URL and no file has
@@ -102,11 +90,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   };
 }
 
-/** How many related assets the rail lists before "See all". */
+/** How many related assets the Related tab lists before "See all". */
 const RELATED_SHOWN = 5;
-
-/** The tool that made a row, for the eyebrow. The repo's own rows need no name. */
-const SOURCE_LABEL: Record<string, string> = { manimkc: "manim", tldrawkc: "tldraw" };
 
 /**
  * The transcript beside a video, and the three answers that are not "here it
@@ -187,14 +172,13 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
 
   const name = assetDisplayTitle(asset);
   const label = assetKindLabel(asset.kind);
-  const size = formatBytes(asset.bytes);
   const fileHref = assetFileHref(asset.id);
   const statusHref = assetStatusHref(asset.id);
   const zone = habitTimeZone();
 
   const explained = explainedConcepts(concepts, new Map(kb.concepts.map((c) => [c.id, c])));
   const firstConcept = explained[0];
-  // Companion files of other assets are not worth a place in a five-row rail;
+  // Companion files of other assets are not worth a place in a five-row list;
   // each is listed on the page of what it belongs to.
   const neighbours = related.filter((row) => !isCompanionKind(row.kind)).slice(0, RELATED_SHOWN);
 
@@ -238,117 +222,14 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
       ? await readFileProblems(embedTargets(text).map(embedId))
       : new Map<string, RouteProblemCode | null>();
 
-  const eyebrow = [
-    label,
-    SOURCE_LABEL[asset.sourceRepo],
-    size,
-    `indexed ${dayKey(asset.createdAt, zone)}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  const rail = (
-    <>
-      <Explains concepts={explained} />
-
-      {neighbours.length > 0 && (
-        <Card
-          title="Related"
-          // The library filters by one topic at a time, so "See all" is only
-          // honest when this asset has exactly one: with two, the neighbours
-          // from the second would be missing from the page it opens. Each
-          // topic's own view is a chip in the catalog row instead.
-          action={
-            asset.topics.length === 1 && asset.topics[0] !== undefined ? (
-              <CardAction href={libraryHref({ topic: asset.topics[0] })}>See all</CardAction>
-            ) : undefined
-          }
-        >
-          <ul className="flex flex-col gap-3">
-            {neighbours.map((row) => (
-              <RelatedRow key={row.id} asset={row} />
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {derivations.sources.length > 0 && (
-        <Card title="Derived from">
-          <ul className="flex flex-col gap-2">
-            {derivations.sources.map((row) => (
-              <FamilyRow key={row.id} asset={row} />
-            ))}
-          </ul>
-        </Card>
-      )}
-      {derivations.derived.length > 0 && (
-        <Card title={asset.kind === "video" ? "Companion files" : "Produced from this"}>
-          <ul className="flex flex-col gap-2">
-            {derivations.derived.map((row) => (
-              <FamilyRow key={row.id} asset={row} />
-            ))}
-          </ul>
-          <p className="text-[12px] leading-relaxed text-text3">
-            Kept out of the library&rsquo;s default view so they do not bury what they accompany.
-            Each one has a page of its own.
-          </p>
-        </Card>
-      )}
-    </>
-  );
-
-  const relatedList = neighbours.length > 0 && (
-    <div className="flex flex-col gap-3">
-      <ul className="flex flex-col gap-3">
-        {neighbours.map((row) => (
-          <RelatedRow key={row.id} asset={row} />
-        ))}
-      </ul>
-      {asset.topics.length === 1 && asset.topics[0] !== undefined && (
-        <CardAction href={libraryHref({ topic: asset.topics[0] })} className="self-start">
-          See all under this topic
-        </CardAction>
-      )}
-    </div>
-  );
-
-  const familyCount = derivations.sources.length + derivations.derived.length;
-  const filesList = familyCount > 0 && (
-    <div className="flex max-w-2xl flex-col gap-4">
-      {derivations.sources.length > 0 && (
-        <FamilyGroup title="Derived from" rows={derivations.sources} />
-      )}
-      {derivations.derived.length > 0 && (
-        <FamilyGroup title="Companion files" rows={derivations.derived} />
-      )}
-      <p className="text-[12px] leading-relaxed text-text3">
-        Kept out of the library&rsquo;s default view so they do not bury what they accompany.
-        Each one has a page of its own.
-      </p>
-    </div>
-  );
-
-  // The video page's sections after the transcript, as tabs of one card
-  // rather than a pile of cards. An empty Related or Files tab is left out;
-  // Explains stays, since "no concept yet" is worth knowing.
-  const videoTabs: TabItem[] = [
-    { id: "explains", label: "Explains", count: explained.length, content: <ExplainsList concepts={explained} /> },
-    ...(relatedList ? [{ id: "related", label: "Related", count: neighbours.length, content: relatedList }] : []),
-    ...(filesList ? [{ id: "files", label: "Files", count: familyCount, content: filesList }] : []),
-    {
-      id: "details",
-      label: "Details",
-      content: (
-        <CatalogFacts
-          asset={asset}
-          titles={titles}
-          indexed={dayKey(asset.createdAt, zone)}
-          watched={<WatchProgress />}
-          className="max-w-3xl"
-        />
-      ),
-    },
-  ];
+  const tabInput: AssetTabsInput = {
+    asset,
+    titles,
+    concepts: explained,
+    related: neighbours,
+    derivations,
+    indexed: dayKey(asset.createdAt, zone),
+  };
 
   const addToNote =
     firstConcept === undefined ? null : (
@@ -412,42 +293,42 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
               )}
             </>
           }
-          tabs={videoTabs}
+          tabs={assetTabItems({ ...tabInput, progress: { label: "Watched", value: <WatchProgress /> } })}
         />
       </div>
     );
   }
 
-  return (
-    <div
-      data-layout="app"
-      className="grid items-start gap-x-5 gap-y-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[auto_1fr]"
-    >
-      <Card className="min-w-0 gap-2.5 lg:col-start-2 lg:row-start-1">
-        <Eyebrow>{eyebrow}</Eyebrow>
-        {heading}
-        <div className="flex flex-wrap items-start gap-2.5">
-          {/* A video tracks itself (`LibraryVideo`); one that cannot be played
-              here has nothing to mark. */}
-          {asset.kind !== "video" && (
-            <MarkWatched
-              assetId={asset.id}
-              verb="read"
-              lastWatchedDay={lastWatched === null ? null : dayKey(lastWatched, zone)}
-            />
-          )}
-          {addToNote}
-        </div>
-      </Card>
+  // A picture reads like a video: the thing first, its title under it. Words
+  // read like a page: the title and "Mark read" above them, where a reader
+  // starts, rather than after a long note.
+  const pictureFirst = asset.kind === "diagram_svg" || asset.kind === "video";
+  const titleRow = (
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+      {heading}
+      <div className="flex shrink-0 flex-wrap items-start gap-2.5">
+        {/* A video tracks itself (`LibraryVideo`); one that cannot be
+            played here has nothing to mark. */}
+        {asset.kind !== "video" && (
+          // Details says when it was last read, so the button does not.
+          <MarkWatched assetId={asset.id} verb="read" lastWatchedDay={null} />
+        )}
+        {addToNote}
+      </div>
+    </div>
+  );
 
-      <div className="flex min-w-0 flex-col gap-3.5 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+  return (
+    <div data-layout="app" className="flex flex-col gap-4">
+      {!pictureFirst && titleRow}
+      <div className="min-w-0">
         {asset.kind === "video" ? (
           servable ? null : (
             fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} />
           )
         ) : asset.kind === "diagram_svg" ? (
           servable ? (
-            <DiagramView src={fileHref} statusHref={statusHref} title={name.text} />
+            <DiagramView src={fileHref} statusHref={statusHref} title={name.text} heading={false} />
           ) : (
             fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} />
           )
@@ -494,11 +375,18 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           // raw-file link without a word.
           <UnreadableFile path={asset.path} href={fileHref} />
         )}
-
-        <CatalogRow asset={asset} titles={titles} indexed={dayKey(asset.createdAt, zone)} />
       </div>
+      {pictureFirst && titleRow}
 
-      <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-2">{rail}</div>
+      <AssetTabs
+        label={`About ${name.text}`}
+        {...tabInput}
+        progress={
+          asset.kind === "video"
+            ? undefined
+            : { label: "Read", value: lastWatched === null ? "Not yet" : `Last marked ${dayKey(lastWatched, zone)}` }
+        }
+      />
     </div>
   );
 }
@@ -506,218 +394,6 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
 /** A quiet note under the asset: 12px, tertiary. */
 function Aside({ children }: { children: ReactNode }) {
   return <p className="text-[12px] leading-relaxed text-text3">{children}</p>;
-}
-
-/**
- * The `asset_concept` rows with mastery (hi-fi 11, "Explains"): each concept
- * with its dot and p(L), and the way into the first one's workspace. A concept
- * with no evidence yet says "not started" rather than printing a prior as if it
- * were a measurement.
- */
-function Explains({ concepts }: { concepts: ExplainedConcept[] }) {
-  return (
-    <Card title="Explains">
-      <ExplainsList concepts={concepts} />
-    </Card>
-  );
-}
-
-/** Explains without its card, for the video page's tab of the same name. */
-function ExplainsList({ concepts }: { concepts: ExplainedConcept[] }) {
-  const first = concepts[0];
-  return (
-    <div className="flex flex-col gap-3">
-      {concepts.length === 0 ? (
-        <p className="text-[14px] text-text2">No concept is linked to this asset yet.</p>
-      ) : (
-        <ul className="flex flex-col gap-2.5">
-          {concepts.map((c) => (
-            <li key={c.slug} className="flex min-w-0 items-center gap-2.5">
-              <MasteryDot bucket={c.bucket} />
-              <Link
-                href={conceptHref(c.slug)}
-                className="min-w-0 flex-1 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                {c.title}
-              </Link>
-              <span className="shrink-0 text-[12px] tabular-nums text-text2">
-                {c.observations > 0 && c.pL !== null ? c.pL.toFixed(2) : "not started"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {first !== undefined && (
-        <Button
-          variant="secondary"
-          size="sm"
-          href={conceptHref(first.slug)}
-          className="self-start"
-        >
-          Open workspace
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/** One neighbour under the same topic: a small labelled box and its title. */
-function RelatedRow({ asset }: { asset: AssetWithTopics }) {
-  const name = assetDisplayTitle(asset);
-  return (
-    <li>
-      <Link
-        href={assetHref(asset.id)}
-        className="group flex items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        <span className="w-16 shrink-0">
-          <Placeholder label={assetKindLabel(asset.kind).toLowerCase()} height={44} className="px-1" />
-        </span>
-        <span
-          className={cx(
-            "line-clamp-2 min-w-0 text-[13px] text-text underline-offset-4 group-hover:underline",
-            name.source !== "title" && "font-mono",
-          )}
-        >
-          {name.text}
-        </span>
-      </Link>
-    </li>
-  );
-}
-
-/**
- * A source or a companion file, named by what it is ("Transcript", "Diagram
- * source") with its filename and size beside it. Not by title: a companion
- * carries the title of the video or drawing it belongs to, which is the title
- * this page is already showing, so a list of them would say it three times.
- */
-function FamilyRow({ asset }: { asset: AssetRef }) {
-  const size = formatBytes(asset.bytes);
-  const file = asset.path?.split("/").pop() ?? asset.url ?? null;
-  return (
-    <li>
-      <Link
-        href={assetHref(asset.id)}
-        className="group flex min-w-0 items-baseline justify-between gap-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        <span className="shrink-0 text-[13px] text-text underline-offset-4 group-hover:underline">
-          {assetKindLabel(asset.kind)}
-        </span>
-        <span className="min-w-0 truncate text-right text-[12px] text-text2" title={file ?? undefined}>
-          {[file, size].filter(Boolean).join(" · ")}
-        </span>
-      </Link>
-    </li>
-  );
-}
-
-/** A titled list of sources or companions, for the video page's Files tab. */
-function FamilyGroup({ title, rows }: { title: string; rows: AssetRef[] }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-[12px] font-bold tracking-[0.05em] text-text3 uppercase">{title}</h3>
-      <ul className="flex flex-col gap-2">
-        {rows.map((row) => (
-          <FamilyRow key={row.id} asset={row} />
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/**
- * The row as the catalog holds it, folded away under the asset: the id, the
- * path, the source, the size and the topic slugs. A reader here is checking
- * what to type, so every value is the identifier rather than a label.
- */
-function CatalogRow({
-  asset,
-  titles,
-  indexed,
-}: {
-  asset: AssetWithTopics;
-  titles: Record<string, string>;
-  indexed: string;
-}) {
-  return (
-    <details className="group rounded-[20px] border-2 border-border bg-surface">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-[18px] px-5 py-4 text-[16px] font-bold text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-        <svg
-          viewBox="0 0 12 12"
-          aria-hidden
-          className="size-3 text-text3 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4.5 2.5 8 6l-3.5 3.5" />
-        </svg>
-        Catalog row
-      </summary>
-      <CatalogFacts asset={asset} titles={titles} indexed={indexed} className="px-5 pb-5" />
-    </details>
-  );
-}
-
-/** The row's identifiers, as a list: the video page's Details tab, and the folded card. */
-function CatalogFacts({
-  asset,
-  titles,
-  indexed,
-  watched,
-  className,
-}: {
-  asset: AssetWithTopics;
-  titles: Record<string, string>;
-  /** The day the row was indexed, in the habit's time zone. */
-  indexed: string;
-  /** How much of a video has played; only a video has one. */
-  watched?: ReactNode;
-  className?: string;
-}) {
-  const size = formatBytes(asset.bytes);
-  return (
-    <dl className={cx("flex flex-col gap-2", className)}>
-      {watched !== undefined && <Fact label="Watched">{watched}</Fact>}
-      <Fact label="Indexed">{indexed}</Fact>
-      <Fact label="Id">
-        <span className="font-mono text-[12px]">{asset.id}</span>
-      </Fact>
-      <Fact label={asset.path === null ? "URL" : "Path"}>
-        <span className="font-mono text-[12px]">{asset.path ?? asset.url ?? "none"}</span>
-      </Fact>
-      <Fact label="Source">{asset.sourceRepo}</Fact>
-      <Fact label="Size">
-        {asset.bytes === null ? "unknown" : `${size} (${asset.bytes.toLocaleString("en")} bytes)`}
-      </Fact>
-      <Fact label="Topics">
-        {asset.topics.length === 0 ? (
-          "none"
-        ) : (
-          <span className="flex flex-wrap gap-1.5">
-            {asset.topics.map((slug) => (
-              <Chip key={slug} size="sm" href={libraryHref({ topic: slug })} title={titles[slug] ?? slug}>
-                <span className="font-mono">{slug}</span>
-              </Chip>
-            ))}
-          </span>
-        )}
-      </Fact>
-    </dl>
-  );
-}
-
-/** A labelled fact. Two columns on anything wider than a phone. */
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-4">
-      <dt className="pt-0.5 text-[11px] font-bold tracking-[0.05em] text-text3 uppercase">{label}</dt>
-      <dd className="min-w-0 break-words text-[13px] text-text2">{children}</dd>
-    </div>
-  );
 }
 
 /*
