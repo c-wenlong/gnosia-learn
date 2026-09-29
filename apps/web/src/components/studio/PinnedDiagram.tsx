@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { videoPosterHref } from "@/lib/studio-cards";
 import { thumbnailHref } from "@/lib/studio-view";
 
 /**
@@ -38,6 +39,33 @@ export function PinnedDiagram({ name, title }: { name: string; title: string }) 
           onError={() => setMissing(true)}
           className="h-full w-full object-contain p-2"
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The video a Change conversation is about, pinned the same way: its stored
+ * poster on a dark mat, since a frame is a picture rather than a drawing on
+ * white. A video with no stored poster is said in words, as a diagram with no
+ * SVG is.
+ */
+export function PinnedVideo({ slug, title }: { slug: string; title: string }) {
+  const [missing, setMissing] = useState(false);
+  return (
+    <div
+      className={`flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-border ${
+        missing ? "bg-surface2" : "bg-[#111]"
+      }`}
+    >
+      {missing ? (
+        <span className="max-w-[44ch] px-4 text-center text-[13px] text-text3">
+          {title} has no poster yet. The planner reads its brief all the same.
+        </span>
+      ) : (
+        // The library's asset route streams the stored JPEG.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={videoPosterHref(slug)} alt={title} onError={() => setMissing(true)} className="h-full w-full object-contain" />
       )}
     </div>
   );

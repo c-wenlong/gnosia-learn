@@ -12,6 +12,7 @@ import { JobStrip } from "@/components/studio/JobStrip";
 import { PlusCard } from "@/components/studio/PlusCard";
 import { DialogHeader, StudioDialog } from "@/components/studio/StudioDialog";
 import { ShotView } from "@/components/studio/ShotView";
+import { SettingsLink, StudioSettings } from "@/components/studio/StudioSettings";
 import { BlockedCard, EmptyDirectory, type DoctorLine } from "@/components/studio/StudioBlocked";
 import { Notice, Spacer, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
 import {
@@ -22,9 +23,20 @@ import {
 } from "@/components/studio/StudioControls";
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
+import {
+  AGENT_ROWS,
+  agentDefaults,
+  effortOptions,
+  modelOptions,
+  rowPriced,
+  rowWarning,
+  runnerSettings,
+  storedAgent,
+} from "@/lib/studio-agent-settings";
+import { readStudioAgents } from "@/lib/studio-agents";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
-import type { DraftSummary } from "@/lib/studio-drafts";
+import { diagramAvailability, videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
 import { filterVideos, gridSections, readVideos, sortVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
@@ -75,6 +87,12 @@ interface Health {
   vocabulary?: VocabularyState;
   /** The rolling day's spend against `STUDIO_DAILY_USD`, which Draw and Send are disabled on. */
   dailyCap?: unknown;
+  /** The video doctor (docs/STUDIO-VIDEOS.md, "API"): whether Video can be tagged and made. */
+  video?: unknown;
+  /** The model and effort a job started now would get, per kind (D53). */
+  agent?: unknown;
+  /** Whether a diagram job can be queued at all (#206). */
+  diagramAgent?: unknown;
 }
 
 export default async function StudioPage({
@@ -173,6 +191,17 @@ export default async function StudioPage({
   // route carrying the brief and the comparison, and the full-width view needs
   // both to say why the other side is not there rather than linking to a 404.
   const shown = view.shot !== null && view.job !== null ? await openShot(view.job) : null;
+  // The settings panel's two rows, read only when it is open.
+  const [agents, runnerAgents] = view.settings
+    ? await Promise.all([readStudioAgents(), studioApi<unknown>("/api/settings/agent")])
+    : [null, null];
+  // The runner's menu (the models it can price) and its defaults when it
+  // answers (#207), else health's defaults and the built-in list.
+  const agentRows = runnerAgents?.ok ? runnerAgents.data : null;
+  const fromRunner = runnerSettings(agentRows);
+  const defaults = fromRunner.defaults ?? agentDefaults(health.data.agent);
+  const videoState = videoAvailability(health.data.video);
+  const diagramState = diagramAvailability(health.data.diagramAgent);
 
   // Every diagram's path, filtered or not: a job drawing onto one of these is
   // an extend and goes on its tile; any other target is a new diagram's card.
@@ -184,19 +213,42 @@ export default async function StudioPage({
     topicTitles,
   );
   // Close drops every parameter the panel reads, and keeps the filters.
-  const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null });
+  const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
   const titles = Object.fromEntries(listing.diagrams.map((diagram) => [diagram.name, displayTitle(diagram)]));
+  // A video's title by slug, for a Change conversation's header. Its own map:
+  // a diagram and a video can share a slug.
+  const videoTitles = Object.fromEntries(allVideos.map((video) => [video.slug, video.title ?? video.slug]));
   // Extend patches this view, so the filters are there when the panel closes.
   const extendFrom = (name: string) => panelHref(path, { extend: name, selected: null, job: null, draft: null });
   const dialog = view.shot !== null ? null : panelFor();
 
   function panelFor() {
+    if (view.settings && agents !== null) {
+      return (
+        <StudioDialog key="settings" closeHref={closeHref} label="Settings" compact>
+          <DialogHeader title="Settings" />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <StudioSettings
+              reachable={agents.reachable}
+              rows={AGENT_ROWS.map((row) => ({
+                ...row,
+                value: agents.values[row.kind],
+                fallback: storedAgent(row.kind, null),
+                models: modelOptions(agents.values[row.kind].model, defaults, fromRunner.models ?? undefined, rowPriced(agentRows, row.kind)),
+                efforts: effortOptions(defaults),
+                warning: rowWarning(agentRows, row.kind),
+              }))}
+            />
+          </div>
+        </StudioDialog>
+      );
+    }
     if (view.draft !== null) {
       return (
         // One key for a conversation and the Extend press before it, so the
         // dialog stays open while one becomes the other rather than closing
         // and opening again. The panel inside is keyed by draft.
-        <StudioDialog key="conversation" closeHref={closeHref} label="Diagram conversation" tall>
+        <StudioDialog key="conversation" closeHref={closeHref} label="Conversation" tall>
           <DraftPanel
             key={view.draft}
             draftId={view.draft}
@@ -204,8 +256,11 @@ export default async function StudioPage({
             path={path}
             topics={topicOptions}
             titles={titles}
+            videoTitles={videoTitles}
             suggestions={chatSuggestions}
             cap={cap}
+            video={videoState}
+            diagramAgent={diagramState}
           />
         </StudioDialog>
       );
@@ -260,6 +315,7 @@ export default async function StudioPage({
         <Spacer />
         <DisplayMenu view={view} />
         <SortMenu view={view} />
+        <SettingsLink href={studioHref(view, { settings: true, draft: null, job: null, extend: null, selected: null, shot: null })} />
       </StudioStrip>
 
       <JobStrip path={path} stream={view.stream} />
