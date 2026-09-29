@@ -222,13 +222,19 @@ describe("habitLabels", () => {
     const labels = habitLabels(habit);
     expect(labels.streak).toBe("1 day streak");
     expect(labels.streakShort).toBe("1");
-    expect(labels.streakTitle).toBe("1 day in a row. Studied today. 1 free miss left this week.");
+    expect(labels.streakDetails).toEqual(["Studied today.", "1 free miss left this week."]);
+    expect(labels.streakName).toBe("1 day streak. Studied today. 1 free miss left this week.");
     expect(labels.target).toBe("Target 1 / 2");
-    expect(labels.targetTitle).toBe("Today's target: 1 concept + due reviews. 1 concept studied today, 1 review due.");
+    expect(labels.targetDetails).toEqual(["Today's target: 1 concept + due reviews.", "1 concept studied today, 1 review due."]);
+    expect(labels.targetName).toBe(
+      "Target 1 / 2. Today's target: 1 concept + due reviews. 1 concept studied today, 1 review due.",
+    );
   });
 
   it("says why when the catalog is down", () => {
-    expect(habitLabels(emptyHabit()).targetTitle).toMatch(/Not connected/);
+    const labels = habitLabels(emptyHabit());
+    expect(labels.targetDetails).toEqual([expect.stringMatching(/Not connected/)]);
+    expect(labels.streakName).toMatch(/^0 day streak\. Not connected/);
   });
 });
 

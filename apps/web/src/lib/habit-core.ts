@@ -380,26 +380,32 @@ function plural(n: number, one: string, many: string): string {
 }
 
 /**
- * What the top bar's two pills say, and the fuller sentence behind each as a
- * tooltip. Facts only (DESIGN.md decision 5): no "don't lose your streak".
+ * What the top bar's two pills say, and the facts behind each: the lines the
+ * pill's popover shows when it is pressed, and its accessible name, which is
+ * the pill's text followed by those lines. Since Today's Streak card went
+ * (2026-09-29) the pill is the only place the free misses and today's fact
+ * are shown, so they are a popover a tap or a key can open, not a hover-only
+ * `title`. Facts only (DESIGN.md decision 5): no "don't lose your streak".
  */
 export function habitLabels(habit: Habit): {
   streak: string;
   streakShort: string;
-  streakTitle: string;
+  streakDetails: string[];
+  streakName: string;
   target: string;
-  targetTitle: string;
+  targetDetails: string[];
+  targetName: string;
 } {
   const { streak, target } = habit;
   if (!habit.reachable) {
     const why = "Not connected to the database, so the streak and target cannot be read.";
-    return {
+    return named({
       streak: `${streak.days} day streak`,
       streakShort: String(streak.days),
-      streakTitle: why,
+      streakDetails: [why],
       target: `Target ${target.done} / ${target.total}`,
-      targetTitle: why,
-    };
+      targetDetails: [why],
+    });
   }
   const leeway =
     streak.leeway === 0
@@ -422,11 +428,26 @@ export function habitLabels(habit: Habit): {
   ]
     .filter(Boolean)
     .join(", ");
-  return {
+  return named({
     streak: `${streak.days} day streak`,
     streakShort: String(streak.days),
-    streakTitle: `${plural(streak.days, "day", "days")} in a row. ${today} ${leeway}`,
+    streakDetails: [today, leeway],
     target: `Target ${target.done} / ${target.total}`,
-    targetTitle: `Today's target: ${goal || "nothing set"}. ${progress}.`,
+    targetDetails: [`Today's target: ${goal || "nothing set"}.`, `${progress.charAt(0).toUpperCase()}${progress.slice(1)}.`],
+  });
+}
+
+/** Each pill's accessible name: what it shows, then the facts behind it. */
+function named(labels: {
+  streak: string;
+  streakShort: string;
+  streakDetails: string[];
+  target: string;
+  targetDetails: string[];
+}) {
+  return {
+    ...labels,
+    streakName: [`${labels.streak}.`, ...labels.streakDetails].join(" "),
+    targetName: [`${labels.target}.`, ...labels.targetDetails].join(" "),
   };
 }
