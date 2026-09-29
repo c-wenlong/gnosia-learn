@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BriefError } from "../src/brief";
 import { normalisePreference, readClaudeDefaults, resolveAgentSettings, resolveSetting } from "../src/video/agent-model";
 import { predictedSeconds, validateVideoBrief } from "../src/video/brief";
+import { buildSettings } from "../src/settings";
+import { GUARD_REFUSAL, guardSource, wrapperCommandAllowed } from "../src/video/bash-guard";
 import { ReadTracker } from "../src/video/calls";
 import { prefixFor, rebasePaths } from "../src/video/checkout";
 import { CopyRefused, safeCopy } from "../src/video/copy";
@@ -67,7 +69,7 @@ describe("the gate's copy", () => {
 
 describe("the video agent's permission file", () => {
   it("allows one Bash prefix, edits the scene file only, and names no bare tool", () => {
-    const settings = buildVideoSettings({ jobId: "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc", paths, manimkcRoot: "/opt/manimkc", manimkcHome: "/opt/manimkc-home" });
+    const settings = buildVideoSettings({ jobId: "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc", paths, manimkcRoot: "/opt/manimkc", manimkcHome: "/opt/manimkc-home", guard: "/usr/local/bin/node /x/bin/bash-guard.cjs" });
     const { allow, deny } = settings.permissions;
     expect(allow.filter((rule) => rule.startsWith("Bash("))).toEqual([`Bash(${paths.wrapper}:*)`]);
     expect(allow.filter((rule) => rule.startsWith("Edit("))).toEqual([`Edit(/${paths.sceneFile})`]);
@@ -76,11 +78,14 @@ describe("the video agent's permission file", () => {
     expect(deny).toEqual(expect.arrayContaining(["WebFetch", "WebSearch", "Bash(python3:*)", "Bash(curl:*)", `Edit(/${paths.topicYml})`, "Read(//opt/manimkc/topics/**)", "Read(//opt/manimkc-home/**)"]));
     expect(deny).toContain(`Edit(/${paths.lib}/**)`);
     expect(deny).toContain(`Read(/${paths.bin}/**)`);
+    expect(settings.hooks).toEqual({ PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "/usr/local/bin/node /x/bin/bash-guard.cjs" }] }] });
+    // The diagram agent's file is not given one.
+    expect("hooks" in buildSettings({ jobId: "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc", slug: "two-boxes" })).toBe(false);
   });
 
   it("denies every other job's workspace and none of its own working directories", () => {
     const id = "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc";
-    const settings = buildVideoSettings({ jobId: id, paths, manimkcRoot: "/opt/manimkc", manimkcHome: null });
+    const settings = buildVideoSettings({ jobId: id, paths, manimkcRoot: "/opt/manimkc", manimkcHome: null, guard: "/usr/local/bin/node /x/bin/bash-guard.cjs" });
     const home = process.env.STUDIO_HOME!;
     const globs = settings.permissions.deny
       .filter((rule) => rule.startsWith("Read(/") && rule.includes(`${home}/jobs/`))
@@ -90,6 +95,65 @@ describe("the video agent's permission file", () => {
     expect(matcher.ignores(`jobs/${id}/render/out/studio/two-boxes/scenes/TB1_A.sheet.png`)).toBe(false);
     expect(matcher.ignores("jobs/1f0f0f0f-aaaa-4bbb-8ccc-123456789abc/job.json")).toBe(true);
     expect(matcher.ignores(`jobs/${id}0/job.json`)).toBe(true);
+  });
+});
+
+describe("the video agent's Bash guard", () => {
+  const wrapper = "/srv/studio/jobs/j1/bin/video";
+  const allowed = [`${wrapper} lint`, `${wrapper}`, `${wrapper} preview TB1_WhyItMatters TB2_Recap`, `${wrapper} api ACCENT labeled_box`, `  ${wrapper} build  `];
+  // Every form the review named, each spelling the CLI was measured to treat
+  // differently, and the rest a shell could make of one line.
+  const refused = [
+    `${wrapper} lint $(cat /x)`,
+    `${wrapper} lint $(/bin/cat /x)`,
+    `${wrapper} lint \`grep x /y\``,
+    `${wrapper} lint <(grep x /y)`,
+    `${wrapper} lint >(tee /y)`,
+    `${wrapper} lint; grep x /y`,
+    `${wrapper} lint && /bin/cat /x`,
+    `${wrapper} lint || grep x /y`,
+    `${wrapper} lint | base64`,
+    `${wrapper} lint\ngrep x /y`,
+    `${wrapper} lint > /tmp/out`,
+    `${wrapper} lint &`,
+    `${wrapper} lint $HOME`,
+    `${wrapper} lint "a b"`,
+    `${wrapper} lint *`,
+    `${wrapper}x lint`,
+    `/srv/studio/jobs/j2/bin/video lint`,
+    `cd /tmp && ${wrapper} lint`,
+    `NODE_OPTIONS=x ${wrapper} lint`,
+    "/bin/cat /x",
+    "grep x /y",
+  ];
+
+  it("allows the wrapper with plain words after it, and nothing else", () => {
+    for (const command of allowed) expect({ command, ok: wrapperCommandAllowed(command, wrapper) }).toEqual({ command, ok: true });
+    for (const command of refused) expect({ command, ok: wrapperCommandAllowed(command, wrapper) }).toEqual({ command, ok: false });
+  });
+
+  it("runs as the hook the CLI calls: exit 2 with a fixed sentence to refuse, and closed on anything it cannot read", async () => {
+    const file = path.join(root, "bash-guard.cjs");
+    await writeFile(file, guardSource(wrapper), "utf8");
+    const call = (stdin: string): { code: number; stderr: string } => {
+      try {
+        execFileSync(process.execPath, [file], { input: stdin, stdio: ["pipe", "pipe", "pipe"] });
+        return { code: 0, stderr: "" };
+      } catch (error) {
+        const failed = error as { status: number; stderr: Buffer };
+        return { code: failed.status, stderr: failed.stderr.toString() };
+      }
+    };
+    const bash = (command: string): string => JSON.stringify({ session_id: "s", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
+    for (const command of allowed) expect({ command, ...call(bash(command)) }).toEqual({ command, code: 0, stderr: "" });
+    for (const command of refused) {
+      const result = call(bash(command));
+      expect({ command, code: result.code }).toEqual({ command, code: 2 });
+      expect(result.stderr).toBe(`${GUARD_REFUSAL}\n`);
+    }
+    expect(call("not json").code).toBe(2);
+    expect(call(JSON.stringify({ tool_name: "Bash", tool_input: {} })).code).toBe(2);
+    expect(call(JSON.stringify({ tool_name: "Read", tool_input: { file_path: "/x" } })).code).toBe(0);
   });
 });
 

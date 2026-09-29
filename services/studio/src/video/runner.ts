@@ -26,6 +26,7 @@ import { sandboxedGateTools } from "./gate-tools";
 import { apiListing, manualFile, manualText, writeManual } from "./manual";
 import { sheetPath, videoCandidateRef, videoTarget, type VideoPaths } from "./paths";
 import { buildVideoPrompt, buildVideoResumePrompt, buildVideoRetryPrompt, buildVideoRevisePrompt } from "./prompt";
+import { writeGuard } from "./bash-guard";
 import { buildProfile, resolvedStudioHome } from "./sandbox";
 import { scanSource, voicedLines } from "./scan";
 import { clipKeys, keepClips, seedClips } from "./seed";
@@ -494,6 +495,7 @@ export class VideoRunner {
     const listing = await apiListing(tools);
     const config = wrapperConfig({ tools, paths, home, voice, scenes: scaffolded.classes, apiNames: listing?.names ?? [], narrated: isNarrated(brief) });
     await writeWrapper(tools.node, paths, config);
+    const guard = await writeGuard(tools.node, paths);
 
     /* The clips it can have for free (D47). */
     const keyInput = { tools, paths, home, voice };
@@ -524,7 +526,7 @@ export class VideoRunner {
     await writeFile(
       paths.settings,
       `${JSON.stringify(
-        buildVideoSettings({ jobId: id, paths, manimkcRoot: tools.manimkcRoot, manimkcHome: manualHome, ...(sourceNote === undefined ? {} : { source: sourceNote }) }),
+        buildVideoSettings({ jobId: id, paths, manimkcRoot: tools.manimkcRoot, manimkcHome: manualHome, guard, ...(sourceNote === undefined ? {} : { source: sourceNote }) }),
         null,
         1,
       )}\n`,

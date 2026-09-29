@@ -4,6 +4,7 @@ import path from "node:path";
 import { cacheDir } from "../content-cache";
 import { REPO_ROOT, studioHome, workDir } from "../paths";
 import { BASH_DENY, claudeTempRules, rule, siblingJobRules, studioHomeRules, type AgentSettings } from "../settings";
+import { guardHooks } from "./bash-guard";
 import type { VideoPaths } from "./paths";
 
 /**
@@ -15,8 +16,10 @@ import type { VideoPaths } from "./paths";
  * What differs from the diagram agent:
  *
  * - **Bash** allows exactly one prefix, this job's wrapper by its absolute
- *   path, plus the diagram agent's deny list, which is what reaches inside a
- *   command substitution.
+ *   path, plus the diagram agent's deny list. On top of both, a `PreToolUse`
+ *   hook (`bash-guard.ts`) refuses any command that is not the wrapper with
+ *   plain words after it, so no pipe, list or substitution depends on how
+ *   the CLI's matcher splits a command.
  * - **Edit** allows the scene file and nothing else. `topic.yml` is the
  *   runner's and the gate checks it; `lib/` is a copy the render reads, not a
  *   place to fix things.
@@ -53,9 +56,15 @@ export interface VideoSettingsInput {
   manimkcHome: string | null;
   /** An absolute path to the brief's source note, when there is one. */
   source?: string;
+  /** The Bash guard's command line, from `writeGuard`. */
+  guard: string;
 }
 
-export function buildVideoSettings(input: VideoSettingsInput): AgentSettings {
+export interface VideoAgentSettings extends AgentSettings {
+  hooks: Record<string, unknown>;
+}
+
+export function buildVideoSettings(input: VideoSettingsInput): VideoAgentSettings {
   const { paths } = input;
   const home = process.env.HOME ?? "";
 
@@ -129,5 +138,6 @@ export function buildVideoSettings(input: VideoSettingsInput): AgentSettings {
       allow,
       deny: [...new Set(deny)],
     },
+    hooks: guardHooks(input.guard),
   };
 }
