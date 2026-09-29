@@ -22,6 +22,7 @@ import {
   formatSize,
   gateStepLabel,
   libraryHref,
+  logLine,
   mediaFiles,
   mediaHref,
   readyHeadline,
@@ -181,7 +182,7 @@ function StatusLine({ job }: { job: VideoJob }) {
           )}
           {model !== null && (
             <span className="text-text3" title={effortTitle(job)}>
-              {" · "}
+              {facts.length > 0 || job.costUsd !== null ? " · " : ""}
               {model}
             </span>
           )}
@@ -353,6 +354,9 @@ function SheetStrip({
           className="flex min-w-0 flex-col gap-2 rounded-xl border border-hair bg-surface2 p-2"
           onKeyDown={(event) => {
             if (event.key === "Escape") {
+              // The sheet closes, not the panel: without this the dialog's
+              // own cancel would take Escape too.
+              event.preventDefault();
               event.stopPropagation();
               setOpen(null);
             } else if (event.key === "ArrowRight") step(1);
@@ -522,7 +526,7 @@ function MakingLog({ job, events }: { job: VideoJob; events: StudioEvent[] }) {
           {lines.map((line) => (
             <li key={`${line.at}-${line.note}`} className="flex gap-2 text-[13px] leading-5">
               <span className="w-11 shrink-0 tabular-nums text-text3">{clock(line.at)}</span>
-              <span className="min-w-0 break-words text-text2">{line.note.charAt(0).toUpperCase() + line.note.slice(1)}</span>
+              <span className="min-w-0 break-words text-text2">{logLine(line.note, job)}</span>
             </li>
           ))}
         </ol>
@@ -576,12 +580,19 @@ function Review({ job, path }: { job: VideoJob; path: string }) {
   const narrated = job.brief === undefined || job.brief.voice !== "none";
   const { cues, chapters } = useTranscript(job.jobId, job.slug, ready && narrated);
   const [seek, setSeek] = useState<{ seconds: number; key: number } | undefined>(undefined);
+  const playerBox = useRef<HTMLDivElement>(null);
   const board = storyboard(job, chapters);
+  // A chapter pressed below the fold plays where the person can see it.
+  const jump = (seconds: number): void => {
+    setSeek((held) => ({ seconds, key: (held?.key ?? 0) + 1 }));
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    playerBox.current?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+  };
   const changes = changedLines(job);
   const actions = reviewActions(job);
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
+    <div ref={playerBox} className="flex min-w-0 scroll-mt-4 flex-col gap-5">
       {ready ? (
         <VideoPlayer
           src={mediaHref(job.jobId, files.mp4)}
@@ -590,16 +601,22 @@ function Review({ job, path }: { job: VideoJob; path: string }) {
           chapters={chapters ?? undefined}
           transcript={narrated ? cues : undefined}
           seekTo={seek}
+          // The storyboard beside the transcript, in the same card the
+          // library uses: the chapters, each scene's lines as voiced, and a
+          // jump to where each starts.
+          tabs={[
+            {
+              id: "chapters",
+              label: "Chapters",
+              count: board.length,
+              content: (
+                <Chapters scenes={board} onJump={jump} />
+              ),
+            },
+          ]}
         />
       ) : (
         <Landed job={job} />
-      )}
-
-      {ready && (
-        <Chapters
-          scenes={board}
-          onJump={(seconds) => setSeek((held) => ({ seconds, key: (held?.key ?? 0) + 1 }))}
-        />
       )}
 
       {changes.length > 0 && <ChangedLines job={job} />}
@@ -621,16 +638,12 @@ function Chapters({
   scenes: ReturnType<typeof storyboard>;
   onJump: (seconds: number) => void;
 }) {
-  const labelId = useId();
-  if (scenes.length === 0) return null;
+  if (scenes.length === 0) return <p className="text-[13px] text-text3">This video has no chapters.</p>;
   return (
-    <section aria-labelledby={labelId} className="min-w-0">
-      <h3 id={labelId} className={cx(LABEL, "mb-2")}>
-        Chapters
-      </h3>
-      <ol className="flex flex-col divide-y divide-hair rounded-xl border border-hair">
+    <div className="min-w-0">
+      <ol className="flex flex-col divide-y divide-hair">
         {scenes.map((scene, index) => (
-          <li key={scene.scene} className="flex min-w-0 flex-col gap-1.5 px-4 py-3">
+          <li key={scene.scene} className="flex min-w-0 flex-col gap-1.5 py-3 first:pt-1">
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="w-5 shrink-0 text-[12px] tabular-nums text-text3">{index + 1}</span>
               {scene.start === null ? (
@@ -662,7 +675,7 @@ function Chapters({
           </li>
         ))}
       </ol>
-    </section>
+    </div>
   );
 }
 
@@ -684,7 +697,7 @@ function ChangedLines({ job }: { job: VideoJob }) {
             {line.brief !== null && (
               <p className="text-[13px] leading-5 text-text3">
                 <span className="sr-only">The brief said: </span>
-                <span className="line-through decoration-text3/60">{line.brief}</span>
+                <span className="text-text2 line-through decoration-text3">{line.brief}</span>
               </p>
             )}
             {line.voiced.length > 0 && (
@@ -759,7 +772,7 @@ function Landed({ job }: { job: VideoJob }) {
     <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-ok-tint px-4 py-3">
       <p className="text-[14px] font-semibold text-ok-text">In the catalog as {job.title ?? job.slug}</p>
       <p className="text-[13px] text-text2">
-        The library plays it with its chapters and transcript{job.written.length > 0 ? `; this wrote ${job.written.length} row${job.written.length === 1 ? "" : "s"}` : ""}.
+        The library plays it with its chapters and transcript.
       </p>
       <div>
         <Button size="sm" href={libraryHref(job.slug)}>
@@ -915,6 +928,7 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
         }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
+            event.preventDefault();
             event.stopPropagation();
             onClose();
           } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {

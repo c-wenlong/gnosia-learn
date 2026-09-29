@@ -28,7 +28,7 @@ import {
   type VideoSummary,
   type VideoTileStage,
 } from "@/lib/studio-video";
-import { conversationHref, panelHref } from "@/lib/studio-view";
+import { conversationHref, panelHref, relativeTime } from "@/lib/studio-view";
 
 /**
  * Studio videos in the grid, and a video job where its video is (docs/
@@ -59,7 +59,7 @@ export function VideoTile({ video, path }: { video: VideoSummary; path: string }
         <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-black">
           {video.poster !== null ? (
             // eslint-disable-next-line @next/next/no-img-element -- a blob behind the asset route, which the optimiser cannot resize.
-            <img src={posterHref(video.poster.assetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
+            <img src={posterHref(video.assetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
           ) : (
             <span className="text-xs text-white/70">No poster</span>
           )}
@@ -74,10 +74,11 @@ export function VideoTile({ video, path }: { video: VideoSummary; path: string }
           <span className="line-clamp-2 text-sm font-medium">{title}</span>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             {video.topic !== null && <Chip>{video.topic}</Chip>}
+            {video.updatedAt !== "" && <span className="text-xs text-[var(--muted)]">{relativeTime(video.updatedAt)}</span>}
           </div>
         </div>
       </Link>
-      <TileVideoJob slug={slug} title={title} poster={video.poster === null ? null : posterHref(video.poster.assetId)} path={path} />
+      <TileVideoJob slug={slug} title={title} poster={video.poster === null ? null : posterHref(video.assetId)} path={path} />
       <div className="pointer-events-none absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
         <VideoChangeButton slug={slug} title={title} path={path} className={HOVER_CONTROL} />
       </div>
@@ -96,7 +97,7 @@ export function VideoRow({ video, path }: { video: VideoSummary; path: string })
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-black">
         {video.poster !== null && (
           // eslint-disable-next-line @next/next/no-img-element -- see VideoTile.
-          <img src={posterHref(video.poster.assetId)} alt="" loading="lazy" className="h-full w-full object-contain" />
+          <img src={posterHref(video.assetId)} alt="" loading="lazy" className="h-full w-full object-contain" />
         )}
       </span>
       <Link
@@ -182,13 +183,14 @@ export function VideoChangeButton({
             sourceKind: "video",
             idempotencyKey: extendKey(store, name, () => idempotencyKey(`change:${slug}`)),
           });
-          if (!made.ok) {
+          const draftId = made.ok && typeof made.data.draftId === "string" ? made.data.draftId : null;
+          if (draftId === null) {
             setPending(false);
-            setProblem(`A conversation could not start: ${made.refusal.error}`);
+            setProblem(`A conversation could not start: ${made.ok ? "the runner named no conversation" : made.refusal.error}`);
             return;
           }
           forgetExtendKey(store, name);
-          router.push(conversationHref(path, made.data.draftId), { scroll: false });
+          router.push(conversationHref(path, draftId), { scroll: false });
         }}
         className={className}
       >
@@ -323,7 +325,14 @@ function Backdrop({
 }) {
   const [posterShown, setPosterShown] = useState(false);
   const [posterMissing, setPosterMissing] = useState(false);
+  const posterImage = useRef<HTMLImageElement>(null);
   const fallback = live.current ?? backdrop;
+  // The server renders the poster's `<img>`, so a cached one can finish
+  // loading before React attaches `onLoad`: ask the element once mounted.
+  useEffect(() => {
+    const image = posterImage.current;
+    if (image !== null && image.complete && image.naturalWidth > 0) setPosterShown(true);
+  }, [stage]);
 
   if (stage === "review") {
     return (
@@ -338,6 +347,7 @@ function Backdrop({
         {!posterMissing && (
           // eslint-disable-next-line @next/next/no-img-element -- the gate's poster, behind the proxy.
           <img
+            ref={posterImage}
             src={mediaHref(job.jobId, "poster.jpg")}
             alt=""
             decoding="async"

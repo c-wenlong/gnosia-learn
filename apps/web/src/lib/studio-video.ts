@@ -240,9 +240,12 @@ export function mediaFiles(slug: string): { mp4: string; vtt: string; transcript
   };
 }
 
-/** A landed video's poster, from the catalog's own asset route. */
-export function posterHref(posterAssetId: string): string {
-  return `/api/assets/${encodeURIComponent(posterAssetId)}/poster`;
+/**
+ * A landed video's poster, through the library's own route, which takes the
+ * *video's* asset id and finds the poster derived from it.
+ */
+export function posterHref(videoAssetId: string): string {
+  return `/api/assets/${encodeURIComponent(videoAssetId)}/poster`;
 }
 
 /** Where the library plays a landed studio video. */
@@ -355,6 +358,7 @@ export function stepRows(job: VideoJob): StepRow[] {
   const narrated = job.steps.length > 0 ? sent.has("narration") : isNarrated(job.brief);
   const stopped = job.state === "failed" || job.state === "cancelled" || job.state === "interrupted";
   const rows: StepRow[] = [];
+  const sentFailed = job.steps.some((step) => step.state === "failed");
   let failedMarked = false;
   for (const name of VIDEO_STEP_NAMES) {
     if (name === "narration" && !narrated) continue;
@@ -366,9 +370,16 @@ export function stepRows(job: VideoJob): StepRow[] {
           ? "current"
           : step.state;
     if (job.state === "queued") status = name === "storyboard" ? "done" : "pending";
+    // A job that stopped marks one step as where it stopped: a step the
+    // runner itself failed, else the first still running. Any other step it
+    // left running did not finish, and reads as not reached.
     if (stopped && status === "current") {
-      status = "failed";
-      failedMarked = true;
+      if (failedMarked || sentFailed) {
+        status = "pending";
+      } else {
+        status = "failed";
+        failedMarked = true;
+      }
     }
     if (job.state === "awaiting_review" || job.state === "accepted") {
       if (status === "current" || status === "pending") status = "done";
@@ -382,7 +393,7 @@ export function stepRows(job: VideoJob): StepRow[] {
     });
     if (name === "narration" || (name === "storyboard" && !narrated)) {
       const changed = job.lineChanges.filter((change) => change.kind !== "unchanged").length;
-      if (changed > 0) {
+      if (changed > 0 && job.state !== "queued") {
         rows.push({
           key: "lines",
           label: "Lines changed",
@@ -395,7 +406,7 @@ export function stepRows(job: VideoJob): StepRow[] {
   }
   // A job that stopped with nothing running (killed between steps): the first
   // step not done is where it stopped.
-  if (stopped && !failedMarked) {
+  if (stopped && !failedMarked && !sentFailed) {
     const first = rows.find((row) => row.status === "pending");
     if (first !== undefined) first.status = "failed";
   }
@@ -631,6 +642,23 @@ export function storyboard(
       lines,
     };
   });
+}
+
+/**
+ * One line of the making-of log, in a person's words: the runner names a
+ * scene by its class (`read the sheet Aw2_ScoringAndScaling`), and the view
+ * says its chapter title ("Read the sheet for Scoring and scaling").
+ */
+export function logLine(note: string, job: Pick<VideoJob, "classes" | "brief">): string {
+  let text = note.trim();
+  for (const scene of job.classes) {
+    const title = sceneTitle(job, scene);
+    text = text
+      .replaceAll(`the sheet ${scene}.sheet`, `the sheet for ${title}`)
+      .replaceAll(`the sheet ${scene}`, `the sheet for ${title}`)
+      .replaceAll(scene, title);
+  }
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** The changed lines to list under the player, with their scene's title. */

@@ -10,6 +10,7 @@ import {
   sortVideos,
   videoGroupKey,
   libraryHref,
+  logLine,
   mediaHref,
   newestSheet,
   newVideoJobs,
@@ -159,6 +160,15 @@ describe("the step list", () => {
     expect(rows.filter((row) => row.status === "failed")).toHaveLength(1);
   });
 
+  it("marks one step, never two, and the runner's own failed step over a running one", () => {
+    const two = steps({ storyboard: { state: "done" }, preview: { state: "running" }, look: { state: "running" } });
+    const rows = stepRows(job({ state: "failed", steps: two }));
+    expect(rows.filter((row) => row.status === "failed").map((row) => row.key)).toEqual(["preview"]);
+    expect(rows.find((row) => row.key === "look")?.status).toBe("pending");
+    const gate = steps({ preview: { state: "running" }, check: { state: "failed" } });
+    expect(stepRows(job({ state: "failed", steps: gate })).filter((row) => row.status === "failed").map((row) => row.key)).toEqual(["check"]);
+  });
+
   it("marks where a job stopped between steps, when nothing was running", () => {
     const rows = stepRows(job({ state: "interrupted", steps: steps({ storyboard: { state: "done" }, narration: { state: "done" } }) }));
     expect(rows.find((row) => row.status === "failed")?.key).toBe("setup");
@@ -177,6 +187,14 @@ describe("the step list", () => {
     expect(videoHeadline(job({ state: "awaiting_review" }))).toBe("Ready to review");
     expect(videoHeadline(job({ cancelRequestedAt: at(40) }))).toBe("Stopping");
     expect(videoStepCount(job({ state: "awaiting_review" }))).toBeNull();
+  });
+});
+
+describe("the making-of log", () => {
+  it("names a scene by its chapter title, not its class", () => {
+    expect(logLine("read the sheet Aw2_ScoringAndScaling", job())).toBe("Read the sheet for Scoring and scaling");
+    expect(logLine("read the sheet Aw1_WhyItMatters.sheet", job())).toBe("Read the sheet for Why it matters");
+    expect(logLine("rendered 3 scenes at 480p in 14 s", job())).toBe("Rendered 3 scenes at 480p in 14 s");
   });
 });
 
@@ -397,7 +415,7 @@ describe("the grid", () => {
   });
 
   it("links the poster, the library page and the gate's copies through the right routes", () => {
-    expect(posterHref("poster:video:a b")).toBe("/api/assets/poster%3Avideo%3Aa%20b/poster");
+    expect(posterHref("video:a b")).toBe("/api/assets/video%3Aa%20b/poster");
     expect(libraryHref("attention-weights")).toBe("/library/video%3Aattention-weights");
     expect(mediaHref("j/1", "a.mp4")).toBe("/studio/api/jobs/j%2F1/media/a.mp4");
   });
