@@ -245,8 +245,16 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
       </Button>
     );
 
+  // The key is for React's development build, not for a list. A video's
+  // props carry its transcript, which pushes the Flight row past its size
+  // limit, so the server sends this element as a deferred chunk. The client
+  // then checks the chunk's contents for a key without seeing that
+  // `LibraryVideo` placed it in static JSX, and warns "Each child in a list
+  // should have a unique key". A key satisfies that check and changes nothing
+  // else.
   const heading = (
     <h1
+      key="heading"
       className={cx(
         "break-words text-text",
         name.source === "title"
