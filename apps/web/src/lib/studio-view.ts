@@ -383,7 +383,8 @@ export interface TopicChip {
  * say so rather than leave a person wondering whether the filter exists.
  */
 export function topicChips(
-  diagrams: readonly Diagram[],
+  /** Anything with a topic: the diagrams, and the studio videos beside them. */
+  diagrams: readonly Pick<Diagram, "topic">[],
   titles: ReadonlyMap<string, string> = new Map(),
   domains: ReadonlyMap<string, string> = new Map(),
 ): TopicChip[] {
