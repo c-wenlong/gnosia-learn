@@ -122,6 +122,12 @@ afterEach(async () => {
   await rm(process.env.STUDIO_HOME!, { recursive: true, force: true });
 });
 
+/** A person's edit of the brief, based on the brief in force unless told otherwise. */
+function edit(id: string, body: unknown, base?: string) {
+  const current = drafts.get(id);
+  return drafts.editBrief(id, body, base ?? (current?.brief ? String(current.briefSeq) : "none"));
+}
+
 /** Send and wait for the whole turn, retries and writes included. */
 async function say(id: string, text: string): Promise<void> {
   await drafts.send(id, text);
@@ -829,20 +835,23 @@ describe("a brief edited by hand", () => {
     expect(drafts.get(record.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
 
     // Still on the proposed slug: checked against the widened vocabulary, and the proposal stays.
-    const renamed = await drafts.editBrief(record.id, { ...brief, title: "Tailscale tunnels, end to end" });
+    const renamed = await edit(record.id, { ...brief, title: "Tailscale tunnels, end to end" });
     expect(renamed.changed).toBe(true);
     expect(renamed.record.pendingTopic?.entry.slug).toBe("mesh-vpn");
     expect(renamed.record.title).toBe("Tailscale tunnels, end to end");
 
     // An existing topic ends the proposal, and the note says so.
-    const moved = await drafts.editBrief(record.id, { ...brief, topic: "tcp-congestion-control" });
+    const moved = await edit(record.id, { ...brief, title: "Tailscale tunnels, end to end", topic: "tcp-congestion-control" });
     expect(moved.record.pendingTopic).toBeNull();
     const view = await drafts.view(record.id);
     expect(view.transcript.at(-1)?.text).toContain('topic: "mesh-vpn" -> "tcp-congestion-control"');
     expect(view.transcript.at(-1)?.text).toContain("proposed new topic is dropped");
     expect(view.pendingTopic).toBeNull();
-    // Two edits, two notes waiting for the planner.
-    expect(drafts.get(record.id)?.undelivered).toHaveLength(2);
+    // Two edits, one note waiting for the planner: both changes, from the brief it proposed.
+    expect(drafts.get(record.id)?.undelivered).toEqual([]);
+    const told = drafts.get(record.id)?.pendingEdit?.text ?? "";
+    expect(told).toContain('- title: "TCP congestion window" -> "Tailscale tunnels, end to end"');
+    expect(told).toContain('- topic: "mesh-vpn" -> "tcp-congestion-control"');
     // Each edit mirrored the row.
     expect(catalogMock.draftUpsert).toHaveBeenCalled();
   });
@@ -858,7 +867,7 @@ describe("a brief edited by hand", () => {
       }),
     );
     const press = drafts.draw(record.id, "press");
-    await expect(drafts.editBrief(record.id, good)).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
+    await expect(edit(record.id, good)).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
     release();
     const { jobId } = await press;
     await mkdir(path.join(process.env.STUDIO_HOME!, "jobs", jobId, "scratch"), { recursive: true });
@@ -866,7 +875,7 @@ describe("a brief edited by hand", () => {
     await store.update(jobId, { state: "discarded" });
     await until(() => drafts.get(record.id)?.state === "done", "a discarded drawing never finished the draft");
     await drafts.settled(record.id);
-    await expect(drafts.editBrief(record.id, good)).rejects.toMatchObject({ status: 409, detail: { reason: "done" } });
+    await expect(edit(record.id, good)).rejects.toMatchObject({ status: 409, detail: { reason: "done" } });
   });
 
   it("is refused with 503 when the vocabulary cannot be read at all", async () => {
@@ -875,14 +884,22 @@ describe("a brief edited by hand", () => {
     await say(record.id, "draw it");
     catalogMock.topicList.mockResolvedValue(topicListDown());
     // The cache the first read wrote answers instead, so the edit still passes...
-    await expect(drafts.editBrief(record.id, { ...good, title: "Renamed" })).resolves.toMatchObject({ changed: true });
+    await expect(edit(record.id, { ...good, title: "Renamed" })).resolves.toMatchObject({ changed: true });
     // ...and with no cache either, it is a 503.
     await rm(path.join(process.env.STUDIO_HOME!, "cache"), { recursive: true, force: true });
-    await expect(drafts.editBrief(record.id, good)).rejects.toMatchObject({ status: 503 });
+    await expect(edit(record.id, good)).rejects.toMatchObject({ status: 503 });
   });
 });
 
 describe("C4: the vocabulary changes during a conversation", () => {
+  // Every turn reads the catalog here; the reuse window has its own test.
+  beforeEach(() => {
+    process.env.STUDIO_TURN_VOCABULARY_MS = "0";
+  });
+  afterEach(() => {
+    delete process.env.STUDIO_TURN_VOCABULARY_MS;
+  });
+
   const added = {
     slug: "mesh-vpn",
     title: "Mesh VPNs",
@@ -944,10 +961,12 @@ describe("vocabularyChangeNote", () => {
     const after = vocabularyBlock([entry("a"), entry("b", ["b-one"]), ...Array.from({ length: 300 }, (_, i) => entry(`new-${i}`))]);
     const note = vocabularyChangeNote(`prompt text\n\n${before}\n\nCORPUS`, after)!;
     expect(note).toContain("archived or removed, so no brief may name them: gone");
-    expect(note).toMatch(/more lines not shown\)$/);
+    expect(note).toMatch(/they follow in the next note\)$/);
     expect(vocabularyChangeNote(before, vocabularyBlock([entry("a"), entry("b"), entry("gone")]))).toBeNull();
     const changed = vocabularyChangeNote(before, vocabularyBlock([entry("a"), entry("b", ["b-one"]), entry("gone")]))!;
-    expect(changed).toContain("changed (as they are now):\nb | b | d |  | \n  concepts: b-one");
+    expect(changed).toContain("changed (as they are now):\nb | b | d |  |\n  concepts: b-one");
+    // The last topic of a block reads the same as it does mid-block.
+    expect(vocabularyChangeNote(before, vocabularyBlock([entry("a"), entry("b"), entry("gone"), entry("z")]))).not.toContain("changed (as they are now)");
   });
 });
 
@@ -989,5 +1008,124 @@ describe("describeBriefEdit", () => {
     ]);
     const reordered = brief(["Act", "Think", "Tool", "Observe", "Answer"], [["Act", "Tool", "calls"], ["Tool", "Observe", "returns"]]);
     expect(describeBriefEdit(before, reordered)).toContain("- elements reordered:");
+  });
+});
+
+describe("the brief a person edited", () => {
+  it("stays in force through a planner reply with no brief, while a planner's own brief does not", async () => {
+    await fake.script([{ text: proposing(good) }, { text: "Looks right to me." }, { text: proposing({ ...good, title: "Newer" }) }, { text: "Anything else?" }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    await edit(record.id, { ...good, title: "Edited" });
+    await say(record.id, "good?");
+    // The person's brief is still the one Draw would draw.
+    expect(drafts.get(record.id)).toMatchObject({ state: "briefed", briefBy: "person", brief: { title: "Edited" } });
+    const view = await drafts.view(record.id);
+    const carrying = view.transcript.filter((entry) => entry.brief !== undefined).at(-1);
+    expect(carrying).toMatchObject({ role: "studio", edit: true, seq: view.briefSeq });
+
+    // A newer valid planner brief replaces it, and then the old rule holds again.
+    await say(record.id, "call it newer");
+    expect(drafts.get(record.id)).toMatchObject({ state: "briefed", briefBy: "planner", brief: { title: "Newer" } });
+    await say(record.id, "hmm");
+    // Out of force: open, which the suite's four-turn cap then closes.
+    expect(drafts.get(record.id)?.state).not.toBe("briefed");
+    expect((await drafts.events(record.id)).some((event) => event.type === "abandoned" && event.by === "turn-cap")).toBe(true);
+  });
+
+  it("is refused when it edits a brief that is no longer in force, and a retried edit that landed is not", async () => {
+    await fake.script([{ text: proposing(good) }, { text: proposing({ ...good, title: "Second" }) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    const stale = String(drafts.get(record.id)?.briefSeq);
+    await say(record.id, "rename it");
+    const current = drafts.get(record.id)!.briefSeq!;
+    await expect(edit(record.id, { ...good, title: "Mine" }, stale)).rejects.toMatchObject({
+      status: 409,
+      detail: { reason: "brief-changed", base: current },
+    });
+    expect(drafts.get(record.id)?.brief?.title).toBe("Second");
+    await expect(edit(record.id, good, undefined as never).then(() => edit(record.id, good, "abc"))).rejects.toMatchObject({
+      status: 400,
+      detail: { field: "base" },
+    });
+    // The first try of an edit landed; its retry names the base it started from and changes nothing.
+    const first = drafts.get(record.id)!.briefSeq!;
+    await edit(record.id, { ...good, title: "Retried" }, String(first));
+    await expect(edit(record.id, { ...good, title: "Retried" }, String(first))).resolves.toMatchObject({ changed: false });
+  });
+
+  it("asks again inside the write chain, so a turn that started while the vocabulary was read refuses the edit", async () => {
+    await fake.script([{ text: proposing(good) }, { text: "thinking", hangMs: 300 }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    let release: () => void = () => undefined;
+    catalogMock.topicList.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve(topicListAnswer()))),
+    );
+    const pending = edit(record.id, { ...good, title: "Mine" });
+    await until(() => catalogMock.topicList.mock.calls.length > 0 && release.name !== "", "the edit never read the vocabulary");
+    await drafts.send(record.id, "another thought");
+    release();
+    await expect(pending).rejects.toMatchObject({ status: 409, detail: { reason: "in-flight" } });
+    await drafts.settled(record.id);
+    expect(drafts.get(record.id)?.brief?.title).toBe(good.title);
+  });
+
+  it("streams studio, brief, then state, with the edit flag on both transcript events", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    const seen: { event: string; data: unknown }[] = [];
+    const off = await drafts.subscribe(record.id, drafts.get(record.id)!.seq, (event) => seen.push(event));
+    await edit(record.id, { ...good, title: "Edited" });
+    off();
+    expect(seen.map((event) => event.event)).toEqual(["studio", "brief", "state"]);
+    expect(seen[0]?.data).toMatchObject({ role: "studio", edit: true });
+    expect(seen[1]?.data).toMatchObject({ edit: true, brief: { title: "Edited" } });
+    // The one disk write holds the brief, its seq and the planner's note together.
+    const onDisk = JSON.parse(await readFile(draftJsonPath(record.id), "utf8")) as Record<string, unknown>;
+    expect(onDisk).toMatchObject({ brief: { title: "Edited" }, briefSeq: (seen[0]?.data as { seq: number }).seq, briefBy: "person" });
+    expect(onDisk.pendingEdit).toMatchObject({ text: expect.stringContaining('"Edited"') });
+  });
+});
+
+describe("the vocabulary a turn reads", () => {
+  it("is reused from the last read for a short while rather than read again before every turn", async () => {
+    await fake.script([{ text: "Which one?" }, { text: "Ok." }]);
+    const { record } = await drafts.create({});
+    catalogMock.topicList.mockClear();
+    await say(record.id, "hello");
+    await say(record.id, "again");
+    // One read per reply's verdict, none before either turn.
+    expect(catalogMock.topicList).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("vocabularyChange", () => {
+  it("advances the baseline only past what the note told, so the next note tells the rest", async () => {
+    const { vocabularyChange } = await import("../src/drafts");
+    const { vocabularyBlock } = await import("../src/planner");
+    const entry = (slug: string) => ({
+      slug,
+      title: slug,
+      domain: "d",
+      summary: null,
+      aliases: [],
+      relations: [],
+      maps: { manimkc: [], courses: [], concepts: [] },
+    });
+    const before = vocabularyBlock([entry("a")]);
+    const now = vocabularyBlock([entry("a"), ...Array.from({ length: 300 }, (_, i) => entry(`new-${i}`))]);
+    const first = vocabularyChange(before, now)!;
+    expect(first.complete).toBe(false);
+    const toldFirst = (first.note!.match(/^new-\d+ \|/gm) ?? []).length;
+    expect(toldFirst).toBeGreaterThan(100);
+    const second = vocabularyChange(first.baseline, now)!;
+    const toldSecond = (second.note!.match(/^new-\d+ \|/gm) ?? []).length;
+    // Nothing told twice, nothing dropped.
+    expect(toldSecond).toBe(300 - toldFirst);
+    expect(second.complete).toBe(true);
+    expect(vocabularyChange(second.baseline, now)?.note).toBeNull();
   });
 });

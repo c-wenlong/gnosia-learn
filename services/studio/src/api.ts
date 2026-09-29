@@ -1274,7 +1274,8 @@ async function draftRoutes(
       const limitRaw = Number.parseInt(url.searchParams.get("limit") ?? "25", 10);
       const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25;
       const state = url.searchParams.get("state") ?? undefined;
-      const list = drafts.list({ limit, ...(state === undefined || state === "" ? {} : { state }) });
+      const nonEmpty = ["1", "true"].includes(url.searchParams.get("nonEmpty") ?? "");
+      const list = drafts.list({ limit, nonEmpty, ...(state === undefined || state === "" ? {} : { state }) });
       return send(response, 200, { drafts: list, note: `${list.length} draft${list.length === 1 ? "" : "s"}, newest first` });
     }
     if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/drafts does`);
@@ -1350,11 +1351,12 @@ async function draftRoutes(
       const input = await body();
       if (input === null) return;
       try {
-        const { record, changed } = await drafts.editBrief(id, input);
+        const { record, changed } = await drafts.editBrief(id, input, url.searchParams.get("base"));
         return send(response, 200, {
           draftId: id,
           state: record.state,
           brief: record.brief,
+          briefSeq: record.briefSeq ?? null,
           pendingTopic: record.pendingTopic,
           note: changed
             ? "the brief is saved; the planner is told on its next turn, and Draw draws this one"

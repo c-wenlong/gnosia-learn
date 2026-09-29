@@ -234,8 +234,13 @@ describe("the draft routes", () => {
 });
 
 describe("PUT /api/drafts/{id}/brief", () => {
-  const put = (route: string, body: unknown, type = "application/json") =>
-    fetch(`${base}${route}`, { method: "PUT", headers: { "content-type": type }, body: JSON.stringify(body) });
+  /** A PUT based on the brief in force, unless `baseSeq` says otherwise (`null` sends none). */
+  const put = (route: string, body: unknown, type = "application/json", baseSeq?: string | null) => {
+    const current = drafts.get(route.split("/")[3] ?? "");
+    const named = baseSeq === undefined ? (current?.brief ? String(current.briefSeq) : "none") : baseSeq;
+    const query = named === null ? "" : `?base=${named}`;
+    return fetch(`${base}${route}${query}`, { method: "PUT", headers: { "content-type": type }, body: JSON.stringify(body) });
+  };
 
   /** A briefed draft: one turn that proposes `good`. */
   async function briefed(): Promise<string> {
@@ -363,6 +368,15 @@ describe("PUT /api/drafts/{id}/brief", () => {
     expect(list.drafts.find((row) => row.draftId === briefedId)?.firstMessage).toBe("draw it");
     const onlyOpen = (await (await fetch(`${base}/api/drafts?state=open`)).json()) as { drafts: unknown[] };
     expect(onlyOpen.drafts).toHaveLength(1);
+
+    // Conversations never started are filtered before the limit, so they cannot crowd out real ones.
+    for (let i = 0; i < 3; i += 1) await post("/api/drafts", {});
+    const crowded = (await (await fetch(`${base}/api/drafts?state=open,briefed&limit=2`)).json()) as { drafts: { turns: number }[] };
+    expect(crowded.drafts.every((row) => row.turns === 0)).toBe(true);
+    const started = (await (await fetch(`${base}/api/drafts?state=open,briefed&nonEmpty=1&limit=2`)).json()) as {
+      drafts: { draftId: string }[];
+    };
+    expect(started.drafts.map((row) => row.draftId).sort()).toEqual([draftId, briefedId].sort());
   });
 });
 

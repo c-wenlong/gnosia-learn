@@ -48,6 +48,7 @@ import {
   plannerSettings,
   startPlanner,
   studioMessage,
+  TOPIC_RELATION_KINDS,
   vocabularyBlock,
   vocabularyHash,
   EXTENDING_LINE_CAP,
@@ -117,6 +118,24 @@ export interface DraftRecord {
   transcriptPath: string;
   brief: DraftBrief | null;
   briefAt: string | null;
+  /**
+   * The transcript seq of the entry carrying the brief in force: the planner
+   * reply it came in, or the studio note of a person's edit. What a
+   * `PUT .../brief?base=` names, so an edit of an older brief is refused.
+   */
+  briefSeq?: number | null;
+  /**
+   * Who wrote the brief in force. A person's edit stays in force when a later
+   * planner reply carries no brief; only a newer valid planner brief replaces
+   * it. A planner's brief ends with any reply that does not repeat it.
+   */
+  briefBy?: "planner" | "person" | null;
+  /**
+   * A person's edits since the planner last heard, as one note: the change
+   * from the brief the planner last knew (`base`) to the one now in force.
+   * Replaced, never appended to, by a further edit before the next turn.
+   */
+  pendingEdit?: { base: DraftBrief | null; text: string } | null;
   pendingTopic: PendingTopic | null;
   /** Person turns so far, retries included, against `PLANNER_TURNS`. */
   turns: number;
@@ -181,6 +200,8 @@ export interface TranscriptEntry {
   briefInvalid?: { field: string; message: string; retried: boolean };
   superseded?: boolean;
   internal?: boolean;
+  /** A studio note for a person's edit of the brief, which carries that brief. */
+  edit?: boolean;
   interrupted?: boolean;
   costUsd?: number | null;
   costSource?: CostSource | null;
@@ -203,6 +224,8 @@ export interface DraftView {
   title: string | null;
   transcript: TranscriptEntry[];
   brief: DraftBrief | null;
+  /** The seq of the transcript entry carrying `brief`; what `PUT .../brief?base=` names. */
+  briefSeq: number | null;
   pendingTopic: PendingTopic | null;
   jobId: string | null;
   turns: number;
@@ -332,6 +355,10 @@ export class Drafts {
   private readonly creating = new Map<string, Promise<{ record: DraftRecord; created: boolean }>>();
   /** Drafts the pruner has taken (D40): gone to `get`, `require` and `list` from that moment. */
   private readonly pruning = new Set<string>();
+  /** Workspaces of pruned drafts that did not all go, removed by the next pass. */
+  private readonly leftovers = new Set<string>();
+  /** The last vocabulary this service read, reused by a turn's C4 check for a short while. */
+  private lastVocabulary: { at: number; value: Vocabulary } | null = null;
 
   constructor(
     private readonly store: JobStore,
@@ -359,6 +386,12 @@ export class Drafts {
       return;
     }
     for (const entry of entries) {
+      // A draft the pruner took whose workspace did not all go: its row is
+      // gone, so it is never served again, and the next pass removes the rest.
+      if (await readFile(tombstonePath(entry), "utf8").then(() => true, () => false)) {
+        this.leftovers.add(entry);
+        continue;
+      }
       try {
         const record = JSON.parse(await readFile(draftJsonPath(entry), "utf8")) as DraftRecord;
         if (record.id !== entry) continue;
@@ -370,7 +403,12 @@ export class Drafts {
         // A draft from before the list showed first messages learns its own.
         const first = events.find((event) => event.type === "message" && typeof event.text === "string");
         const firstMessage = record.firstMessage ?? (first === undefined ? null : listLine(first.text as string));
-        this.records.set(record.id, { ...record, seq, firstMessage });
+        // A draft from before briefs carried their seq learns it from its transcript.
+        const lastBrief = [...events].reverse().find((event) => event.type === "brief");
+        const briefSeq =
+          record.briefSeq ?? (record.brief !== null && typeof lastBrief?.replySeq === "number" ? lastBrief.replySeq : null);
+        const briefBy = record.briefBy ?? (record.brief === null ? null : lastBrief?.edit === true ? "person" : "planner");
+        this.records.set(record.id, { ...record, seq, firstMessage, briefSeq, briefBy });
       } catch {
         // A workspace with no readable record is one that was created and
         // never written, or one a person has been poking at: nothing to serve.
@@ -438,7 +476,7 @@ export class Drafts {
                 error: "The reply was cut off: the studio stopped while the planner was answering.",
                 errorField: null,
               }),
-          ...(current.state === "briefed" && !briefed ? { state: "open" as const } : {}),
+          ...(current.state === "briefed" && !briefed && current.briefBy !== "person" ? { state: "open" as const } : {}),
         });
       });
       interrupted.push(record.id);
@@ -486,7 +524,7 @@ export class Drafts {
   }
 
   /** `state` may name several, comma-separated (`open,briefed`). */
-  list(filter: { state?: string; limit?: number } = {}): DraftSummaryView[] {
+  list(filter: { state?: string; limit?: number; nonEmpty?: boolean } = {}): DraftSummaryView[] {
     const states =
       filter.state === undefined
         ? null
@@ -494,6 +532,8 @@ export class Drafts {
     return [...this.records.values()]
       .filter((record) => !this.pruning.has(record.id))
       .filter((record) => states === null || states.size === 0 || states.has(record.state))
+      // Before the limit, so conversations never started cannot crowd real ones out.
+      .filter((record) => filter.nonEmpty !== true || record.turns > 0)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, filter.limit ?? 50)
       .map((record) => ({
@@ -541,6 +581,7 @@ export class Drafts {
       title: record.title,
       transcript: transcriptOf(await this.events(id)),
       brief: record.brief,
+      briefSeq: record.brief === null ? null : (record.briefSeq ?? null),
       pendingTopic: record.pendingTopic,
       jobId: record.jobIds.at(-1) ?? null,
       turns: record.turns,
@@ -745,7 +786,7 @@ export class Drafts {
 
     let vocabulary: Vocabulary;
     try {
-      vocabulary = await loadVocabulary();
+      vocabulary = await this.readVocabulary();
     } catch (error) {
       throw vocabularyDown(error);
     }
@@ -957,8 +998,9 @@ export class Drafts {
   private async converse(id: string, turn: number, text: string): Promise<void> {
     await this.tellVocabularyChanges(id);
     const record = this.require(id);
-    const prompt = [...record.undelivered.map(studioMessage), text].join("\n\n");
-    if (record.undelivered.length > 0) await this.write(id, () => this.save(id, { undelivered: [] }));
+    const notes = [...record.undelivered, ...(record.pendingEdit ? [record.pendingEdit.text] : [])];
+    const prompt = [...notes.map(studioMessage), text].join("\n\n");
+    if (notes.length > 0) await this.write(id, () => this.save(id, { undelivered: [], pendingEdit: null }));
 
     const first = await this.speak(id, turn, prompt, false);
     if (first === null) return;
@@ -1010,7 +1052,8 @@ export class Drafts {
       `The planner's brief did not pass the studio's checks twice. ${verdict.field}: ${verdict.message}`,
       verdict.field,
     );
-    if (this.require(id).state === "briefed") await this.save(id, { state: "open" });
+    const now = this.require(id);
+    if (now.state === "briefed" && now.briefBy !== "person") await this.save(id, { state: "open" });
   }
 
   /** A reply with no refusal: a new brief in force, or none, which ends any older one. */
@@ -1018,9 +1061,11 @@ export class Drafts {
     const record = this.require(id);
     if (record.state === "abandoned") return;
     if (verdict.kind === "none") {
-      // A reply that asks rather than proposes leaves no brief in force. The
-      // last one stays on the record, for "Fill the brief myself".
-      if (record.state === "briefed") await this.save(id, { state: "open" });
+      // A reply that asks rather than proposes leaves no planner brief in
+      // force; the last one stays on the record, for "Fill the brief myself".
+      // A brief the person edited stays in force: only a newer valid planner
+      // brief replaces it.
+      if (record.state === "briefed" && record.briefBy !== "person") await this.save(id, { state: "open" });
       return;
     }
     if (verdict.kind !== "valid") return;
@@ -1032,6 +1077,8 @@ export class Drafts {
       state: record.state === "drawing" ? "drawing" : "briefed",
       brief: verdict.brief,
       briefAt: new Date().toISOString(),
+      briefSeq: replySeq,
+      briefBy: "planner",
       pendingTopic: verdict.pendingTopic,
       title: verdict.brief.title,
     });
@@ -1048,7 +1095,7 @@ export class Drafts {
   private async tellVocabularyChanges(id: string): Promise<void> {
     let vocabulary: Vocabulary;
     try {
-      vocabulary = await loadVocabulary();
+      vocabulary = await this.recentVocabulary(turnVocabularyMs());
     } catch {
       return;
     }
@@ -1058,18 +1105,37 @@ export class Drafts {
       (await readFile(vocabularyToldPath(id), "utf8").catch(() => null)) ??
       (await readFile(plannerSystemPath(id), "utf8").catch(() => null));
     const now = vocabularyBlock(vocabulary.entries);
-    const text = told === null ? null : vocabularyChangeNote(told, now);
+    const change = told === null ? null : vocabularyChange(told, now);
     await this.write(id, async () => {
-      await atomicWrite(vocabularyToldPath(id), `${now}\n`);
-      if (text !== null) await this.note(id, text);
-      await this.save(id, { vocabularyHash: hash });
+      // The note first, then the baseline: a crash between the two tells the
+      // planner twice rather than not at all.
+      if (change?.note) await this.note(id, change.note);
+      const complete = change === null || change.complete;
+      await atomicWrite(vocabularyToldPath(id), `${complete ? now : change.baseline}\n`);
+      // A capped note leaves the baseline short of the catalog, so the hash
+      // cannot match and the next turn tells the rest.
+      await this.save(id, { vocabularyHash: complete ? hash : `partial:${hash}` });
     });
+  }
+
+  /** The vocabulary, read at most `maxAgeMs` ago by this service, or read now. */
+  private async recentVocabulary(maxAgeMs: number): Promise<Vocabulary> {
+    const last = this.lastVocabulary;
+    if (last !== null && Date.now() - last.at < maxAgeMs) return last.value;
+    return this.readVocabulary();
+  }
+
+  /** Read the vocabulary and remember it for `recentVocabulary`. */
+  private async readVocabulary(): Promise<Vocabulary> {
+    const value = await loadVocabulary();
+    this.lastVocabulary = { at: Date.now(), value };
+    return value;
   }
 
   private async judge(text: string): Promise<BriefVerdict> {
     let vocabulary: Vocabulary;
     try {
-      vocabulary = await loadVocabulary();
+      vocabulary = await this.readVocabulary();
     } catch (error) {
       return { kind: "invalid", field: "topic", message: `the topic list cannot be read: ${(error as Error).message}` };
     }
@@ -1555,8 +1621,9 @@ export class Drafts {
    *
    * An identical brief on a briefed draft changes nothing and writes nothing.
    */
-  async editBrief(id: string, input: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
-    const before = this.assertEditable(id);
+  async editBrief(id: string, input: unknown, rawBase: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
+    this.assertEditable(id);
+    const base = parseBase(rawBase);
     if (typeof input !== "object" || input === null || Array.isArray(input)) {
       throw new JobRefused(400, "the request body must be a JSON object holding a brief", { field: "body" });
     }
@@ -1564,18 +1631,13 @@ export class Drafts {
     for (const field of EDITABLE_BRIEF_FIELDS) if (field in input) raw[field] = (input as Record<string, unknown>)[field];
     let vocabulary: Vocabulary;
     try {
-      vocabulary = await loadVocabulary();
+      vocabulary = await this.readVocabulary();
     } catch (error) {
       throw vocabularyDown(error);
     }
     return this.write(id, async () => {
       // Asked again after the read: a turn or a press may have started since.
       const current = this.assertEditable(id);
-      if (current.briefAt !== before.briefAt) {
-        throw new JobRefused(409, "the brief changed while this edit was being checked; look at the new one and edit that", {
-          reason: "brief-changed",
-        });
-      }
       const pending = current.pendingTopic;
       const keepsPending = pending !== null && raw.topic === pending.entry.slug && !vocabulary.topics.has(pending.entry.slug);
       const checkedAgainst: Vocabulary = keepsPending
@@ -1590,6 +1652,8 @@ export class Drafts {
       }
       const brief = withoutKey(valid);
       const pendingTopic = keepsPending ? pending : null;
+      // What is already in force is a success whatever the base, so a
+      // retried PUT whose first try landed is not refused.
       if (
         current.state === "briefed" &&
         JSON.stringify(brief) === JSON.stringify(current.brief) &&
@@ -1597,30 +1661,42 @@ export class Drafts {
       ) {
         return { record: current, changed: false };
       }
-      // The record first, in memory at once: a Draw pressed from here on
-      // draws this brief, never the one it replaces.
-      await this.save(id, {
+      const inForce = current.brief === null ? null : (current.briefSeq ?? null);
+      if (base !== inForce) {
+        throw new JobRefused(
+          409,
+          "this edit is of a brief that is no longer the one in force; look at the newer brief and edit that",
+          { reason: "brief-changed", base: inForce },
+        );
+      }
+      const summary = describeBriefEdit(current.brief, brief, { pendingCleared: pending !== null && pendingTopic === null });
+      // The planner hears once per turn: every edit since, from the brief it last knew.
+      const plannerBase = current.pendingEdit ? current.pendingEdit.base : current.brief;
+      const told = describeBriefEdit(plannerBase, brief, { pendingCleared: pending !== null && pendingTopic === null });
+      // In memory at once, before the first await: a Draw pressed from here
+      // on draws this brief, never the one it replaces. The disk record is
+      // written once, after the transcript, so the stream carries `studio`,
+      // `brief`, then `state`.
+      this.records.set(id, {
+        ...current,
         state: "briefed",
         brief,
         briefAt: new Date().toISOString(),
+        briefBy: "person",
         pendingTopic,
         title: brief.title,
         errorKind: null,
         error: null,
         errorField: null,
       });
-      const summary = describeBriefEdit(current.brief, brief, { pendingCleared: pending !== null && pendingTopic === null });
       const note = await this.append(id, { type: "studio", text: summary, edit: true });
       await this.append(id, { type: "brief", replySeq: note.seq, brief, pendingTopic, edit: true });
-      // The planner is told the whole brief now in force; the person sees the summary.
       await this.save(id, {
-        undelivered: [
-          ...this.require(id).undelivered,
-          `${summary}\n\nThis is the brief in force; build on it, and a change is still a whole new brief:\n` +
-            `${JSON.stringify(brief, null, 1)}\n\n` +
-            "A reply of yours with no brief block takes this brief out of force and hides Draw. So if your next " +
-            "reply keeps it, end that reply with it in a brief block, unchanged.",
-        ],
+        briefSeq: note.seq,
+        pendingEdit: {
+          base: plannerBase,
+          text: `${told}\n\nThis is the brief in force; build on it, and a change is still a whole new brief:\n${JSON.stringify(brief, null, 1)}`,
+        },
       });
       return { record: this.require(id), changed: true };
     });
@@ -1742,16 +1818,35 @@ export class Drafts {
       this.pruning.add(id);
       try {
         if (!(await decide(record))) return false;
+        // The row is gone. A tombstone first, so a workspace that does not
+        // all go is never loaded as a draft again, and the next pass finishes it.
+        await writeFile(tombstonePath(id), `${new Date().toISOString()}\n`, "utf8");
         this.records.delete(id);
         this.live.delete(id);
         this.streams.get(id)?.removeAllListeners();
         this.streams.delete(id);
-        await rm(draftDir(id), { recursive: true, force: true });
+        await rm(draftDir(id), { recursive: true, force: true }).catch(() => this.leftovers.add(id));
         return true;
       } finally {
         this.pruning.delete(id);
       }
     });
+  }
+
+  /** Remove what is left of workspaces pruned before; their rows went first. */
+  async sweepLeftovers(): Promise<{ removed: string[]; failed: string[] }> {
+    const removed: string[] = [];
+    const failed: string[] = [];
+    for (const id of [...this.leftovers]) {
+      try {
+        await rm(draftDir(id), { recursive: true, force: true });
+        this.leftovers.delete(id);
+        removed.push(id);
+      } catch {
+        failed.push(id);
+      }
+    }
+    return { removed, failed };
   }
 
   /* ------------------------------------------------------------------ */
@@ -1870,6 +1965,33 @@ export function describeBriefEdit(before: DraftBrief | null, after: DraftBrief, 
   return lines.join("\n");
 }
 
+/** Written into a pruned draft's workspace before it is removed, so a partial removal is never loaded again. */
+function tombstonePath(id: string): string {
+  return path.join(draftDir(id), "pruned");
+}
+
+/**
+ * How long a turn's C4 check may reuse the vocabulary this service last read
+ * (every reply's verdict reads it), rather than spawn `catalog topic ls` again
+ * before the turn. Read per call, so a suite can set it.
+ */
+function turnVocabularyMs(): number {
+  const raw = Number(process.env.STUDIO_TURN_VOCABULARY_MS ?? "");
+  return Number.isFinite(raw) && raw >= 0 && process.env.STUDIO_TURN_VOCABULARY_MS?.trim() ? raw : 60_000;
+}
+
+/** `?base=`: the seq of the brief the edit started from, or `none` for a draft with no brief. */
+function parseBase(raw: unknown): number | null {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (text === "none") return null;
+  if (/^[1-9][0-9]{0,8}$/.test(text)) return Number(text);
+  throw new JobRefused(
+    400,
+    `"base" is required: the seq of the transcript entry carrying the brief being edited, or "none" when there is no brief`,
+    { field: "base" },
+  );
+}
+
 /** The VOCABULARY block the planner was last told of by a C4 note; before any, its system prompt's. */
 function vocabularyToldPath(id: string): string {
   return path.join(draftDir(id), "vocabulary-told.md");
@@ -1885,7 +2007,13 @@ export function vocabularyTopics(text: string): { domains: string | null; topics
   const start = text.indexOf(begin);
   if (start === -1) return null;
   const end = text.indexOf("-----END VOCABULARY-----", start);
-  const lines = text.slice(start + begin.length, end === -1 ? undefined : end).split("\n");
+  // Trailing space trimmed: a topic with no summary ends in "| ", and the
+  // fence trims the block's last line, so the same topic would otherwise
+  // read as changed whenever it stops being the last one.
+  const lines = text
+    .slice(start + begin.length, end === -1 ? undefined : end)
+    .split("\n")
+    .map((line) => line.trimEnd());
   let domains: string | null = null;
   const topics = new Map<string, string>();
   let current: string | null = null;
@@ -1912,31 +2040,67 @@ const VOCABULARY_NOTE_CAP = EXTENDING_LINE_CAP;
 
 /**
  * The C4 note: what is new, what changed and what is gone between the
- * vocabulary the planner was told of and the one the catalog lists now. Null
- * when no topic differs.
+ * vocabulary the planner was told of and the one the catalog lists now, and
+ * the baseline for the next comparison: what the planner has now been told.
+ * Removals come first and always fit; whole topics follow up to the cap, and
+ * any that do not fit stay out of the baseline, so the next turn tells them.
+ * Null when either block cannot be read.
  */
-export function vocabularyChangeNote(told: string, now: string): string | null {
+export function vocabularyChange(
+  told: string,
+  now: string,
+): { note: string | null; baseline: string; complete: boolean } | null {
   const before = vocabularyTopics(told);
   const after = vocabularyTopics(now);
   if (before === null || after === null) return null;
-  const added: string[] = [];
-  const changed: string[] = [];
+  const added: [string, string][] = [];
+  const changed: [string, string][] = [];
   const gone: string[] = [];
   for (const [slug, entry] of after.topics) {
     const was = before.topics.get(slug);
-    if (was === undefined) added.push(entry);
-    else if (was !== entry) changed.push(entry);
+    if (was === undefined) added.push([slug, entry]);
+    else if (was !== entry) changed.push([slug, entry]);
   }
   for (const slug of before.topics.keys()) if (!after.topics.has(slug)) gone.push(slug);
-  if (added.length === 0 && changed.length === 0 && gone.length === 0) return null;
+  if (added.length === 0 && changed.length === 0 && gone.length === 0) {
+    return { note: null, baseline: now, complete: true };
+  }
   const lines = ["The topic list changed since you were given the VOCABULARY block. Read it with these changes, in the same format:"];
   if (after.domains !== null && after.domains !== before.domains) lines.push(after.domains);
-  // Removals first: one line, and the one a cap must never cut.
   if (gone.length > 0) lines.push(`archived or removed, so no brief may name them: ${gone.join(", ")}`);
-  if (added.length > 0) lines.push("added:", ...added.flatMap((entry) => entry.split("\n")));
-  if (changed.length > 0) lines.push("changed (as they are now):", ...changed.flatMap((entry) => entry.split("\n")));
-  if (lines.length <= VOCABULARY_NOTE_CAP) return lines.join("\n");
-  return [...lines.slice(0, VOCABULARY_NOTE_CAP), `(${lines.length - VOCABULARY_NOTE_CAP} more lines not shown)`].join("\n");
+  const baseline = new Map(before.topics);
+  for (const slug of gone) baseline.delete(slug);
+  let untold = 0;
+  for (const [heading, group] of [
+    ["added:", added],
+    ["changed (as they are now):", changed],
+  ] as const) {
+    let headed = false;
+    for (const [slug, entry] of group) {
+      const entryLines = entry.split("\n");
+      // One line kept back for the count of what did not fit.
+      if (lines.length + entryLines.length + (headed ? 0 : 1) > VOCABULARY_NOTE_CAP - 1) {
+        untold += 1;
+        continue;
+      }
+      if (!headed) lines.push(heading);
+      headed = true;
+      lines.push(...entryLines);
+      baseline.set(slug, entry);
+    }
+  }
+  if (untold > 0) lines.push(`(${untold} more topic${untold === 1 ? "" : "s"} changed; they follow in the next note)`);
+  const header = [after.domains ?? "domains: ", `relation kinds: ${TOPIC_RELATION_KINDS.join(", ")}`, ""];
+  return {
+    note: lines.join("\n"),
+    baseline: untold === 0 ? now : fence("VOCABULARY", [...header, ...baseline.values()].join("\n")),
+    complete: untold === 0,
+  };
+}
+
+/** The note alone, for a caller that does not keep a baseline. */
+export function vocabularyChangeNote(told: string, now: string): string | null {
+  return vocabularyChange(told, now)?.note ?? null;
 }
 
 /** How long a first message may be in the drafts list. */
@@ -1998,7 +2162,13 @@ function streamEventOf(event: TranscriptEvent): DraftStreamEvent | null {
       return {
         id: event.seq,
         event: "brief",
-        data: { seq: event.seq, replySeq: event.replySeq, brief: event.brief, pendingTopic: event.pendingTopic ?? null },
+        data: {
+          seq: event.seq,
+          replySeq: event.replySeq,
+          brief: event.brief,
+          pendingTopic: event.pendingTopic ?? null,
+          ...(event.edit === true ? { edit: true } : {}),
+        },
       };
     case "brief-invalid":
       return {
@@ -2038,7 +2208,14 @@ function entryOf(event: TranscriptEvent): TranscriptEntry | null {
         costSource: (event.costSource as CostSource | null | undefined) ?? null,
       };
     case "studio":
-      return { seq: event.seq, role: "studio", text, at: event.at, ...(event.internal === true ? { internal: true } : {}) };
+      return {
+        seq: event.seq,
+        role: "studio",
+        text,
+        at: event.at,
+        ...(event.internal === true ? { internal: true } : {}),
+        ...(event.edit === true ? { edit: true } : {}),
+      };
     default:
       return null;
   }
