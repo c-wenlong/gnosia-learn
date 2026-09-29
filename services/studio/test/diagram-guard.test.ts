@@ -7,7 +7,6 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { shellWord } from "../src/bash-guard";
 import type { ValidBrief } from "../src/brief";
-import { withPathCheck } from "../src/canvas";
 import {
   canvasCommandAllowed,
   canvasTokens,
@@ -377,17 +376,12 @@ describe("the diagram agent's Bash guard", () => {
     }
   });
 
-  it("refuses at the doctor a studio home the agent could not type, and allows letters, digits and spaces", () => {
+  it("names a studio home the agent could not type, and allows letters, digits and spaces", () => {
     expect(diagramPathProblem("/Users/a/Projects/self-learn/.studio", "/usr/bin/node")).toBeNull();
     expect(diagramPathProblem("/Users/a b/.studio", "/usr/bin/node")).toBeNull();
     for (const bad of ["/Users/a$b/.studio", "/Users/a`b/.studio", "/Users/o'brien/.studio", '/Users/a"b/.studio', "/Users/a\\b/.studio", "/Users/a*b/.studio", "/Users/~a/.studio", "/Users/a;b/.studio"]) {
       expect({ bad, problem: diagramPathProblem(bad, "/usr/bin/node") }).toEqual({ bad, problem: expect.stringContaining("the studio home path holds") });
     }
     expect(diagramPathProblem("/Users/a/.studio", "/opt/o'brien/node")).toContain("quote");
-    const ok = { code: 0, signal: null, stdout: "", stderr: "", json: { ok: true, checks: [{ name: "node", status: "pass", detail: "" }] }, timedOut: false };
-    expect(withPathCheck(ok, "/Users/a/.studio")).toBe(ok);
-    const refused = withPathCheck(ok, "/Users/a$b/.studio");
-    expect(refused.code).toBe(1);
-    expect((refused.json as { checks: { name: string; status: string }[] }).checks.map((check) => [check.name, check.status])).toEqual([["node", "pass"], ["studio home", "fail"]]);
   });
 });

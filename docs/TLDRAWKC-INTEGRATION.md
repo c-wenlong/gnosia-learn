@@ -583,8 +583,12 @@ Each with the reason it exists.
   it. The hook program, its read-only file and the settings block are the
   video guard's, shared in `services/studio/src/bash-guard.ts`. A studio home
   the agent could not type bare or with a plain quote around a space (a `$`,
-  a quote, a backtick, a glob character) fails the doctor by name, so no job
-  is queued to spend its turns on refusals.
+  a quote, a backtick, a glob character) refuses the diagram agent by name:
+  `POST /api/jobs` answers 503, a job queued before the home moved is
+  refused before its spawn, and `/api/health` reports it as `diagramAgent`.
+  The tldrawkc doctor is left alone, since the studio's own canvas calls pass
+  paths as argv with no shell, so the grid, checkout, commit and the mirror
+  keep working.
 - **The residual hole, now narrower.** `canvas run <file> --code <snippet>`
   takes output paths as arguments, and until the guard an allowlisted command
   could write a `.tldr` or a `.png` anywhere on the disk (measured above). The

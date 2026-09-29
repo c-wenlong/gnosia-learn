@@ -22,6 +22,7 @@ import {
 } from "./config";
 import { costFromLog, JobCostMeter, spendWindow, type CostReading, type SpendEntry } from "./cost";
 import { diagramShow, jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
+import { diagramPathProblem } from "./diagram-guard";
 import { checkoutRevision, documentHashOf, ensureCheckout } from "./diagrams";
 import { narrate, runGate } from "./gate";
 import {
@@ -37,6 +38,7 @@ import {
   rejectedDir,
   scratchDir,
   shotPath,
+  studioHome,
   targetPath,
   targetSvgPath,
   workDir,
@@ -428,6 +430,15 @@ export class Runner {
     const existing = this.store.byIdempotencyKey(brief.idempotencyKey);
     if (existing !== undefined) {
       return { record: existing, created: false, jobsAhead: this.queued().length };
+    }
+
+    // A studio home the agent's Bash guard cannot carry refuses the agent and
+    // nothing else: the runner's own canvas calls pass paths as argv with no
+    // shell, so the doctor, the grid, checkout, commit and the mirror are
+    // untouched by it (Greptile on #206). `/api/health` says the same.
+    const pathProblem = diagramPathProblem(studioHome());
+    if (pathProblem !== null) {
+      throw new JobRefused(503, `the diagram agent cannot run from this studio home: ${pathProblem}`, { check: "diagram agent" });
     }
 
     const target = targetPath(brief.slug);

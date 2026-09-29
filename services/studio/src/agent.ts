@@ -11,8 +11,8 @@ import {
   type AgentAuth,
   type Model,
 } from "./config";
-import { writeDiagramGuard } from "./diagram-guard";
-import { candidateDir, REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
+import { diagramPathProblem, writeDiagramGuard } from "./diagram-guard";
+import { candidateDir, REPO_ROOT, scratchDir, settingsPath, studioHome, tmpDir } from "./paths";
 import { signalGroup, sweepByMarker } from "./proc";
 import { buildSettings, type SettingsInput } from "./settings";
 
@@ -519,6 +519,10 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
   await mkdir(scratchDir(options.jobId), { recursive: true });
   await mkdir(candidateDir(options.jobId), { recursive: true });
   await mkdir(tmpDir(options.jobId), { recursive: true });
+  // The enqueue check again, for a job queued before the studio home moved:
+  // refused before anything is spawned, with the same sentence.
+  const pathProblem = diagramPathProblem(studioHome());
+  if (pathProblem !== null) throw new Error(`the diagram agent cannot run from this studio home: ${pathProblem}`);
   // After the directories, so the policy can name their resolved spellings.
   const guard = await writeDiagramGuard(options.jobId, options.slug);
   const settingsInput: SettingsInput = {

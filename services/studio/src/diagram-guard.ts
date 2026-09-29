@@ -76,8 +76,11 @@ const TYPABLE_PATH = /^[A-Za-z0-9_./:,@+= -]+$/;
 
 /**
  * Why this machine's paths cannot carry a diagram job, or null when they can.
- * The doctor's check, so a job is refused before it is queued rather than
- * failing at its first command.
+ * Checked at enqueue (`Runner.enqueue` refuses with 503), again before a
+ * spawn, and reported by `/api/health` as `diagramAgent`, so a job is refused
+ * before it is queued rather than failing at its first command. Not in the
+ * tldrawkc doctor: the studio's own canvas calls pass paths as argv with no
+ * shell, so the grid, checkout, commit and the mirror do not need this.
  *
  * The prompt hands the agent its candidate and scratch paths bare, and the
  * guard accepts a path only as a bare word or quoted. A space the agent
