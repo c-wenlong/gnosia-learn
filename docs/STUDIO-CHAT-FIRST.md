@@ -1084,9 +1084,9 @@ Postgres up.
       section generated from it; the submodule pointer bumped through
       Workflow 1 of the root `AGENTS.md`
 - [ ] The drawing spawn passes the manual with `--append-system-prompt`
-- [ ] Extend on the tile and in the tile's panel; the EXTENDING block from
+- [x] Extend on the tile and in the tile's panel; the EXTENDING block from
       `inspect --json`
-- [ ] The brief form and its route in the UI deleted
+- [x] The brief form and its route in the UI deleted
 
 Done when: ten real drafts, recorded in the PR body, went from first message
 to Draw with no use of the form, and every brief passed validation within its
