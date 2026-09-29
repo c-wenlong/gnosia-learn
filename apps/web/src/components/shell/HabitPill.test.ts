@@ -67,10 +67,49 @@ describe("HabitPill", () => {
   it("closes on Escape and gives focus back to the pill", () => {
     const host = mount();
     const button = host.querySelector("button") as HTMLButtonElement;
+    act(() => button.focus());
     press(button);
     act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
     expect(button.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(button);
+  });
+
+  it("closes when focus moves outside, and then leaves focus where it went", () => {
+    const host = mount();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    mounted.push(() => outside.remove());
+    const button = host.querySelector("button") as HTMLButtonElement;
+    act(() => button.focus());
+    press(button);
+    act(() => outside.focus());
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("does not pull focus back on Escape when focus is elsewhere", () => {
+    const host = mount();
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    mounted.push(() => outside.remove());
+    const button = host.querySelector("button") as HTMLButtonElement;
+    press(button);
+    // Opened by a pointer, so focus never entered: it sits on the input.
+    act(() => outside.focus());
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("stays open when focus moves within it", () => {
+    const host = mount();
+    const button = host.querySelector("button") as HTMLButtonElement;
+    act(() => button.focus());
+    press(button);
+    const panel = host.querySelector(`#${CSS.escape(button.getAttribute("aria-controls") ?? "")}`) as HTMLElement;
+    panel.tabIndex = -1;
+    act(() => panel.focus());
+    expect(button.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("closes on a press outside it", () => {

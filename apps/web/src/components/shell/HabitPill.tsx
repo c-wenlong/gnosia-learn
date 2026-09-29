@@ -12,7 +12,10 @@ import { cx, PILL } from "@/components/ui/classes";
  * Today's Streak card went (2026-09-29) the pill is the only place they show.
  *
  * The same disclosure as `AvatarMenu`: `aria-expanded` on the button, closed
- * by Escape (focus back on the pill), a press outside, or pressing it again.
+ * by Escape, a press outside, pressing it again, or focus moving to something
+ * outside the pill and its popover (Tab away). Escape gives focus back to the
+ * pill only when focus was inside it; pressed while the reader is somewhere
+ * else on the page, it closes the popover and leaves focus where it is.
  * Its accessible name is `name`, the pill's text followed by the facts, so a
  * screen reader hears them without opening it.
  */
@@ -44,7 +47,7 @@ export function HabitPill({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);
-        button.current?.focus();
+        if (root.current?.contains(document.activeElement)) button.current?.focus();
       }
     };
     document.addEventListener("pointerdown", onPointer);
@@ -56,7 +59,17 @@ export function HabitPill({
   }, [open]);
 
   return (
-    <div ref={root} className="relative">
+    <div
+      ref={root}
+      className="relative"
+      // Focus leaving for an element outside closes it. A null `relatedTarget`
+      // (a press on the popover's own text, or on the page) is left to the
+      // pointer handler, which knows whether the press was inside.
+      onBlur={(event) => {
+        const next = event.relatedTarget;
+        if (next instanceof Node && !event.currentTarget.contains(next)) setOpen(false);
+      }}
+    >
       <button
         ref={button}
         type="button"
