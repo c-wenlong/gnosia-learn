@@ -76,9 +76,13 @@ export function WorkspacePanels({
   // `hidden` below 900px unless this is the active tab. A wrapper carries it,
   // since a primitive's own `display` would win over a class passed to it.
   const shown = (key: PanelKey) => cx("min-h-0 min-w-0", active !== key && "max-[899px]:hidden");
-  // Below 900px the tab row names the one panel on show, so its header would
-  // repeat the tab just pressed; the section keeps the name for a screen reader.
+  // Below 900px the tab row names the one panel on show, so its title would
+  // repeat the tab just pressed. The note and studio headers hold nothing else
+  // there (Collapse is desktop-only) and go; the tutor's keeps its style line
+  // and Settings link, with only the title hidden. The section keeps its name
+  // for a screen reader either way.
   const phoneHeader = "max-[899px]:hidden";
+  const phoneTitle = "max-[899px]:sr-only";
 
   return (
     <div className="flex min-h-0 flex-col gap-4 min-[900px]:flex-1">
@@ -122,7 +126,7 @@ export function WorkspacePanels({
           <Panel
             title="Tutor"
             aria-label="Tutor"
-            headerClassName={phoneHeader}
+            titleClassName={phoneTitle}
             actions={tutorAside}
             className="h-full max-[899px]:min-h-[70dvh]"
             // A last resort for a window too short for even the shrunk thread,
