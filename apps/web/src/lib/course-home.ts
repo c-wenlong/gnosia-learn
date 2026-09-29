@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ModuleData, RelatedCourse } from "@/components/course-home/types";
+import { getTags, tagsFor } from "@/data/content";
 import { getCourses, getRelatedCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
 import { loadCourseAssets } from "@/lib/course-assets";
@@ -33,11 +34,12 @@ export interface CourseHomeData {
 
 export async function loadCourseHome(course: Course): Promise<CourseHomeData> {
   const moduleTopics = course.modules.map((m) => m.topic);
-  const [{ kb, reachable: kbReachable }, assets, courses, topics] = await Promise.all([
+  const [{ kb, reachable: kbReachable }, assets, courses, topics, tags] = await Promise.all([
     loadKnowledgeBase(),
     loadCourseAssets(moduleTopics),
     getCourses(),
     getTopics(),
+    getTags(),
   ]);
 
   const bySlug = new Map(topics.map((t) => [t.slug, t]));
@@ -64,7 +66,8 @@ export async function loadCourseHome(course: Course): Promise<CourseHomeData> {
     slug: r.slug,
     code: r.code,
     title: r.title,
-    shared: r.tags.filter((t) => course.tags.includes(t)),
+    // the tags' labels ("Agentic AI"), not their ids ("agentic-ai")
+    shared: tagsFor(tags, r.tags.filter((t) => course.tags.includes(t))).map((t) => t.label),
   }));
 
   return { mastery, modules, assetsReachable: assets.reachable, related };
