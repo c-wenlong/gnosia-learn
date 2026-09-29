@@ -267,7 +267,7 @@ print(json.dumps(out))
 `;
     const verdicts = await runScene("narrate", probe, "narrate_probe");
     for (const [name, verdict] of Object.entries(verdicts)) {
-      if (name === "list the shared cache" && run.tools.sharedAudioCache === null) continue;
+      if (name === "list the shared cache" && (run.tools.sharedAudioCache === null || !existsSync(run.tools.sharedAudioCache))) continue;
       if (name === "read the hugging face token" && verdict.outcome === "missing") continue;
       expect({ name, outcome: verdict.outcome }).toEqual({ name, outcome: "denied" });
     }
