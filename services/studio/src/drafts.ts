@@ -459,8 +459,12 @@ function sumCost(spend: readonly TurnSpend[]): { costUsd: number | null; costSou
  * happens the next time anything opens the diagram. A missing file, or a draft
  * that recorded neither, says nothing changed rather than guess.
  */
-export async function sourceChanged(record: Pick<DraftRecord, "source" | "sourceHash" | "sourceRevision">): Promise<boolean> {
+export async function sourceChanged(record: Pick<DraftRecord, "source" | "sourceHash" | "sourceRevision" | "sourceKind">): Promise<boolean> {
   if (record.source === null) return false;
+  // A draft opened on a studio video: the checks below read a diagram's
+  // checkout by slug, which is a different thing that may share the name.
+  // Checking the video would be a catalog call per view, so it says nothing.
+  if (record.sourceKind === "video") return false;
   if (record.sourceHash !== null) {
     const now = await documentHashOf(workPath(record.source));
     if (now !== null && now !== record.sourceHash) return true;

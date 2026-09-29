@@ -213,6 +213,13 @@ describe("a new draft", () => {
     expect(system).not.toContain("-----BEGIN EXTENDING-----");
     expect(catalogMock.diagramList).toHaveBeenCalled();
 
+    // A diagram checkout that shares the video's slug says nothing about the
+    // video (C11 is a diagram check; the #207 review).
+    await mkdir(path.join(process.env.STUDIO_HOME!, "work"), { recursive: true });
+    await writeFile(path.join(process.env.STUDIO_HOME!, "work", "two-boxes.tldr"), '{"a diagram":"that changed"}');
+    await writeFile(path.join(process.env.STUDIO_HOME!, "work", "two-boxes.checkout.json"), '{"revision": 9}');
+    expect((await drafts.view(record.id)).sourceChanged).toBe(false);
+
     catalogMock.videoShow.mockResolvedValue(ok({ video: null }));
     await expect(drafts.create({ source: "a-diagram-slug", sourceKind: "video" })).rejects.toMatchObject({
       status: 404,
