@@ -24,7 +24,8 @@ import {
   type FieldKey,
   type FieldProblem,
 } from "@/lib/studio-brief-edit";
-import { drawLabel, modeLine, type CardStatus, type DrawBlock } from "@/lib/studio-chat";
+import { composerKey } from "@/components/ui/composer-keys";
+import { cardEditable, drawLabel, modeLine, type CardStatus, type DrawBlock } from "@/lib/studio-chat";
 import type { PendingTopic, Refusal } from "@/lib/studio-drafts";
 import { candidatePathFor, type Brief } from "@/lib/studio-jobs";
 
@@ -67,6 +68,7 @@ export function ConfirmCard({
   onDraw,
   onSave,
   onEditingChange,
+  onEditNewest,
   editBlock = null,
   jobHref,
   holderHref,
@@ -86,6 +88,11 @@ export function ConfirmCard({
   onSave?: (brief: Brief) => Promise<SaveOutcome>;
   /** Told when editing starts and stops, so the panel holds Draw and Send meanwhile. */
   onEditingChange?: (editing: boolean) => void;
+  /**
+   * Starts editing the newest brief, when there is one to edit: offered on a
+   * card whose brief was replaced while the person was editing it.
+   */
+  onEditNewest?: () => void;
   /** Why the brief cannot be edited right now (a reply being written, a press under way), or null. */
   editBlock?: string | null;
   /** On a `drawn` card: the job this brief started. */
@@ -107,11 +114,17 @@ export function ConfirmCard({
   const root = useRef<HTMLDivElement | null>(null);
   const base = useId();
 
-  // Only the live card edits. A newer brief arriving mid-edit makes this card
-  // an older one, and its edits go with it: they were edits of a brief that
-  // is no longer the one Draw would send.
-  const edit = live && onSave !== undefined ? held : null;
-  const editing = edit !== null;
+  // The brief in force edits, and so does the newest brief of a draft that
+  // moved on from it (`held`), since saving puts it back in force. A newer
+  // brief arriving mid-edit (a planner reply, another tab) makes this card an
+  // older one: the edits stay on it, frozen and said so, rather than
+  // vanishing, and the person is offered the newer brief to edit instead.
+  const editable = cardEditable(status) && onSave !== undefined;
+  const edit = held;
+  const editing = held !== null && editable;
+  const frozen = held !== null && !editable;
+  /** Nothing on the card may change: a save is in flight, or the edits are frozen. */
+  const locked = saving || frozen;
 
   useEffect(() => {
     onEditingChange?.(editing);
@@ -161,7 +174,7 @@ export function ConfirmCard({
 
   /** Change the edit, and clear the problems on what changed (and any general one). */
   function change(next: (current: BriefEdit) => BriefEdit, fields: FieldKey[]) {
-    if (saving) return;
+    if (locked) return;
     setHeld((current) => (current === null ? current : next(current)));
     setProblems((current) => current.filter((problem) => !fields.includes(problem.field) && problem.field !== "general"));
   }
@@ -218,8 +231,10 @@ export function ConfirmCard({
   }
 
   async function save() {
-    if (edit === null || saving || onSave === undefined) return;
-    if (!isChanged(brief, edit)) {
+    if (edit === null || !editing || saving || onSave === undefined) return;
+    // A live brief saved unchanged is a no-op; a held one is sent anyway,
+    // since the save is what puts it back in force.
+    if (live && !isChanged(brief, edit)) {
       cancel();
       return;
     }
@@ -244,19 +259,37 @@ export function ConfirmCard({
     setFocusNext(problem.field === "general" ? "save" : problem.field);
   }
 
+  /** A held brief put back in force as it is: a save of the unchanged brief. */
+  async function putBack() {
+    if (!editable || status !== "held" || saving || onSave === undefined) return;
+    setSaving(true);
+    setProblems([]);
+    const outcome = await onSave(brief);
+    setSaving(false);
+    if (!outcome.ok) setProblems([saveRefusal(outcome.status, outcome.refusal, toEdit(brief))]);
+  }
+
+  function discard() {
+    setHeld(null);
+    setProblems([]);
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (!editing) return;
+    const inList = (event.target as HTMLElement).closest('[role="listbox"]') !== null;
     if (event.key === "Escape") {
       // Escape inside the card leaves editing, never the whole panel: an
       // uncancelled Escape is also the dialog's close request. An open topic
-      // list closes itself and stays in editing.
+      // list closes itself and stays in editing, and a save in flight is
+      // waited for, since the brief it sends lands whatever this card shows.
       event.preventDefault();
-      if ((event.target as HTMLElement).closest('[role="listbox"]') !== null) return;
+      if (inList || saving) return;
       cancel();
       return;
     }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      // Save, not Draw: the panel's own Cmd+Enter sees this as handled.
+    // Save, not Draw: the panel's own Cmd+Enter sees this as handled. Not
+    // from the open topic list, whose Enter is a pick that has not landed yet.
+    if (enterKey(event) === "mod-send" && !inList) {
       event.preventDefault();
       void save();
     }
@@ -266,8 +299,9 @@ export function ConfirmCard({
   /* Render                                                            */
   /* ---------------------------------------------------------------- */
 
-  const titleProblem = problemFor("title");
-  const topicProblem = problemFor("topic");
+  // A problem belongs to the edit it was found in: none shows on a card at rest.
+  const titleProblem = held === null ? null : problemFor("title");
+  const topicProblem = held === null ? null : problemFor("topic");
   const general = problemFor("general");
 
   return (
@@ -275,18 +309,18 @@ export function ConfirmCard({
       tight
       as="article"
       aria-label={`Brief: ${brief.title}`}
-      className={cx("mt-1", !live && "opacity-60")}
+      className={cx("mt-1", !cardEditable(status) && !frozen && "opacity-60")}
     >
       <div ref={root} onKeyDown={onKeyDown} aria-busy={saving || undefined} className="flex flex-col gap-3.5">
         <div>
           <div className="flex min-h-9 items-center gap-3">
-            {editing ? (
+            {edit !== null ? (
               <Input
                 size="sm"
                 data-field="title"
                 aria-label="Title"
                 value={edit.title}
-                readOnly={saving}
+                readOnly={locked}
                 maxLength={200}
                 aria-invalid={titleProblem !== null || undefined}
                 aria-describedby={titleProblem === null ? undefined : messageId("title")}
@@ -295,7 +329,7 @@ export function ConfirmCard({
                   change((current) => ({ ...current, title: value }), ["title"]);
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) {
+                  if (enterKey(event) === "send") {
                     event.preventDefault();
                     void save();
                   }
@@ -305,7 +339,7 @@ export function ConfirmCard({
             ) : (
               <h2 className="min-w-0 flex-1 text-[16px] font-bold leading-snug text-text">{brief.title}</h2>
             )}
-            {live && onSave !== undefined && !editing && (
+            {editable && held === null && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -320,11 +354,13 @@ export function ConfirmCard({
             )}
           </div>
           <Problem id={messageId("title")} problem={titleProblem} />
-          {status === "stale" && <p className="mt-0.5 text-[12px] text-text3">An earlier brief. The newest one is below.</p>}
+          {status === "stale" && !frozen && (
+            <p className="mt-0.5 text-[12px] text-text3">An earlier brief. The newest one is below.</p>
+          )}
         </div>
 
         <Row label="Topic">
-          {editing ? (
+          {edit !== null ? (
             <div data-group="topic" className="flex min-h-9 items-center">
               <FilterMenu
                 label="Topic"
@@ -349,7 +385,7 @@ export function ConfirmCard({
             <ProposedTopic
               proposed={proposed}
               topics={topicMap}
-              editing={editing}
+              editing={edit !== null}
               onPick={(slug) => change((current) => ({ ...current, topic: slug }), ["topic"])}
             />
           )}
@@ -368,10 +404,10 @@ export function ConfirmCard({
         </Row>
 
         <Row label="What will appear">
-          {editing ? (
+          {edit !== null ? (
             <ElementsEditor
               edit={edit}
-              saving={saving}
+              locked={locked}
               problemFor={problemFor}
               messageId={messageId}
               onLabel={(id, label) =>
@@ -397,12 +433,12 @@ export function ConfirmCard({
           )}
         </Row>
 
-        {(brief.relations.length > 0 || editing) && (
+        {(brief.relations.length > 0 || edit !== null) && (
           <Row label="What connects">
-            {editing ? (
+            {edit !== null ? (
               <RelationsEditor
                 edit={edit}
-                saving={saving}
+                locked={locked}
                 problemFor={problemFor}
                 messageId={messageId}
                 onChange={(id, patch, field) =>
@@ -438,11 +474,30 @@ export function ConfirmCard({
           </Row>
         )}
 
-        {live && editing && (
+        {frozen && (
+          <div role="status" className="flex flex-col gap-2 border-t border-hair pt-3.5">
+            <p className="text-[13px] leading-5 text-text">
+              This brief changed while you were editing it, in a planner reply or another tab. Your edits are kept
+              here so nothing is lost; the newest brief is below.
+            </p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {onEditNewest !== undefined && (
+                <Button size="sm" onClick={onEditNewest}>
+                  Edit the newest brief
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={discard}>
+                Discard my edits
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {editing && (
           <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <Button onClick={() => void save()} disabled={saving} data-field="save" aria-keyshortcuts="Meta+Enter Control+Enter">
-                {saving ? "Saving…" : "Save"}
+                {saving ? "Saving…" : live ? "Save" : "Save and use it"}
               </Button>
               <Button variant="ghost" onClick={cancel} disabled={saving}>
                 Cancel
@@ -461,7 +516,26 @@ export function ConfirmCard({
           </div>
         )}
 
-        {live && !editing && (
+        {status === "held" && editable && held === null && (
+          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Button onClick={() => void putBack()} disabled={saving || editBlock !== null} title={editBlock ?? undefined}>
+                {saving ? "Saving…" : "Use this brief"}
+              </Button>
+            </div>
+            {general !== null ? (
+              <p role="alert" className="text-[13px] leading-5 text-danger">
+                {general.message}
+              </p>
+            ) : (
+              <p className="text-[12px] leading-4 text-text2">
+                The conversation moved on after this brief, so Draw would not use it. Use it as it is, or edit it first.
+              </p>
+            )}
+          </div>
+        )}
+
+        {live && held === null && (
           <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Button
@@ -510,6 +584,23 @@ export function ConfirmCard({
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * What Enter means in a card field, by the composer's own rule: nothing while
+ * an input method is composing a word (Enter there confirms the word), plain
+ * Enter or Cmd/Ctrl+Enter otherwise.
+ */
+function enterKey(event: KeyboardEvent<HTMLElement>) {
+  return composerKey({
+    key: event.key,
+    shiftKey: event.shiftKey,
+    metaKey: event.metaKey,
+    ctrlKey: event.ctrlKey,
+    altKey: event.altKey,
+    isComposing: event.nativeEvent.isComposing,
+    keyCode: event.keyCode,
+  });
+}
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -568,7 +659,7 @@ const REMOVE = cx(
 
 function ElementsEditor({
   edit,
-  saving,
+  locked,
   problemFor,
   messageId,
   onLabel,
@@ -576,7 +667,7 @@ function ElementsEditor({
   onRemove,
 }: {
   edit: BriefEdit;
-  saving: boolean;
+  locked: boolean;
   problemFor: (field: FieldKey) => FieldProblem | null;
   messageId: (field: FieldKey) => string;
   onLabel: (id: string, label: string) => void;
@@ -601,18 +692,18 @@ function ElementsEditor({
                 aria-label={`Element ${at + 1}`}
                 value={element.label}
                 placeholder="Label"
-                readOnly={saving}
+                readOnly={locked}
                 maxLength={200}
                 size={Math.max(5, element.label.length + 1)}
                 aria-invalid={problem !== null || undefined}
                 aria-describedby={problem === null ? undefined : messageId(field)}
                 onChange={(event) => onLabel(element.id, event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) {
+                  if (enterKey(event) === "send") {
                     // Enter is the next element, the way a list editor works.
                     event.preventDefault();
-                    onAdd(at);
-                  } else if (event.key === "Backspace" && element.label === "" && !only) {
+                    if (!locked) onAdd(at);
+                  } else if (event.key === "Backspace" && element.label === "" && !only && !locked) {
                     event.preventDefault();
                     onRemove(element.id);
                   }
@@ -622,7 +713,7 @@ function ElementsEditor({
               <button
                 type="button"
                 onClick={() => onRemove(element.id)}
-                disabled={saving || only}
+                disabled={locked || only}
                 tabIndex={-1}
                 aria-label={`Remove ${element.label.trim() === "" ? `element ${at + 1}` : element.label}`}
                 title={only ? "A diagram needs at least one element" : "Remove"}
@@ -637,7 +728,7 @@ function ElementsEditor({
           <button
             type="button"
             onClick={() => onAdd(edit.elements.length - 1)}
-            disabled={saving}
+            disabled={locked}
             className={chipClasses({ size: "sm", className: "border-dashed text-text2" })}
           >
             <span aria-hidden>+</span> Add
@@ -659,7 +750,7 @@ function ElementsEditor({
 
 function RelationsEditor({
   edit,
-  saving,
+  locked,
   problemFor,
   messageId,
   onChange,
@@ -667,7 +758,7 @@ function RelationsEditor({
   onRemove,
 }: {
   edit: BriefEdit;
-  saving: boolean;
+  locked: boolean;
   problemFor: (field: FieldKey) => FieldProblem | null;
   messageId: (field: FieldKey) => string;
   onChange: (id: string, patch: Partial<EditRelation>, field: "from" | "to" | "label") => void;
@@ -694,7 +785,7 @@ function RelationsEditor({
                       end="from"
                       at={at}
                       edit={edit}
-                      saving={saving}
+                      locked={locked}
                       problem={problem("from")}
                       describedBy={messageId(`relation:${relation.id}:from`)}
                       onChange={onChange}
@@ -707,7 +798,7 @@ function RelationsEditor({
                       aria-label={`Arrow ${at + 1} label`}
                       value={relation.label}
                       placeholder="No label"
-                      readOnly={saving}
+                      readOnly={locked}
                       maxLength={200}
                       size={Math.max(8, relation.label.length + 1)}
                       aria-invalid={problem("label") !== null || undefined}
@@ -723,7 +814,7 @@ function RelationsEditor({
                       end="to"
                       at={at}
                       edit={edit}
-                      saving={saving}
+                      locked={locked}
                       problem={problem("to")}
                       describedBy={messageId(`relation:${relation.id}:to`)}
                       onChange={onChange}
@@ -731,7 +822,7 @@ function RelationsEditor({
                     <button
                       type="button"
                       onClick={() => onRemove(relation.id)}
-                      disabled={saving}
+                      disabled={locked}
                       aria-label={`Remove arrow ${at + 1}`}
                       title="Remove"
                       className={cx(REMOVE, "ml-1")}
@@ -753,7 +844,7 @@ function RelationsEditor({
           type="button"
           data-field="add-relation"
           onClick={onAdd}
-          disabled={saving || edit.elements.length === 0}
+          disabled={locked || edit.elements.length === 0}
           className={chipClasses({ size: "sm", className: "border-dashed text-text2" })}
         >
           <span aria-hidden>+</span> Add an arrow
@@ -770,7 +861,7 @@ function EndSelect({
   end,
   at,
   edit,
-  saving,
+  locked,
   problem,
   describedBy,
   onChange,
@@ -779,7 +870,7 @@ function EndSelect({
   end: "from" | "to";
   at: number;
   edit: BriefEdit;
-  saving: boolean;
+  locked: boolean;
   problem: FieldProblem | null;
   describedBy: string;
   onChange: (id: string, patch: Partial<EditRelation>, field: "from" | "to" | "label") => void;
@@ -794,7 +885,7 @@ function EndSelect({
         aria-invalid={problem !== null || undefined}
         aria-describedby={problem === null ? undefined : describedBy}
         onChange={(event) => {
-          if (saving) return;
+          if (locked) return;
           onChange(relation.id, { [end]: event.target.value === "" ? null : event.target.value }, end);
         }}
         className={cx(CHIP_FIELD, "cursor-pointer appearance-none truncate pl-2.5 pr-6")}

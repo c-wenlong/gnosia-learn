@@ -7,6 +7,7 @@ import {
   askAgainText,
   capFrom,
   capSentence,
+  cardEditable,
   cardStatus,
   composerState,
   costLabel,
@@ -131,7 +132,13 @@ describe("the thread", () => {
     expect(cardStatus(view({ state: "briefed", transcript }), 6)).toBe("live");
     expect(cardStatus(view({ state: "briefed", transcript }), 4)).toBe("stale");
     expect(cardStatus(view({ state: "drawing", transcript }), 6)).toBe("drawn");
-    expect(cardStatus(view({ state: "open", transcript }), 6)).toBe("stale");
+    expect(cardStatus(view({ state: "open", transcript }), 6)).toBe("held");
+    expect(cardStatus(view({ state: "open", transcript }), 4)).toBe("stale");
+    expect(cardStatus(view({ state: "abandoned", transcript }), 6)).toBe("closed");
+  });
+
+  it("lets the brief in force, or the newest one to put back, be edited", () => {
+    expect((["live", "held", "drawn", "stale", "closed"] as const).map(cardEditable)).toEqual([true, true, false, false, false]);
   });
 
   it("knows an empty conversation, and the last thing the person said", () => {

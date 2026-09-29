@@ -20,6 +20,7 @@ import type { TopicOption } from "@/data/topics";
 import {
   askAgainText,
   capFrom,
+  cardEditable,
   cardPendingTopic,
   cardStatus,
   CHECKING_BRIEF,
@@ -28,6 +29,7 @@ import {
   drawBlock,
   drawKey,
   drawRefusal,
+  EDITING_BRIEF,
   GONE,
   isEmptyConversation,
   jobPatch,
@@ -56,6 +58,7 @@ import {
   getDraft,
   openDraftEvents,
   readDailyCap,
+  refusalReason,
   saveBrief,
   sendMessage,
   type DraftView,
@@ -377,12 +380,19 @@ export function DraftPanel({
    * holds the result, so the card leaves editing as the stored brief appears
    * under the runner's note, rather than showing the old brief for a moment.
    * Focus then goes to the new card's Draw, the next thing to press.
+   *
+   * `base` is the seq of the entry carrying the edited brief, so the runner
+   * refuses an edit of a brief that is no longer in force. A refused save is
+   * the card's to say, under its buttons; only a failed read of the draft
+   * means the conversation is gone. On `brief-changed` the record is read
+   * again, so the newer brief arrives and the edited card keeps its edits,
+   * frozen, above it.
    */
   const saveEdit = useCallback(
-    async (brief: Brief): Promise<SaveOutcome> => {
-      const result = await saveBrief(draftId, brief);
+    async (brief: Brief, base: number): Promise<SaveOutcome> => {
+      const result = await saveBrief(draftId, brief, base);
       if (!result.ok) {
-        if (result.status === 404) setStatus("gone");
+        if (refusalReason(result.refusal) === "brief-changed") void load();
         return { ok: false, status: result.status, refusal: result.refusal };
       }
       await load();
@@ -583,8 +593,14 @@ export function DraftPanel({
             topics={topics}
             block={entry.seq === liveSeq ? block : null}
             busy={drawing}
+            answering={view.inFlight || pending !== null}
             onSave={saveEdit}
             onEditingChange={setEditing}
+            onEditNewest={
+              entry.seq !== liveSeq && liveSeq !== null && cardEditable(cardStatus(view, liveSeq))
+                ? () => thread.current?.querySelector<HTMLButtonElement>("[data-card-edit]")?.click()
+                : undefined
+            }
             refusal={
               refused !== null && refused.seq === entry.seq
                 ? { text: refusalNoted(refused, entries) ? null : refused.text, holder: refused.holder }
@@ -612,6 +628,7 @@ export function DraftPanel({
             problem={problem}
             onRetry={lastPerson === null ? null : () => void send(lastPerson)}
             onAskAgain={problem.case === "E6" ? () => void send(askAgainText(problem)) : null}
+            blocked={editing ? EDITING_BRIEF : null}
             onStartOver={() => setConfirmStartOver(true)}
             cutOffShown={entries.at(-1)?.interrupted === true}
           />
@@ -690,6 +707,8 @@ function Entry({
   jobs,
   onSave,
   onEditingChange,
+  onEditNewest,
+  answering,
 }: {
   jobs: readonly Job[];
   entry: TranscriptEntry;
@@ -700,8 +719,11 @@ function Entry({
   refusal: { text: string | null; holder: string | null } | null;
   onDraw: () => void;
   path: string;
-  onSave: (brief: Brief) => Promise<SaveOutcome>;
+  onSave: (brief: Brief, base: number) => Promise<SaveOutcome>;
   onEditingChange: (editing: boolean) => void;
+  onEditNewest?: () => void;
+  /** A person turn is in flight: sent, or being answered. */
+  answering: boolean;
 }) {
   if (entry.role === "person") return <UserMessage>{entry.text}</UserMessage>;
   const status = entry.brief === undefined ? null : cardStatus(view, entry.seq);
@@ -716,9 +738,10 @@ function Entry({
         busy={busy}
         refusal={refusal}
         onDraw={onDraw}
-        onSave={onSave}
+        onSave={(brief) => onSave(brief, entry.seq)}
         onEditingChange={onEditingChange}
-        editBlock={view.inFlight ? STILL_ANSWERING : busy ? "Draw was just pressed." : null}
+        onEditNewest={onEditNewest}
+        editBlock={answering ? STILL_ANSWERING : busy ? "Draw was just pressed." : null}
         jobHref={view.jobId === null ? null : panelHref(path, { job: view.jobId })}
         holderHref={(holder) => panelHref(path, jobPatch(holder, view, jobs))}
         sourceChanged={view.sourceChanged === true}
@@ -814,8 +837,14 @@ function Problem({
   onAskAgain,
   onStartOver,
   cutOffShown,
+  blocked,
 }: {
   problem: ThreadProblem;
+  /**
+   * Why a paid resend waits, or null: the brief is being edited, and a reply
+   * may carry a new brief that retires the card with the edits on it.
+   */
+  blocked: string | null;
   /** The cut-off reply already says so under its text: E2 is then only Try again. */
   cutOffShown: boolean;
   onRetry: (() => void) | null;
@@ -825,7 +854,7 @@ function Problem({
   if (problem.case === "E2" && cutOffShown) {
     return onRetry === null ? null : (
       <div className="-mt-3 px-1.5">
-        <Button size="sm" variant="secondary" onClick={onRetry}>
+        <Button size="sm" variant="secondary" onClick={onRetry} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
           Try again
         </Button>
       </div>
@@ -852,14 +881,14 @@ function Problem({
       )}
       <div className="flex flex-wrap items-center gap-2">
         {problem.case !== "E6" && onRetry !== null && (
-          <Button size="sm" variant="secondary" onClick={onRetry}>
+          <Button size="sm" variant="secondary" onClick={onRetry} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
             Try again
           </Button>
         )}
         {problem.case === "E6" && (
           <>
             {onAskAgain !== null && (
-              <Button size="sm" variant="secondary" onClick={onAskAgain}>
+              <Button size="sm" variant="secondary" onClick={onAskAgain} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
                 Ask again
               </Button>
             )}

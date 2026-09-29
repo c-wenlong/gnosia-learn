@@ -122,19 +122,31 @@ export function latestBriefSeq(transcript: readonly TranscriptEntry[]): number |
   return latest;
 }
 
-/** Where a brief card stands: the live one, the one that was drawn, or an older one greyed out. */
-export type CardStatus = "live" | "drawn" | "stale";
-
 /**
- * One Draw on screen, ever: only the newest brief, and only while the draft is
- * `briefed`. The newest brief of a draft that went on to draw is `drawn` and
- * links to its job; every older card is `stale`, greyed and without a button.
+ * Where a brief card stands.
+ *
+ * - `live`: the newest brief of a `briefed` draft, with the one Draw.
+ * - `held`: the newest brief of an `open` draft. The conversation moved on
+ *   after it (a reply with no brief), so Draw would not use it, but it can be
+ *   put back in force as it is, or edited first.
+ * - `drawn`: the newest brief of a draft that went on to draw; it links to its job.
+ * - `stale`: an older brief, with a newer one below it.
+ * - `closed`: the newest brief of a closed draft. Nothing is below it.
  */
+export type CardStatus = "live" | "held" | "drawn" | "stale" | "closed";
+
+/** One Draw on screen, ever: only the newest brief, and only while the draft is `briefed`. */
 export function cardStatus(view: Pick<DraftView, "state" | "transcript">, seq: number): CardStatus {
   if (seq !== latestBriefSeq(view.transcript)) return "stale";
   if (view.state === "briefed") return "live";
+  if (view.state === "open") return "held";
   if (view.state === "drawing" || view.state === "done") return "drawn";
-  return "stale";
+  return "closed";
+}
+
+/** Whether a card in this state may be edited: the brief in force, or the newest one to put back. */
+export function cardEditable(status: CardStatus): boolean {
+  return status === "live" || status === "held";
 }
 
 /** Whether the conversation has anything in it yet, which decides the opening turn. */
@@ -473,8 +485,8 @@ export function turnIndicator(
 }
 
 /**
- * The topic a brief card shows as "New topic". The live card reads the
- * draft's own `pendingTopic`, which the runner clears once the topic exists,
+ * The topic a brief card shows as "New topic". The live card (and a held
+ * one, which a save puts back in force) reads the draft's own `pendingTopic`, which the runner clears once the topic exists,
  * so its button stops saying "Create topic and draw". An older card keeps
  * what its reply proposed, as the record of that reply.
  */
@@ -483,7 +495,7 @@ export function cardPendingTopic(
   entry: Pick<TranscriptEntry, "pendingTopic">,
   view: Pick<DraftView, "pendingTopic">,
 ): PendingTopic | null {
-  return status === "live" ? view.pendingTopic : (entry.pendingTopic ?? null);
+  return cardEditable(status) ? view.pendingTopic : (entry.pendingTopic ?? null);
 }
 
 /**

@@ -237,7 +237,10 @@ export function saveRefusal(status: number, refusal: Refusal, edit: BriefEdit): 
       case "drawing":
         return { field: "general", message: "This brief is already being drawn, so it can no longer change." };
       case "brief-changed":
-        return { field: "general", message: "A newer brief arrived while this was saving. Edit that one instead." };
+        return {
+          field: "general",
+          message: "The brief changed while you were editing it, in a planner reply or another tab. Your edits are still here.",
+        };
       case "done":
       case "abandoned":
         return { field: "general", message: "This conversation has moved on, so this brief can no longer change." };
@@ -269,7 +272,8 @@ export interface TopicChoice {
  * stays what it is, a proposal the Draw press creates), then the vocabulary
  * grouped by domain in the order the domains first appear, titles sorted in
  * each. A brief whose topic is in neither (a topic archived since) still shows
- * it, so the menu never claims a value it does not hold.
+ * it, so the menu never claims a value it does not hold; with no vocabulary
+ * at all (the runner could not read it) it says that instead.
  */
 export function topicMenu(
   topics: readonly TopicChoice[],
@@ -300,7 +304,10 @@ export function topicMenu(
     for (const topic of list) rows.push({ value: topic.slug, label: topic.title, section: domain });
   }
   if (current !== "" && !rows.some((row) => row.value === current)) {
-    rows.unshift({ value: current, label: current, detail: "Not in the topic list", section: "Current" });
+    // With no list at all the runner could not read it, which says nothing
+    // about whether this topic is in it.
+    const detail = topics.length === 0 ? "The topic list could not be read" : "Not in the topic list";
+    rows.unshift({ value: current, label: current, detail, section: "Current" });
   }
   return rows;
 }

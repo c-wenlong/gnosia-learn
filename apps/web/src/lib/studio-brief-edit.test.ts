@@ -134,7 +134,16 @@ describe("where a refusal lands", () => {
     });
     expect(saveRefusal(409, { error: "x", detail: { reason: "drawing" } }, edit).message).toMatch(/already being drawn/);
     expect(saveRefusal(409, { error: "x", detail: { reason: "abandoned" } }, edit).message).toMatch(/moved on/);
-    expect(saveRefusal(409, { error: "x", detail: { reason: "brief-changed" } }, edit).message).toMatch(/newer brief/);
+    expect(saveRefusal(409, { error: "x", detail: { reason: "brief-changed", base: 9 } }, edit).message).toMatch(
+      /changed while you were editing it, in a planner reply or another tab/,
+    );
+  });
+
+  it("says a refused save in the runner's words, never as a conversation that is gone", () => {
+    expect(saveRefusal(404, { error: "no route PUT /api/drafts/d/brief", detail: null }, edit)).toEqual({
+      field: "general",
+      message: "No route PUT /api/drafts/d/brief.",
+    });
   });
 
   it("keeps the edits when the runner is not answering", () => {
@@ -176,6 +185,12 @@ describe("topicMenu", () => {
   });
 
   it("still shows a topic the vocabulary no longer lists", () => {
-    expect(topicMenu(topics, null, "gone")[0]).toMatchObject({ value: "gone", section: "Current" });
+    expect(topicMenu(topics, null, "gone")[0]).toMatchObject({ value: "gone", section: "Current", detail: "Not in the topic list" });
+  });
+
+  it("does not call a topic missing when the list itself could not be read", () => {
+    expect(topicMenu([], null, "networking")).toEqual([
+      { value: "networking", label: "networking", detail: "The topic list could not be read", section: "Current" },
+    ]);
   });
 });
