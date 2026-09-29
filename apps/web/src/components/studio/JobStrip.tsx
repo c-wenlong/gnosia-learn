@@ -14,6 +14,7 @@ import {
   stepLabel,
   type Job,
 } from "@/lib/studio-jobs";
+import { asVideoJob, videoFailureLine, videoPhaseWords, videoStepCount, readyHeadline } from "@/lib/studio-video";
 import { panelHref } from "@/lib/studio-view";
 
 /**
@@ -103,6 +104,8 @@ export function JobStrip({ path, stream = true }: { path: string; stream?: boole
 
 /** What the strip says about a job, in the fewest words that are true. */
 function Words({ job }: { job: Job }) {
+  const video = asVideoJob(job);
+  if (video !== null) return <VideoWords job={video} />;
   if (job.state === "awaiting_review") {
     return <span className="truncate text-[var(--muted-strong)]">{finishedHeadline(job)} · ready to review</span>;
   }
@@ -121,6 +124,31 @@ function Words({ job }: { job: Job }) {
         {stepLabel(job)}
         {job.attempt > 1 && ` · attempt ${job.attempt}`}
       </span>
+    </>
+  );
+}
+
+/** The same for a video job, whose steps are the manimkc-video skill's, not the seven phases. */
+function VideoWords({ job }: { job: NonNullable<ReturnType<typeof asVideoJob>> }) {
+  if (job.state === "awaiting_review") {
+    return <span className="truncate text-[var(--muted-strong)]">{readyHeadline(job)} · ready to review</span>;
+  }
+  if (job.state === "failed" || job.state === "interrupted" || job.state === "cancelled") {
+    return <span className="truncate text-[var(--danger)]">{videoFailureLine(job)}</span>;
+  }
+  if (!isActive(job.state)) {
+    return <span className="truncate text-[var(--muted)]">{job.state}</span>;
+  }
+  const step = videoStepCount(job);
+  return (
+    <>
+      <span className="truncate text-[var(--muted-strong)]">{videoPhaseWords(job)}</span>
+      {(step !== null || job.attempt > 1) && (
+        <span className="shrink-0 tabular-nums text-[var(--muted)]">
+          {step === null ? "" : step.toLowerCase()}
+          {job.attempt > 1 && `${step === null ? "" : " · "}attempt ${job.attempt}`}
+        </span>
+      )}
     </>
   );
 }

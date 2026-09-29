@@ -145,6 +145,18 @@ describe("a new diagram's card", () => {
     const jobs = [job({ target: "learn/assets/matrix.tldr" })];
     expect(newDiagramJobs(jobs, EXISTING, [], [])).toEqual([]);
   });
+
+  it("is only ever a diagram job: a video, or any later kind, has tiles of its own", () => {
+    const jobs = [
+      job({ jobId: "video", kind: "video", target: "videos/attention.mp4" }),
+      job({ jobId: "other", kind: "audio", target: "learn/assets/span.tldr" }),
+      job({ jobId: "diagram", target: "learn/assets/eigenvectors.tldr" }),
+    ];
+    expect(newDiagramJobs(jobs, EXISTING, [], []).map((entry) => entry.jobId)).toEqual(["diagram"]);
+    // The newest job on the target is a video's: the diagram tile keeps no loader.
+    const onTile = [job({ jobId: "v", kind: "video", target: "learn/assets/dot-product.tldr" }), job({ jobId: "d", target: "learn/assets/dot-product.tldr" })];
+    expect(jobForTarget(onTile, "learn/assets/dot-product.tldr", [], [])?.jobId).toBe("d");
+  });
 });
 
 describe("what the loader says", () => {

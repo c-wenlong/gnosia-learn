@@ -15,6 +15,16 @@ import { failureReport, isActive, PHASES, type Job } from "@/lib/studio-jobs";
  * than drawn as a stray new card.
  */
 
+/**
+ * Whether a job belongs on the diagram grid at all: an allowlist, so a video
+ * job (docs/STUDIO-VIDEOS.md), or any kind added after it, stays off the
+ * diagram tiles and gets its own (`studio-video.ts`). A row from a runner
+ * that predates `kind` is a diagram.
+ */
+export function isDiagramJob(job: Pick<Job, "kind">): boolean {
+  return (job.kind ?? "diagram") === "diagram";
+}
+
 /** What a tile or card is showing about its job. */
 export type TileStage = "working" | "review" | "failed";
 
@@ -57,7 +67,7 @@ export function jobForTarget(
   ended: readonly string[],
   dismissed: readonly string[],
 ): Job | null {
-  const newest = jobs.find((job) => job.target === target);
+  const newest = jobs.find((job) => isDiagramJob(job) && job.target === target);
   return newest !== undefined && shownOnGrid(newest, ended, dismissed) ? newest : null;
 }
 
@@ -75,6 +85,7 @@ export function newDiagramJobs(
   const seen = new Set<string>();
   const out: Job[] = [];
   for (const job of jobs) {
+    if (!isDiagramJob(job)) continue;
     if (existingTargets.has(job.target) || seen.has(job.target)) continue;
     seen.add(job.target);
     if (shownOnGrid(job, ended, dismissed)) out.push(job);

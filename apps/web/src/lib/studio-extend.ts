@@ -215,6 +215,12 @@ export interface ExtendOpener {
   send: string | null;
   compose: string;
   source: string | null;
+  /**
+   * Chips the composer starts with, before `compose`: a video's Change hands
+   * its words to the conversation with the Video chip already in place
+   * (STUDIO-MENTIONS.md, 2c). Absent is none.
+   */
+  mentions?: ("diagram" | "video")[];
 }
 
 export function leaveOpener(storage: Storage | null, draftId: string, opener: ExtendOpener): void {
@@ -231,11 +237,17 @@ export function takeOpener(storage: Storage | null, draftId: string): ExtendOpen
   const held = safely(() => storage.getItem(OPENER_PREFIX + draftId), null);
   if (held === null) return null;
   safely(() => storage.removeItem(OPENER_PREFIX + draftId), undefined);
-  const parsed = safely(() => JSON.parse(held) as { send?: unknown; compose?: unknown; source?: unknown }, {});
+  const parsed = safely(
+    () => JSON.parse(held) as { send?: unknown; compose?: unknown; source?: unknown; mentions?: unknown },
+    {},
+  );
   const send = typeof parsed.send === "string" && parsed.send.trim() !== "" ? parsed.send : null;
   const compose = typeof parsed.compose === "string" ? parsed.compose : "";
   const source = typeof parsed.source === "string" && parsed.source !== "" ? parsed.source : null;
-  return { send, compose, source };
+  const mentions = Array.isArray(parsed.mentions)
+    ? [...new Set(parsed.mentions.filter((kind): kind is "diagram" | "video" => kind === "diagram" || kind === "video"))]
+    : [];
+  return { send, compose, source, mentions };
 }
 
 /** `window.sessionStorage`, or null where reading it throws or there is no window. */

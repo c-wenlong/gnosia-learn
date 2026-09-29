@@ -19,6 +19,7 @@ import {
   type Job,
   type StudioEvent,
 } from "@/lib/studio-jobs";
+import { asVideoJob, videoAnnouncement } from "@/lib/studio-video";
 
 /**
  * Where the job state lives, and why it lives there.
@@ -365,7 +366,8 @@ function useAnnouncements(jobs: readonly Job[]): void {
       const settled = isTerminal(job.state) || job.state === "awaiting_review";
       if (!settled) continue;
 
-      const said = announcement(job);
+      const video = asVideoJob(job);
+      const said = video === null ? announcement(job) : videoAnnouncement(video);
       if (said === null) continue;
       const watching = !document.hidden && document.hasFocus();
       if (watching) continue;
