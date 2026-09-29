@@ -409,20 +409,24 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
     });
 
     it("doctor calls a note an orphan only when it has no edge of either kind", async () => {
-      // `background` has an `assumes` edge and nothing else; the doc tells
-      // authors to prefer that kind when in doubt, so it must not be the
-      // thing the orphan warning fires on. `solo` has no edge at all.
+      // `background` has an outgoing `assumes` edge and nothing else, and
+      // `basis` only an incoming one (nothing requires it); the doc tells
+      // authors to prefer that kind when in doubt, so neither direction may
+      // be the thing the orphan warning fires on. `solo` has no edge at all.
       const dir = path.join(root, "learn", "concepts", "fixtures");
-      await writeFile(path.join(dir, "background.md"), "---\nid: background\ntitle: Background\nassumes: [alpha]\n---\n\n# Background\n", "utf8");
-      await writeFile(path.join(dir, "solo.md"), "---\nid: solo\ntitle: Solo\n---\n\n# Solo\n", "utf8");
+      const fixtures = {
+        basis: "---\nid: basis\ntitle: Basis\n---\n\n# Basis\n",
+        background: "---\nid: background\ntitle: Background\nassumes: [basis]\n---\n\n# Background\n",
+        solo: "---\nid: solo\ntitle: Solo\n---\n\n# Solo\n",
+      };
+      for (const [id, body] of Object.entries(fixtures)) await writeFile(path.join(dir, `${id}.md`), body, "utf8");
       try {
         const { stdout } = await learn("doctor", "--json").catch((error: { stdout: string }) => error);
         const report = JSON.parse(stdout) as { problems: { kind: string; message: string }[] };
         const orphans = report.problems.filter((p) => p.kind === "orphan").map((p) => p.message);
         expect(orphans).toEqual(["solo is connected to nothing — is a prerequisite missing?"]);
       } finally {
-        await rm(path.join(dir, "background.md"), { force: true });
-        await rm(path.join(dir, "solo.md"), { force: true });
+        for (const id of Object.keys(fixtures)) await rm(path.join(dir, `${id}.md`), { force: true });
       }
     });
 
