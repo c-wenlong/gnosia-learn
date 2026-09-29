@@ -222,10 +222,11 @@ async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promi
   // it is asserted here, where every write passes. A key the row already had
   // is let through: after D23's move of a type to the commons a row keeps its
   // `local/` key until `catalog asset upload` re-keys it.
-  for (const column of ["blobKey", "svgBlobKey"] as const) {
+  const blobColumns = { blobKey: "blob_key", svgBlobKey: "svg_blob_key", mp4BlobKey: "mp4_blob_key" } as const;
+  for (const [column, sqlName] of Object.entries(blobColumns)) {
     const key = input.next.row[column];
     if (typeof key !== "string" || key.startsWith(`${input.owner}/`)) continue;
-    const kept = before?.snapshot.entity[column === "blobKey" ? "blob_key" : "svg_blob_key"];
+    const kept = before?.snapshot.entity[sqlName];
     if (kept === key) continue;
     throw new ContentWriteError(
       "invalid",

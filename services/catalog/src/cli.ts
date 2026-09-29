@@ -17,6 +17,8 @@ import {
   runItem,
 } from "./commands/course";
 import { runDiagramCommand } from "./commands/diagram";
+import { formatPreference, PreferenceError, preferenceKey, runPreferenceGet } from "./commands/preference";
+import { runVideoCommand } from "./commands/video";
 import {
   formatDraft,
   readDraftFile,
@@ -154,7 +156,8 @@ Commands:
                            learning order.
   search <term>            Topic titles and aliases, concept titles, asset
                            titles. Top 20.
-  job <verb>               The generation jobs behind the diagram studio:
+  job <verb>               The generation jobs behind the studio (diagrams
+                           and videos):
                            enqueue --brief FILE, claim, finish --state S,
                            accept, discard, ls, show ID. --owner ID acts on
                            that owner's jobs only (default: local).
@@ -166,13 +169,19 @@ Commands:
   diagram <verb>           Diagrams in the database: put, checkout, commit,
                            list, show. \`catalog diagram --help\` has the
                            flags.
+  video <verb>             Studio videos in the database: put --job (Accept,
+                           in one transaction), list, show, checkout.
+                           \`catalog video --help\` has the flags.
+  preference get --key K   One of the studio's two agent preferences
+                           (studioVideoAgent, studioDiagramAgent) for --owner
+                           ID (default: local), read-only.
   session <verb>           The session row a job hangs off: start --id ID
                            [--kind studio] [--title T] [--goal G]
                            [--agent-session UUID], and end --id ID --state S.
   history <type> <id>      Every revision of one content entity, oldest first:
                            who wrote it, why, and with what op. Types: topic,
                            tag, collection, curriculum_item, concept, diagram,
-                           asset.
+                           asset, video.
   diff <rev> [<rev>]       What one revision changed from the one before it, or
                            the difference between two revisions: fields, link
                            rows, and a line diff for markdown.
@@ -300,6 +309,12 @@ Options:
   --brief FILE             job enqueue: the brief JSON. Needs "topic", "target"
                            and "idempotencyKey"; "brief" is the generator's own
                            and is stored as jsonb.
+                           A video job's target is videos/<slug>.mp4.
+  --discard-parent ID      job enqueue: discard ID, a video job awaiting
+                           review that the brief's "parentJob" names, in the
+                           transaction that inserts the new job (D52 of
+                           docs/STUDIO-VIDEOS.md). A refusal changes neither.
+  --key K                  preference get: which preference.
   --state S                job finish: the state to move to, one of
                            awaiting_review, failed, cancelled, interrupted.
                            job ls: filter by state.
@@ -363,6 +378,7 @@ type Command =
   | "search"
   | "job"
   | "draft"
+  | "preference"
   | "session"
   | "history"
   | "diff"
@@ -390,6 +406,7 @@ const COMMANDS: readonly Command[] = [
   "search",
   "job",
   "draft",
+  "preference",
   "session",
   "history",
   "diff",
@@ -441,6 +458,7 @@ class Usage extends Error {}
 export async function main(argv: string[]): Promise<number> {
   // Commands with flags of their own parse their own line.
   if (argv[0] === "diagram") return diagram(argv.slice(1));
+  if (argv[0] === "video") return video(argv.slice(1));
   let parsed;
   try {
     parsed = parseArgs({
@@ -503,6 +521,8 @@ export async function main(argv: string[]): Promise<number> {
         course: { type: "string" },
         diagram: { type: "string" },
         owner: { type: "string" },
+        key: { type: "string" },
+        "discard-parent": { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -755,6 +775,18 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatDraft(result));
         break;
       }
+      case "preference": {
+        if (positionals[1] !== "get") throw new Usage("usage: preference get --key studioVideoAgent|studioDiagramAgent [--owner ID]");
+        try {
+          preferenceKey(values.key);
+        } catch (error) {
+          if (error instanceof PreferenceError) throw new Usage(error.message);
+          throw error;
+        }
+        const result = await runPreferenceGet({ key: values.key, owner: values.owner });
+        emit(result, formatPreference(result));
+        break;
+      }
       case "history": {
         const type = parseEntityType(positionals[1]);
         const id = positionals[2];
@@ -868,7 +900,9 @@ function reportFailure(error: unknown, command: string, verb: string | undefined
     );
     if (reason !== null) {
       const named =
-        command === "job" || command === "draft" || command === "session" || command === "diagram" ? verb : undefined;
+        command === "job" || command === "draft" || command === "session" || command === "diagram" || command === "video" || command === "preference"
+          ? verb
+          : undefined;
       process.stderr.write(`catalog ${named === undefined ? command : `${command} ${named}`} failed: ${reason}\n`);
     }
   } else {
@@ -952,6 +986,7 @@ type Values = {
   goal?: string;
   "agent-session"?: string;
   owner?: string;
+  "discard-parent"?: string;
 };
 
 /**
@@ -1007,7 +1042,11 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
   switch (verb) {
     case "enqueue": {
       if (values.brief === undefined) throw new Usage("job enqueue needs --brief <file.json>");
-      return runEnqueue({ brief: await readBrief(values.brief), owner: values.owner });
+      return runEnqueue({
+        brief: await readBrief(values.brief),
+        owner: values.owner,
+        ...(values["discard-parent"] === undefined ? {} : { discardParent: values["discard-parent"] }),
+      });
     }
     case "claim":
       return runClaim({
@@ -1083,6 +1122,16 @@ async function draftCommand(positionals: string[], values: Values): Promise<Draf
     default:
       throw new Usage("usage: draft upsert|show|ls|delete");
   }
+}
+
+/** `catalog video <verb>`, whose flags are its own (`commands/video.ts`). */
+async function video(argv: string[]): Promise<number> {
+  const outcome = await runVideoCommand(argv, {
+    stdout: (text) => process.stdout.write(text),
+    stderr: (text) => process.stderr.write(text),
+  });
+  if ("code" in outcome) return outcome.code;
+  return reportFailure(outcome.error, "video", argv[0], outcome.json);
 }
 
 /** `catalog diagram <verb>`, whose flags are its own (`commands/diagram.ts`). */
