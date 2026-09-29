@@ -42,9 +42,12 @@ import { candidatePath, candidateSvgPath, jobDir, scratchDir, SERVICE_ROOT } fro
  *
  * What it does not close is what a snippet does once it runs, which is
  * tldrawkc's page in Chromium and not the shell. The page has no filesystem
- * API, and a snippet's requests are to be contained by tldrawkc's own
- * network block on the page, which lands separately (in the submodule, with
- * a pointer bump); until then a snippet can reach the network from Chromium.
+ * API, and tldrawkc's page network block (D46 there) keeps it off the
+ * network beyond its own page server: Chromium switches (a dead proxy with
+ * loopback forced through it, no name resolution, no non-proxied WebRTC
+ * UDP), context-level interception of every off-origin request and
+ * WebSocket, and a `Content-Security-Policy` of `'self'`. Before it, a
+ * snippet's `fetch` reached example.com and any loopback port.
  */
 
 const CHECKER_FILE = path.join(SERVICE_ROOT, "src", "canvas-guard.cjs");
