@@ -356,6 +356,23 @@ describe("a tag waits for its brief (T30)", () => {
     expect(view.slots.video).toMatchObject({ state: "briefed", requestSeq: 2, waiting: null });
   });
 
+  it("counts refusals per waiting request, so an untagged turn never buys a second retry (#207 review)", async () => {
+    const badVideo = { kind: "video", ...videoBrief, targetSeconds: 300 };
+    await fake.script([{ text: videoOnly(badVideo) }, { text: "Which voice would you like?" }, { text: videoOnly(badVideo) }, { text: "never asked" }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "attention", "video");
+    // Refused once, retried, and the retry asked a question instead: still waiting.
+    expect((await drafts.view(record.id)).waiting).toEqual(["video"]);
+    expect(await fake.argvs()).toHaveLength(2);
+    await send(record.id, "af_heart");
+    // Refused a second time for the same request: E6, with no retry spent.
+    expect(await fake.argvs()).toHaveLength(3);
+    const view = await drafts.view(record.id);
+    expect(view.waiting).toEqual([]);
+    expect(view.error).toMatchObject({ kind: "brief-invalid", briefKind: "video", field: "targetSeconds" });
+    expect(view.transcript.at(-1)).toMatchObject({ role: "planner", briefsInvalid: [expect.objectContaining({ kind: "video", retried: false })] });
+  });
+
   it("stops waiting without a turn, and a brief landing after is dropped", async () => {
     await fake.script([{ text: "Narrated, or silent?" }, { text: videoOnly(), hangMs: 300 }]);
     const { record } = await drafts.create({});

@@ -144,8 +144,8 @@ export interface KindSlot {
   drawnSeq: number | null;
   /** The last verdict on this kind's job the draft acted on. */
   followed: { jobId: string; state: string } | null;
-  /** A tagged request for this kind still owed a brief. */
-  waiting: { requestSeq: number } | null;
+  /** A tagged request for this kind still owed a brief, and how often its brief was refused so far. */
+  waiting: { requestSeq: number; refusals?: number } | null;
   /** The tagged message the brief in force answered: what pairs two cards for Make both. */
   requestSeq: number | null;
   /** Set by a planner `hold` block until Use this brief, an edit, or a new brief. */
@@ -947,7 +947,7 @@ export class Drafts {
       pendingTopic: slot.pendingTopic,
       jobId: slot.jobId,
       jobState: job?.state ?? null,
-      waiting: slot.waiting,
+      waiting: slot.waiting === null ? null : { requestSeq: slot.waiting.requestSeq },
       requestSeq: slot.requestSeq,
       held: slot.held === null ? null : { reason: slot.held.reason, at: slot.held.at },
       state: slot.state,
@@ -1431,28 +1431,41 @@ export class Drafts {
     );
     if (refused.length === 0) return;
 
-    const retry = this.require(id).turns < PLANNER_TURNS && this.records.get(id)?.state !== "abandoned";
+    // Refusals are counted per waiting request, not per turn (the #207
+    // review): a retry answered with no brief leaves the request waiting, and
+    // without a count every later untagged turn would pay for another retry.
+    // The second refusal of one request is E6, retried or not.
+    const canRetry = this.require(id).turns < PLANNER_TURNS && this.records.get(id)?.state !== "abandoned";
+    const toRetry: typeof refused = [];
     await this.write(id, async () => {
       for (const verdict of refused) {
+        const current = this.require(id);
+        const waitingFor = slotOf(current, verdict.kind).waiting;
+        const refusals = (waitingFor?.refusals ?? 0) + 1;
+        if (conversational && waitingFor !== null) {
+          await this.save(id, withSlot(current, verdict.kind, { waiting: { ...waitingFor, refusals } }));
+        }
+        const retried = canRetry && (!conversational || refusals < 2);
+        if (retried) toRetry.push(verdict);
         await this.append(id, {
           type: "brief-invalid",
           replySeq: first.seq,
           kind: verdict.kind,
           field: verdict.field,
           message: verdict.message,
-          retried: retry,
+          retried,
         });
-        if (!retry) await this.refusedTwice(id, verdict);
+        if (!retried) await this.refusedTwice(id, verdict);
       }
     });
-    if (!retry) return;
+    if (toRetry.length === 0) return;
 
     const instruction = conversational
-      ? `Your ${refused.length === 1 ? `${refused[0]!.kind} brief was` : "briefs were"} refused:\n` +
-        refused.map((verdict) => `- ${verdict.kind}, ${verdict.field}: ${verdict.message}`).join("\n") +
-        `\nFix exactly that and send ${refused.length === 1 ? "that whole brief" : "each of those whole briefs"} again, ` +
+      ? `Your ${toRetry.length === 1 ? `${toRetry[0]!.kind} brief was` : "briefs were"} refused:\n` +
+        toRetry.map((verdict) => `- ${verdict.kind}, ${verdict.field}: ${verdict.message}`).join("\n") +
+        `\nFix exactly that and send ${toRetry.length === 1 ? "that whole brief" : "each of those whole briefs"} again, ` +
         `with its summary above it, and no other brief.`
-      : `Your brief was refused. ${refused[0]!.field}: ${refused[0]!.message}\n` +
+      : `Your brief was refused. ${toRetry[0]!.field}: ${toRetry[0]!.message}\n` +
         `Fix exactly that and send the whole brief again, with the same summary above it.`;
     await this.write(id, async () => {
       await this.append(id, { type: "studio", text: instruction, internal: true, replySeq: first.seq });
@@ -1465,14 +1478,14 @@ export class Drafts {
     // is ignored, so the retry cannot replace a card the person is reading.
     const again = await this.judgeReply(
       second.text,
-      refused.map((verdict) => verdict.kind),
+      toRetry.map((verdict) => verdict.kind),
       conversational,
     );
     await this.write(id, async () => {
       const stillRefused = await this.settleReply(id, {
         replySeq: second.seq,
         messageSeq: turn,
-        tagged: tagged.filter((kind) => refused.some((verdict) => verdict.kind === kind)),
+        tagged: tagged.filter((kind) => toRetry.some((verdict) => verdict.kind === kind)),
         judged: again,
         hold: null,
         retry: true,
