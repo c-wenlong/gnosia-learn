@@ -21,7 +21,7 @@ const INTRO = `# Raw measurements (computed styles, CSS px), coursera.org, captu
 
 ## How it was read
 
-- Pages: \`/search?query=machine%20learning\`, \`/learn/machine-learning\`, \`/specializations/machine-learning-introduction\`, \`/\` (header, mega menu, footer).
+- Pages: \`/search?query=machine%20learning\`, \`/learn/machine-learning\`, \`/specializations/machine-learning-introduction\`, \`/\` (header, mega menu, footer), \`/explore/generative-ai\` (the compact course card, chip row, carousel and band headings; also read in a 390x844 mobile context, and in a 390 window with the desktop user agent for the arrow buttons).
 - Headless Chromium (Playwright 1.63), desktop Chrome user agent, 1440x900 at deviceScaleFactor 2, 6.5s settle after \`domcontentloaded\`, one slow scroll through each page so lazy sections mount. The cookie banner is removed and the AI coach side panel is closed with its own close button (it opens by default and squeezes \`<main>\` to 1024px).
 - States: \`hover\` is a real mouse hover with a 450ms settle. \`focus-visible\` is a real keyboard focus (focus, Shift+Tab, Tab), so CDS's \`cds-buttonBase-focusVisible\` class and the browser's \`:focus-visible\` both apply. \`pressed\` is \`:active:hover\` forced with the DevTools protocol (\`CSS.forcePseudoState\`); no mouse button is ever pressed, so no link, submit or Enroll button fires. \`expanded\`, \`opened\`, \`checked\` and \`selected\` come from clicking UI toggles only (accordions, the Explore menu, a filter checkbox with View never pressed, the select, the (i) help button). Nothing was signed into, enrolled in or submitted.
 - Scripts: [tools/capture/measure.mjs](../tools/capture/measure.mjs) (measure and crop), [tools/capture/lib.mjs](../tools/capture/lib.mjs) (computed-style reader, crop and quantize), [tools/capture/build-measurements.mjs](../tools/capture/build-measurements.mjs) (this file), [tools/capture/explore.mjs](../tools/capture/explore.mjs) (class inventory pass).
@@ -268,7 +268,7 @@ function table(c) {
 function paintNotes(c) {
   const out = [];
   let prev = null;
-  for (const v of Object.values(c.states)) {
+  for (const [st, v] of Object.entries(c.states)) {
     if (!v || !v.paint) continue;
     const s = JSON.stringify(v.paint);
     if (s === prev) continue;
@@ -297,7 +297,7 @@ function paintNotes(c) {
 function extraNotes(c) {
   const out = [];
   let prevExtra = null;
-  for (const v of Object.values(c.states)) {
+  for (const [st, v] of Object.entries(c.states)) {
     const ex = v && v.extra ? JSON.stringify(v.extra) : null;
     if (ex && ex === prevExtra) { if (v && v.via && !['at rest'].includes(v.via)) out.push(`- \`${st}\` reached by: ${v.via}`); continue; }
     prevExtra = ex || prevExtra;
@@ -319,6 +319,7 @@ const GROUPS = [
   ['Links and breadcrumbs', /^(link-|breadcrumb|instructor-name|spec-course-title-link)/],
   ['Search results: filters', /^(chip-suggestion|filter-|checkbox|radio|select)/],
   ['Product cards and tags', /^(product-card|tag-)/],
+  ['Explore page: compact card, chips and carousel', /^explore-/],
   ['Chips and pills', /^(chip|pill|skill-chip)/],
   ['Course hero and stats card', /^(course-hero|hero-|badge-|stats-card|spec-hero|help-dialog|tooltip)/],
   ['In-page tab bar and sticky nav', /^(tab|sticky-nav)/],
@@ -454,7 +455,7 @@ for (const [g, keys] of groups) {
   }
 }
 
-md += `\n## CDS class names in the stylesheets\n\nUnion of every \`cds-*\` class named in a stylesheet selector on the four pages (${allClasses.size} names; ${numbered} of them are numbered \`cds-<n>\` Emotion labels with no component meaning, not listed). Grouped by component, modifiers after the colon.\n\n`;
+md += `\n## CDS class names in the stylesheets\n\nUnion of every \`cds-*\` class named in a stylesheet selector on the five pages (${allClasses.size} names; ${numbered} of them are numbered \`cds-<n>\` Emotion labels with no component meaning, not listed). Grouped by component, modifiers after the colon.\n\n`;
 for (const [k, v] of Object.entries(byComp).sort((a, b) => a[0].localeCompare(b[0]))) md += `- \`cds-${k}\`: ${v.join(', ')}\n`;
 
 fs.writeFileSync(path.join(RAW, 'measurements.md'), md);

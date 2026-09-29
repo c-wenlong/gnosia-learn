@@ -1,10 +1,10 @@
 # Raw measurements (computed styles, CSS px), coursera.org, captured 2026-09-29T03:36:35.172Z
 
-166 components, 333 component states, 294 crops in [components/crops/](../components/crops/). Every value below was read from the live public pages with `getComputedStyle` and `getBoundingClientRect`; nothing is estimated. The machine-readable copy is [components-computed.json](components-computed.json), keyed by component, then state. Tokens are matched against [css-vars.json](css-vars.json) (the light half of each `light-dark()` pair).
+193 components, 397 component states, 352 crops in [components/crops/](../components/crops/). Every value below was read from the live public pages with `getComputedStyle` and `getBoundingClientRect`; nothing is estimated. The machine-readable copy is [components-computed.json](components-computed.json), keyed by component, then state. Tokens are matched against [css-vars.json](css-vars.json) (the light half of each `light-dark()` pair).
 
 ## How it was read
 
-- Pages: `/search?query=machine%20learning`, `/learn/machine-learning`, `/specializations/machine-learning-introduction`, `/` (header, mega menu, footer).
+- Pages: `/search?query=machine%20learning`, `/learn/machine-learning`, `/specializations/machine-learning-introduction`, `/` (header, mega menu, footer), `/explore/generative-ai` (the compact course card, chip row, carousel and band headings; also read in a 390x844 mobile context, and in a 390 window with the desktop user agent for the arrow buttons).
 - Headless Chromium (Playwright 1.63), desktop Chrome user agent, 1440x900 at deviceScaleFactor 2, 6.5s settle after `domcontentloaded`, one slow scroll through each page so lazy sections mount. The cookie banner is removed and the AI coach side panel is closed with its own close button (it opens by default and squeezes `<main>` to 1024px).
 - States: `hover` is a real mouse hover with a 450ms settle. `focus-visible` is a real keyboard focus (focus, Shift+Tab, Tab), so CDS's `cds-buttonBase-focusVisible` class and the browser's `:focus-visible` both apply. `pressed` is `:active:hover` forced with the DevTools protocol (`CSS.forcePseudoState`); no mouse button is ever pressed, so no link, submit or Enroll button fires. `expanded`, `opened`, `checked` and `selected` come from clicking UI toggles only (accordions, the Explore menu, a filter checkbox with View never pressed, the select, the (i) help button). Nothing was signed into, enrolled in or submitted.
 - Scripts: [tools/capture/measure.mjs](../tools/capture/measure.mjs) (measure and crop), [tools/capture/lib.mjs](../tools/capture/lib.mjs) (computed-style reader, crop and quantize), [tools/capture/build-measurements.mjs](../tools/capture/build-measurements.mjs) (this file), [tools/capture/explore.mjs](../tools/capture/explore.mjs) (class inventory pass).
@@ -65,7 +65,7 @@ Every distinct transition on the measured components (computed style, any state)
 | 0.15s | cubic-bezier(0.4, 0, 0.2, 1) | background-color | checkbox-box |
 | 0.15s | ease-in-out | transform | faq-chevron |
 | 0.2s | ease-in-out | transform | header-container |
-| 0.3s | cubic-bezier(0, 0, 0.5, 1) | all | pill, product-card, product-card-list |
+| 0.3s | cubic-bezier(0, 0, 0.5, 1) | all | pill, product-card, product-card-list, explore-card |
 
 Declared on stylesheet rules (selector attributed to its `cds-*` class):
 
@@ -2505,6 +2505,680 @@ Crops: `tag-skill-default.png`.
 - Extra (`default`): `{"font":"14px / 20px \SSP","color":"#0d0f12"}`
 - Repeated items: 8 measured, sizes 132.2x22.0, 129.5x22.0, 137.5x22.0, 135.3x22.0, gaps dx 16, dx 16, dx 16, dx 16, dy 16, dx 16, dx 16
 
+### Explore page: compact card, chips and carousel
+
+#### explore-band
+
+Explore page band (Trusted AI Learning): a full-width grey wrapper holding a 20% heading column and an 80% column with the chip row over the card carousel. The wrapper paints the fill; the block inside it (1440 wide, radius 24) paints nothing here.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `[data-testid=block_layout] parent`. States: default, mobile.
+Crops: `explore-band-default.png`, `explore-band-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 1440 x 351.61 | 390 x 443.25 |
+| Padding | 0 | same |
+| Display | block | same |
+| Radius | 0px | same |
+| Background | #f2f5fa `--cds-color-interactive-background-secondary-hover-weak` / `--cds-color-grey-25` | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same |
+| Text node font | h2: Source Sans Pro 20/24 600 `--cds-typography-subtitle-large`, `--cds-typography-title-x-small-sm`, ls -0.06px | a.cds-119.cds-113: Source Sans Pro 20/24 600 `--cds-typography-subtitle-large`, `--cds-typography-title-x-small-sm`, ls -0.06px |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Icon | 0 x 0, colour #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | 20 x 20, colour #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` |
+
+- Painted in `default`: div, 1440.0x351.6, bg #f2f5fa `--cds-color-interactive-background-secondary-hover-weak` / `--cds-color-grey-25`; button.cds-149.cds-Chip-root, 92.7x32.0, bg #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, border 1px solid #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, radius 32px; button.cds-149.cds-Chip-root, 53.2x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 111.5x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 90.1x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 87.3x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px
+- Painted in `mobile`: div, 390.0x443.3, bg #f2f5fa `--cds-color-interactive-background-secondary-hover-weak` / `--cds-color-grey-25`; button.cds-149.cds-Chip-root, 92.7x32.0, bg #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, border 1px solid #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, radius 32px; button.cds-149.cds-Chip-root, 53.2x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 111.5x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 90.1x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 87.3x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px
+
+- Extra (`default`): `{"block":{"w":1440,"padding":"32px 48px","borderRadius":"24px","maxWidth":"1440px","backgroundColor":"transparent"},"row":{"display":"flex","flexWrap":"wrap","justifyContent":"center","margin":"-16px","w":1376},"columns":[{"x":32,"w":275.2,"flexBasis":"20%","maxWidth":"20%","padding":"16px","alignItems":"normal"},{"x":307.2,"w":1100.8,"flexBasis":"80%","maxWidth":"80%","padding":"16px 8px","alignItems":"center"}]}`
+- Extra (`mobile`): `{"block":{"w":390,"padding":"24px 16px","borderRadius":"24px"},"columns":[{"x":12,"w":366,"flexBasis":"100%","padding":"4px 4px 0px"},{"x":12,"w":366,"flexBasis":"100%","padding":"12px 4px 4px"}],"h2Displayed":false}`
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-section-heading
+
+Band heading (h2 "Trusted AI Learning") in the left column: 600 20/24 with the -0.003em tracking of the subtitle styles.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `block h2`. States: default.
+Crops: `explore-section-heading-default.png`.
+
+| Property | default |
+|---|---|
+| Size (w x h) | 164.3 x 24 |
+| Padding | 0 |
+| Display | block |
+| Radius | 0px |
+| Background | transparent |
+| Font | Source Sans Pro 20/24 600 `--cds-typography-subtitle-large`, `--cds-typography-title-x-small-sm` |
+| Letter spacing | -0.06px |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` |
+
+#### explore-section-sub
+
+Sub text under the band heading: 400 16/24 in the primary ink, 4px below the heading, wrapping in the 243px column.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `block .cds-grid-item p`. States: default, mobile.
+Crops: `explore-section-sub-default.png`, `explore-section-sub-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 243.19 x 120 | 358 x 72 |
+| Padding | 0 | same |
+| Display | block | same |
+| Radius | 0px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-chip-row
+
+Row of chips above the cards: flex, wrap, 8px between chips, 8px above the cards.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `parent of .cds-Chip-root`. States: default, mobile.
+Crops: `explore-chip-row-default.png`, `explore-chip-row-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 1084.8 x 32 | 358 x 72 |
+| Padding | 0 | same |
+| Margin | 0 0 8px 0 | same |
+| Gap | 8px | same |
+| Display | flex row, align normal, justify normal | same |
+| Radius | 0px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same |
+| Text node font | span.cds-Chip-labelText: Source Sans Pro 14/20 600 `--cds-typography-action-secondary`, ls 0.14px | same |
+| Text node colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+
+- Painted in `default`: button.cds-149.cds-Chip-root, 92.7x32.0, bg #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, border 1px solid #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, radius 32px; button.cds-149.cds-Chip-root, 53.2x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 111.5x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 90.1x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px; button.cds-149.cds-Chip-root, 87.3x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px
+
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+- Repeated items: 5 measured, sizes 92.7x32.0, 53.2x32.0, 111.5x32.0, 90.1x32.0, gaps dx 8, dx 8, dx 8, dx 8
+
+#### explore-chip
+
+Idle chip (cds-Chip-root): white pill, 1px grey border, 400 14/20 label, 32 tall. Read as loaded: no chip was clicked.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `button.cds-Chip-root:not(.cds-Chip-selected)`. States: default, hover, focus-visible, pressed, mobile.
+Crops: `explore-chip-default.png`, `explore-chip-hover.png`, `explore-chip-focus-visible.png`, `explore-chip-pressed.png`, `explore-chip-mobile.png`.
+
+| Property | default | hover | focus-visible | pressed | mobile |
+|---|---|---|---|---|---|
+| Size (w x h) | 53.19 x 32 | same | same | same | same |
+| Padding | 4px 12px | same | same | same | same |
+| Display | flex row, align center, justify center | same | same | same | same |
+| Border | 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200` | 1px solid #0b408b `--cds-color-interactive-primary-hover` / `--cds-color-blue-850` | same | 1px solid #3c0f8a `--cds-color-interactive-primary-selected` / `--cds-color-purple-900` | same |
+| Radius | 32px `--cds-border-radius-400` | same | same | same | same |
+| Background | #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0` | #f0f6ff `--cds-color-interactive-background-primary-hover-weak` / `--cds-color-blue-25` | same | #f9f5ff `--cds-color-interactive-background-primary-selected-weak` / `--cds-color-purple-25` | same |
+| Outline | none | same | 1px solid transparent offset 2px | same | same |
+| Font | Source Sans Pro 14/20 400 `--cds-typography-body2`, `--cds-typography-body-secondary` | same | same | same | same |
+| Text node font | span.cds-Chip-labelText: Source Sans Pro 14/20 400 `--cds-typography-body2`, `--cds-typography-body-secondary`, ls normal | same | same | same | same |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | #0b408b `--cds-color-interactive-primary-hover` / `--cds-color-blue-850` | same | #3c0f8a `--cds-color-interactive-primary-selected` / `--cds-color-purple-900` | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | #0b408b `--cds-color-interactive-primary-hover` / `--cds-color-blue-850` | same | #3c0f8a `--cds-color-interactive-primary-selected` / `--cds-color-purple-900` | same |
+| Cursor | pointer | same | same | same | same |
+| ::after |  | same | 55.2 x 34.0, inset -2px -2px -2px -2px, radius 32px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token) | same | same |
+
+- Painted in `default`: button.cds-149.cds-Chip-root, 53.2x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px
+- Painted in `hover`: button.cds-149.cds-Chip-root, 53.2x32.0, bg #f0f6ff `--cds-color-interactive-background-primary-hover-weak` / `--cds-color-blue-25`, border 1px solid #0b408b `--cds-color-interactive-primary-hover` / `--cds-color-blue-850`, radius 32px
+- Painted in `focus-visible`: button.cds-149.cds-Chip-root, 53.2x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, outline 1px solid transparent offset 2px, radius 32px; button::after.cds-149.cds-Chip-root, 55.1875pxx34px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token), radius 32px, inset -2px -2px -2px -2px
+- Painted in `pressed`: button.cds-149.cds-Chip-root, 53.2x32.0, bg #f9f5ff `--cds-color-interactive-background-primary-selected-weak` / `--cds-color-purple-25`, border 1px solid #3c0f8a `--cds-color-interactive-primary-selected` / `--cds-color-purple-900`, radius 32px
+- Painted in `mobile`: button.cds-149.cds-Chip-root, 53.2x32.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 32px
+
+- `hover` reached by: mouse hover
+- `focus-visible` reached by: Shift+Tab, Tab
+- `pressed` reached by: CDP forcePseudoState :active:hover
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-chip-selected
+
+Selected chip (cds-Chip-selected): near-black fill, white 600 14/20 label with 0.14px tracking, same 32px height and 12px side padding as the idle chip.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `button.cds-Chip-root.cds-Chip-selected`. States: default, hover, focus-visible, pressed.
+Crops: `explore-chip-selected-default.png`, `explore-chip-selected-hover.png`, `explore-chip-selected-focus-visible.png`, `explore-chip-selected-pressed.png`.
+
+| Property | default | hover | focus-visible | pressed |
+|---|---|---|---|---|
+| Size (w x h) | 92.67 x 32 | same | same | same |
+| Padding | 4px 12px | same | same | same |
+| Display | flex row, align center, justify center | same | same | same |
+| Border | 1px solid #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950` | 1px solid #0b408b `--cds-color-interactive-primary-hover` / `--cds-color-blue-850` | same | 1px solid #3c0f8a `--cds-color-interactive-primary-selected` / `--cds-color-purple-900` |
+| Radius | 32px `--cds-border-radius-400` | same | same | same |
+| Background | #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950` | #0b408b `--cds-color-emphasis-primary-background-xstrong` / `--cds-color-blue-850` | same | #3c0f8a `--cds-color-interactive-primary-selected` / `--cds-color-purple-900` |
+| Outline | none | same | 1px solid transparent offset 2px | same |
+| Font | Source Sans Pro 14/20 600 `--cds-typography-action-secondary` | same | same | same |
+| Letter spacing | 0.14px | same | same | same |
+| Text node font | span.cds-Chip-labelText: Source Sans Pro 14/20 600 `--cds-typography-action-secondary`, ls 0.14px | same | same | same |
+| Text node colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` | same | same | same |
+| Colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` | same | same | same |
+| Cursor | pointer | same | same | same |
+| ::after |  | same | 94.7 x 34.0, inset -2px -2px -2px -2px, radius 32px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token) | same |
+
+- Painted in `default`: button.cds-149.cds-Chip-root, 92.7x32.0, bg #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, border 1px solid #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, radius 32px
+- Painted in `hover`: button.cds-149.cds-Chip-root, 92.7x32.0, bg #0b408b `--cds-color-emphasis-primary-background-xstrong` / `--cds-color-blue-850`, border 1px solid #0b408b `--cds-color-interactive-primary-hover` / `--cds-color-blue-850`, radius 32px
+- Painted in `focus-visible`: button.cds-149.cds-Chip-root, 92.7x32.0, bg #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, border 1px solid #1c2026 `--cds-color-interactive-secondary-selected` / `--cds-color-grey-950`, outline 1px solid transparent offset 2px, radius 32px; button::after.cds-149.cds-Chip-root, 94.6719pxx34px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token), radius 32px, inset -2px -2px -2px -2px
+- Painted in `pressed`: button.cds-149.cds-Chip-root, 92.7x32.0, bg #3c0f8a `--cds-color-interactive-primary-selected` / `--cds-color-purple-900`, border 1px solid #3c0f8a `--cds-color-interactive-primary-selected` / `--cds-color-purple-900`, radius 32px
+
+- `hover` reached by: mouse hover
+- `focus-visible` reached by: Shift+Tab, Tab
+- `pressed` reached by: CDP forcePseudoState :active:hover
+
+#### explore-carousel
+
+The card row (data-testid overflow-carousel): a flex wrapper with -8px -16px margins that holds the scroll container, the card grid inside it and two absolutely placed arrow buttons. With four cards and room for four it does not scroll and both arrows are 0x0.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `[data-testid=overflow-carousel]`. States: default, mobile, narrow.
+Crops: `explore-carousel-default.png`, `explore-carousel-mobile.png`, `explore-carousel-narrow.png`.
+
+| Property | default | mobile | narrow |
+|---|---|---|---|
+| Size (w x h) | 1116.8 x 263.61 | 390 x 218.25 | 390 x 218.25 |
+| Padding | 0 | same | same |
+| Margin | -8px -16px | same | same |
+| Display | flex row, align center, justify normal | same | same |
+| Radius | 0px | same | same |
+| Background | transparent | same | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same | same |
+| Text node font | p.cds-ProductCard-partnerNames: Source Sans Pro 14/24 400, ls normal | same | same |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same | same |
+| Icon | 0 x 0, colour #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same | same |
+
+- Painted in `default`: div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px
+- Painted in `mobile`: div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, shadow #e9eef7 0px 0px 4px 0px, #0f1114 @ 0.1 0px 4px 12px 4px (no elevation token), radius 16px
+- Painted in `narrow`: div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px
+
+- Extra (`default`): `{"cards":4,"cardWidth":266.2,"cardPitch":278.2,"fullyVisible":4,"partlyVisible":4,"next":{"display":"none","w":0,"h":0,"x":0,"padding":"0px 0px 0px 4px"},"previous":{"display":"none","w":0,"h":0,"x":0,"padding":"0px 4px 0px 0px"},"scroller":{"overflowX":"auto","scrollSnapType":"x mandatory","scrollSnapAlign":"start","scrollSnapStop":"always","scrollBehavior":"smooth","scrollbarWidth":"none","padding":"8px 0px","scrollWidth":1117,"clientWidth":1117,"scrollLeft":0},"content":{"display":"grid","columns":"266.188px 266.203px 266.203px 266.203px","gap":"12px","padding":"0px 0px 0px 16px","role":"list","itemRole":"listitem","itemSnapAlign":"none"}}`
+- Extra (`mobile`): `{"cards":4,"cardWidth":150,"cardPitch":162,"fullyVisible":2,"partlyVisible":3,"next":{"display":"none","w":0,"h":0,"x":0,"padding":"0px 0px 0px 4px"},"previous":{"display":"none","w":0,"h":0,"x":0,"padding":"0px 4px 0px 0px"},"scroller":{"overflowX":"auto","scrollSnapType":"x mandatory","scrollSnapAlign":"start","scrollSnapStop":"always","scrollBehavior":"smooth","scrollbarWidth":"none","padding":"8px 0px","scrollWidth":652,"clientWidth":390,"scrollLeft":0},"content":{"display":"grid","columns":"150px 150px 150px 150px","gap":"12px","padding":"0px 0px 0px 16px","role":"list","itemRole":"listitem","itemSnapAlign":"none"}}`
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+- Extra (`narrow`): `{"cards":4,"cardWidth":150,"cardPitch":162,"fullyVisible":2,"partlyVisible":3,"next":{"display":"block","w":24,"h":202.3,"x":366,"padding":"0px 0px 0px 4px"},"previous":{"display":"none","w":0,"h":0,"x":0,"padding":"0px 4px 0px 0px"},"scroller":{"overflowX":"auto","scrollSnapType":"x mandatory","scrollSnapAlign":"start","scrollSnapStop":"always","scrollBehavior":"smooth","scrollbarWidth":"none","padding":"8px 0px","scrollWidth":652,"clientWidth":390,"scrollLeft":0},"content":{"display":"grid","columns":"150px 150px 150px 150px","gap":"12px","padding":"0px 0px 0px 16px","role":"list","itemRole":"listitem","itemSnapAlign":"none"}}`
+- `narrow` reached by: 390x844 window with the desktop user agent
+- Repeated items: 4 measured, sizes 266.2x247.6, 266.2x247.6, 266.2x247.6, 266.2x247.6, gaps dx 12, dx 12, dx 12
+
+#### explore-carousel-content
+
+The card grid (data-testid overflow-carousel-content, role list): grid with 12px gap (--cds-spacing-150), 16px left padding and four equal columns, or minmax(150px, 1fr) columns below 600.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `[data-testid=overflow-carousel-content]`. States: default, mobile.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 1116.8 x 247.61 | 652 x 202.25 |
+| Padding | 0 0 0 16px | same |
+| Gap | 12px | same |
+| Display | grid | same |
+| Radius | 0px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same |
+| Text node font | p.cds-ProductCard-partnerNames: Source Sans Pro 14/24 400, ls normal | same |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+
+- Painted in `default`: div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px
+- Painted in `mobile`: div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, shadow #e9eef7 0px 0px 4px 0px, #0f1114 @ 0.1 0px 4px 12px 4px (no elevation token), radius 16px
+
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-card
+
+Compact course card: the search product card (cds-ProductCard-grid) without the skills line or tags. 8px inset 16:9 cover image, partner row, title, one type line. Height follows the tallest card in the row.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `[data-testid=overflow-carousel-content] .cds-ProductCard-grid`. States: default, hover, focus-visible, pressed, mobile.
+Crops: `explore-card-default.png`, `explore-card-hover.png`, `explore-card-focus-visible.png`, `explore-card-pressed.png`, `explore-card-mobile.png`.
+
+| Property | default | hover | focus-visible | pressed | mobile |
+|---|---|---|---|---|---|
+| Size (w x h) | 266.19 x 247.61 | same | same | same | 150 x 202.25 |
+| Padding | 0 | same | same | same | same |
+| Display | flex column, align normal, justify space-between | same | same | same | same |
+| Border | 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200` | same | same | same | same |
+| Radius | 16px `--cds-border-radius-200` | same | same | same | same |
+| Background | #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0` | same | same | same | same |
+| Box shadow | none | #e9eef7 0px 0px 4px 0px, #0f1114 @ 0.1 0px 4px 12px 4px (no elevation token) | same | #e9eef7 0px 0px 4px 0px, #0f1114 @ 0.1 0px 4px 12px 4px (no elevation token) | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same | same | same | same |
+| Text node font | p.cds-ProductCard-partnerNames: Source Sans Pro 14/24 400, ls normal | same | same | same | same |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same | same | same | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same | same | same | same |
+| Transition | all 0.3s cubic-bezier(0, 0, 0.5, 1) | same | same | same | same |
+| Cursor | pointer | same | same | same | same |
+
+- Painted in `default`: div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px
+- Painted in `hover`: div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, shadow #e9eef7 0px 0px 4px 0px, #0f1114 @ 0.1 0px 4px 12px 4px (no elevation token), radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px
+- Painted in `focus-visible`: div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; a.cds-119.cds-113, 232.2x20.0, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token), outline 1px solid transparent offset 2px, radius 4px
+- Painted in `pressed`: div.cds-ProductCard-base.cds-ProductCard-grid, 266.2x247.6, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, shadow #e9eef7 0px 0px 4px 0px, #0f1114 @ 0.1 0px 4px 12px 4px (no elevation token), radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px
+- Painted in `mobile`: div.cds-ProductCard-base.cds-ProductCard-grid, 150.0x202.3, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px
+
+- `hover` reached by: mouse hover
+- `focus-visible` reached by: Shift+Tab, Tab
+- `pressed` reached by: CDP forcePseudoState :active:hover
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-card-click-area
+
+The inner click area that holds the hover shadow and focus ring.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-CommonCard-clickArea`. States: default.
+
+| Property | default |
+|---|---|
+| Size (w x h) | 264.19 x 245.61 |
+| Padding | 0 |
+| Display | flex column, align normal, justify normal |
+| Radius | 0px |
+| Background | transparent |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` |
+| Text node font | p.cds-ProductCard-partnerNames: Source Sans Pro 14/24 400, ls normal |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` |
+| Cursor | pointer |
+
+- Painted in `default`: div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; ancestor +1 div.cds-ProductCard-base.cds-ProductCard-grid, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, radius 16px
+
+#### explore-card-image-container
+
+Image well: 16:9, inset 8px.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-ProductCard-gridPreviewContainer`. States: default, mobile.
+Crops: `explore-card-image-container-default.png`, `explore-card-image-container-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 248.19 x 139.59 | 132 x 74.25 |
+| Padding | 0 | same |
+| Display | block | same |
+| Radius | 0px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Cursor | pointer | same |
+
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-card-image
+
+Preview image wrapper: 16:9, radius 8, clips an img with object-fit cover.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-CommonCard-previewImage`. States: default, mobile.
+Crops: `explore-card-image-default.png`, `explore-card-image-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 248.19 x 139.59 | 132 x 74.25 |
+| Padding | 0 | same |
+| Display | block | same |
+| Radius | 8px `--cds-border-radius-100` | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Cursor | pointer | same |
+
+- Extra (`default`): `{"img":{"w":248.2,"h":139.6,"objectFit":"cover","radius":"0px"}}`
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-card-content
+
+Text column under the image: 8px padding, 8px between the header and the footer.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-ProductCard-content`. States: default.
+
+| Property | default |
+|---|---|
+| Size (w x h) | 248.19 x 90.02 |
+| Padding | 8px |
+| Gap | 8px |
+| Display | flex column, align normal, justify normal |
+| Radius | 0px |
+| Background | transparent |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` |
+| Text node font | p.cds-ProductCard-partnerNames: Source Sans Pro 14/24 400, ls normal |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` |
+| Cursor | pointer |
+
+- Painted in `default`: div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px
+
+#### explore-card-partner-logo
+
+Organisation avatar: 18px square, 1px border, radius 5, 2px padding around a 12px logo.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-ProductCard-partnerLogos .cds-Avatar-base`. States: default, mobile.
+Crops: `explore-card-partner-logo-default.png`, `explore-card-partner-logo-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 18 x 18 | same |
+| Padding | 2px | same |
+| Display | flex row, align center, justify center | same |
+| Border | 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200` | same |
+| Radius | 5px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Cursor | pointer | same |
+
+- Painted in `default`: div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px
+
+- Extra (`default`): `{"img":{"w":12,"h":12,"objectFit":"cover","radius":"4px"}}`
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-card-partner-name
+
+Organisation name beside the avatar: 400 14/24.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-ProductCard-partnerNames`. States: default, mobile.
+Crops: `explore-card-partner-name-default.png`, `explore-card-partner-name-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 41.41 x 24 | same |
+| Padding | 0 | same |
+| Display | flow-root | same |
+| Radius | 0px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 14/24 400 | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Cursor | pointer | same |
+
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-card-title
+
+Card title (h3): 600 16/20, -0.048px tracking, three-line clamp.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-CommonCard-title`. States: default, mobile.
+Crops: `explore-card-title-default.png`, `explore-card-title-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 232.19 x 20 | 116 x 20 |
+| Padding | 0 | same |
+| Display | flow-root | same |
+| Radius | 0px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 16/20 600 `--cds-typography-subtitle-medium` | same |
+| Letter spacing | -0.048px | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Cursor | pointer | same |
+
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-card-title-link
+
+The title link; it is stretched over the whole card, so it takes the card focus ring.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-CommonCard-titleLink`. States: default, hover, focus-visible.
+Crops: `explore-card-title-link-hover.png`, `explore-card-title-link-focus-visible.png`.
+
+| Property | default | hover | focus-visible |
+|---|---|---|---|
+| Size (w x h) | 232.19 x 20 | same | same |
+| Padding | 0 | same | same |
+| Display | block | same | same |
+| Radius | 0px | same | 4px `--cds-border-radius-50` |
+| Background | transparent | same | same |
+| Box shadow | none | same | #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token) |
+| Outline | none | same | 1px solid transparent offset 2px |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same | same |
+| Text node font | h3.cds-CommonCard-title: Source Sans Pro 16/20 600 `--cds-typography-subtitle-medium`, ls -0.048px | same | same |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | #0b408b `--cds-color-interactive-primary-hover` / `--cds-color-blue-850` | #0b408b `--cds-color-interactive-primary-hover` / `--cds-color-blue-850` |
+| Cursor | pointer | same | same |
+| ::before | 264.2 x 245.6, inset 0px 0px 0px 0px, radius 0px, shadow none | same | same |
+
+- Painted in `focus-visible`: a.cds-119.cds-113, 232.2x20.0, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token), outline 1px solid transparent offset 2px, radius 4px
+
+- `hover` reached by: mouse hover
+- `focus-visible` reached by: Shift+Tab, Tab
+
+#### explore-card-type
+
+Type line under the title ("Professional Certificate", "Specialization", "Course"): 400 12/18 in the weak ink.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-CommonCard-metadata p`. States: default, mobile.
+Crops: `explore-card-type-default.png`, `explore-card-type-mobile.png`.
+
+| Property | default | mobile |
+|---|---|---|
+| Size (w x h) | 232.19 x 18 | 116 x 18 |
+| Padding | 0 | same |
+| Display | block | same |
+| Radius | 0px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 12/18 400 `--cds-typography-body-tertiary` | same |
+| Colour | #48546e `--cds-color-neutral-primary-weak` / `--cds-color-grey-750` | same |
+| Cursor | pointer | same |
+
+- `mobile` reached by: 390x844 mobile context (touch, Android Chrome user agent)
+
+#### explore-card-footer
+
+Footer block that holds the type line; it has no gap in a carousel.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `.cds-ProductCard-grid .cds-ProductCard-footer`. States: default.
+
+| Property | default |
+|---|---|
+| Size (w x h) | 232.19 x 18.02 |
+| Padding | 0 |
+| Gap | 4px |
+| Display | flex column, align normal, justify flex-end |
+| Radius | 0px |
+| Background | transparent |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` |
+| Text node font | p: Source Sans Pro 12/18 400 `--cds-typography-body-tertiary`, ls normal |
+| Text node colour | #48546e `--cds-color-neutral-primary-weak` / `--cds-color-grey-750` |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` |
+| Cursor | pointer |
+
+#### explore-band-dark
+
+Dark band (Learn AI with today's most popular certificates): a 1344 wide block with radius 24 on the grey-975 ground, a 20% heading column, an 80% card column, and decorative art absolutely placed behind. The white text and the ghost-invert link sit on it.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `[data-testid=block_layout] with a ghostInvert link`. States: default.
+Crops: `explore-band-dark-default.png`.
+
+| Property | default |
+|---|---|
+| Size (w x h) | 1344 x 306 |
+| Padding | 16px 16px 16px 32px |
+| Display | block |
+| Radius | 24px `--cds-border-radius-300` |
+| Background | #0d0f12 `--cds-color-emphasis-neutral-background-xxstrong` / `--cds-color-grey-975` |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` |
+| Text node font | h2: Source Sans Pro 20/24 600 `--cds-typography-subtitle-large`, `--cds-typography-title-x-small-sm`, ls -0.06px |
+| Text node colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` |
+| Colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` |
+| Icon | 0 x 0, colour #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` |
+
+- Painted in `default`: div.cds-1.cds-2, 1344.0x306.0, bg #0d0f12 `--cds-color-emphasis-neutral-background-xxstrong` / `--cds-color-grey-975`, radius 24px; div.cds-ProductCard-base.cds-ProductCard-grid, 242.0x274.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 242.0x274.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 242.0x274.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px
+
+- Extra (`default`): `{"block":{"w":1344,"padding":"16px 16px 16px 32px","borderRadius":"24px","overflow":"hidden"},"parent":{"w":1344,"padding":"0px","backgroundColor":"transparent"}}`
+
+#### explore-section-heading-inverse
+
+Band heading on the dark band: the same 600 20/24 style in white.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `dark block h2`. States: default.
+Crops: `explore-section-heading-inverse-default.png`.
+
+| Property | default |
+|---|---|
+| Size (w x h) | 233.59 x 48 |
+| Padding | 0 |
+| Display | block |
+| Radius | 0px |
+| Background | transparent |
+| Font | Source Sans Pro 20/24 600 `--cds-typography-subtitle-large`, `--cds-typography-title-x-small-sm` |
+| Letter spacing | -0.06px |
+| Colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` |
+
+#### explore-section-sub-inverse
+
+Sub text on the dark band: 400 16/24 in white.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `dark block .cds-grid-item p`. States: default.
+Crops: `explore-section-sub-inverse-default.png`.
+
+| Property | default |
+|---|---|
+| Size (w x h) | 233.59 x 48 |
+| Padding | 0 |
+| Display | block |
+| Radius | 0px |
+| Background | transparent |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` |
+| Colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` |
+
+#### explore-section-link
+
+The "Explore programs" arrow link under the sub text: cds-button-ghostInvert, a link styled as a button (48 tall, 600 16/24, 0.16px tracking) with a 24px arrow end icon; its left margin is -16px so the text lines up with the heading.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `a.cds-button-ghostInvert`. States: default, hover, focus-visible, pressed.
+Crops: `explore-section-link-default.png`, `explore-section-link-hover.png`, `explore-section-link-focus-visible.png`, `explore-section-link-pressed.png`.
+
+| Property | default | hover | focus-visible | pressed |
+|---|---|---|---|---|
+| Size (w x h) | 183.66 x 48 | same | same | same |
+| Padding | 12px 16px | same | same | same |
+| Margin | 0 0 0 -16px | same | same | same |
+| Display | inline-flex row, align center, justify center | same | same | same |
+| Radius | 8px `--cds-border-radius-100` | same | same | same |
+| Background | transparent | same | same | same |
+| Outline | none | same | 1px solid transparent offset 2px | same |
+| Font | Source Sans Pro 16/24 600 `--cds-typography-title3`, `--cds-typography-action-primary` | same | same | same |
+| Letter spacing | 0.16px | same | same | same |
+| Text node font | span.cds-button-label: Source Sans Pro 16/24 600 `--cds-typography-title3`, `--cds-typography-action-primary`, ls 0.16px | same | same | same |
+| Text node colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` | same | same | same |
+| Colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` | same | same | same |
+| Text decoration | none | underline | underline | underline |
+| Cursor | pointer | same | same | same |
+| Icon | 24 x 24, colour #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` | same | same | same |
+| ::after |  | same | 187.7 x 52.0, inset -2px -2px -2px -2px, radius 8px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token) | same |
+
+- Painted in `focus-visible`: a.cds-149.cds-button-disableElevation, 183.7x48.0, outline 1px solid transparent offset 2px, radius 8px; a::after.cds-149.cds-button-disableElevation, 187.656pxx52px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token), radius 8px, inset -2px -2px -2px -2px
+
+- `hover` reached by: mouse hover
+- `focus-visible` reached by: Shift+Tab, Tab
+- `pressed` reached by: CDP forcePseudoState :active:hover
+
+#### explore-carousel-dark
+
+A carousel that overflows (20 cards at 242 wide, fixed columns): the scroll container has overflow-x auto, scroll-snap-type x mandatory and no scrollbar. The Next arrow appears at the right end; after one click the Previous arrow appears at the left end and the row has scrolled by four cards.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `[data-testid=overflow-carousel] (dark band)`. States: default, scrolled.
+Crops: `explore-carousel-dark-default.png`, `explore-carousel-dark-scrolled.png`.
+
+| Property | default | scrolled |
+|---|---|---|
+| Size (w x h) | 1062.39 x 290 | same |
+| Padding | 0 | same |
+| Margin | -8px -16px | same |
+| Display | flex row, align center, justify normal | same |
+| Radius | 0px | same |
+| Background | transparent | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same |
+| Text node font | p.cds-ProductCard-partnerNames: Source Sans Pro 14/24 400, ls normal | same |
+| Text node colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Colour | #ffffff `--cds-color-neutral-primary-invert` / `--cds-color-white-0` | same |
+| Icon | 0 x 0, colour #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | 24 x 24, colour #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` |
+
+- Painted in `default`: div.cds-ProductCard-base.cds-ProductCard-grid, 242.0x274.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 242.0x274.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px; div.cds-ProductCard-base.cds-ProductCard-grid, 242.0x274.0, bg #ffffff `--cds-color-neutral-background-primary` / `--cds-color-white-0`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 16px; div.cds-Avatar-base.cds-Avatar-organization, 18.0x18.0, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` / `--cds-color-grey-200`, radius 5px
+
+- Extra (`default`): `{"snapProbe":{"requested":100,"settled":100},"cards":20,"cardWidth":242,"cardPitch":254,"fullyVisible":4,"partlyVisible":5,"next":{"display":"block","w":24,"h":274,"x":1368,"padding":"0px 0px 0px 4px"},"previous":{"display":"none","w":0,"h":0,"x":0,"padding":"0px 4px 0px 0px"},"scroller":{"overflowX":"auto","scrollSnapType":"x mandatory","scrollSnapAlign":"start","scrollSnapStop":"always","scrollBehavior":"smooth","scrollbarWidth":"none","padding":"8px 0px","scrollWidth":5100,"clientWidth":1062,"scrollLeft":0},"content":{"display":"grid","columns":"242px x 20","gap":"12px","padding":"0px 16px","role":"list","itemRole":"listitem","itemSnapAlign":"none"}}`
+- Extra (`scrolled`): `{"cards":20,"cardWidth":242,"cardPitch":254,"fullyVisible":4,"partlyVisible":6,"next":{"display":"block","w":24,"h":274,"x":1368,"padding":"0px 0px 0px 4px"},"previous":{"display":"block","w":24,"h":274,"x":329.6,"padding":"0px 4px 0px 0px"},"scroller":{"overflowX":"auto","scrollSnapType":"x mandatory","scrollSnapAlign":"start","scrollSnapStop":"always","scrollBehavior":"smooth","scrollbarWidth":"none","padding":"8px 0px","scrollWidth":5100,"clientWidth":1062,"scrollLeft":1016},"content":{"display":"grid","columns":"242px x 20","gap":"12px","padding":"0px 16px","role":"list","itemRole":"listitem","itemSnapAlign":"none"}}`
+- `scrolled` reached by: clicked Next once from scrollLeft 0, read after the smooth scroll settled
+- Repeated items: 8 measured, sizes 242.0x274.0, 242.0x274.0, 242.0x274.0, 242.0x274.0, gaps dx 12, dx 12, dx 12, dx 12, dx 12, dx 12, dx 12
+
+#### explore-carousel-next
+
+Next arrow: a 24px wide button the height of the row, pinned to the right end, a 24px chevron over a white fade (linear-gradient to the right, 0 to 0.8 alpha; hover and pressed swap in a stronger fade), padding 0 0 0 4px. 0x0 when the row does not overflow. Clicking scrolls the row by four cards (1016px at 254 pitch) with scroll-behavior smooth.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `[data-testid=overflow-carousel] button "Next"`. States: default, hover, focus-visible, pressed, narrow.
+Crops: `explore-carousel-next-default.png`, `explore-carousel-next-hover.png`, `explore-carousel-next-focus-visible.png`, `explore-carousel-next-pressed.png`, `explore-carousel-next-narrow.png`.
+
+| Property | default | hover | focus-visible | pressed | narrow |
+|---|---|---|---|---|---|
+| Size (w x h) | 24 x 274 | same | same | same | 24 x 202.25 |
+| Padding | 0 0 0 4px | same | same | same | same |
+| Display | block | same | same | same | same |
+| Radius | 0px | same | same | same | same |
+| Background | transparent + linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%) | transparent + linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.8) 40%, rgb(255, 255, 255) 100%) | same | transparent + linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.8) 40%, rgb(255, 255, 255) 100%) | same |
+| Outline | none | same | 1px solid transparent offset 2px | same | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same | same | same | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | #0056d2 `--cds-color-interactive-primary` / `--cds-color-blue-800` | same | #0056d2 `--cds-color-interactive-primary` / `--cds-color-blue-800` | same |
+| Cursor | pointer | same | same | same | same |
+| Icon | 24 x 24, colour #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | 24 x 24, colour #0056d2 `--cds-color-interactive-primary` / `--cds-color-blue-800` | same | 24 x 24, colour #0056d2 `--cds-color-interactive-primary` / `--cds-color-blue-800` | same |
+| ::after |  | same | 28.0 x 278.0, inset -2px -2px -2px -2px, radius 8px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token) | same | same |
+
+- Painted in `default`: button.cds-149, 24.0x274.0, bg-image linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%)
+- Painted in `hover`: button.cds-149, 24.0x274.0, bg-image linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.8) 40%, rgb(255, 255, 255) 100%)
+- Painted in `focus-visible`: button.cds-149.cds-151, 24.0x274.0, bg-image linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%), outline 1px solid transparent offset 2px; button::after.cds-149.cds-151, 28pxx278px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token), radius 8px, inset -2px -2px -2px -2px
+- Painted in `pressed`: button.cds-149, 24.0x274.0, bg-image linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.8) 40%, rgb(255, 255, 255) 100%)
+- Painted in `narrow`: button.cds-149, 24.0x202.3, bg-image linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%)
+
+- `hover` reached by: mouse hover
+- `focus-visible` reached by: Shift key press, then focus() without scrolling (:focus-visible matches)
+- `pressed` reached by: CDP forcePseudoState :active:hover
+- `narrow` reached by: 390x844 window with the desktop user agent
+
+#### explore-carousel-prev
+
+Previous arrow: mirror of the Next arrow at the left end (white fade to the left, padding 0 4px 0 0). It is 0x0 until the row has scrolled.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `[data-testid=overflow-carousel] button "Previous"`. States: default, hover, focus-visible, pressed.
+Crops: `explore-carousel-prev-default.png`, `explore-carousel-prev-hover.png`, `explore-carousel-prev-focus-visible.png`, `explore-carousel-prev-pressed.png`.
+
+| Property | default | hover | focus-visible | pressed |
+|---|---|---|---|---|
+| Size (w x h) | 24 x 274 | same | same | same |
+| Padding | 0 4px 0 0 | same | same | same |
+| Display | block | same | same | same |
+| Radius | 0px | same | same | same |
+| Background | transparent + linear-gradient(270deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%) | transparent + linear-gradient(90deg, rgb(255, 255, 255) 0%, rgba(255, 255, 255, 0.8) 40%, rgba(255, 255, 255, 0.1) 100%) | same | transparent + linear-gradient(90deg, rgb(255, 255, 255) 0%, rgba(255, 255, 255, 0.8) 40%, rgba(255, 255, 255, 0.1) 100%) |
+| Outline | none | same | 1px solid transparent offset 2px | same |
+| Font | Source Sans Pro 16/24 400 `--cds-typography-body1`, `--cds-typography-body-primary` | same | same | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | #0056d2 `--cds-color-interactive-primary` / `--cds-color-blue-800` | same | #0056d2 `--cds-color-interactive-primary` / `--cds-color-blue-800` |
+| Cursor | pointer | same | same | same |
+| Icon | 24 x 24, colour #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | 24 x 24, colour #0056d2 `--cds-color-interactive-primary` / `--cds-color-blue-800` | same | 24 x 24, colour #0056d2 `--cds-color-interactive-primary` / `--cds-color-blue-800` |
+| ::after |  | same | 28.0 x 278.0, inset -2px -2px -2px -2px, radius 8px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token) | same |
+
+- Painted in `default`: button.cds-149, 24.0x274.0, bg-image linear-gradient(270deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%)
+- Painted in `hover`: button.cds-149, 24.0x274.0, bg-image linear-gradient(90deg, rgb(255, 255, 255) 0%, rgba(255, 255, 255, 0.8) 40%, rgba(255, 255, 255, 0.1) 100%)
+- Painted in `focus-visible`: button.cds-149.cds-151, 24.0x274.0, bg-image linear-gradient(270deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%), outline 1px solid transparent offset 2px; button::after.cds-149.cds-151, 28pxx278px, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token), radius 8px, inset -2px -2px -2px -2px
+- Painted in `pressed`: button.cds-149, 24.0x274.0, bg-image linear-gradient(90deg, rgb(255, 255, 255) 0%, rgba(255, 255, 255, 0.8) 40%, rgba(255, 255, 255, 0.1) 100%)
+
+- `hover` reached by: mouse hover
+- `focus-visible` reached by: Shift key press, then focus() without scrolling (:focus-visible matches)
+- `pressed` reached by: CDP forcePseudoState :active:hover
+
+#### explore-section-heading-link
+
+Below 600 the h2 collapses to 0x0 and the heading is shown as a link: the same 600 20/24 text with a chevron icon (4px margin) after it, on the band's own link. Read in the 390 context only.
+
+Page: explore (https://www.coursera.org/explore/generative-ai). Selector: `block .cds-grid-item a (below 600)`. States: default, focus-visible.
+Crops: `explore-section-heading-link-default.png`, `explore-section-heading-link-focus-visible.png`.
+
+| Property | default | focus-visible |
+|---|---|---|
+| Size (w x h) | 188.3 x 28 | same |
+| Padding | 0 | same |
+| Display | inline | same |
+| Radius | 0px | 4px `--cds-border-radius-50` |
+| Background | transparent | same |
+| Box shadow | none | #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token) |
+| Outline | none | 1px solid transparent offset 2px |
+| Font | Source Sans Pro 20/24 600 `--cds-typography-subtitle-large`, `--cds-typography-title-x-small-sm` | same |
+| Letter spacing | -0.06px | same |
+| Colour | #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+| Text decoration | none | underline |
+| Cursor | pointer | same |
+| Icon | 20 x 20, colour #0d0f12 `--cds-color-interactive-secondary` / `--cds-color-grey-975` | same |
+
+- Painted in `focus-visible`: a.cds-119.cds-113, 188.3x28.0, shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px (no elevation token), outline 1px solid transparent offset 2px, radius 4px
+
+- `focus-visible` reached by: Shift+Tab, Tab
+
 ### Chips and pills
 
 #### pill
@@ -4135,7 +4809,7 @@ Crops: `footer-social-icon-default.png`, `footer-social-icon-hover.png`, `footer
 
 ## CDS class names in the stylesheets
 
-Union of every `cds-*` class named in a stylesheet selector on the four pages (571 names; 246 of them are numbered `cds-<n>` Emotion labels with no component meaning, not listed). Grouped by component, modifiers after the colon.
+Union of every `cds-*` class named in a stylesheet selector on the five pages (571 names; 246 of them are numbered `cds-<n>` Emotion labels with no component meaning, not listed). Grouped by component, modifiers after the colon.
 
 - `cds-AccordionGroup`: itemSpacing
 - `cds-AccordionHeader`: button, chevron, content, expanded, freeContent, hasTitleIcon, labelDetails, labelGroup, positionEnd, titleIcon
