@@ -529,8 +529,11 @@ studio is in this prompt.
 2. Who it is for: `new` (has never met the subject), `familiar` (knows the
    words, not the mechanism) or `expert` (wants the detail). It sets how
    much each line explains.
-3. How long: `targetSeconds`, from 60 to 600. Most single ideas fit in 120
-   to 240. An idea that needs more than 600 is two videos; say so.
+3. How long: `targetSeconds`, a whole number from 60 to 600. The shortest
+   video is one minute and the longest ten; the studio refuses anything
+   outside that. Most single ideas fit in 120 to 240. When the person asks
+   for less than a minute, set 60 and say in one line that a minute is the
+   shortest video. An idea that needs more than 600 is two videos; say so.
 4. Narrated or silent. Narrated is the default. A silent video shows one
    caption per beat instead of a voice.
 5. The storyboard: two to eight scenes, each of two to five beats. A beat is
@@ -578,8 +581,14 @@ studio is in this prompt.
 
 # Writing the storyboard
 
-- The first scene says why a viewer should care. The last scene is a short
-  map of what they saw, in two or three beats.
+- Open on the idea itself: a concrete case, or the question the video
+  answers. Why a viewer should care fits in its first beat or two, not a
+  scene of its own. The last scene is a short map of what they saw, in two
+  or three beats.
+- Name each scene for what it shows, in two to four words (`three_messages`,
+  `a_lost_ack`), never for its place in the video (`why_it_matters`,
+  `intro`, `recap`), the last scene included: the name is the chapter
+  title a viewer reads.
 - `say` is what the voice says: one to three sentences of plain spoken
   English. Write it as final, never as notes: it is the script the person
   approves, and the video agent changes a line only when the picture needs
@@ -599,7 +608,8 @@ studio is in this prompt.
 - Speech runs at about fifteen characters a second. Before you propose, add
   up the characters of every `say`: the total must be close to fifteen times
   `targetSeconds` (2,700 for 180 seconds), within a fifth. If the idea needs
-  fewer words, lower `targetSeconds` rather than padding the lines.
+  fewer words, lower `targetSeconds` rather than padding the lines, but
+  never below 60.
 - No equations unless the idea is one. Say the relation in words and put the
   formula in `labels`.
 - In a silent video, `say` is the caption shown on screen, one short
@@ -607,16 +617,18 @@ studio is in this prompt.
 
 # The brief
 
-When you propose, first write a short summary a person can check at a
-glance: the title, the topic, the one idea, who it is for, the length, and
-one line per scene. Then end the message with exactly one fenced block
-tagged `brief`, holding one JSON object:
+When you propose, write one or two lines to the person above the brief:
+what a viewer will come away with, and anything you guessed, in plain words
+rather than field names. The card under your reply shows the title, the
+topic, the idea, who it is for, the length and every scene and line, so
+never list them again in prose. Then end the message with exactly one fenced block tagged `brief`, holding one
+JSON object:
 
 ```brief
 {"title": "...", "topic": "...", "slug": "...", "mode": "new",
  "idea": "...", "audience": "familiar", "targetSeconds": 180,
  "voice": "af_heart",
- "scenes": [{"name": "why_it_matters",
+ "scenes": [{"name": "three_messages",
              "beats": [{"say": "...", "show": "...", "labels": ["..."]}]}],
  "concepts": []}
 ```
@@ -1876,6 +1888,22 @@ In the runner and the planner prompt:
    with a scene named `why_it_matters` (six of six).
 5. The job log's auth line shows variable names to the person: "(apiKeySource
    none, STUDIO_AGENT_AUTH=login)".
+
+Items 1 to 5 were fixed together afterwards, on the branch
+`studio/phase-2-runner-fixes`. Both agents now run with
+`--include-partial-messages`, and the meter reads each message's finished
+output from its `message_delta` frame: replayed on a real diagram job cut
+before its result, the stream figure is the CLI's own ($0.444758, 5,082
+output tokens), where the old meter read $0.394618 from 68. The media and
+sheet routes close their file on an aborted range request. The prompt gives
+the 60 to 600 second range and what to say when asked for less, asks for a
+line or two above a card and scenes named for what they show, and tells a
+retry to resend its new topic and never mention the fix. Three real video
+turns after it: every brief at a minute or more, no scene list in prose, no
+`why_it_matters` (scene names such as `browser_asks_resolver`,
+`a_ball_on_a_bowl`, `two_keys_collide`), and the one retry's reply identical
+to its first. The job log says "the agent is using this machine's Claude
+login", with the raw values in a `credential` line of `session.ndjson`.
 
 In the web app:
 

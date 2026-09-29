@@ -33,8 +33,8 @@
  *  "output_tokens":16,"service_tier":"standard"}
  * ```
  *
- * plus `message.model` (`claude-sonnet-5`). Nothing else in the stream carries
- * usage: `system/init`, `system/task_summary`, `system/thinking_tokens`,
+ * plus `message.model` (`claude-sonnet-5`). Without `--include-partial-messages`
+ * nothing else in the stream carries usage: `system/init`, `system/task_summary`, `system/thinking_tokens`,
  * `system/post_turn_summary`, `system/permission_denied`, `user` and
  * `rate_limit_event` all have none.
  *
@@ -47,20 +47,30 @@
  * `input_tokens`, `cache_creation_input_tokens` and `cache_read_input_tokens`
  * **exactly, on all nine sessions**.
  *
- * **`output_tokens` is a floor, not a total.** It is the value from the API's
- * `message_start` frame, before the message finished generating, and nothing
- * later in the stream corrects it. Across those nine sessions the accumulated
- * output ran from 4% to 46% of the final figure — 65 tokens against 3,432 on
- * one, 703 against 5,889 on another.
+ * **An assistant event's `output_tokens` is a floor, not a total.** It is the
+ * value from the API's `message_start` frame, before the message finished
+ * generating. Across those nine sessions the accumulated output ran from 4% to
+ * 46% of the final figure, and the whole estimate from 80% to 93% of the true
+ * cost; on the phase 2 video job, where output is a larger share of the bill,
+ * it summed 932 output tokens against 20,630 and would have recorded about a
+ * third too little for a killed job (Phase 2 measured, docs/STUDIO-VIDEOS.md).
  *
- * Because cache traffic rather than output is most of a drawing job's bill,
- * that lands the **whole estimate between 80% and 93% of the true cost**, on
- * every one of the nine (mean 88%). It is an under-estimate, always, and by a
- * knowable amount. Nothing here scales it up to close the gap: a fudge factor
- * would make the number unauditable against the CLI's own figure, which is the
- * one check that can catch a stale rate table. Instead every row records **where
- * its figure came from** — `result` for the exact one, `stream` for this one —
- * and every surface that shows a figure shows that beside it.
+ * **So both agents run with `--include-partial-messages`**, and the meter reads
+ * two of its frames: `message_start`, which names the message, and
+ * `message_delta`, which closes it with the finished `output_tokens`. The agent
+ * passes only those two on (`keepsStreamEvent` in `agent.ts`). Each message's
+ * usage is counted field by field at the largest value any of its frames gave,
+ * so the delta adds exactly the output the start frame lacked. Replayed on a
+ * real diagram job cut before its result event
+ * (`test/fixtures/session-partial.ndjson`), the stream now reaches the CLI's own figure to the digit,
+ * 5,082 output tokens and $0.444758, where the old reading was 68 and 88.7%.
+ *
+ * It is still an under-estimate wherever it differs, and never scaled up: a
+ * kill mid-message loses that message's output, since its delta never came. A
+ * fudge factor would make the number unauditable against the CLI's own figure,
+ * which is the one check that can catch a stale rate table. Instead every row
+ * records **where its figure came from** — `result` for the exact one, `stream`
+ * for this one — and every surface that shows a figure shows that beside it.
  *
  * `system/thinking_tokens` events carry a cumulative `estimated_tokens` and
  * were measured as a way to close the output gap. They do not: adding them
@@ -261,6 +271,26 @@ export function addUsage(left: TokenUsage, right: TokenUsage): TokenUsage {
   };
 }
 
+function maxUsage(left: TokenUsage, right: TokenUsage): TokenUsage {
+  return {
+    inputTokens: Math.max(left.inputTokens, right.inputTokens),
+    cacheWrite5mTokens: Math.max(left.cacheWrite5mTokens, right.cacheWrite5mTokens),
+    cacheWrite1hTokens: Math.max(left.cacheWrite1hTokens, right.cacheWrite1hTokens),
+    cacheReadTokens: Math.max(left.cacheReadTokens, right.cacheReadTokens),
+    outputTokens: Math.max(left.outputTokens, right.outputTokens),
+  };
+}
+
+function subtractUsage(left: TokenUsage, right: TokenUsage): TokenUsage {
+  return {
+    inputTokens: left.inputTokens - right.inputTokens,
+    cacheWrite5mTokens: left.cacheWrite5mTokens - right.cacheWrite5mTokens,
+    cacheWrite1hTokens: left.cacheWrite1hTokens - right.cacheWrite1hTokens,
+    cacheReadTokens: left.cacheReadTokens - right.cacheReadTokens,
+    outputTokens: left.outputTokens - right.outputTokens,
+  };
+}
+
 export function isEmptyUsage(usage: TokenUsage): boolean {
   return (
     usage.inputTokens === 0 &&
@@ -347,16 +377,24 @@ export class JobCostMeter {
   /** True when something was seen that no rate could be found for. */
   private unpriced = false;
   /**
-   * Message ids already counted in *this attempt*: one event per content
-   * block, one usage each.
+   * What has been counted for each message id in *this attempt*, field by
+   * field: one event per content block, one usage each, and a later frame of
+   * the same message only ever adds what the earlier ones had not counted.
    *
    * Cleared at each result event, because that is where one attempt ends and
    * the next begins. Two reasons, and the second is the one that matters: a
-   * message id is only unique within a session, so carrying the set across a
+   * message id is only unique within a session, so carrying the map across a
    * boundary makes correctness depend on the CLI never reusing one — and it
    * grows without limit over a long job.
    */
-  private seen = new Set<string>();
+  private counted = new Map<string, TokenUsage>();
+  /**
+   * The message streaming now, by the agent it belongs to (the parent tool use
+   * id, or the empty string for the session itself). A `message_delta` frame
+   * names no message, so it is credited to the last `message_start` seen on
+   * the same line of descent.
+   */
+  private streaming = new Map<string, string>();
   private messages = 0;
 
   /**
@@ -391,19 +429,42 @@ export class JobCostMeter {
     if (event.type === "assistant") {
       const message = record(event.message);
       if (message === null) return;
+      this.noteModel(message.model);
       const id = typeof message.id === "string" ? message.id : null;
-      // No id is not a reason to skip the spend, but it is a reason not to
-      // claim it was deduplicated. Counted once, keyed on nothing.
-      if (id !== null && this.seen.has(id)) return;
       const usage = readUsage(message.usage);
-      if (usage === null || isEmptyUsage(usage)) return;
-      if (id !== null) this.seen.add(id);
-      if (typeof message.model === "string") {
-        this.model = message.model;
-        this.priceableModel = canonicalModel(message.model) ?? this.priceableModel;
+      if (usage !== null) this.count(id, usage);
+      return;
+    }
+
+    // `--include-partial-messages`: the API's own frames. `message_start`
+    // opens a message with the same usage its assistant events repeat, and
+    // `message_delta` closes it with the finished `output_tokens`, which is the
+    // one number no assistant event carries.
+    if (event.type === "stream_event") {
+      const inner = record(event.event);
+      if (inner === null) return;
+      const lineage = typeof event.parent_tool_use_id === "string" ? event.parent_tool_use_id : "";
+      if (inner.type === "message_start") {
+        const message = record(inner.message);
+        if (message === null) return;
+        this.noteModel(message.model);
+        const id = typeof message.id === "string" ? message.id : null;
+        if (id !== null) this.streaming.set(lineage, id);
+        const usage = readUsage(message.usage);
+        if (usage !== null) this.count(id, usage);
+        return;
       }
-      this.pending = addUsage(this.pending, usage);
-      this.messages += 1;
+      if (inner.type === "message_delta") {
+        const id = this.streaming.get(lineage) ?? null;
+        // A delta whose message never started here cannot be told apart from
+        // one already counted, so it is left out: the low side, as ever.
+        if (id === null) return;
+        const usage = record(inner.usage);
+        if (usage === null) return;
+        // Only the output. The delta's cache counts carry no TTL split, and
+        // reading them would charge a five-minute write at the one-hour rate.
+        this.count(id, { ...EMPTY_USAGE, outputTokens: count(usage.output_tokens) });
+      }
       return;
     }
 
@@ -429,9 +490,46 @@ export class JobCostMeter {
       }
       if (exact !== null) this.sawResult = true;
       this.pending = EMPTY_USAGE;
-      this.seen = new Set();
+      this.counted = new Map();
+      this.streaming = new Map();
       return;
     }
+  }
+
+  private noteModel(model: unknown): void {
+    if (typeof model !== "string") return;
+    this.model = model;
+    this.priceableModel = canonicalModel(model) ?? this.priceableModel;
+  }
+
+  /**
+   * Add what `usage` says about message `id` that has not been counted yet.
+   *
+   * Field by field, the larger of what was counted and what is seen now: the
+   * input and cache counts are the same on every frame of a message, and the
+   * output count only grows, so the sum over a message is its last word and
+   * never its frames added together.
+   */
+  private count(id: string | null, usage: TokenUsage): void {
+    // No id is not a reason to skip the spend, but it is a reason not to claim
+    // it was deduplicated. Counted once, keyed on nothing.
+    if (id === null) {
+      if (isEmptyUsage(usage)) return;
+      this.pending = addUsage(this.pending, usage);
+      this.messages += 1;
+      return;
+    }
+    const before = this.counted.get(id);
+    if (before === undefined) {
+      if (isEmptyUsage(usage)) return;
+      this.counted.set(id, usage);
+      this.pending = addUsage(this.pending, usage);
+      this.messages += 1;
+      return;
+    }
+    const after = maxUsage(before, usage);
+    this.counted.set(id, after);
+    this.pending = addUsage(this.pending, subtractUsage(after, before));
   }
 
   /** Feed a whole `session.ndjson` body. */
