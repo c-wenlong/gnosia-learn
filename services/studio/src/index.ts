@@ -4,6 +4,7 @@ import path from "node:path";
 import { createApi } from "./api";
 import { Drafts } from "./drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
+import { ManualSource } from "./manual/source";
 import { Mirrors } from "./mirrors";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
@@ -27,6 +28,20 @@ async function main(): Promise<void> {
   const store = new JobStore();
   await store.load();
   const runner = new Runner(store);
+
+  // The tldraw manual, built from the installed tool before anything can
+  // start a job, and checked: its three worked snippets run in the background
+  // after each new build (M3). A tool that cannot answer leaves no manual,
+  // which `doctor` will already be refusing jobs over.
+  const manual = new ManualSource({ checkSnippets: true });
+  runner.manual = manual;
+  const built = await manual.refresh();
+  process.stdout.write(
+    built === null
+      ? `no tldraw manual: ${manual.status().error ?? "canvas api did not answer"}\n`
+      : `tldraw manual ${built.hash.slice(0, 12)}: ${built.chars} characters, ${built.helpers} helpers, ` +
+          `options ${built.optionsSource}\n`,
+  );
 
   const { interrupted, swept } = await runner.reconcile();
   if (interrupted.length > 0) {

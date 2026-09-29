@@ -36,6 +36,12 @@ export interface PromptInput {
   brief: ValidBrief;
   /** True when the brief carried a flowchart and the runner wrote it to scratch. */
   hasMermaid: boolean;
+  /**
+   * True when the agent's system prompt carries the tldraw manual, which lists
+   * every helper with its options. The agent then has no reason to spend its
+   * first request on `canvas api`, which prints a subset of the same thing.
+   */
+  manual?: boolean;
 }
 
 export function buildPrompt(input: PromptInput): string {
@@ -69,9 +75,19 @@ export function buildPrompt(input: PromptInput): string {
     ``,
     `# How to work`,
     ``,
-    `1. Run \`npm run --silent canvas -- api\` and read it. It lists every helper the`,
-    `   page bundle exposes, with a real usage line for each. Build shapes with those`,
-    `   helpers; bind every arrow with \`helpers.connect\` so it stays attached.`,
+    ...(input.manual === true
+      ? [
+          `1. The tldraw manual in your system prompt lists every helper the page bundle`,
+          `   exposes, with its options, the lint rules and three worked snippets. Work from`,
+          `   it rather than running \`canvas -- api\` or looking for the tool's source. Build`,
+          `   shapes with those helpers; bind every arrow with \`helpers.connect\` so it stays`,
+          `   attached.`,
+        ]
+      : [
+          `1. Run \`npm run --silent canvas -- api\` and read it. It lists every helper the`,
+          `   page bundle exposes, with a real usage line for each. Build shapes with those`,
+          `   helpers; bind every arrow with \`helpers.connect\` so it stays attached.`,
+        ]),
   ];
 
   if (input.hasMermaid) {

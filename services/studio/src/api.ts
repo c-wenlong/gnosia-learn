@@ -232,6 +232,8 @@ function view(record: JobRecord): Record<string, unknown> {
     // request failed, because that is the fact a person needs to fix it.
     agentAuth: record.agentAuth ?? null,
     apiKeySource: record.apiKeySource ?? null,
+    // The tldraw manual the agent ran with, by the hash that names its file.
+    manualHash: record.manualHash ?? null,
     exitCode: record.exitCode,
     gate: record.gate,
     // The finished-job screen's whole content, computed by the runner when the
@@ -1405,6 +1407,16 @@ async function health(store: JobStore, runner: Runner, drafts?: Drafts): Promise
   // and launches an agent, so a job that sat queued for two days and ran an
   // hour ago spent an hour ago.
   const cap = runner.capStatus();
+  const manualStatus = runner.manual?.status() ?? {
+    state: "missing" as const,
+    hash: null,
+    chars: null,
+    optionsSource: null,
+    reasons: [],
+    snippets: null,
+    error: "this runner holds no manual source",
+    builtAt: null,
+  };
 
   const tldrawkc = checked !== null && checked.code === 0;
   const claude = claudeVersion !== null && claudeVersion.code === 0;
@@ -1427,6 +1439,13 @@ async function health(store: JobStore, runner: Runner, drafts?: Drafts): Promise
     // the runner's environment at all. A job whose first request is refused
     // offers "doctor", and this is the line that answers it.
     agentAuth: agentAuthReport(),
+    // The tldraw manual the next job would carry (D30, M2, M3 of
+    // docs/STUDIO-CHAT-FIRST.md): `ok`, `stale` when the installed tool names a
+    // lint rule the static table does not (or the reverse) or a worked snippet
+    // stopped running clean, and `missing` when none could be built. The
+    // detail says which rule or snippet.
+    manual: manualStatus.state,
+    manualDetail: manualStatus,
     postgres,
     // Where the topic list a brief is checked against stands (D13): `stale`
     // with the `readAt` of the cached copy when the source could not be read,

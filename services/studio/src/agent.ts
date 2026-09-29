@@ -63,6 +63,12 @@ export interface AgentOptions {
    * the only place the stream says which credential the session is using.
    */
   onInit?: (init: AgentInit) => void;
+  /**
+   * The tldraw manual this job runs with, `$STUDIO_HOME/manual/<hash>.md`, or
+   * null for none. Passed on every attempt, resumes included, and always the
+   * job's own file rather than the newest: see `startAgent`.
+   */
+  manualPath?: string | null;
 }
 
 /** What the CLI's `system/init` event says about the session it started. */
@@ -439,6 +445,18 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *   `--permission-prompts none`, which refuses a *call* but does not stop the
  *   definitions riding the request. `--setting-sources ""` alone does not close
  *   this: connectors are not a setting source.
+ * - `--append-system-prompt-file <manual>` adds the tldraw manual to Claude
+ *   Code's own system prompt (docs/STUDIO-CHAT-FIRST.md, D30). The file form
+ *   rather than `--append-system-prompt <text>`: the text is about 29,000
+ *   characters, well inside the argument limit, but it would sit in every
+ *   `ps` listing and in each recorded argv, and the file is already on disk
+ *   under its hash. Measured on the installed CLI (2.1.274): a `--resume`
+ *   sends the system prompt recorded on the session's first request and
+ *   ignores a different file passed later (`--system-prompt-snapshot`, on by
+ *   default), so attempts two and three read the manual attempt one started
+ *   with. The job's own file is still passed on every attempt, never the
+ *   newest, so the two agree even where the CLI renders the prompt again,
+ *   which it does after a compaction (M1).
  */
 export async function startAgent(options: AgentOptions): Promise<AgentRun> {
   const settingsInput: SettingsInput = {
@@ -475,6 +493,9 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
     options.model,
     "--max-turns",
     String(MAX_TURNS),
+    ...(options.manualPath === undefined || options.manualPath === null
+      ? []
+      : ["--append-system-prompt-file", options.manualPath]),
     ...(options.resume ? ["--resume", options.sessionId] : ["--session-id", options.sessionId]),
   ];
 

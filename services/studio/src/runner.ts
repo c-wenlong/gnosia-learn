@@ -33,6 +33,7 @@ import {
   candidateSvgPath,
   isLegacyCandidate,
   jobDir,
+  manualPath,
   mermaidPath,
   rejectedDir,
   scratchDir,
@@ -50,6 +51,7 @@ import {
   buildRevisePrompt,
   type CandidateFiles,
 } from "./prompt";
+import type { ManualSource } from "./manual/source";
 import { dirtyFiles } from "./review";
 import { resolveSource } from "./source-note";
 import type { GateResult, JobRecord, JobStore } from "./store";
@@ -157,6 +159,15 @@ export class Runner {
    * drafts exist, so the cap counts a chat as it counts a drawing.
    */
   extraSpend: () => readonly SpendEntry[] = () => [];
+  /**
+   * The tldraw manual the drawing agent's system prompt carries (D30 of
+   * docs/STUDIO-CHAT-FIRST.md). Set by `index.ts`, which refreshes it at
+   * start; `enqueue` refreshes it again, so a job queued after a rebuild of
+   * tldrawkc gets a manual for that build. Null means no manual: every job
+   * runs as it did before the manual existed, which is what a test that never
+   * sets it gets.
+   */
+  manual: ManualSource | null = null;
 
   constructor(store: JobStore) {
     this.store = store;
@@ -382,6 +393,11 @@ export class Runner {
 
     const target = targetPath(brief.slug);
     const base = await this.admit(brief);
+    // Before the record, so the job this creates starts on a manual for the
+    // build installed now. One short `canvas api --json` when nothing changed;
+    // a failure keeps the manual there was and never refuses the job, since
+    // `doctor` is the gate on a broken tool.
+    await this.manual?.refresh().catch(() => null);
 
     const id = randomUUID();
     const record: JobRecord = {
@@ -785,7 +801,21 @@ export class Runner {
     // every attempt runs under the same rule and the record says which one it
     // was even if the setting is changed while this job is running.
     const auth = agentAuth();
-    record = await this.store.update(id, { agentAuth: auth });
+    // The manual, decided here once for every attempt (M1). A job that
+    // continues its parent's session inherits the parent's: the CLI replays
+    // the system prompt it recorded on that session's first request, so the
+    // parent's manual is the one this agent actually reads.
+    const manualHash = this.manualFor(record, inherited !== null);
+    record = await this.store.update(id, { agentAuth: auth, manualHash });
+    const manualFile = manualHash === null ? null : manualPath(manualHash);
+    await this.store.emit(id, {
+      type: "step",
+      state: "running",
+      note:
+        manualHash === null
+          ? "the agent runs without the tldraw manual: none could be built from canvas api"
+          : `the agent's system prompt carries the tldraw manual ${manualHash.slice(0, 12)}`,
+    });
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       if (entry.cancelled) break;
@@ -831,6 +861,7 @@ export class Runner {
                 jobId: id,
                 brief: source === undefined ? record.brief : { ...record.brief, source },
                 hasMermaid,
+                manual: manualHash !== null,
               });
       startedSession = true;
 
@@ -854,6 +885,7 @@ export class Runner {
         sessionId: agentSessionId,
         resume: resumeFromParent || started,
         auth,
+        manualPath: manualFile,
         onLine: (line) => {
           void this.onAgentLine(id, line);
         },
@@ -1056,6 +1088,18 @@ export class Runner {
       // bills, and reading the final result event alone forgot the two before it.
       cost: entry.meter.read(),
     });
+  }
+
+  /**
+   * Which manual a job runs with: its parent's when it continues the parent's
+   * session, else the newest the runner holds. See `JobRecord.manualHash`.
+   */
+  private manualFor(record: JobRecord, continuesParent: boolean): string | null {
+    if (continuesParent && record.parentJobId !== null) {
+      const parent = this.store.get(record.parentJobId);
+      if (parent !== undefined) return parent.manualHash ?? null;
+    }
+    return this.manual?.current()?.hash ?? null;
   }
 
   /**
