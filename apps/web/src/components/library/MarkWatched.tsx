@@ -68,7 +68,7 @@ export function MarkWatched({
 
   return (
     <div className="flex flex-col gap-1">
-      <Button onClick={mark} disabled={state.kind === "saving"} aria-live="polite">
+      <Button size="sm" onClick={mark} disabled={state.kind === "saving"} aria-live="polite">
         {label}
       </Button>
       {state.kind === "failed" ? (
