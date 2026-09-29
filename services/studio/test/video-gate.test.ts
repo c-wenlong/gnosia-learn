@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, utimes } from "node:fs/promises";
+import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -44,7 +44,7 @@ afterEach(async () => {
 
 const at = (offsetMs: number): string => new Date(Date.now() + offsetMs).toISOString();
 
-async function narratedJob(lines: [string, string], over: { segments?: string[]; tail?: number } = {}) {
+async function narratedJob(lines: [string, string], over: { segments?: string[]; tail?: number; chapters?: unknown[] } = {}) {
   const brief = narratedBrief();
   const source = narratedSource(lines);
   const texts = over.segments ?? lines;
@@ -56,7 +56,7 @@ async function narratedJob(lines: [string, string], over: { segments?: string[];
       { scene: CLASSES[0]!, end: 20, text: texts[0]! },
       { scene: CLASSES[1]!, end: 45, text: texts[1]! },
     ],
-    chapters: [
+    chapters: over.chapters ?? [
       { scene: CLASSES[0]!, end: 21 },
       { scene: CLASSES[1]!, end: 45 + (over.tail ?? 1) },
     ],
@@ -164,6 +164,59 @@ describe.skipIf(!hasPython())("the video gate", () => {
     expect(result.steps.find((step) => step.name === "looked")?.ok).toBe(false);
     expect(result.findings.join(" ")).toContain("look at the sheet for TB2_Recap");
     expect(result.looked?.TB1_WhyItMatters?.readAt).not.toBeNull();
+  });
+
+  it("fails a chapter list that is not one well-formed chapter per scene with a line in it", async () => {
+    const brief = narratedBrief();
+    const lines = brief.scenes.map((scene) => scene.beats[0]!.say) as [string, string];
+    const cases: [string, unknown[], RegExp][] = [
+      ["empty", [], /one per scene/],
+      ["one scene short", [{ scene: CLASSES[0]!, end: 21 }], /one per scene/],
+      ["out of order", [{ scene: CLASSES[1]!, end: 46 }, { scene: CLASSES[0]!, end: 21 }], /one per scene/],
+      ["no scene", [{ end: 21 }, { scene: CLASSES[1]!, end: 46 }], /one per scene/],
+      ["no end", [{ scene: CLASSES[0]! }, { scene: CLASSES[1]!, end: 46 }], /TB1_WhyItMatters has no end time/],
+      ["an end that is not a number", [{ scene: CLASSES[0]!, end: "21" }, { scene: CLASSES[1]!, end: 46 }], /TB1_WhyItMatters has no end time/],
+    ];
+    for (const [name, chapters, finding] of cases) {
+      await rm(paths.candidate, { recursive: true, force: true });
+      const { laid, duration } = await narratedJob(lines, { chapters });
+      const result = await runVideoGate({
+        brief,
+        paths,
+        classes: CLASSES,
+        startedAtMs: Date.now() - 60_000,
+        sourceHashBefore: null,
+        calls: [preview(at(-5_000), CLASSES), build(at(-1_000), laid.sourceHash)],
+        reads: CLASSES.map((scene) => ({ path: sceneSheet(paths, scene), at: at(-4_000) })),
+        tools: recordedTools({ duration }),
+      });
+      expect({ name, ok: result.ok }).toEqual({ name, ok: false });
+      expect(result.steps.find((step) => step.name === "sync")?.ok, name).toBe(false);
+      expect(result.findings.join(" "), name).toMatch(finding);
+    }
+  });
+
+  it("fails a chapter with no line of the transcript in it", async () => {
+    const brief = narratedBrief();
+    const lines = brief.scenes.map((scene) => scene.beats[0]!.say) as [string, string];
+    const { laid, duration } = await narratedJob(lines);
+    // The transcript names every line under the first scene: the second
+    // scene's chapter has none.
+    const transcript = JSON.parse(await readFile(paths.transcript, "utf8")) as { segments: { scene: string }[] };
+    for (const segment of transcript.segments) segment.scene = CLASSES[0]!;
+    await writeFile(paths.transcript, JSON.stringify(transcript), "utf8");
+    const result = await runVideoGate({
+      brief,
+      paths,
+      classes: CLASSES,
+      startedAtMs: Date.now() - 60_000,
+      sourceHashBefore: null,
+      calls: [preview(at(-5_000), CLASSES), build(at(-1_000), laid.sourceHash)],
+      reads: CLASSES.map((scene) => ({ path: sceneSheet(paths, scene), at: at(-4_000) })),
+      tools: recordedTools({ duration }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.findings.join(" ")).toMatch(/the chapter for TB2_Recap has no line in the transcript/);
   });
 
   it("fails a build that is older than the source, and a source that is older than the job", async () => {

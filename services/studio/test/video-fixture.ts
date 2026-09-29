@@ -139,7 +139,7 @@ export interface LaidOut {
 /** Lay out a finished job: the source, topic.yml, the deliverable and its sidecars. */
 export async function layOut(
   paths: VideoPaths,
-  input: { source: string; topic: string; narrated: boolean; segments?: { scene: string; end: number; text: string }[]; chapters?: { scene: string; end: number }[]; mp4?: Buffer },
+  input: { source: string; topic: string; narrated: boolean; segments?: { scene: string; end: number; text: string }[]; chapters?: unknown[]; mp4?: Buffer },
 ): Promise<LaidOut> {
   await mkdir(paths.topicDir, { recursive: true });
   await mkdir(paths.outTopic, { recursive: true });

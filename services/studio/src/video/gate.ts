@@ -335,15 +335,32 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
       if (texts.join("\u0000") !== lines.join("\u0000")) {
         syncProblems.push(`the transcript's ${texts.length} lines are not the scene file's ${lines.length} voiceover lines, in order`);
       }
-      for (const chapter of chapterList ?? []) {
-        if (typeof chapter.scene !== "string" || typeof chapter.end !== "number") continue;
-        const ends = segments.filter((segment) => segment.scene === chapter.scene && typeof segment.end === "number").map((segment) => segment.end as number);
-        if (ends.length === 0) continue;
-        const tail = Math.round((chapter.end - Math.max(...ends)) * 100) / 100;
-        heldTail[chapter.scene] = tail;
-        if (tail > HELD_TAIL_SECONDS) syncProblems.push(`${chapter.scene} holds ${tail}s of picture after its last line; four is the most`);
-      }
+      // One chapter per scene, in the brief's order, each with an end and at
+      // least one line of the transcript: a chapter that is missing,
+      // malformed or lineless fails here rather than being skipped (Greptile
+      // on #201), since the library's chapter list is built from this file.
       if (chapterList === null) syncProblems.push("the chapters file has no chapters");
+      else {
+        const named = chapterList.map((chapter) => (typeof chapter.scene === "string" ? chapter.scene : "(no scene)"));
+        if (named.join(",") !== input.classes.join(",")) {
+          syncProblems.push(`the chapters must be one per scene, ${input.classes.join(", ")}, in that order; the file has ${named.join(", ") || "none"}`);
+        }
+        for (const chapter of chapterList) {
+          if (typeof chapter.scene !== "string") continue;
+          if (typeof chapter.end !== "number" || !Number.isFinite(chapter.end)) {
+            syncProblems.push(`the chapter for ${chapter.scene} has no end time`);
+            continue;
+          }
+          const ends = segments.filter((segment) => segment.scene === chapter.scene && typeof segment.end === "number").map((segment) => segment.end as number);
+          if (ends.length === 0) {
+            syncProblems.push(`the chapter for ${chapter.scene} has no line in the transcript`);
+            continue;
+          }
+          const tail = Math.round((chapter.end - Math.max(...ends)) * 100) / 100;
+          heldTail[chapter.scene] = tail;
+          if (tail > HELD_TAIL_SECONDS) syncProblems.push(`${chapter.scene} holds ${tail}s of picture after its last line; four is the most`);
+        }
+      }
     }
     sync = { segments: segments?.length ?? 0, heldTail };
     if (syncProblems.length > 0) {
