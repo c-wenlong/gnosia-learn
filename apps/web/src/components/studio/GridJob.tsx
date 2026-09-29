@@ -12,7 +12,7 @@ import {
   afterShotHref,
   failureLine,
   jobForTarget,
-  liveShotHref,
+  liveShotFor,
   LIVE_POLL_MS,
   loaderHeadline,
   loaderStep,
@@ -487,11 +487,12 @@ function useLivePicture(
   const urls = useRef<string[]>([]);
   const issued = useRef(0);
   const polling = wantsLivePicture(job, visible, pageHidden);
-  const once = visible && !pageHidden && job.state !== "running" && job.state !== "queued";
+  const live = liveShotFor(job);
+  const once = live !== null && visible && !pageHidden && job.state !== "running" && job.state !== "queued";
   const jobId = job.jobId;
 
   useEffect(() => {
-    if (!polling && !once) return;
+    if (live === null || (!polling && !once)) return;
     const controller = new AbortController();
     let busy = false;
     const tick = async (): Promise<void> => {
@@ -501,7 +502,7 @@ function useLivePicture(
       let url: string | null = null;
       let adopted = false;
       try {
-        const response = await fetch(liveShotHref(jobId), {
+        const response = await fetch(live, {
           cache: "no-store",
           signal: controller.signal,
           headers: tag.current === null ? {} : { "if-none-match": tag.current },
@@ -533,7 +534,7 @@ function useLivePicture(
       controller.abort();
       if (timer !== null) clearInterval(timer);
     };
-  }, [jobId, polling, once]);
+  }, [jobId, live, polling, once]);
 
   // Whatever nothing shows any more is revoked, including a picture a stale
   // answer brought that `adoptPicture` refused.

@@ -267,7 +267,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<ApiResult<
 }
 
 /** `POST /api/drafts`: a new conversation, or one opened on a diagram to extend it. */
-export function createDraft(input: { source?: string; idempotencyKey: string }) {
+export function createDraft(input: { source?: string; sourceKind?: "diagram" | "video"; idempotencyKey: string }) {
   return call<{ draftId: string; state: DraftState; note: string }>(BASE, {
     method: "POST",
     body: JSON.stringify(input),
