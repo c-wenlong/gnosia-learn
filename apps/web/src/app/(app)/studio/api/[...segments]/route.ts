@@ -201,6 +201,13 @@ export async function POST(
   return proxy(request, (await context.params).segments);
 }
 
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ segments: string[] }> },
+): Promise<Response> {
+  return proxy(request, (await context.params).segments);
+}
+
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ segments: string[] }> },

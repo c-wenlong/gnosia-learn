@@ -50,8 +50,13 @@ export function sectionsOf<V extends string>(options: readonly FilterOption<V>[]
  * option prints as itself, so a hand-typed URL still says what it filtered on.
  */
 export function triggerText<V extends string>(label: string, options: readonly FilterOption<V>[], value: V): string {
+  return `${label}: ${valueText(options, value)}`;
+}
+
+/** The chosen option's text alone, for a trigger that sits beside its own label. */
+export function valueText<V extends string>(options: readonly FilterOption<V>[], value: V): string {
   const chosen = options.find((o) => o.value === value);
-  return `${label}: ${chosen === undefined ? value : (chosen.short ?? chosen.label)}`;
+  return chosen === undefined ? value : (chosen.short ?? chosen.label);
 }
 
 /**

@@ -32,6 +32,8 @@ export function topicDomainMap(topics: readonly TopicEntry[]): ReadonlyMap<strin
 export interface TopicOption {
   slug: string;
   title: string;
+  /** The topic's domain, which groups the confirm card's topic menu. */
+  domain?: string;
 }
 
 /**
@@ -39,9 +41,9 @@ export interface TopicOption {
  *
  * The studio's conversation is a client component and this module is
  * `server-only`, so the confirm card cannot import it: what crosses is this
- * array, serialised as a prop. Only the slug and the title the card shows,
- * because a prop is bytes in the page.
+ * array, serialised as a prop. Only the slug, the title the card shows and
+ * the domain its topic menu groups by, because a prop is bytes in the page.
  */
 export function topicOptionsOf(topics: readonly TopicEntry[]): TopicOption[] {
-  return topics.map((topic) => ({ slug: topic.slug, title: topic.title }));
+  return topics.map((topic) => ({ slug: topic.slug, title: topic.title, ...(topic.domain ? { domain: topic.domain } : {}) }));
 }
