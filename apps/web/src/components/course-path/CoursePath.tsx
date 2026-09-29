@@ -405,7 +405,12 @@ function ModulesCard({
               <li key={m.id}>
                 <Link
                   href={`#${m.slug}`}
-                  onClick={() => onPick(m.slug)}
+                  onClick={(event) => {
+                    // A click that opens the link elsewhere (a new tab or
+                    // window) leaves this page as it is.
+                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                    onPick(m.slug);
+                  }}
                   className="flex items-center gap-2.5 rounded-sm text-[13px] text-text hover:text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
                   <span className="min-w-0 flex-1 truncate">

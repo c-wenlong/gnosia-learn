@@ -117,6 +117,25 @@ describe("CoursePath modules", () => {
     expect(openModules(host)[2]).toBe(true);
   });
 
+  it("leaves the page as it is on a click that opens the row elsewhere", () => {
+    const { host } = render();
+    const row = [...host.querySelectorAll("a")].find((a) => a.textContent?.startsWith("M3 "))!;
+    act(() => {
+      row.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
+    });
+    expect(openModules(host)[2]).toBe(false);
+  });
+
+  it("opens the module a hash names when the page is arrived at with one", () => {
+    window.location.hash = "#m3";
+    try {
+      const { host } = render();
+      expect(openModules(host)).toEqual([true, false, true]);
+    } finally {
+      window.location.hash = "";
+    }
+  });
+
   it("opens the next module when it becomes the current one, and leaves the first as it was", () => {
     const { host, draw } = render();
     learner.state.completed = { "m1-a": true, "m1-b": true };
