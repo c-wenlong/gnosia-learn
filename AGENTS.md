@@ -331,9 +331,13 @@ Rules of engagement:
   number unauditable against the CLI's own figure. An unpriceable model
   records `null`, never zero, so an unknown cost is not presented as a free
   job; the spend cap's real protection is the fallback that keeps pricing at
-  the brief's own model when the stream names one the rate table has never
+  the model the job passed when the stream names one the rate table has never
   heard of, so an all-null reading is a rare edge case rather than the
-  ordinary path.
+  ordinary path. A model the job passed that the table cannot price (the
+  settings panel or the owner's own settings can name one) is priced as its
+  family by name, else at the dearest rate in the table (`priceableAs` in
+  `cost.ts`), and the reading's `pricedAs` says which: an estimate, never
+  none, so the cap still counts a killed attempt.
 - The mirror iframe at `/studio/d/<name>` is cross-origin, so the studio has
   no channel to ask the live canvas anything; it derives the SVG-freshness
   pill by comparing file modification times instead. An open canvas sends a
