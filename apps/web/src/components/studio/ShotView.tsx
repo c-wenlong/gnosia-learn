@@ -61,7 +61,7 @@ export function ShotView({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 text-xs">
         <span className="font-medium">{label}</span>
-        <span className="min-w-0 truncate font-mono text-[var(--muted)]">{title}</span>
+        <span className="min-w-0 truncate text-[var(--muted)]">{title}</span>
         <div className="flex-1" />
         {otherMissing === null ? (
           <Link

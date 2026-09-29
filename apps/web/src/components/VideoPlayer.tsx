@@ -164,6 +164,29 @@ export function VideoPlayer({
     jumpTo(seekSeconds);
   }, [seekKey, seekSeconds]);
 
+  // What the element already knows when it is attached. The server renders
+  // the `<video>` with `preload="metadata"`, so the browser can load the
+  // metadata before hydration attaches a single listener: `loadedmetadata`
+  // and `durationchange` have then fired into nothing and do not fire again,
+  // and the bar showed "–:––" and no chapters until the page was reloaded.
+  // So the element is read once it is ours, on every new element (a retry
+  // remounts it) and every new source, and the events carry it from there.
+  const readElement = useEffectEvent((video: HTMLVideoElement) => {
+    if (video.readyState < HAVE_METADATA) return;
+    setDuration(video.duration);
+    setBuffered(bufferedEnd(video));
+    setPaused(video.paused);
+    setMuted(video.muted);
+    setVolume(video.volume);
+    setRate(video.playbackRate);
+    applyPendingSeek(video);
+  });
+  const load = source.load;
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video !== null) readElement(video);
+  }, [attempt, load]);
+
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === frameRef.current);
     document.addEventListener("fullscreenchange", onChange);
@@ -490,11 +513,7 @@ export function VideoPlayer({
             )}
             <span className="flex-1" />
             {hasSubtitles && (
-              <ControlButton
-                label={subtitles ? "Subtitles off (c)" : "Subtitles (c)"}
-                onClick={toggleSubtitles}
-                pressed={subtitles}
-              >
+              <ControlButton label="Subtitles (c)" onClick={toggleSubtitles} pressed={subtitles}>
                 <span className="relative flex">
                   <Icon name="cc" className="size-6" />
                   <span
@@ -613,6 +632,9 @@ function pipSupported(): boolean {
   return typeof document !== "undefined" && document.pictureInPictureEnabled === true;
 }
 
+/** `HTMLMediaElement.HAVE_METADATA`: the length and the size are known. */
+const HAVE_METADATA = 1;
+
 /** The speeds the speed button steps through, in order. */
 const RATES = [1, 1.25, 1.5, 1.75, 2, 0.75];
 
@@ -632,6 +654,12 @@ function ControlButton({
   pressed,
   children,
 }: {
+  /**
+   * What the button does. A toggle (`pressed` set) keeps one name whatever
+   * its state, and `aria-pressed` says whether it is on, as ARIA asks of a
+   * toggle button; a button without `pressed` names the action it would take
+   * now ("Mute", "Unmute"), since nothing else says its state.
+   */
   label: string;
   onClick: () => void;
   /** Set for a toggle, so it is announced as one. */

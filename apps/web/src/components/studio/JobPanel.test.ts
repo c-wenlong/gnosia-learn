@@ -131,3 +131,55 @@ describe("a job the provider does not list", () => {
     expect(host.textContent).toContain("accepted");
   });
 });
+
+describe("a diagram job's panel", () => {
+  // Nothing a person reads names a file: not the job's workspace, not the
+  // logical names it landed as, not an absolute path.
+  const pathLike = /jobs\/|candidate\/|\.tldr|\.svg|learn\/assets|\$STUDIO_HOME|\/Users\//;
+
+  it("says where a job in review stands without printing its candidate's path", async () => {
+    stubFetch([
+      {
+        status: 200,
+        body: {
+          ...DIAGRAM,
+          state: "awaiting_review",
+          candidate: "jobs/old-1/candidate/old.tldr",
+          comparison: {
+            before: { shot: true, shapes: 4, bindings: 2, svgBytes: 1000 },
+            after: { shot: true, shapes: 6, bindings: 3, svgBytes: 1200 },
+            fixed: [],
+            added: [],
+            beforeHash: null,
+            refreshedAt: null,
+          },
+          note: "the candidate is written and checked in the job's workspace, and nothing has landed. 6 shapes, 0 lints.",
+        },
+      },
+    ]);
+    const host = await mount();
+    await settle();
+    expect(host.textContent).toContain("Accept");
+    expect(host.textContent).not.toMatch(pathLike);
+    const alts = [...host.querySelectorAll("img")].map((img) => img.getAttribute("alt") ?? "");
+    expect(alts.length).toBeGreaterThan(0);
+    for (const alt of alts) expect(alt).not.toMatch(pathLike);
+  });
+
+  it("says a job landed without listing the names it was stored under", async () => {
+    stubFetch([
+      {
+        status: 200,
+        body: {
+          ...DIAGRAM,
+          written: ["learn/assets/old.tldr", "learn/assets/old.svg"],
+          note: "accepted: learn/assets/old.tldr and learn/assets/old.svg landed in the database.",
+        },
+      },
+    ]);
+    const host = await mount();
+    await settle();
+    expect(host.textContent).toContain("Landed in the catalog");
+    expect(host.textContent).not.toMatch(pathLike);
+  });
+});
