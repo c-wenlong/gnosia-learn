@@ -119,6 +119,19 @@ export function failureLine(job: Job): string {
   return headline.charAt(0).toUpperCase() + headline.slice(1);
 }
 
+/** What a list row says about its job: the failure when it failed, else what it is doing. */
+export function rowWords(job: Job): string {
+  return tileStage(job) === "failed" ? failureLine(job) : loaderHeadline(job);
+}
+
+/**
+ * The accessible name of a list row's link to its job: the same words the row
+ * shows, so a failed job is not announced by the phase it failed in.
+ */
+export function rowJobLabel(job: Job, title: string): string {
+  return `${rowWords(job)}: open the job on ${title}`;
+}
+
 /* -------------------------------------------------------------------------- */
 /* The live picture                                                           */
 /* -------------------------------------------------------------------------- */

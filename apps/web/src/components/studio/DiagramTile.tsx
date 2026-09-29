@@ -219,7 +219,7 @@ export function DiagramRow({
       <Link
         href={selectHref}
         scroll={false}
-        className="min-w-0 flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
+        className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
       >
         {displayTitle(diagram)}
       </Link>
@@ -234,7 +234,9 @@ export function DiagramRow({
           {diagram.concepts.join(", ")}
         </span>
       )}
-      <span className="w-20 shrink-0 text-right text-[var(--muted)]">
+      {/* Off on a phone, as the topic is: at 400px the size, the date, the
+          thumbnail and a job's status left the name no room at all. */}
+      <span className="hidden w-20 shrink-0 text-right text-[var(--muted)] sm:inline">
         {formatBytes(diagram.svg.bytes) ?? `${diagram.shapes} shapes`}
       </span>
       <span className="w-24 shrink-0 text-right text-[var(--muted)]">

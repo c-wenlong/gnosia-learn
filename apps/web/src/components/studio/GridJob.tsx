@@ -19,6 +19,8 @@ import {
   newDiagramJobs,
   NO_PICTURES,
   retiredUrls,
+  rowJobLabel,
+  rowWords,
   settlePicture,
   showsThumbnail,
   tileStage,
@@ -93,8 +95,10 @@ export function RowJob({ target, title, path }: { target: string; title: string;
     <Link
       href={panelHref(path, { job: job.jobId })}
       scroll={false}
-      aria-label={`${loaderHeadline(job)}: open the job on ${title}`}
-      className="relative z-10 flex shrink-0 items-center rounded px-1 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+      aria-label={rowJobLabel(job, title)}
+      // Shrinks before the title does, and never past about half the row:
+      // the diagram's name is what identifies the row, the status is extra.
+      className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
     >
       <RowWords job={job} />
     </Link>
@@ -161,8 +165,10 @@ function NewDiagramRow({ job, path }: { job: Job; path: string }) {
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[var(--surface2)]">
         <Dot stage={tileStage(job)} />
       </span>
-      <span className="min-w-0 flex-1 truncate font-medium">{job.title ?? "New diagram"}</span>
-      <RowWords job={job} />
+      <span className="min-w-[5rem] flex-1 truncate font-medium">{job.title ?? "New diagram"}</span>
+      <span className="flex min-w-0 max-w-[45%]">
+        <RowWords job={job} />
+      </span>
     </Link>
   );
 }
@@ -424,15 +430,15 @@ function StepAndTime({ job }: { job: Job }) {
 function RowWords({ job }: { job: Job }) {
   const stage = tileStage(job);
   const now = useNow(job.finished === null);
-  const words = stage === "failed" ? failureLine(job) : loaderHeadline(job);
+  // The words truncate first; the dot and the time never do.
   return (
     <span
-      className={`flex shrink-0 items-center gap-1.5 ${stage === "failed" ? "text-[var(--danger)]" : "text-[var(--muted-strong)]"}`}
+      className={`flex min-w-0 max-w-full items-center gap-1.5 ${stage === "failed" ? "text-[var(--danger)]" : "text-[var(--muted-strong)]"}`}
     >
       <Dot stage={stage} />
-      <span className="max-w-[14rem] truncate">{words}</span>
+      <span className="min-w-0 truncate">{rowWords(job)}</span>
       {stage === "working" && (
-        <span className="tabular-nums text-[var(--muted)]">{formatDuration(elapsedMs(job, now))}</span>
+        <span className="shrink-0 tabular-nums text-[var(--muted)]">{formatDuration(elapsedMs(job, now))}</span>
       )}
     </span>
   );

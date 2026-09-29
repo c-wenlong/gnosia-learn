@@ -6,6 +6,8 @@ import {
   failureLine,
   NO_PICTURES,
   retiredUrls,
+  rowJobLabel,
+  rowWords,
   settlePicture,
   showsThumbnail,
   jobForTarget,
@@ -218,5 +220,18 @@ describe("swapping live pictures", () => {
     const held = { current: "blob:3", previous: "blob:2", settled: false, seq: 3 };
     expect(retiredUrls(["blob:1", "blob:2", "blob:3"], held)).toEqual(["blob:1"]);
     expect(retiredUrls(["blob:2", "blob:3"], settlePicture(held))).toEqual(["blob:2"]);
+  });
+});
+
+describe("a list row's job link", () => {
+  it("says what the row shows, the failure included, not the phase it failed in", () => {
+    expect(rowWords(job({ phase: "linting" }))).toBe("Checking the layout");
+    expect(rowJobLabel(job({ phase: "drawing" }), "Dot product")).toBe("Drawing: open the job on Dot product");
+    const failed = job({ state: "failed", phase: "drawing", errorKind: "timeout" });
+    expect(rowWords(failed)).toBe("It ran out of time");
+    expect(rowJobLabel(failed, "Dot product")).toBe("It ran out of time: open the job on Dot product");
+    expect(rowJobLabel(job({ state: "interrupted", phase: "drawing", errorKind: "interrupted" }), "Dot product")).toBe(
+      "The runner died while this was running: open the job on Dot product",
+    );
   });
 });
