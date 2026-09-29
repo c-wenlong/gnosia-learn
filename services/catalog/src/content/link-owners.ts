@@ -63,8 +63,15 @@ export async function linkOwners(db: CatalogDatabase): Promise<LinkOwnerReport> 
     where m.owner_id <> t.owner_id
     order by 1, 2, 3`);
 
+  // Doctor runs on a database behind the journal too, to say so: an entity
+  // whose table a later migration adds (`video`, 0015) has nothing to probe.
+  const { rows: present } = await db.execute<{ name: string }>(
+    sql`select table_name as name from information_schema.tables where table_schema = 'public'`,
+  );
+  const exists = new Set(present.map((row) => row.name));
   const probes: SQL[] = [];
   for (const [type, spec] of Object.entries(ENTITIES) as [RevisionEntityType, (typeof ENTITIES)[RevisionEntityType]][]) {
+    if (!exists.has(getTableName(spec.table))) continue;
     const parentTable = ident(getTableName(spec.table));
     const parentKey = ident(sqlName(spec.table, spec.key));
     for (const end of ROW_FAR_ENDS[type] ?? []) {

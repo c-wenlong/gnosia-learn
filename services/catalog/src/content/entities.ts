@@ -17,6 +17,7 @@ import {
   tag,
   topic,
   topicRelation,
+  video,
 } from "@self-learn/schema";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
@@ -94,6 +95,9 @@ export const ENTITIES: Readonly<Record<RevisionEntityType, EntitySpec>> = {
     key: "id",
     links: [link(assetTopic, "assetId"), link(assetConcept, "assetId"), link(assetDerivation, "assetId")],
   },
+  // A studio video's rendered files are `asset` rows of their own, each with
+  // its own revisions; the `video` row is the source they came from.
+  video: { type: "video", table: video, key: "slug", links: [] },
 };
 
 /** A column naming another content entity: where a link, or a row, points. */
@@ -114,6 +118,7 @@ export const ROW_FAR_ENDS: Readonly<Partial<Record<RevisionEntityType, readonly 
   curriculum_item: [{ column: "collectionId", target: "collection" }],
   concept: [{ column: "topicSlug", target: "topic" }],
   diagram: [{ column: "topicSlug", target: "topic" }],
+  video: [{ column: "topicSlug", target: "topic" }],
 };
 
 /** The same for each link table, by its SQL name: the far end, never the parent. */
