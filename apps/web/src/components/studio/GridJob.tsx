@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { useNow } from "@/components/studio/JobStrip";
+import { Duration } from "@/components/studio/JobStrip";
 import { Chip } from "@/components/studio/StudioChrome";
-import { elapsedMs, finishedHeadline, formatDuration, type Job } from "@/lib/studio-jobs";
+import { finishedHeadline, type Job } from "@/lib/studio-jobs";
 import {
   adoptPicture,
   afterShotHref,
@@ -29,6 +29,7 @@ import {
   type TileStage,
 } from "@/lib/studio-tile-jobs";
 import { conversationHref, panelHref } from "@/lib/studio-view";
+import { useElapsed } from "@/lib/use-elapsed";
 
 /**
  * A job, shown in the grid where its diagram is ("The job in the grid" in
@@ -416,12 +417,12 @@ function Status({
 }
 
 function StepAndTime({ job }: { job: Job }) {
-  const now = useNow(job.finished === null);
+  const ms = useElapsed(job);
   const step = loaderStep(job);
-  const time = formatDuration(elapsedMs(job, now));
+  const time = <Duration ms={ms} live={job.finished === null} />;
   return (
     <span className="block truncate tabular-nums text-[var(--muted)]">
-      {step === null ? time : `${step} · ${time}`}
+      {step === null ? time : <>{step} · {time}</>}
     </span>
   );
 }
@@ -429,7 +430,7 @@ function StepAndTime({ job }: { job: Job }) {
 /** The list row's version: a dot, the words, the time. */
 function RowWords({ job }: { job: Job }) {
   const stage = tileStage(job);
-  const now = useNow(job.finished === null);
+  const ms = useElapsed(job);
   // The words truncate first; the dot and the time never do.
   return (
     <span
@@ -438,7 +439,9 @@ function RowWords({ job }: { job: Job }) {
       <Dot stage={stage} />
       <span className="min-w-0 truncate">{rowWords(job)}</span>
       {stage === "working" && (
-        <span className="shrink-0 tabular-nums text-[var(--muted)]">{formatDuration(elapsedMs(job, now))}</span>
+        <span className="shrink-0 text-[var(--muted)]">
+          <Duration ms={ms} live={job.finished === null} />
+        </span>
       )}
     </span>
   );

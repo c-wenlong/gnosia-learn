@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import {
-  elapsedMs,
   failureReport,
   finishedHeadline,
   formatDuration,
@@ -16,6 +15,7 @@ import {
 } from "@/lib/studio-jobs";
 import { asVideoJob, videoFailureLine, videoPhaseWords, videoStepCount, readyHeadline } from "@/lib/studio-video";
 import { panelHref } from "@/lib/studio-view";
+import { useElapsed } from "@/lib/use-elapsed";
 
 /**
  * The 32px job strip, under the studio strip and above the content.
@@ -88,7 +88,7 @@ export function JobStrip({ path, stream = true }: { path: string; stream?: boole
         </>
       ) : (
         <>
-          <span className="shrink-0 text-[var(--muted)]">{formatDuration(elapsedMs(job))}</span>
+          <Elapsed job={job} />
           <button
             type="button"
             onClick={() => dismiss(job.jobId)}
@@ -174,23 +174,31 @@ function Dot({ job }: { job: Job }) {
  * seconds it managed to stay awake for.
  */
 export function Elapsed({ job }: { job: Job }) {
-  const now = useNow(job.finished === null);
+  const ms = useElapsed(job);
   return (
-    <span className="shrink-0 tabular-nums text-[var(--muted)]">
-      {formatDuration(elapsedMs(job, now))}
+    <span className="shrink-0 text-[var(--muted)]">
+      <Duration ms={ms} live={job.finished === null} />
     </span>
   );
 }
 
-/** A second-resolution clock that stops when there is nothing to count. */
-export function useNow(ticking: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!ticking) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [ticking]);
-  return now;
+/**
+ * A duration as text, or the room for one.
+ *
+ * A running job has no figure on the server or in the browser's first pass
+ * (`useElapsed`), so `ms` is `null` there and the text is held back. `live`
+ * keeps five characters of width under it, tabular so each second is as wide as
+ * the last, which fits `12:30`; whatever sits beside the figure does not move
+ * when it arrives. A finished job's figure is there from the first render and
+ * takes only the room it needs.
+ */
+export function Duration({ ms, live }: { ms: number | null; live: boolean }) {
+  return (
+    <span className={`inline-block tabular-nums ${live ? "min-w-[5ch]" : ""}`}>
+      {/* A no-break space, so the empty box keeps a line's height and baseline. */}
+      {ms === null ? "\u00a0" : formatDuration(ms)}
+    </span>
+  );
 }
 
 /** No number on it, ever. It says "something is happening" and nothing more. */

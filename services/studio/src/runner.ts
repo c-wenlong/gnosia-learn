@@ -161,6 +161,12 @@ export class Runner {
    */
   extraSpend: () => readonly SpendEntry[] = () => [];
   /**
+   * Spend by the other runner's jobs: the video runner's (D43 of
+   * docs/STUDIO-VIDEOS.md), which shares this one cap. Set by `index.ts`;
+   * counted in the total and not in the planner's share.
+   */
+  otherJobSpend: () => readonly SpendEntry[] = () => [];
+  /**
    * The tldraw manual the drawing agent's system prompt carries (D30 of
    * docs/STUDIO-CHAT-FIRST.md). Set by `index.ts`, which refreshes it at
    * start; `enqueue` refreshes it again, so a job queued after a rebuild of
@@ -544,7 +550,7 @@ export class Runner {
     // Whole records: `SpendEntry` is structural, so `startedAt`, `finishedAt`
     // and `costUsd` are read off them directly and nothing has to be kept in
     // step with a second shape.
-    return spendWindow([...this.store.list(), ...this.extraSpend()], DAILY_WINDOW_MS, now);
+    return spendWindow([...this.store.list(), ...this.extraSpend(), ...this.otherJobSpend()], DAILY_WINDOW_MS, now);
   }
 
   /** What the cap is, and where it stands. For `/api/health` and the UI. */

@@ -1,0 +1,221 @@
+import { accessSync, constants, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import path from "node:path";
+
+import { REPO_ROOT } from "../paths";
+import { run } from "../proc";
+
+/**
+ * Where the programs a render runs actually live on this machine.
+ *
+ * The sandbox profiles allow `process-exec` of a short list of programs and
+ * nothing else (D44), and Seatbelt matches the real path after every symlink
+ * is resolved. So the list is generated here, from where `ffmpeg`, `ffprobe`,
+ * `python3` and the two venvs' interpreters resolve right now, never written
+ * down as a guess: a `brew upgrade` moves a Cellar keg, and a profile naming
+ * the old one would refuse every render with nothing to say why.
+ *
+ * Nothing here reads a file an agent wrote.
+ */
+
+export interface Program {
+  /** The name as found on PATH, e.g. `/opt/homebrew/bin/ffmpeg`. */
+  link: string;
+  /** Every symlink resolved. */
+  real: string;
+  /**
+   * The directory the program's installation lives in, allowed as a subpath:
+   * a Homebrew keg (`/opt/homebrew/Cellar/ffmpeg/9.0.1_1`) or a framework
+   * (`/Library/Frameworks/Python.framework`), because Python re-executes its
+   * own `Python.app` inside the framework. Null for a program that is only
+   * its own file.
+   */
+  home: string | null;
+}
+
+export interface Toolchain {
+  platform: NodeJS.Platform;
+  /** `/usr/bin/sandbox-exec`, or null when this machine has none (V3). */
+  sandboxExec: string | null;
+  /** The real manimkc checkout, every symlink resolved: the venvs, `manim/` and `tools/` the job links to. */
+  manimkcRoot: string;
+  /**
+   * The four directories the job links to, each resolved on its own: a
+   * checkout whose venv is itself a link (a second clone sharing one set of
+   * venvs) has them somewhere else, and Seatbelt allows the real path only.
+   */
+  manimkcDirs: { manim: string; venv: string; venvTts: string; tools: string };
+  ffmpeg: Program | null;
+  ffprobe: Program | null;
+  python3: Program | null;
+  /** `<manimkc>/.venv/bin/python`, resolved: the interpreter a render and the narration step import manimlib in. */
+  venvPython: Program | null;
+  /** `<manimkc>/.venv-tts/bin/python`, resolved: the kokoro worker's interpreter. */
+  ttsPython: Program | null;
+  /** The node that runs the wrapper, `process.execPath`. */
+  node: string;
+  /** The Hugging Face hub cache, where kokoro's model is. */
+  hfHubCache: string;
+  /** `<hub>/models--hexgrad--Kokoro-82M`, or null when the model was never downloaded (V9). */
+  kokoroModel: string | null;
+  /** The kokoro voices whose files are in that cache. */
+  voicesInstalled: string[];
+  /** The owner's shared TTS cache, read to seed a job and never written. Null when manimkc cannot say. */
+  sharedAudioCache: string | null;
+}
+
+/** Search `PATH` the way a shell would, for an executable regular file. */
+export function which(name: string, searchPath: string = process.env.PATH ?? ""): string | null {
+  for (const dir of searchPath.split(":")) {
+    if (dir === "") continue;
+    const candidate = path.join(dir, name);
+    try {
+      if (!statSync(candidate).isFile()) continue;
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/** The installation a resolved program belongs to: its Homebrew keg or its framework. */
+export function installationOf(real: string): string | null {
+  const cellar = /^(.*\/Cellar\/[^/]+\/[^/]+)\//.exec(real);
+  if (cellar?.[1] !== undefined) return cellar[1];
+  const framework = /^(.*\/[^/]+\.framework)\//.exec(real);
+  if (framework?.[1] !== undefined) return framework[1];
+  return null;
+}
+
+export function programAt(link: string | null): Program | null {
+  if (link === null || !existsSync(link)) return null;
+  try {
+    const real = realpathSync(link);
+    return { link, real, home: installationOf(real) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The manimkc checkout the studio renders with: `MANIMKC_ROOT` (the same
+ * variable, and the same meaning, manimkc's own CLI gives it), else the
+ * submodule at the path `.gitmodules` names. Resolved, because a worktree may
+ * point it at the main checkout where the venvs actually are.
+ */
+export function manimkcRoot(): string {
+  const configured = process.env.MANIMKC_ROOT?.trim();
+  const root = configured ? path.resolve(REPO_ROOT, configured) : path.join(REPO_ROOT, "tools", "manimkc");
+  try {
+    return realpathSync(root);
+  } catch {
+    return root;
+  }
+}
+
+function resolveOr(target: string): string {
+  try {
+    return realpathSync(target);
+  } catch {
+    return target;
+  }
+}
+
+function hubCache(): string {
+  const hub = process.env.HF_HUB_CACHE?.trim();
+  if (hub) return path.resolve(hub);
+  const home = process.env.HF_HOME?.trim();
+  if (home) return path.join(path.resolve(home), "hub");
+  return path.join(process.env.HOME ?? "", ".cache", "huggingface", "hub");
+}
+
+function voicesIn(model: string): string[] {
+  const found = new Set<string>();
+  let snapshots: string[] = [];
+  try {
+    snapshots = readdirSync(path.join(model, "snapshots"));
+  } catch {
+    return [];
+  }
+  for (const snapshot of snapshots) {
+    try {
+      for (const file of readdirSync(path.join(model, "snapshots", snapshot, "voices"))) {
+        if (file.endsWith(".pt")) found.add(file.slice(0, -3));
+      }
+    } catch {
+      /* a snapshot with no voices directory */
+    }
+  }
+  return [...found].sort();
+}
+
+/**
+ * The owner's shared TTS cache, as `manimkc home --json` reports it for the
+ * real checkout. Read-only: the command writes nothing, and its timing line
+ * is switched off.
+ */
+async function sharedCache(root: string, python: string | null): Promise<string | null> {
+  if (python === null) return null;
+  const env: NodeJS.ProcessEnv = {
+    PATH: "/usr/bin:/bin",
+    HOME: process.env.HOME ?? "",
+    MANIMKC_TIMING: "0",
+    ...(process.env.MANIMKC_HOME === undefined ? {} : { MANIMKC_HOME: process.env.MANIMKC_HOME }),
+  };
+  const result = await run(python, [path.join(root, "tools", "cli", "manimkc"), "--root", root, "home", "--json"], {
+    cwd: root,
+    env,
+    timeoutMs: 30_000,
+  }).catch(() => null);
+  const cache = (result?.json as { derived?: { cache?: unknown } } | null)?.derived?.cache;
+  return typeof cache === "string" && path.isAbsolute(cache) ? cache : null;
+}
+
+export async function discoverToolchain(): Promise<Toolchain> {
+  const root = manimkcRoot();
+  const python3 = programAt(which("python3"));
+  const hub = hubCache();
+  const model = path.join(hub, "models--hexgrad--Kokoro-82M");
+  const kokoroModel = existsSync(model) ? realpathSync(model) : null;
+  return {
+    platform: process.platform,
+    sandboxExec: existsSync("/usr/bin/sandbox-exec") ? "/usr/bin/sandbox-exec" : null,
+    manimkcRoot: root,
+    manimkcDirs: {
+      manim: resolveOr(path.join(root, "manim")),
+      venv: resolveOr(path.join(root, ".venv")),
+      venvTts: resolveOr(path.join(root, ".venv-tts")),
+      tools: resolveOr(path.join(root, "tools")),
+    },
+    ffmpeg: programAt(which("ffmpeg")),
+    ffprobe: programAt(which("ffprobe")),
+    python3,
+    venvPython: programAt(path.join(root, ".venv", "bin", "python")),
+    ttsPython: programAt(path.join(root, ".venv-tts", "bin", "python")),
+    node: process.execPath,
+    hfHubCache: existsSync(hub) ? realpathSync(hub) : hub,
+    kokoroModel,
+    voicesInstalled: kokoroModel === null ? [] : voicesIn(kokoroModel),
+    sharedAudioCache: await sharedCache(root, python3?.real ?? null),
+  };
+}
+
+/** Why a toolchain cannot run a video job, one line each; empty when it can. */
+export function toolchainProblems(tools: Toolchain): string[] {
+  const problems: string[] = [];
+  if (tools.platform !== "darwin") {
+    problems.push(
+      `the video kind runs only on macOS for now: its Linux sandbox (bubblewrap) is designed and not measured, so video jobs stay off here (V4)`,
+    );
+  }
+  if (tools.sandboxExec === null) problems.push("sandbox-exec is missing, and a video job never renders unsandboxed (V3)");
+  if (tools.ffmpeg === null) problems.push("ffmpeg is not on PATH");
+  if (tools.ffprobe === null) problems.push("ffprobe is not on PATH");
+  if (tools.python3 === null) problems.push("python3 is not on PATH (the manimkc CLI runs on it)");
+  if (tools.venvPython === null) problems.push(`${tools.manimkcRoot}/.venv is missing: run manimkc doctor for the fix`);
+  if (tools.ttsPython === null) problems.push(`${tools.manimkcRoot}/.venv-tts is missing, so no narrated video can be voiced`);
+  if (tools.kokoroModel === null) problems.push("the kokoro model is not in the Hugging Face cache, and the narration step never downloads it (V9)");
+  if (!/^[A-Za-z0-9/._-]+$/.test(tools.node)) problems.push(`node's path ${JSON.stringify(tools.node)} holds a character the wrapper's first line cannot carry`);
+  return problems;
+}

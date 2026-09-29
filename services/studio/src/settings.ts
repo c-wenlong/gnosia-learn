@@ -77,7 +77,7 @@ export interface AgentSettings {
  * which for a per-job settings file is the job workspace — so the obvious
  * spelling would silently write a rule about the wrong place.
  */
-function rule(tool: string, absolutePath: string, suffix = ""): string {
+export function rule(tool: string, absolutePath: string, suffix = ""): string {
   return `${tool}(/${absolutePath}${suffix})`;
 }
 
@@ -332,7 +332,7 @@ function denyEach(directory: string, keep: (name: string) => boolean): string[] 
  * job by job below, because this job's own workspace is in there and a deny
  * on the parent would take its candidate and scratch with it.
  */
-function studioHomeRules(): string[] {
+export function studioHomeRules(): string[] {
   return denyEach(studioHome(), (name) => name !== "jobs");
 }
 
@@ -424,7 +424,7 @@ const JOB_ID_ALPHABET = "0123456789abcdef-";
  * this id. None of them matches this job's own directory, which the test
  * checks with the same matcher the CLI uses.
  */
-function siblingJobRules(jobId: string): string[] {
+export function siblingJobRules(jobId: string): string[] {
   const jobs = path.join(studioHome(), "jobs");
   const rules: string[] = [];
   let entries: string[] = [];
