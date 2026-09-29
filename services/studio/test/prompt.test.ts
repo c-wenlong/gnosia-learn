@@ -119,3 +119,35 @@ describe("a continued session", () => {
     expect(prompt.indexOf("the files have moved")).toBeLessThan(prompt.indexOf("inspect"));
   });
 });
+
+describe("the order of commands the prompt gives", () => {
+  const plain = { ...brief, intent: "a plain intent", notes: undefined };
+
+  it("lifts a flowchart first on a new job, then stamps the metadata with meta set, and never runs new", () => {
+    const prompt = buildPrompt({ jobId: "job-m", brief: { ...plain, mermaid: "flowchart LR\n a --> b" }, hasMermaid: true });
+    const lift = prompt.indexOf(`from-mermaid ${candidatePath("job-m", "dot-product-two")}`);
+    expect(lift).toBeGreaterThan(0);
+    expect(prompt.indexOf("meta set")).toBeGreaterThan(lift);
+    // `from-mermaid` refuses a document that exists, so `new` first would fail it.
+    expect(prompt).not.toContain("canvas -- new ");
+  });
+
+  it("appends a flowchart to an extend job's copy with --append", () => {
+    const prompt = buildPrompt({ jobId: "job-x", brief: { ...plain, mode: "extend", mermaid: "flowchart LR\n a --> b" }, hasMermaid: true });
+    expect(prompt).toContain(`--source ${mermaidPath("job-x")} --append`);
+    expect(prompt).toContain("Extend it");
+  });
+
+  it("requires verify after export and a look at its PNG, as the manual does", () => {
+    const prompt = buildPrompt({ jobId: "job-v", brief: plain, hasMermaid: false });
+    const exported = prompt.indexOf("--svg ");
+    const verified = prompt.indexOf("canvas -- verify ");
+    expect(verified).toBeGreaterThan(exported);
+    expect(prompt.slice(verified)).toContain("Read that PNG");
+    expect(prompt.indexOf("Stop.")).toBeGreaterThan(verified);
+    const files = { tldr: candidatePath("job-v", "d"), svg: candidateSvgPath("job-v", "d"), scratch: "/s" };
+    for (const next of [buildRetryPrompt(["x"], files), buildRevisePrompt("y", files), buildResumePrompt(files)]) {
+      expect(next).toContain(`verify ${files.svg} -o /s/verify.png`);
+    }
+  });
+});

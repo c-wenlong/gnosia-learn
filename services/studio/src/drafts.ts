@@ -807,7 +807,8 @@ export class Drafts {
         sourceHash,
         sourceRevision,
         vocabularyHash: hash,
-        manualHash: null,
+        // The manual a Draw pressed now would start with, for the record.
+        manualHash: this.runner.manual?.current()?.hash ?? null,
         corpus: corpus.length,
         corpusStale: listing?.stale ?? true,
       });

@@ -280,3 +280,29 @@ export function plannerSettingsPath(draftId: string): string {
 export function draftTmpDir(draftId: string): string {
   return path.join(draftDir(draftId), "tmp");
 }
+
+/* -------------------------------------------------------------------------- */
+/* The tldraw manual (docs/STUDIO-CHAT-FIRST.md, "The drawing agent's prompt") */
+/* -------------------------------------------------------------------------- */
+
+/** The manual's static half: `sections/*.md` and `snippets/*.js`, checked in. */
+export const MANUAL_SOURCE_DIR = path.join(SERVICE_ROOT, "src", "manual");
+
+/**
+ * Where assembled manuals are written, one file per distinct text, named by
+ * its hash. Never pruned: a job records the hash of the manual it ran with,
+ * and every attempt of that job reads this file again (M1), so the file has to
+ * outlive a rebuild of the tool.
+ */
+export function manualDir(): string {
+  return path.join(studioHome(), "manual");
+}
+
+export function manualPath(hash: string): string {
+  return path.join(manualDir(), `${hash}.md`);
+}
+
+/** Scratch for the worked-snippet check: `run --no-save` writes nothing, but it takes a path. */
+export function manualCheckDir(): string {
+  return path.join(manualDir(), "check");
+}
