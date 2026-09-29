@@ -38,6 +38,8 @@ import {
   reserveRevisionIds,
   type PendingRevision,
 } from "../content/revisions";
+import { storedCredit } from "../content/cover-image";
+import { BLOB_KEY_COLUMNS } from "../content/entities";
 import { placePositions, PositionGapError } from "../content/positions";
 import { readSnapshots, type SnapshotRead } from "../content/snapshot";
 import { CLI_OWNER } from "../content/scope";
@@ -47,7 +49,7 @@ import { sqlstate } from "../state/errors";
 import { importLogs, type ImportedLog } from "../content/session-logs";
 import { keepBlobKeys } from "./blob-keys";
 import { IndexError, IndexErrors } from "./errors";
-import type { Indexer, ReplaceScope, SourceRows } from "./source";
+import type { CoverRead, Indexer, ReplaceScope, SourceRows } from "./source";
 
 /** Postgres SQLSTATE for a foreign key violation. */
 const FOREIGN_KEY_VIOLATION = "23503";
@@ -411,6 +413,8 @@ export async function writeSource(
      * owner, `local`, which every row is today.
      */
     owner?: string;
+    /** The courses source's `coversRead`: checked under the locks, see `assertCoversUnmoved`. */
+    coversRead?: ReadonlyMap<string, CoverRead>;
   } = {},
 ): Promise<SourceWrite> {
   const who: ImportOwner = { owner: options.owner ?? CLI_OWNER, readable: [] };
@@ -448,6 +452,11 @@ export async function writeSource(
       ).map((name) => REVISION_TYPE[name]),
     );
     await markSeam(tx, `import:${indexer.source}`);
+
+    // The covers the courses source decided against, read again now that no
+    // seam write can land until this commits. One that moved since the read
+    // would be written back as it was, so the source is refused instead.
+    if (options.coversRead !== undefined) await assertCoversUnmoved(tx, options.coversRead, who.owner);
 
     // Nothing this tree produced may land on a row another owner holds, or
     // link to one the owner cannot read. Refused by id before anything moves.
@@ -959,7 +968,7 @@ function stampOwner(indexer: Indexer, rows: SourceRows, owner: string): SourceRo
           `indexer "${indexer.source}" produced ${describe(row)} for owner "${String(named)}", and this import writes as "${owner}"`,
         );
       }
-      for (const column of ["blobKey", "svgBlobKey"]) {
+      for (const [column] of BLOB_KEY_COLUMNS) {
         const key = row[column];
         if (typeof key === "string" && !key.startsWith(`${owner}/`)) {
           throw new IndexError(
@@ -1473,4 +1482,39 @@ function evidenceError(slugs: string[]): IndexError {
       `empty stub is enough), or rename the concept by moving its events first — ` +
       `deleting the study record is not something an index run will do for you.`,
   );
+}
+
+/**
+ * Refuse, naming the courses, when any course's cover (its key or its credit)
+ * is not what the read that planned this write saw: `catalog course cover`
+ * committed between the read and this transaction's locks. Writing the rows
+ * as planned would put the old cover back, or take the new one away, so
+ * nothing is written, and a rerun reads the cover as it now is. Run under the
+ * `collection` type lock `lockTypes` takes, which a cover write's entity lock
+ * waits on, so nothing can move after this answer.
+ */
+async function assertCoversUnmoved(
+  tx: CatalogDatabase,
+  seen: ReadonlyMap<string, CoverRead>,
+  owner: string,
+): Promise<void> {
+  if (seen.size === 0) return;
+  const rows = await tx
+    .select({ id: collection.id, key: collection.coverBlobKey, metadata: collection.metadata, owner: collection.ownerId })
+    .from(collection)
+    .where(inArray(collection.id, [...seen.keys()]));
+  const now = new Map(
+    rows
+      .filter((row) => row.owner === owner && row.key !== null)
+      .map((row) => [row.id, { key: row.key as string, credit: storedCredit(row.metadata) }] as const),
+  );
+  const same = (a: CoverRead, b: CoverRead) => JSON.stringify(a === null ? null : [a.key, a.credit]) === JSON.stringify(b === null ? null : [b.key, b.credit]);
+  const moved = [...seen].filter(([id, read]) => !same(read, now.get(id) ?? null)).map(([id]) => id).sort();
+  if (moved.length > 0) {
+    throw new IndexError(
+      `${moved.map((id) => `course "${id}"`).join(", ")}: a cover changed while the import ran (a \`catalog course ` +
+        `cover\` committed between the read and the write), and writing the courses as read would undo it. Run the ` +
+        `import again; nothing was written for the courses.`,
+    );
+  }
 }

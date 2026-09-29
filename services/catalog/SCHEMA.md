@@ -72,7 +72,7 @@ which brief produced them.
 | --- | --- |
 | `topic` | The shared vocabulary. Slug PK, title, domain, summary, aliases. The required join for every asset. |
 | `concept` | One authored note (`learn/concepts/<domain>/<slug>.md` in the export layout). Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
-| `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. |
+| `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. A course may name its cover photo's blob in `cover_blob_key` (0016), with its credit in `metadata.coverCredit`. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
 | `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. |
 | `asset_topic` | This asset is about this topic. |
@@ -351,6 +351,7 @@ erDiagram
         text parent_id FK "nullable"
         int position
         jsonb metadata
+        text cover_blob_key FK "nullable, courses only"
     }
     curriculum_item {
         text id PK "cs4263-m1-t1"
@@ -600,6 +601,42 @@ lock, which a document put also takes, and, until the flip, counting a
 `.tldr` on disk that no import has read yet). Until the flip the import files such
 an SVG by its name alone (the concept of that name and its topic), so the put
 is refused unless it names exactly that; after it, the writer's links stand.
+
+### Course covers: a column and a blob
+
+A course's cover photo is a blob (D5, D7), and the course row names it by key
+in `collection.cover_blob_key` (0016), never by a URL: the web app serves it
+from `/api/courses/<slug>/cover`, so the route and a later cloud store can
+change without a migration. The key follows `diagram.svg_blob_key`: a foreign
+key to `blob_object(key)`, `ON DELETE RESTRICT` (an object a course shows
+cannot be deleted) and `ON UPDATE CASCADE`, with an index. Two checks hold the
+rest:
+
+| Constraint | Rule | Why |
+| --- | --- | --- |
+| `collection_cover_course_check` | only a `course` has a cover | a module is a page inside a course; a photo on it is one nothing shows |
+| `collection_cover_credit_check` | `cover_blob_key` is set exactly when `metadata.coverCredit` is | a photo never arrives without the photographer, source page and licence it is used under |
+
+`catalog course cover <id>` (`src/content/course-cover.ts`) is the one writer:
+it checks the image (WebP, JPEG or PNG by its bytes, at most 2 MiB) and the
+credit, stores the bytes through `uploadBlob`, then points the row at the key
+in one seam write with a revision, or with `--clear` removes both. The blob
+stays after a replace or a clear, since an earlier revision names it; `catalog
+blob audit` counts a cover as referenced and a replaced one as unreferenced.
+
+In the export a cover is `content/courses/<code>.cover.<ext>` beside the
+course file, which names it under `cover:` with the credit. `catalog import
+<dir>` stores it as a blob before the rows, as the diagrams source stores an
+SVG, and refuses by name a cover that is missing, not an image, or not the
+type its name says. It sets a cover the course lacks and never changes one it
+has: a file with no `cover:` (an export from before covers) keeps the stored
+cover and credit with no revision, and a `cover:` whose credit, type or bytes
+differ from the stored cover is refused by name. Those decisions are made
+against the covers as the read saw them, and the writer reads them again
+under its locks: a `course cover` that committed in between refuses the
+courses source by name, writing nothing for it, and a rerun reads the new
+cover. `course import` of one file carries the cover over and
+refuses a `cover:` that differs from the course's.
 
 ### Studio videos: a row, five assets and one transaction
 
@@ -869,6 +906,13 @@ they cannot snapshot the same entity two ways.
 | `concept` | `concept_prerequisite` |
 | `asset` | `asset_topic`, `asset_concept`, `asset_derivation` |
 | `tag`, `diagram`, `video` | none |
+
+A column added to a table after its entities had revisions is left out of the
+snapshot while it is null (`OMITTED_WHEN_NULL` in `src/content/entities.ts`):
+`collection.cover_blob_key`, from 0016. Without that, the new empty key would
+change the hash of every course and module, and the next write of each would
+append a revision whose only difference is a key that says nothing. The first
+revision that mentions the column is the one that set it.
 
 `writeContent` in `src/content/write.ts` is the one authored write: one
 transaction that takes the revision locks, refuses when the writer's `base` is

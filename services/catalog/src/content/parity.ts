@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { isCoverFile } from "@self-learn/content";
 import { parse } from "yaml";
 
 import type { CatalogDatabase } from "../db";
@@ -214,6 +215,13 @@ function cut(type: ExportType, files: readonly ExportFile[]): Cut {
           break;
         }
         case "courses": {
+          // A cover image is bytes, compared by its hash; its credit is in
+          // the course file, which is compared as data.
+          if (isCoverFile(file.path)) {
+            add(file.path, { sha256: sha256(file.bytes) });
+            count("covers");
+            break;
+          }
           const doc = parse(body) as Record<string, unknown> | null;
           add(`course ${file.path}`, doc);
           countCourse(doc, count);
