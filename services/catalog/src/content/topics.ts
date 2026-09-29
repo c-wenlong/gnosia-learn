@@ -19,6 +19,7 @@ import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { ASSET_PREFIX } from "../index/source";
 import { diagramPaths } from "./diagram-document";
+import { restampVideoSource, sourceHash } from "./videos";
 import { type ExportType, sha256 } from "./layout";
 import { POSITION_STEP } from "./positions";
 import { andOwnedBy, type Owners, CLI_OWNER, cliScope } from "./scope";
@@ -1368,6 +1369,24 @@ async function renameUnder(
       await tx.execute(sql`
         update asset set content_hash = ${sha256(bytes)}, bytes = ${Buffer.byteLength(bytes, "utf8")}, updated_at = now()
         where id = ${`${ASSET_PREFIX.diagrams}${diagramPaths(diagram.slug).tldr}`}`);
+    }
+
+    // 4b. Each studio video's source names its topic twice, in the brief and
+    //     in topic.yml; `topic_slug` followed by cascade already. The source
+    //     hash moves with it, and so does the rendered one when it was the
+    //     same: a restamped slug changes no picture in the cut.
+    const videos = await tx.execute<{ slug: string; source: unknown; source_hash: string; rendered_source_hash: string | null }>(
+      sql`select slug, source, source_hash, rendered_source_hash from video where topic_slug = ${to}`,
+    );
+    for (const row of videos.rows) {
+      const source = restampVideoSource(row.source, from, to);
+      if (source === null) continue;
+      const hash = sourceHash(source);
+      await tx.execute(sql`
+        update video set source = ${JSON.stringify(source)}::jsonb, source_hash = ${hash},
+          rendered_source_hash = case when rendered_source_hash = ${row.source_hash} then ${hash} else rendered_source_hash end,
+          updated_at = now()
+        where slug = ${row.slug}`);
     }
 
     // 5. Open jobs' briefs. `job.topic_slug` followed by cascade; the brief is

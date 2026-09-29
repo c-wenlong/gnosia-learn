@@ -516,7 +516,20 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
         discarded,
       };
     } catch (error) {
-      if (error instanceof JobError) throw error;
+      if (error instanceof JobError) {
+        // Two submits of one change race: the winner discarded the parent and
+        // inserted the child, and the loser, waiting on the parent's row lock,
+        // then finds it discarded. The honest answer is the winner's job,
+        // exactly as for the key race below.
+        if (discardParent !== undefined) {
+          const winner = await byIdempotencyKey(db, idempotencyKey);
+          if (theirs(winner)) throw keyTaken();
+          if (winner !== undefined) {
+            return { ok: true as const, command: "enqueue" as const, created: false, job: summarise(winner), discarded: null };
+          }
+        }
+        throw error;
+      }
       // Two submits of one key can both miss the lookup above and race to the
       // insert. The loser lands here, and the honest answer is the same one the
       // lookup would have given: this key already belongs to that job. Throwing

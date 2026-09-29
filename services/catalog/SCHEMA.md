@@ -628,14 +628,24 @@ video has no folder in manimkc's `topics/` (edge case V16).
 (`src/content/videos.ts`) is Accept. It reads the job (this owner's, kind
 `video`, `awaiting_review`, target `videos/S.mp4`), holds every file in the
 candidate directory to the hash the gate wrote in `copies.json` (each a regular
-file with one link), stores the blobs, and then, in one transaction, writes the
+file with one link; every source file needs a record, and every recorded source
+file must be there), stores the blobs, and then, in one transaction, writes the
 `video` row, the asset rows, their `asset_job` provenance and the job's move to
 `accepted`, through the same checked transition `catalog job accept` makes
 (`acceptJobIn` in `src/commands/job.ts`). So there is no state in which a video
 is in the catalog and its job still in review, unlike a diagram's put and
 accept, which predate this and are two calls. A put repeated for an accepted
 job returns the landed revision and writes nothing when the source hash and
-every file's hash are what that job landed, and is refused by name otherwise.
+every file's hash are what that job landed, and is refused by name otherwise;
+the same check runs again under the locks, so a retry that raced the first put
+gets the landed Accept rather than a stale-base refusal.
+
+The blobs are stored before the transaction, so a put refused inside it leaves
+them in the store with no row naming them. Nothing deletes them: a retry of the
+same Accept reuses them (the keys are hashes), `catalog blob audit` lists any
+left as `unreferenced` (the audit counts `video.mp4_blob_key` as a reference),
+and they count toward the owner's byte cap, the same as a re-rendered video's
+old bytes. A reclaim of unreferenced blobs, for every kind, is still to build.
 
 A change to a video in review is `catalog job enqueue --discard-parent <id>`
 (D52): the parent is locked, checked (this owner's, a video job, awaiting
@@ -799,7 +809,7 @@ row-level security, which waits for a second service to read the database:
 | The `learn` CLI's learner view (`src/learn/files.ts`, `vault.ts`) | Reads as `cliScope()`: `status`, `frontier`, `plan`, the note reads and checkouts, and `vault pull` see the CLI owner's notes and the commons', with edges to anything else dropped, and only the CLI owner's own session logs. The five pinned `--json` shapes did not change |
 | The write seam (`src/content/write.ts`) | Stamps `owner_id = owner` (required on every write) and refuses a write naming an id another owner holds, `foreign-owner`, since ids are global. Stamps its link rows the same way (D24: a link belongs to its parent's owner) and refuses a new far end, or a row's own reference, naming a row neither the writer's nor the commons' (`ROW_FAR_ENDS`, `LINK_FAR_ENDS` in `src/content/entities.ts`); one already there is carried over. `deleteContent` deletes through the same two checks. The CLIs write as `CLI_OWNER` (`src/content/scope.ts`), which is `local` |
 | The verbs that write around the seam | `topic rename` refuses another owner's topic; `item purge` refuses another owner's item and deletes only the purging learner's rows; `course import` deletes only its own orphaned links, through `deleteContent` |
-| `catalog video put`, `list`, `show`, `checkout` (`src/content/videos.ts`) and `catalog preference get` | Take `--owner` (default `CLI_OWNER`): `put` lands only that owner's job (another owner's is "no job") and writes as them; `list`, `show` and `checkout` read only what they may read, and another owner's slug is a slug with no video (`checkout` writes nothing). `preference get` reads only that learner's row |
+| `catalog video put`, `list`, `show`, `checkout` (`src/content/videos.ts`) and `catalog preference get` | Take `--owner` (default `CLI_OWNER`): `put` lands only that owner's job (another owner's is "no job") and writes as them; `list`, `show` and `checkout` read only what they may read, and another owner's slug is a slug with no video (`checkout` writes nothing). Their joins are scoped at the far end too: a poster, transcript, topic or concept another owner holds is left out rather than named `preference get` reads only that learner's row |
 | `catalog job` and `catalog session` | Take `--owner` (default `CLI_OWNER`) and act only on that owner's jobs and sessions: another owner's is "no job", an id another learner holds is refused rather than adopted, and a job's session and parent job must be the owner's too. The studio passes the owner it serves |
 | `catalog doctor` | Reports D24's mixed rows (a relation or mapping whose `owner_id` is not its topic's), which fail it (exit 1) as an armed rule's violator does, and links pointing at a row their owner cannot read, which are reported only; `--fix` restamps the mixed rows through the seam, one revision per topic |
 | `catalog export`, parity, `topic ls` | Read every owner, through an `owners` argument that is optional only on those internal functions |

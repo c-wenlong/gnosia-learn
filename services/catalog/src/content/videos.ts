@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { key as blobKey, type BlobStore } from "@self-learn/blob";
+import { BlobIntegrityError, key as blobKey, type BlobStore } from "@self-learn/blob";
 import {
   assetJob,
   canonicalJson,
@@ -17,13 +17,14 @@ import {
 } from "@self-learn/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
-import { acceptJobIn, VIDEOS_DIR, VIDEO_SLUG } from "../commands/job";
+import { acceptJobIn, JobError, VIDEOS_DIR, VIDEO_SLUG } from "../commands/job";
 import type { CatalogDatabase } from "../db";
 import { fileFacts } from "../index/files";
 import { ASSET_PREFIX } from "../index/source";
 import { POSTER_CONTENT_TYPE } from "../poster/recipe";
 import { POSTER_PREFIX } from "./asset-upload";
 import { uploadBlob } from "./blob";
+import { BlobOwnerError } from "./blob-owner";
 import { sha256 } from "./diagram-document";
 import { latestRevisions, lockEntity } from "./revisions";
 import { andOwnedBy } from "./scope";
@@ -46,7 +47,9 @@ import { ContentWriteError, deleteContent, writeContents, type WriteContentInput
  * rows, the `asset_job` provenance and the job's move to `accepted` together.
  * A failure anywhere in that transaction leaves the job in review and no row
  * pointing at the bytes; the blobs it stored are content-addressed and are
- * either reused by the retry or swept as unreferenced.
+ * reused by the retry, since keys are hashes. Nothing deletes an abandoned
+ * one: `catalog blob audit` lists it as `unreferenced`, and it counts toward
+ * the owner's byte cap, as a re-rendered video's old bytes do.
  */
 
 /** The studio's namespace for a video's asset ids (not an import source, so nothing prunes it). */
@@ -54,7 +57,16 @@ export const VIDEO_PREFIX = "video:";
 
 export class VideoError extends Error {
   constructor(
-    readonly code: "bad-slug" | "unreadable" | "job" | "stale-base" | "mismatch" | "unresolved" | "dirty-checkout",
+    readonly code:
+      | "bad-slug"
+      | "unreadable"
+      | "job"
+      | "stale-base"
+      | "mismatch"
+      | "unresolved"
+      | "invalid"
+      | "blob"
+      | "dirty-checkout",
     message: string,
   ) {
     super(message);
@@ -310,12 +322,29 @@ async function readSource(dir: string, copies: Copies): Promise<Record<string, s
     }
     const body = await readFile(file);
     const recorded = copies.files[`source/${name}`];
-    if (recorded !== undefined && (sha256(body) !== recorded.sha256 || body.length !== recorded.bytes)) {
+    if (recorded === undefined) {
+      throw new VideoError(
+        "mismatch",
+        `${COPIES_FILE} records no copy named source/${name}, so there is no hash to hold it to. Nothing was stored.`,
+      );
+    }
+    if (sha256(body) !== recorded.sha256 || body.length !== recorded.bytes) {
       throw new VideoError("mismatch", `source/${name} is not the file the gate copied. Nothing was stored.`);
     }
     const text = body.toString("utf8");
     if (!Buffer.from(text, "utf8").equals(body)) throw new VideoError("unreadable", `${file} is not UTF-8 text.`);
     files[name] = text;
+  }
+  // The other direction: a source file the gate recorded and that is gone
+  // would make the stored source a different one from what it checked.
+  const missing = Object.keys(copies.files)
+    .filter((key) => key.startsWith("source/") && SOURCE_NAME.test(key.slice("source/".length)))
+    .filter((key) => !(key.slice("source/".length) in files));
+  if (missing.length > 0) {
+    throw new VideoError(
+      "mismatch",
+      `${COPIES_FILE} records ${missing.join(", ")}, which ${missing.length === 1 ? "is" : "are"} not in ${root}. Nothing was stored.`,
+    );
   }
   if (!("topic.yml" in files) || !Object.keys(files).some((n) => n.endsWith(".py"))) {
     throw new VideoError("unreadable", `${root} needs topic.yml and at least one scene file (.py): it is what a change starts from.`);
@@ -329,6 +358,33 @@ async function readSource(dir: string, copies: Copies): Promise<Record<string, s
 /** The hash of a video's source: its canonical JSON, the definition `diagram.document_hash` uses too. */
 export function sourceHash(source: VideoSource): string {
   return sha256(Buffer.from(canonicalJson(source), "utf8"));
+}
+
+/**
+ * A video's source with the topic `from` renamed to `to` wherever the source
+ * names it: the brief's `topic` and `topic.yml`'s `topic:` line. Null when it
+ * names `from` nowhere. `topic rename` calls this, so a change job checked out
+ * after a rename starts from a source its gate accepts.
+ */
+export function restampVideoSource(value: unknown, from: string, to: string): VideoSource | null {
+  const source = sourceOf(value);
+  let changed = false;
+  const brief = { ...source.brief };
+  if (brief.topic === from) {
+    brief.topic = to;
+    changed = true;
+  }
+  const files = { ...source.files };
+  const yml = files["topic.yml"];
+  if (yml !== undefined) {
+    const line = new RegExp(`^(topic:[ \\t]*)(["']?)${from.replaceAll("-", "\\-")}\\2([ \\t]*(?:#.*)?)$`, "m");
+    const next = yml.replace(line, `$1$2${to}$2$3`);
+    if (next !== yml) {
+      files["topic.yml"] = next;
+      changed = true;
+    }
+  }
+  return changed ? { files, brief } : null;
 }
 
 function briefConcepts(brief: Record<string, unknown>): string[] {
@@ -466,39 +522,37 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
   if (existing !== undefined && existing.ownerId !== ownerId) {
     throw new VideoError("job", `${paths.mp4} names a video this owner cannot write: choose another slug.`);
   }
-  const latestVideo = (await latestRevisions(db, "video", [slug])).get(slug);
-
-  // A retried put under the same job: its own write is the latest revision,
-  // and the source and every stored file are exactly these. That is the
-  // landed Accept, returned as it is, with nothing written; anything else
-  // under an accepted job is refused by name.
-  if (job.state === "accepted") {
+  // What a put under a job that is already accepted returns: its own landed
+  // Accept, as it is, with nothing written, or a refusal by name. Asked here
+  // for a retry that arrives after the Accept, and again under the locks below
+  // for one that raced it.
+  const landed = async (reader: CatalogDatabase): Promise<PutVideoResult> => {
+    const [now] = await reader.select().from(video).where(eq(video.slug, slug)).limit(1);
+    const latest = (await latestRevisions(reader, "video", [slug])).get(slug);
     const recorded =
-      latestVideo === undefined
+      latest === undefined
         ? []
-        : (
-            await db.execute<{ job_id: string | null }>(sql`select job_id from content_revision where id = ${latestVideo.id}`)
-          ).rows;
-    const outputs = await db
+        : (await reader.execute<{ job_id: string | null }>(sql`select job_id from content_revision where id = ${latest.id}`)).rows;
+    const outputs = await reader
       .select({ assetId: assetJob.assetId, contentHash: assetJob.contentHash })
       .from(assetJob)
       .where(eq(assetJob.jobId, input.jobId));
-    const landed = new Map(outputs.map((o) => [o.assetId, o.contentHash] as const));
+    const byAsset = new Map(outputs.map((o) => [o.assetId, o.contentHash] as const));
     const own =
       recorded[0]?.job_id === input.jobId &&
-      existing !== undefined &&
-      existing.sourceHash === hash &&
-      existing.mp4BlobKey === mp4Key &&
-      landed.size === planned.length &&
-      planned.every((p) => landed.get(p.id) === p.sha256);
-    if (!own) {
+      now !== undefined &&
+      now.sourceHash === hash &&
+      now.mp4BlobKey === mp4Key &&
+      byAsset.size === planned.length &&
+      planned.every((p) => byAsset.get(p.id) === p.sha256);
+    if (!own || now === undefined) {
       throw new VideoError(
         "job",
         `job ${input.jobId} is accepted, and what it landed is not this: its video is recorded and is not ` +
           `rewritten under its name. A change is a new job (D52 of docs/STUDIO-VIDEOS.md).`,
       );
     }
-    const assetRevisions = await latestRevisions(db, "asset", planned.map((p) => p.id));
+    const assetRevisions = await latestRevisions(reader, "asset", planned.map((p) => p.id));
     return {
       ok: true,
       slug,
@@ -508,34 +562,43 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
       concepts,
       narrated,
       sourceHash: hash,
-      durationSeconds: Number(existing.durationSeconds ?? copies.durationSeconds),
-      revision: latestVideo?.id ?? 0,
+      durationSeconds: Number(now.durationSeconds ?? copies.durationSeconds),
+      revision: latest?.id ?? 0,
       changed: false,
       retry: true,
       jobState: "accepted",
       assets: planned.map((p) => ({ id: p.id, kind: p.kind, key: keyOf(p), sha256: p.sha256, bytes: p.bytes, uploaded: false })),
       revisions: [
-        { type: "video", id: slug, revision: latestVideo?.id ?? 0, changed: false },
+        { type: "video", id: slug, revision: latest?.id ?? 0, changed: false },
         ...planned.map((p) => ({ type: "asset", id: p.id, revision: assetRevisions.get(p.id)?.id ?? 0, changed: false })),
       ],
       notes: ["already landed by this job: nothing was written"],
     };
-  }
+  };
+  if (job.state === "accepted") return landed(db);
 
   // The bytes first, each confirmed against the hash the gate recorded (the
   // store checks the stream against it). A failure from here to the commit
-  // leaves at most unreferenced blobs, and no row pointing at them.
+  // leaves blobs no row points at. Nothing deletes those: `catalog blob audit`
+  // lists them as `unreferenced` and they count toward the owner's byte cap,
+  // as a re-rendered video's old bytes do. A retry of the same Accept reuses
+  // them, since the keys are the hashes.
   const assets: VideoAssetResult[] = [];
-  for (const p of planned) {
-    const done = await uploadBlob(db, store, {
-      ownerId,
-      file: p.file,
-      mime: p.mime,
-      ext: p.ext,
-      sha256: p.sha256,
-      bytes: p.bytes,
-    });
-    assets.push({ id: p.id, kind: p.kind, key: done.key, sha256: done.sha256, bytes: done.bytes, uploaded: done.uploaded });
+  try {
+    for (const p of planned) {
+      const done = await uploadBlob(db, store, {
+        ownerId,
+        file: p.file,
+        mime: p.mime,
+        ext: p.ext,
+        sha256: p.sha256,
+        bytes: p.bytes,
+      });
+      assets.push({ id: p.id, kind: p.kind, key: done.key, sha256: done.sha256, bytes: done.bytes, uploaded: done.uploaded });
+    }
+  } catch (error) {
+    if (error instanceof BlobIntegrityError || error instanceof BlobOwnerError) throw new VideoError("blob", error.message);
+    throw error;
   }
 
   const common = { owner: ownerId, author: input.author, authorKind: input.authorKind, reason: input.reason, jobId: input.jobId };
@@ -544,15 +607,21 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
   // with an old transcript.
   const stale = sidecars === null ? [ids.transcript, ids.chapters, ids.captions] : [];
 
-  let results: WriteContentResult[];
+  let outcome: { retry: PutVideoResult } | { written: WriteContentResult[] };
   try {
-    results = await db.transaction(async (tx) => {
+    outcome = await db.transaction(async (tx) => {
       // Every lock this write takes, first and in the global order (type,
       // then id): the stale sidecars `deleteContent` removes after
-      // `writeContents` would otherwise be locked out of order. The bases are
-      // then read under the locks.
+      // `writeContents` would otherwise be locked out of order. Everything
+      // below is read under the locks.
       for (const id of [...new Set([...planned.map((p) => p.id), ...stale])].sort()) await lockEntity(tx, "asset", id);
       await lockEntity(tx, "video", slug);
+      // A put of the same job that committed while this one uploaded holds
+      // these locks until then, so the job is read again now: accepted means
+      // that put landed, and this is its retry, not a stale write.
+      const [current] = await tx.select({ state: jobTable.state }).from(jobTable).where(eq(jobTable.id, input.jobId)).limit(1);
+      if (current?.state === "accepted") return { retry: await landed(tx) };
+      const latestVideo = (await latestRevisions(tx, "video", [slug])).get(slug);
       const latestAssets = await latestRevisions(tx, "asset", [...planned.map((p) => p.id), ...stale]);
       const base = input.base === undefined ? (latestVideo?.id ?? null) : input.base;
       const inputs: WriteContentInput[] = [
@@ -631,14 +700,14 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
       // The same checked transition `catalog job accept` makes, in this
       // transaction: the video and its job's verdict land together.
       await acceptJobIn(tx, input.jobId, ownerId);
-      return written;
+      return { written };
     });
   } catch (error) {
-    if (error instanceof ContentWriteError && error.code === "stale-base") throw new VideoError("stale-base", error.message);
-    if (error instanceof ContentWriteError && error.code === "foreign-owner") throw new VideoError("unresolved", error.message);
-    throw error;
+    throw refusal(error);
   }
+  if ("retry" in outcome) return outcome.retry;
 
+  const results = outcome.written;
   const own = results[0] as WriteContentResult;
   return {
     ok: true,
@@ -658,6 +727,23 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
     revisions: results.map((r) => ({ type: r.type, id: r.id, revision: r.revisionId, changed: r.changed })),
     notes,
   };
+}
+
+/**
+ * Every refusal a put can meet, as a `VideoError` with a code, so the
+ * studio branches on `code` rather than on a sentence. A failure that is not
+ * a refusal (a lost connection, a constraint nothing here expects) passes
+ * through as it is.
+ */
+export function refusal(error: unknown): unknown {
+  if (error instanceof VideoError) return error;
+  if (error instanceof ContentWriteError) {
+    const code = error.code === "stale-base" ? "stale-base" : error.code === "foreign-owner" ? "unresolved" : "invalid";
+    return new VideoError(code, error.message);
+  }
+  if (error instanceof JobError) return new VideoError("job", error.message);
+  if (error instanceof BlobIntegrityError || error instanceof BlobOwnerError) return new VideoError("blob", error.message);
+  return error;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -725,14 +811,17 @@ async function studioRows(db: CatalogDatabase, scope: OwnerScope, only?: string,
     select v.slug, v.title, v.topic_slug, v.source_hash, v.rendered_source_hash, v.mp4_blob_key,
       v.duration_seconds, v.updated_at, b.bytes as mp4_bytes, b.sha256 as mp4_sha256,
       (select array_agg(c.concept_slug order by c.concept_slug) from asset_concept c
-        where c.asset_id = ${VIDEO_PREFIX} || v.slug) as concepts,
+        join concept k on k.slug = c.concept_slug
+        where c.asset_id = ${VIDEO_PREFIX} || v.slug${andOwnedBy(sql`k.owner_id`, scope.readable)}) as concepts,
       p.id as poster_id, p.blob_key as poster_key,
-      exists (select 1 from asset t where t.id = ${VIDEO_PREFIX} || v.slug || '.transcript.json') as narrated,
+      exists (
+        select 1 from asset t where t.id = ${VIDEO_PREFIX} || v.slug || '.transcript.json'${andOwnedBy(sql`t.owner_id`, scope.readable)}
+      ) as narrated,
       rev.id as revision, rev.job_id as revision_job
       ${withSource ? sql`, v.source` : sql``}
     from video v
     left join blob_object b on b.key = v.mp4_blob_key
-    left join asset p on p.id = ${POSTER_PREFIX} || ${VIDEO_PREFIX} || v.slug
+    left join asset p on p.id = ${POSTER_PREFIX} || ${VIDEO_PREFIX} || v.slug${andOwnedBy(sql`p.owner_id`, scope.readable)}
     left join lateral (
       select id, job_id from content_revision
       where entity_type = 'video' and entity_id = v.slug
@@ -790,15 +879,20 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
   const studio = (await studioRows(db, scope)).map(studioSummary);
   const { rows } = await db.execute<ManimkcRow>(sql`
     select a.id, a.title, a.blob_key, a.bytes, a.content_hash, a.updated_at,
-      (select min(t.topic_slug) from asset_topic t where t.asset_id = a.id) as topic,
-      (select array_agg(c.concept_slug order by c.concept_slug) from asset_concept c where c.asset_id = a.id) as concepts,
+      (select min(t.topic_slug) from asset_topic t join topic o on o.slug = t.topic_slug
+        where t.asset_id = a.id${andOwnedBy(sql`o.owner_id`, scope.readable)}) as topic,
+      (select array_agg(c.concept_slug order by c.concept_slug) from asset_concept c join concept k on k.slug = c.concept_slug
+        where c.asset_id = a.id${andOwnedBy(sql`k.owner_id`, scope.readable)}) as concepts,
       p.id as poster_id, p.blob_key as poster_key,
       exists (
         select 1 from asset_derivation d join asset s on s.id = d.asset_id
-        where d.source_asset_id = a.id and s.kind = 'transcript'
+        where d.source_asset_id = a.id and s.kind = 'transcript'${andOwnedBy(sql`s.owner_id`, scope.readable)}
       ) as narrated
     from asset a
-    left join asset p on p.id = ${POSTER_PREFIX} || a.id
+    -- Scoped at the far end as the row is: a poster another owner holds (an
+    -- owner move done for the video and not its poster) is absent here, not
+    -- served by its key.
+    left join asset p on p.id = ${POSTER_PREFIX} || a.id${andOwnedBy(sql`p.owner_id`, scope.readable)}
     where a.kind = 'video' and starts_with(a.id, ${ASSET_PREFIX.manimkc})${andOwnedBy(sql`a.owner_id`, scope.readable)}
     order by a.id
   `);
@@ -911,31 +1005,36 @@ export async function checkoutVideo(
       throw new VideoError("unreadable", `the stored source of ${slug} names "${name}", which is not a file name a checkout writes.`);
     }
   }
-  await mkdir(base, { recursive: true });
-  const files: VideoCheckoutResult["files"] = [];
-  let written = false;
+  // Every destination is judged before any is written, so a conflict on a
+  // later file never leaves the earlier ones replaced: a refusal writes
+  // nothing at all.
+  const plan: { name: string; file: string; bytes: Buffer; write: boolean }[] = [];
+  const conflicts: string[] = [];
   for (const [name, text] of planned) {
     const file = path.join(base, name);
     const bytes = Buffer.from(text, "utf8");
     const here = await lstat(file).catch(() => null);
-    if (here !== null) {
-      const same = here.isFile() && (await readFile(file)).equals(bytes);
-      if (!same && options.force !== true) {
-        throw new VideoError(
-          "dirty-checkout",
-          `${file} is already there with other contents, so it was left as it is. Pass --force to replace it.`,
-        );
-      }
-      if (!same) {
-        await rm(file, { force: true });
-        await writeAtomic(file, bytes);
-        written = true;
-      }
-    } else {
-      await writeAtomic(file, bytes);
+    const same = here !== null && here.isFile() && (await readFile(file)).equals(bytes);
+    if (here !== null && !same && options.force !== true) conflicts.push(file);
+    plan.push({ name, file, bytes, write: !same });
+  }
+  if (conflicts.length > 0) {
+    throw new VideoError(
+      "dirty-checkout",
+      `${conflicts.join(" and ")} ${conflicts.length === 1 ? "is" : "are"} already there with other contents, so ` +
+        `nothing was written. Pass --force to replace ${conflicts.length === 1 ? "it" : "them"}.`,
+    );
+  }
+  await mkdir(base, { recursive: true });
+  const files: VideoCheckoutResult["files"] = [];
+  let written = false;
+  for (const entry of plan) {
+    if (entry.write) {
+      await rm(entry.file, { force: true });
+      await writeAtomic(entry.file, entry.bytes);
       written = true;
     }
-    files.push({ name, path: file, bytes: bytes.length, sha256: sha256(bytes) });
+    files.push({ name: entry.name, path: entry.file, bytes: entry.bytes.length, sha256: sha256(entry.bytes) });
   }
   return {
     ok: true,

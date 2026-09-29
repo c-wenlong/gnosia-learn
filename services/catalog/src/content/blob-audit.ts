@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import type { BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, diagram } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, diagram, video } from "@self-learn/schema";
 import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -30,7 +30,7 @@ import {
  * | `missing`, `corrupt` | A `present` row whose object is gone, or whose bytes no longer hash to its key | the row goes back to `pending`, so its asset answers `not-uploaded` until the upload reruns |
  * | `stale-pending` | A `pending` row a day old with no object behind it and no asset or diagram pointing at it | the row is deleted |
  * | `pending` | Any other `pending` row: an upload that has not finished, or one the audit sent back | none; rerun the upload |
- * | `unreferenced` | A `present` row no asset or diagram points at: the old bytes of something re-rendered | none; listed so it can be seen |
+ * | `unreferenced` | A `present` row no asset, diagram or studio video points at: the old bytes of something re-rendered, or the blobs of a `video put` whose transaction was refused | none; listed so it can be seen, and still counted toward the owner's byte cap |
  * | `orphan-poster` | A poster asset derived from no video: its video was pruned, or the upload unhooked it from a re-render it could not cut a new poster for | none; the next upload with ffmpeg makes and hooks up a new one |
  * | `partial` | A staged write under `<root>/.tmp` a day old: an upload a crash stopped before its rename | deleted |
  *
@@ -145,6 +145,15 @@ export async function auditBlobs(
     .from(diagram)
     .where(isNotNull(diagram.svgBlobKey))) {
     if (key !== null) referenced.add(key);
+  }
+  // A studio video's cut is named by its row as well as its asset (0015), so
+  // a row that holds a key is enough for the key to be in use. Asked only
+  // where the table exists: the audit runs on a database behind the journal.
+  const { rows: hasVideo } = await db.execute<{ present: boolean }>(sql`select to_regclass('public.video') is not null as present`);
+  if (hasVideo[0]?.present === true) {
+    for (const { key } of await db.select({ key: video.mp4BlobKey }).from(video).where(isNotNull(video.mp4BlobKey))) {
+      if (key !== null) referenced.add(key);
+    }
   }
 
   // 1. Objects the table does not know.
