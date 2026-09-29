@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { formatTimecode } from "@/components/media";
 import { JobLog } from "@/components/studio/JobPanel";
-import { useNow } from "@/components/studio/JobStrip";
+import { Duration } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
@@ -13,7 +13,8 @@ import { cx, LABEL } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
-import { formatDuration, isActive, narration, type StudioEvent } from "@/lib/studio-jobs";
+import { isActive, narration, type StudioEvent } from "@/lib/studio-jobs";
+import { useElapsed } from "@/lib/use-elapsed";
 import {
   changedLines,
   changeProblem,
@@ -151,13 +152,6 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
 /* The status line                                                            */
 /* -------------------------------------------------------------------------- */
 
-function elapsed(job: VideoJob, now: number): number {
-  const from = Date.parse(job.started ?? job.requested);
-  if (!Number.isFinite(from)) return 0;
-  const to = job.finished === null ? now : Date.parse(job.finished);
-  return Math.max(0, (Number.isFinite(to) ? to : now) - from);
-}
-
 /**
  * What the job is doing, the step count, the time and the cost, and Cancel.
  * The headline is a live region, so a screen reader hears each new step.
@@ -166,15 +160,16 @@ function StatusLine({ job }: { job: VideoJob }) {
   const { post } = useStudioJobs();
   const [cancelling, setCancelling] = useState(false);
   const live = job.state === "running" || job.state === "queued";
-  const now = useNow(live);
+  // Null until hydrated, so the server's second is never matched against the browser's.
+  const elapsed = useElapsed(job);
   const step = videoStepCount(job);
   const stopping = cancelling || job.cancelRequestedAt !== null;
   const model = job.resolvedModel ?? job.agentModel?.passed ?? null;
-  const facts = [
+  const facts: ReactNode[] = [
     step,
-    job.state === "queued" ? null : formatDuration(elapsed(job, now)),
+    job.state === "queued" ? null : <Duration key="time" ms={elapsed} live={live} />,
     job.attempt > 1 ? `Attempt ${job.attempt}` : null,
-  ].filter((part): part is string => part !== null && part !== "");
+  ].filter((part) => part !== null && part !== "");
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
@@ -184,7 +179,12 @@ function StatusLine({ job }: { job: VideoJob }) {
           {headline(job)}
         </p>
         <p className="truncate text-[13px] tabular-nums text-text2">
-          {facts.join(" · ")}
+          {facts.map((part, at) => (
+            <Fragment key={at}>
+              {at > 0 ? " · " : ""}
+              {part}
+            </Fragment>
+          ))}
           {job.costUsd !== null && (
             <>
               {facts.length > 0 ? " · " : ""}

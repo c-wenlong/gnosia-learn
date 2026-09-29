@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { useNow } from "@/components/studio/JobStrip";
+import { Duration } from "@/components/studio/JobStrip";
 import { Chip } from "@/components/studio/StudioChrome";
 import { useSheets } from "@/components/studio/video/use-video-job";
-import { formatDuration } from "@/lib/studio-jobs";
+import { useElapsed } from "@/lib/use-elapsed";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
 import { extendKey, forgetExtendKey, sessionStore } from "@/lib/studio-extend";
 import {
@@ -462,30 +462,31 @@ function Status({ job, stage, headline, path }: { job: VideoJob; stage: VideoTil
   );
 }
 
-function elapsedOf(job: VideoJob, now: number): number {
-  const from = Date.parse(job.started ?? job.requested);
-  if (!Number.isFinite(from)) return 0;
-  const to = job.finished === null ? now : Date.parse(job.finished);
-  return Math.max(0, (Number.isFinite(to) ? to : now) - from);
-}
-
 function StepAndTime({ job }: { job: VideoJob }) {
-  const now = useNow(job.finished === null);
+  // Null until hydrated, so the server's second is never matched against the browser's.
+  const elapsed = useElapsed(job);
   const step = videoStepCount(job);
-  const time = job.state === "queued" ? "" : formatDuration(elapsedOf(job, now));
-  const text = [step, time].filter((part) => part !== null && part !== "").join(" · ");
-  return <span className="block truncate tabular-nums text-[var(--muted)]">{text === "" ? "Video" : text}</span>;
+  const timed = job.state !== "queued";
+  return (
+    <span className="block truncate tabular-nums text-[var(--muted)]">
+      {step === null && !timed ? "Video" : step}
+      {step !== null && timed ? " · " : ""}
+      {timed && <Duration ms={elapsed} live={job.finished === null} />}
+    </span>
+  );
 }
 
 function RowWords({ job }: { job: VideoJob }) {
   const stage = videoTileStage(job);
-  const now = useNow(job.finished === null);
+  const elapsed = useElapsed(job);
   return (
     <span className={`flex min-w-0 max-w-full items-center gap-1.5 ${stage === "failed" ? "text-[var(--danger)]" : "text-[var(--muted-strong)]"}`}>
       <Dot stage={stage} />
       <span className="min-w-0 truncate">{stage === "failed" ? videoFailureLine(job) : videoHeadline(job)}</span>
       {stage === "working" && job.state !== "queued" && (
-        <span className="shrink-0 tabular-nums text-[var(--muted)]">{formatDuration(elapsedOf(job, now))}</span>
+        <span className="shrink-0 text-[var(--muted)]">
+          <Duration ms={elapsed} live={job.finished === null} />
+        </span>
       )}
     </span>
   );

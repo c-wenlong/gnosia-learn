@@ -345,7 +345,7 @@ export function phaseWords(job: Job): string {
 /* -------------------------------------------------------------------------- */
 
 /** How long the job has been going, counting up, stopping when it stops. */
-export function elapsedMs(job: Job, now: number = Date.now()): number {
+export function elapsedMs(job: Pick<Job, "started" | "requested" | "finished">, now: number = Date.now()): number {
   const from = Date.parse(job.started ?? job.requested);
   if (!Number.isFinite(from)) return 0;
   const to = job.finished === null ? now : Date.parse(job.finished);
