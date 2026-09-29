@@ -338,7 +338,7 @@ describe("what a failure says", () => {
     expect(`${report.headline} ${report.detail}`).not.toMatch(/\/Users|jobs\/|candidate\/|\.tldr/);
     expect(report.detail).toContain("Nothing was written to the job's drawing.");
     expect(failureFooter(failed)).not.toMatch(/learn\/assets|\.tldr/);
-    expect(failureFooter(failed)).toContain("Nothing in the catalog changed.");
+    expect(failureFooter(failed)).toContain("Nothing in the catalog changed");
     // The relative form the catalog stores, and an SVG beside it.
     const relative = failureReport(job({ state: "failed", errorKind: "timeout", error: "stopped before jobs/j1/candidate/x.svg was exported" }));
     expect(relative.detail).toBe("stopped before the job's picture was exported");

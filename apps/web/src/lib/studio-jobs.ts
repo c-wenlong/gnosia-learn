@@ -568,7 +568,7 @@ export function failureFooter(job: Job): string {
     default:
       // `gate`, `wrote-outside`, and a record with no kind at all, which is
       // what a gate failure looked like before kinds were written.
-      return `${unchanged} The agent's permission file never allowed it.`;
+      return "Nothing in the catalog changed: the agent's permission file does not let it write there.";
   }
 }
 
