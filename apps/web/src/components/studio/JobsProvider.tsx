@@ -87,7 +87,16 @@ interface JobsValue {
    * from yesterday is history, not news.
    */
   lastWatched: string | null;
-  /** Dismissed terminal jobs, so a finished strip can be put away. */
+  /**
+   * Every job this tab saw stop running, in the order it saw them.
+   *
+   * `lastWatched` is one job, the active one; the grid can show several at
+   * once (a queued job and a running one, a failure beside a new job), and a
+   * failed card stays until it is dismissed only when this tab watched it
+   * fail. Yesterday's failures are not in here, which is the point.
+   */
+  ended: string[];
+  /** Dismissed terminal jobs, so a finished strip or card can be put away. */
   dismissed: string[];
   dismiss: (jobId: string) => void;
 }
@@ -119,6 +128,7 @@ export function JobsProvider({
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [lastWatched, setLastWatched] = useState<string | null>(null);
+  const [ended, setEnded] = useState<string[]>([]);
   /**
    * The events, tagged with the job they belong to.
    *
@@ -164,8 +174,18 @@ export function JobsProvider({
       if (!Array.isArray(body.jobs)) return;
       const next = body.jobs;
       const was = activeJob(previous.current);
+      const stopped = previous.current
+        .filter((before) => isActive(before.state))
+        .filter((before) => {
+          const now = next.find((job) => job.jobId === before.jobId);
+          return now !== undefined && !isActive(now.state);
+        })
+        .map((before) => before.jobId);
       previous.current = next;
       setJobs(next);
+      if (stopped.length > 0) {
+        setEnded((held) => [...held, ...stopped.filter((id) => !held.includes(id))]);
+      }
       if (was !== null) {
         const now = next.find((job) => job.jobId === was.jobId);
         if (now !== undefined && !isActive(now.state)) setLastWatched(was.jobId);
@@ -293,10 +313,11 @@ export function JobsProvider({
       refresh,
       post,
       lastWatched,
+      ended,
       dismissed,
       dismiss: (jobId: string) => setDismissed((held) => (held.includes(jobId) ? held : [...held, jobId])),
     }),
-    [jobs, active, watching, events, connection, streamEnabled, refresh, post, lastWatched, dismissed],
+    [jobs, active, watching, events, connection, streamEnabled, refresh, post, lastWatched, ended, dismissed],
   );
 
   return <JobsContext.Provider value={value}>{children}</JobsContext.Provider>;
