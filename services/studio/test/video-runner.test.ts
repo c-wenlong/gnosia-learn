@@ -35,7 +35,7 @@ const catalogMock = vi.hoisted(() => ({
 }));
 vi.mock("../src/catalog", () => catalogMock);
 
-const { VideoRunner, stillWorking } = await import("../src/video/runner");
+const { VideoRunner, stillWorking, IN_FLIGHT_MAX_MS } = await import("../src/video/runner");
 const { acceptVideo, discardVideo } = await import("../src/video/review");
 
 const ok = (json: unknown = {}) => ({ ok: true, json, error: null, offline: false });
@@ -83,17 +83,37 @@ describe("the hang timer's question", () => {
     const render = path.join(job, "render", "out");
     await mkdir(render, { recursive: true });
     const calls = path.join(job, "calls.ndjson");
+    const inflight = path.join(job, "inflight");
     const hangMs = 20 * 60_000;
     // A scene that keeps touching a file: fresh, and still not the agent.
     await writeFile(path.join(render, "partial.mp4"), "x");
-    expect(await stillWorking({ calls }, hangMs)).toBe(false);
+    expect(await stillWorking({ calls, inflight }, hangMs)).toBe(false);
     const call = (endedAt: number) => `${JSON.stringify({ verb: "preview", startedAt: new Date(endedAt - 1000).toISOString(), endedAt: new Date(endedAt).toISOString(), exitCode: 0 })}\n`;
     await writeFile(calls, call(Date.now() - hangMs - 60_000));
-    expect(await stillWorking({ calls }, hangMs)).toBe(false);
+    expect(await stillWorking({ calls, inflight }, hangMs)).toBe(false);
     await writeFile(calls, call(Date.now() - 60_000), { flag: "a" });
-    expect(await stillWorking({ calls }, hangMs)).toBe(true);
+    expect(await stillWorking({ calls, inflight }, hangMs)).toBe(true);
     // And once the window has passed that call, it no longer counts.
-    expect(await stillWorking({ calls }, hangMs, Date.now() + hangMs)).toBe(false);
+    expect(await stillWorking({ calls, inflight }, hangMs, Date.now() + hangMs)).toBe(false);
+  });
+
+  it("counts a call still rendering however short the window, up to the Bash tool's ceiling", async () => {
+    const job = path.join(home, "jobs", "hang-inflight");
+    const calls = path.join(job, "calls.ndjson");
+    const inflight = path.join(job, "inflight");
+    await mkdir(inflight, { recursive: true });
+    const hangMs = 30_000;
+    // A preview five minutes in, with the window at its 30 second minimum:
+    // no call has ended, and the render is not a hang.
+    await writeFile(path.join(inflight, "4242.json"), JSON.stringify({ verb: "preview", startedAt: new Date(Date.now() - 5 * 60_000).toISOString() }));
+    expect(await stillWorking({ calls, inflight }, hangMs)).toBe(true);
+    // A marker older than the Bash tool's ceiling is a call the tool already killed.
+    expect(await stillWorking({ calls, inflight }, hangMs, Date.now() + IN_FLIGHT_MAX_MS)).toBe(false);
+    // Anything else in the directory counts for nothing.
+    await rm(path.join(inflight, "4242.json"));
+    await writeFile(path.join(inflight, "note.txt"), JSON.stringify({ startedAt: new Date().toISOString() }));
+    await writeFile(path.join(inflight, "7.json"), "{half");
+    expect(await stillWorking({ calls, inflight }, hangMs)).toBe(false);
   });
 });
 

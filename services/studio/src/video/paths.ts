@@ -12,6 +12,7 @@ import { jobDir } from "../paths";
  *     job.json, session.ndjson, brief.json   the runner's records
  *     agent-settings.json                    the permission file
  *     calls.ndjson                           one line per wrapper call, the wrapper's
+ *     inflight/<pid>.json                    a wrapper call that has started and not ended
  *     reads.ndjson                           every sheet Read the stream showed, the runner's
  *     bin/video                              the wrapper
  *     render.sb, narrate.sb, gate.sb         the three sandbox profiles
@@ -39,6 +40,7 @@ export interface VideoPaths {
   bin: string;
   wrapper: string;
   calls: string;
+  inflight: string;
   reads: string;
   brief: string;
   settings: string;
@@ -87,6 +89,7 @@ export function videoPaths(jobId: string, slug: string): VideoPaths {
     bin: path.join(job, "bin"),
     wrapper: path.join(job, "bin", "video"),
     calls: path.join(job, "calls.ndjson"),
+    inflight: path.join(job, "inflight"),
     reads: path.join(job, "reads.ndjson"),
     brief: path.join(job, "brief.json"),
     settings: path.join(job, "agent-settings.json"),

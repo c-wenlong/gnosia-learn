@@ -117,7 +117,7 @@ path, the cost meter and the cap.
 | Agent's one command | `npm run --silent canvas` | the job's own wrapper, `jobs/<id>/bin/video` (D45) |
 | Where agent-written code runs | nowhere: a snippet runs in tldrawkc's browser page | inside a per-job OS sandbox (D44) |
 | Workspace | `jobs/<id>/candidate/`, `scratch/` | `jobs/<id>/checkout/` (a synthetic manimkc checkout) and `render/` (D46) |
-| Timers | 15 min attempt, 45 min job, 5 min idle | one hang timer: 20 min with no agent output and no wrapper call ending (a guess); no attempt or job timer (D54, amended) |
+| Timers | 15 min attempt, 45 min job, 5 min idle | one hang timer: 20 min with no agent output, no wrapper call ending and none running (a guess); no attempt or job timer (D54, amended) |
 | Gate | candidate, inspect, elements and relations, topic, export, verify | source, lint, script and labels, topic, the finished video, sync, length, poster, looked; it reads the agent's build and renders nothing itself |
 | Model and effort | the brief's `model`, `sonnet` by default | the settings panel, the owner's Claude Code default by default (D53) |
 | Accept | `catalog diagram put --job` | `catalog video put --job` |
@@ -1252,7 +1252,7 @@ limit. What remains:
 | Guard | Value | Why |
 | --- | --- | --- |
 | The daily cap | `STUDIO_DAILY_USD`, unset by default. When the owner sets it, a video job and a video planner turn count like any job and turn, in the same window, and a job already running is never stopped | One cap, as D27 and D36; no new limit for videos |
-| Hang timer | 20 minutes with no line from the agent and no wrapper call ending (a line in `calls.ndjson`), then the job is stopped as `timeout` | The only timer (D54, amended). A render runs inside one Bash call, which the tool ends at 600 s and then answers on the stream, so a long render is not a hang. Files under `render/` do not count: a scene writes them, so a scene touching one kept a hung session alive forever (the review of #201). 20 minutes is a guess |
+| Hang timer | 20 minutes with no line from the agent, no wrapper call ending (a line in `calls.ndjson`) and none still running (a marker in `inflight/`, counted for at most the Bash tool's 600 s ceiling plus a minute), then the job is stopped as `timeout` | The only timer (D54, amended). A render runs inside one Bash call, which the tool ends at 600 s and then answers on the stream, so a long render is not a hang, even with `STUDIO_VIDEO_HANG_MS` set below one call's length. Files under `render/` do not count: a scene writes them, so a scene touching one kept a hung session alive forever (the review of #201). 20 minutes is a guess |
 | Attempts | three, as for diagrams: a gate failure resumes the agent with the findings | A retry policy, not a limit on work within an attempt |
 | `--max-turns` | not passed; `STUDIO_VIDEO_MAX_TURNS` exists for the owner to set | No limit by default, as a hand-run session has none |
 | Concurrency | one video job, independent of the diagram runner's one | A correctness choice, not a cost one: scenes already render in parallel inside a job, `min(cores / 3, (RAM - 2 GB) / 1.5 GB, 4)`, 4 on this machine, from manimkc's measured 930 MB and three cores per 1080p scene |
@@ -1561,9 +1561,11 @@ owner's when the skill is run by hand.
 now a wrapper call ending inside the window, not a file written under
 `render/`. A scene writes under `render/`, so a scene that touched a file in
 a loop kept a hung session alive forever; only the agent can add a line to
-`calls.ndjson`, which sits outside everything a profile may write. A render
-still cannot trip it, since the Bash tool ends a call at 600 s, well inside
-the 20 minutes, and answers on the stream.
+`calls.ndjson`, which sits outside everything a profile may write. A call
+still running counts too: the wrapper writes `inflight/<pid>.json` when it
+starts and removes it when it ends, and a marker counts for at most the Bash
+tool's 600 s ceiling plus a minute, so a render is never a hang whatever
+`STUDIO_VIDEO_HANG_MS` is set to, and a killed wrapper's marker expires.
 
 **Why:** rendering is dynamic (code written, compiled, a local model started,
 scenes stitched), and a list of failures in the runner would always be a list

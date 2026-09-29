@@ -1025,9 +1025,41 @@ export function agentActive(calls: readonly { endedAt?: string }[], now: number,
   });
 }
 
-/** The hang timer's question for one job, asked when the stream has been silent for `hangMs`. */
-export async function stillWorking(paths: Pick<VideoPaths, "calls">, hangMs: number, now: number = Date.now()): Promise<boolean> {
-  return agentActive(await readCalls(paths.calls), now, hangMs);
+/**
+ * How long a started wrapper call counts as working: the Bash tool's own
+ * ceiling on one call, and a minute for the wrapper to notice. A marker older
+ * than that belongs to a call the tool already ended (a killed wrapper cannot
+ * remove its own), so it counts for nothing.
+ */
+export const IN_FLIGHT_MAX_MS = BASH_TIMEOUT_MS + 60_000;
+
+/** The start times of the wrapper calls that have started and not ended. */
+export async function inFlight(directory: string): Promise<number[]> {
+  const names = await readdir(directory).catch(() => [] as string[]);
+  const starts: number[] = [];
+  for (const name of names) {
+    if (!/^[0-9]+\.json$/.test(name)) continue;
+    const body = await readFile(path.join(directory, name), "utf8").catch(() => "");
+    try {
+      const started = Date.parse((JSON.parse(body) as { startedAt?: string }).startedAt ?? "");
+      if (Number.isFinite(started)) starts.push(started);
+    } catch {
+      /* half-written: the next check reads it */
+    }
+  }
+  return starts;
+}
+
+/**
+ * The hang timer's question for one job, asked when the stream has been
+ * silent for `hangMs`: a wrapper call ended inside the window, or one is still
+ * running (a render, which the stream shows nothing of until it ends). The
+ * second holds whatever `STUDIO_VIDEO_HANG_MS` is set to, bounded by the Bash
+ * tool's ceiling rather than by the window (Greptile on #201).
+ */
+export async function stillWorking(paths: Pick<VideoPaths, "calls" | "inflight">, hangMs: number, now: number = Date.now()): Promise<boolean> {
+  if (agentActive(await readCalls(paths.calls), now, hangMs)) return true;
+  return (await inFlight(paths.inflight)).some((started) => started > now - IN_FLIGHT_MAX_MS);
 }
 
 /** One wrapper call, as the narration log says it (D24). */

@@ -25,9 +25,9 @@ export const VIDEO_CONCURRENCY = integer("STUDIO_VIDEO_CONCURRENCY", 1, 1, 1);
 
 /**
  * The only timer (D54, amended): this long with no line from the agent
- * **and** no wrapper call ending. A render runs inside one Bash call, which
- * the tool ends at 600 s and answers on the stream, so a long render is not a
- * hang. Files under `render/` do not count, since a scene writes them.
+ * **and** no wrapper call ending or still running (`inflight/`, counted for
+ * at most the Bash tool's 600 s ceiling). A render runs inside one Bash call,
+ * so a long render is not a hang, whatever this is set to. Files under `render/` do not count, since a scene writes them.
  * Twenty minutes is a guess, to be reset against the first ten real jobs
  * (phase 3).
  */

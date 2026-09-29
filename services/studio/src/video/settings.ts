@@ -100,7 +100,7 @@ export function buildVideoSettings(input: VideoSettingsInput): VideoAgentSetting
     rule("Edit", paths.lib, "/**"),
     rule("Edit", paths.render, "/**"),
     // This job's records, profiles and wrapper: not the agent's to read or rewrite.
-    ...[paths.bin, paths.candidate, paths.source, paths.clips, paths.rejected].flatMap((dir) => [rule("Read", dir, "/**"), rule("Edit", dir, "/**")]),
+    ...[paths.bin, paths.inflight, paths.candidate, paths.source, paths.clips, paths.rejected].flatMap((dir) => [rule("Read", dir, "/**"), rule("Edit", dir, "/**")]),
     ...[
       paths.calls,
       paths.reads,

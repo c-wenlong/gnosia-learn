@@ -54,6 +54,8 @@ export interface WrapperConfig {
   sceneFile: string;
   topicDir: string;
   calls: string;
+  /** Where a call marks itself started, removed when it ends: the hang timer's view of a render in progress. */
+  inflight: string;
   profiles: { render: string; narrate: string };
   env: { render: Record<string, string>; narrate: Record<string, string> };
   scenes: string[];
@@ -84,6 +86,7 @@ export function wrapperConfig(input: {
     sceneFile: paths.sceneFile,
     topicDir: paths.topicDir,
     calls: paths.calls,
+    inflight: paths.inflight,
     profiles: { render: paths.renderProfile, narrate: paths.narrateProfile },
     env: { render: sandboxEnv("render", envInput), narrate: sandboxEnv("narrate", envInput) },
     scenes: input.scenes,
@@ -189,6 +192,21 @@ function main(argv) {
 
   const startedAt = now();
   const startMs = Date.now();
+  // Started and not ended: a render in progress, which the hang timer counts
+  // as the agent working (a line in calls.ndjson comes only at the end).
+  const marker = CONFIG.inflight + "/" + process.pid + ".json";
+  try {
+    fs.mkdirSync(CONFIG.inflight, { recursive: true, mode: 0o755 });
+    fs.writeFileSync(marker, JSON.stringify({ verb, startedAt }) + "\n", { mode: 0o644 });
+  } catch { /* the hang timer then sees silence, which is the old behaviour */ }
+  try {
+    return run(verb, rest, startedAt, startMs);
+  } finally {
+    try { fs.unlinkSync(marker); } catch { /* already gone */ }
+  }
+}
+
+function run(verb, rest, startedAt, startMs) {
   const sceneSha256 = hashScene();
   const steps = [];
   const needsVoice = CONFIG.narrated && (verb === "narrate" || verb === "preview" || verb === "build");

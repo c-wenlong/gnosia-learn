@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { rebasePaths } from "../src/video/checkout";
+import { stillWorking } from "../src/video/runner";
 import { videoPaths, type VideoPaths } from "../src/video/paths";
 import { writeWrapper, type WrapperConfig } from "../src/video/wrapper";
 
@@ -44,6 +45,7 @@ async function config(): Promise<WrapperConfig> {
     sceneFile: paths.sceneFile,
     topicDir: paths.topicDir,
     calls: paths.calls,
+    inflight: paths.inflight,
     profiles: { render: paths.renderProfile, narrate: paths.narrateProfile },
     env: { render: { PATH: "/usr/bin:/bin", MANIMKC_HOME: paths.render }, narrate: { PATH: "/usr/bin:/bin", HF_HUB_OFFLINE: "1" } },
     scenes: ["TB1_WhyItMatters", "TB2_Recap"],
@@ -120,6 +122,27 @@ describe.skipIf(process.platform !== "darwin")("the wrapper", () => {
     const [line] = (await readFile(paths.calls, "utf8")).trim().split("\n").map((entry) => JSON.parse(entry) as Record<string, unknown>);
     expect(line).toMatchObject({ verb: "preview", scenes: ["TB2_Recap"], exitCode: 0, rendered: [] });
     expect(line?.sceneSha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("marks a call in flight while it renders, so a short hang window does not read it as silence", async () => {
+    // A render that takes a second and a half, against a 100 ms window.
+    const slow = path.join(root, "slow-sandbox-exec");
+    await writeFile(slow, `#!${process.execPath}\nsetTimeout(() => {}, 1500);\n`, "utf8");
+    await chmod(slow, 0o755);
+    await writeWrapper(process.execPath, paths, { ...(await config()), sandboxExec: slow });
+    const call = video(["lint"]);
+    let seen = false;
+    for (let waited = 0; waited < 1200 && !seen; waited += 50) {
+      seen = (await readdir(paths.inflight).catch(() => [] as string[])).length > 0;
+      if (!seen) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(seen).toBe(true);
+    expect(await readFile(paths.calls, "utf8").catch(() => "")).toBe("");
+    expect(await stillWorking(paths, 100)).toBe(true);
+    expect((await call).code).toBe(0);
+    // Ended: the marker is gone and the call's line is in calls.ndjson.
+    expect(await readdir(paths.inflight)).toEqual([]);
+    expect(await stillWorking(paths, 100, Date.now() + 1_000)).toBe(false);
   });
 
   it("builds the whole topic with --no-register, since a job checkout has no README to register in", async () => {
