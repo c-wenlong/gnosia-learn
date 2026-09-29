@@ -1033,19 +1033,31 @@ export function agentActive(calls: readonly { endedAt?: string }[], now: number,
  */
 export const IN_FLIGHT_MAX_MS = BASH_TIMEOUT_MS + 60_000;
 
-/** The start times of the wrapper calls that have started and not ended. */
+/**
+ * The start times of the wrapper calls that have started and not ended.
+ *
+ * The wrapper writes a marker whole and renames it into place, but a marker
+ * that is there and does not parse still counts, dated by its own
+ * modification time: stopping a healthy render over a read that raced a
+ * write is the worse mistake, and the expiry still ends it (Greptile on
+ * #201). Only an old malformed marker is ignored, by that same expiry.
+ */
 export async function inFlight(directory: string): Promise<number[]> {
   const names = await readdir(directory).catch(() => [] as string[]);
   const starts: number[] = [];
   for (const name of names) {
     if (!/^[0-9]+\.json$/.test(name)) continue;
-    const body = await readFile(path.join(directory, name), "utf8").catch(() => "");
+    const file = path.join(directory, name);
+    const facts = await lstat(file).catch(() => null);
+    if (facts === null || !facts.isFile()) continue;
+    const body = await readFile(file, "utf8").catch(() => "");
+    let started = Number.NaN;
     try {
-      const started = Date.parse((JSON.parse(body) as { startedAt?: string }).startedAt ?? "");
-      if (Number.isFinite(started)) starts.push(started);
+      started = Date.parse((JSON.parse(body) as { startedAt?: string }).startedAt ?? "");
     } catch {
-      /* half-written: the next check reads it */
+      /* unreadable: dated by the file below */
     }
+    starts.push(Number.isFinite(started) ? started : facts.mtimeMs);
   }
   return starts;
 }

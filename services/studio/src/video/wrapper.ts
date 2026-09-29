@@ -194,10 +194,14 @@ function main(argv) {
   const startMs = Date.now();
   // Started and not ended: a render in progress, which the hang timer counts
   // as the agent working (a line in calls.ndjson comes only at the end).
+  // Written whole to a temporary name in the same directory, then renamed,
+  // so the hang check never finds it half-written.
   const marker = CONFIG.inflight + "/" + process.pid + ".json";
+  const pending = CONFIG.inflight + "/." + process.pid + ".json.tmp";
   try {
     fs.mkdirSync(CONFIG.inflight, { recursive: true, mode: 0o755 });
-    fs.writeFileSync(marker, JSON.stringify({ verb, startedAt }) + "\n", { mode: 0o644 });
+    fs.writeFileSync(pending, JSON.stringify({ verb, startedAt }) + "\n", { mode: 0o644 });
+    fs.renameSync(pending, marker);
   } catch { /* the hang timer then sees silence, which is the old behaviour */ }
   try {
     return run(verb, rest, startedAt, startMs);

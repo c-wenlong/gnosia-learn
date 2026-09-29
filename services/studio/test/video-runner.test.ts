@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -109,10 +109,19 @@ describe("the hang timer's question", () => {
     expect(await stillWorking({ calls, inflight }, hangMs)).toBe(true);
     // A marker older than the Bash tool's ceiling is a call the tool already killed.
     expect(await stillWorking({ calls, inflight }, hangMs, Date.now() + IN_FLIGHT_MAX_MS)).toBe(false);
-    // Anything else in the directory counts for nothing.
+    // Anything not named like a marker counts for nothing, the wrapper's
+    // temporary file included.
     await rm(path.join(inflight, "4242.json"));
     await writeFile(path.join(inflight, "note.txt"), JSON.stringify({ startedAt: new Date().toISOString() }));
+    await writeFile(path.join(inflight, ".7.json.tmp"), "{half");
+    expect(await stillWorking({ calls, inflight }, hangMs)).toBe(false);
+    // A marker read mid-write still counts while it is younger than the
+    // expiry: a race must not stop a healthy render.
     await writeFile(path.join(inflight, "7.json"), "{half");
+    expect(await stillWorking({ calls, inflight }, hangMs)).toBe(true);
+    // An old malformed one is ignored.
+    const old = new Date(Date.now() - IN_FLIGHT_MAX_MS - 60_000);
+    await utimes(path.join(inflight, "7.json"), old, old);
     expect(await stillWorking({ calls, inflight }, hangMs)).toBe(false);
   });
 });

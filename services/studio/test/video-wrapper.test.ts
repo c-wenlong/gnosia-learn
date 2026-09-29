@@ -137,6 +137,8 @@ describe.skipIf(process.platform !== "darwin")("the wrapper", () => {
       if (!seen) await new Promise((resolve) => setTimeout(resolve, 50));
     }
     expect(seen).toBe(true);
+    // Renamed into place whole: only the marker, never the temporary file.
+    expect((await readdir(paths.inflight)).every((name) => /^[0-9]+\.json$/.test(name))).toBe(true);
     expect(await readFile(paths.calls, "utf8").catch(() => "")).toBe("");
     expect(await stillWorking(paths, 100)).toBe(true);
     expect((await call).code).toBe(0);
