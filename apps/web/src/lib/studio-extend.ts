@@ -229,6 +229,19 @@ export function leaveOpener(storage: Storage | null, draftId: string, opener: Ex
 }
 
 /**
+ * Said on `window` after `leaveOpener`, for a conversation that is already
+ * on screen: its panel read its opener when it mounted and will not mount
+ * again, so the video job view's Change, shown inside that conversation,
+ * tells it there is a new one to take. `detail` is `{ draftId }`.
+ */
+export const OPENER_EVENT = "studio:opener";
+
+export function announceOpener(draftId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(OPENER_EVENT, { detail: { draftId } }));
+}
+
+/**
  * Read the opener once and remove it, so a reload of the conversation never
  * sends it a second time. Anything malformed is no opener.
  */

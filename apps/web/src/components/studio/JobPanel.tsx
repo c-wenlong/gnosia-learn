@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { ComparisonPanel } from "@/components/studio/ComparisonPanel";
 import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { VideoJobPanel } from "@/components/studio/video/VideoJobPanel";
 import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import {
   failureFooter,
@@ -42,7 +43,36 @@ import { conversationHref, extendFromHref, panelHref } from "@/lib/studio-view";
  * because "what did it do to get here" is the other half of deciding.
  */
 
-export function JobPanel({
+export function JobPanel(props: Parameters<typeof DiagramJobPanel>[0]) {
+  const { jobs } = useStudioJobs();
+  // A video job has its own view (docs/STUDIO-VIDEOS.md, "The job view"):
+  // its steps are the manimkc-video skill's, and its review is a player. The
+  // kind is read from the provider's row; a job older than its fifty, or not
+  // listed yet, is asked for by the video view itself when the id says video.
+  const row = jobs.find((entry) => entry.jobId === props.jobId);
+  const [probed, setProbed] = useState<{ id: string; kind: string | null } | null>(null);
+  useEffect(() => {
+    if (row !== undefined) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const response = await fetch(`/studio/api/jobs/${encodeURIComponent(props.jobId)}`, { cache: "no-store" });
+        const body = response.ok ? ((await response.json()) as { kind?: unknown }) : null;
+        if (alive) setProbed({ id: props.jobId, kind: typeof body?.kind === "string" ? body.kind : null });
+      } catch {
+        if (alive) setProbed({ id: props.jobId, kind: null });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [row, props.jobId]);
+  const kind = row?.kind ?? (probed?.id === props.jobId ? probed.kind : null);
+  if (kind === "video") return <VideoJobPanel jobId={props.jobId} path={props.path} inConversation={props.inConversation} />;
+  return <DiagramJobPanel {...props} />;
+}
+
+function DiagramJobPanel({
   jobId,
   path,
   embedded = false,
@@ -376,7 +406,7 @@ function Narration({ events, job }: { events: StudioEvent[]; job: Job }) {
  * for the tail — two small requests rather than one that could be tens of
  * megabytes of agent transcript.
  */
-function JobLog({
+export function JobLog({
   jobId,
   openByDefault,
   live,

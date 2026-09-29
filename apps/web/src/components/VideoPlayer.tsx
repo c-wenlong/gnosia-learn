@@ -77,6 +77,7 @@ export function VideoPlayer({
   onPlayback,
   header,
   tabs,
+  seekTo,
 }: {
   src: string;
   /** Where to ask why `src` failed. Without one a failure says it has no reason. */
@@ -96,6 +97,12 @@ export function VideoPlayer({
   header?: ReactNode;
   /** Sections after the transcript in the tabbed card under the header. */
   tabs?: TabItem[];
+  /**
+   * A jump asked for from outside the player, such as a chapter list beside
+   * it: each new `key` moves the playhead to `seconds` and plays. The key is
+   * what makes a second press on the same chapter a second jump.
+   */
+  seekTo?: { seconds: number; key: number };
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -141,6 +148,22 @@ export function VideoPlayer({
     setBuffered(0);
     setPaused(true);
   }
+
+  // A jump from outside. The element is moved directly; its own `seeked` and
+  // `timeupdate` events then bring the state along, as for any seek.
+  const seekKey = seekTo?.key;
+  const seekSeconds = seekTo?.seconds;
+  useEffect(() => {
+    if (seekKey === undefined || seekSeconds === undefined) return;
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      video.currentTime = Math.max(0, seekSeconds);
+    } catch {
+      // Before metadata: the play below loads it, and the reader can press again.
+    }
+    void video.play()?.catch(() => undefined);
+  }, [seekKey, seekSeconds]);
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === frameRef.current);

@@ -6,6 +6,9 @@ import {
   chapterTitle,
   CHANGE_LIMIT,
   filterVideos,
+  groupVideos,
+  sortVideos,
+  videoGroupKey,
   libraryHref,
   mediaHref,
   newestSheet,
@@ -397,5 +400,31 @@ describe("the grid", () => {
     expect(posterHref("poster:video:a b")).toBe("/api/assets/poster%3Avideo%3Aa%20b/poster");
     expect(libraryHref("attention-weights")).toBe("/library/video%3Aattention-weights");
     expect(mediaHref("j/1", "a.mp4")).toBe("/studio/api/jobs/j%2F1/media/a.mp4");
+  });
+});
+
+describe("videos among the grid's groups", () => {
+  const list = readVideos({
+    videos: [
+      { origin: "studio", slug: "old", assetId: "video:old", topic: "networking", updatedAt: "2026-09-01T00:00:00.000Z" },
+      { origin: "studio", slug: "new", assetId: "video:new", topic: "transformers", updatedAt: "2026-09-20T00:00:00.000Z" },
+      { origin: "studio", slug: "loose", assetId: "video:loose", topic: null, updatedAt: "2026-09-10T00:00:00.000Z" },
+    ],
+  });
+
+  it("puts the newest first", () => {
+    expect(sortVideos(list).map((video) => video.slug)).toEqual(["new", "loose", "old"]);
+  });
+
+  it("files each video where its topic's diagrams are, and makes a section for a topic with none", () => {
+    const { byGroup, extra } = groupVideos(list, "topic", ["networking"], new Map([["transformers", "Transformers"]]));
+    expect(byGroup.get("networking")?.map((video) => video.slug)).toEqual(["old"]);
+    expect(extra.map((entry) => `${entry.key}:${entry.label}`)).toEqual(["transformers:Transformers", "none:No topic"]);
+  });
+
+  it("keeps them in one group with no grouping, and by domain when asked", () => {
+    expect(groupVideos(list, "none", ["all"]).extra).toEqual([]);
+    expect(videoGroupKey(list[0]!, "domain", new Map([["networking", "networks"]]))).toBe("networks");
+    expect(videoGroupKey(list[1]!, "domain", new Map())).toBe("none");
   });
 });

@@ -880,3 +880,53 @@ export function filterVideos(videos: readonly VideoSummary[], view: { topics: re
     return [video.title ?? "", video.slug ?? "", video.topic ?? ""].some((field) => field.toLowerCase().includes(query));
   });
 }
+
+/** Newest first: the grid's order for studio videos, whose only date is the last write. */
+export function sortVideos(videos: readonly VideoSummary[]): VideoSummary[] {
+  return [...videos].sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
+}
+
+/**
+ * Which of the grid's groups a video sits in, keyed as `groupDiagrams` keys
+ * them: `all` with no grouping, else its topic or its topic's domain, `none`
+ * when it has neither.
+ */
+export function videoGroupKey(
+  video: Pick<VideoSummary, "topic">,
+  group: "none" | "topic" | "domain",
+  domains: ReadonlyMap<string, string> = new Map(),
+): string {
+  if (group === "none") return "all";
+  if (video.topic === null) return "none";
+  if (group === "topic") return video.topic;
+  return domains.get(video.topic) ?? "none";
+}
+
+/**
+ * The videos of each group, and the groups only videos are in, labelled as
+ * `groupDiagrams` labels, so a topic with a video and no diagram still has
+ * its section.
+ */
+export function groupVideos(
+  videos: readonly VideoSummary[],
+  group: "none" | "topic" | "domain",
+  diagramGroups: readonly string[],
+  titles: ReadonlyMap<string, string> = new Map(),
+  domains: ReadonlyMap<string, string> = new Map(),
+): { byGroup: Map<string, VideoSummary[]>; extra: { key: string; label: string; items: VideoSummary[] }[] } {
+  const byGroup = new Map<string, VideoSummary[]>();
+  for (const video of videos) {
+    const key = videoGroupKey(video, group, domains);
+    byGroup.set(key, [...(byGroup.get(key) ?? []), video]);
+  }
+  const known = new Set(diagramGroups);
+  const extra = [...byGroup.entries()]
+    .filter(([key]) => !known.has(key))
+    .map(([key, items]) => ({
+      key,
+      label: key === "all" ? "" : key === "none" ? (group === "topic" ? "No topic" : "No domain") : group === "topic" ? (titles.get(key) ?? key) : key,
+      items,
+    }))
+    .sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : a.label.localeCompare(b.label)));
+  return { byGroup, extra };
+}

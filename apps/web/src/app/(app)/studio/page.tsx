@@ -7,6 +7,7 @@ import { DraftsList } from "@/components/studio/DraftsList";
 import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { NewDiagramJobs } from "@/components/studio/GridJob";
+import { NewVideoJobs, VideoRow, VideoTile } from "@/components/studio/video/VideoGridJob";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { PlusCard } from "@/components/studio/PlusCard";
 import { DialogHeader, StudioDialog } from "@/components/studio/StudioDialog";
@@ -24,6 +25,7 @@ import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
 import type { DraftSummary } from "@/lib/studio-drafts";
+import { filterVideos, groupVideos, readVideos, sortVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   filterDiagrams,
@@ -128,13 +130,17 @@ export default async function StudioPage({
   // screen still browses and draws then. The runner answers from its D13 copy,
   // and with no copy at all the chips fall back to slugs and the banner below
   // says why.
-  const [listed, jobList, vocabulary, draftList] = await Promise.all([
+  const [listed, jobList, vocabulary, draftList, videoList] = await Promise.all([
     studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000 }),
     studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
     studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000 }),
     // The conversations to pick up again. A runner that cannot list them
     // costs the section, never the page.
     studioApi<{ drafts: DraftSummary[] }>(listPath()),
+    // The owner's studio videos (docs/STUDIO-VIDEOS.md, "API"). A runner
+    // without the route, or one that cannot read the catalog, costs the
+    // video tiles and nothing else.
+    studioApi<unknown>("/api/videos", { timeoutMs: 60_000 }),
   ]);
   const drafts = draftList.ok && Array.isArray(draftList.data.drafts) ? draftList.data.drafts : null;
   const topics = vocabulary.ok ? vocabularyTopics(vocabulary.data) : [];
@@ -153,6 +159,16 @@ export default async function StudioPage({
   const chips = topicChips(listing.diagrams, topicTitles, topicDomains);
   const visible = sortDiagrams(filterDiagrams(listing.diagrams, view), view);
   const groups = groupDiagrams(visible, view, topicTitles, topicDomains);
+  const allVideos = videoList.ok ? readVideos(videoList.data) : [];
+  const videoSlugs = allVideos.flatMap((video) => (video.slug === null ? [] : [video.slug]));
+  const shownVideos = sortVideos(filterVideos(allVideos, view));
+  const videoGroups = groupVideos(
+    shownVideos,
+    view.group,
+    groups.map((group) => group.key),
+    topicTitles,
+    topicDomains,
+  );
   const selected = listing.diagrams.find((entry) => entry.name === view.selected) ?? null;
   const allJobs = jobList.ok ? jobList.data.jobs : [];
   const jobs = allJobs.filter((job) => selected !== null && job.target === selected.tldr.path);
@@ -319,16 +335,45 @@ export default async function StudioPage({
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
                   <PlusCard path={path} />
                   <NewDiagramJobs targets={targets} path={path} layout="grid" />
+                  <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />
                 </div>
               ) : (
                 <div className="space-y-0.5">
                   <PlusCard path={path} layout="list" />
                   <NewDiagramJobs targets={targets} path={path} layout="list" />
+                  <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />
                 </div>
               ))}
+            {/* Studio videos in sections no diagram is in (a topic with only
+                videos, or every video when no diagram matches). */}
+            {(visible.length === 0 ? [{ key: "videos", label: "", items: shownVideos }] : videoGroups.extra)
+              .filter((group) => group.items.length > 0)
+              .map((group) => (
+                <section key={`videos:${group.key}`}>
+                  {group.label !== "" && (
+                    <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
+                      {group.label} · {group.items.length}
+                    </h2>
+                  )}
+                  {view.layout === "grid" ? (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+                      {group.items.map((video) => (
+                        <VideoTile key={video.assetId} video={video} path={path} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      {group.items.map((video) => (
+                        <VideoRow key={video.assetId} video={video} path={path} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ))}
             {listing.diagrams.length === 0 && listing.errors.length === 0 ? (
-              <EmptyDirectory dir={listing.dir} />
+              allVideos.length === 0 ? <EmptyDirectory dir={listing.dir} /> : null
             ) : visible.length === 0 ? (
+              shownVideos.length > 0 ? null : (
               <p className="text-sm text-[var(--muted)]">
                 No diagram matches this filter.{" "}
                 <a className="underline underline-offset-2" href="/studio">
@@ -336,6 +381,7 @@ export default async function StudioPage({
                 </a>
                 .
               </p>
+              )
             ) : (
               groups.map((group, at) => (
                 <section key={group.key}>
@@ -349,6 +395,10 @@ export default async function StudioPage({
                       {at === 0 && <PlusCard path={path} />}
                       {/* A new diagram being drawn sits beside the way in. */}
                       {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="grid" />}
+                      {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />}
+                      {(videoGroups.byGroup.get(group.key) ?? []).map((video) => (
+                        <VideoTile key={video.assetId} video={video} path={path} />
+                      ))}
                       {group.items.map((diagram) => (
                         <DiagramTile
                           key={diagram.name}
@@ -365,6 +415,10 @@ export default async function StudioPage({
                     <div className="space-y-0.5">
                       {at === 0 && <PlusCard path={path} layout="list" />}
                       {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="list" />}
+                      {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />}
+                      {(videoGroups.byGroup.get(group.key) ?? []).map((video) => (
+                        <VideoRow key={video.assetId} video={video} path={path} />
+                      ))}
                       {group.items.map((diagram) => (
                         <DiagramRow
                           key={diagram.name}
