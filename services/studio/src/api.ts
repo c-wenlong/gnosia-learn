@@ -1,4 +1,5 @@
 import { createReadStream } from "node:fs";
+import { pipeline } from "node:stream";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
@@ -23,7 +24,8 @@ import {
 import { studioBlobStore } from "./blobs";
 import type { Drafts, DraftStreamEvent } from "./drafts";
 import { MirrorRefused, type Mirrors } from "./mirrors";
-import { shotPath, targetPath, workDir, workSvgPath } from "./paths";
+import { matchesTag, openNewestShot } from "./live-shot";
+import { scratchDir, shotPath, targetPath, workDir, workSvgPath } from "./paths";
 import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
@@ -346,7 +348,7 @@ async function handle(
         "/api/jobs/{id}",
         "/api/jobs/{id}/events",
         "/api/jobs/{id}/log",
-        "/api/jobs/{id}/shot?which=before|after",
+        "/api/jobs/{id}/shot?which=before|after|live",
         "/api/jobs/{id}/cancel|accept|discard|reindex|revise|resume|compare",
         "/api/drafts",
         "/api/drafts/{id}",
@@ -509,8 +511,11 @@ async function handle(
     }
 
     case "GET shot": {
-      const which = url.searchParams.get("which") === "before" ? "before" : "after";
-      return shotBytes(response, record, which);
+      const asked = url.searchParams.get("which");
+      // `live` is the newest picture the agent took of its own work, for the
+      // grid's preview while the job runs; the other two are the comparison.
+      if (asked === "live") return liveShotBytes(request, response, record);
+      return shotBytes(response, record, asked === "before" ? "before" : "after");
     }
 
     case "POST compare": {
@@ -1073,7 +1078,56 @@ async function shotBytes(
     "cache-control": "no-cache",
     "last-modified": info.mtime.toUTCString(),
   });
-  createReadStream(file).pipe(response);
+  // As for the live picture: an abort or a read error closes the file.
+  pipeline(createReadStream(file), response, () => undefined);
+}
+
+/**
+ * The newest picture the drawing agent took, for the grid's live preview.
+ *
+ * Read from this job's own scratch directory and nowhere else: the id picks
+ * the directory, the request names no path, and `newestShot` follows no
+ * symlink (see `live-shot.ts`). The tile polls this every few seconds while
+ * the job runs, so it answers a repeat with a 304 on the strong tag: an
+ * unchanged directory costs a directory read and no bytes. No Chromium is
+ * launched; the agent already took the picture for itself.
+ *
+ * A 404 before the first pass is the ordinary answer, and the tile keeps its
+ * blurred thumbnail (or its blank card) until there is something to show.
+ */
+async function liveShotBytes(
+  request: IncomingMessage,
+  response: ServerResponse,
+  record: JobRecord,
+): Promise<void> {
+  // Opened and checked once, and this handle is what is streamed: no second
+  // open of the path, so nothing swapped in after the check is ever read.
+  const shot = await openNewestShot(scratchDir(record.id));
+  const cache = {
+    // Revalidated on every poll: the tag is what makes that cheap.
+    "cache-control": "private, no-cache",
+    "x-content-type-options": "nosniff",
+  };
+  if (shot === null) {
+    return fail(response, 404, `job ${record.id} has no picture yet`, { which: "live", state: record.state });
+  }
+  if (matchesTag(request.headers["if-none-match"], shot.etag)) {
+    await shot.handle.close();
+    response.writeHead(304, { ...cache, etag: shot.etag });
+    response.end();
+    return;
+  }
+  response.writeHead(200, {
+    ...cache,
+    "content-type": "image/png",
+    "content-length": shot.size,
+    etag: shot.etag,
+    "last-modified": new Date(shot.mtimeMs).toUTCString(),
+  });
+  // `pipeline` rather than `pipe`: a client that goes away mid-picture, or a
+  // read that fails, destroys both ends and closes the handle, where `pipe`
+  // left the stream open and an error on it unhandled.
+  pipeline(shot.handle.createReadStream({ start: 0 }), response, () => undefined);
 }
 
 /**

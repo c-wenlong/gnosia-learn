@@ -112,7 +112,11 @@ describe.skipIf(!reachable.ok)("catalog draft", () => {
     expect(first.job.draft).toBe("d-draws");
     expect((await runShow(first.job.id)).job.draft).toBe("d-draws");
     // A second job from the same conversation, later: the newest is the draft's.
-    await scratch.db.update(job).set({ state: "failed", finishedAt: new Date(), startedAt: new Date() }).where(eq(job.id, first.job.id));
+    // One base time, so `job_finished_at_check` (finished_at >= started_at)
+    // never sees two clock reads land a millisecond apart in the wrong order.
+    const startedAt = new Date();
+    const finishedAt = new Date(startedAt.getTime() + 1_000);
+    await scratch.db.update(job).set({ state: "failed", startedAt, finishedAt }).where(eq(job.id, first.job.id));
     const second = await runEnqueue({
       brief: { kind: "diagram", topic: "alpha", target: "learn/assets/one.tldr", idempotencyKey: "k-2", draft: "d-draws" },
       repoRoot: fixture.root,

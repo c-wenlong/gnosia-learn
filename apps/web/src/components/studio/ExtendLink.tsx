@@ -42,7 +42,8 @@ function Label({ diagram }: { diagram?: string | undefined }) {
   return (
     <span data-pending={pending ? "" : undefined} aria-live="polite" className="grid">
       <span className={`col-start-1 row-start-1 ${pending ? "invisible" : ""}`}>
-        Extend{diagram !== undefined && <span className="sr-only"> {diagram}</span>}
+        {/* Heard as "Extend: <title>": the visible word first (label in name). */}
+        Extend{diagram !== undefined && <span className="sr-only">: {diagram}</span>}
       </span>
       <span aria-hidden={!pending} className={`col-start-1 row-start-1 ${pending ? "animate-pulse motion-reduce:animate-none" : "invisible"}`}>
         Opening…

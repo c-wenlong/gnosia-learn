@@ -4,6 +4,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,6 +12,7 @@ import {
   candidatePath,
   candidateSvgPath,
   jobDir,
+  scratchDir,
   shotPath,
   targetPath,
   targetSvgPath,
@@ -422,6 +424,61 @@ describe("a job's two screenshots", () => {
     await writeFile(shotPath("job-api", "after"), "bytes", "utf8");
     const response = await fetch(`${base}/api/jobs/job-api/shot?which=../../etc/passwd`);
     expect(response.status).toBe(200);
+  });
+});
+
+describe("the live picture", () => {
+  const PNG = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from("pixels", "utf8"),
+    Buffer.from([0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]),
+  ]);
+
+  it("is a 404 before the agent has taken a picture, which the tile reads as blank", async () => {
+    await store.create(record({ state: "running" }));
+    const response = await fetch(`${base}/api/jobs/job-api/shot?which=live`);
+    expect(response.status).toBe(404);
+  });
+
+  it("streams the newest PNG in the job's scratch, and answers a repeat with a 304", async () => {
+    await store.create(record({ state: "running" }));
+    await mkdir(scratchDir("job-api"), { recursive: true });
+    await writeFile(path.join(scratchDir("job-api"), "pass1.png"), PNG);
+
+    const first = await fetch(`${base}/api/jobs/job-api/shot?which=live`);
+    expect(first.status).toBe(200);
+    expect(first.headers.get("content-type")).toBe("image/png");
+    expect(first.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(first.headers.get("cache-control")).toBe("private, no-cache");
+    expect(Buffer.from(await first.arrayBuffer()).equals(PNG)).toBe(true);
+    const etag = first.headers.get("etag");
+    expect(etag).toMatch(/^"live-/);
+
+    const again = await fetch(`${base}/api/jobs/job-api/shot?which=live`, {
+      headers: { "if-none-match": etag ?? "" },
+    });
+    expect(again.status).toBe(304);
+    expect(again.headers.get("etag")).toBe(etag);
+  });
+
+  it("never reads the comparison pictures or another job's scratch as live", async () => {
+    await store.create(record({ state: "running" }));
+    await mkdir(jobDir("job-api"), { recursive: true });
+    await writeFile(shotPath("job-api", "after"), PNG);
+    await mkdir(scratchDir("other-job"), { recursive: true });
+    await writeFile(path.join(scratchDir("other-job"), "pass1.png"), PNG);
+    const response = await fetch(`${base}/api/jobs/job-api/shot?which=live`);
+    expect(response.status).toBe(404);
+  });
+
+  it("is refused to any owner but the one this runner serves", async () => {
+    await store.create(record({ state: "running" }));
+    await mkdir(scratchDir("job-api"), { recursive: true });
+    await writeFile(path.join(scratchDir("job-api"), "pass1.png"), PNG);
+    const response = await fetch(`${base}/api/jobs/job-api/shot?which=live`, {
+      headers: { [STUDIO_OWNER_HEADER]: "somebody-else" },
+    });
+    expect(response.status).toBe(403);
   });
 });
 
