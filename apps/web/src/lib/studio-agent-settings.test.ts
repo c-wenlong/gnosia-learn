@@ -108,7 +108,7 @@ describe("GET /api/settings/agent (#207)", () => {
     const options = modelOptions("default", read.defaults, read.models!);
     const labels = options.map((option) => option.label);
     expect(new Set(labels).size).toBe(labels.length);
-    expect(labels).toEqual(["Claude Code default (Fable 5.1, 1M context)", "Fable 5.1", "Opus 5", "Opus 5.5", "Sonnet 5", "Sonnet 5.5"]);
+    expect(labels).toEqual(["Claude Code default (Fable 5.1)", "Fable 5.1", "Opus 5", "Opus 5.5", "Sonnet 5", "Sonnet 5.5"]);
     expect(labels.join(" ")).not.toContain("[1m]");
   });
 });
@@ -122,6 +122,7 @@ describe("a model's name, for a person", () => {
     expect(modelName("opus[1m]")).toBe("Opus, 1M context");
     expect(modelName("claude-opus-5[200k]")).toBe("Opus 5, 200K context");
     expect(modelName("some-other-model")).toBe("some-other-model");
+    expect(modelName("claude-fable-5-1[1m]", { context: false })).toBe("Fable 5.1");
   });
 });
 

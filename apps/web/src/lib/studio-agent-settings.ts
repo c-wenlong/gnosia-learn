@@ -174,7 +174,9 @@ export function modelOptions(
   }
   const offered = [...byModel.values()].sort((a, b) => a.label.localeCompare(b.label, "en", { numeric: true }));
   const options: FilterOption<string>[] = [
-    { value: "default", label: defaultLabel(defaults?.model, defaults !== null, modelName) },
+    // The resolved default without its context window: the menu is narrow,
+    // and "Claude Code default (Fable 5.1, 1M context)" was cut off there.
+    { value: "default", label: defaultLabel(defaults?.model, defaults !== null, (model) => modelName(model, { context: false })) },
     ...offered,
   ];
   // A stored model outside the menu's list is offered only when it is a model
