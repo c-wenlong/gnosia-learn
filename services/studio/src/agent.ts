@@ -164,6 +164,8 @@ export class AgentRun {
   private idleTimer: NodeJS.Timeout | null = null;
   private attemptTimer: NodeJS.Timeout | null = null;
   private killTimer: NodeJS.Timeout | null = null;
+  /** Bumped by every line of output: which silence a pending `stillWorking` answer is about. */
+  private activity = 0;
   readonly done: Promise<AgentOutcome>;
 
   constructor(child: ChildProcess, options: RunWatch) {
@@ -178,7 +180,9 @@ export class AgentRun {
   }
 
   private touch(): void {
+    this.activity += 1;
     if (this.idleTimer !== null) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
     const idleMs = this.options.idleMs;
     if (idleMs === null || this.stopReason !== null) return;
     this.idleTimer = setTimeout(() => {
@@ -190,9 +194,14 @@ export class AgentRun {
         void this.stop("idle-timeout");
         return;
       }
+      // The check is asynchronous, and output can arrive while it runs. That
+      // output re-armed the timer, so a verdict about the silence before it
+      // is stale and must not stop a session that has since spoken.
+      const asked = this.activity;
       void check()
         .catch(() => false)
         .then((working) => {
+          if (this.activity !== asked || this.stopReason !== null) return;
           if (working) this.touch();
           else void this.stop("idle-timeout");
         });

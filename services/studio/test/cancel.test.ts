@@ -136,6 +136,58 @@ describe("the process group kill", () => {
   }, 20_000);
 });
 
+describe("the idle timer", () => {
+  const talker = (script: string): ChildProcess => {
+    const child = spawn(process.execPath, ["-e", script], { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    started.push(child);
+    return child;
+  };
+
+  it("stops a silent session when nothing is asked (the diagram agent's timer)", async () => {
+    const child = talker(`process.stdout.write("{}\\n"); setInterval(() => {}, 1000);`);
+    const run = new AgentRun(child, { attemptMs: null, idleMs: 300, onLine: () => undefined });
+    const outcome = await run.done;
+    expect(outcome.stopReason).toBe("idle-timeout");
+  }, 20_000);
+
+  it("never lets a stillWorking answer about old silence stop a session that has spoken since", async () => {
+    // Output at 0, 400 and 900 ms, then a clean exit. The idle timer fires at
+    // 200 ms and asks; the answer (no) takes 400 ms and lands after the line
+    // at 400 ms re-armed the timer. Acting on it stopped a talking agent.
+    const child = talker(`
+      const say = (s) => process.stdout.write(JSON.stringify({ say: s }) + "\\n");
+      say("a");
+      setTimeout(() => say("b"), 400);
+      setTimeout(() => { say("done"); process.exit(0); }, 900);
+    `);
+    const lines: string[] = [];
+    let asked = 0;
+    const run = new AgentRun(child, {
+      attemptMs: null,
+      idleMs: 200,
+      onLine: (line) => lines.push((JSON.parse(line) as { say: string }).say),
+      stillWorking: async () => {
+        asked += 1;
+        await settle(400);
+        return false;
+      },
+    });
+    const outcome = await run.done;
+    expect(asked).toBeGreaterThan(0);
+    expect(outcome.stopReason).toBeNull();
+    expect(lines).toEqual(["a", "b", "done"]);
+  }, 20_000);
+
+  it("re-arms while stillWorking says yes, and stops once it says no", async () => {
+    const child = talker(`process.stdout.write("{}\\n"); setInterval(() => {}, 1000);`);
+    const answers = [true, true, false];
+    const run = new AgentRun(child, { attemptMs: null, idleMs: 150, onLine: () => undefined, stillWorking: async () => answers.shift() ?? false });
+    const outcome = await run.done;
+    expect(outcome.stopReason).toBe("idle-timeout");
+    expect(answers).toEqual([]);
+  }, 20_000);
+});
+
 describe("the orphan sweep", () => {
   it("kills anything still running out of the job's temporary directory", async () => {
     // Stands in for `chromium --user-data-dir=<TMPDIR>/playwright_…`: what makes
