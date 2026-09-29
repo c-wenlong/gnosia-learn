@@ -10,6 +10,7 @@ import type { VideoDoctor, VideoDoctorReport } from "../src/video/doctor";
 import type { VideoJobRecord } from "../src/video/types";
 
 import { narratedBrief } from "./video-fixture";
+import { until } from "./wait";
 
 /**
  * The video runner's frame, with the catalog stubbed: the refusals made
@@ -310,5 +311,132 @@ describe("reconcile and cancel", () => {
     const { record } = await made.enqueue(brief());
     expect((await made.cancel(record.id)).state).toBe("cancelled");
     await expect(made.cancel(record.id)).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+describe("a kick while a job's enqueue has not answered", () => {
+  /*
+   * The record is in the store before `catalog job enqueue` answers, so a
+   * kick from another job finishing could start it before the catalog had
+   * its row: the claim was refused, the local record failed, and the row then
+   * landed `queued` and held the slug's lease against the next press. The
+   * stand-in catalog answers the enqueue when the test says so, and refuses a
+   * claim of a row it has not written, as the real one does.
+   */
+  let rows: Set<string>;
+  let answer: ((result: { ok: boolean; json: unknown; error: string | null; offline: boolean }) => void) | null;
+
+  beforeEach(() => {
+    rows = new Set();
+    answer = null;
+    catalogMock.jobFinish.mockClear();
+    catalogMock.sessionStart.mockReset().mockResolvedValue(ok());
+    catalogMock.jobEnqueue.mockImplementation(async (briefFile: string) => {
+      const { id } = JSON.parse(await readFile(briefFile, "utf8")) as { id: string };
+      const result = await new Promise<{ ok: boolean }>((resolve) => {
+        answer = resolve;
+      });
+      if (result.ok) rows.add(id);
+      return result;
+    });
+    catalogMock.jobClaim.mockReset().mockImplementation(async (id: string) =>
+      rows.has(id) ? ok() : { ok: false, json: null, error: `no job ${id} is queued`, offline: false },
+    );
+  });
+
+  afterEach(() => {
+    catalogMock.jobClaim.mockReset();
+    catalogMock.sessionStart.mockReset();
+  });
+
+  it("does not start the job before the catalog has its row, and claims it once it does", async () => {
+    // Admitted while the doctor passes, failing by the start, so a job that
+    // was claimed ends there without rendering anything.
+    const flaky = doctor();
+    const failing = { ...flaky.current()!, ok: false, checks: [{ name: "render profile", ok: false, detail: "no Metal" }] };
+    let asked = 0;
+    const made = new VideoRunner(store, { doctor: { ...flaky, report: async () => (asked++ === 0 ? flaky.current()! : failing) } as unknown as VideoDoctor });
+    const enqueued = made.enqueue(brief());
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    // What another job finishing does. `kick` registers a job it starts before
+    // its first await, so `busy` read straight after it is the answer.
+    void made.kick();
+    expect(made.busy).toBe(0);
+
+    answer!(ok({ job: {} }));
+    const { record } = await enqueued;
+    await made.settled(record.id);
+
+    expect(catalogMock.jobClaim).toHaveBeenCalledTimes(1);
+    expect(store.get(record.id)).toMatchObject({ state: "failed", errorKind: "internal" });
+    expect(catalogMock.jobFinish).toHaveBeenCalledWith(expect.objectContaining({ jobId: record.id, state: "failed" }));
+    await made.drain();
+  });
+
+  it("forgets a job the catalog refused without ever having started it", async () => {
+    const made = new VideoRunner(store, { doctor: doctor() });
+    const enqueued = made.enqueue(brief()).catch((error: unknown) => error);
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    void made.kick();
+    expect(made.busy).toBe(0);
+
+    answer!({ ok: false, json: null, error: "the lease on videos/two-boxes.mp4 is already held by job y", offline: false });
+    expect(await enqueued).toMatchObject({ status: 409 });
+
+    // Nothing ran under the record the refusal forgot.
+    expect(store.list()).toHaveLength(0);
+    expect(made.busy).toBe(0);
+    expect(catalogMock.sessionStart).not.toHaveBeenCalled();
+    expect(catalogMock.jobClaim).not.toHaveBeenCalled();
+    await made.drain();
+  });
+
+  it("refuses a cancel until the row exists, which a job finish would otherwise miss", async () => {
+    const made = await runner();
+    const enqueued = made.enqueue(brief());
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    const id = store.list()[0]!.id;
+
+    await expect(made.cancel(id)).rejects.toMatchObject({ status: 409 });
+    expect(store.get(id)?.state).toBe("queued");
+    expect(catalogMock.jobFinish).not.toHaveBeenCalled();
+
+    answer!(ok({ job: {} }));
+    await enqueued;
+    expect((await made.cancel(id)).state).toBe("cancelled");
+  });
+
+  it("does not start a replacing child until its parent's cleanup is done", async () => {
+    const queued = (await runner()).enqueue(brief());
+    await until(() => answer !== null, "the parent's enqueue never reached the catalog");
+    answer!(ok({ job: {} }));
+    const { record: parent } = await queued;
+    await store.update(parent.id, { state: "awaiting_review", agentSessionId: "11111111-1111-4111-8111-111111111111", classes: ["TB1_WhyItMatters"] });
+    answer = null;
+
+    // Admitted while the doctor passes, failing by the start, as above.
+    const flaky = doctor();
+    const failing = { ...flaky.current()!, ok: false, checks: [{ name: "render profile", ok: false, detail: "no Metal" }] };
+    let asked = 0;
+    const made = new VideoRunner(store, { doctor: { ...flaky, report: async () => (asked++ === 0 ? flaky.current()! : failing) } as unknown as VideoDoctor });
+    // The parent's source and clips are rewritten here; the child starts from them.
+    let release: () => void = () => undefined;
+    const cleanup = vi
+      .spyOn(made as unknown as { cleanup: (...args: unknown[]) => Promise<void> }, "cleanup")
+      .mockImplementation(() => new Promise<void>((resolve) => (release = resolve)));
+
+    const revised = made.revise(store.get(parent.id)!, "the arrow in scene two points at the wrong box");
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    answer!(ok({ job: {} }));
+    await until(() => cleanup.mock.calls.length > 0, "the parent was never cleaned up");
+    void made.kick();
+    expect(made.busy).toBe(0);
+
+    release();
+    const child = await revised;
+    await made.settled(child.id);
+    expect(catalogMock.jobClaim).toHaveBeenCalledTimes(1);
+    expect(store.get(child.id)).toMatchObject({ state: "failed", errorKind: "internal" });
+    await made.drain();
   });
 });
