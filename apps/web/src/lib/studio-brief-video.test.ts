@@ -36,11 +36,12 @@ describe("the video card's arithmetic", () => {
   it("predicts the length from the script at the measured rate, never from the target", () => {
     // 2,533 characters at 15.2 a second, times 1.08: 180 seconds.
     expect(Math.round(predictedSeconds(BRIEF))).toBe(180);
-    expect(videoSummaryLine({ ...BRIEF, targetSeconds: 600 })).toBe("About 3 minutes, narrated (af_heart), for someone who knows the terms");
+    const longTarget: VideoBrief = { ...BRIEF, targetSeconds: 600 };
+    expect(videoSummaryLine(longTarget)).toBe("About 3 minutes, narrated (af_heart), for someone who knows the terms");
   });
 
   it("uses each beat's seconds for a silent video", () => {
-    const silent = { ...BRIEF, voice: "none", scenes: [{ name: "one", beats: [{ say: "Hi", show: "x", labels: [], seconds: 5 }] }] };
+    const silent: VideoBrief = { ...BRIEF, voice: "none", scenes: [{ name: "one", beats: [{ say: "Hi", show: "x", labels: [], seconds: 5 }] }] };
     expect(predictedSeconds(silent)).toBe(5);
     expect(videoSummaryLine({ ...silent, audience: "new" })).toBe("About 10 seconds, silent, for someone new to it");
   });
@@ -65,7 +66,7 @@ describe("the video card's arithmetic", () => {
     const acl = { ...BRIEF, scenes: [{ name: "one", beats: [{ say: "The ACL checks TCP and ACL again. I agree.", show: "x", labels: [] }] }] };
     expect(abbreviations(acl)).toEqual(["ACL", "TCP"]);
     expect(abbreviations({ ...acl, voice: "none" })).toEqual([]);
-    expect(abbreviationWarning(["ACL"])).toMatch(/^The voice may read ACL as a word/);
+    expect(abbreviationWarning(["ACL"])).toBe('The voice may read ACL as a word. Spell it out ("A C L") where it is said letter by letter.');
     expect(abbreviationWarning([])).toBeNull();
   });
 

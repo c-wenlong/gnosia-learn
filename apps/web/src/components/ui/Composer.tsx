@@ -3,8 +3,8 @@
 import { useId, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 
 import { Button } from "./Button";
-import { COMPOSER_FRAME, COMPOSER_REASON, COMPOSER_TEXT, cx } from "./classes";
-import { composerHeight, composerKey, COMPOSER_MAX_ROWS, modEnterTarget } from "./composer-keys";
+import { cx } from "./classes";
+import { COMPOSER_FRAME, COMPOSER_MAX_ROWS, COMPOSER_REASON, COMPOSER_TEXT, composerHeight, composerKey, modEnterTarget } from "./composer-keys";
 
 /**
  * Kit composer: the chat input the concept tutor and the studio's planner

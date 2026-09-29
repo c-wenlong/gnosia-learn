@@ -77,7 +77,7 @@ export function ConfirmCard({
   sourceChanged = false,
   holdReason = null,
   onUse,
-  after,
+  paired = false,
   keyShortcut = true,
 }: {
   brief: Brief;
@@ -109,8 +109,8 @@ export function ConfirmCard({
   holdReason?: string | null;
   /** Use this brief on an `onHold` card: takes it off hold with no turn. */
   onUse?: () => Promise<string | null>;
-  /** Under the card's own press: Make both, when this card is the later of a pair. */
-  after?: ReactNode;
+  /** A pair is live, so Make both is the primary press and this card's steps back. */
+  paired?: boolean;
   /** Opens a job by id: the holder of a leased target. */
   holderHref: (jobId: string) => string;
   /**
@@ -591,6 +591,7 @@ export function ConfirmCard({
           <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Button
+                variant={paired ? "secondary" : "primary"}
                 onClick={onDraw}
                 disabled={busy || block !== null}
                 aria-keyshortcuts={keyShortcut ? "Meta+Enter Control+Enter" : undefined}
@@ -623,7 +624,6 @@ export function ConfirmCard({
                 )}
               </p>
             )}
-            {after}
           </div>
         )}
 

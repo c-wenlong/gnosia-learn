@@ -15,11 +15,12 @@ import { useStartDraft } from "@/components/studio/PlusCard";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
-import { chipClasses, COMPOSER_FRAME, cx } from "@/components/ui/classes";
+import { chipClasses, cx } from "@/components/ui/classes";
+import { COMPOSER_FRAME } from "@/components/ui/composer-keys";
 import { Glyph } from "@/components/ui/Glyph";
 import { MentionChip } from "@/components/ui/MentionChip";
 import type { MentionComposerHandle, MentionComposerProps } from "@/components/ui/MentionComposer";
-import { EMPTY_MENTION_VALUE, inlinePieces, isEmptyValue, trimValue, valueOf, type MentionValue } from "@/components/ui/mention-text";
+import { EMPTY_MENTION_VALUE, inlinePieces, isEmptyValue, trimValue, type MentionValue } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { TopicOption } from "@/data/topics";
 import {
@@ -34,6 +35,7 @@ import {
   kindUnavailable,
   lastPersonValue,
   liveCards,
+  openerValue,
   makeBoth,
   MENTION_HINT,
   MENTION_OPENING_TURN,
@@ -80,7 +82,6 @@ import {
   drawBoth,
   drawDraft,
   getDraft,
-  isDraftKind,
   openDraftEvents,
   readStudioHealth,
   refusalReason,
@@ -95,7 +96,7 @@ import {
   type TranscriptEntry,
   type VideoAvailability,
 } from "@/lib/studio-drafts";
-import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, sessionStore, takeOpener } from "@/lib/studio-extend";
+import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, OPENER_EVENT, sessionStore, takeOpener } from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { panelHref, titleOf } from "@/lib/studio-view";
 
@@ -159,8 +160,6 @@ const POLL_IN_FLIGHT_MS = 4_000;
 const CAP_READ_MS = 30_000;
 /** The same limit the runner takes, `STUDIO_TEXT_LIMIT`'s default. */
 const TEXT_LIMIT = 8_000;
-/** The event a page sends when it left an opener for a conversation that is already open (the video job view's Change). */
-const OPENER_EVENT = "studio:opener";
 
 type Status = "loading" | "ready" | "gone" | "down";
 type Value = MentionValue<DraftKind>;
@@ -222,6 +221,23 @@ export function DraftPanel({
   const { start: startDraft, busy: starting, error: startError } = useStartDraft(path);
 
   const arriving = arrivingSource(draftId);
+
+  /**
+   * Focus the composer once it is on screen: it loads lazily, and is not
+   * rendered while the panel shows a job, so this tries for a couple of
+   * seconds' worth of frames rather than once.
+   */
+  const focusComposerSoon = useCallback(() => {
+    let frames = 0;
+    const attempt = () => {
+      if (composer.current !== null) {
+        composer.current.focus();
+        return;
+      }
+      if ((frames += 1) < 120) requestAnimationFrame(attempt);
+    };
+    requestAnimationFrame(attempt);
+  }, []);
 
   /* ---------------------------------------------------------------- */
   /* The record                                                        */
@@ -558,19 +574,15 @@ export function DraftPanel({
       if (opener === null) return;
       // Arrived: a reload of the press that made this draft may now mint a new one.
       if (opener.source !== null) forgetExtendKey(store, opener.source);
-      const raw = (opener as { mentions?: unknown }).mentions;
-      const kinds = Array.isArray(raw) ? raw.filter(isDraftKind) : [];
-      if (opener.compose !== "" || kinds.length > 0) {
+      const composed = openerValue(opener);
+      if (composed !== null) {
         // The composer first, chips ahead of the words, and a send that leaves
         // it alone: a message queued during the read and a second one still
-        // being typed both survive.
-        setValue(
-          valueOf<DraftKind>([
-            ...kinds.flatMap((kind) => [{ type: "mention" as const, kind }, { type: "text" as const, text: " " }]),
-            { type: "text", text: opener.compose },
-          ]),
-        );
-        requestAnimationFrame(() => composer.current?.focus());
+        // being typed both survive. The composer may not be on screen yet (the
+        // panel is showing a job, or the field is still loading); it builds
+        // itself from this value when it mounts.
+        setValue(composed);
+        focusComposerSoon();
       }
       if (opener.send !== null && isEmptyConversation(current.transcript) && !current.inFlight) {
         void send({ text: opener.send, mentions: [] }, { keepComposer: true });
@@ -578,7 +590,7 @@ export function DraftPanel({
     },
     // `send` is this render's; each caller runs this once per opener.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [draftId],
+    [draftId, focusComposerSoon],
   );
 
   const opened = useRef(false);
@@ -788,7 +800,7 @@ export function DraftPanel({
                 key={suggestion.label}
                 onClick={() => {
                   setValue(topicSuggestionValue(suggestion.label));
-                  requestAnimationFrame(() => composer.current?.focus());
+                  focusComposerSoon();
                 }}
               >
                 {suggestion.label}
@@ -806,6 +818,7 @@ export function DraftPanel({
             jobs={jobs}
             cards={cards}
             both={both !== null && both.seq === entry.seq ? both : null}
+            makeBothLive={both !== null}
             pressing={pressing}
             refused={refused}
             entries={entries}
@@ -969,6 +982,7 @@ function Entry({
   jobs,
   cards,
   both,
+  makeBothLive,
   pressing,
   refused,
   entries,
@@ -991,7 +1005,10 @@ function Entry({
   topics: readonly TopicOption[];
   jobs: readonly Job[];
   cards: readonly LiveCard[];
+  /** Make both, on the entry it sits under. */
   both: ReturnType<typeof makeBoth>;
+  /** Whether Make both is shown anywhere in the thread. */
+  makeBothLive: boolean;
   pressing: ReadonlySet<DraftKind>;
   refused: Partial<Record<CardKey, DrawRefusal & { seq: number }>>;
   entries: readonly TranscriptEntry[];
@@ -1022,6 +1039,9 @@ function Entry({
   }
 
   const briefs = entryBriefs(entry);
+  // With a pair live, Make both is the press the person most likely wants, so
+  // it is the one primary button and each card's own press steps back.
+  const pairedHere = cards.length === 2 && makeBothLive;
   const renderCard = (item: TranscriptBrief) => {
     const status: KindCardStatus = kindCardStatus(view, entry.seq, item.kind, jobs);
     const live = cards.find((card) => card.kind === item.kind && card.seq === entry.seq) ?? null;
@@ -1038,10 +1058,7 @@ function Entry({
     const pendingTopic = kindPendingTopic(status, item.kind, entry, view);
     const holdReason = slot?.held?.reason ?? null;
     const editBlock = answering ? STILL_ANSWERING : pressing.has(item.kind) ? "The press is under way." : null;
-    const after =
-      both !== null && both.kind === item.kind ? (
-        <MakeBothButton label={both.label} busy={pressing.size > 0} error={bothError} onPress={onPressBoth} />
-      ) : null;
+    const paired = pairedHere;
     const holderHref = (holder: string) => panelHref(path, jobPatch(holder, { draftId: view.draftId, jobId: jobIdOf }, jobs));
     const inner =
       item.kind === "diagram" ? (
@@ -1063,7 +1080,7 @@ function Entry({
           sourceChanged={view.sourceChanged === true}
           holdReason={holdReason}
           onUse={() => onUse("diagram", entry.seq)}
-          after={after}
+          paired={paired}
           keyShortcut={singleCard}
         />
       ) : (
@@ -1088,7 +1105,8 @@ function Entry({
           runnerAbbreviations={item.abbreviations}
           keyShortcut={singleCard}
           editBlock={editBlock}
-          after={after}
+          paired={paired}
+          replacing={live?.replaces != null}
         />
       );
     return (
@@ -1105,9 +1123,10 @@ function Entry({
         .map((item) => item.kind as DraftKind)
     : [];
   const cardsHere =
-    briefs.length === 0 && retrying.length === 0 ? null : (
+    briefs.length === 0 && retrying.length === 0 && both === null ? null : (
       <div className="flex flex-col gap-3">
         {briefs.map(renderCard)}
+        {both !== null && <MakeBothButton label={both.label} busy={pressing.size > 0} error={bothError} onPress={onPressBoth} />}
         {retrying.map((kind) => (
           <p key={kind} className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
             Checking the {kind} brief
@@ -1172,14 +1191,14 @@ function Entry({
 /** Make both: a primary button under the later card of a pair asked for together (D60). */
 function MakeBothButton({ label, busy, error, onPress }: { label: string; busy: boolean; error: string | null; onPress: () => void }) {
   return (
-    <div className="mt-1 flex flex-col gap-1.5 border-t border-hair pt-3">
+    <div className="flex flex-col gap-1.5 pt-1">
       <div>
-        <Button onClick={onPress} disabled={busy} data-make-both>
+        <Button onClick={onPress} disabled={busy} data-make-both aria-keyshortcuts="Meta+Enter Control+Enter">
           {busy ? "Queuing both…" : label}
         </Button>
       </div>
       {error === null ? (
-        <p className="text-[12px] text-text3">Starts the diagram and the video together. Each card still has its own press.</p>
+        <p className="text-[12px] leading-4 text-text3">Starts the diagram and the video together. Nothing is spent until you press it.</p>
       ) : (
         <p role="alert" className="text-[13px] leading-5 text-text">
           {error}

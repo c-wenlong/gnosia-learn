@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState } from "react";
 
 import { ProposedTopic } from "@/components/studio/ConfirmCard";
 import { Button } from "@/components/ui/Button";
@@ -63,7 +63,8 @@ export function ConfirmCardVideo({
   runnerAbbreviations,
   keyShortcut = true,
   editBlock = null,
-  after,
+  paired = false,
+  replacing = false,
 }: {
   brief: VideoBrief;
   pendingTopic: PendingTopic | null;
@@ -86,7 +87,10 @@ export function ConfirmCardVideo({
   keyShortcut?: boolean;
   /** Why Use this brief waits (a reply being written), or null. */
   editBlock?: string | null;
-  after?: ReactNode;
+  /** A pair is live, so Make both is the primary press and this card's steps back. */
+  paired?: boolean;
+  /** The press discards this draft's video in review and queues this one in its place (D52). */
+  replacing?: boolean;
 }) {
   const [using, setUsing] = useState(false);
   const [useError, setUseError] = useState<string | null>(null);
@@ -174,13 +178,14 @@ export function ConfirmCardVideo({
           <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Button
+                variant={paired ? "secondary" : "primary"}
                 onClick={onPress}
                 disabled={busy || block !== null}
                 aria-keyshortcuts={keyShortcut ? "Meta+Enter Control+Enter" : undefined}
                 data-studio-draw
                 data-card-kind="video"
               >
-                {busy ? pressBusyLabel("video", proposed) : pressLabel("video", proposed)}
+                {busy ? pressBusyLabel("video", proposed) : pressLabel("video", proposed, replacing)}
               </Button>
             </div>
             {block !== null && <p className="text-[12px] leading-4 text-text2">{block.reason}</p>}
@@ -205,7 +210,6 @@ export function ConfirmCardVideo({
                 )}
               </p>
             )}
-            {after}
           </div>
         )}
 
@@ -258,7 +262,7 @@ function Storyboard({ brief }: { brief: VideoBrief }) {
               <Glyph name="next" size={16} className={cx("text-text3 transition-transform", expanded && "rotate-90")} />
             </button>
             {expanded && (
-              <ol id={panel} className="flex flex-col gap-3 px-3 pb-3 pl-11">
+              <ol id={panel} className="flex flex-col gap-3 px-3 pb-3 pl-11 pt-1">
                 {scene.beats.map((beat, index) => (
                   <li key={index} className="flex flex-col gap-1">
                     <p className="text-[14px] leading-5 text-text">

@@ -22,7 +22,7 @@ import {
 } from "@/components/studio/StudioControls";
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
-import { agentDefaults } from "@/lib/studio-agent-settings";
+import { AGENT_ROWS, agentDefaults, effortOptions, modelOptions, storedAgent } from "@/lib/studio-agent-settings";
 import { readStudioAgents } from "@/lib/studio-agents";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
@@ -191,10 +191,19 @@ export default async function StudioPage({
   function panelFor() {
     if (view.settings && agents !== null) {
       return (
-        <StudioDialog key="settings" closeHref={closeHref} label="Settings">
+        <StudioDialog key="settings" closeHref={closeHref} label="Settings" compact>
           <DialogHeader title="Settings" />
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <StudioSettings initial={agents.values} defaults={defaults} reachable={agents.reachable} />
+            <StudioSettings
+              reachable={agents.reachable}
+              rows={AGENT_ROWS.map((row) => ({
+                ...row,
+                value: agents.values[row.kind],
+                fallback: storedAgent(row.kind, null),
+                models: modelOptions(agents.values[row.kind].model, defaults),
+                efforts: effortOptions(defaults),
+              }))}
+            />
           </div>
         </StudioDialog>
       );

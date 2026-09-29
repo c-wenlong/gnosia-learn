@@ -31,10 +31,6 @@ const PATHS = {
   add: "M10 4.5v11M4.5 10h11",
   // A padlock.
   lock: "M6 9V7a4 4 0 0 1 8 0v2M5 9h10v8H5z",
-  // A tick, for a row already chosen.
-  check: "M4.5 10.5l3.5 3.5 7.5-8",
-  // Three sliders, for settings.
-  settings: "M4 6h7M15 6h1M4 14h1M9 14h7M13 4v4M7 12v4",
   // Arrows for the previous and next module.
   previous: "M12 5l-5 5 5 5",
   next: "M8 5l5 5-5 5",

@@ -72,6 +72,24 @@ export interface DraftSlot {
   /** Set while the brief in force is on hold. */
   held: { reason: string; at?: string } | null;
   state: "open" | "briefed" | "drawing" | "done";
+  /**
+   * The job a press of this kind would discard and replace in one
+   * transaction: a video in review, changed by a newer brief (D52). The
+   * runner's name for it was still to be settled when this was written;
+   * `replacesJob` below is the one place that reads it.
+   */
+  replaces?: { jobId: string } | string | null;
+}
+
+/**
+ * The job in review a press of `kind` would replace (Make video becomes
+ * "Replace and make video"), or null. The one reader of the runner's field,
+ * so adapting to its final name is a change here and nowhere else.
+ */
+export function replacesJob(view: { slots?: DraftSlots }, kind: DraftKind): string | null {
+  const raw = view.slots?.[kind]?.replaces ?? null;
+  if (typeof raw === "string") return raw === "" ? null : raw;
+  return raw !== null && typeof raw === "object" && typeof raw.jobId === "string" ? raw.jobId : null;
 }
 
 export type DraftSlots = Partial<Record<DraftKind, DraftSlot>>;

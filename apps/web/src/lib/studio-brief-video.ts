@@ -141,7 +141,10 @@ export function abbreviations(brief: Pick<VideoBrief, "voice" | "scenes">): stri
 export function abbreviationWarning(words: readonly string[]): string | null {
   if (words.length === 0) return null;
   const list = words.length <= 4 ? words.join(", ") : `${words.slice(0, 4).join(", ")} and ${words.length - 4} more`;
-  return `The voice may read ${list} as ${words.length === 1 ? "a word" : "words"}. Spell ${words.length === 1 ? "it" : "them"} out ("A C L") where ${words.length === 1 ? "it is" : "they are"} said letter by letter.`;
+  const one = words.length === 1;
+  // The first word spelled the way the prompt asks for it: "G P U".
+  const spelled = words[0]!.split("").join(" ");
+  return `The voice may read ${list} as ${one ? "a word" : "words"}. Spell ${one ? "it" : "them"} out ("${spelled}") where ${one ? "it is" : "they are"} said letter by letter.`;
 }
 
 /** Whether a value looks enough like a video brief to draw a card from. */

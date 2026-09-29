@@ -50,6 +50,7 @@ export function StudioDialog({
   closeHref,
   label,
   tall = false,
+  compact = false,
   children,
 }: {
   /** Where Close goes: the same view with the panel's parameters dropped. */
@@ -61,6 +62,12 @@ export function StudioDialog({
    * composer should sit at the foot rather than follow the last message.
    */
   tall?: boolean;
+  /**
+   * As tall as its content and 560px wide from 768px up, for a short panel
+   * (the settings) that would otherwise sit in a mostly empty dialog: a
+   * modal `<dialog>` with `height: auto` stretches between its insets.
+   */
+  compact?: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -139,7 +146,8 @@ export function StudioDialog({
           // Phone: a sheet, the whole screen.
           "h-dvh max-h-none w-full max-w-none rounded-none",
           // 768px up: the width less 32px of gutter, then 720px from 1024px.
-          "md:h-auto md:max-h-[calc(100dvh-96px)] md:w-[calc(100vw-32px)] md:rounded-2xl md:border md:border-hair lg:w-[720px]",
+          "md:max-h-[calc(100dvh-96px)] md:rounded-2xl md:border md:border-hair",
+          compact ? "md:h-fit md:w-[560px]" : "md:h-auto md:w-[calc(100vw-32px)] lg:w-[720px]",
           tall && "md:h-[calc(100dvh-96px)]",
           "transition-[opacity,translate] duration-150 ease-out starting:open:translate-y-2 starting:open:opacity-0",
           "motion-reduce:transition-none",

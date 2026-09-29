@@ -19,6 +19,7 @@ import {
   makeBoth,
   mentionOptions,
   modEnterPlan,
+  openerValue,
   newestBriefSeq,
   plannerKindsOf,
   pressLabel,
@@ -389,5 +390,29 @@ describe("the composer's values", () => {
 
   it("prefills a topic suggestion as a tagged sentence, never sent", () => {
     expect(topicSuggestionValue("TCP").text).toBe("A @diagram for TCP that shows ");
+  });
+});
+
+describe("a video in review replaced by a newer brief (D52)", () => {
+  it("lets the press through, says so, and does not count the replaced job as holding the slug", () => {
+    const current = bothAsked();
+    current.slots!.video = slot({ ...current.slots!.video, jobId: "v1", replaces: { jobId: "v1" } });
+    const jobs = [job({ jobId: "v1", state: "awaiting_review", target: "videos/attention-weights.mp4" })];
+    expect(kindDrawBlock("video", VIDEO, current, jobs, null, null)).toBeNull();
+    expect(liveCards(current, jobs, null, null).find((card) => card.kind === "video")?.replaces).toBe("v1");
+    expect(pressLabel("video", null, true)).toBe("Replace and make video");
+    current.slots!.video.replaces = null;
+    expect(kindDrawBlock("video", VIDEO, current, jobs, null, null)?.reason).toBe("The video is still being made.");
+  });
+});
+
+describe("openerValue", () => {
+  it("puts a Change's chips ahead of its words, and nothing when there is neither", () => {
+    expect(openerValue({ compose: "say it slower", mentions: ["video", "nope", "video"] })).toEqual({
+      text: "@video say it slower",
+      mentions: [{ kind: "video", start: 0, end: 6 }],
+    });
+    expect(openerValue({ compose: "just words" })).toEqual({ text: "just words", mentions: [] });
+    expect(openerValue({ compose: "", mentions: [] })).toBeNull();
   });
 });

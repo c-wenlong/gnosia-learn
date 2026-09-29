@@ -15,6 +15,7 @@ import {
   type DrawBlock,
   type ThreadProblem,
 } from "@/lib/studio-chat";
+import { replacesJob } from "@/lib/studio-drafts";
 import type {
   DraftKind,
   DraftSlot,
@@ -269,10 +270,13 @@ export function kindDrawBlock(
   if (view.inFlight) return { reason: STILL_ANSWERING, holder: null };
   const held = slotOf(view, kind)?.held ?? null;
   if (held !== null) return { reason: `On hold: ${held.reason}`, holder: null };
+  // A video in review that this press replaces (D52) does not hold the press
+  // back, and does not count as another job holding the slug.
+  const replaced = replacesJob(view, kind);
   const busy = kindBusy(view, kind, jobs);
-  if (busy !== null) return { reason: `${KIND_BUSY[kind]}.`, holder: busy.jobId };
+  if (busy !== null && busy.jobId !== replaced) return { reason: `${KIND_BUSY[kind]}.`, holder: busy.jobId };
   const holder = jobs.find((job) => {
-    if (!isActive(job.state) || jobKind(job) !== kind) return false;
+    if (!isActive(job.state) || jobKind(job) !== kind || job.jobId === replaced) return false;
     return (kind === "video" ? videoSlug(job.target) : targetSlug(job.target)) === brief.slug;
   });
   if (holder !== undefined) {
@@ -287,9 +291,14 @@ export function kindDrawBlock(
   return null;
 }
 
-/** The press's words: Draw or Make video, with the topic's creation when one is proposed. */
-export function pressLabel(kind: DraftKind, pending: PendingTopic | null | undefined): string {
+/**
+ * The press's words: Draw or Make video, with the topic's creation when one
+ * is proposed, and "Replace and make video" when the press discards this
+ * draft's video in review and queues the new one in its place (D52).
+ */
+export function pressLabel(kind: DraftKind, pending: PendingTopic | null | undefined, replacing = false): string {
   if (kind === "diagram") return drawLabel(pending);
+  if (replacing) return pending ? "Create topic, replace and make video" : "Replace and make video";
   return pending ? "Create topic and make video" : "Make video";
 }
 
@@ -322,6 +331,8 @@ export function kindDrawKey(draftId: string, seq: number, kind: DraftKind, previ
 export interface LiveCard {
   seq: number;
   kind: DraftKind;
+  /** The job in review this card's press replaces, or null (D52). */
+  replaces: string | null;
   brief: Brief | VideoBrief;
   requestSeq: number | null;
   pendingTopic: PendingTopic | null;
@@ -349,6 +360,7 @@ export function liveCards(
       kind,
       brief: item.brief,
       requestSeq: requestSeqOf(view, kind, item, true),
+      replaces: replacesJob(view, kind),
       pendingTopic: kindPendingTopic(status, kind, entry, view),
       block: kindDrawBlock(kind, item.brief, view, jobs, cap, video),
     });
@@ -511,4 +523,18 @@ export function valueBack(
 ): MentionValue<DraftKind> {
   if (isEmptyValue(held)) return body;
   return keptComposer ? prependValue(body, held) : held;
+}
+
+/**
+ * An opener's words and chips as the composer's value (the video job view's
+ * Change hands its text over with the Video chip, 2c): the chips first, each
+ * followed by a space, then the words. Never sent; the person sends it.
+ */
+export function openerValue(opener: { compose: string; mentions?: readonly unknown[] }): MentionValue<DraftKind> | null {
+  const kinds = [...new Set((opener.mentions ?? []).filter((kind): kind is DraftKind => kind === "diagram" || kind === "video"))];
+  if (opener.compose === "" && kinds.length === 0) return null;
+  return valueOf<DraftKind>([
+    ...kinds.flatMap((kind) => [{ type: "mention" as const, kind }, { type: "text" as const, text: " " }]),
+    { type: "text", text: opener.compose },
+  ]);
 }

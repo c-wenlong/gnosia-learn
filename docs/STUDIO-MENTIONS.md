@@ -249,6 +249,19 @@ Lexical's own site gives its core as about 22 kB minified and gzipped, plus the
 React bindings and two plugins; that figure is theirs, not measured here, and
 phase 2's done-when records the real increase to `/studio`'s first load.
 
+**Measured (2b, 2026-09-29, `next build` with Turbopack, gzip of each route's
+client chunks).** The composer and Lexical load only when a conversation
+opens, as one lazy chunk of **235 kB minified, 75 kB gzipped**: about three
+times Lexical's own figure, most of it `lexical` itself. `/studio`'s first
+load went from 147.5 to 159.9 kB gzipped for the panel's own new code (the
+cards, the video card, the settings panel), with no Lexical in it, and the
+canvas route `/studio/d/<name>` from 40.9 to 41.5 kB for the studio modules
+it shares. Outside the studio, the course pages grew 0.1 kB gzipped (`Glyph`
+became a module of its own) and the concept tutor 0.1 kB (`Composer` reads the
+shared frame classes); every other route is byte-for-byte unchanged. The frame
+classes live in `composer-keys.ts` rather than `classes.ts`, because every
+page's shell loads `classes.ts` and only the two composers read them.
+
 **Rejected:**
 
 | Option | Why not |
@@ -1117,20 +1130,20 @@ loses the Diagram or Video control and `PUT /api/drafts/{id}/kind`, and gains:
 
 **2b, the web app:**
 
-- [ ] `Glyph` moved into the kit; the composer frame's classes shared by
+- [x] `Glyph` moved into the kit; the composer frame's classes shared by
       `Composer` and the new `MentionComposer`
-- [ ] `MentionComposer` on Lexical: the inline chip node, the menu with its
+- [x] `MentionComposer` on Lexical: the inline chip node, the menu with its
       keys, the plus button, `insertMention`, the live region, plain-text
       paste, and the React-free serialiser to `{ text, mentions }` with its
       tests; IMPLEMENTATION.md's kit table gains its row
-- [ ] The transcript draws a message's chips inline; the drafts list shows its
+- [x] The transcript draws a message's chips inline; the drafts list shows its
       kinds; suggestion buttons under the newest reply
-- [ ] One live card per kind, `(seq, kind)` keys everywhere a card is keyed,
+- [x] One live card per kind, `(seq, kind)` keys everywhere a card is keyed,
       Make both for a pair by `requestSeq` whatever replies it landed in, the
       held card with Use this brief, the waiting chip and the Stop waiting
       line, Cmd+Enter with two cards, and the panel staying on the
       conversation while another card is live
-- [ ] The opening line, "Ask me about an idea, or type @ to make a diagram or
+- [x] The opening line, "Ask me about an idea, or type @ to make a diagram or
       a video of it", and the labels (open question 2)
 
 **2c, the video screens**, as STUDIO-VIDEOS.md's phase 2 lists them: the video

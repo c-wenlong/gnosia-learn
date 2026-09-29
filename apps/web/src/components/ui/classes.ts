@@ -38,20 +38,6 @@ export const TRACK = "bg-track inset-ring inset-ring-border";
  */
 export const LABEL = "text-[12px] font-semibold leading-4 text-text2";
 
-/**
- * The composer's frame, shared by `Composer` (a textarea) and
- * `MentionComposer` (a rich-text field with chips): radius 16, a 2px
- * `--border` that goes `--accent` on focus, `--surface` inside. 52px at one
- * line (`composer-keys.ts` has the arithmetic), growing to six. The focus
- * rule is the caller's, since a textarea takes `focus:` and a frame around an
- * editable takes `focus-within:`.
- */
-export const COMPOSER_FRAME = "rounded-2xl border-2 border-border bg-surface transition-colors duration-100";
-/** The composer's text: 15px on a 24px line, as the tutor's input always had. */
-export const COMPOSER_TEXT = "text-[15px] leading-6 text-text";
-/** The 12px line under a composer saying why it, or Send, is disabled. */
-export const COMPOSER_REASON = "px-1 text-[12px] leading-4 text-text2";
-
 /** Kit `Pill`'s face: 36px, 2px border, pill radius, 13/600. `Pill` and the top bar's `HabitPill` share it. */
 export const PILL =
   "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border-2 border-border bg-surface px-3.5 text-[13px] font-semibold text-text tabular-nums";

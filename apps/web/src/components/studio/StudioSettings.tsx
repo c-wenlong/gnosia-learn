@@ -1,23 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 
 import type { StudioAgentPreference } from "@self-learn/schema/shared";
 
 import { saveStudioAgent } from "@/app/(app)/studio/actions";
-import { cx } from "@/components/ui/classes";
-import { FilterMenu } from "@/components/ui/FilterMenu";
-import { Glyph } from "@/components/ui/Glyph";
+import { cx, inputClasses, LABEL } from "@/components/ui/classes";
+import type { FilterOption } from "@/components/ui/filter-menu";
 import { Panel } from "@/components/ui/Panel";
-import {
-  AGENT_ROWS,
-  effortOptions,
-  modelOptions,
-  storedAgent,
-  type AgentDefaults,
-  type AgentKind,
-} from "@/lib/studio-agent-settings";
+import type { AgentKind } from "@/lib/studio-agent-settings";
+
+/**
+ * One row as the page builds it on the server: its stored value, the value
+ * it has when nothing is stored, and its two menus. Built there so this
+ * client module imports no runtime from `@self-learn/schema/shared`, whose
+ * exports, once used on the client, ship with every route that loads it.
+ */
+export interface AgentRow {
+  kind: AgentKind;
+  name: string;
+  value: StudioAgentPreference;
+  fallback: StudioAgentPreference;
+  models: FilterOption<string>[];
+  efforts: FilterOption<string>[];
+}
 
 /**
  * The studio's settings panel (D53 of docs/STUDIO-VIDEOS.md): the model and
@@ -31,16 +38,16 @@ import {
  * the row says "Saved", or why not, beside its menus.
  */
 export function StudioSettings({
-  initial,
-  defaults,
+  rows,
   reachable,
 }: {
-  initial: Record<AgentKind, StudioAgentPreference>;
-  defaults: AgentDefaults | null;
+  rows: AgentRow[];
   /** Whether the catalog answered the read: with it down, a save cannot land either. */
   reachable: boolean;
 }) {
-  const [values, setValues] = useState(initial);
+  const [values, setValues] = useState<Record<AgentKind, StudioAgentPreference>>(
+    () => Object.fromEntries(rows.map((row) => [row.kind, row.value])) as Record<AgentKind, StudioAgentPreference>,
+  );
   const [notes, setNotes] = useState<Partial<Record<AgentKind, { ok: boolean; text: string }>>>({});
   const [saving, startSaving] = useTransition();
 
@@ -72,40 +79,93 @@ export function StudioSettings({
           The catalog is not answering, so these show the defaults and a change cannot be saved yet.
         </p>
       )}
-      {AGENT_ROWS.map((row) => {
+      {rows.map((row) => {
         const value = values[row.kind];
         const note = notes[row.kind];
-        const fallback = storedAgent(row.kind, null);
         return (
-          <div key={row.kind} className="flex flex-col gap-2">
-            <h3 className="text-[14px] font-semibold text-text">{row.name}</h3>
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterMenu
+          <fieldset key={row.kind} className="flex min-w-0 flex-col gap-2.5">
+            <legend className="mb-2.5 text-[14px] font-semibold text-text">{row.name}</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Menu
                 label="Model"
-                options={modelOptions(value.model, defaults)}
+                options={row.models}
                 value={value.model}
-                defaultValue={fallback.model}
+                busy={saving}
                 onChange={(model) => change(row.kind, { model })}
-                busy={saving}
               />
-              <FilterMenu
+              <Menu
                 label="Effort"
-                options={effortOptions(defaults)}
+                options={row.efforts}
                 value={value.effort}
-                defaultValue={fallback.effort}
-                onChange={(effort) => change(row.kind, { effort: effort as StudioAgentPreference["effort"] })}
                 busy={saving}
+                onChange={(effort) => change(row.kind, { effort: effort as StudioAgentPreference["effort"] })}
               />
-              {note !== undefined && (
-                <span role={note.ok ? "status" : "alert"} className={cx("text-[12px]", note.ok ? "text-text3" : "text-danger")}>
-                  {note.text}
-                </span>
-              )}
             </div>
-          </div>
+            {note !== undefined && (
+              <p role={note.ok ? "status" : "alert"} className={cx("text-[12px] leading-4", note.ok ? "text-text3" : "text-danger")}>
+                {note.text}
+              </p>
+            )}
+          </fieldset>
         );
       })}
     </Panel>
+  );
+}
+
+/**
+ * One menu: a native `<select>` in the kit's field face. Native rather than
+ * the kit's `FilterMenu`, whose popover a short dialog clips, and whose
+ * filled "active" face reads as a filter being on; a phone gets its own
+ * picker for free.
+ */
+function Menu({
+  label,
+  options,
+  value,
+  busy,
+  onChange,
+}: {
+  label: string;
+  options: FilterOption<string>[];
+  value: string;
+  busy: boolean;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={id} className={LABEL}>
+        {label}
+      </label>
+      <span className="relative flex min-w-0">
+        <select
+          id={id}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-busy={busy || undefined}
+          className={inputClasses({ className: "cursor-pointer appearance-none truncate pr-9" })}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <svg
+          aria-hidden
+          viewBox="0 0 16 16"
+          className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-text2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m4 6 4 4 4-4" />
+        </svg>
+      </span>
+    </div>
   );
 }
 
@@ -122,7 +182,10 @@ export function SettingsLink({ href }: { href: string }) {
         "hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
       )}
     >
-      <Glyph name="settings" size={18} />
+      {/* Three sliders. Drawn here rather than added to the kit's glyphs, which every course page carries. */}
+      <svg aria-hidden viewBox="0 0 20 20" width={18} height={18} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+        <path d="M4 6h7M15 6h1M4 14h1M9 14h7M13 4v4M7 12v4" />
+      </svg>
     </Link>
   );
 }
