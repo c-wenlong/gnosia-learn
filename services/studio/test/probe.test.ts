@@ -51,7 +51,7 @@ describe("a read", () => {
   it("answers at once with the last answer while a slow refresh runs, and has the new one next time", async () => {
     const gate = gated<string>();
     const time = clock();
-    const probe = new Probe(gate.check, 1_000, time.now);
+    const probe = new Probe(gate.check, 1_000, { now: time.now });
     const first = probe.read();
     await tick();
     gate.answer("old");
@@ -79,7 +79,7 @@ describe("a read", () => {
   it("does not refresh an answer younger than its lifetime", async () => {
     const gate = gated<number>();
     const time = clock();
-    const probe = new Probe(gate.check, 1_000, time.now);
+    const probe = new Probe(gate.check, 1_000, { now: time.now });
     const first = probe.read();
     await tick();
     gate.answer(1);
@@ -95,7 +95,7 @@ describe("a read", () => {
     const probe = new Probe(async () => {
       time.advance(5_000);
       return "slow";
-    }, 1_000, time.now);
+    }, 1_000, { now: time.now });
     const read = await probe.read();
     expect(read).toMatchObject({ value: "slow", stale: false, ageMs: 0 });
     expect(read.checkedAt).toBe(new Date(time.now()).toISOString());
@@ -108,7 +108,7 @@ describe("a read", () => {
       calls += 1;
       if (calls === 2) throw new Error("the check fell over");
       return calls;
-    }, 1_000, time.now);
+    }, 1_000, { now: time.now });
     expect((await probe.read()).value).toBe(1);
     time.advance(2_000);
     expect((await probe.read()).value).toBe(1);
@@ -123,7 +123,7 @@ describe("a gate", () => {
   it("waits for a new answer when the last one is too old, where a read would not", async () => {
     const gate = gated<string>();
     const time = clock();
-    const probe = new Probe(gate.check, 1_000, time.now);
+    const probe = new Probe(gate.check, 1_000, { now: time.now });
     const first = probe.fresh();
     await tick();
     gate.answer("passing");
@@ -154,7 +154,42 @@ describe("a gate", () => {
   });
 });
 
+describe("an answer the check had cached itself", () => {
+  it("is as old as the check says, not as old as the probe's copy (Greptile on #218)", async () => {
+    const time = clock();
+    // The canvas doctor hands back an answer it got 20 s ago, within its own TTL.
+    const answeredAt = time.now() - 20_000;
+    const probe = new Probe(async () => ({ verdict: "pass", at: answeredAt }), 30_000, {
+      now: time.now,
+      answeredAt: (value) => value.at,
+    });
+    const read = await probe.read();
+    expect(read).toMatchObject({ ageMs: 20_000, stale: false });
+    expect(read.checkedAt).toBe(new Date(answeredAt).toISOString());
+    // 10 s later it is 30 s old, and the probe says so and refreshes.
+    time.advance(10_000);
+    expect(await probe.read()).toMatchObject({ ageMs: 30_000, stale: true });
+  });
+});
+
 describe("forget", () => {
+  it("does not let a read that was waiting store the answer from before it (Greptile on #218)", async () => {
+    const gate = gated<string>();
+    const probe = new Probe(gate.check, 60_000);
+    // A health call is waiting on the very first check when a settings write lands.
+    const waiting = probe.read();
+    await tick();
+    probe.forget();
+    gate.answer("read before the write", 0);
+    await tick();
+    // It waits on a check started after the write instead.
+    expect(gate.started).toBe(2);
+    gate.answer("after the write", 1);
+    expect((await waiting).value).toBe("after the write");
+    expect((await probe.read()).value).toBe("after the write");
+  });
+
+
   it("makes the next read wait, and a check started before it cannot store what it read", async () => {
     const gate = gated<string>();
     const probe = new Probe(gate.check, 60_000);

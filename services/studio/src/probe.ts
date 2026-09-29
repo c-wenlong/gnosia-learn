@@ -47,12 +47,26 @@ export class Probe<T> {
   /** Bumped by `forget`, so a check that started before it cannot store what it read. */
   private generation = 0;
 
+  private readonly now: () => number;
+  private readonly answeredAt: (value: T) => number | null;
+
   constructor(
     private readonly check: () => Promise<T>,
     readonly ttlMs: number,
-    // Read through a closure, so a test's fake clock is the one consulted.
-    private readonly now: () => number = () => Date.now(),
-  ) {}
+    options: {
+      /** The clock; read through a closure by default, so a test's fake clock is the one consulted. */
+      now?: () => number;
+      /**
+       * When the answer was actually produced, for a check that can hand back a
+       * cached answer of its own (the canvas `doctor` does): its age counts
+       * from then, not from when this probe received it. Null means now.
+       */
+      answeredAt?: (value: T) => number | null;
+    } = {},
+  ) {
+    this.now = options.now ?? (() => Date.now());
+    this.answeredAt = options.answeredAt ?? (() => null);
+  }
 
   /** Start a check unless one is running, and return it. */
   refresh(): Promise<T> {
@@ -63,7 +77,7 @@ export class Probe<T> {
         // Behind a resolved promise, so a check that throws before its first
         // await still settles after `inFlight` is assigned below, and clears it.
         const value = await Promise.resolve().then(() => this.check());
-        if (generation === this.generation) this.last = { value, at: this.now() };
+        if (generation === this.generation) this.last = { value, at: Math.min(this.answeredAt(value) ?? Infinity, this.now()) };
         return value;
       } finally {
         // A `forget` since this started has already let go of it, and may have
@@ -83,18 +97,17 @@ export class Probe<T> {
 
   /** The last answer at once, refreshing it in the background when it is old. For a report. */
   async read(): Promise<ProbeReading<T>> {
-    if (this.last === null) {
-      const value = await this.refresh();
-      // A `forget` while this read waited leaves nothing stored; report what
-      // the check said, stamped now, rather than nothing.
-      if (this.last === null) this.last = { value, at: this.now() };
-    } else if (this.now() - this.last.at >= this.ttlMs) {
+    // A `forget` while this waited leaves nothing stored, since the check it
+    // waited on may have read what the write replaced: wait for the next one.
+    while (this.last === null) {
+      await this.refresh();
+    }
+    if (this.now() - this.last.at >= this.ttlMs) {
       // Nobody awaits this one; a failure leaves the last answer standing and
       // the next read tries again.
       this.refresh().catch(() => undefined);
     }
-    // `refresh` resolved, so `last` is set.
-    const last = this.last as unknown as { value: T; at: number };
+    const last = this.last;
     const ageMs = Math.max(0, this.now() - last.at);
     return {
       value: last.value,

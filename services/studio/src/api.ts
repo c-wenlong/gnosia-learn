@@ -1704,10 +1704,9 @@ async function videosRoute(response: ServerResponse): Promise<void> {
   return send(response, 200, { videos, note: `${videos.length} studio video${videos.length === 1 ? "" : "s"}` });
 }
 
-/** One probe's age, as health reports it. `answeredAt` overrides the read's stamp when the check had an older one of its own. */
-function freshness(read: ProbeReading<unknown>, answeredAt: number | null = null): Record<string, unknown> {
-  const checkedAt = answeredAt === null ? read.checkedAt : new Date(answeredAt).toISOString();
-  return { checkedAt, stale: read.stale, refreshing: read.refreshing };
+/** One probe's age, as health reports it. */
+function freshness(read: ProbeReading<unknown>): Record<string, unknown> {
+  return { checkedAt: read.checkedAt, stale: read.stale, refreshing: read.refreshing };
 }
 
 async function health(
@@ -1819,7 +1818,7 @@ async function health(
     // The video doctor carries its own `checkedAt`, and `vocabulary` its
     // `readAt`.
     freshness: {
-      tldrawkc: freshness(doctorRead, doctorRead.value.at),
+      tldrawkc: freshness(doctorRead),
       claude: freshness(claudeRead),
       postgres: freshness(catalogRead),
       agent: freshness(agentRead),

@@ -1,4 +1,5 @@
 import { resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
+import { vocabularyStatus } from "./brief";
 import { doctor, doctorAnsweredAt, DOCTOR_TTL_MS } from "./canvas";
 import { status as catalogStatus, type CatalogResult } from "./catalog";
 import { CLAUDE_BIN } from "./config";
@@ -38,7 +39,7 @@ export const AGENT_PROBE_TTL_MS = 15_000;
 export interface DoctorAnswer {
   /** Null when the tool could not even be launched. */
   result: RunResult | null;
-  /** When `doctor` itself answered, which can be earlier than the probe's read of its cache. */
+  /** When `doctor` itself answered, which can be earlier than the probe's read of its cache; null means now. */
   at: number | null;
 }
 
@@ -57,9 +58,17 @@ export class HealthProbes {
   readonly agent: Probe<Record<string, unknown> | null>;
 
   constructor(ttls: Partial<HealthProbeTtls> = {}) {
+    // `doctor()` hands back its own cached answer when it has one younger than
+    // its TTL, so this probe's age counts from when the doctor answered, not
+    // from when the probe asked: the two clocks agree, and `checkedAt` is the
+    // doctor's.
     this.doctor = new Probe(
-      async () => ({ result: await doctor().catch(() => null), at: doctorAnsweredAt() }),
+      async () => {
+        const result = await doctor().catch(() => null);
+        return { result, at: result === null ? null : doctorAnsweredAt() };
+      },
       ttls.doctor ?? DOCTOR_TTL_MS,
+      { answeredAt: (answer) => answer.at },
     );
     this.claude = new Probe(
       () => run(CLAUDE_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
@@ -71,6 +80,9 @@ export class HealthProbes {
 
   /** Start every check now, not awaited, so the first health call after a start finds answers. */
   warm(): void {
+    // The vocabulary keeps its own last outcome (`vocabularyStatusNow`), which
+    // health waits for only when there is none.
+    void vocabularyStatus();
     this.doctor.warm();
     this.claude.warm();
     this.catalog.warm();
