@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { WatchStatusContext, type WatchStatus } from "@/components/library/WatchProgress";
 import type { TranscriptCue, VideoChapter } from "@/components/media";
 import type { TabItem } from "@/components/ui/Tabs";
 import { VideoPlayer, type PlaybackSignal } from "@/components/VideoPlayer";
@@ -26,8 +27,9 @@ const ENDPOINT = "/api/learner/playback";
  * itself once enough of the video has played (`WATCHED_FRACTION`). The next
  * visit starts where this one stopped.
  *
- * The status beside the title is the route's answer, so it says what was
- * stored rather than what this tab hopes was. A save the route did not accept
+ * The status it provides (`WatchStatusContext`, read by the Details tab's
+ * `WatchProgress`) is the route's answer, so it says what was stored rather
+ * than what this tab hopes was. A save the route did not accept
  * puts its ranges back, so the next save carries them again; a beacon cannot
  * report back, which is why it is kept for the page being left.
  *
@@ -45,7 +47,7 @@ export function LibraryVideo({
   transcript,
   saved,
   heading,
-  meta,
+  watchedDay,
   actions,
   notes,
   tabs,
@@ -60,19 +62,21 @@ export function LibraryVideo({
   /** What the store held when the page was rendered, or null for a first visit. */
   saved: Playback | null;
   heading: ReactNode;
-  /** The line under the title: kind, source, size. */
-  meta: string;
+  /** The day `saved.watchedAt` falls on in the habit's time zone, or null. */
+  watchedDay: string | null;
   actions?: ReactNode;
   /** Quiet lines under the facts: a sidecar that could not be read, say. */
   notes?: ReactNode;
   tabs?: TabItem[];
 }) {
   const router = useRouter();
-  const [status, setStatus] = useState(() => ({
+  const [startAt] = useState(() => resumeAt(saved));
+  const [status, setStatus] = useState<WatchStatus>(() => ({
     coverage: saved === null ? 0 : coverage(saved.ranges, saved.duration),
     watched: saved?.watchedAt != null,
+    position: startAt,
+    watchedDay,
   }));
-  const [startAt] = useState(() => resumeAt(saved));
 
   const state = useRef({
     open: null as number | null,
@@ -108,7 +112,9 @@ export function LibraryVideo({
       s.ranges = [];
       s.sentAt = Date.now();
       s.sentPosition = s.last;
-      const body = JSON.stringify({ assetId, position: s.last, duration: s.duration, ranges });
+      const sentPosition = s.last;
+      const sentDuration = s.duration;
+      const body = JSON.stringify({ assetId, position: sentPosition, duration: sentDuration, ranges });
 
       if (beacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
         navigator.sendBeacon(ENDPOINT, new Blob([body], { type: "application/json" }));
@@ -135,7 +141,13 @@ export function LibraryVideo({
         .then((payload: { result?: { coverage: number; watchedAt: string | null; crossed: boolean } } | null) => {
           const result = payload?.result;
           if (!result) return;
-          setStatus({ coverage: result.coverage, watched: result.watchedAt !== null });
+          setStatus((previous) => ({
+            coverage: result.coverage,
+            watched: result.watchedAt !== null,
+            // Where the next visit would start, by the same rule it will use.
+            position: resumeAt({ position: sentPosition, duration: sentDuration }),
+            watchedDay: previous.watchedDay,
+          }));
           // A watched event is a study day: the streak pill is drawn by the
           // root layout, which a client navigation keeps mounted.
           if (result.crossed) router.refresh();
@@ -192,47 +204,28 @@ export function LibraryVideo({
     };
   }, [save]);
 
-  const percent = Math.round(status.coverage * 100);
-  const progress = status.watched ? "Watched" : percent > 0 ? `${percent}% watched` : null;
-
   return (
-    <VideoPlayer
-      src={src}
-      statusHref={statusHref}
-      poster={poster}
-      title={title}
-      chapters={chapters}
-      transcript={transcript}
-      startAt={startAt}
-      onPlayback={onPlayback}
-      header={
-        <div className="flex flex-col gap-2">
-          {heading}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] text-text2">
-              <span>{meta}</span>
-              {progress !== null && (
-                <>
-                  <span aria-hidden className="text-text3">
-                    ·
-                  </span>
-                  <span className={status.watched ? "font-semibold text-ok-text" : undefined} aria-live="polite">
-                    {status.watched && (
-                      <svg viewBox="0 0 12 12" aria-hidden className="mr-1 inline size-3 -translate-y-px" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M2.5 6.5 5 9l4.5-6" />
-                      </svg>
-                    )}
-                    {progress}
-                  </span>
-                </>
-              )}
-            </p>
-            {actions !== undefined && <div className="ml-auto flex gap-2">{actions}</div>}
+    <WatchStatusContext value={status}>
+      <VideoPlayer
+        src={src}
+        statusHref={statusHref}
+        poster={poster}
+        title={title}
+        chapters={chapters}
+        transcript={transcript}
+        startAt={startAt}
+        onPlayback={onPlayback}
+        header={
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+              {heading}
+              {actions !== undefined && <div className="flex shrink-0 gap-2">{actions}</div>}
+            </div>
+            {notes}
           </div>
-          {notes}
-        </div>
-      }
-      tabs={tabs}
-    />
+        }
+        tabs={tabs}
+      />
+    </WatchStatusContext>
   );
 }
