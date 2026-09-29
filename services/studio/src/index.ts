@@ -7,6 +7,7 @@ import { Drafts } from "./drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
 import { ManualSource } from "./manual/source";
 import { Mirrors } from "./mirrors";
+import { HealthProbes } from "./health-probes";
 import { DraftPruner } from "./prune";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
@@ -109,7 +110,11 @@ async function main(): Promise<void> {
 
   const mirrors = new Mirrors();
   runner.canvasOpen = (target) => mirrors.isOpen(target);
-  const server = createApi({ store, runner, mirrors, drafts, video: { store: videoStore, runner: videoRunner, doctor: videoDoctor } });
+  // What /api/health reports on, checked now and not awaited, so the first
+  // health call finds answers and no call after it waits on a subprocess.
+  const probes = new HealthProbes();
+  probes.warm();
+  const server = createApi({ store, runner, mirrors, drafts, video: { store: videoStore, runner: videoRunner, doctor: videoDoctor }, probes });
   server.listen(PORT, HOST, () => {
     process.stdout.write(
       `studio on http://${HOST}:${PORT}\n` +
