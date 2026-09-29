@@ -216,6 +216,25 @@ describe("the draft routes", () => {
     expect((await post(`/api/drafts/${draftId}/messages`, { text: "hi" })).status).toBe(409);
   });
 
+  it("records the brief a POST /api/jobs from a draft draws, so an edit under it is refused (#207 review)", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, tagged("draw it"));
+    await drafts.settled(draftId);
+    const seq = drafts.get(draftId)!.slots!.diagram!.briefSeq!;
+    const job = await post("/api/jobs", { ...good, idempotencyKey: "j-seq", draftId });
+    expect(job.status).toBe(201);
+    expect(drafts.get(draftId)!.slots!.diagram).toMatchObject({ state: "drawing", drawnSeq: seq });
+    const edit = await fetch(`${base}/api/drafts/${draftId}/brief?base=${seq}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...good, title: "Under its job" }),
+    });
+    expect(edit.status).toBe(409);
+    expect(await edit.json()).toMatchObject({ detail: { reason: "drawing" } });
+    await until(() => agentMock.startAgent.mock.calls.length > 0, "the job never reached its agent");
+  });
+
   it("refuses a job naming a draft while its planner is answering", async () => {
     await fake.script([{ text: proposing(good) }, { text: "still thinking", hangMs: 500 }]);
     const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };

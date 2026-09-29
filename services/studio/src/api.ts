@@ -666,7 +666,11 @@ async function enqueueChecked(
 
   try {
     const { record, created, jobsAhead } = await runner.enqueue(brief, undefined, { draftId });
-    if (draftId !== null && drafts !== undefined && created) await drafts.markDrawing(draftId, record.id);
+    // Pressed from the diagram brief in force, which the claim held still: the
+    // seq it was drawn from, so a newer brief is known to be newer.
+    if (draftId !== null && drafts !== undefined && created) {
+      await drafts.markDrawing(draftId, record.id, "diagram", drafts.get(draftId)?.slots?.diagram?.briefSeq ?? null);
+    }
     return send(response, created ? 201 : 200, {
       jobId: record.id,
       state: record.state,

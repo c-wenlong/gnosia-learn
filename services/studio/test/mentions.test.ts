@@ -551,6 +551,36 @@ describe("a video in review (D52)", () => {
 });
 
 describe("a draft from before tags", () => {
+  it("loading while drawing, knows the brief its job draws: an edit mid-draw is refused, and after the verdict it is pressable (#207 review)", async () => {
+    const { record } = await drafts.create({});
+    const job = await store.create({
+      id: "old-job",
+      kind: "diagram",
+      state: "running",
+      slug: good.slug,
+      topic: good.topic,
+      targetPath: `learn/assets/${good.slug}.tldr`,
+      draftId: record.id,
+      brief: good,
+      idempotencyKey: "old",
+      requestedAt: new Date().toISOString(),
+      gate: null,
+      error: null,
+    } as never);
+    const legacy = { ...drafts.get(record.id)! } as Record<string, unknown>;
+    for (const key of ["slots", "plannerKinds", "conversational", "sourceKind"]) delete legacy[key];
+    await writeFile(draftJsonPath(record.id), JSON.stringify({ ...legacy, state: "drawing", brief: good, briefSeq: 1, briefBy: "planner", jobIds: [job.id] }));
+    await drafts.drain();
+    drafts = build();
+    await drafts.load();
+    expect(drafts.get(record.id)?.slots?.diagram).toMatchObject({ state: "drawing", briefSeq: 1, drawnSeq: 1 });
+    await expect(drafts.editBrief(record.id, { ...good, title: "Mid-draw" }, "1")).rejects.toMatchObject({ status: 409, detail: { reason: "drawing" } });
+    await store.update(job.id, { state: "failed", error: "boom" } as never);
+    await until(() => drafts.get(record.id)?.slots?.diagram?.state === "briefed", "the verdict never freed the card");
+    await expect(drafts.editBrief(record.id, { ...good, title: "After" }, "1")).resolves.toMatchObject({ changed: true });
+    await expect(drafts.drawOne(record.id, "after")).resolves.toMatchObject({ kind: "diagram", created: true });
+  });
+
   it("loads its one brief as a diagram slot, and reads an untagged message as tagged Diagram", async () => {
     const { record } = await drafts.create({});
     const legacy = { ...drafts.get(record.id)! } as Record<string, unknown>;

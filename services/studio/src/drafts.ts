@@ -606,6 +606,13 @@ export class Drafts {
         // brief saved before D53 holds the `sonnet` the old `validateBrief`
         // filled in, which would otherwise beat the panel at every press.
         loaded.slots = withoutModels(loaded.slots);
+        // A slot drawing with no record of what it was pressed from (a draft
+        // from before slots, or a job route that did not say) is drawing the
+        // brief in force: otherwise that brief reads as newer and could be
+        // edited under its own job.
+        for (const slot of Object.values(loaded.slots)) {
+          if (slot.state === "drawing" && slot.drawnSeq === null) slot.drawnSeq = slot.briefSeq;
+        }
         if (loaded.brief !== null && "model" in loaded.brief) loaded.brief = withoutModel(loaded.brief);
         loaded.plannerKinds = loaded.plannerKinds ?? ["diagram"];
         this.records.set(record.id, { ...loaded, ...summarize(loaded) });
@@ -2327,7 +2334,13 @@ export class Drafts {
           jobIds: [...record.jobIds, jobId],
           ...(record.state === "abandoned"
             ? {}
-            : withSlot(record, which, { jobId, state: "drawing", drawnSeq: drawnSeq === undefined ? slot.drawnSeq : drawnSeq })),
+            : withSlot(record, which, {
+                jobId,
+                state: "drawing",
+                // A Resume or Revise draws what the slot last drew; with no
+                // record of that, the brief in force.
+                drawnSeq: drawnSeq === undefined ? (slot.drawnSeq ?? slot.briefSeq) : drawnSeq,
+              })),
         });
       }
       const job = this.jobOf(which, jobId);
