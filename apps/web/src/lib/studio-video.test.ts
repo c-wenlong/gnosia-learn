@@ -4,6 +4,7 @@ import {
   changedLines,
   changeDraftOutcome,
   childJob,
+  changeHint,
   changeProblem,
   chapterTitle,
   CHANGE_LIMIT,
@@ -471,6 +472,16 @@ describe("the review", () => {
     expect(reviewActions(job({ state: "awaiting_review" }))).toEqual({ accept: true, discard: true, change: true });
     expect(reviewActions(job({ state: "accepted" }))).toEqual({ accept: false, discard: false, change: true });
     expect(reviewActions(job({ state: "running" }))).toEqual({ accept: false, discard: false, change: false });
+  });
+
+  it("says what each way to send a change does, in plain sentences", () => {
+    // "Change the picture has the agent rework it" read the button's name as
+    // the sentence's subject, and did not parse.
+    expect(changeHint(false, true)).toBe(
+      "The agent reworks the picture from the source it wrote. Changing the words goes back to the conversation, where you approve the new script first.",
+    );
+    expect(changeHint(true, false)).toBe("This video is set aside, and the agent reworks the picture from the source it wrote.");
+    for (const hint of [changeHint(false, false), changeHint(true, true)]) expect(hint).not.toMatch(/picture (has|sets)/);
   });
 
   it("refuses an empty change, or one longer than the runner takes", () => {

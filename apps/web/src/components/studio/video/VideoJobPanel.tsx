@@ -17,6 +17,7 @@ import { isActive, narration, type StudioEvent } from "@/lib/studio-jobs";
 import { useElapsed } from "@/lib/use-elapsed";
 import {
   changedLines,
+  changeHint,
   changeProblem,
   childJob,
   changeWord,
@@ -1017,10 +1018,7 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
         className="min-h-20 w-full resize-y rounded-lg border-2 border-border bg-surface px-3 py-2 text-[14px] leading-5 text-text outline-none placeholder:text-text3 focus:border-accent aria-invalid:border-danger"
       />
       <p id={hintId} className="text-[12px] leading-4 text-text3">
-        {reviewing
-          ? "Change the picture sets this video aside and has the agent rework it from its own source. "
-          : "Change the picture has the agent rework it from its own source. "}
-        {canTalk ? "A change to the words goes to the conversation, where you approve the new script first." : ""}
+        {changeHint(reviewing, canTalk)}
       </p>
       {problem !== null && (
         <p role="alert" className="text-[13px] text-danger">

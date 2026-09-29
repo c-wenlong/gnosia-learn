@@ -936,6 +936,19 @@ export function changeProblem(text: string): string | null {
   return null;
 }
 
+/**
+ * The line under the Change box: what each send does, before it is pressed.
+ * Change the picture revises the job from the agent's own source, and on a
+ * job in review sets the reviewed video aside in the same step (D52); Change
+ * what is said, offered only with a conversation, goes back to it.
+ */
+export function changeHint(reviewing: boolean, canTalk: boolean): string {
+  const picture = reviewing
+    ? "This video is set aside, and the agent reworks the picture from the source it wrote."
+    : "The agent reworks the picture from the source it wrote.";
+  return canTalk ? `${picture} Changing the words goes back to the conversation, where you approve the new script first.` : picture;
+}
+
 /** Which of Accept, Discard and Change a job offers. */
 export function reviewActions(job: VideoJob): { accept: boolean; discard: boolean; change: boolean } {
   const reviewing = job.state === "awaiting_review";
