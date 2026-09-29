@@ -592,10 +592,12 @@ function TalkItThrough({
               onFailed(`a conversation could not start: ${made.refusal.error}`);
               return;
             }
-            const what = [failure.headline, failure.detail].filter((part) => part !== null && part !== "").join(": ");
+            // The headline, not the detail: the detail is often a path or a
+            // stack line, which makes a prefill nobody wants to edit. The
+            // planner has no use for it either; the person can paste it.
             leaveOpener(sessionStore(), made.data.draftId, {
               send: null,
-              compose: talkItThroughText(body.brief, what.length > 400 ? `${what.slice(0, 400)}…` : what),
+              compose: talkItThroughText(body.brief, failure.headline),
               source: null,
             });
             router.push(conversationHref(path, made.data.draftId), { scroll: false });
