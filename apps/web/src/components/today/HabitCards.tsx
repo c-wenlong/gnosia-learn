@@ -1,18 +1,20 @@
 import Link from "next/link";
 
 import { Card } from "@/components/ui/Card";
-import { StreakDay } from "@/components/ui/StreakDay";
 import { TargetBar } from "@/components/ui/TargetBar";
 import { cx } from "@/components/ui/classes";
 import type { Habit } from "@/lib/habit-core";
 import { describeTarget } from "@/lib/preferences";
-import { leewayLine, streakStrip, targetRows } from "@/lib/today-core";
+import { targetRows } from "@/lib/today-core";
 
 /**
- * The habit layer on Today (hi-fi 01, right column; 13, the two stat cards):
- * the target the learner set and how much of it is met, and the forgiving
- * streak with this week's discs. Facts only (DESIGN.md decision 5): nothing
- * here says "don't lose it".
+ * The habit layer on Today (hi-fi 01, right column; 13, the stat card): the
+ * target the learner set and how much of it is met. Facts only (DESIGN.md
+ * decision 5): nothing here says "don't lose it".
+ *
+ * The streak has no card here. The top bar's pill already says "2 day
+ * streak", with the free misses and today's fact in its tooltip, so a card
+ * saying it again was dropped on the owner's call (2026-09-29).
  */
 
 export function TargetCard({ habit }: { habit: Habit }) {
@@ -55,56 +57,19 @@ export function TargetCard({ habit }: { habit: Habit }) {
   );
 }
 
-export function StreakCard({ habit, today }: { habit: Habit; today: string }) {
-  const { streak, reachable } = habit;
+/** The phone's small card in place of the target card; the streak is the top bar's pill. */
+export function PhoneTargetStat({ habit }: { habit: Habit }) {
+  const { target } = habit;
   return (
-    <Card title="Streak">
-      <div className="flex items-center gap-3">
-        <span className="font-display text-[36px] leading-none font-bold text-streak tabular-nums">{streak.days}</span>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[15px] font-semibold text-text">day streak</span>
-          <span className="text-[12px] text-text2">{leewayLine(habit)}</span>
-        </div>
+    // One row now that the streak card beside it is gone: a card as tall as
+    // the pair was would be mostly empty.
+    <Card tight>
+      <div className="flex items-baseline gap-2">
+        <span className="font-display text-[24px] leading-tight font-bold text-text tabular-nums">
+          {target.done} / {target.total}
+        </span>
+        <span className="text-[13px] text-text2">Today&rsquo;s target</span>
       </div>
-      <ol aria-label="This week" className="flex flex-wrap gap-3">
-        {streakStrip(streak.week, today).map((disc) => (
-          <li key={disc.date}>
-            <StreakDay letter={disc.letter} state={disc.state} isToday={disc.isToday} description={disc.description} />
-          </li>
-        ))}
-      </ol>
-      <p className="text-[12px] text-text3">
-        {!reachable
-          ? "The streak could not be read."
-          : streak.activeToday
-            ? "Studied today."
-            : "Nothing recorded yet today."}
-      </p>
     </Card>
-  );
-}
-
-/** The phone's two small cards in place of the target and streak cards. */
-export function PhoneHabitStats({ habit }: { habit: Habit }) {
-  const { streak, target } = habit;
-  const left =
-    streak.leeway === 0 ? "Streak" : `Streak · ${streak.leewayLeft} ${streak.leewayLeft === 1 ? "miss" : "misses"} left`;
-  return (
-    <div className="grid grid-cols-2 gap-2.5">
-      <Card tight>
-        <div className="flex flex-col gap-0.5">
-          <span className="font-display text-[24px] leading-tight font-bold text-text tabular-nums">
-            {target.done} / {target.total}
-          </span>
-          <span className="text-[12px] text-text2">Target</span>
-        </div>
-      </Card>
-      <Card tight>
-        <div className="flex flex-col gap-0.5">
-          <span className="font-display text-[24px] leading-tight font-bold text-streak tabular-nums">{streak.days}</span>
-          <span className="text-[12px] text-text2">{left}</span>
-        </div>
-      </Card>
-    </div>
   );
 }

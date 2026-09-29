@@ -23,7 +23,6 @@ export { ProgressBar, type ProgressTone } from "./ProgressBar";
 export { RatingButton } from "./RatingButton";
 export { SearchField } from "./SearchField";
 export { StatTile, type StatTone } from "./StatTile";
-export { StreakDay } from "./StreakDay";
 export { TargetBar } from "./TargetBar";
 export { UnitHeader } from "./UnitHeader";
 export { buttonClasses, cardClasses, chipClasses, cx, inputClasses, LABEL } from "./classes";
