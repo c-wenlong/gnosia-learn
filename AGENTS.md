@@ -561,6 +561,15 @@ not have to be worked out again.
   `npm run canvas -- inspect x.tldr --json | jq` fails on the first token.
   `npm run --silent canvas -- ...` suppresses it. The same applies to
   `npm run learn`.
+- **`npm run canvas` must not start through the `tsx` CLI.** It is
+  `node --import tsx services/catalog/src/canvas.ts` on purpose. The `tsx` CLI
+  binds a Unix socket at `$TMPDIR/tsx-<uid>/<pid>.pipe` on every start, and
+  the studio runs `canvas` with `TMPDIR` inside `$STUDIO_HOME` (every job's
+  agent, the manual check). macOS keeps 104 bytes of a socket path and libuv
+  binds whatever those bytes name, so a long home failed with `EADDRINUSE`
+  whenever the cut landed on a directory, and health reported
+  `manual: stale` for good. `services/studio/test/long-home.test.ts` fails if
+  the script goes back.
 - **`canvas export --svg` takes the output path, it is not a flag.**
   `export x.tldr --svg` fails with "argument missing"; the call is
   `export x.tldr --svg x.svg`. Re-exporting in place after a `meta set` is
