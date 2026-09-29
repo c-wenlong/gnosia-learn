@@ -133,6 +133,53 @@ describe("the video runner's refusals", () => {
   });
 });
 
+describe("a job the catalog will not hand over", () => {
+  beforeEach(() => {
+    catalogMock.jobFinish.mockClear();
+    catalogMock.sessionEnd.mockClear();
+    catalogMock.sessionStart.mockReset();
+    catalogMock.jobClaim.mockReset();
+  });
+
+  it("fails the local record and closes the session, and never finishes a row another runner holds", async () => {
+    catalogMock.sessionStart.mockResolvedValue(ok());
+    catalogMock.jobClaim.mockResolvedValue({ ok: false, json: null, error: "the job is not queued", offline: false });
+    const made = new VideoRunner(store, { doctor: doctor() });
+    const { record } = await made.enqueue(brief());
+    await made.settled(record.id);
+    expect(store.get(record.id)).toMatchObject({ state: "failed", errorKind: "not-claimed" });
+    expect(catalogMock.sessionEnd).toHaveBeenCalledWith(`studio-${record.id}`, "failed", expect.stringContaining("Another runner holds this job"));
+    expect(catalogMock.jobFinish).not.toHaveBeenCalled();
+    await made.drain();
+  });
+
+  it("never finishes the row when the job throws before its claim", async () => {
+    catalogMock.sessionStart.mockRejectedValue(new Error("boom"));
+    const made = new VideoRunner(store, { doctor: doctor() });
+    const { record } = await made.enqueue(brief());
+    await made.settled(record.id);
+    expect(store.get(record.id)).toMatchObject({ state: "failed", errorKind: "internal" });
+    expect(catalogMock.jobClaim).not.toHaveBeenCalled();
+    expect(catalogMock.jobFinish).not.toHaveBeenCalled();
+    await made.drain();
+  });
+
+  it("does finish a row it claimed when the job throws after the claim", async () => {
+    catalogMock.sessionStart.mockResolvedValue(ok());
+    catalogMock.jobClaim.mockResolvedValue(ok());
+    // Admitted while the doctor passed; it fails by the time the job starts.
+    const flaky = doctor();
+    const failing = { ...flaky.current()!, ok: false, checks: [{ name: "render profile", ok: false, detail: "no Metal" }] };
+    let asked = 0;
+    const made = new VideoRunner(store, { doctor: { ...flaky, report: async () => (asked++ === 0 ? flaky.current()! : failing) } as unknown as VideoDoctor });
+    const { record } = await made.enqueue(brief());
+    await made.settled(record.id);
+    expect(store.get(record.id)).toMatchObject({ state: "failed", errorKind: "internal" });
+    expect(catalogMock.jobFinish).toHaveBeenCalledWith(expect.objectContaining({ jobId: record.id, state: "failed" }));
+    await made.drain();
+  });
+});
+
 describe("a change asked of a video in review (D52)", () => {
   it("discards the parent and enqueues the child in the catalog's one transaction", async () => {
     const made = await runner();

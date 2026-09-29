@@ -64,6 +64,13 @@ interface Running {
   callsNarrated: number;
   /** The stream's lines, handled in order; the gate waits for it. */
   lines: LineQueue;
+  /**
+   * Whether this runner may write the catalog row's terminal state: once the
+   * catalog handed the job over, or answered nothing (the degraded mode, D16).
+   * Never before the claim, and never after a refusal, which means the row is
+   * someone else's (Greptile on #201).
+   */
+  mayFinish: boolean;
 }
 
 export interface VideoParent {
@@ -369,6 +376,7 @@ export class VideoRunner {
         gateRunning: false,
         callsNarrated: 0,
         lines: new LineQueue(),
+        mayFinish: false,
       };
       this.running.set(next.id, entry);
       let settle: () => void = () => undefined;
@@ -381,8 +389,12 @@ export class VideoRunner {
             errorKind: "internal",
             error: `the video runner threw: ${(error as Error).message}`,
           });
-          const finished = await jobFinish({ jobId: next.id, state: "failed", errorKind: "internal", error: (error as Error).message });
-          if (!finished.ok) await this.store.noteCatalogError(next.id, finished.error ?? "");
+          if (entry.mayFinish) {
+            const finished = await jobFinish({ jobId: next.id, state: "failed", errorKind: "internal", error: (error as Error).message });
+            if (!finished.ok) await this.store.noteCatalogError(next.id, finished.error ?? "");
+          }
+          const sessionId = this.store.get(next.id)?.sessionId ?? null;
+          if (sessionId !== null) await sessionEnd(sessionId, "failed", (error as Error).message).catch(() => undefined);
         })
         .finally(() => {
           this.running.delete(next.id);
@@ -456,15 +468,17 @@ export class VideoRunner {
     if (!claimed.ok) {
       await this.store.noteCatalogError(id, claimed.error ?? "");
       if (!claimed.offline) {
-        await this.store.update(id, {
-          state: "failed",
-          finishedAt: new Date().toISOString(),
-          errorKind: "not-claimed",
-          error: `${claimed.error ?? "the catalog would not hand this job over"}. No agent was started and nothing was spent.`,
-        });
+        // The row is someone else's: another runner claimed it, or a person
+        // cancelled it. The local record and the session are closed, and the
+        // row is left alone, as the diagram runner's `abandon` does.
+        const error = `${claimed.error ?? "the catalog would not hand this job over"}. Another runner holds this job, or it was cancelled before it was picked up, so no agent was started and nothing was spent.`;
+        const updated = await this.store.update(id, { state: "failed", finishedAt: new Date().toISOString(), errorKind: "not-claimed", error });
+        await this.store.emit(id, { type: "error", state: "failed", note: videoNote(updated) });
+        await sessionEnd(sessionId, "failed", error);
         return;
       }
     }
+    entry.mayFinish = true;
 
     /* The workspace, only on a machine the doctor passes: never unsandboxed (V2, V3). */
     const report = await this.deps.doctor.report();
