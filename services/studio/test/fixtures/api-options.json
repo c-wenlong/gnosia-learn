@@ -1075,14 +1075,8 @@
           "name": "color",
           "type": "TLDefaultColorStyle",
           "optional": true,
-          "doc": "Outline colour, default `black`.",
+          "doc": "Text colour, default `black`.",
           "default": "black"
-        },
-        {
-          "name": "labelColor",
-          "type": "TLDefaultColorStyle",
-          "optional": true,
-          "doc": "Label colour, defaults to `color`."
         },
         {
           "name": "font",
