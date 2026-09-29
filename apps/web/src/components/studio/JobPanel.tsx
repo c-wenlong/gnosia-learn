@@ -8,6 +8,7 @@ import { ComparisonPanel } from "@/components/studio/ComparisonPanel";
 import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { VideoJobPanel } from "@/components/studio/video/VideoJobPanel";
+import { readJobLookup, type JobLookup } from "@/lib/studio-video";
 import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import {
   failureFooter,
@@ -51,26 +52,41 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
   // (older than its fifty, or not polled yet) is read once here, and neither
   // view is drawn until that read says which it is; the answer is handed to
   // the view, so it does not ask again.
+  //
+  // Only a 404 is "no such job". A read that failed (the runner down, a 5xx)
+  // says nothing about the job: the panel says so, retries when the window
+  // regains focus and on a press, and never hands the view a verdict it
+  // would then keep.
   const row = jobs.find((entry) => entry.jobId === props.jobId);
-  const [probed, setProbed] = useState<{ id: string; body: (Job & { kind?: string }) | null } | null>(null);
+  const [probed, setProbed] = useState<{ id: string; attempt: number; lookup: JobLookup } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (row !== undefined) return;
     let alive = true;
     void (async () => {
+      let lookup: JobLookup;
       try {
         const response = await fetch(`/studio/api/jobs/${encodeURIComponent(props.jobId)}`, { cache: "no-store" });
-        const body = response.ok ? ((await response.json()) as Job) : null;
-        if (alive) setProbed({ id: props.jobId, body });
-      } catch {
-        if (alive) setProbed({ id: props.jobId, body: null });
+        const body: unknown = await response.json().catch(() => null);
+        lookup = readJobLookup({ status: response.status, body });
+      } catch (error) {
+        lookup = readJobLookup({ error: (error as Error).message });
       }
+      if (alive) setProbed({ id: props.jobId, attempt, lookup });
     })();
     return () => {
       alive = false;
     };
-  }, [row, props.jobId]);
+  }, [row, props.jobId, attempt]);
   const answer = probed?.id === props.jobId ? probed : null;
-  if (row === undefined && answer === null) {
+  const failed = row === undefined && answer?.lookup.kind === "failed";
+  useEffect(() => {
+    if (!failed) return;
+    const again = (): void => setAttempt((held) => held + 1);
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
+  }, [failed]);
+  if (row === undefined && (answer === null || (answer.lookup.kind === "failed" && answer.attempt !== attempt))) {
     return (
       <div className={props.embedded ? "px-5 py-4" : "p-3"}>
         <p role="status" className="text-xs text-[var(--muted)]">
@@ -79,18 +95,35 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
       </div>
     );
   }
-  const kind = row?.kind ?? answer?.body?.kind ?? null;
+  if (row === undefined && answer !== null && answer.lookup.kind === "failed") {
+    return (
+      <div className={props.embedded ? "px-5 py-4" : "p-3"}>
+        <p role="alert" className="text-xs text-[var(--muted-strong)]">
+          Could not look up <Mono>{props.jobId}</Mono>: {answer.lookup.reason}. It is asked again when this window
+          regains focus.
+        </p>
+        <div className="mt-3">
+          <Button type="button" onClick={() => setAttempt((held) => held + 1)}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  const found = answer !== null && answer.lookup.kind === "found" ? answer.lookup.body : null;
+  const kind = row?.kind ?? found?.kind ?? null;
   if (kind === "video") {
     return (
       <VideoJobPanel
         jobId={props.jobId}
         path={props.path}
         inConversation={props.inConversation}
-        initial={row === undefined ? answer?.body : undefined}
+        initial={row === undefined ? found : undefined}
       />
     );
   }
-  return <DiagramJobPanel {...props} initial={row === undefined ? (answer?.body ?? null) : undefined} />;
+  // Here the read answered: the job (a diagram's), or a 404, which is `null`.
+  return <DiagramJobPanel {...props} initial={row === undefined ? ((found as Job | null) ?? null) : undefined} />;
 }
 
 function DiagramJobPanel({

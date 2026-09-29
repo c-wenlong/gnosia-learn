@@ -18,6 +18,7 @@ import {
   newVideoJobs,
   parseVtt,
   posterHref,
+  readJobLookup,
   readSheets,
   readTranscript,
   readVideos,
@@ -427,6 +428,17 @@ describe("the review", () => {
     expect(videoFailure(job({ state: "failed", errorKind: "timeout" })).headline).toBe("It stopped: nothing moved for too long");
     expect(videoFailure(job({ state: "interrupted" })).actions).toEqual(["resume"]);
     expect(videoFailure(job({ state: "failed", errorKind: "agent", error: "401" }))).toMatchObject({ actions: [], detail: "401" });
+  });
+});
+
+describe("reading a job the provider does not list", () => {
+  it("is found, missing only on a 404, and failed on anything else", () => {
+    expect(readJobLookup({ status: 200, body: { jobId: "j", kind: "video" } })).toEqual({ kind: "found", body: { jobId: "j", kind: "video" } });
+    expect(readJobLookup({ status: 404, body: { error: "no job j" } })).toEqual({ kind: "missing" });
+    expect(readJobLookup({ status: 503, body: null })).toEqual({ kind: "failed", reason: "the runner answered 503" });
+    expect(readJobLookup({ status: 502, body: { error: "the studio runner is not answering" } })).toHaveProperty("kind", "failed");
+    expect(readJobLookup({ status: 200, body: "<html>" })).toEqual({ kind: "failed", reason: "the runner's answer was not a job" });
+    expect(readJobLookup({ error: "fetch failed" })).toEqual({ kind: "failed", reason: "the runner did not answer (fetch failed)" });
   });
 });
 

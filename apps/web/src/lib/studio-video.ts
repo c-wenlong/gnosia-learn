@@ -1076,3 +1076,26 @@ export function changeDraftOutcome(
   }
   return { draftId };
 }
+
+/**
+ * What one read of `GET /api/jobs/{id}` says, for `JobPanel`, which reads a
+ * job the provider does not list: the job, a 404 (the runner does not have
+ * it, a real answer), or a failure (nothing listening, a 5xx, a body that is
+ * not a job), which says nothing about the job and is retried. Only a 404
+ * may become "the runner does not have this job".
+ */
+export type JobLookup =
+  | { kind: "found"; body: { kind?: string; jobId?: string } & Record<string, unknown> }
+  | { kind: "missing" }
+  | { kind: "failed"; reason: string };
+
+export function readJobLookup(answer: { status: number; body: unknown } | { error: string }): JobLookup {
+  if ("error" in answer) return { kind: "failed", reason: `the runner did not answer (${answer.error})` };
+  if (answer.status === 404) return { kind: "missing" };
+  if (answer.status < 200 || answer.status >= 300) return { kind: "failed", reason: `the runner answered ${answer.status}` };
+  const body = answer.body;
+  if (body === null || typeof body !== "object" || typeof (body as { jobId?: unknown }).jobId !== "string") {
+    return { kind: "failed", reason: "the runner's answer was not a job" };
+  }
+  return { kind: "found", body: body as { kind?: string; jobId?: string } & Record<string, unknown> };
+}
