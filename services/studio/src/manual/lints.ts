@@ -53,8 +53,8 @@ export const LINT_RULES: readonly LintRule[] = [
     name: "overlapping-shapes",
     severity: "error",
     fires:
-      "Two geo shapes overlap by more than 10 percent of the smaller one. Containers from " +
-      "`boxShapes` are skipped.",
+      "Two shapes overlap by more than 10 percent of the smaller one. Every shape but arrows " +
+      "counts, text and notes included; containers from `boxShapes` are skipped.",
     fix:
       "Place with `after`/`below` and a `gap`, or lay the shapes out with `row`, `column` or " +
       "`grid`. To group shapes, draw a container with `boxShapes`, never a plain box behind them.",

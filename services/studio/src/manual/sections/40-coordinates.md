@@ -13,10 +13,12 @@
   wraps, so two boxes given the same `h` can render at different heights. Give
   every box in a row the same `w` and an `h` tall enough for the longest label
   (about 64 for one line, 96 for two), or read the real bounds with
-  `helpers.describe()` or `editor.getShapePageBounds(key)`; never `props.h`.
+  `helpers.describe()` or `editor.getShapePageBounds('shape:<key>')`; never
+  `props.h`.
 - A labelled arrow needs room: about 120 units plus ten per character of its
   label. `after` and `below` default to a gap of 120, which fits a short label
-  and nothing longer. At 60 or less the label covers the whole line and lands on
+  and nothing longer; `row`, `column` and `grid` default to 40, which fits no
+  label at all. At 60 or less the label covers the whole line and lands on
   both boxes.
 - Equal widths along a row, equal heights along a column. A reader takes a size
   difference for a meaning.

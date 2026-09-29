@@ -21,7 +21,9 @@ it and Write the new file; there is no `cp`.
 
 `from-mermaid <doc> --source <file>` lifts a flowchart onto the canvas. Use it
 only when the user message says a flowchart was supplied, and only at the path
-it names. `meta set <doc> --topic <slug>` stamps the topic on a document that
-lacks one, without a browser. Useful options on the verbs that draw: `--json`
+it names. It creates the document and refuses one that exists (add `--append`
+to add to it), so on a new job it comes **instead of** `new`, followed by
+`meta set <doc> --title "<title>" --topic <slug> --concept <slug>`, which
+stamps the metadata without a browser. Useful options on the verbs that draw: `--json`
 (one JSON object on stdout), `--page <name>` (work on a named page, default the
 first), `--timeout <ms>` (the snippet's time limit, default 30000).
