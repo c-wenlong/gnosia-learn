@@ -1,0 +1,20 @@
+<svg fill="none" height="20" viewBox="0 0 20 20" width="20" xmlns="http://www.w3.org/2000/svg">
+<path d="M14.925 3.174a.28.28 0 00-.517 0l-.403.987a.93.93 0 01-.51.51l-.988.404a.28.28 0 000 .517l.988.403a.93.93 0 01.51.51l.403.988a.28.28 0 00.517 0l.403-.988a.931.931 0 01.51-.51l.988-.403a.28.28 0 000-.517l-.988-.404a.931.931 0 01-.51-.51l-.403-.987z" fill="url(#cds-react-aria6046162658-:rl:_0)">
+</path>
+<path d="M9.654 4.845a.466.466 0 00-.863 0L7.936 6.94a4.66 4.66 0 01-2.552 2.553l-2.094.854a.466.466 0 000 .863l2.094.855a4.66 4.66 0 012.552 2.552l.855 2.094a.466.466 0 00.863 0l.854-2.094a4.66 4.66 0 012.553-2.552l2.094-.855a.466.466 0 000-.863l-2.094-.854a4.66 4.66 0 01-2.553-2.553l-.854-2.094z" fill="url(#cds-react-aria6046162658-:rl:_1)">
+</path>
+<defs>
+<linearGradient id="cds-react-aria6046162658-:rl:_0" x1="1.941" y1="17" x2="20.891" y2="16.531" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0048B0">
+</stop>
+<stop offset="1" stop-color="#1E72EB">
+</stop>
+</linearGradient>
+<linearGradient id="cds-react-aria6046162658-:rl:_1" x1="1.941" y1="17" x2="20.891" y2="16.531" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0048B0">
+</stop>
+<stop offset="1" stop-color="#1E72EB">
+</stop>
+</linearGradient>
+</defs>
+</svg>

@@ -1,0 +1,59 @@
+file	inferred_name	hash	sizes	viewBox	style	seen_on	place	text_or_label
+chevron-down.svg	chevron-down	0ef7aed3	20x20 16x16 24x24	0 0 20 20	fill	course; search; home; browse; specialization; certificate; course2	button[megamenu-explore-button]; button; button cds-ShowMoreContainer-ctaIcon	Explore our catalog / Week 1: Introduction to Machine Learning / Week 2: Regression with multiple input v
+search.svg	search	13edc5a1	20x20	0 0 20 20	fill	course; search; home; browse; specialization; certificate; course2	button cds-Search-actionButtons; div cds-Search-prefix	Search
+coursera-wordmark.svg	coursera-wordmark	ff7e58ce	127x32 0x0	0 0 1155 164	fill	course; search; home; browse; specialization; certificate; course2	a[home-logo]	Coursera
+arrow-right.svg	arrow-right	e3a23823	20x20 16x16	0 0 20 20	fill	course; search; home; browse; specialization; certificate; course2	button; span; a	Start trial / Explore degrees / Learn more
+ai-sparkle-gradient.svg	ai-sparkle-gradient	47ecc0fa	24x24	0 0 20 20	fill	course; home; browse; specialization; certificate; course2	div; button[two-panel-chat-trigger]; button[coursera-ai-sparkle]	Ask Coursera
+chevron-right.svg	chevron-right	d5264215	20x28 24x24 20x20	0 0 20 20	fill	course; home; browse; specialization; certificate; course2	li; button	Categories / Data Science / Machine Learning
+star-filled.svg	star-filled	dc94c5c5	20x20 16x16	0 0 20 20	fill	course; home; specialization; certificate; course2	div; span; div cds-ProductCard-footer	5.0 / 4.9 32,925 reviews / 4.8
+help-circle.svg	help-circle	2237632b	20x20	0 0 20 20	fill	course; browse; specialization; certificate; course2	div	More questions Visit the learner help ce
+home.svg	home	faa51082	20x20	0 0 20 20	fill	course; browse; specialization; certificate; course2	a[home-link]	Home
+closed-captions.svg	closed-captions	70f1c5ce	24x24	0 0 20 20	fill	course; specialization; certificate; course2	div	Taught in English 30 languages available / Taught in English 5 languages available / Taught in English 25 languages available
+contextual-help.svg	contextual-help	bdff88bb	16x16	0 0 24 24	fill	course; browse; specialization; certificate	button cds-ContextualHelpIcon-customHelpIcon	Information about difficulty level pre-r / Information about this filter group
+certificate-laptop.svg	certificate-laptop	92336e67	34x34	0 0 20 20	fill	course; specialization; certificate	div	
+check.svg	check	dfae66a0	24x24	0 0 20 20	fill	course; specialization; certificate	div	Build machine learning models in Python  / Build & train supervised machine learnin / Build ML models with NumPy & scikit-lear
+rocket-white.svg	rocket-white	437414be	24x24	0 0 24 24	fill	search; home; browse	span	
+trending-up-white.svg	trending-up-white	aabfd5a7	24x24	0 0 24 24	fill	search; home; browse	span	
+binoculars-white.svg	binoculars-white	c4fe1cd2	24x24	0 0 24 24	fill	search; home; browse	span	
+shuffle-white.svg	shuffle-white	df24a36d	24x24	0 0 24 24	fill	search; home; browse	span	
+assessments-clipboard.svg	assessments-clipboard	12e50135	24x24	0 0 20 20	fill	course; course2	div	Assessments 9 assignments / Assessments 11 assignments¹ AI Graded se
+reading-book.svg	reading-book	5ae36fa8	24x24	0 0 20 20	fill	course; course2	span	1 reading
+thumbs-up.svg	thumbs-up	6bdc5911	24x24	0 0 20 20	fill	course; course2	div	98% Most learners liked this course
+video-play.svg	video-play	aa8741ec	24x24	0 0 20 20	fill	course; course2	span	20 videos
+assignment-list.svg	assignment-list	b614780e	24x24	0 0 20 20	fill	course; course2	span	3 assignments
+info-filled.svg	info-filled	bb73cadf	16x16	0 0 20 20	fill	course; course2	button	Information about instructor ratings
+code-brackets.svg	code-brackets	05cb3d4c	24x24	0 0 20 20	fill	course	span	
+lab-window.svg	lab-window	4a9c5d9e	24x24	0 0 20 20	fill	course	span	4 ungraded labs
+app-item-enter.svg	app-item-enter	7430cf07	24x24	0 0 20 20	fill	course	span	1 app item
+chevron-down-alt.svg	chevron-down-alt	79707137	24x24 16x16	0 0 20 20	fill	browse; specialization; certificate	div	Sort by: Best Match ​ / All courses ​
+ai-sparkle-blue.svg	ai-sparkle-blue	1fb2919f	16x16	0 0 20 20	fill	search	button[chip-button-inactive]	Core Machine Learning Concepts and Techn / Machine Learning Libraries and Programmi
+graduation-cap.svg	graduation-cap	5c8c2ee7	24x24 34x34	0 0 20 20	fill	specialization; certificate	div	Build toward a degree Learn more
+open-in-new.svg	open-in-new	6dc5befc	16x16	0 0 20 20	fill	specialization; certificate	a	
+ai-sparkle-black.svg	ai-sparkle-black	7cd88379	20x20 16x16	0 0 20 20	fill	home; certificate	a cds-Pill-root; button	Artificial Intelligence / New AI skills
+filter-sliders.svg	filter-sliders	9bdd7874	16x16	0 0 20 20	fill	search	button[filter-and-sort-button]	Filter & Sort
+close.svg	close	a1805541	36x36 24x24 20x20	0 0 20 20	fill	course; search; certificate	button[coach-close]; button cds-Dialog-dialog; button	Close chat / Close
+clear-circle-x.svg	clear-circle-x	cfe0dc7b	20x20		fill	search	button cds-SearchClearButton-searchClearIcon	Clear search
+category-social-sciences.svg	category-social-sciences	0b4b8928	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-social-sciences] cds-Pill-root	Social Sciences
+category-data-science.svg	category-data-science	14c8adce	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-data-science] cds-Pill-root	Data Science
+category-language-learning.svg	category-language-learning	36ca98dc	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-language-learning] cds-Pill-root	Language Learning
+category-information-technology.svg	category-information-technology	455ea437	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-information-technology] cds-Pill-root	Information Technology
+category-computer-science.svg	category-computer-science	46628f2d	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-computer-science] cds-Pill-root	Computer Science
+category-math-and-logic.svg	category-math-and-logic	4db2b6ae	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-math-and-logic] cds-Pill-root	Math and Logic
+category-physical-science-and-engineering.svg	category-physical-science-and-engineering	534ae895	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-physical-science-and-engineering] cds-Pill-root	Physical Science and Engineering
+category-personal-development.svg	category-personal-development	945f074b	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-personal-development] cds-Pill-root	Personal Development
+checkbox-outline.svg	checkbox-outline	9ca7de83	18x18	0 0 20 20	fill	search; browse	span	
+category-business.svg	category-business	a71fd5e3	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-business] cds-Pill-root	Business
+category-healthcare.svg	category-healthcare	b619cd1f	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-health] cds-Pill-root	Healthcare / Health
+category-arts-and-humanities.svg	category-arts-and-humanities	c8d50478	20x20	0 0 20 20	fill	home; browse	a cds-Pill-root; a[category-pill-arts-and-humanities] cds-Pill-root	Arts and Humanities
+chevron-left.svg	chevron-left	df194908	20x20 24x24	0 0 20 20	fill	browse; certificate	button	Go to previous page / Previous
+info-filled-alt.svg	info-filled-alt	1a945fb7	20x20	0 0 20 20	fill	course	div	
+radio-selected.svg	radio-selected	64e5ad2b	20x20	0 0 20 20	fill	search	span	
+more-horizontal.svg	more-horizontal	64f94e78	16x16	0 0 20 20	fill	browse	div	
+search-alt.svg	search-alt	80fdfc47	20x20	0 0 20 20	fill	search	div cds-AutocompleteOption-prefix	
+radio-unselected.svg	radio-unselected	8164f15c	20x20	0 0 20 20	fill	search	span	
+chevron-up.svg	chevron-up	b194ee56	16x16	0 0 20 20	fill	search	button[filter-dropdown-productTypeDescription]	Learning Product
+ai-launcher-star.svg	ai-launcher-star	b737eee5	24x24	0 0 32 32	fill	course	button[two-panel-chat-trigger]	Close Ask Coursera
+star-outline.svg	star-outline	b966f9c9	16x16	0 0 20 20	fill	course2	span	
+arrow-up.svg	arrow-up	c43fb470	20x20	0 0 20 20	fill	course	button[earlier-messages-button]; button[chat-jump-to-top]; span cds-ChatResponseField-sendButton	Earlier messages / Jump to top / Send message
+assignment-edit.svg	assignment-edit	d8b8e499	24x24	0 0 20 20	fill	course2	span	
+arrow-down.svg	arrow-down	e9d5c3e6	20x20	0 0 20 20	fill	course	button[chat-jump-to-bottom]	Jump to most recent message
