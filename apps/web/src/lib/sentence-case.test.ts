@@ -48,12 +48,9 @@ function* files(dir: string, test: (name: string) => boolean): Generator<string>
  * An entry is a debt, not a permission, and a file that no longer exists is
  * simply not read.
  */
-const ALLOWED: Record<string, string> = {
-  // The studio's brief form is being deleted by the chat-first phase 2 branch
-  // (studio/phase-2-extend-ui), so it was left alone rather than edited under
-  // it. Its "More options" summary is the last uppercase label.
-  "components/studio/BriefForm.tsx": "deleted by studio chat-first phase 2",
-};
+// Empty: the one entry was the studio's brief form, which chat-first phase 2
+// deleted. Add a file here only with its reason and what removes it.
+const ALLOWED: Record<string, string> = {};
 
 const isSource = (name: string) => /\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name) && !name.endsWith(".d.ts");
 

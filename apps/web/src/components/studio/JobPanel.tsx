@@ -16,12 +16,16 @@ import {
   narration,
   phaseRows,
   stepLabel,
+  type Brief,
   type FailureAction,
+  type FailureReport,
   type Job,
   type PhaseRow,
   type StudioEvent,
 } from "@/lib/studio-jobs";
-import { panelHref } from "@/lib/studio-view";
+import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
+import { leaveOpener, leavePrefill, sessionStore, talkItThroughText, talkTarget } from "@/lib/studio-extend";
+import { conversationHref, extendFromHref, panelHref } from "@/lib/studio-view";
 
 /**
  * The right panel while a job is happening, and after it stops.
@@ -42,9 +46,15 @@ export function JobPanel({
   jobId,
   path,
   embedded = false,
+  inConversation = false,
 }: {
   jobId: string;
   path: string;
+  /**
+   * Shown under the conversation's own "From your conversation" bar, which
+   * already leads back to it: the failure panel does not offer it twice.
+   */
+  inConversation?: boolean;
   /**
    * Inside the studio's panel, which carries the title and Close in its own
    * header and is 720px wide rather than 320px: the same parts, more room.
@@ -101,7 +111,7 @@ export function JobPanel({
     // behind it.
     const next = typeof result.data.jobId === "string" ? result.data.jobId : null;
     if (result.ok && next !== null && next !== jobId) {
-      router.push(panelHref(path, { job: next, brief: null }), { scroll: false });
+      router.push(panelHref(path, { job: next }), { scroll: false });
       router.refresh();
     }
   };
@@ -241,20 +251,24 @@ export function JobPanel({
             disabled={busy}
             onDone={(text, ok) => setSaid({ ok, text })}
             onQueued={(next) => {
-              router.push(panelHref(path, { job: next, brief: null }), { scroll: false });
+              router.push(panelHref(path, { job: next }), { scroll: false });
               router.refresh();
             }}
           />
         )}
-        {report?.actions.includes("edit") === true && (
-          <Link
-            href={panelHref(path, { brief: job.jobId, job: null })}
-            scroll={false}
-            className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium hover:bg-[var(--surface-hover)]"
-          >
-            Edit brief
-          </Link>
-        )}
+        {report?.actions.includes("talk") === true &&
+          !inConversation &&
+          (typeof job.draftId === "string" ? (
+            <Link
+              href={conversationHref(path, job.draftId)}
+              scroll={false}
+              className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium hover:bg-[var(--surface-hover)]"
+            >
+              Tell the planner what to change
+            </Link>
+          ) : (
+            <TalkItThrough job={job} path={path} failure={report} onFailed={(text) => setSaid({ ok: false, text })} />
+          ))}
         {report?.actions.includes("doctor") === true && (
           <Button type="button" disabled={busy} onClick={() => void refresh()} title="The studio checks doctor on every render of this screen">
             Recheck
@@ -535,6 +549,77 @@ function RetryButton({
       }}
     >
       Retry
+    </Button>
+  );
+}
+
+/**
+ * A failed job with no conversation of its own (the brief form started it,
+ * before the form was removed) gets one, opened on the diagram when the job
+ * extended one: its composer prefilled, not sent, with what the old brief was
+ * for and what went wrong.
+ * The person edits that before a turn is paid for. This replaced Edit brief,
+ * which was that job's only way to change what gets drawn.
+ */
+function TalkItThrough({
+  job,
+  path,
+  failure,
+  onFailed,
+}: {
+  job: Job;
+  path: string;
+  failure: FailureReport;
+  onFailed: (text: string) => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      type="button"
+      disabled={busy}
+      onClick={() => {
+        void (async () => {
+          setBusy(true);
+          try {
+            const detail = await fetch(`/studio/api/jobs/${encodeURIComponent(job.jobId)}`, { cache: "no-store" });
+            const body = (await detail.json().catch(() => ({}))) as { brief?: Brief };
+            if (!detail.ok || body.brief === undefined) {
+              onFailed("the runner did not return this job's brief, so there is nothing to talk through");
+              return;
+            }
+            // The headline, not the detail: the detail is often a path or a
+            // stack line, which makes a prefill nobody wants to edit. The
+            // planner has no use for it either; the person can paste it.
+            const words = talkItThroughText(body.brief, failure.headline);
+            const target = talkTarget(body.brief);
+            if (target !== null) {
+              // An extend job: the conversation opens on that diagram through
+              // the Extend panel, so the planner gets its EXTENDING block and
+              // the create's refusals (a diagram since deleted, a failed
+              // inspect) are handled where every Extend handles them.
+              leavePrefill(sessionStore(), target, words);
+              // `talk` in the URL is what stops the opener: storage may be
+              // unavailable, and then the prefill is lost but no turn is paid.
+              router.push(extendFromHref(path, target, { talk: true }), { scroll: false });
+              return;
+            }
+            const made = await createDraft({ idempotencyKey: idempotencyKey(`talk:${job.jobId}`) });
+            if (!made.ok) {
+              onFailed(`a conversation could not start: ${made.refusal.error}`);
+              return;
+            }
+            leaveOpener(sessionStore(), made.data.draftId, { send: null, compose: words, source: null });
+            router.push(conversationHref(path, made.data.draftId), { scroll: false });
+          } catch (error) {
+            onFailed((error as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        })();
+      }}
+    >
+      {busy ? "Opening a conversation…" : "Talk it through"}
     </Button>
   );
 }

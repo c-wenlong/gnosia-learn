@@ -32,6 +32,7 @@ import {
   targetSlug,
   threadProblem,
   visibleEntries,
+  wordsBack,
 } from "./studio-chat";
 
 const BRIEF: Brief = {
@@ -379,5 +380,17 @@ describe("suggestions", () => {
 
   it("falls back to three examples on an empty corpus", () => {
     expect(suggestions([], new Map())).toHaveLength(3);
+  });
+});
+
+describe("the composer after a refused turn", () => {
+  it("gives a typed turn back unless newer words are there", () => {
+    expect(wordsBack("", "hello", false)).toBe("hello");
+    expect(wordsBack("newer", "hello", false)).toBe("newer");
+  });
+
+  it("puts a turn that never was in the composer in front of what it holds, so neither is lost", () => {
+    expect(wordsBack("and label the angle", "Add the projection", true)).toBe("Add the projection\nand label the angle");
+    expect(wordsBack("", "Add the projection", true)).toBe("Add the projection");
   });
 });

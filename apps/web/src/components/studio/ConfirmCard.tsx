@@ -36,6 +36,7 @@ export function ConfirmCard({
   onDraw,
   jobHref,
   holderHref,
+  sourceChanged = false,
 }: {
   brief: Brief;
   pendingTopic: PendingTopic | null;
@@ -51,6 +52,12 @@ export function ConfirmCard({
   jobHref: string | null;
   /** Opens a job by id: the holder of a leased target. */
   holderHref: (jobId: string) => string;
+  /**
+   * C11: the diagram an extend brief is about moved on since the planner read
+   * it. Draw is unaffected (the job copies the diagram as it is when it
+   * starts), so this is said, not enforced.
+   */
+  sourceChanged?: boolean;
 }) {
   const live = status === "live";
   const topic = topics.get(brief.topic);
@@ -118,6 +125,11 @@ export function ConfirmCard({
         <p className="text-[14px] text-text">
           {mode.lead} <code className="rounded bg-surface2 px-1 py-0.5 font-mono text-[13px]">{mode.slug}</code>
         </p>
+        {live && sourceChanged && brief.mode === "extend" && (
+          <p className="mt-1 text-[13px] text-warn-text">
+            The diagram changed after this conversation started. The drawing starts from it as it is now.
+          </p>
+        )}
       </Row>
 
       <Row label="What will appear">
