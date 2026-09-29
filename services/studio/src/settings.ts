@@ -1,4 +1,4 @@
-import { readdirSync, type Dirent } from "node:fs";
+import { readdirSync, realpathSync, type Dirent } from "node:fs";
 import path from "node:path";
 
 import { cacheDir } from "./content-cache";
@@ -286,6 +286,9 @@ export function buildSettings(input: SettingsInput): AgentSettings {
     // a deny on the jobs directory would take this job's own scratch with it,
     // because deny beats allow.
     ...siblingJobRules(input.jobId),
+    // The CLI's default temp root, where its scratchpad would be if
+    // `CLAUDE_CODE_TMPDIR` did not move it into the job.
+    ...claudeTempRules(),
   ];
 
   return {
@@ -331,6 +334,67 @@ function denyEach(directory: string, keep: (name: string) => boolean): string[] 
  */
 function studioHomeRules(): string[] {
   return denyEach(studioHome(), (name) => name !== "jobs");
+}
+
+/**
+ * The claude CLI's per-user temp root, `/tmp/claude-<uid>/`, denied whole.
+ *
+ * Every session there has a scratchpad, `<root>/<cwd>/<session>/scratchpad/`,
+ * which its system prompt advertises, and the CLI allows any write into the
+ * current session's scratchpad on its own authority: no allow rule, no working
+ * directory, and `--permission-prompts none` does not stop it. A real job used
+ * it on 2026-09-29. Measured on 2.1.274, the edit check reads `Edit(...)` deny
+ * rules first and reaches the scratchpad allowance only after them, so a deny
+ * here does refuse it; a `Write(...)` deny would not, for the reason at the top
+ * of this file. The CLI has no flag that turns the scratchpad off: it is on
+ * whenever a server-side gate or the artifact tool's eligibility says so.
+ *
+ * `agentEnv` moves the root into the job with `CLAUDE_CODE_TMPDIR`, which is
+ * the actual fix. These rules are for a CLI that stops reading that variable:
+ * the scratchpad would come back at the default root, and a refusal there is
+ * better than a write nobody notices. Both spellings of the root are named,
+ * the literal one and the resolved one (`/private/tmp` on macOS), since the
+ * CLI resolves the root before it builds the path. A root that holds
+ * `STUDIO_HOME` or the repository is left out, because deny beats allow and
+ * the job's own candidate would go with it.
+ */
+export function claudeTempRules(): string[] {
+  const uid = process.getuid?.() ?? 0;
+  const bases = ["/tmp", process.env.CLAUDE_CODE_TMPDIR?.trim()].filter(
+    (base): base is string => base !== undefined && base !== "",
+  );
+  const guarded = [studioHome(), REPO_ROOT];
+  const roots = new Set<string>();
+  for (const base of bases) {
+    const root = path.join(path.resolve(base), `claude-${uid}`);
+    // Both spellings go, or neither: the CLI resolves a path before matching
+    // it, so dropping only `/tmp/…` would leave `/private/tmp/…` denying the
+    // job's candidate all the same.
+    if (guarded.some((dir) => contains(root, dir) || contains(resolved(root), resolved(dir)))) continue;
+    roots.add(root);
+    roots.add(resolved(root));
+  }
+  return [...roots].flatMap((root) => [rule("Read", root, "/**"), rule("Edit", root, "/**")]);
+}
+
+function contains(parent: string, child: string): boolean {
+  const relative = path.relative(parent, path.resolve(child));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+/** `target` with its deepest existing ancestor's symlinks resolved; the rest, which does not exist yet, as written. */
+function resolved(target: string): string {
+  const absoluteTarget = path.resolve(target);
+  let existing = absoluteTarget;
+  for (;;) {
+    try {
+      return path.join(realpathSync(existing), path.relative(existing, absoluteTarget));
+    } catch {
+      const parent = path.dirname(existing);
+      if (parent === existing) return absoluteTarget;
+      existing = parent;
+    }
+  }
 }
 
 /**

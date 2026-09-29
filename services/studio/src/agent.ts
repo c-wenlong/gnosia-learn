@@ -395,7 +395,8 @@ export const AGENT_AUTH_ENV: readonly string[] = [
 
 /**
  * The agent's environment: this process's, less the auth variables under
- * `login`, with `TMPDIR` pointed into the job workspace.
+ * `login`, with `TMPDIR` and `CLAUDE_CODE_TMPDIR` pointed into the job
+ * workspace.
  *
  * Built from a copy, never by deleting from `process.env`, because the runner
  * itself (and `STUDIO_AGENT_AUTH=env` on the next job) still reads it.
@@ -409,6 +410,15 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
   // this job launches lands under a directory named after the job. That
   // string is what `sweepOrphans` matches on.
   env.TMPDIR = tmp;
+  // The CLI's own temp root, which it does not take from `TMPDIR`: it is
+  // `CLAUDE_CODE_TMPDIR`, else `/tmp`, plus `claude-<uid>/`. The session's
+  // scratchpad lives under it, and the CLI allows every write there before it
+  // reads an allow rule (measured on 2.1.274; `claudeTempRules` in
+  // `settings.ts` has the detail). Left alone, a job wrote a snippet into
+  // `/private/tmp/claude-501/<cwd>/<session>/scratchpad/`, outside its
+  // workspace, and the tool said "File created successfully". Pointed here,
+  // the scratchpad is inside the job's own `tmp/` and goes with the job.
+  env.CLAUDE_CODE_TMPDIR = tmp;
   return env;
 }
 

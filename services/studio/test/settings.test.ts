@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import ignore from "ignore";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { BASH_ALLOW, buildSettings, otherJobPatterns } from "../src/settings";
+import { BASH_ALLOW, buildSettings, claudeTempRules, otherJobPatterns } from "../src/settings";
 import { cacheDir } from "../src/content-cache";
 import {
   absolute,
@@ -294,5 +294,61 @@ describe("the source note", () => {
     expect(withSource.permissions.allow).toContain(
       `Read(/${absolute("learn/concepts/foundations/dot-product.md")})`,
     );
+  });
+});
+
+describe("the CLI's own scratchpad", () => {
+  // The CLI keeps a scratchpad per session under `<root>/claude-<uid>/`, where
+  // the root is `CLAUDE_CODE_TMPDIR` or `/tmp`, and allows every write into it
+  // without reading an allow rule. `agentEnv` moves the root into the job; these
+  // denies are for a CLI that stops honouring the variable.
+  const uid = process.getuid?.() ?? 0;
+
+  it("denies the default temp root whole, under both of its spellings", () => {
+    for (const root of [`/tmp/claude-${uid}`, path.join(realpathSync("/tmp"), `claude-${uid}`)]) {
+      expect(deny).toContain(`Read(/${root}/**)`);
+      expect(deny).toContain(`Edit(/${root}/**)`);
+    }
+  });
+
+  it("writes the deny as Edit, which the CLI reads before its scratchpad allowance", () => {
+    // Measured on 2.1.274: a Write into the scratchpad under this rule came back
+    // "File is in a directory that is denied by your permission settings".
+    expect(deny.some((rule) => rule.startsWith("Write("))).toBe(false);
+  });
+
+  it("never denies a root the job's own workspace sits in", () => {
+    // Deny beats allow, so a root holding STUDIO_HOME would take the candidate
+    // with it. A runner whose STUDIO_HOME is under its own temp root keeps the
+    // /tmp deny and drops that one.
+    const base = mkdtempSync(path.join(tmpdir(), "studio-claude-tmp-"));
+    const root = path.join(realpathSync(base), `claude-${uid}`);
+    process.env.CLAUDE_CODE_TMPDIR = base;
+    process.env.STUDIO_HOME = path.join(root, "studio");
+    try {
+      const rules = claudeTempRules();
+      expect(rules).toContain(`Edit(//tmp/claude-${uid}/**)`);
+      expect(rules.some((rule) => rule.includes(root))).toBe(false);
+
+      process.env.STUDIO_HOME = home;
+      expect(claudeTempRules()).toContain(`Edit(/${root}/**)`);
+    } finally {
+      delete process.env.CLAUDE_CODE_TMPDIR;
+      process.env.STUDIO_HOME = home;
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("drops both spellings of a root when the workspace is under the symlinked one", () => {
+    // On macOS /tmp is a link to /private/tmp and the CLI resolves a path before
+    // matching it, so keeping the /private/tmp deny would still refuse the
+    // candidate of a STUDIO_HOME written as /tmp/claude-<uid>/...
+    process.env.STUDIO_HOME = path.join("/tmp", `claude-${uid}`, `studio-settings-${randomUUID()}`);
+    try {
+      const rules = claudeTempRules();
+      expect(rules.some((rule) => rule.includes(`/tmp/claude-${uid}`))).toBe(false);
+    } finally {
+      process.env.STUDIO_HOME = home;
+    }
   });
 });
