@@ -13,7 +13,7 @@ import { targetRows } from "@/lib/today-core";
  * decision 5): nothing here says "don't lose it".
  *
  * The streak has no card here. The top bar's pill already says "2 day
- * streak", with the free misses and today's fact in its tooltip, so a card
+ * streak", and opens the free misses and today's fact on a tap, so a card
  * saying it again was dropped on the owner's call (2026-09-29).
  */
 

@@ -332,7 +332,8 @@ record of what was designed; this is what changed on top of it.
   Reminders, Save to note, Add source and Generate flashcards were drawn
   disabled with "Not built yet." beside them; they are gone until they exist.
 - **Today has no Streak card.** It repeated the top bar's streak pill, which
-  stays and carries the free misses and today's fact in its tooltip.
+  stays, and is a button whose popover (and accessible name) carries the
+  free misses and today's fact, so a phone or a keyboard can reach them.
 - **"Leech" reads "Keeps slipping"** wherever the reader sees it (the Learn
   badge and filter, the review card). `leech` stays the field, the filter key
   and the CLI's word: the `--json` shapes are a contract with the plugin.
