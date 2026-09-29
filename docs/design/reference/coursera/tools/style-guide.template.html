@@ -114,9 +114,9 @@ table.t th { color: var(--neutral-primary-weak); font-weight: 600; }
 .lst:focus-visible, .lst.is-focus { outline: var(--focus-list-outline) solid var(--interactive-stroke-primary-focus); outline-offset: var(--focus-list-outline-offset); }
 
 /* Buttons (cds-button): 8px radius, label tracking +0.01em, no transition, a 1px inset edge in the rest colour */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-100); height: var(--size-button-medium); padding: var(--size-button-padding-medium); border: 0; border-radius: var(--radius-100);
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-100); height: var(--size-button-medium); padding: var(--size-button-padding-medium-block) var(--size-button-padding-medium-inline); border: 0; border-radius: var(--radius-100);
   font: var(--typography-action-secondary); letter-spacing: var(--tracking-action); background: transparent; color: var(--interactive-primary); cursor: pointer; text-decoration: none; white-space: nowrap; transition: none; }
-.btn.lg { height: var(--size-button-large); padding: var(--size-button-padding-large); font: var(--typography-action-primary); }
+.btn.lg { height: var(--size-button-large); padding: var(--size-button-padding-large-block) var(--size-button-padding-large-inline); font: var(--typography-action-primary); }
 .btn.primary { background: var(--interactive-primary); color: var(--neutral-primary-invert); box-shadow: inset 0 0 0 1px var(--interactive-primary); }
 .btn.primary:hover, .btn.primary.is-hover, .btn.primary.is-focus { background: var(--interactive-primary-hover); }
 .btn.primary:active, .btn.primary.is-pressed { background: var(--interactive-primary-pressed); }
@@ -135,9 +135,9 @@ a.btn.primary:hover, a.btn.primary.is-hover, a.btn.primary.is-focus, a.btn.prima
 .btn.ghost2:active, .btn.ghost2.is-pressed { background: var(--interactive-background-secondary-pressed-weak); color: var(--interactive-secondary-pressed); text-decoration: underline; }
 .btn.ghost2.is-focus::after, .btn.ghost2:focus-visible::after { border-radius: var(--radius-100); }
 .btn.inline { padding: 0; height: auto; }
-.btn.enroll { flex-direction: column; gap: 0; height: var(--size-enroll-height); width: var(--size-enroll-width); max-width: 100%; padding: var(--size-enroll-padding); font: var(--typography-action-primary); letter-spacing: var(--tracking-action); }
+.btn.enroll { flex-direction: column; gap: 0; height: var(--size-enroll-height); width: var(--size-enroll-width); max-width: 100%; padding: var(--size-enroll-padding-top) var(--size-enroll-padding-inline) var(--size-enroll-padding-bottom); font: var(--typography-action-primary); letter-spacing: var(--tracking-action); }
 .btn.enroll small { font: 600 var(--size-enroll-subline-font-size)/var(--size-enroll-subline-line-height) var(--ff-source-sans-pro); letter-spacing: 0; }
-.btn.enroll.compact { width: var(--size-enroll-compact-width); height: var(--size-enroll-compact-height); padding: var(--size-enroll-compact-padding); font: var(--typography-action-secondary); letter-spacing: var(--tracking-action); }
+.btn.enroll.compact { width: var(--size-enroll-compact-width); height: var(--size-enroll-compact-height); padding: var(--size-enroll-compact-padding-top) var(--size-enroll-compact-padding-inline) var(--size-enroll-compact-padding-bottom); font: var(--typography-action-secondary); letter-spacing: var(--tracking-action); }
 /* Icon buttons */
 .ibtn { display: inline-grid; place-items: center; width: var(--size-icon-button-small); height: var(--size-icon-button-small); padding: 0; border: 0; border-radius: var(--radius-100); background: transparent; color: var(--interactive-secondary); cursor: pointer; box-shadow: inset 0 0 0 1px transparent; }
 .ibtn.md { width: var(--size-icon-button-medium); height: var(--size-icon-button-medium); color: var(--interactive-primary); }
@@ -179,9 +179,9 @@ a.btn.primary:hover, a.btn.primary.is-hover, a.btn.primary.is-focus, a.btn.prima
 .mltabs { display: flex; gap: var(--size-my-learning-tab-gap); border-bottom: 1px solid var(--neutral-stroke-primary-weak); max-width: 100%; overflow-x: auto; padding: 3px 3px 0; margin: -3px -3px 0; }
 .mltab { position: relative; display: inline-flex; align-items: center; height: var(--size-my-learning-tab); padding: var(--spacing-150) 0; border: 0; background: transparent; font: var(--typography-body1); color: var(--interactive-secondary-inactive); cursor: pointer; white-space: nowrap; }
 .mltab:hover, .mltab.is-hover, .mltab.is-pressed { color: var(--interactive-secondary-hover); border-radius: var(--radius-50); }
-.mltab:hover::after, .mltab.is-hover::after, .mltab.is-pressed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--size-my-learning-tab-indicator); background: var(--neutral-stroke-primary-weak); border-radius: var(--shape-tab-indicator); }
+.mltab:hover::after, .mltab.is-hover::after, .mltab.is-pressed::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--size-my-learning-tab-indicator); background: var(--neutral-stroke-primary-weak); border-radius: var(--shape-tab-indicator-top) var(--shape-tab-indicator-top) var(--shape-tab-indicator-bottom) var(--shape-tab-indicator-bottom); }
 .mltab.is-selected { font: var(--typography-action-primary); letter-spacing: var(--tracking-action); color: var(--neutral-primary); }
-.mltab.is-selected::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--size-my-learning-tab-indicator); background: var(--emphasis-neutral-background-xxstrong); border-radius: var(--shape-tab-indicator); }
+.mltab.is-selected::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--size-my-learning-tab-indicator); background: var(--emphasis-neutral-background-xxstrong); border-radius: var(--shape-tab-indicator-top) var(--shape-tab-indicator-top) var(--shape-tab-indicator-bottom) var(--shape-tab-indicator-bottom); }
 .mltab.is-focus { outline: var(--focus-ring-inner) solid var(--interactive-stroke-primary-focus); outline-offset: var(--focus-forced-colors-outline-offset); border-radius: var(--radius-100); color: var(--interactive-secondary-hover); }
 
 /* Chips, pills, tags */
@@ -303,7 +303,7 @@ a.btn.primary:hover, a.btn.primary.is-hover, a.btn.primary.is-focus, a.btn.prima
 .srow.smod.is-selected { min-height: var(--size-sidebar-row-selected); font: var(--typography-action-primary); }
 .srow .circ { width: 20px; height: 20px; display: grid; place-items: center; flex: none; }
 .srow .circ i { width: var(--size-sidebar-circle); height: var(--size-sidebar-circle); border: 1px solid var(--neutral-stroke-primary); border-radius: 50%; }
-.mainc { flex: 1 1 420px; max-width: var(--layout-course-home-main); min-width: 0; padding: var(--layout-course-home-main-padding); }
+.mainc { flex: 1 1 420px; max-width: var(--layout-course-home-main); min-width: 0; padding: var(--layout-course-home-main-padding-block) var(--layout-course-home-main-padding-inline); }
 @media (max-width: 599.95px) { .mainc { padding: var(--spacing-200); } }
 .mainc h2 { margin: 0; font: var(--typography-subtitle-large); letter-spacing: var(--tracking-subtitle); }
 .metarow { display: flex; flex-wrap: wrap; gap: var(--spacing-100) var(--spacing-150); margin-top: var(--spacing-100); color: var(--neutral-primary-weak); font: var(--typography-body2); }

@@ -69,6 +69,8 @@ def css_val(name, t):
         return ", ".join(("inset " if s.get("inset") else "") + f'{s["offsetX"]} {s["offsetY"]} {s["blur"]} {s["spread"]} {alias(s["color"])}' for s in v)
     if ty == "typography":
         return typo(v)
+    if ty == "number" and name.startswith("letterSpacing-"):
+        return f"{v}em"  # tokens.json stores an em letter-spacing as its number of ems
     if ty == "fontFamily":
         return font_stack(name.split("-", 1)[1], v)
     return alias(v)

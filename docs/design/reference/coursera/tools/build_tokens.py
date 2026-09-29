@@ -100,7 +100,16 @@ core["fontSize"] = {k.split("-")[-1]: tok(v, "fontSizes", f"css-var {k}")
 core["lineHeight"] = {k.split("-")[-1]: tok(v, "lineHeights", f"css-var {k}")
                       for k, v in sorted(ROOT.items(), key=lambda kv: num_key(kv[0].split("-")[-1]))
                       if re.fullmatch(r"--cds-line-height-\d+", k)}
-core["letterSpacing"] = {k.split("-")[-1]: tok(v, "letterSpacing", f"css-var {k}")
+# CDS writes most letter-spacing in em, which scales with the font size; a DTCG dimension is
+# px or rem only, so an em step is published as the number of ems and a px step as a dimension.
+def ls_token(k, v):
+    m = re.fullmatch(r"(-?[\d.]+)em", v)
+    if m:
+        return tok(float(m.group(1)) if float(m.group(1)) else 0, "number", f"css-var {k}", "In em: multiply by the font size")
+    return tok(v, "dimension", f"css-var {k}")
+
+
+core["letterSpacing"] = {k.split("-")[-1]: ls_token(k, v)
                          for k, v in ROOT.items() if re.fullmatch(r"--cds-letter-spacing-(minus)?\d+", k)}
 
 
@@ -121,6 +130,7 @@ for n in names:
     key = next((v for k, v in LS.items() if n == k or n.startswith(k + "-")), None)
     ls_var = f"{C}letter-spacing-{key}" if key else None
     ls = BY_W["1440"].get(ls_var, "0em") if ls_var else "0em"
+    ls = "0px" if re.fullmatch(r"-?0(\.0+)?(em|px|rem)?", ls) else ls
     if n.endswith("-sm") or n.endswith("-xs") or "-sm-" in n or "-xs-" in n or "-lg" in n:
         continue  # breakpoint variants are folded into $extensions.responsive below
     widths = {}
