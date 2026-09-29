@@ -1,17 +1,21 @@
 import type { ReactNode } from "react";
 
 import { cx } from "./classes";
-import { Eyebrow } from "./Eyebrow";
 
 /**
  * Kit `tutor` and `user` turns in the workspace chat (hi-fi 04).
  *
- * A tutor turn is bare prose under a "Tutor" eyebrow, with its citation chips
- * and its actions on one row underneath: the thread reads as a document the
- * tutor is writing, not a column of bubbles. A learner turn is a tinted bubble
- * at radius 20 on the right, so the two voices are told apart by shape before
- * anyone reads a word. Both are server-safe; the chat that owns them is the
- * client component.
+ * A tutor turn is bare prose, with its citation chips and its actions on one
+ * row underneath: the thread reads as a document the tutor is writing, not a
+ * column of bubbles. A learner turn is a tinted bubble at radius 20 on the
+ * right, so the two voices are told apart by shape before anyone reads a word.
+ * Both are server-safe; the chat that owns them is the client component.
+ *
+ * There is no visible speaker label. A chat has two parties and the shape
+ * already says which turn is whose, so a "Tutor" or "Planner" line over every
+ * reply only repeated it (removed 2026-09-29; AGENTS.md, "Sentence case, and
+ * no label that repeats the page"). `label` still names the turn for a screen
+ * reader, as the learner's bubble's hidden "You:" does.
  */
 export function TutorMessage({
   children,
@@ -25,12 +29,12 @@ export function TutorMessage({
   cites?: ReactNode;
   /** Ghost buttons, right-aligned on the same row. */
   actions?: ReactNode;
+  /** Who is speaking, for a screen reader only. */
   label?: string;
   className?: string;
 }) {
   return (
-    <article className={cx("flex min-w-0 flex-col gap-2 px-1.5", className)}>
-      <Eyebrow>{label}</Eyebrow>
+    <article aria-label={label} className={cx("flex min-w-0 flex-col gap-2 px-1.5", className)}>
       <div className="min-w-0 text-[15px] leading-6 text-text">{children}</div>
       {(cites || actions) && (
         <div className="flex flex-wrap items-center gap-2">

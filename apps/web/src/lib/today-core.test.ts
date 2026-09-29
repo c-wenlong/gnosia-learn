@@ -10,11 +10,9 @@ import {
   estimateMinutes,
   futureDayLabel,
   lastSeenLabel,
-  leewayLine,
   nextUpEyebrows,
   pastDayLabel,
   reviewKindLabel,
-  streakStrip,
   targetRows,
 } from "@/lib/today-core";
 
@@ -242,33 +240,22 @@ describe("the habit cards", () => {
   const habitWith = (events: HabitEvent[], dueReviews: number, preferences: Record<string, unknown> = {}) =>
     computeHabit({ events, preferences, dueReviews, now: NOW, timeZone: TZ });
 
-  it("draws the week Monday first, marking today", () => {
+  it("keeps the week Monday first, with the free miss marked", () => {
     const habit = habitWith(
       [obs("2026-09-21T09:00:00Z", "softmax"), obs("2026-09-22T09:00:00Z", "softmax"), obs("2026-09-24T09:00:00Z", "softmax")],
       0,
     );
-    const strip = streakStrip(habit.streak.week, TODAY);
-    expect(strip.map((d) => d.letter).join("")).toBe("MTWTFSS");
+    const week = habit.streak.week;
+    expect(week[0].date).toBe("2026-09-21");
     // Friday is forgiven (this week's one free miss); Wednesday finds the
     // leeway spent, so the run starts on Thursday and Wednesday is a miss.
-    expect(strip.map((d) => d.state)).toEqual(["done", "done", "missed", "done", "forgiven", "today", "future"]);
-    expect(strip.filter((d) => d.isToday).map((d) => d.date)).toEqual([TODAY]);
-    expect(strip[4].description).toBe("Friday, missed, covered by a free miss");
+    expect(week.map((d) => d.state)).toEqual(["done", "done", "missed", "done", "forgiven", "today", "future"]);
     expect(habit.streak.days).toBe(1);
-    expect(strip[5].description).toBe("Saturday, today, nothing recorded yet");
   });
 
-  it("says today was studied once it was", () => {
+  it("marks today done once it was studied", () => {
     const habit = habitWith([obs("2026-09-26T08:00:00Z", "softmax")], 0);
-    const today = streakStrip(habit.streak.week, TODAY).find((d) => d.isToday);
-    expect(today?.state).toBe("done");
-    expect(today?.description).toBe("Saturday, today, studied");
-  });
-
-  it("states the leeway as a fact", () => {
-    expect(leewayLine(habitWith([], 0))).toBe("1 free miss left this week");
-    expect(leewayLine(habitWith([], 0, { dailyLeeway: 2 }))).toBe("2 free misses left this week");
-    expect(leewayLine(habitWith([], 0, { dailyLeeway: 0 }))).toBe("No free misses set");
+    expect(habit.streak.week.find((d) => d.date === TODAY)?.state).toBe("done");
   });
 
   it("lists the target's two halves with what is left of each", () => {

@@ -26,8 +26,10 @@ import type { MasteryBucket } from "@/lib/mastery-bucket";
  *
  * **One shape for every kind.** A video shows its poster and a diagram shows
  * itself; everything else, and a video or diagram with no picture to show,
- * gets the labelled `Placeholder` box the hi-fi draws, so the grid lines up
- * whatever it holds.
+ * gets an empty `--surface2` box of the same size, so the grid lines up
+ * whatever it holds. The box does not print the kind: the chip under it
+ * already does, and a card saying "note" three times (box, chip and meta
+ * line) was the kind of repetition the owner asked to remove on 2026-09-29.
  *
  * **It has to degrade honestly**, because the catalog holds rows this app has
  * never seen. A kind with no special rendering still reads as itself. An
@@ -90,6 +92,10 @@ export function AssetCard({
   const meta = assetMetaLine(asset);
   const previewable = family === "video" || family === "diagram";
   const showThumb = previewable && Boolean(thumbnailSrc) && !thumbFailed;
+  // A note explains its own concept, so the concept line would repeat the
+  // title word for word; the dot then carries the mastery on its own label.
+  const conceptIsTitle =
+    concept !== undefined && concept.title.trim().toLowerCase() === name.text.trim().toLowerCase();
 
   const nameClass =
     name.source === "title"
@@ -127,24 +133,24 @@ export function AssetCard({
             className="h-full w-full"
           />
         ) : (
-          <span data-thumbnail="placeholder" className="text-[12px] text-text3">
-            {label.toLowerCase()}
-          </span>
+          <span data-thumbnail="placeholder" aria-hidden />
         )}
       </div>
       <div className="flex min-w-0 items-center gap-2">
-        {/* Lowercase by style only, so the chip reads "video" as the hi-fi
-            draws it while its text stays the kind's name. */}
-        <Chip size="sm" className="lowercase">
-          {label}
-        </Chip>
+        <Chip size="sm">{label}</Chip>
         {meta && <span className="min-w-0 truncate text-[12px] text-text2">{meta}</span>}
       </div>
       <h3 className={cx("line-clamp-2 break-words text-[14px] leading-snug", nameClass)}>{name.text}</h3>
       {concept !== undefined ? (
         <p className="flex min-w-0 items-center gap-2 text-[12px] text-text2">
-          <MasteryDot bucket={concept.bucket} size={12} />
-          <span className="min-w-0 truncate">{concept.title}</span>
+          {conceptIsTitle ? (
+            <MasteryDot bucket={concept.bucket} size={12} showLabel />
+          ) : (
+            <>
+              <MasteryDot bucket={concept.bucket} size={12} />
+              <span className="min-w-0 truncate">{concept.title}</span>
+            </>
+          )}
           {concept.more > 0 && <span className="shrink-0 text-text3">+{concept.more}</span>}
         </p>
       ) : topic !== undefined ? (

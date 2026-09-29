@@ -13,6 +13,8 @@ export function Panel({
   actions,
   as: Tag = "section",
   className,
+  headerClassName,
+  titleClassName,
   bodyClassName,
   children,
   ...rest
@@ -21,6 +23,16 @@ export function Panel({
   actions?: ReactNode;
   as?: "section" | "div" | "aside";
   className?: string;
+  /**
+   * Classes for the header, e.g. `max-[899px]:hidden` where a tab row above
+   * already names the panel and the header would say it a second time.
+   */
+  headerClassName?: string;
+  /**
+   * Classes for the title alone, e.g. `max-[899px]:sr-only` where a tab row
+   * names the panel but the header's actions still have to show.
+   */
+  titleClassName?: string;
   /** Classes for the body under the header, e.g. `overflow-y-auto`. */
   bodyClassName?: string;
   children?: ReactNode;
@@ -30,8 +42,10 @@ export function Panel({
   return (
     <Tag className={cx("flex min-h-0 min-w-0 flex-col rounded-2xl bg-surface", className)} {...rest}>
       {header && (
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-hair px-4">
-          {title !== undefined && <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text">{title}</h2>}
+        <div className={cx("flex h-12 shrink-0 items-center gap-2 border-b border-hair px-4", headerClassName)}>
+          {title !== undefined && (
+            <h2 className={cx("min-w-0 flex-1 truncate text-[14px] font-semibold text-text", titleClassName)}>{title}</h2>
+          )}
           {actions !== undefined && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
         </div>
       )}

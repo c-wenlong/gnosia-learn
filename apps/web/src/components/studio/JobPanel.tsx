@@ -437,10 +437,10 @@ function JobLog({
       <button
         type="button"
         onClick={() => setChoice({ job: jobId, open: !open })}
-        className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--muted)]"
+        className="flex w-full items-center justify-between text-xs font-semibold text-[var(--muted-strong)]"
       >
         <span>Raw log</span>
-        <span>{open ? "hide" : "show"}</span>
+        <span>{open ? "Hide" : "Show"}</span>
       </button>
       {open && (
         <>

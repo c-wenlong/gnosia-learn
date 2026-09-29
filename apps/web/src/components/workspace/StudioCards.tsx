@@ -136,18 +136,13 @@ export function StudioCards({
                 >
                   <AssetThumb src={a.thumbnail} />
                   <span className="min-w-0 flex-1 truncate px-1">
-                    {assetKindLabel(a.kind).toLowerCase()} · {assetDisplayTitle(a).text}
+                    {assetKindLabel(a.kind)} · {assetDisplayTitle(a).text}
                   </span>
                 </Link>
               </li>
             ))}
           </ul>
         )}
-        <span className="mt-1">
-          <Button variant="secondary" size="sm" disabled disabledReason="Not built yet.">
-            Generate flashcards
-          </Button>
-        </span>
       </Card>
 
       <Card tight className="gap-1.5" aria-label="Neighbourhood">

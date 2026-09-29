@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { GnosiaWordmark } from "@/components/brand";
-import { Pill } from "@/components/ui/Pill";
 import { cx } from "@/components/ui/classes";
 import { habitLabels, type Habit } from "@/lib/habit-core";
 import { activeDestination, DESTINATIONS } from "@/lib/nav";
 
 import { AvatarMenu } from "./AvatarMenu";
+import { HabitPill } from "./HabitPill";
 import { useHabitRefresh } from "./use-habit-refresh";
 
 /**
@@ -74,20 +74,19 @@ export function TopBar({ habit, studio }: { habit: Habit; studio: boolean }) {
           {/* Visibility is on wrappers: a class that hides the pill itself
               would compete with the pill's own display utility. */}
           <span className="flex lg:hidden">
-            <Pill dot="var(--streak)" title={labels.streakTitle}>
-              <span className="sr-only">Streak: </span>
+            <HabitPill dot="var(--streak)" name={labels.streakName} details={labels.streakDetails}>
               {labels.streakShort}
-            </Pill>
+            </HabitPill>
           </span>
           <span className="hidden lg:flex">
-            <Pill dot="var(--streak)" title={labels.streakTitle}>
+            <HabitPill dot="var(--streak)" name={labels.streakName} details={labels.streakDetails}>
               {labels.streak}
-            </Pill>
+            </HabitPill>
           </span>
           <span className="hidden md:flex">
-            <Pill dot="var(--accent)" title={labels.targetTitle}>
+            <HabitPill dot="var(--accent)" name={labels.targetName} details={labels.targetDetails}>
               {labels.target}
-            </Pill>
+            </HabitPill>
           </span>
           <AvatarMenu studio={studio} />
         </div>

@@ -36,7 +36,7 @@ function RecapSection({ label, items }: { label: string; items: string[] }) {
   if (items.length === 0) return null;
   return (
     <div className="mt-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+      <p className="text-xs font-semibold text-[var(--muted-strong)]">
         {label}
       </p>
       <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-[var(--muted-strong)]">
@@ -82,7 +82,7 @@ export function RecapCard({
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)] p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--accent-strong)]">
+        <p className="text-xs font-semibold text-[var(--accent-strong)]">
           {title}
         </p>
         <p className="text-[11px] text-[var(--muted)]">
@@ -168,7 +168,7 @@ export function RecapEditor({
   const fieldClass =
     "mt-1 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none ring-[var(--accent)] focus:ring-2";
   const labelClass =
-    "text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]";
+    "text-xs font-semibold text-[var(--muted-strong)]";
 
   const empty =
     !summary.trim() &&

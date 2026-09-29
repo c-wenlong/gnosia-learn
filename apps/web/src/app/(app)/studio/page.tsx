@@ -313,7 +313,7 @@ export default async function StudioPage({
               groups.map((group, at) => (
                 <section key={group.key}>
                   {group.label !== "" && (
-                    <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
                       {group.label} · {group.items.length}
                     </h2>
                   )}
