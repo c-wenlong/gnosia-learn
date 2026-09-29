@@ -65,3 +65,18 @@ export const VIDEO_RUNNER_NAME = "studio-videos";
  * more, so it runs at start and every ten minutes, not per request.
  */
 export const VIDEO_DOCTOR_TTL_MS = integer("STUDIO_VIDEO_DOCTOR_TTL_MS", 10 * 60_000, 10_000, 24 * 3_600_000);
+
+/**
+ * Whether this build carries the video kind, which decides whether a new
+ * draft's planner prompt has the video section (D59 of docs/STUDIO-MENTIONS.md).
+ * macOS only until the bubblewrap profile is measured on Linux (V4).
+ * `STUDIO_VIDEO_KIND=off` turns it off here too, and `on` turns it on
+ * elsewhere, for a test suite: built is not usable, and on a machine without
+ * Seatbelt the video doctor fails, so every press there answers 503 (V2).
+ */
+export function videoKindBuilt(): boolean {
+  const raw = process.env.STUDIO_VIDEO_KIND?.trim().toLowerCase();
+  if (raw === "off" || raw === "0" || raw === "false") return false;
+  if (raw === "on" || raw === "1" || raw === "true") return true;
+  return process.platform === "darwin";
+}

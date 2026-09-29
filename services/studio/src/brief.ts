@@ -75,7 +75,14 @@ export interface Brief {
 /** A validated brief: every field present, every slug checked, every cap applied. */
 export interface ValidBrief extends Brief {
   mode: Mode;
-  model: Model;
+  /**
+   * Only when the brief named one. Absent is the ordinary case: the runner
+   * then takes the model from the settings panel's Diagrams row at job start
+   * (D53 of docs/STUDIO-VIDEOS.md), and `sonnet` when the owner never saved
+   * one. Filling `sonnet` in here, as this did before the panel, would make
+   * every brief name a model and the panel apply to none.
+   */
+  model?: Model;
   concepts: string[];
   idempotencyKey: string;
 }
@@ -380,7 +387,7 @@ export function validateBrief(input: unknown, vocabulary: Vocabulary): ValidBrie
   const layout = raw.layout === undefined ? undefined : oneOf(raw.layout, "layout", LAYOUTS);
   const source = optionalText(raw.source, "source", 400);
   const notes = optionalText(raw.notes, "notes");
-  const model = raw.model === undefined ? ("sonnet" as Model) : oneOf(raw.model, "model", MODELS);
+  const model = raw.model === undefined ? undefined : oneOf(raw.model, "model", MODELS);
   const idempotencyKey = optionalText(raw.idempotencyKey, "idempotencyKey", 200);
 
   return {
@@ -396,7 +403,7 @@ export function validateBrief(input: unknown, vocabulary: Vocabulary): ValidBrie
     ...(mermaid === undefined ? {} : { mermaid }),
     ...(source === undefined ? {} : { source }),
     ...(notes === undefined ? {} : { notes }),
-    model,
+    ...(model === undefined ? {} : { model }),
     // An absent key still has to be unique, or a second brief for a different
     // diagram would resolve to the first job. The caller supplying one is what
     // makes a retried submit safe; minting one here only makes it legal.

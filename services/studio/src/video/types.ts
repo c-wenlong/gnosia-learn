@@ -11,8 +11,16 @@ import type { ValidVideoBrief } from "./brief";
  * fields only a video has.
  */
 
-/** Where a model or an effort level came from (D53). */
-export type AgentSettingSource = "panel" | "claude-settings" | "cli";
+/**
+ * Where a model or an effort level came from (D53). `panel` is a value the
+ * settings panel stored; `claude-settings` the owner's own Claude Code
+ * default, read from their user settings because the seal hides that file
+ * from the session; `cli` no flag at all. Two only a diagram job records:
+ * `brief`, a model the brief itself named (only `POST /api/jobs` or a
+ * person's brief edit can), which beats the panel; and `default`, the
+ * diagram agent's `sonnet` when the owner has never saved the Diagrams row.
+ */
+export type AgentSettingSource = "panel" | "claude-settings" | "cli" | "brief" | "default";
 
 export interface AgentSetting {
   /** What the panel says: `default`, or a value. */

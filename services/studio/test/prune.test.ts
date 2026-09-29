@@ -128,9 +128,10 @@ async function draft(): Promise<string> {
 async function drew(): Promise<{ id: string; jobId: string }> {
   await fake.script([{ text: proposing(good) }]);
   const id = await draft();
-  await drafts.send(id, "draw it");
+  // Tagged Diagram (D57), so the reply's brief is the draft's.
+  await drafts.send(id, "@diagram draw it", [{ kind: "diagram", start: 0, end: 8 }]);
   await drafts.settled(id);
-  const { jobId } = await drafts.draw(id, "press");
+  const { jobId } = await drafts.drawOne(id, "press");
   jobRows.add(id);
   return { id, jobId };
 }

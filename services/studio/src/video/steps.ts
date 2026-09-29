@@ -55,7 +55,10 @@ export function deriveSteps(facts: StepFacts): VideoStep[] {
     steps.push(
       step(
         "narration",
-        voicing.length === 0 ? (facts.seeded === null ? "pending" : "running") : failed === 0 ? "done" : "failed",
+        // Pending until the agent's own first `narrate` call: seeding is the
+        // runner copying clips before the agent starts, which is a note on the
+        // step, not the step running.
+        voicing.length === 0 ? "pending" : failed === 0 ? "done" : "failed",
         voicing.length,
         voicing.length === 0 ? seededNote : `${voicing.length} narration step${voicing.length === 1 ? "" : "s"}${seededNote === null ? "" : `; ${seededNote}`}`,
       ),
