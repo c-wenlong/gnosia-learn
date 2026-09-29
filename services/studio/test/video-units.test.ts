@@ -267,7 +267,12 @@ describe("the video brief", () => {
     (quote.scenes as { beats: { say: string }[] }[])[0]!.beats[0]!.say = 'She said "hi"';
     expect(() => validateVideoBrief(quote, testVocabulary())).toThrow(BriefError);
     const short = { ...base(), targetSeconds: 300 };
-    expect(() => validateVideoBrief(short, testVocabulary())).toThrow(/add about \d+ characters or set targetSeconds/);
+    // About 55 seconds of lines: never told to set a target the range refuses.
+    expect(() => validateVideoBrief(short, testVocabulary())).toThrow(/add about \d+ characters; a video is at least 60 seconds, so the lines must fill a minute$/);
+    const doubled = base();
+    for (const scene of doubled.scenes as { beats: { say: string }[] }[]) for (const beat of scene.beats) beat.say = `${beat.say} ${beat.say}`;
+    expect(() => validateVideoBrief(doubled, testVocabulary())).toThrow(/cut about \d+ characters or set targetSeconds to \d+$/);
+    expect(() => validateVideoBrief({ ...base(), targetSeconds: 45 }, testVocabulary())).toThrow(/at least a minute and at most ten/);
     expect(() => validateVideoBrief({ ...base(), voice: "zz_nobody" }, testVocabulary())).toThrow(/kokoro voice/);
     expect(() => validateVideoBrief({ ...base(), scenes: [(base().scenes as unknown[])[0]] }, testVocabulary())).toThrow(/2 to 8 scenes/);
   });

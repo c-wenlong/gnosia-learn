@@ -27,6 +27,7 @@ process.env.STUDIO_CLAUDE_BIN = FAKE;
 const { AGENT_AUTH_ENV, agentEnv, startAgent } = await import("../src/agent");
 const { agentAuth, agentAuthReport } = await import("../src/config");
 const { candidateDir, jobDir, scratchDir, tmpDir } = await import("../src/paths");
+const { JobCostMeter } = await import("../src/cost");
 
 const API_ERROR =
   "API Error: 400 This API key is not scoped to a workspace, so this request must include " +
@@ -58,12 +59,24 @@ out({
   appendText: process.argv.includes("--append-system-prompt"),
   model: process.argv.includes("--model") ? process.argv[process.argv.indexOf("--model") + 1] : null,
   effort: process.argv.includes("--effort") ? process.argv[process.argv.indexOf("--effort") + 1] : null,
+  partial: process.argv.includes("--include-partial-messages"),
 });
 out({ type: "system", subtype: "init", model: "claude-sonnet-test", apiKeySource: key ? "ANTHROPIC_API_KEY" : "none" });
 if (key) {
   out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: ${JSON.stringify(API_ERROR)} }] }, is_api_error_message: true });
   out({ type: "result", subtype: "success", is_error: true, num_turns: 1, total_cost_usd: 0, api_error_status: 400, result: ${JSON.stringify(API_ERROR)} });
   process.exit(1);
+}
+if (process.argv.includes("--include-partial-messages")) {
+  // The frames the real CLI prints around one message, as it printed them.
+  const usage = { input_tokens: 2, cache_creation_input_tokens: 100, cache_read_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 100 }, output_tokens: 1 };
+  out({ type: "stream_event", parent_tool_use_id: null, event: { type: "message_start", message: { id: "msg_fake", model: "claude-sonnet-5", usage } } });
+  out({ type: "stream_event", parent_tool_use_id: null, event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } });
+  out({ type: "stream_event", parent_tool_use_id: null, event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "drew it" } } });
+  out({ type: "stream_event", parent_tool_use_id: null, event: { type: "content_block_stop", index: 0 } });
+  out({ type: "assistant", message: { id: "msg_fake", model: "claude-sonnet-5", usage, content: [{ type: "text", text: "drew it" }] } });
+  out({ type: "stream_event", parent_tool_use_id: null, event: { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { ...usage, output_tokens: 250 } } });
+  out({ type: "stream_event", parent_tool_use_id: null, event: { type: "message_stop" } });
 }
 out({ type: "result", subtype: "success", is_error: false, num_turns: 4, total_cost_usd: 0.01, result: "drew it" });
 `;
@@ -139,6 +152,25 @@ describe("the agent's working directories", () => {
     const { env } = await runFake("job-dirs");
     expect(env.addDirs).toEqual([scratchDir("job-dirs"), candidateDir("job-dirs")]);
     expect(env.addDirs).not.toContain(jobDir("job-dirs"));
+  });
+});
+
+describe("the agent's stream", () => {
+  it("asks for the partial frames, and passes on the two the cost meter reads and none of the rest", async () => {
+    // Phase 2 measured: without `message_delta` the stream never says how many
+    // tokens a message wrote, and a killed video job recorded a third too little.
+    const { env, lines } = await runFake("job-partial");
+    expect(env.partial).toBe(true);
+    const frames = lines
+      .map((line) => JSON.parse(line) as { type: string; event?: { type: string } })
+      .filter((event) => event.type === "stream_event")
+      .map((event) => event.event?.type);
+    expect(frames).toEqual(["message_start", "message_delta"]);
+    const meter = new JobCostMeter("sonnet");
+    for (const line of lines) {
+      if (JSON.parse(line).type !== "result") meter.observe(line);
+    }
+    expect(meter.read().usage.outputTokens).toBe(250);
   });
 });
 
