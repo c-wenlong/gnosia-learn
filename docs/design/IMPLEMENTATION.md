@@ -155,8 +155,7 @@ The pure helpers beside them:
 | [`@/components/ui/classes`](../../apps/web/src/components/ui/classes.ts) | `cx(...)`, `buttonClasses({ variant, size, block, className })`, `chipClasses({ active, size, interactive, className })`, `inputClasses({ pill, className })`, `cardClasses({ tight, className })` |
 | [`@/lib/mastery-bucket`](../../apps/web/src/lib/mastery-bucket.ts) | `type MasteryBucket = "mastered" \| "learning" \| "untouched"`, `bucketOf({ mastery, observations? })`, `MASTERY_BUCKETS`, `MASTERY_BUCKET_LABEL`, `masteryCaption(bucket, pL?)` |
 | [`@/lib/nav`](../../apps/web/src/lib/nav.ts) | `DESTINATIONS`, `type DestinationKey`, `activeDestination(pathname)` |
-| [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags)`, `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `partnerLine(...)`, `courseCounts(...)`, `usedTags(...)` |
-| [`@/lib/course-covers`](../../apps/web/src/lib/course-covers.ts) | `COURSE_COVERS` (the slugs with a photo in `public/course-covers/`) and `coverSrc(slug)`, null for a course with none |
+| [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags, coverSha256?)`, `coverUrl(slug, sha256)` (the cover route, versioned by the image's hash), `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `partnerLine(...)`, `courseCounts(...)`, `usedTags(...)` |
 | [`@/lib/habit-core`](../../apps/web/src/lib/habit-core.ts) | the `Habit` types, `computeHabit`, `computeStreak`, `computeTarget`, `habitLabels`, `dayKey`, `weekStart`, `addDays`, `parseDailyTarget`, `parseLeeway` |
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), the validators the preference route runs (`validateDailyTarget`, `validateLeeway`, `validateTutorStyle`, `validateMotionMode`), and the words (`describeTarget`, `describeLeeway`, `targetChoices`) |
 | [`@/lib/today-core`](../../apps/web/src/lib/today-core.ts) | the Today model (`TodayModel`) and its pure parts: `activityRows`, `dueLabel`, `countCheckBlocks`, `targetRows`, `coursesInProgress`, `pastDayLabel`, `futureDayLabel` |
@@ -649,11 +648,17 @@ credits where Coursera names the partner, the title, and the type line
 started). The whole card links to `/courses/<slug>`. Four across at 1392px
 (280px minimum), two on a phone.
 
-The covers are stock photos in `apps/web/public/course-covers/<slug>.webp`
-(960x540), each credited in the `CREDITS.md` beside them, and listed in
-`COURSE_COVERS` so the page never reads the folder (`course-covers.test.ts`
-fails when the two disagree). A course with no photo shows its code in a
-`Placeholder`.
+The covers are stock photos (960x540 WebP) kept in the blob store: the course
+row names each by its blob key with its credit beside it (`catalog course
+cover`, services/catalog/SCHEMA.md "Course covers"), `getCourseCovers()` in
+`apps/web/src/data/course-covers.ts` says which courses have one, and the card
+loads it from `/api/courses/<slug>/cover?v=<hash>`, cached for good since the
+hash names the image. The `<Image>` is `unoptimized`: the route needs the
+session cookie, and Next's optimizer fetches its source without forwarding
+any header. A course with no photo, a page that cannot read the covers, or
+a photo that fails to load (a deployment without the blob store) shows its
+code in a `Placeholder` (`CourseCover`, which swaps on the image's `onError`
+inside the same 16:9 frame).
 
 | Where | Coursera | Built | Why |
 | --- | --- | --- | --- |

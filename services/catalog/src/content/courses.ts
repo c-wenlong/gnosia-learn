@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import { ContentError, COURSES_DIR, courseFileName, parseCourse, type Course } from "@self-learn/content";
 import {
@@ -16,6 +17,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ASSET_PREFIX } from "../index/source";
+import { CoverImageError, creditOf, keyParts, readCoverImage, storedCredit } from "./cover-image";
 import { renderType } from "./export";
 import { PositionGapError, placePositions } from "./positions";
 import { latestRevisions, lockEntity } from "./revisions";
@@ -60,6 +62,15 @@ import { CLI_OWNER } from "./scope";
  * changed, are rewritten in the tree the type was imported from, and the
  * write is refused while either holds an edit the database has not imported,
  * the file being imported aside.
+ *
+ * **The cover is not changed by an import.** A cover is an image, and the
+ * course file only names it (`cover:`, with its credit); `catalog course
+ * cover` is the one writer of it. The import carries the course's cover
+ * over, and refuses a file whose `cover:` says anything else: a cover the
+ * course does not have, a different credit or image type, no `cover:` for a
+ * course that has one, or an image beside the file whose bytes are not the
+ * stored ones. So a file written before the cover was set cannot silently
+ * take it away, and an edited credit is not silently ignored.
  *
  * **Export** writes one course's file as the database would export it: the
  * file a person edits and imports back.
@@ -327,6 +338,59 @@ async function checkReferences(db: CatalogDatabase, course: Course, file: string
   }
 }
 
+/**
+ * Refuse a file whose `cover:` is not the cover the course has (see the
+ * module comment): the image type and the credit must match what the row
+ * holds, and an image beside the file under the name it gives must hold the
+ * stored bytes. An absent image is fine: `course export` writes the file
+ * alone, and the cover stays where it is.
+ */
+async function checkCover(row: CollectionRow | undefined, course: Course, file: string): Promise<void> {
+  const key = row?.kind === "course" ? row.coverBlobKey : null;
+  const named = course.cover;
+  const how =
+    `A cover is set with \`catalog course cover ${course.id} --file <image> --photographer P --source URL ` +
+    `--licence L --reason R\`, and removed with \`catalog course cover ${course.id} --clear --reason R\`.`;
+  if (named === undefined && key === null) return;
+  if (named === undefined) {
+    throw new CourseWriteError(
+      `${file} has no cover:, and course "${course.id}" has a cover (${key}). course import does not remove ` +
+        `a cover; export the course again (it writes the cover: block) and reapply the edit. ${how} ` +
+        `Nothing was written.`,
+    );
+  }
+  if (key === null) {
+    throw new CourseWriteError(
+      `${file} names cover ${named.file}, and course "${course.id}" has none. course import does not store ` +
+        `images. ${how} Nothing was written.`,
+    );
+  }
+  const { sha256: stored, ext } = keyParts(key);
+  const credit = storedCredit(row?.metadata);
+  const differs: string[] = [];
+  if (!named.file.endsWith(`.${ext}`)) differs.push(`the image is a .${ext}, not ${named.file}`);
+  for (const field of ["photographer", "source", "licence"] as const) {
+    if (credit?.[field] !== named[field]) differs.push(`${field} is ${JSON.stringify(credit?.[field] ?? null)}`);
+  }
+  if (differs.length === 0) {
+    const beside = path.join(path.dirname(file), named.file);
+    if ((await stat(beside).catch(() => null)) === null) return;
+    let image;
+    try {
+      image = await readCoverImage(beside);
+    } catch (error) {
+      if (!(error instanceof CoverImageError)) throw error;
+      throw new CourseWriteError(`${error.message}. Nothing was written.`);
+    }
+    if (image.sha256 === stored) return;
+    differs.push(`${beside} is not the stored image`);
+  }
+  throw new CourseWriteError(
+    `${file}: its cover: is not course "${course.id}"'s cover in the catalog (${differs.join("; ")}). ` +
+      `course import does not change a cover. ${how} Nothing was written.`,
+  );
+}
+
 /** The composite write that makes the database hold `course`, and what it archives and deletes. */
 interface Plan {
   inputs: WriteContentInput[];
@@ -484,7 +548,13 @@ async function plan(
           inferred: course.inferred,
           tags: course.tags,
           capstone: course.capstone,
+          // The cover the course has, carried over: `checkCover` has refused
+          // any file whose `cover:` differs from it, before this runs.
+          ...(existing.course?.coverBlobKey != null && course.cover !== undefined
+            ? { coverCredit: creditOf(course.cover) }
+            : {}),
         },
+        coverBlobKey: course.cover === undefined ? null : (existing.course?.coverBlobKey ?? null),
         archivedAt: null,
       }),
       links: {
@@ -875,6 +945,9 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
     const first = await plan(tx, course, await readExisting(tx, course.id), by);
     await lockAll(tx, first.touched);
     const existing = await readExisting(tx, course.id);
+    // Under the course's lock, so a `course cover` write cannot land between
+    // this check and the write that carries the cover over.
+    await checkCover(existing.course, course, options.file);
     const planned = await plan(tx, course, existing, by);
     const locked = new Set(first.touched.map(([type, id]) => `${type} ${id}`));
     const unlocked = planned.touched.filter(([type, id]) => !locked.has(`${type} ${id}`));

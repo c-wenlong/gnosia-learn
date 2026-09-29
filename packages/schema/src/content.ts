@@ -236,7 +236,8 @@ export const concept = pgTable(
 /**
  * Courses, modules and (later) decks, in one self-referencing tree. `metadata`
  * carries the kind-specific extras the web app already shows and that no query
- * joins on: `inferred`, `code`, `credits`, `track`, `tags`, `capstone`.
+ * joins on: `inferred`, `code`, `credits`, `track`, `tags`, `capstone`, and a
+ * course's `coverCredit` beside its `cover_blob_key`.
  */
 export const collection = pgTable(
   "collection",
@@ -259,6 +260,19 @@ export const collection = pgTable(
      * `curriculum_item.collection_id` is RESTRICT, so a delete would fail.
      */
     archivedAt: archivedAt(),
+    /**
+     * A course's cover photo, as the blob store's key: the bytes are a blob
+     * (D5, D7) and the URL is derived (`/api/courses/<slug>/cover`), so a
+     * store that moves never leaves a stale link in a row. Its credit
+     * (photographer, source page, licence) is `metadata.coverCredit`, so it
+     * travels with the row. Restrict, as `diagram.svg_blob_key`: an object
+     * a course shows is not deletable. Written by `catalog course cover` and
+     * by the courses source of `catalog import`.
+     */
+    coverBlobKey: text("cover_blob_key").references(() => blobObject.key, {
+      onDelete: "restrict",
+      onUpdate: "cascade",
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -266,8 +280,18 @@ export const collection = pgTable(
     check("collection_id_check", kebab("id")),
     check("collection_kind_check", inList("kind", COLLECTION_KINDS)),
     check("collection_not_own_parent_check", sql`parent_id is distinct from id`),
+    // Only a course has a cover: a module is a page inside one, and a cover
+    // on it would be a photo nothing shows.
+    check("collection_cover_course_check", sql`cover_blob_key is null or kind = 'course'`),
+    // A cover always carries its credit, and a credit describes a cover: a
+    // photo whose licence was lost on the way in is the failure this is for.
+    check(
+      "collection_cover_credit_check",
+      sql`(cover_blob_key is null) = ((metadata -> 'coverCredit') is null)`,
+    ),
     index("collection_parent_id_idx").on(t.parentId),
     index("collection_owner_id_idx").on(t.ownerId),
+    index("collection_cover_blob_key_idx").on(t.coverBlobKey),
     // Two live collections under one parent cannot share a slug, which is the
     // URL segment. `coalesce` so two top-level courses (parent_id NULL) collide
     // too; partial so an archived module does not hold its slug against the

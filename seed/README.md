@@ -21,7 +21,7 @@ own, [COURSES.md](COURSES.md).
 | --- | --- | --- |
 | Topics | 5, in 4 domains | `vector-and-linear-algebra-basics`, `transformer-architecture-and-training`, `agent-tool-use-and-reasoning-loops`, `agent-memory-and-state`, `tomasulo-algorithm` |
 | Tags | 2 | `agentic-ai`, `transformers`: the course's own |
-| Courses | 1, with 2 modules | `cp4284`, cut to `cp4284-m1` and `cp4284-m3`, the modules filed under those topics: 5 items, 4 links, 8 concept links |
+| Courses | 1, with 2 modules | `cp4284`, cut to `cp4284-m1` and `cp4284-m3`, the modules filed under those topics: 5 items, 4 links, 8 concept links, and its cover photo (`cp4284.cover.webp`) |
 | Concept notes | 11 | every note filed under those topics, with their 13 prerequisites |
 | Session logs | 1 | `2026-08-19-react-agents` |
 | Diagrams | 1 | `vector-as-a-list-of-numbers`, its `.tldr` and its `.svg` |
@@ -53,9 +53,9 @@ of each command after a `createdb self_learn_seed`.
 `MANIMKC_ROOT` points at a directory with no manimkc CLI so the import leaves
 manimkc out. On a machine with the submodule checked out, the manimkc source
 would otherwise read every rendered video and refuse each topic folder, since
-no seed topic maps one. The diagram's SVG goes into the blob store
-`SELF_LEARN_HOME` names; set it to a scratch directory unless you want it in
-`~/.self-learn/blobs`.
+no seed topic maps one. The diagram's SVG and the course's cover photo go
+into the blob store `SELF_LEARN_HOME` names; set it to a scratch directory
+unless you want them in `~/.self-learn/blobs`.
 
 ## Regenerating it
 
@@ -120,6 +120,7 @@ restored archive, becomes a database.
 | `content/topics.yaml` | The shared topic vocabulary: one entry per subject, with its domain, summary, aliases, relations and the videos, course modules and concept notes it covers | `catalog topic ...`; `learn concept add --topic` files a note under a topic |
 | `content/tags.yaml` | The cross-course themes a course's `tags:` names, and how related courses find each other | `catalog tag ...` |
 | `content/courses/<code>.yaml` | One course: modules, curriculum items, subtopics and curated resources ([COURSES.md](COURSES.md)) | `catalog course import`, and `catalog item archive\|restore\|purge` |
+| `content/courses/<code>.cover.<webp\|jpg\|png>` | A course's cover photo, named by its file's `cover:` with its credit. A blob in the database, written out here from the store and stored back by an import | `catalog course cover` |
 | `learn/concepts/<domain>/<id>.md` | Concept notes | the `learn` CLI: `concept add\|edit\|checkout\|commit`, `check add`, `vault push` ([docs/LEARN.md](../docs/LEARN.md)) |
 | `learn/sessions/<id>.md` | Session logs | the `learn` CLI's `session` and `observe` |
 | `learn/assets/<slug>.tldr`, `.svg` | Diagrams: the editable canvas and its export | the studio, `catalog diagram put\|commit`, `learn diagram commit` |

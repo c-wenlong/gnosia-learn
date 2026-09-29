@@ -330,8 +330,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       expect(report.steps.find((s) => s.name === "asset upload")?.warning).toMatch(/^no posters were made: ffmpeg was not found/);
       expect(report.warnings).toBe(1);
       expect(step("asset upload again")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0 });
-      // The seed's diagram SVG, the render and its transcript: all three the import's.
-      expect(step("blob audit")).toMatchObject({ rows: 3, objects: 3, outstanding: 0 });
+      // The seed's diagram SVG and course cover, the render and its
+      // transcript: all four the import's.
+      expect(step("blob audit")).toMatchObject({ rows: 4, objects: 4, outstanding: 0 });
       expect(step("doctor again")["blobContract"]).toEqual({ inForce: true, unstored: [], unkeyed: [] });
       expect(step("migrate the contract")).toMatchObject({ applied: [], head: latestTag(), held: [] });
 

@@ -33,6 +33,25 @@ export const SCHEDULE_LIMITS = {
 /** BKT prior, mirroring scripts/learn/lib/bkt.mjs (`DEFAULT_PARAMS.pL0`). */
 export const DEFAULT_P_L = 0.25;
 
+/**
+ * The image types a course cover may be, by the file extension its blob key
+ * and its export file carry. A closed list: `catalog course cover` refuses
+ * anything else by its magic bytes, and the cover route serves only these.
+ */
+export const COURSE_COVER_TYPES = {
+  webp: "image/webp",
+  jpg: "image/jpeg",
+  png: "image/png",
+} as const;
+export type CourseCoverExt = keyof typeof COURSE_COVER_TYPES;
+
+/**
+ * The largest cover `catalog course cover` stores, in bytes. A card shows it
+ * at 960x540 at most, where a WebP is under 100 KB and even a PNG is well
+ * under this; anything larger is a photo nobody resized.
+ */
+export const COURSE_COVER_MAX_BYTES = 2 * 1024 * 1024;
+
 /** The default single learner. One row until auth exists; not a UUID so it stays readable. */
 export const LOCAL_LEARNER_ID = "local";
 

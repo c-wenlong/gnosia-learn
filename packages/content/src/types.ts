@@ -54,6 +54,24 @@ export interface Module {
   resources: Resource[];
 }
 
+/**
+ * A course's cover photo, as the export format names it: the image file
+ * beside the course file, and its credit. In the database the image is a blob
+ * (`collection.cover_blob_key`) and the credit is `metadata.coverCredit`;
+ * the file name is derived from the course code and the image type, so it is
+ * the same on every export.
+ */
+export interface CourseCover {
+  /** `<code>.cover.<webp|jpg|png>`, in lowercase, in the course file's own directory. */
+  file: string;
+  /** Who took it, as the source credits them. */
+  photographer: string;
+  /** The page the photo came from, an http(s) URL. */
+  source: string;
+  /** The licence it is used under, e.g. `Unsplash License`. */
+  licence: string;
+}
+
 export interface Course {
   id: string;
   slug: string;
@@ -70,6 +88,8 @@ export interface Course {
   prereq?: string;
   track?: string;
   notes?: string;
+  /** The card's cover photo and its credit, when the course has one. */
+  cover?: CourseCover;
   inferred: boolean;
   tags: TagId[];
   modules: Module[];
