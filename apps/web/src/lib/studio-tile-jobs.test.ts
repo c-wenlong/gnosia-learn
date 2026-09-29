@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { Job } from "./studio-jobs";
 import {
+  adoptPicture,
   failureLine,
+  NO_PICTURES,
+  retiredUrls,
+  settlePicture,
+  showsThumbnail,
   jobForTarget,
   liveShotHref,
   loaderHeadline,
@@ -78,7 +83,7 @@ describe("which jobs the grid shows", () => {
 });
 
 describe("a job on an existing diagram's tile", () => {
-  it("is the newest shown job whose target is that diagram", () => {
+  it("is the newest job whose target is that diagram", () => {
     const jobs = [
       job({ jobId: "newer", state: "queued" }),
       job({ jobId: "older", state: "running" }),
@@ -87,6 +92,18 @@ describe("a job on an existing diagram's tile", () => {
     expect(jobForTarget(jobs, "learn/assets/dot-product.tldr", [], [])?.jobId).toBe("newer");
     expect(jobForTarget(jobs, "learn/assets/matrix.tldr", [], [])?.jobId).toBe("other");
     expect(jobForTarget(jobs, "learn/assets/none.tldr", [], [])).toBeNull();
+  });
+
+  it("is only ever the newest job: a later accept, cancel or discard hides an older failure", () => {
+    for (const state of ["accepted", "cancelled", "discarded"] as const) {
+      const jobs = [job({ jobId: "retry", state }), job({ jobId: "failed", state: "failed" })];
+      // The failure was watched and never dismissed, so on its own it would show.
+      expect(jobForTarget(jobs, "learn/assets/dot-product.tldr", ["failed", "retry"], [])).toBeNull();
+    }
+    // With nothing newer, the same failure does show.
+    expect(
+      jobForTarget([job({ jobId: "failed", state: "failed" })], "learn/assets/dot-product.tldr", ["failed"], [])?.jobId,
+    ).toBe("failed");
   });
 
   it("skips a finished job to reach nothing, so the tile is plain again", () => {
@@ -170,5 +187,36 @@ describe("the live picture", () => {
 
   it("goes through the studio proxy, with the job id escaped", () => {
     expect(liveShotHref("a/b")).toBe("/studio/api/jobs/a%2Fb/shot?which=live");
+  });
+});
+
+describe("swapping live pictures", () => {
+  it("fades a new picture in over the old, then drops the old one", () => {
+    const first = adoptPicture(NO_PICTURES, "blob:1", 1, false)!;
+    expect(first).toEqual({ current: "blob:1", previous: null, settled: false, seq: 1 });
+    // The thumbnail stays under the first picture until it has faded in.
+    expect(showsThumbnail(first)).toBe(true);
+    const shown = settlePicture(first);
+    expect(showsThumbnail(shown)).toBe(false);
+    const second = adoptPicture(shown, "blob:2", 2, false)!;
+    expect(second.previous).toBe("blob:1");
+    expect(settlePicture(second)).toEqual({ current: "blob:2", previous: null, settled: true, seq: 2 });
+  });
+
+  it("replaces at once when less motion was asked for", () => {
+    const first = adoptPicture(NO_PICTURES, "blob:1", 1, true)!;
+    expect(adoptPicture(first, "blob:2", 2, true)).toEqual({ current: "blob:2", previous: null, settled: true, seq: 2 });
+  });
+
+  it("refuses an answer to an older poll, so the preview never steps backwards", () => {
+    const newer = adoptPicture(NO_PICTURES, "blob:new", 5, false)!;
+    expect(adoptPicture(newer, "blob:old", 4, false)).toBeNull();
+    expect(adoptPicture(newer, "blob:same", 5, false)).toBeNull();
+  });
+
+  it("names every URL nothing shows any more, for revoking", () => {
+    const held = { current: "blob:3", previous: "blob:2", settled: false, seq: 3 };
+    expect(retiredUrls(["blob:1", "blob:2", "blob:3"], held)).toEqual(["blob:1"]);
+    expect(retiredUrls(["blob:2", "blob:3"], settlePicture(held))).toEqual(["blob:2"]);
   });
 });

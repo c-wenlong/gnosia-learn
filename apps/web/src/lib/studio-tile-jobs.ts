@@ -42,14 +42,23 @@ export function tileStage(job: Job): TileStage {
   return "working";
 }
 
-/** The newest shown job drawing onto `target`, or null. The list arrives newest first. */
+/**
+ * The newest job drawing onto `target`, when the grid shows it, or null. The
+ * list arrives newest first.
+ *
+ * The newest job, then the rule, and not the newest job the rule lets
+ * through: a failure left undismissed and then a retry that was accepted
+ * would otherwise put the old failure's loader back over the diagram the
+ * retry just landed. The same order as `newDiagramJobs`.
+ */
 export function jobForTarget(
   jobs: readonly Job[],
   target: string,
   ended: readonly string[],
   dismissed: readonly string[],
 ): Job | null {
-  return jobs.find((job) => job.target === target && shownOnGrid(job, ended, dismissed)) ?? null;
+  const newest = jobs.find((job) => job.target === target);
+  return newest !== undefined && shownOnGrid(newest, ended, dismissed) ? newest : null;
 }
 
 /**
@@ -137,4 +146,52 @@ export function afterShotHref(jobId: string): string {
 /** Whether the tile should be asking for a newer picture. */
 export function wantsLivePicture(job: Job, visible: boolean, pageHidden: boolean): boolean {
   return job.state === "running" && visible && !pageHidden;
+}
+
+/**
+ * The pictures a tile is showing: the newest, the one it fades in over, and
+ * the sequence number of the poll that brought the newest.
+ */
+export interface LivePictures {
+  /** The newest picture, as an object URL, or null before the first. */
+  current: string | null;
+  /** The one before it, kept under the new one only while it fades in. */
+  previous: string | null;
+  /** True once `current` has finished fading in (at once with reduced motion). */
+  settled: boolean;
+  /** The poll that brought `current`; an answer to an earlier poll is stale. */
+  seq: number;
+}
+
+export const NO_PICTURES: LivePictures = { current: null, previous: null, settled: true, seq: 0 };
+
+/**
+ * Take a newly decoded picture, or refuse it (null) when a later poll's
+ * picture is already showing, so the preview never steps backwards. Without
+ * motion it replaces the old one at once; otherwise the old one stays under
+ * it until `settlePicture`.
+ */
+export function adoptPicture(held: LivePictures, url: string, seq: number, still: boolean): LivePictures | null {
+  if (seq <= held.seq) return null;
+  return still
+    ? { current: url, previous: null, settled: true, seq }
+    : { current: url, previous: held.current, settled: false, seq };
+}
+
+/** The fade has finished: drop the picture underneath. */
+export function settlePicture(held: LivePictures): LivePictures {
+  return held.settled && held.previous === null ? held : { ...held, previous: null, settled: true };
+}
+
+/** Of the object URLs a tile made, the ones nothing shows any more, to revoke. */
+export function retiredUrls(owned: readonly string[], held: LivePictures): string[] {
+  return owned.filter((url) => url !== held.current && url !== held.previous);
+}
+
+/**
+ * Whether the tile's own thumbnail still belongs on screen: until there is a
+ * live picture, and until the first one has faded in over it.
+ */
+export function showsThumbnail(held: LivePictures): boolean {
+  return held.current === null || (held.previous === null && !held.settled);
 }
