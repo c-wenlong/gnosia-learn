@@ -30,6 +30,9 @@ import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
+import { readClaudeDefaults, readPreference, resolveAgentSettings } from "./video/agent-model";
+import type { VideoDoctor } from "./video/doctor";
+import { postVideoJob, videoJobRoutes, videoView, type VideoDeps } from "./video/routes";
 
 /**
  * The HTTP surface: JSON in, JSON out, on `127.0.0.1:7250`.
@@ -269,11 +272,17 @@ export interface ApiDeps {
   mirrors: Mirrors;
   /** The planner conversations. Absent in a test that serves only the job routes. */
   drafts?: Drafts;
+  /**
+   * The video runner (docs/STUDIO-VIDEOS.md): its store, its runner and its
+   * doctor. Absent in a test that serves only diagrams, and then a video
+   * brief is refused as a kind this studio does not run.
+   */
+  video?: VideoDeps & { doctor: VideoDoctor };
 }
 
-export function createApi({ store, runner, mirrors, drafts }: ApiDeps): Server {
+export function createApi({ store, runner, mirrors, drafts, video }: ApiDeps): Server {
   return createServer((request, response) => {
-    void handle(request, response, store, runner, mirrors, drafts).catch((error: unknown) => {
+    void handle(request, response, store, runner, mirrors, drafts, video).catch((error: unknown) => {
       if (!response.headersSent) {
         fail(response, 500, "the studio threw handling this request", (error as Error).message);
       } else {
@@ -290,6 +299,7 @@ async function handle(
   runner: Runner,
   mirrors: Mirrors,
   drafts: Drafts | undefined,
+  video: (VideoDeps & { doctor: VideoDoctor }) | undefined = undefined,
 ): Promise<void> {
   const refused = guard(request);
   if (refused !== null) return fail(response, 403, refused);
@@ -306,7 +316,7 @@ async function handle(
 
   /* /api/health */
   if (segments[1] === "health" && segments.length === 2) {
-    return send(response, 200, await health(store, runner, drafts));
+    return send(response, 200, await health(store, runner, drafts, video));
   }
 
   /* /api/drafts — the planner conversations (docs/STUDIO-CHAT-FIRST.md). */
@@ -357,20 +367,45 @@ async function handle(
 
   /* /api/jobs */
   if (segments.length === 2) {
-    if (method === "POST") return postJob(request, response, runner, drafts);
+    if (method === "POST") {
+      let body: unknown;
+      try {
+        body = await readJson(request);
+      } catch (error) {
+        return fail(response, 400, "the request body is not JSON", (error as Error).message);
+      }
+      // Dispatched on the brief's own kind, never on a draft's: one draft may
+      // hold a diagram and a video in flight at once, each on its own queue.
+      const kind = (body as { kind?: unknown } | null)?.kind;
+      if (kind === "video") {
+        if (video === undefined) return fail(response, 400, "this studio was started without the video runner");
+        return postVideoJob(body, response, video);
+      }
+      if (kind !== undefined && kind !== "diagram") return fail(response, 400, `"kind" is diagram or video`);
+      return postJob(body, response, runner, drafts);
+    }
     if (method === "GET") {
       const limitRaw = Number.parseInt(url.searchParams.get("limit") ?? "25", 10);
       const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25;
       const state = url.searchParams.get("state") ?? undefined;
-      const jobs = store
-        .list({ limit, ...(state === undefined ? {} : { state }) })
-        .map((record) => view(record));
+      const filter = { limit, ...(state === undefined ? {} : { state }) };
+      const jobs = [
+        ...store.list(filter).map((record) => ({ at: record.requestedAt, view: view(record) })),
+        ...(video?.store.list(filter) ?? []).map((record) => ({ at: record.requestedAt, view: videoView(record) })),
+      ]
+        .sort((a, b) => b.at.localeCompare(a.at))
+        .slice(0, limit)
+        .map((entry) => entry.view);
       return send(response, 200, { jobs, note: `${jobs.length} job${jobs.length === 1 ? "" : "s"}, newest first` });
     }
     return fail(response, 405, `${method} is not a thing /api/jobs does`);
   }
 
   const id = segments[2] ?? "";
+  const videoRecord = video?.store.get(id);
+  if (video !== undefined && videoRecord !== undefined) {
+    return videoJobRoutes(request, response, segments, method, url, videoRecord, video);
+  }
   const record = store.get(id);
   if (record === undefined) {
     return fail(response, 404, `no job ${id}`, "GET /api/jobs lists what there is.");
@@ -537,17 +572,11 @@ async function handle(
 }
 
 async function postJob(
-  request: IncomingMessage,
+  body: unknown,
   response: ServerResponse,
   runner: Runner,
   drafts: Drafts | undefined,
 ): Promise<void> {
-  let body: unknown;
-  try {
-    body = await readJson(request);
-  } catch (error) {
-    return fail(response, 400, "the request body is not JSON", (error as Error).message);
-  }
 
   // A brief from a chat names its draft beside it (D35): the draft has to
   // exist and be briefed, and it moves to drawing once the job is queued.
@@ -1470,15 +1499,41 @@ async function draftEvents(
 }
 
 /** What is and is not working right now. */
-async function health(store: JobStore, runner: Runner, drafts?: Drafts): Promise<Record<string, unknown>> {
-  const [checked, claudeVersion, catalog, vocabulary] = await Promise.all([
+/**
+ * The model and effort a job started now would get, per kind, and where each
+ * came from (D53 of docs/STUDIO-VIDEOS.md). The diagram agent still takes its
+ * model from the brief, `sonnet` unless a brief names another, and passes no
+ * effort; the panel reaches it in phase 2.
+ */
+async function agentSettings(): Promise<Record<string, unknown>> {
+  const videoAgent = await resolveAgentSettings(await readPreference("studioVideoAgent"), await readClaudeDefaults());
+  return {
+    video: videoAgent,
+    diagram: {
+      model: { requested: "sonnet", passed: "sonnet", source: "brief" },
+      effort: { requested: "default", passed: null, source: "cli" },
+    },
+  };
+}
+
+async function health(
+  store: JobStore,
+  runner: Runner,
+  drafts?: Drafts,
+  video?: VideoDeps & { doctor: VideoDoctor },
+): Promise<Record<string, unknown>> {
+  const [checked, claudeVersion, catalog, vocabulary, agent] = await Promise.all([
     doctor().catch(() => null),
     run(CLAUDE_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
     catalogStatus().catch(() => null),
     // The last read any route made, when it is recent, rather than a
     // `catalog topic ls` on every page render.
     vocabularyStatus(),
+    agentSettings().catch(() => null),
   ]);
+  // The video doctor's cached answer: it takes seconds, so health never
+  // waits for a fresh one (it refreshes at start and every ten minutes).
+  const videoReport = video?.doctor.current() ?? null;
   const queueDepth = store.list({ state: "queued" }).length;
   // The same window and the same arithmetic the cap refuses on, rather than a
   // second implementation that agrees with it until it does not. It also moves
@@ -1543,6 +1598,15 @@ async function health(store: JobStore, runner: Runner, drafts?: Drafts): Promise
     plannerTurnsLast24h: cap.plannerTurns,
     plannerTurnsInFlight: drafts?.busy ?? 0,
     dailyCap: cap,
+    // The video kind (docs/STUDIO-VIDEOS.md, "API"): whether a video job can
+    // be queued now, from the doctor's last answer.
+    video:
+      video === undefined
+        ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "this studio was started without the video runner" }
+        : videoReport === null
+          ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "the video doctor has not finished its first check" }
+          : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length },
+    agent,
     note: !tldrawkc
       ? "tldrawkc cannot run, so no job can be queued. Build the submodule."
       : !claude
