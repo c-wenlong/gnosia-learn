@@ -88,7 +88,7 @@ export function StreakCard({ habit, today }: { habit: Habit; today: string }) {
 export function PhoneHabitStats({ habit }: { habit: Habit }) {
   const { streak, target } = habit;
   const left =
-    streak.leeway === 0 ? "streak" : `streak · ${streak.leewayLeft} ${streak.leewayLeft === 1 ? "miss" : "misses"} left`;
+    streak.leeway === 0 ? "Streak" : `Streak · ${streak.leewayLeft} ${streak.leewayLeft === 1 ? "miss" : "misses"} left`;
   return (
     <div className="grid grid-cols-2 gap-2.5">
       <Card tight>
@@ -96,7 +96,7 @@ export function PhoneHabitStats({ habit }: { habit: Habit }) {
           <span className="font-display text-[24px] leading-tight font-bold text-text tabular-nums">
             {target.done} / {target.total}
           </span>
-          <span className="text-[12px] text-text2">target</span>
+          <span className="text-[12px] text-text2">Target</span>
         </div>
       </Card>
       <Card tight>

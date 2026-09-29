@@ -71,10 +71,10 @@ export function SessionClose({
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 md:flex md:gap-3.5">
-        <StatTile value={`${totals.right} / ${totals.answered}`} label="right" tone="ok" />
-        <StatTile value={formatTotalsMove(totals)} label="mastery moved" tone="accent" />
-        <StatTile value={totals.cards} label="review cards" tone="violet" />
-        <StatTile value={target.reachable ? `${target.done} / ${target.total}` : "–"} label="target" tone="streak" />
+        <StatTile value={`${totals.right} / ${totals.answered}`} label="Right" tone="ok" />
+        <StatTile value={formatTotalsMove(totals)} label="Mastery moved" tone="accent" />
+        <StatTile value={totals.cards} label="Review cards" tone="violet" />
+        <StatTile value={target.reachable ? `${target.done} / ${target.total}` : "–"} label="Target" tone="streak" />
       </div>
 
       <Card title="What moved">

@@ -17,7 +17,7 @@ import type { TabItem } from "@/components/ui/Tabs";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Placeholder } from "@/components/ui/Placeholder";
-import { cx } from "@/components/ui/classes";
+import { cx, LABEL } from "@/components/ui/classes";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import {
   loadAssetDetail,
@@ -563,7 +563,7 @@ function RelatedRow({ asset }: { asset: AssetWithTopics }) {
         className="group flex items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <span className="w-16 shrink-0">
-          <Placeholder label={assetKindLabel(asset.kind).toLowerCase()} height={44} className="px-1" />
+          <Placeholder label={assetKindLabel(asset.kind)} height={44} className="px-1" />
         </span>
         <span
           className={cx(
@@ -608,7 +608,7 @@ function FamilyRow({ asset }: { asset: AssetRef }) {
 function FamilyGroup({ title, rows }: { title: string; rows: AssetRef[] }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-[12px] font-bold tracking-[0.05em] text-text3 uppercase">{title}</h3>
+      <h3 className={LABEL}>{title}</h3>
       <ul className="flex flex-col gap-2">
         {rows.map((row) => (
           <FamilyRow key={row.id} asset={row} />
@@ -687,7 +687,7 @@ function CatalogFacts({
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-4">
-      <dt className="pt-0.5 text-[11px] font-bold tracking-[0.05em] text-text3 uppercase">{label}</dt>
+      <dt className={cx(LABEL, "pt-0.5")}>{label}</dt>
       <dd className="min-w-0 break-words text-[13px] text-text2">{children}</dd>
     </div>
   );

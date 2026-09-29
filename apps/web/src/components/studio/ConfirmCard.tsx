@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { cx } from "@/components/ui/classes";
+import { cx, LABEL } from "@/components/ui/classes";
 import type { TopicOption } from "@/data/topics";
 import { drawLabel, modeLine, type CardStatus, type DrawBlock } from "@/lib/studio-chat";
 import type { PendingTopic } from "@/lib/studio-drafts";
@@ -205,7 +205,7 @@ export function ConfirmCard({
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-1 sm:grid-cols-[128px_1fr] sm:gap-3">
-      <p className="pt-0.5 text-[11px] font-bold uppercase leading-5 tracking-[0.05em] text-text3">{label}</p>
+      <p className={cx(LABEL, "pt-1")}>{label}</p>
       <div className="min-w-0">{children}</div>
     </div>
   );

@@ -68,7 +68,7 @@ export function AvatarMenu({ studio }: { studio: boolean }) {
         >
           <ul className="flex flex-col gap-0.5">
             <li className="px-1.5 pt-1 pb-2">
-              <p id={themeLabel} className="mb-1.5 px-1.5 text-[11px] font-semibold tracking-wide text-text3 uppercase">
+              <p id={themeLabel} className="mb-1.5 px-1.5 text-[12px] font-semibold text-text2">
                 Theme
               </p>
               <ThemeSwitch size="sm" labelledBy={themeLabel} />

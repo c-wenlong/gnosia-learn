@@ -34,7 +34,7 @@ function CollapseButton({ label, onClick }: { label: string; onClick: () => void
       className="hidden rounded-sm text-[12px] text-text3 underline-offset-4 hover:text-text2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent min-[900px]:inline"
       aria-label={`Collapse ${label}`}
     >
-      collapse
+      Collapse
     </button>
   );
 }
@@ -76,6 +76,9 @@ export function WorkspacePanels({
   // `hidden` below 900px unless this is the active tab. A wrapper carries it,
   // since a primitive's own `display` would win over a class passed to it.
   const shown = (key: PanelKey) => cx("min-h-0 min-w-0", active !== key && "max-[899px]:hidden");
+  // Below 900px the tab row names the one panel on show, so its header would
+  // repeat the tab just pressed; the section keeps the name for a screen reader.
+  const phoneHeader = "max-[899px]:hidden";
 
   return (
     <div className="flex min-h-0 flex-col gap-4 min-[900px]:flex-1">
@@ -104,6 +107,8 @@ export function WorkspacePanels({
           <div className={cx("h-full", !noteOpen && "min-[900px]:hidden")}>
             <Panel
               title="Note & sources"
+              aria-label="Note & sources"
+              headerClassName={phoneHeader}
               actions={<CollapseButton label="Note & sources" onClick={() => setNoteOpen(false)} />}
               className="h-full"
               bodyClassName="gap-4 min-[900px]:overflow-y-auto"
@@ -116,6 +121,8 @@ export function WorkspacePanels({
         <div className={shown("tutor")}>
           <Panel
             title="Tutor"
+            aria-label="Tutor"
+            headerClassName={phoneHeader}
             actions={tutorAside}
             className="h-full max-[899px]:min-h-[70dvh]"
             // A last resort for a window too short for even the shrunk thread,
@@ -131,6 +138,8 @@ export function WorkspacePanels({
           <div className={cx("h-full", !studioOpen && "min-[900px]:hidden")}>
             <Panel
               title="Studio"
+              aria-label="Studio"
+              headerClassName={phoneHeader}
               actions={<CollapseButton label="Studio" onClick={() => setStudioOpen(false)} />}
               className="h-full"
               bodyClassName="gap-2.5 min-[900px]:overflow-y-auto"
