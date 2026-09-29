@@ -458,3 +458,8 @@ export function videoList(): Promise<CatalogResult> {
 export function preferenceGet(key: string): Promise<CatalogResult> {
   return catalog(["preference", "get", "--key", key, ...owned()], 60_000);
 }
+
+/** `catalog preference set --key <key> --value <json>`: store one owner-scoped preference; the catalog validates it. */
+export function preferenceSet(key: string, value: unknown): Promise<CatalogResult> {
+  return catalog(["preference", "set", "--key", key, "--value", JSON.stringify(value), ...owned()], 60_000);
+}

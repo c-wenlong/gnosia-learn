@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { isAgentModel } from "@self-learn/schema/shared";
+
 import { preferenceGet } from "../catalog";
 import { readThrough } from "../content-cache";
 import type { AgentSetting } from "./types";
@@ -32,40 +34,70 @@ export interface AgentPreference {
 export const DEFAULT_PREFERENCE: AgentPreference = { model: "default", effort: "default" };
 
 /** A model name the CLI takes: an alias or a full id, optionally with a `[1m]` context suffix. */
-const MODEL_NAME = /^[a-z][a-z0-9.-]{0,80}(\[[0-9a-z]{1,8}\])?$/;
+// The model rule is `isAgentModel` in @self-learn/schema/shared, the one the
+// settings route and `catalog preference set` refuse by, so a stored value is
+// never read as something other than what was saved.
 
 /** The stored value, as `{ model, effort }` with `default` for anything missing or not a value the CLI takes. */
 export function normalisePreference(value: unknown): AgentPreference {
   const raw = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-  const model = typeof raw.model === "string" && (raw.model === "default" || MODEL_NAME.test(raw.model)) ? raw.model : "default";
+  const model = typeof raw.model === "string" && (raw.model === "default" || isAgentModel(raw.model)) ? raw.model : "default";
   const effort = typeof raw.effort === "string" && (raw.effort === "default" || (EFFORTS as readonly string[]).includes(raw.effort)) ? raw.effort : "default";
   return { model, effort };
 }
 
-function isPreference(value: unknown): value is AgentPreference {
-  return typeof value === "object" && value !== null && typeof (value as AgentPreference).model === "string" && typeof (value as AgentPreference).effort === "string";
+export type AgentPreferenceKey = "studioVideoAgent" | "studioDiagramAgent";
+
+/**
+ * What the cache holds for one key: the row, or null for no row. Wrapped so
+ * "there is no row" is a value the cache can remember, and so a copy written
+ * by the build before this one (a bare `{ model, effort }`, which could have
+ * been a real row or the defaults standing in for none) is no copy at all
+ * rather than a row nobody saved.
+ */
+interface StoredCopy {
+  row: AgentPreference | null;
+}
+
+function isStoredCopy(value: unknown): value is StoredCopy {
+  if (typeof value !== "object" || value === null || !("row" in value)) return false;
+  const row = (value as StoredCopy).row;
+  return row === null || (typeof row === "object" && typeof row.model === "string" && typeof row.effort === "string");
 }
 
 /**
- * The panel's value, through the catalog, cached in
- * `$STUDIO_HOME/cache/preferences.<key>.json` as the topics are: with
- * Postgres down a job uses the last good read, and with none, the defaults.
+ * The stored row, or null when the owner has none, through the catalog and
+ * cached in `$STUDIO_HOME/cache/preferences.<key>.json` as the topics are:
+ * with Postgres down a job uses the last good read. With no read ever, it is
+ * null, the same answer as no row, because nothing can say a row exists; that
+ * is "with none, the defaults" of D53, and for the diagram agent the defaults
+ * are what no row means.
  */
-export async function readPreference(key: "studioVideoAgent" | "studioDiagramAgent"): Promise<AgentPreference> {
+export async function readStoredPreference(key: AgentPreferenceKey): Promise<AgentPreference | null> {
   try {
-    const read = await readThrough(
+    const read = await readThrough<StoredCopy>(
       `preferences.${key}`,
       async () => {
         const result = await preferenceGet(key);
         if (!result.ok) throw new Error(result.error ?? "catalog preference get failed");
-        return normalisePreference((result.json as { value?: unknown } | null)?.value ?? null);
+        const value = (result.json as { value?: unknown } | null)?.value ?? null;
+        return { row: value === null ? null : normalisePreference(value) };
       },
-      { isValue: isPreference },
+      { isValue: isStoredCopy },
     );
-    return normalisePreference(read.value);
+    return read.value.row === null ? null : normalisePreference(read.value.row);
   } catch {
-    return DEFAULT_PREFERENCE;
+    return null;
   }
+}
+
+/**
+ * The panel's value with the defaults standing in for no row, which is what
+ * the video agent needs: its default is the owner's Claude Code default
+ * either way.
+ */
+export async function readPreference(key: AgentPreferenceKey): Promise<AgentPreference> {
+  return (await readStoredPreference(key)) ?? DEFAULT_PREFERENCE;
 }
 
 /** The owner's user settings file: `$CLAUDE_CONFIG_DIR/settings.json`, else `~/.claude/settings.json`. */
@@ -78,7 +110,7 @@ export function claudeSettingsPath(env: NodeJS.ProcessEnv = process.env): string
 export async function readClaudeDefaults(file: string = claudeSettingsPath()): Promise<{ model: string | null; effort: string | null }> {
   try {
     const parsed = JSON.parse(await readFile(file, "utf8")) as { model?: unknown; effortLevel?: unknown };
-    const model = typeof parsed.model === "string" && MODEL_NAME.test(parsed.model) ? parsed.model : null;
+    const model = isAgentModel(parsed.model) ? parsed.model : null;
     const effort = typeof parsed.effortLevel === "string" && (EFFORTS as readonly string[]).includes(parsed.effortLevel) ? parsed.effortLevel : null;
     return { model, effort };
   } catch {

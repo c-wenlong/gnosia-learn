@@ -57,6 +57,7 @@ const catalogMock = vi.hoisted(() => ({
   jobDiscard: vi.fn(),
   topicList: vi.fn(),
   status: vi.fn(),
+  preferenceGet: vi.fn(),
 }));
 vi.mock("../src/catalog", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/catalog")>();
@@ -148,6 +149,8 @@ beforeEach(async () => {
   catalogMock.jobDiscard.mockResolvedValue(answer({}));
   catalogMock.topicList.mockReset().mockResolvedValue(topicListAnswer());
   catalogMock.status.mockResolvedValue(answer({}));
+  // No stored agent preference: the defaults, and never the machine's own row.
+  catalogMock.preferenceGet.mockReset().mockResolvedValue(answer({ ok: true, value: null, updatedAt: null }));
 
   const runner = {
     enqueue: (brief: Record<string, unknown>, parent?: Record<string, unknown>) => {
@@ -641,6 +644,22 @@ describe("the vocabulary", () => {
     expect(none).toMatchObject({ stale: true, readAt: null });
   }, 60_000);
 
+  it("reports a studio home the diagram agent cannot use as a diagram-agent problem, and nothing else", async () => {
+    const saved = process.env.STUDIO_HOME;
+    const ok = (await get("/api/health")).body;
+    expect(ok.diagramAgent).toEqual({ ok: true, problem: null });
+    process.env.STUDIO_HOME = `${saved}-$dollar`;
+    try {
+      const body = (await get("/api/health")).body;
+      expect(body.diagramAgent).toMatchObject({ ok: false, problem: expect.stringContaining('"$"') });
+      // The tool is as healthy as it was: only queueing a job is refused.
+      expect(body.tldrawkc).toBe(ok.tldrawkc);
+      if (ok.tldrawkc === true && ok.claude === true) expect(body.note).toContain("no diagram job can be queued");
+    } finally {
+      process.env.STUDIO_HOME = saved;
+    }
+  }, 60_000);
+
   it("does not spawn a topic listing per health call, and reads again once the last read is old", async () => {
     await get("/api/vocabulary");
     const calls = catalogMock.topicList.mock.calls.length;
@@ -687,6 +706,56 @@ describe("the vocabulary", () => {
     });
     expect(response.status).toBe(503);
     expect(enqueued).toHaveLength(0);
+  });
+});
+
+describe("the agent's model and effort", () => {
+  const savedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  afterEach(() => {
+    if (savedConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = savedConfigDir;
+  });
+
+  it("are on the job, beside the model its session said it was", async () => {
+    await store.create(
+      record({
+        agentModel: { requested: "opus", passed: "opus", source: "panel" },
+        agentEffort: { requested: "default", passed: "high", source: "claude-settings" },
+        resolvedModel: "claude-opus-5",
+      }),
+    );
+    const body = (await (await fetch(`${base}/api/jobs/job-api`)).json()) as Record<string, unknown>;
+    expect(body.agentModel).toEqual({ requested: "opus", passed: "opus", source: "panel" });
+    expect(body.agentEffort).toEqual({ requested: "default", passed: "high", source: "claude-settings" });
+    expect(body.resolvedModel).toBe("claude-opus-5");
+  });
+
+  it("are null on a job recorded before the settings panel", async () => {
+    await store.create(record());
+    const body = (await (await fetch(`${base}/api/jobs/job-api`)).json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ agentModel: null, agentEffort: null, resolvedModel: null });
+  });
+
+  it("are what health says a diagram job started now would get, from the panel's row", async () => {
+    const dir = path.join(process.env.STUDIO_HOME ?? "", "claude-config");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "settings.json"), JSON.stringify({ model: "claude-fable-5-1", effortLevel: "high" }), "utf8");
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    catalogMock.preferenceGet.mockImplementation(async (key: string) => ({
+      ok: true,
+      json: { ok: true, value: key === "studioDiagramAgent" ? { model: "opus", effort: "default" } : null, updatedAt: null },
+      error: null,
+      offline: false,
+    }));
+    const body = (await (await fetch(`${base}/api/health`)).json()) as { agent: Record<string, unknown> };
+    expect(body.agent.diagram).toEqual({
+      model: { requested: "opus", passed: "opus", source: "panel" },
+      effort: { requested: "default", passed: "high", source: "claude-settings" },
+    });
+    expect(body.agent.video).toEqual({
+      model: { requested: "default", passed: "claude-fable-5-1", source: "claude-settings" },
+      effort: { requested: "default", passed: "high", source: "claude-settings" },
+    });
   });
 });
 

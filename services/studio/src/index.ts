@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { createApi } from "./api";
+import type { SpendEntry } from "./cost";
 import { Drafts } from "./drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
 import { ManualSource } from "./manual/source";
@@ -62,20 +63,6 @@ async function main(): Promise<void> {
     );
   }
 
-  // Drafts after jobs: a draft follows its newest job, so the job records are
-  // in memory first. An interrupted turn is written down as cut off (C1) and
-  // nothing is resent by itself.
-  const drafts = new Drafts(store, runner);
-  await drafts.load();
-  const cut = await drafts.reconcile();
-  if (cut.length > 0) {
-    process.stdout.write(`marked ${cut.length} planner turn${cut.length === 1 ? "" : "s"} cut off: ${cut.join(", ")}\n`);
-  }
-  // The runner's reconcile ran before any draft was listening, so each draft
-  // is brought up to its newest job here, an interrupted one included.
-  await drafts.syncFromJobs();
-  runner.extraSpend = () => drafts.spendEntries();
-
   // The video runner (D43 of docs/STUDIO-VIDEOS.md): its own store over the
   // same jobs/ directory (each loads only its own kind), its own queue, and
   // the one daily cap both runners and the planner count against. Its doctor
@@ -84,15 +71,30 @@ async function main(): Promise<void> {
   const videoStore = new RecordStore<VideoJobRecord>("video");
   await videoStore.load();
   const videoDoctor = new VideoDoctor();
-  const videoRunner = new VideoRunner(videoStore, {
+  const videoRunner: VideoRunner = new VideoRunner(videoStore, {
     doctor: videoDoctor,
-    otherSpend: () => [...store.list(), ...drafts.spendEntries()],
+    // Read at each cap check, by which time `drafts` below exists.
+    otherSpend: (): SpendEntry[] => [...store.list(), ...drafts.spendEntries()],
   });
   runner.otherJobSpend = () => videoStore.list();
   const videoReconciled = await videoRunner.reconcile();
   if (videoReconciled.interrupted.length > 0) {
     process.stdout.write(`marked ${videoReconciled.interrupted.length} video job(s) interrupted: ${videoReconciled.interrupted.join(", ")}\n`);
   }
+
+  // Drafts after both runners' jobs: a draft follows each kind's newest job,
+  // so the job records are in memory first. An interrupted turn is written
+  // down as cut off (C1) and nothing is resent by itself.
+  const drafts: Drafts = new Drafts(store, runner, { store: videoStore, runner: videoRunner });
+  await drafts.load();
+  const cut = await drafts.reconcile();
+  if (cut.length > 0) {
+    process.stdout.write(`marked ${cut.length} planner turn${cut.length === 1 ? "" : "s"} cut off: ${cut.join(", ")}\n`);
+  }
+  // The runners' reconciles ran before any draft was listening, so each
+  // draft is brought up to its newest jobs here, an interrupted one included.
+  await drafts.syncFromJobs();
+  runner.extraSpend = () => drafts.spendEntries();
   void videoDoctor.report(true).then((report) => {
     process.stdout.write(report.ok ? "video doctor: every check passed\n" : `video doctor: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
     void videoRunner.kick();

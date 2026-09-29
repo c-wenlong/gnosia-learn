@@ -19,6 +19,7 @@ import { videoPaths, type VideoPaths } from "../src/video/paths";
 import { buildProfile, renderJobs, sandboxEnv } from "../src/video/sandbox";
 import { seedClips } from "../src/video/seed";
 import { buildVideoSettings } from "../src/video/settings";
+import { deriveSteps, type StepFacts } from "../src/video/steps";
 import type { Toolchain } from "../src/video/toolchain";
 
 import { testVocabulary } from "./vocabulary";
@@ -80,8 +81,8 @@ describe("the video agent's permission file", () => {
     expect(deny).toContain(`Edit(/${paths.lib}/**)`);
     expect(deny).toContain(`Read(/${paths.bin}/**)`);
     expect(settings.hooks).toEqual({ PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "/usr/local/bin/node /x/bin/bash-guard.cjs" }] }] });
-    // The diagram agent's file is not given one.
-    expect("hooks" in buildSettings({ jobId: "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc", slug: "two-boxes" })).toBe(false);
+    // The diagram agent's file carries its own guard, in the same block.
+    expect(buildSettings({ jobId: "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc", slug: "two-boxes", guard: "/usr/local/bin/node /x/bash-guard.cjs" }).hooks).toEqual({ PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "/usr/local/bin/node /x/bash-guard.cjs" }] }] });
   });
 
   it("denies every other job's workspace and none of its own working directories", () => {
@@ -396,5 +397,45 @@ describe("the scene-class prefix", () => {
     expect(prefixFor("two-boxes")).toBe("TB");
     expect(prefixFor("attention")).toBe("AT");
     expect(prefixFor("3d-rotation")).toBe("R");
+  });
+});
+
+describe("the job view's narration step", () => {
+  const facts = (over: Partial<StepFacts> = {}): StepFacts => ({
+    narrated: true,
+    seeded: null,
+    setupDone: true,
+    edits: 0,
+    calls: [],
+    reads: [],
+    sheets: {},
+    gate: null,
+    gateRunning: false,
+    ready: false,
+    agentRunning: true,
+    ...over,
+  });
+  const narration = (over: Partial<StepFacts> = {}) => deriveSteps(facts(over)).find((step) => step.name === "narration");
+
+  it("stays pending until the agent's first narrate call, with the seeding as a note", () => {
+    expect(narration()).toMatchObject({ state: "pending", rounds: 0, note: null });
+    // Seeding is the runner copying clips before the agent starts: a note, not the step running.
+    expect(narration({ seeded: { wanted: 5, seeded: 3 } })).toMatchObject({
+      state: "pending",
+      rounds: 0,
+      note: "3 of 5 lines already voiced",
+    });
+  });
+
+  it("is done or failed by the agent's own narrate calls", () => {
+    const call = (exitCode: number) => ({
+      verb: "preview" as const,
+      startedAt: "2026-09-29T00:00:00Z",
+      endedAt: "2026-09-29T00:00:10Z",
+      exitCode,
+      steps: [{ step: "narrate", exitCode }],
+    });
+    expect(narration({ seeded: { wanted: 5, seeded: 3 }, calls: [call(0)] as never })).toMatchObject({ state: "done", rounds: 1 });
+    expect(narration({ calls: [call(1)] as never })).toMatchObject({ state: "failed", rounds: 1 });
   });
 });
