@@ -1,7 +1,7 @@
 import "server-only";
 
 import path from "node:path";
-import { Readable } from "node:stream";
+import type { Readable } from "node:stream";
 
 import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@self-learn/blob";
 import {
@@ -528,12 +528,11 @@ export function parseRange(header: string | null, size: number): RangeRequest {
  *
  * Measured on Node 22.23 against an 8 MB file with a reader that stops after
  * one chunk: 196,608 bytes read with a byte-counting strategy, and all
- * 8,388,608 with a counting one. Node's own default for a non-object-mode
- * readable is already `ByteLengthQueuingStrategy`
- * (`newReadableStreamFromStreamReadable` in `internal/webstreams/adapters`),
- * so this is not a live leak being plugged. It is written out because the
- * guarantee matters more than the default does: it survives a Node that
- * changes its mind, and the test measures it rather than trusting either.
+ * 8,388,608 with a counting one, the same for `Readable.toWeb` and for the
+ * hand-rolled stream below. `Readable.toWeb` defaulted to bytes on its own;
+ * a `new ReadableStream` defaults to counting chunks, so since
+ * `webStreamFrom` stopped using the adapter this strategy is the only thing
+ * bounding the queue, and the test measures it rather than trusting it.
  */
 export const BYTE_QUEUE = {
   highWaterMark: 64 * 1024,
@@ -547,10 +546,48 @@ export const BYTE_QUEUE = {
  * reader, and read `bytesRead` off it. That is the only way to observe the
  * queue from outside.
  *
- * A client that seeks away cancels the web stream, which destroys the file
- * handle behind it; that is `Readable.toWeb`'s own behaviour and is why this
- * is not a hand-rolled `ReadableStream`.
+ * A client that seeks away cancels the web stream, and the cancel destroys the
+ * readable, which closes the file handle behind it.
+ *
+ * **Hand-rolled on purpose, not `Readable.toWeb`.** Node's adapter pushes: it
+ * resumes the readable on `pull` and enqueues from its `data` handler. A
+ * `resume()` only schedules the flow for the next tick, so a cancel landing
+ * in between (a read and a cancel in the same tick, with a chunk buffered in
+ * the paused readable, which is what a `<video>` seeking away produces) lets
+ * that tick emit the chunk into a controller the cancel already closed.
+ * `enqueue` then throws ERR_INVALID_STATE from an event handler, with no
+ * caller to catch it, and `next start` logs an uncaughtException. Here the
+ * web stream pulls instead: each `pull` awaits one chunk from the readable's
+ * iterator and enqueues it only if no cancel came first, so the readable
+ * reads ahead by at most its own buffer and the byte queue above bounds the
+ * rest, as before.
  */
 export function webStreamFrom(stream: Readable): ReadableStream<Uint8Array> {
-  return Readable.toWeb(stream, { strategy: BYTE_QUEUE }) as unknown as ReadableStream<Uint8Array>;
+  const chunks: AsyncIterator<Uint8Array> = stream[Symbol.asyncIterator]();
+  let cancelled = false;
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        let next: IteratorResult<Uint8Array>;
+        try {
+          next = await chunks.next();
+        } catch (error) {
+          // The cancel's own destroy settles an outstanding read with a
+          // premature close; that is not an error to report to anyone.
+          if (cancelled) return;
+          throw error;
+        }
+        if (cancelled) return;
+        if (next.done) controller.close();
+        else controller.enqueue(next.value);
+      },
+      cancel() {
+        cancelled = true;
+        // Without a reason: `destroy(error)` emits `error`, and before the
+        // first pull nothing is listening for it yet.
+        stream.destroy();
+      },
+    },
+    BYTE_QUEUE,
+  );
 }
