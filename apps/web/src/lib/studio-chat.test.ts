@@ -412,3 +412,24 @@ describe("the composer after a refused turn", () => {
     expect(wordsBack("", "Add the projection", true)).toBe("Add the projection");
   });
 });
+
+describe("tags (docs/STUDIO-MENTIONS.md)", () => {
+  it("hides suggest and hold blocks from the prose, and does not call them a brief being checked", () => {
+    const reply = "A picture would help here.\n\n```suggest\n{\"kinds\": [\"diagram\"]}\n```\n\n```hold\n{\"kinds\": [\"video\"], \"reason\": \"wrong topic\"}\n```";
+    expect(splitReply(reply)).toEqual({ prose: "A picture would help here.", hadBrief: false, checking: false });
+    expect(splitReply("Try one.\n```sugg", true)).toEqual({ prose: "Try one.", hadBrief: false, checking: false });
+    expect(splitReply("Here.\n```suggest\n{\"kinds\"", true).checking).toBe(false);
+    expect(splitReply("Here.\n```brief\n{\"kind\"", true).checking).toBe(true);
+  });
+
+  it("takes messages while a job runs once the runner has slots (C14 lifted), and opens as a chat", () => {
+    const drawing = { ...view({ state: "drawing", jobId: "j1" }), slots: {} };
+    const state = composerState(drawing, null, false, false);
+    expect(state.disabled).toBe(false);
+    expect(state.placeholder).toBe("Reply, or type @ to make something");
+    expect(composerState({ ...drawing, state: "open", jobId: null }, null, false, true).placeholder).toBe(
+      "Ask about an idea, or type @ to make something",
+    );
+    expect(composerState(view({ state: "drawing", jobId: "j1" }), null).disabled).toBe(true);
+  });
+});

@@ -1,4 +1,8 @@
+import type { Mention } from "@/components/ui/mention-text";
+import type { VideoBrief } from "@/lib/studio-brief-video";
 import type { Brief } from "@/lib/studio-jobs";
+
+export type { VideoAudience, VideoBeat, VideoBrief, VideoScene } from "@/lib/studio-brief-video";
 
 /**
  * Every call the web app makes to the runner's draft routes, and the shapes
@@ -21,6 +25,56 @@ import type { Brief } from "@/lib/studio-jobs";
 /* -------------------------------------------------------------------------- */
 
 export type DraftState = "open" | "briefed" | "drawing" | "done" | "abandoned";
+
+/**
+ * What a draft can make (docs/STUDIO-MENTIONS.md). A kind lives on a brief
+ * and a job, never on the draft: one draft may hold a live diagram brief and
+ * a live video brief at once (D60).
+ */
+export const DRAFT_KINDS = ["diagram", "video"] as const;
+export type DraftKind = (typeof DRAFT_KINDS)[number];
+
+export function isDraftKind(value: unknown): value is DraftKind {
+  return typeof value === "string" && (DRAFT_KINDS as readonly string[]).includes(value);
+}
+
+/** A chip in a person's message: the kind it tags and where its `@<kind>` sits in the text (D57). */
+export type DraftMention = Mention<DraftKind>;
+
+/** One brief a planner reply (or an edit's note) carries, with the tagged message it answers (D61). */
+export type TranscriptBrief =
+  | { kind: "diagram"; brief: Brief; requestSeq: number | null }
+  | { kind: "video"; brief: VideoBrief; requestSeq: number | null; abbreviations?: string[] };
+
+/** A `hold` block the planner ended an untagged reply with: the kinds it contradicts, and why (D60). */
+export interface HoldBlock {
+  kinds: DraftKind[];
+  reason: string;
+}
+
+/**
+ * One kind's slot in `draft.json` (D62): the brief in force for that kind,
+ * its newest job, whether a tagged request is still owed a brief, and whether
+ * the planner put the brief on hold.
+ */
+export interface DraftSlot {
+  brief: Brief | VideoBrief | null;
+  briefAt?: string | null;
+  /** The transcript seq of the entry carrying the brief in force. */
+  briefSeq: number | null;
+  briefBy?: "planner" | "person" | null;
+  pendingTopic: PendingTopic | null;
+  jobId: string | null;
+  /** Set while a tagged request for this kind is owed a brief. */
+  waiting: { requestSeq: number } | null;
+  /** The tagged message the brief in force answered, which pairs it for Make both. */
+  requestSeq: number | null;
+  /** Set while the brief in force is on hold. */
+  held: { reason: string; at?: string } | null;
+  state: "open" | "briefed" | "drawing" | "done";
+}
+
+export type DraftSlots = Partial<Record<DraftKind, DraftSlot>>;
 
 /** Who said a transcript entry. `studio` is the runner speaking, not a third voice. */
 export type DraftRole = "person" | "planner" | "studio";
@@ -55,6 +109,8 @@ export interface DraftError {
 }
 
 export interface BriefInvalid {
+  /** The kind whose brief was refused. Absent from a runner before STUDIO-MENTIONS.md, which meant diagram. */
+  kind?: DraftKind;
   field: string;
   message: string;
   /** True when the runner sent the planner one retry; false is E6. */
@@ -66,8 +122,22 @@ export interface TranscriptEntry {
   role: DraftRole;
   text: string;
   at: string;
-  /** On a planner reply whose brief passed `validateBrief`. */
+  /**
+   * On a planner reply whose brief passed `validateBrief`. Since
+   * STUDIO-MENTIONS.md, the newest diagram brief, kept one release beside
+   * `briefs` so the runner PR can land first (its API table).
+   */
   brief?: Brief;
+  /** Every brief the reply (or an edit's note) carries, one per kind (D61). */
+  briefs?: TranscriptBrief[];
+  /** On a person's message: its chips (D57). */
+  mentions?: DraftMention[];
+  /** On a planner reply: the kinds it offers as suggestion buttons (D58). */
+  suggest?: DraftKind[];
+  /** On a planner reply: the live cards it puts on hold (D60). */
+  hold?: HoldBlock | null;
+  /** Refused briefs of a reply, by kind, when more than one kind was judged. */
+  briefsInvalid?: BriefInvalid[];
   /** On the same reply, when its topic is a proposal rather than a slug that exists. */
   pendingTopic?: PendingTopic;
   /** On a planner reply whose brief failed. */
@@ -85,10 +155,17 @@ export interface TranscriptEntry {
 /** `GET /api/drafts/{id}`: the record. The stream is a cache of it. */
 export interface DraftView {
   draftId: string;
-  kind: "diagram";
+  /** Since STUDIO-MENTIONS.md, the newest brief's kind, for display only (D62). */
+  kind: DraftKind;
   state: DraftState;
-  /** The diagram's slug, on a draft opened to extend one. */
+  /** The diagram's slug, on a draft opened to extend one, or the video's on a change draft. */
   source: string | null;
+  /** What `source` names. Absent from a runner before video phase 2, which meant diagram. */
+  sourceKind?: DraftKind;
+  /** Per kind: the brief in force, its job, waiting and held (D62). Absent from a runner before 2a. */
+  slots?: DraftSlots;
+  /** The kinds this draft's planner prompt carries (D59). Absent means `["diagram"]`, a draft from before. */
+  plannerKinds?: DraftKind[];
   /**
    * C11: the diagram's checkout moved on since the EXTENDING block was built
    * from it. Optional: a runner from before it does not send it.
@@ -116,7 +193,9 @@ export interface DraftView {
 
 export interface DraftSummary {
   draftId: string;
-  kind: "diagram";
+  kind: DraftKind;
+  /** The kinds the draft has briefs or jobs of, for the list's glyphs. Optional: a runner before 2a omits it. */
+  kinds?: DraftKind[];
   state: DraftState;
   title: string | null;
   source: string | null;
@@ -184,7 +263,8 @@ export interface DeltaEvent {
 export interface BriefEvent {
   seq: number;
   replySeq: number;
-  brief: Brief;
+  kind?: DraftKind;
+  brief: Brief | VideoBrief;
   pendingTopic: PendingTopic | null;
 }
 
@@ -195,6 +275,7 @@ export interface BriefInvalidEvent extends BriefInvalid {
 
 export interface StateEvent {
   state: DraftState;
+  slots?: DraftSlots;
   jobId: string | null;
   inFlight: boolean;
   turns: number;
@@ -267,7 +348,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<ApiResult<
 }
 
 /** `POST /api/drafts`: a new conversation, or one opened on a diagram to extend it. */
-export function createDraft(input: { source?: string; idempotencyKey: string }) {
+export function createDraft(input: { source?: string; sourceKind?: "diagram" | "video"; idempotencyKey: string }) {
   return call<{ draftId: string; state: DraftState; note: string }>(BASE, {
     method: "POST",
     body: JSON.stringify(input),
@@ -296,15 +377,24 @@ export function getDraft(draftId: string) {
 }
 
 /**
- * `POST /api/drafts/{id}/messages`: one person turn. 202 means the planner is
- * answering and the reply arrives on the stream. Refusals: 409 `in-flight`,
- * `drawing` or `abandoned`; 422 `turn-cap`; 429 the daily cap, with the same
- * detail `POST /api/jobs` gives; 400 an empty or over-long text.
+ * `POST /api/drafts/{id}/messages`: one person turn, `{ text, mentions? }`
+ * (D57). 202 means the planner is answering and the reply arrives on the
+ * stream. Refusals: 409 `in-flight` or `abandoned`; 409
+ * `kind-not-in-conversation` for a tag this draft's prompt cannot make (T4);
+ * 422 `turn-cap`; 429 the daily cap, with the same detail `POST /api/jobs`
+ * gives; 400 `{ field: "mentions" }` for a mention the runner's checks refuse,
+ * and `{ field: "text" }` for an empty or over-long text or a bare tag in an
+ * empty conversation. No longer refused while a job runs (C14 lifted).
+ *
+ * `mentions` is left out when there are none, so an untagged turn is the body
+ * a runner from before STUDIO-MENTIONS.md already takes.
  */
-export function sendMessage(draftId: string, text: string) {
+export function sendMessage(draftId: string, body: string | { text: string; mentions?: readonly DraftMention[] }) {
+  const message = typeof body === "string" ? { text: body } : body;
+  const payload = message.mentions !== undefined && message.mentions.length > 0 ? message : { text: message.text };
   return call<{ draftId: string; seq: number; note: string }>(draftPath(draftId, "/messages"), {
     method: "POST",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -314,11 +404,78 @@ export function sendMessage(draftId: string, text: string) {
  * `POST /api/jobs`'s statuses and bodies, and each also lands in the
  * transcript as a studio note (E7).
  */
-export function drawDraft(draftId: string, key: string) {
-  return call<{ draftId: string; jobId: string; state: DraftState; note: string }>(draftPath(draftId, "/draw"), {
+export function drawDraft(draftId: string, key: string, kind: DraftKind = "diagram") {
+  return call<{ draftId: string; jobId: string; state: DraftState; kind?: DraftKind; note: string }>(draftPath(draftId, "/draw"), {
     method: "POST",
-    body: JSON.stringify({ idempotencyKey: key }),
+    // `kind` goes only when it is not the default, so a Draw is the body a
+    // runner from before STUDIO-MENTIONS.md already takes.
+    body: JSON.stringify(kind === "diagram" ? { idempotencyKey: key } : { idempotencyKey: key, kind }),
   });
+}
+
+/** One item of Make both's answer: the job it started, or the refusal its own press would have had. */
+export type DrawItemResult =
+  | { kind: DraftKind; jobId: string }
+  | { kind: DraftKind; status: number; refusal: Refusal };
+
+/**
+ * Make both (D60): `POST /api/drafts/{id}/draw` with `{ items: [{ kind,
+ * idempotencyKey }, ...] }`. The runner handles each item on its own (topics,
+ * then enqueue) and answers `200 { results }`, one per item, each started or
+ * refused exactly as that card's own press would have been. A retried press
+ * is safe: each key returns the job it already started.
+ */
+export async function drawBoth(draftId: string, items: readonly { kind: DraftKind; idempotencyKey: string }[]) {
+  const result = await call<{ draftId: string; results?: unknown[]; note?: string }>(draftPath(draftId, "/draw"), {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+  if (!result.ok) return result;
+  return { ...result, data: { ...result.data, results: drawResults(result.data.results) } };
+}
+
+/** Make both's `results`, read defensively: a malformed entry is dropped. */
+export function drawResults(raw: unknown): DrawItemResult[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DrawItemResult[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const item = entry as Record<string, unknown>;
+    if (!isDraftKind(item.kind)) continue;
+    if (typeof item.jobId === "string") {
+      out.push({ kind: item.kind, jobId: item.jobId });
+      continue;
+    }
+    const status = typeof item.status === "number" ? item.status : 500;
+    const refusal = typeof item.refusal === "object" && item.refusal !== null ? asRefusal(status, item.refusal) : asRefusal(status, item);
+    out.push({ kind: item.kind, status, refusal });
+  }
+  return out;
+}
+
+/**
+ * `POST /api/drafts/{id}/slots/{kind}/stop-waiting`: the person no longer
+ * wants the brief a tag asked for (D57). `200` with the slots; a kind not
+ * waiting is `200` and writes nothing.
+ */
+export function stopWaiting(draftId: string, kind: DraftKind) {
+  return call<{ slots?: DraftSlots }>(draftPath(draftId, `/slots/${encodeURIComponent(kind)}/stop-waiting`), {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+/**
+ * `POST /api/drafts/{id}/slots/{kind}/use?base=<seq>`: Use this brief, which
+ * takes a held brief off hold with no turn (D60). `409 brief-changed` when
+ * `base` is no longer that kind's brief in force; a brief not on hold is
+ * `200` and writes nothing.
+ */
+export function releaseHold(draftId: string, kind: DraftKind, base: number) {
+  return call<{ slots?: DraftSlots }>(
+    draftPath(draftId, `/slots/${encodeURIComponent(kind)}/use?base=${encodeURIComponent(String(base))}`),
+    { method: "POST", body: "{}" },
+  );
 }
 
 /**
@@ -339,16 +496,19 @@ export function drawDraft(draftId: string, key: string) {
  * replaced the brief while this edit was checked), `draw-in-progress`,
  * `drawing`, `done` or `abandoned`; 503 when the topic list cannot be read.
  */
-export function saveBrief(draftId: string, brief: Brief, base: number) {
+export function saveBrief(draftId: string, brief: Brief | VideoBrief, base: number, kind: DraftKind = "diagram") {
   return call<{
     draftId: string;
     state: DraftState;
-    brief: Brief;
+    brief: Brief | VideoBrief;
     briefSeq?: number | null;
     pendingTopic: PendingTopic | null;
     note: string;
   }>(
-    draftPath(draftId, `/brief?base=${encodeURIComponent(String(base))}`),
+    draftPath(
+      draftId,
+      `/brief?base=${encodeURIComponent(String(base))}${kind === "diagram" ? "" : `&kind=${encodeURIComponent(kind)}`}`,
+    ),
     { method: "PUT", body: JSON.stringify(brief) },
   );
 }
@@ -463,8 +623,48 @@ export function openDraftEvents(
  * seconds and once when the cap's oldest spend ages out, never on a timer.
  */
 export async function readDailyCap(): Promise<unknown> {
-  const result = await call<{ dailyCap?: unknown }>("/studio/api/health");
-  return result.ok ? (result.data.dailyCap ?? null) : null;
+  return (await readStudioHealth())?.dailyCap ?? null;
+}
+
+/**
+ * The two parts of `/api/health` the conversation acts on: the daily cap, and
+ * the video doctor (`video`), which decides whether the menu's Video entry and
+ * the Video suggestion can be used (T5, T25). Null when the runner did not
+ * answer. Read at the same rate as the cap, for the same reason.
+ */
+export async function readStudioHealth(): Promise<{ dailyCap: unknown; video: unknown } | null> {
+  const result = await call<{ dailyCap?: unknown; video?: unknown }>("/studio/api/health");
+  return result.ok ? { dailyCap: result.data.dailyCap ?? null, video: result.data.video ?? null } : null;
+}
+
+/** Whether a video can be made now, and why not, from health's `video` block. */
+export interface VideoAvailability {
+  ok: boolean;
+  /** The doctor's reason, when it fails. */
+  reason: string | null;
+}
+
+/**
+ * Read health's `video` block (`{ ok, checks, note? }`, #201). A failing
+ * doctor gives its first failing check's detail, else its note. An absent
+ * block (a runner from before the video runner) is unavailable, with no
+ * reason, which the menu words as "not available on this machine".
+ */
+export function videoAvailability(raw: unknown): VideoAvailability {
+  if (typeof raw !== "object" || raw === null) return { ok: false, reason: null };
+  const video = raw as { ok?: unknown; note?: unknown; checks?: unknown };
+  if (video.ok === true) return { ok: true, reason: null };
+  const failing = Array.isArray(video.checks)
+    ? video.checks.find((check) => typeof check === "object" && check !== null && (check as { ok?: unknown }).ok === false)
+    : undefined;
+  const detail =
+    failing === undefined
+      ? null
+      : (["detail", "note", "message", "name"] as const)
+          .map((field) => (failing as Record<string, unknown>)[field])
+          .find((value): value is string => typeof value === "string" && value.trim() !== "") ?? null;
+  const note = typeof video.note === "string" && video.note.trim() !== "" ? video.note : null;
+  return { ok: false, reason: detail ?? note };
 }
 
 /* -------------------------------------------------------------------------- */
