@@ -26,6 +26,14 @@ import { canvasCliPath } from "./index/tldr";
  * "lints remain" has to survive, since `inspect` exiting 0 is the definition of
  * a finished diagram. Nothing is written to stdout, so
  * `npm run --silent canvas -- ... --json | jq` stays parseable.
+ *
+ * package.json starts it with `node --import tsx`, not the `tsx` CLI. That CLI
+ * binds a Unix socket at `$TMPDIR/tsx-<uid>/<pid>.pipe` on every start, and the
+ * studio runs this command with `TMPDIR` inside `$STUDIO_HOME` (the agent, the
+ * manual check). macOS keeps 104 bytes of a socket path and libuv binds
+ * whatever those bytes name, so a long home failed every run with
+ * `EADDRINUSE` when the cut landed on a directory. The loader alone binds
+ * nothing; `services/studio/test/long-home.test.ts` holds that case.
  */
 
 const cli = canvasCliPath();
