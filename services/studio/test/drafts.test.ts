@@ -950,3 +950,19 @@ describe("vocabularyChangeNote", () => {
     expect(changed).toContain("changed (as they are now):\nb | b | d |  | \n  concepts: b-one");
   });
 });
+
+describe("describeBriefEdit", () => {
+  it("reads a rename as one line, not as every arrow it touches added and removed", async () => {
+    const { describeBriefEdit } = await import("../src/drafts");
+    const before = { ...good, model: "sonnet" } as never;
+    const after = {
+      ...good,
+      model: "sonnet",
+      elements: [{ label: "Sender" }, { label: "Server" }],
+      relations: [{ from: "Sender", to: "Server", label: "sends segments" }],
+    } as never;
+    const note = describeBriefEdit(before, after);
+    expect(note).toContain('- element 2: "Receiver" -> "Server"');
+    expect(note).not.toContain("arrow");
+  });
+});
