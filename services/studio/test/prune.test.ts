@@ -240,6 +240,56 @@ describe("pruning drafts (D40)", () => {
     await drafts.settled(busy);
   });
 
+  it("leaves another owner's draft alone, on disk and in Postgres", async () => {
+    const id = await draft();
+    process.env.STUDIO_OWNER = "someone-else";
+    try {
+      const report = await pruneDrafts(drafts, store, { now: eightDaysOn, deleteRow });
+      expect(report.pruned).toEqual([]);
+      expect(report.kept).toEqual([{ draftId: id, reason: expect.stringContaining("owner local's") }]);
+      expect(deleteRow).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.STUDIO_OWNER;
+    }
+    // And a row the catalog says is another owner's keeps the workspace it names.
+    deleteRow.mockResolvedValueOnce(ok({ outcome: "other-owner" }));
+    const report = await pruneDrafts(drafts, store, { now: eightDaysOn, deleteRow });
+    expect(report.kept).toEqual([{ draftId: id, reason: "its row is another owner's" }]);
+    expect(await exists(draftDir(id))).toBe(true);
+  });
+
+  it("stops on an answer it does not understand, and on a jobs directory it cannot read", async () => {
+    const id = await draft();
+    deleteRow.mockResolvedValueOnce(ok(null));
+    let report = await pruneDrafts(drafts, store, { now: eightDaysOn, deleteRow });
+    expect(report.pruned).toEqual([]);
+    expect(report.skipped).toMatch(/neither deleted nor kept/);
+    expect(await exists(draftDir(id))).toBe(true);
+
+    // A jobs "directory" that is a file: the disk cannot say no job names the draft.
+    await rm(path.join(process.env.STUDIO_HOME!, "jobs"), { recursive: true, force: true });
+    await writeFile(path.join(process.env.STUDIO_HOME!, "jobs"), "not a directory");
+    deleteRow.mockClear();
+    report = await pruneDrafts(drafts, store, { now: eightDaysOn, deleteRow });
+    expect(report.skipped).toMatch(/jobs directory cannot be read/);
+    expect(deleteRow).not.toHaveBeenCalled();
+    expect(await exists(draftDir(id))).toBe(true);
+  });
+
+  it("never loads a pruned draft whose workspace did not all go, and the next pass removes it", async () => {
+    const id = await draft();
+    // What a removal that failed after the row went leaves behind.
+    await writeFile(path.join(draftDir(id), "pruned"), "2026-09-29T00:00:00.000Z\n");
+    const fresh = new Drafts(store, runner as never);
+    await fresh.load();
+    expect(fresh.get(id)).toBeUndefined();
+    const report = await pruneDrafts(fresh, store, { now: eightDaysOn, deleteRow });
+    expect(report.pruned).toEqual([]);
+    expect(await exists(draftDir(id))).toBe(false);
+    // Postgres was not asked: the row went before the tombstone was written.
+    expect(deleteRow).not.toHaveBeenCalled();
+  });
+
   it("runs once at a time from the runner's pruner, and logs what it did", async () => {
     const id = await draft();
     const lines: string[] = [];

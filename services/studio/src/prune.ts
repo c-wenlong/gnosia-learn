@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { draftDelete, type CatalogResult } from "./catalog";
+import { studioOwner } from "./config";
 import type { DraftRecord, Drafts } from "./drafts";
 import { jobJsonPath, studioHome } from "./paths";
 import type { JobStore } from "./store";
@@ -62,17 +63,30 @@ export interface PruneOptions {
   deleteRow?: (id: string) => Promise<CatalogResult>;
 }
 
-/** A `job.json` under `$STUDIO_HOME/jobs/` naming the draft, or null. One that mentions it and will not parse counts. */
+const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === "ENOENT";
+
+/**
+ * A `job.json` under `$STUDIO_HOME/jobs/` naming the draft, or null. One that
+ * mentions it and will not parse counts, and a directory or record that
+ * cannot be read throws: the disk not answering is not the disk saying no.
+ */
 export async function jobFileNaming(draftId: string): Promise<string | null> {
   let entries: string[];
   try {
     entries = await readdir(path.join(studioHome(), "jobs"));
-  } catch {
-    return null;
+  } catch (error) {
+    if (missing(error)) return null;
+    throw new Error(`the jobs directory cannot be read (${(error as Error).message})`);
   }
   for (const entry of entries) {
-    const body = await readFile(jobJsonPath(entry), "utf8").catch(() => null);
-    if (body === null || !body.includes(draftId)) continue;
+    let body: string;
+    try {
+      body = await readFile(jobJsonPath(entry), "utf8");
+    } catch (error) {
+      if (missing(error)) continue;
+      throw new Error(`jobs/${entry}/job.json cannot be read (${(error as Error).message})`);
+    }
+    if (!body.includes(draftId)) continue;
     try {
       if ((JSON.parse(body) as { draftId?: unknown }).draftId === draftId) return entry;
     } catch {
@@ -104,11 +118,25 @@ export async function pruneDrafts(drafts: Drafts, store: JobStore, options: Prun
     pruned: [],
     kept: [],
   };
+  // What an earlier pass could not remove; the rows went first.
+  await drafts.sweepLeftovers();
+  const owner = studioOwner();
   for (const candidate of drafts.untouchedSince(cutoff)) {
+    // Another owner's draft is not this runner's to prune, whatever its age.
+    if (candidate.ownerId !== owner) {
+      report.kept.push({ draftId: candidate.id, reason: `it is owner ${candidate.ownerId}'s, and this studio serves ${owner}` });
+      continue;
+    }
     let stop: string | null = null;
     const gone = await drafts.prune(candidate.id, cutoff, async (record) => {
       // Asked with the draft held, so a job queued since the list was read counts.
-      const onDisk = await jobOnDisk(record, store);
+      let onDisk: string | null;
+      try {
+        onDisk = await jobOnDisk(record, store);
+      } catch (error) {
+        stop = `${(error as Error).message}, so no job.json naming a draft can be ruled out; pruning stopped`;
+        return false;
+      }
       if (onDisk !== null) {
         report.kept.push({ draftId: record.id, reason: onDisk });
         return false;
@@ -122,13 +150,21 @@ export async function pruneDrafts(drafts: Drafts, store: JobStore, options: Prun
           : `catalog draft delete failed, so pruning stopped: ${result.error ?? "no reason"}`;
         return false;
       }
-      if ((result.json as { outcome?: unknown } | null)?.outcome === "has-jobs") {
+      const outcome = (result.json as { outcome?: unknown } | null)?.outcome;
+      if (outcome === "has-jobs") {
         report.kept.push({ draftId: record.id, reason: "a job row names it" });
         return false;
       }
+      if (outcome === "other-owner") {
+        report.kept.push({ draftId: record.id, reason: "its row is another owner's" });
+        return false;
+      }
       // `deleted`, or `no-draft`: a row that never landed, which no job row
-      // can name either, since `job.draft_id` is a foreign key.
-      return true;
+      // can name either, since `job.draft_id` is a foreign key. Anything else
+      // is an answer this pass does not understand, and it stops.
+      if (outcome === "deleted" || outcome === "no-draft") return true;
+      stop = `catalog draft delete answered ${JSON.stringify(result.json)}, which says neither deleted nor kept; pruning stopped`;
+      return false;
     });
     if (stop !== null) {
       report.skipped = stop;
