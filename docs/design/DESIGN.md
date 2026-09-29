@@ -85,7 +85,7 @@ Session. Probe and Teach are steps inside it; Close is its last screen.
 | Route | Screen | Lo-fi | Replaces | Reads | Status |
 | --- | --- | --- | --- | --- | --- |
 | `/` | Today | [01-today](lofi/01-today.svg), [13-phone-today](lofi/13-phone-today.svg) | `/` course shortlist | due reviews, frontier, target, streak, recent events, course progress | New |
-| `/courses` | Courses | [02-courses](lofi/02-courses.svg) | `/` | `content/courses`, tags, progress | Redesigned |
+| `/courses` | Courses | [02-courses](lofi/02-courses.svg) | `/` | courses, tags, progress, the next topic and the course last opened | Redesigned; rebuilt on 2026-09-29 in Coursera's layout: a Continue learning block (My Learning's course card) over a grid of cover cards (its explore carousels), filtered by tag chips and a search |
 | `/courses/[slug]` | Course path | [03-course-path](lofi/03-course-path.svg) | `/courses/[slug]` and `/courses/[slug]/[module]` | modules, topics, concept mastery per topic, assets per module | Redesigned; the module page folds into the path as a unit |
 | `/learn` | Learn index | [09-learn-index](lofi/09-learn-index.svg) | `/learn` | concepts, mastery, due, last seen, course link; neighbourhood graph | Redesigned |
 | `/learn/[concept]` | Concept workspace | [04-concept-workspace](lofi/04-concept-workspace.svg) | none (concept notes had no page) | note, prerequisites, dependants, backlinks, sources, tutor thread, mastery and history, checks, assets, graph | New |
