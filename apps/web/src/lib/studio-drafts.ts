@@ -323,8 +323,9 @@ export function drawDraft(draftId: string, key: string) {
  * identical brief is answered 200 and changes nothing.
  *
  * Refusals: 400 with `detail.field` naming the field `validateBrief` refused;
- * 409 with `detail.reason` `in-flight`, `draw-in-progress`, `drawing`, `done`
- * or `abandoned`; 503 when the topic list cannot be read.
+ * 409 with `detail.reason` `in-flight`, `brief-changed` (a planner reply
+ * replaced the brief while this edit was checked), `draw-in-progress`,
+ * `drawing`, `done` or `abandoned`; 503 when the topic list cannot be read.
  */
 export function saveBrief(draftId: string, brief: Brief) {
   return call<{ draftId: string; state: DraftState; brief: Brief; pendingTopic: PendingTopic | null; note: string }>(

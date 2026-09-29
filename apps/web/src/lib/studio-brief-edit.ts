@@ -224,6 +224,8 @@ export function saveRefusal(status: number, refusal: Refusal, edit: BriefEdit): 
       case "draw-in-progress":
       case "drawing":
         return { field: "general", message: "This brief is already being drawn, so it can no longer change." };
+      case "brief-changed":
+        return { field: "general", message: "A newer brief arrived while this was saving. Edit that one instead." };
       case "done":
       case "abandoned":
         return { field: "general", message: "This conversation has moved on, so this brief can no longer change." };

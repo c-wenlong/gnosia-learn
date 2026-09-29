@@ -123,6 +123,7 @@ describe("where a refusal lands", () => {
     });
     expect(saveRefusal(409, { error: "x", detail: { reason: "drawing" } }, edit).message).toMatch(/already being drawn/);
     expect(saveRefusal(409, { error: "x", detail: { reason: "abandoned" } }, edit).message).toMatch(/moved on/);
+    expect(saveRefusal(409, { error: "x", detail: { reason: "brief-changed" } }, edit).message).toMatch(/newer brief/);
   });
 
   it("keeps the edits when the runner is not answering", () => {
