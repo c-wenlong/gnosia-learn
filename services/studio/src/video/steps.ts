@@ -102,7 +102,7 @@ export function deriveSteps(facts: StepFacts): VideoStep[] {
       "check",
       facts.gateRunning ? "running" : gate === null ? "pending" : check.every((entry) => entry.ok) && gate.ok ? "done" : check.some((entry) => !entry.ok) ? "failed" : "running",
       gate === null ? 0 : 1,
-      gate === null ? null : `${check.filter((entry) => entry.ok).length} of ten checks passed`,
+      gate === null ? null : `${gate.steps.filter((entry) => entry.ok).length} of ${gate.steps.length} checks passed`,
     ),
   );
   const poster = gate?.steps.find((entry) => entry.name === "poster");
