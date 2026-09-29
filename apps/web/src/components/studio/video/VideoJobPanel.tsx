@@ -108,13 +108,13 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
         <p className="rounded-xl bg-surface2 px-4 py-3 text-[14px] text-text2">
           {child === null
             ? "Discarded. The renders are deleted and nothing landed in the catalog; the source is kept, so a later change can start from it."
-            : "Set aside for a change. The renders are deleted and nothing landed in the catalog; the change starts from this video's source."}
+            : "Replaced by a newer version. Its renders are deleted and nothing of it landed in the catalog; the newer one starts from its source."}
         </p>
       )}
       {child !== null && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hair px-4 py-3">
           <p className="min-w-0 flex-1 text-[14px] text-text">
-            Continued in a newer job: {videoHeadline(child).toLowerCase()}.
+            A newer version: {videoHeadline(child).toLowerCase()}.
           </p>
           <Button size="sm" href={panelHref(path, { job: child.jobId })}>
             Open it

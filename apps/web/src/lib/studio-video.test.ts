@@ -193,6 +193,35 @@ describe("the step list", () => {
     expect(timedOut.filter((row) => row.status === "failed").map((row) => row.key)).toEqual(["scene-code"]);
   });
 
+  it("keeps narration pending, with its note, until the agent's first narrate call", () => {
+    // As the runner reports it since step 2a: seeding is a note, not the step running.
+    const early = job({
+      phase: "scene-code",
+      steps: steps({
+        storyboard: { state: "done", rounds: 1 },
+        narration: { state: "pending", note: "4 of 6 lines already voiced" },
+        setup: { state: "done", rounds: 1 },
+        "scene-code": { state: "running", rounds: 1 },
+      }),
+    });
+    expect(stepRows(early).find((row) => row.key === "narration")).toMatchObject({ status: "pending", note: "4 of 6 lines already voiced" });
+    expect(videoHeadline(early)).toBe("Writing the scenes");
+    // Killed mid-build, nothing running and narration never called: the failure is the build, not narration.
+    const killed = job({
+      state: "interrupted",
+      steps: steps({
+        storyboard: { state: "done" },
+        narration: { state: "pending" },
+        setup: { state: "done" },
+        "scene-code": { state: "done" },
+        lint: { state: "done" },
+        preview: { state: "done" },
+        look: { state: "done" },
+      }),
+    });
+    expect(stepRows(killed).filter((row) => row.status === "failed").map((row) => row.key)).toEqual(["build"]);
+  });
+
   it("marks where a job stopped between steps, when nothing was running", () => {
     const rows = stepRows(job({ state: "interrupted", steps: steps({ storyboard: { state: "done" }, narration: { state: "done" } }) }));
     expect(rows.find((row) => row.status === "failed")?.key).toBe("setup");
@@ -400,6 +429,11 @@ describe("where a change leads", () => {
     expect(changeDraftOutcome({ ok: true, data: { draftId: "d-9", kind: "diagram" } })).toHaveProperty("problem");
     expect(changeDraftOutcome({ ok: true, data: {} })).toHaveProperty("problem");
     // A runner before `sourceKind` looks for a diagram with the slug and answers 404.
+    // Step 2a's own refusals, by reason.
+    expect(changeDraftOutcome({ ok: false, status: 404, refusal: { error: "no video", detail: { reason: "no-video", source: "gone" } } })).toEqual({
+      problem: "This video is no longer in the catalog, so there is nothing to change.",
+    });
+    expect(changeDraftOutcome({ ok: false, status: 409, refusal: { error: "x", detail: { reason: "kind-not-in-conversation" } } })).toHaveProperty("problem", "This studio cannot make videos in a conversation yet.");
     expect(changeDraftOutcome({ ok: false, status: 404, refusal: { error: "no diagram attention-weights" } })).toEqual({
       problem: "The runner found nothing to change: no diagram attention-weights",
     });

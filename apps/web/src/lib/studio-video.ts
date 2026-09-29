@@ -362,7 +362,7 @@ function sentence(text: string | null): string | null {
  *
  * **A job that stopped marks one step where it stopped:** the step the runner
  * itself failed; else the one that was active; else, when nothing was
- * running (killed between steps), the first not done.
+ * running (killed between steps), the first not done after the furthest done.
  *
  * "Lines changed" is not a step the runner sends: it is inserted after
  * Narration whenever the record lists a line voiced differently from the
@@ -409,8 +409,15 @@ export function stepRows(job: VideoJob): StepRow[] {
     }
   }
   if (stopped && active === null && !sentFailed) {
-    const first = rows.find((row) => row.status === "pending");
-    if (first !== undefined) first.status = "failed";
+    // The step after the furthest one done: narration is pending until the
+    // agent's first narrate call, so "the first pending" could point back at
+    // it while the job had got as far as a build.
+    let reached = -1;
+    rows.forEach((row, at) => {
+      if (row.key !== "lines" && row.status === "done") reached = at;
+    });
+    const next = rows.slice(reached + 1).find((row) => row.status === "pending");
+    if (next !== undefined) next.status = "failed";
   }
   return rows;
 }
@@ -1034,9 +1041,15 @@ export function gridSections<D>(
 export function changeDraftOutcome(
   result:
     | { ok: true; data: { draftId?: unknown; sourceKind?: unknown; kind?: unknown } }
-    | { ok: false; status: number; refusal: { error: string } },
+    | { ok: false; status: number; refusal: { error: string; detail?: unknown } },
 ): { draftId: string } | { problem: string } {
   if (!result.ok) {
+    // The runner's reasons (step 2a): `no-video` for a slug it holds no
+    // studio video for, `kind-not-in-conversation` for a build without video.
+    const detail = result.refusal.detail;
+    const reason = typeof detail === "object" && detail !== null ? (detail as { reason?: unknown }).reason : undefined;
+    if (reason === "no-video") return { problem: "This video is no longer in the catalog, so there is nothing to change." };
+    if (reason === "kind-not-in-conversation") return { problem: "This studio cannot make videos in a conversation yet." };
     return {
       problem:
         result.status === 404
