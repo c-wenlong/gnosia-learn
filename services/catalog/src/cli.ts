@@ -19,7 +19,7 @@ import {
   runItem,
 } from "./commands/course";
 import { runDiagramCommand } from "./commands/diagram";
-import { formatPreference, PreferenceError, preferenceKey, runPreferenceGet } from "./commands/preference";
+import { formatPreference, parsePreferenceValue, PreferenceError, preferenceKey, runPreferenceGet, runPreferenceSet } from "./commands/preference";
 import { runVideoCommand } from "./commands/video";
 import {
   formatDraft,
@@ -177,6 +177,11 @@ Commands:
   preference get --key K   One of the studio's two agent preferences
                            (studioVideoAgent, studioDiagramAgent) for --owner
                            ID (default: local), read-only.
+  preference set --key K --value JSON
+                           Store one of them for --owner ID: a JSON object of
+                           exactly {"model":M,"effort":E}, each "default" or a
+                           value the claude CLI takes. Writes nothing when it
+                           already holds the value.
   session <verb>           The session row a job hangs off: start --id ID
                            [--kind studio] [--title T] [--goal G]
                            [--agent-session UUID], and end --id ID --state S.
@@ -327,7 +332,8 @@ Options:
                            review that the brief's "parentJob" names, in the
                            transaction that inserts the new job (D52 of
                            docs/STUDIO-VIDEOS.md). A refusal changes neither.
-  --key K                  preference get: which preference.
+  --key K                  preference get/set: which preference.
+  --value JSON             preference set: the value, {"model":...,"effort":...}.
   --state S                job finish: the state to move to, one of
                            awaiting_review, failed, cancelled, interrupted.
                            job ls: filter by state.
@@ -538,6 +544,7 @@ export async function main(argv: string[]): Promise<number> {
         licence: { type: "string" },
         clear: { type: "boolean", default: false },
         key: { type: "string" },
+        value: { type: "string" },
         "discard-parent": { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
@@ -826,15 +833,26 @@ export async function main(argv: string[]): Promise<number> {
         break;
       }
       case "preference": {
-        if (positionals[1] !== "get") throw new Usage("usage: preference get --key studioVideoAgent|studioDiagramAgent [--owner ID]");
+        const verb = positionals[1];
+        if (verb !== "get" && verb !== "set") {
+          throw new Usage(
+            "usage: preference get --key studioVideoAgent|studioDiagramAgent [--owner ID]\n       preference set --key studioVideoAgent|studioDiagramAgent --value JSON [--owner ID]",
+          );
+        }
         try {
-          preferenceKey(values.key);
+          preferenceKey(values.key, verb);
+          if (verb === "set") parsePreferenceValue(values.value);
         } catch (error) {
           if (error instanceof PreferenceError) throw new Usage(error.message);
           throw error;
         }
-        const result = await runPreferenceGet({ key: values.key, owner: values.owner });
-        emit(result, formatPreference(result));
+        if (verb === "get") {
+          const result = await runPreferenceGet({ key: values.key, owner: values.owner });
+          emit(result, formatPreference(result));
+        } else {
+          const result = await runPreferenceSet({ key: values.key, value: values.value, owner: values.owner });
+          emit(result, formatPreference(result));
+        }
         break;
       }
       case "history": {

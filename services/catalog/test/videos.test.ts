@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runImportCommand } from "../src/commands/index-command";
 import { JobError, runClaim, runEnqueue, runFinish, runShow, type BriefDocument } from "../src/commands/job";
 import { BlobIntegrityError } from "@self-learn/blob";
-import { runPreferenceGet } from "../src/commands/preference";
+import { runPreferenceGet, runPreferenceSet } from "../src/commands/preference";
 import { openBlobStore } from "../src/content/blob";
 import { auditBlobs } from "../src/content/blob-audit";
 import { lockEntity } from "../src/content/revisions";
@@ -755,6 +755,52 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     expect((await runPreferenceGet({ key: "studioDiagramAgent" })).value).toBeNull();
     expect((await runPreferenceGet({ key: "studioDiagramAgent", owner: "other" })).value).toEqual({ model: "sonnet", effort: "low" });
     await expect(runPreferenceGet({ key: "theme" })).rejects.toThrow(/answers studioVideoAgent and studioDiagramAgent only/);
+  });
+  it("sets a studio agent preference: round-trips, idempotent, owner-scoped, refuses a bad value", async () => {
+    const opus = JSON.stringify({ model: "opus", effort: "high" });
+    const first = await runPreferenceSet({ key: "studioDiagramAgent", value: opus });
+    expect(first).toMatchObject({ ok: true, verb: "set", owner: LOCAL_LEARNER_ID, key: "studioDiagramAgent", changed: true });
+    expect(first.value).toEqual({ model: "opus", effort: "high" });
+    const got = await runPreferenceGet({ key: "studioDiagramAgent" });
+    expect(got.value).toEqual({ model: "opus", effort: "high" });
+    expect(got.updatedAt).toBe(first.updatedAt);
+
+    // An identical set writes nothing, whatever the key order.
+    const again = await runPreferenceSet({ key: "studioDiagramAgent", value: JSON.stringify({ effort: "high", model: "opus" }) });
+    expect(again.changed).toBe(false);
+    expect(again.updatedAt).toBe(first.updatedAt);
+
+    // A different value updates the one row.
+    const next = await runPreferenceSet({ key: "studioDiagramAgent", value: JSON.stringify({ model: "default", effort: "default" }) });
+    expect(next.changed).toBe(true);
+    expect((await runPreferenceGet({ key: "studioDiagramAgent" })).value).toEqual({ model: "default", effort: "default" });
+
+    // Another owner's set leaves the first owner's value alone.
+    await runPreferenceSet({ key: "studioDiagramAgent", value: JSON.stringify({ model: "sonnet", effort: "low" }), owner: "other" });
+    expect((await runPreferenceGet({ key: "studioDiagramAgent", owner: "other" })).value).toEqual({ model: "sonnet", effort: "low" });
+    expect((await runPreferenceGet({ key: "studioDiagramAgent" })).value).toEqual({ model: "default", effort: "default" });
+
+    // Nothing that reads back differently is stored.
+    const before = await runPreferenceGet({ key: "studioDiagramAgent" });
+    const refused: [string | undefined, RegExp][] = [
+      [JSON.stringify({ model: "opus", effort: "ultra" }), /effort must be/],
+      [JSON.stringify({ model: "opus", effort: "high", extra: 1 }), /other than model and effort: extra/],
+      [JSON.stringify({ model: "--flag", effort: "high" }), /model must be/],
+      [JSON.stringify({ model: "opus" }), /effort must be/],
+      [JSON.stringify(["opus"]), /must be a JSON object/],
+      ["7", /must be a JSON object/],
+      ["not json", /not valid JSON/],
+      [undefined, /needs --value/],
+    ];
+    for (const [value, message] of refused) {
+      await expect(runPreferenceSet({ key: "studioDiagramAgent", value })).rejects.toThrow(message);
+    }
+    expect(await runPreferenceGet({ key: "studioDiagramAgent" })).toEqual(before);
+
+    await expect(runPreferenceSet({ key: "theme", value: opus })).rejects.toThrow(/preference set answers studioVideoAgent and studioDiagramAgent only/);
+    await expect(runPreferenceSet({ key: undefined, value: opus })).rejects.toThrow(/answers studioVideoAgent/);
+    await expect(runPreferenceSet({ key: "studioVideoAgent", value: opus, owner: "nobody" })).rejects.toThrow(/no learner "nobody"/);
+    expect((await runPreferenceGet({ key: "studioVideoAgent", owner: "nobody" })).value).toBeNull();
   });
   it("restamps a video's source on topic rename, and names it when the topic is archived", async () => {
     const by = { author: "local", authorKind: "person" as const, reason: "test" };
