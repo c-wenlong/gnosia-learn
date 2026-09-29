@@ -195,15 +195,11 @@ export function TutorChat({
               })}
               actions={
                 i === lastTutor && !busy ? (
-                  <>
-                    <Button variant="ghost" size="sm" onClick={() => void ask("Why?")}>
-                      Why?
-                    </Button>
-                    {/* Last, so its reason trails it rather than sitting between two buttons. */}
-                    <Button variant="ghost" size="sm" disabled disabledReason="Not built yet.">
-                      Save to note
-                    </Button>
-                  </>
+                  // The hi-fi's "Save to note" joins Why? here once a turn can be
+                  // written to the note (DESIGN.md: extend POST /api/learner/note).
+                  <Button variant="ghost" size="sm" onClick={() => void ask("Why?")}>
+                    Why?
+                  </Button>
                 ) : undefined
               }
             >

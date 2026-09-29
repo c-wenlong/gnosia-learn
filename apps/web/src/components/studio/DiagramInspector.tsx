@@ -225,7 +225,6 @@ function SelectedDiagram({
       </div>
 
       <div className="mt-4">
-        <PanelHeading>Verbs</PanelHeading>
         <div className="flex flex-wrap gap-1.5">
           {!embedded && (
             <ButtonLink href={canvasHref(diagram.name)} filled>

@@ -1,20 +1,23 @@
 import type { ReactNode } from "react";
 
-import { cx } from "./classes";
+import { cx, LABEL } from "./classes";
 
-/** Kit `Eyebrow`: 11px, 700, uppercase, tracked, tertiary text. A section label, not a badge. */
+/**
+ * A section label, not a badge: 12/600 in `--text2`, sentence case, no
+ * letter-spacing (`LABEL` in `./classes`). It was 11/700 uppercase and tracked
+ * until 2026-09-29. Use it only for a label that says something the heading
+ * under it does not, such as a place ("CS4263 · Module 1 · Informed search"),
+ * a number or a status. A label that repeats the heading, or names what the
+ * layout already shows, is left out instead.
+ */
 export function Eyebrow({
   as: Tag = "p",
   className,
   children,
 }: {
-  as?: "p" | "span" | "h2" | "h3" | "div";
+  as?: "p" | "span" | "h2" | "h3" | "h4" | "div";
   className?: string;
   children: ReactNode;
 }) {
-  return (
-    <Tag className={cx("text-[11px] font-bold uppercase leading-4 tracking-[0.05em] text-text3", className)}>
-      {children}
-    </Tag>
-  );
+  return <Tag className={cx(LABEL, className)}>{children}</Tag>;
 }

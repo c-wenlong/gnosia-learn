@@ -7,12 +7,13 @@ import { ConceptGraph, ConceptGraphKey } from "@/components/ConceptGraph";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { cx } from "@/components/ui/classes";
+import { cx, LABEL } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
+import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
   matchesFilter,
@@ -91,15 +92,6 @@ export function LearnIndex({
           onChange={(e) => setQuery(e.target.value)}
           className="w-full sm:w-[280px]"
         />
-        <span className="hidden sm:inline-flex">
-          <Button
-            variant="secondary"
-            disabled
-            disabledReason="Add one with npm run learn -- concept add"
-          >
-            Add concept
-          </Button>
-        </span>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -152,7 +144,7 @@ function ConceptTable({
   onSelect: (id: string) => void;
   total: number;
 }) {
-  const th = "px-3 py-2.5 sm:px-4 text-left text-[11px] font-bold tracking-[0.05em] text-text3 uppercase";
+  const th = cx("px-3 py-2.5 sm:px-4 text-left", LABEL);
   return (
     <div className="min-w-0 overflow-hidden rounded-[20px] border-2 border-border bg-surface">
       <div className="overflow-x-auto">
@@ -197,7 +189,7 @@ function ConceptTable({
                     >
                       {r.title}
                     </Link>
-                    {r.leech && <span className="shrink-0 text-[11px] font-bold text-danger uppercase">leech</span>}
+                    {r.leech && <span className="shrink-0 text-[12px] font-semibold text-danger">{LEECH_LABEL}</span>}
                   </span>
                 </td>
                 <td className="px-3 py-2.5 sm:px-4">

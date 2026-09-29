@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 
 import { MathText } from "@/components/Math";
 import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
-import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import type { CitationSource } from "@/lib/agent/prompt";
@@ -108,16 +107,6 @@ export function NoteAndSources({
             </li>
           ))}
         </ul>
-        <span className="mt-1">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled
-            disabledReason="Not built yet. Add it to the note's sources: frontmatter."
-          >
-            Add source
-          </Button>
-        </span>
       </Section>
 
       <Section title="Backlinks">

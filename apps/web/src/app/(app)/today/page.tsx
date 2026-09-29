@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { ActivityCard } from "@/components/today/ActivityCard";
 import { CoursesCard } from "@/components/today/CoursesCard";
-import { PhoneHabitStats, StreakCard, TargetCard } from "@/components/today/HabitCards";
+import { PhoneTargetStat, TargetCard } from "@/components/today/HabitCards";
 import { NextUpCard } from "@/components/today/NextUpCard";
 import { ReviewsCard } from "@/components/today/ReviewsCard";
 import { loadToday } from "@/lib/today";
@@ -28,14 +28,13 @@ export default async function TodayPage() {
         <div className="flex min-w-0 flex-col gap-3 md:gap-4">
           <NextUpCard nextUp={today.nextUp} conceptCount={today.conceptCount} reachable={today.reachable} />
           <div className="md:hidden">
-            <PhoneHabitStats habit={today.habit} />
+            <PhoneTargetStat habit={today.habit} />
           </div>
           <ReviewsCard reviews={today.reviews} reachable={today.reachable} />
           <ActivityCard rows={today.activity} reachable={today.reachable} />
         </div>
         <div className="flex min-w-0 flex-col gap-4 max-md:hidden">
           <TargetCard habit={today.habit} />
-          <StreakCard habit={today.habit} today={today.today} />
           <CoursesCard courses={today.courses} />
         </div>
       </div>

@@ -20,8 +20,6 @@ import {
   dayKey,
   type Habit,
   type HabitEvent,
-  type StreakDay,
-  type StreakDayState,
 } from "@/lib/habit-core";
 import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
@@ -507,45 +505,6 @@ export function targetRows(habit: Habit): TargetRow[] {
     });
   }
   return rows;
-}
-
-export interface StreakDisc {
-  date: string;
-  /** "M", "T", ... */
-  letter: string;
-  state: StreakDayState;
-  isToday: boolean;
-  /** "Monday, studied": what a screen reader hears for the disc. */
-  description: string;
-}
-
-const STATE_WORDS: Record<StreakDayState, string> = {
-  done: "studied",
-  forgiven: "missed, covered by a free miss",
-  missed: "missed",
-  today: "today, nothing recorded yet",
-  future: "not yet",
-};
-
-/** The seven discs of the streak card, Monday first, from the habit's `week`. */
-export function streakStrip(week: readonly StreakDay[], today: string): StreakDisc[] {
-  return week.map(({ date, state }) => {
-    const name = WEEKDAYS[weekdayOf(date)];
-    return {
-      date,
-      letter: name[0],
-      state,
-      isToday: date === today,
-      description: `${name}, ${date === today && state === "done" ? "today, studied" : STATE_WORDS[state]}`,
-    };
-  });
-}
-
-/** "1 free miss left this week", "No free misses set". */
-export function leewayLine(habit: Habit): string {
-  const { leeway, leewayLeft } = habit.streak;
-  if (leeway === 0) return "No free misses set";
-  return `${leewayLeft} free ${leewayLeft === 1 ? "miss" : "misses"} left this week`;
 }
 
 /**

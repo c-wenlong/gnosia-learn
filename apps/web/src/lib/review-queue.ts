@@ -12,7 +12,7 @@ import type { ConceptCheck } from "@/lib/concept-note-core";
 import { readConceptNote } from "@/lib/concept-note";
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner, ownerScope } from "@/lib/owner";
-import { buildChoices, type ReviewItem, type ReviewSessionData } from "@/lib/review-core";
+import { buildChoices, recallPrompt, type ReviewItem, type ReviewSessionData } from "@/lib/review-core";
 
 /**
  * The review queue as cards a page can render: the due list from the catalog,
@@ -77,7 +77,7 @@ export function toReviewItem(
     return {
       ...base,
       kind: "recall",
-      prompt: `Recall: ${item.title}`,
+      prompt: recallPrompt(item.title),
       answer: item.summary,
       why: null,
       source: null,

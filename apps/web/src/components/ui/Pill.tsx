@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 
-import { cx } from "./classes";
+import { cx, PILL } from "./classes";
 
 /**
- * Kit `Pill`: the stat pills in the top bar ("14 day streak", "Target 1 / 2").
- * 36px, 2px border, a 10px dot in the stat's colour before the label.
- * `dot` is any CSS colour, normally a token such as `var(--streak)`.
+ * Kit `Pill`: a stat in a pill ("14 day streak", "Target 1 / 2"). 36px, 2px
+ * border, a 10px dot in the stat's colour before the label. `dot` is any CSS
+ * colour, normally a token such as `var(--streak)`. A static label; the top
+ * bar's pills, which open their facts on a tap, are `HabitPill` in
+ * `components/shell`, on the same face (`PILL`).
  */
 export function Pill({
   dot,
@@ -19,13 +21,7 @@ export function Pill({
   children: ReactNode;
 }) {
   return (
-    <span
-      title={title}
-      className={cx(
-        "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border-2 border-border bg-surface px-3.5 text-[13px] font-semibold text-text tabular-nums",
-        className,
-      )}
-    >
+    <span title={title} className={cx(PILL, className)}>
       {dot !== undefined && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: dot }} />}
       {children}
     </span>

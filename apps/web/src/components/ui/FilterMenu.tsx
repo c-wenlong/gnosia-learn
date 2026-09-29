@@ -241,7 +241,7 @@ export function FilterMenu<V extends string>({
             if (section.heading === null) return rows;
             return (
               <div key={`section-${section.heading}`} role="group" aria-label={section.heading} className="mt-1 flex flex-col gap-0.5 border-t border-hair pt-1.5 first:mt-0 first:border-t-0 first:pt-0">
-                <div aria-hidden className="px-3 pt-1 pb-0.5 text-[11px] font-semibold tracking-wide text-text3 uppercase">
+                <div aria-hidden className="px-3 pt-1 pb-0.5 text-[12px] font-semibold text-text2">
                   {section.heading}
                 </div>
                 {rows}

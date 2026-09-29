@@ -10,8 +10,9 @@ const PHONE_ROWS = 3;
 /**
  * Reviews due (hi-fi 01, middle left): the first five cards in the queue,
  * each with how late it is and whether its note holds checks to ask, then
- * Start review with the whole queue's size. Snooze is drawn and disabled:
- * there is nothing yet to snooze a card with.
+ * Start review with the whole queue's size. The hi-fi's "Snooze to
+ * tomorrow" goes beside Start review once snoozing exists; until then it is
+ * not drawn (2026-09-29: no control that only says it is not built).
  */
 export function ReviewsCard({ reviews, reachable }: { reviews: TodayModel["reviews"]; reachable: boolean }) {
   const { total, rows, estimateMinutes } = reviews;
@@ -51,11 +52,6 @@ export function ReviewsCard({ reviews, reachable }: { reviews: TodayModel["revie
               <span className="md:hidden">Start review · {total}</span>
               <span className="max-md:hidden">Start review · {total} due</span>
             </Button>
-            <span className="max-md:hidden">
-              <Button variant="secondary" disabled disabledReason="Not built yet.">
-                Snooze to tomorrow
-              </Button>
-            </span>
             <span className="ml-auto text-[12px] text-text3 max-md:hidden">Est. {estimateMinutes} min</span>
           </div>
         </>

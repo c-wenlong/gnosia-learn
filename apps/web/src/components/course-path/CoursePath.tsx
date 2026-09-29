@@ -8,7 +8,7 @@ import { ResourceList } from "@/components/ResourceList";
 import { Button } from "@/components/ui/Button";
 import { Card, CardAction } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { cx } from "@/components/ui/classes";
+import { cx, LABEL } from "@/components/ui/classes";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { UnitHeader } from "@/components/ui/UnitHeader";
 import { VisitTracker } from "@/components/VisitTracker";
@@ -220,8 +220,8 @@ function UnitCard({
 
       {!guidebook && guideOpen && (
         <div id={guideId} className="rounded-2xl bg-surface2 p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">Guidebook</p>
-          <p className="mt-1 text-[14px] text-text2">
+          {/* No "Guidebook" label here: the Guidebook button just opened it. */}
+          <p className="text-[14px] text-text2">
             No concept note covers this module yet, so here is what it sets out to teach.
           </p>
           <ol className="mt-3 flex flex-col gap-2.5">
@@ -388,7 +388,7 @@ function AssetsCard({
                   href={a.href}
                   className="group flex items-center gap-2.5 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
-                  <AssetThumb src={a.thumb} statusHref={a.thumbStatus} label={a.kindLabel} contain={a.diagram} />
+                  <AssetThumb src={a.thumb} statusHref={a.thumbStatus} contain={a.diagram} />
                   <span className="flex min-w-0 flex-col gap-0.5">
                     <span
                       className={cx(
@@ -431,13 +431,13 @@ function AboutCard({
         {course.notes && <p className="text-[13px] text-text">{course.notes}</p>}
         {course.capstone && (
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">Capstone</p>
+            <p className={LABEL}>Capstone</p>
             <p className="mt-1 text-[13px] text-text">{course.capstone}</p>
           </div>
         )}
         {related.length > 0 && (
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">Related courses</p>
+            <p className={LABEL}>Related courses</p>
             <ul className="mt-1 flex flex-col gap-1">
               {related.map((r) => (
                 <li key={r.slug} className="text-[13px]">
