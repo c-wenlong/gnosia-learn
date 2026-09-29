@@ -9,6 +9,7 @@ import { readConceptNote } from "@/lib/concept-note";
 import { buildConceptWorkspace, type ConceptPlace, type ConceptWorkspace } from "@/lib/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { currentOwner, ownerScope } from "@/lib/owner";
+import { ownValue } from "@/lib/own-key";
 import type { Course } from "@/lib/types";
 
 /**
@@ -82,7 +83,7 @@ export async function readConceptWorkspace(slug: string): Promise<ConceptWorkspa
       frontmatter: note.ok ? { sources: note.frontmatter.sources, tags: note.frontmatter.tags } : null,
       checks: note.ok ? note.checks : [],
       events,
-      card: reviews.cards[slug] ?? null,
+      card: ownValue(reviews.cards, slug) ?? null,
       assets,
       place: placeOf(courses, concept.topics),
     });
