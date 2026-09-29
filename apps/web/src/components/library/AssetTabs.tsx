@@ -11,6 +11,7 @@ import { Placeholder } from "@/components/ui/Placeholder";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { cx, LABEL } from "@/components/ui/classes";
 import { assetHref, conceptHref, libraryHref, type ExplainedConcept } from "@/lib/library";
+import { ownValue } from "@/lib/own-key";
 
 /**
  * The tabbed card under every asset in the library: Explains, Related, Files
@@ -278,7 +279,7 @@ function CatalogFacts({
         ) : (
           <span className="flex flex-wrap gap-1.5">
             {asset.topics.map((slug) => (
-              <Chip key={slug} size="sm" href={libraryHref({ topic: slug })} title={titles[slug] ?? slug}>
+              <Chip key={slug} size="sm" href={libraryHref({ topic: slug })} title={ownValue(titles, slug) ?? slug}>
                 <span className="font-mono">{slug}</span>
               </Chip>
             ))}

@@ -33,6 +33,7 @@ import {
   type LibraryFilters,
 } from "@/lib/library";
 import { loadKnowledgeBase } from "@/lib/learner-store";
+import { ownValue } from "@/lib/own-key";
 
 export const metadata: Metadata = {
   title: "Library",
@@ -135,7 +136,7 @@ export default async function LibraryPage({
     kind !== null && `a ${kindLabel(kind).toLowerCase()}`,
     chosenCourse !== null && `in ${chosenCourse.code}`,
     course !== null && chosenCourse === null && `in a course called "${course}"`,
-    topic !== null && `filed under ${titles[topic] ?? topic}`,
+    topic !== null && `filed under ${ownValue(titles, topic) ?? topic}`,
   ].filter((c): c is string => typeof c === "string");
   const noMatchSentence =
     "Nothing in the catalog" +
@@ -178,7 +179,7 @@ export default async function LibraryPage({
       value: topic,
       options: [
         { value: "", label: "All topics", short: "All" },
-        { value: topic, label: titles[topic] ?? topic },
+        { value: topic, label: ownValue(titles, topic) ?? topic },
       ],
     });
   }
@@ -275,7 +276,7 @@ export default async function LibraryPage({
               className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]"
             >
               {matching.map((row) => {
-                const explained = explainedConcepts(concepts[row.id] ?? [], kbById);
+                const explained = explainedConcepts(ownValue(concepts, row.id) ?? [], kbById);
                 const first = explained[0];
                 const concept: CardConcept | undefined =
                   first === undefined
@@ -287,7 +288,7 @@ export default async function LibraryPage({
                     <AssetCard
                       asset={row}
                       concept={concept}
-                      topic={topicSlug === undefined ? undefined : (titles[topicSlug] ?? topicSlug)}
+                      topic={topicSlug === undefined ? undefined : (ownValue(titles, topicSlug) ?? topicSlug)}
                       href={assetHref(row.id)}
                       // A diagram is its own thumbnail; a video gets a frame
                       // cut out of it on demand; everything else gets the
