@@ -722,7 +722,7 @@ export class Drafts {
     const key = input.idempotencyKey?.trim() || null;
     if (key === null) return this.createNew(input, null);
     if (key.length > 200) throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
-    const existing = [...this.records.values()].find((record) => record.idempotencyKey === key);
+    const existing = [...this.records.values()].find((record) => record.idempotencyKey === key && !this.pruning.has(record.id));
     if (existing !== undefined) return { record: existing, created: false };
     // Reserved before the first await: a second post of the same key while
     // the vocabulary, the corpus or an inspect is being read gets this draft.
