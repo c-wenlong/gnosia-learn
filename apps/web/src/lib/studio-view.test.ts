@@ -105,6 +105,7 @@ describe("writing the view back into a URL", () => {
       panel: false,
       job: "job-1",
       extend: "tailscale",
+      talk: true,
       stream: false,
       shot: "after",
       draft: "draft-1",
@@ -337,6 +338,23 @@ describe("what the panel holds", () => {
     expect(panelHref("/studio?q=x", { draft: "d2" })).toBe("/studio?q=x&draft=d2");
     expect(panelHref("/studio?draft=d1&job=j", { draft: null, job: null })).toBe("/studio");
     expect(studioHref({ ...DEFAULT_VIEW, draft: "d1" })).toBe("/studio?draft=d1");
+  });
+
+  it("marks a Talk it through press in the URL, and drops the mark with the press", () => {
+    const href = extendFromHref("/studio/d/dot-product?job=j1", "dot-product", { talk: true });
+    expect(href).toBe("/studio?extend=dot-product&talk=1");
+    expect(parsePanel(Object.fromEntries(new URL(href, "http://x").searchParams))).toMatchObject({
+      extend: "dot-product",
+      talk: true,
+    });
+    // The hand-off to the conversation, and Close, both end the press.
+    expect(panelHref(href, { extend: null, draft: "d1" })).toBe("/studio?draft=d1");
+    expect(panelHref(href, { extend: null, draft: null })).toBe("/studio");
+    // Another press is an ordinary one unless it says so.
+    expect(panelHref(href, { extend: "other" })).toBe("/studio?extend=other");
+    // The mark means nothing on its own.
+    expect(parsePanel({ talk: "1" }).talk).toBe(false);
+    expect(parsePanel({ extend: "dot-product" }).talk).toBe(false);
   });
 
   it("opens an Extend press from either screen", () => {

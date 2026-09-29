@@ -21,6 +21,16 @@ import { runnerDown, type Refusal } from "@/lib/studio-drafts";
  */
 
 /**
+ * What an Extend press hands over as the first turn: a message the person
+ * sent during the read, else the opener, except on a Talk it through press,
+ * which never sends one (the person edits the prefill, or writes their own,
+ * before anything is paid for).
+ */
+export function firstTurn(queued: string | null, talk: boolean): string | null {
+  return queued ?? (talk ? null : EXTEND_OPENER);
+}
+
+/**
  * The first thing an extend conversation says, on the person's behalf.
  *
  * Sent rather than waited for, because the design's promise is that the

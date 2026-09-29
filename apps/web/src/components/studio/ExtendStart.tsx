@@ -12,7 +12,7 @@ import { Composer } from "@/components/ui/Composer";
 import { UserMessage } from "@/components/ui/Message";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
 import {
-  EXTEND_OPENER,
+  firstTurn,
   extendKey,
   extendRefusal,
   leaveOpener,
@@ -46,12 +46,15 @@ export function ExtendStart({
   title,
   path,
   listed,
+  talk = false,
 }: {
   name: string;
   title: string;
   path: string;
   /** Whether the grid has this diagram. A name it does not have gets no picture, only the runner's answer. */
   listed: boolean;
+  /** From Talk it through (`&talk=1`): no opener is sent, prefill or not. */
+  talk?: boolean;
 }) {
   const router = useRouter();
   const { close, isClosing } = useStudioDialog();
@@ -77,8 +80,6 @@ export function ExtendStart({
   }, []);
   const composer = useRef<HTMLTextAreaElement | null>(null);
   const running = useRef(false);
-  /** Talk it through left words for this press: the person edits them, and no opener is sent. */
-  const prefilled = useRef(false);
   // Closing the panel mid-read does not stop the post, and its answer must not
   // reopen a conversation the person just closed.
   const mounted = useRef(true);
@@ -119,12 +120,12 @@ export function ExtendStart({
     noteArrival(result.data.draftId, name);
     const { text: draftText, queued: waiting } = typed.current;
     leaveOpener(store, result.data.draftId, {
-      send: waiting ?? (prefilled.current ? null : EXTEND_OPENER),
+      send: firstTurn(waiting, talk),
       compose: draftText,
       source: name,
     });
     router.replace(panelHref(path, { extend: null, draft: result.data.draftId }), { scroll: false });
-  }, [name, title, path, router, isClosing, setQueued, setText]);
+  }, [name, title, path, talk, router, isClosing, setQueued, setText]);
 
   useEffect(() => {
     // The post runs from an effect because this panel is what a link opens:
@@ -146,15 +147,14 @@ export function ExtendStart({
     // its first control (Close) when it opens: typing straight away should
     // land in the composer, and an Enter there should not close the panel.
     const later = setTimeout(() => {
-      const prefill = takePrefill(sessionStore(), name);
-      if (prefill !== null) {
-        prefilled.current = true;
-        setText(prefill);
-      }
+      // Only a Talk it through press reads a prefill, so a stale one left by
+      // a press that never arrived cannot land in an ordinary Extend.
+      const prefill = talk ? takePrefill(sessionStore(), name) : null;
+      if (prefill !== null) setText(prefill);
       composer.current?.focus();
     }, 0);
     return () => clearTimeout(later);
-  }, [name, setText]);
+  }, [name, talk, setText]);
 
   const words = readingWords(now - startedAt);
 

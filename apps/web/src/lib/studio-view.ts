@@ -108,6 +108,14 @@ export interface StudioView {
    */
   extend: string | null;
   /**
+   * The Extend press came from Talk it through on a failed job (`&talk=1`),
+   * so it sends no opener, whatever storage does or does not hold: the
+   * person writes the first turn. In the URL rather than in storage so a
+   * browser with no storage cannot turn it into a paid turn nobody asked
+   * for. Meaningless without `extend`, and dropped with it.
+   */
+  talk: boolean;
+  /**
    * Whether the job panel may open an event stream at all.
    *
    * `?stream=off` forces the polling fallback that a dropped connection would
@@ -148,6 +156,7 @@ export const DEFAULT_VIEW: StudioView = {
   panel: true,
   job: null,
   extend: null,
+  talk: false,
   stream: true,
   shot: null,
   draft: null,
@@ -205,12 +214,13 @@ export function parseView(params: RawParams): StudioView {
  */
 export function parsePanel(
   params: RawParams,
-): Pick<StudioView, "job" | "extend" | "stream" | "shot" | "draft"> {
+): Pick<StudioView, "job" | "extend" | "talk" | "stream" | "shot" | "draft"> {
   const shot = one(params.shot);
   const job = one(params.job);
   return {
     job,
     extend: one(params.extend),
+    talk: one(params.extend) !== null && one(params.talk) === "1",
     stream: (one(params.stream) ?? "on") !== "off",
     // A picture belongs to a job, so `?shot=after` on its own names nothing and
     // is read as nothing rather than as a main area that cannot say whose
@@ -240,6 +250,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
   if (next.panel !== DEFAULT_VIEW.panel) params.set("panel", next.panel ? "1" : "0");
   if (next.job !== null) params.set("job", next.job);
   if (next.extend !== null) params.set("extend", next.extend);
+  if (next.extend !== null && next.talk) params.set("talk", "1");
   if (next.draft !== null) params.set("draft", next.draft);
   if (!next.stream) params.set("stream", "off");
   if (next.shot !== null && next.job !== null) params.set("shot", next.shot);
@@ -260,6 +271,7 @@ export function panelHref(
   patch: {
     job?: string | null;
     extend?: string | null;
+    talk?: boolean;
     shot?: "before" | "after" | null;
     draft?: string | null;
     selected?: string | null;
@@ -282,7 +294,12 @@ export function panelHref(
   if (patch.extend !== undefined) {
     if (patch.extend === null) params.delete("extend");
     else params.set("extend", patch.extend);
+    // A new press, or none, is not the Talk it through one unless it says so.
+    if (patch.talk !== true) params.delete("talk");
   }
+  if (patch.talk === true && params.get("extend") !== null) params.set("talk", "1");
+  if (patch.talk === false) params.delete("talk");
+  if (params.get("extend") === null) params.delete("talk");
   if (patch.shot !== undefined) {
     if (patch.shot === null) params.delete("shot");
     else params.set("shot", patch.shot);
@@ -320,10 +337,10 @@ export function conversationHref(path: string, draftId: string): string {
  * the filters and swaps the panel, and from the canvas route it goes to the
  * grid, where the Extend panel lives.
  */
-export function extendFromHref(path: string, name: string): string {
+export function extendFromHref(path: string, name: string, options: { talk?: boolean } = {}): string {
   const [base] = path.split("?");
   const from = base === "/studio" ? path : "/studio";
-  return panelHref(from, { extend: name, draft: null, job: null, selected: null });
+  return panelHref(from, { extend: name, talk: options.talk === true, draft: null, job: null, selected: null });
 }
 
 /** Add or remove one topic chip, which is what clicking a chip means. */

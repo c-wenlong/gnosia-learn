@@ -5,6 +5,7 @@ import {
   EXTEND_OPENER,
   extendKey,
   extendRefusal,
+  firstTurn,
   forgetExtendKey,
   leaveOpener,
   readingWords,
@@ -87,6 +88,20 @@ describe("a refused Extend", () => {
     // A 502 the runner itself sent is about the diagram, not about the runner.
     expect(extendRefusal(502, refusal("dot-product would not inspect"), "x").actions).toContain("canvas");
     expect(extendRefusal(500, refusal("boom"), "x").headline).toBe("The runner answered 500.");
+  });
+});
+
+describe("the first turn an Extend press hands over", () => {
+  it("is the opener on an ordinary press, and a message sent during the read instead of it", () => {
+    expect(firstTurn(null, false)).toBe(EXTEND_OPENER);
+    expect(firstTurn("Add the projection", false)).toBe("Add the projection");
+  });
+
+  it("is never the opener on a Talk it through press, with a prefill or without one", () => {
+    // Storage lost the prefill: still nothing is sent on the person's behalf.
+    expect(firstTurn(null, true)).toBeNull();
+    // The person sent their own words during the read: those go.
+    expect(firstTurn("Add the length panel again, smaller", true)).toBe("Add the length panel again, smaller");
   });
 });
 

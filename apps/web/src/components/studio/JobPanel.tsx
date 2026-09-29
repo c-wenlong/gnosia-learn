@@ -599,7 +599,9 @@ function TalkItThrough({
               // the create's refusals (a diagram since deleted, a failed
               // inspect) are handled where every Extend handles them.
               leavePrefill(sessionStore(), target, words);
-              router.push(extendFromHref(path, target), { scroll: false });
+              // `talk` in the URL is what stops the opener: storage may be
+              // unavailable, and then the prefill is lost but no turn is paid.
+              router.push(extendFromHref(path, target, { talk: true }), { scroll: false });
               return;
             }
             const made = await createDraft({ idempotencyKey: idempotencyKey(`talk:${job.jobId}`) });
