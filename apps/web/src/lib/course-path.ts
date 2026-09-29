@@ -1,10 +1,11 @@
 import type { MasteryLabel } from "@self-learn/catalog/state";
 
-import { bucketOf, masteryCaption, type MasteryBucket } from "@/lib/mastery-bucket";
+import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
- * The course path's arithmetic (hi-fi screen 03): which colour each topic
- * node is, which node is the one to do next, and which units are locked.
+ * The course page's arithmetic: which mark each topic and module carries,
+ * which topic is the one to do next, which modules are locked, and which
+ * module `/courses/[slug]` opens on.
  *
  * Pure and React-free, so the server page, the client path and a test can all
  * call it. `import type` only from the catalog, the same as
@@ -277,30 +278,98 @@ export function pathStatus(
   };
 }
 
-/** "4 of 4 mastered", "1 of 5 done", or "Locked until Module 1". */
-export function unitSubtitle(status: ModuleStatus, previousOrder: number | undefined): string {
-  if (status.locked && previousOrder !== undefined) return `Locked until Module ${previousOrder}`;
-  return `${status.done} of ${status.total} ${status.conceptBacked ? "mastered" : "done"}`;
-}
-
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** "8 modules · 20 topics · 40% mastered", the rail header's line. */
-export function courseSummaryLine(status: PathStatus): string {
-  return [
-    plural(status.modules.length, "module"),
-    plural(status.total, "topic"),
-    `${status.percent}% ${status.conceptBacked ? "mastered" : "done"}`,
-  ].join(" · ");
+/**
+ * The module a course page shows at `/courses/[slug]`: the one holding the
+ * active topic, else the first. A finished course (no active topic) opens on
+ * its first module, as a course home does once everything is done.
+ */
+export function defaultModuleIndex(modules: readonly { id: string }[], status: Pick<PathStatus, "active">): number {
+  const at = status.active ? modules.findIndex((m) => m.id === status.active!.moduleId) : -1;
+  return at === -1 ? 0 : at;
 }
 
-/** The caption under a node: the mastery caption, or the tick's state. */
-export function nodeCaption(mastery: TopicMastery | null | undefined, ticked: boolean): string {
-  if (!mastery) return ticked ? "Completed" : "Not started";
-  const base = masteryCaption(mastery.bucket, mastery.pL);
-  return mastery.concepts.length > 1 ? `${base} · ${mastery.concepts.length} concepts` : base;
+/** `/courses/<course>/<module>`: one module of a course, on a page of its own. */
+export function moduleHref(courseSlug: string, moduleSlug: string): string {
+  return `/courses/${courseSlug}/${moduleSlug}`;
+}
+
+/** How a module row in the sidebar marks its standing. */
+export type ModuleMark = "done" | "progress" | "todo" | "locked";
+
+export function moduleMark(status: ModuleStatus): ModuleMark {
+  if (status.locked) return "locked";
+  if (status.total > 0 && status.done === status.total) return "done";
+  return status.done > 0 ? "progress" : "todo";
+}
+
+/** "mastered" when every topic of the scope has a concept, else "done": a tick is not mastery. */
+export function doneWord(conceptBacked: boolean): string {
+  return conceptBacked ? "mastered" : "done";
+}
+
+/** "2 of 5 done", "4 of 4 mastered": a module's or a course's count of finished topics. */
+export function doneLine(done: number, total: number, conceptBacked: boolean): string {
+  return `${done} of ${total} ${doneWord(conceptBacked)}`;
+}
+
+/** One part of a module's meta row, with the icon it is drawn beside. */
+export interface ModuleMetaPart {
+  icon: "topics" | "concepts" | "assets" | "done";
+  text: string;
+}
+
+/**
+ * The line under a module's title ("5 topics · 12 concepts · 3 assets · 2 of 5
+ * done"). A count of nothing is left out, except the topics and the done
+ * count, which say what the module is and how far along it is.
+ */
+export function moduleMeta({
+  status,
+  concepts,
+  assets,
+}: {
+  status: ModuleStatus;
+  /** Distinct concepts across the module's topics. */
+  concepts: number;
+  /** Assets filed under the module's topic; null when the catalog did not answer. */
+  assets: number | null;
+}): ModuleMetaPart[] {
+  const parts: ModuleMetaPart[] = [{ icon: "topics", text: plural(status.total, "topic") }];
+  if (concepts > 0) parts.push({ icon: "concepts", text: plural(concepts, "concept") });
+  if (assets) parts.push({ icon: "assets", text: plural(assets, "asset") });
+  if (status.total > 0) parts.push({ icon: "done", text: doneLine(status.done, status.total, status.conceptBacked) });
+  return parts;
+}
+
+/** How a topic row marks its standing: mastery when it has concepts, the tick when not. */
+export type TopicMark = "done" | "learning" | "untouched";
+
+export function topicMark(mastery: TopicMastery | null | undefined, ticked: boolean): TopicMark {
+  if (topicDone(mastery, ticked)) return "done";
+  return mastery?.bucket === "learning" ? "learning" : "untouched";
+}
+
+/** The grey line under a topic's title: "3 concepts · Learning", "Done", "Not started". */
+export function topicMeta(mastery: TopicMastery | null | undefined, ticked: boolean): string {
+  if (!mastery) return ticked ? "Done" : "Not started";
+  return `${plural(mastery.concepts.length, "concept")} · ${MASTERY_BUCKET_LABEL[mastery.bucket]}`;
+}
+
+/**
+ * What the module sets out to teach, for "Show learning objectives": every
+ * topic's subtopics in order, each once.
+ */
+export function moduleObjectives(topics: readonly { subtopics: readonly string[] }[]): string[] {
+  return [...new Set(topics.flatMap((t) => t.subtopics.map((s) => s.trim()).filter(Boolean)))];
+}
+
+/** The distinct concepts behind a module's topics. */
+export function moduleConceptCount(mastery: readonly (TopicMastery | null | undefined)[]): number {
+  return new Set(mastery.flatMap((m) => m?.concepts.map((c) => c.slug) ?? [])).size;
 }
 
 /** `/learn/<concept>`: the concept workspace, where a Guidebook opens. */

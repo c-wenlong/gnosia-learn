@@ -11,7 +11,7 @@ the shell), and how to check a page against its hi-fi frame.
 | --- | --- | --- | --- |
 | 0 | Foundation: tokens, primitives, habit data, the shell, Courses, the screenshot tool | `/courses`, `/` (redirect), `/review` and `/settings` (placeholders) | Done |
 | 1a | Today and Settings | `/`, `/settings`, `GET /api/learner/today`, `GET /api/learner/export` | Done |
-| 1b | Course path, absorbing the module page | `/courses/[slug]`, `/courses/[slug]/[module]` (a redirect to the unit) | Done |
+| 1b | Course path, absorbing the module page; rebuilt on 2026-09-29 as the Coursera-style course home (see [The course home](#the-course-home)) | `/courses/[slug]`, `/courses/[slug]/[module]` (a redirect to the unit until the rebuild, its own page since) | Done |
 | 1c | Learn index and Concept workspace, with a concept-aware tutor chat | `/learn`, `/learn/[concept]`, `GET /api/concepts/[slug]`, `conceptSlug` on `POST /api/agent/chat` | Done |
 | 1d | Session focus mode with graded probes writing BKT events, and the close screen | `/learn/[concept]/session`, `POST /api/learner/observe`, `POST /api/learner/session/close`, `POST /api/agent/session` | Done |
 | 1e | Review | `/review`, `GET /api/review/due`, `POST /api/review/grade` | Done |
@@ -175,7 +175,7 @@ its size is the `.katex` rule in `globals.css`.
 stays mastered, no observations is untouched, everything else is learning.
 Pass `observations`; a missing count reads as zero.
 
-`PathNode` (`bucket`, `active?`, `glyph?: "dot" | "check"`: the 72 by 78 node with its 6px lip and the accent ring) and `UnitHeader` (`eyebrow`, `title`, `subtitle?`, `actions?`, `muted?` for a locked unit, `headingLevel?`) shipped with 1b.
+`PathNode` and `UnitHeader` shipped with 1b and were deleted with the course path on 2026-09-29: the course home draws Coursera's item rows instead, from its own `components/course-home/`, and nothing else used either.
 
 Not built yet, because one phase each needs them and none of the others do:
 the tutor message and the citation pill (1c). Build them in
@@ -513,6 +513,49 @@ A probe is recorded as `source: probe` (no learning step), a check after
 teaching as `teach`, and a Quiz me check as `probe`, since nothing was taught
 in that session.
 
+## The course home
+
+`/courses/[slug]` and `/courses/[slug]/[module]` are one screen, rebuilt on
+2026-09-29 in the layout of Coursera's signed-in course home
+([reference/coursera/](reference/coursera/README.md), "Use in Figma") with
+our tokens, Figtree and primitives. It replaced the stacked course path of
+phase 1b. Each module has its own URL; the course's own URL shows the module
+the learner is on.
+
+| File | What it holds |
+| --- | --- |
+| [`lib/course-home.ts`](../../apps/web/src/lib/course-home.ts) | `loadCourseHome(course)`, server only: each topic's mastery, and per module the Guidebook concept, the assets and the description (the topic vocabulary's `summary` for the module's `topic:`). Both pages call it; every module is resolved, since the sidebar marks all of them |
+| [`lib/course-path.ts`](../../apps/web/src/lib/course-path.ts) | the pure rules, unchanged where Today and Courses read them (`pathStatus`, the lock, `itemStanding`), plus `defaultModuleIndex`, `moduleHref`, `moduleMark`, `topicMark`, `topicMeta`, `moduleMeta`, `moduleObjectives`, `moduleConceptCount`, `doneLine` |
+| [`lib/course-assets.ts`](../../apps/web/src/lib/course-assets.ts) | a module's assets as rows: title, kind label and icon family, the first six, and the library link for the rest. No thumbnails, so no blob reads |
+| [`CourseHome`](../../apps/web/src/components/course-home/CourseHome.tsx) | the client half: the status from the ticks, which module to show, the grid |
+| [`CourseSidebar`](../../apps/web/src/components/course-home/CourseSidebar.tsx), [`ModuleMain`](../../apps/web/src/components/course-home/ModuleMain.tsx), [`TopicRow`](../../apps/web/src/components/course-home/TopicRow.tsx), [`ModuleResources`](../../apps/web/src/components/course-home/ModuleResources.tsx), [`CourseRail`](../../apps/web/src/components/course-home/CourseRail.tsx) | the three columns and their rows; `rows.ts` holds the row classes, `icons.tsx` the glyphs and status marks |
+
+**Layout.** Three `Panel`s (surface, radius 16, no border, no shadow) on the
+page colour, 16 apart: from 1280px a 300px sidebar, the module, and a 360px
+rail; from 1024px the rail drops under the module; below that the sidebar
+becomes a picker (a button naming the module on screen, opening the list)
+above the module, and the rail follows. The sidebar is sticky from 1024px.
+
+**Which module `/courses/[slug]` shows.** The one holding the active topic
+(`pathStatus`), else the first. It is chosen once, on the client, from the
+ticks the page was served with, and kept: finishing a module's last topic
+moves Continue on without pulling the page away. The ticks live in
+`LearnerProvider`, so the server cannot choose without a second snapshot
+read. The visit is recorded with the module only on a module's own URL.
+
+**Rows.** Coursera's item row: at least 60px, 8px padding, radius 8, a 20px
+status mark, a 16/24 title over a 14/20 `--text2` meta line, `--tint` on
+hover and on the active topic. A topic's mark is done (a mastered disc with
+a tick: mastered, or ticked when it has no concept), learning (the kit's
+learning dot) or not started (a ring in `--text3`); its meta line is
+"3 concepts · Learning", "Done" or "Not started". The whole row is a toggle
+(a button whose `::after` covers the row) that opens the topic's tools,
+which are the old node panel's: concepts with their mastery, what it covers,
+Mark done, the tutor chat, the recap and the note. Continue sits above the
+toggle at the row's right, and under the title on a phone. A module row's
+mark is done, in progress (an arc for the share done), not started, or a
+padlock while locked.
+
 ## Deviations from the hi-fi
 
 | Where | Hi-fi | Built | Why |
@@ -524,13 +567,15 @@ in that session.
 | Store banner | not drawn | `--text` on `--warn-tint` with a `--warn` rule | `--warn-text` on `--warn-tint` is under 3:1 in light, too low for a sentence |
 | Preference key | DESIGN.md's API table said `streakLeewayPerWeek` | `dailyLeeway` | the name the phase-0 brief set; DESIGN.md now matches |
 | Stat tile label | white on the coloured strip in light | black (`--on-tone`) in both themes | white on the streak orange is about 2:1, and under 4.5:1 on the other three; black is at least 4.8:1 on all four |
-| Path nodes | one node per concept | one node per course topic, coloured by the concepts whose notes name it (all mastered is mastered, none observed is untouched, anything else learning; p(L) is the minimum) | the phase-1b brief; a course's topics are the unit of progress everywhere else. `content/topics.yaml` maps modules, not topics, so the per-topic link is the note's `topics:` frontmatter (`KbConcept.topics`) and `maps.concepts` only orders them |
-| Path, topic with no concept | not drawn | the node shows the learner's tick: a check on the mastered face when done, untouched otherwise, captioned "Completed" or "Not started" | most courses have no concept notes yet; without this their paths would be all grey |
+| Path nodes (now topic rows) | one node per concept | one node per course topic, coloured by the concepts whose notes name it (all mastered is mastered, none observed is untouched, anything else learning; p(L) is the minimum) | the phase-1b brief; a course's topics are the unit of progress everywhere else. `content/topics.yaml` maps modules, not topics, so the per-topic link is the note's `topics:` frontmatter (`KbConcept.topics`) and `maps.concepts` only orders them |
+| Path, topic with no concept | not drawn | the row shows the learner's tick: the done mark when ticked, the empty ring otherwise, with "Done" or "Not started" as its meta line | most courses have no concept notes yet; without this their rows would all read not started |
 | Unit and header wording | "4 of 4 mastered", "40% mastered" | "mastered" only when every topic has a concept, else "done" | a tick is not mastery |
-| Path, per-node tools | not drawn | a chevron at the right of each row opens the topic's concepts, subtopics, done tick, note, recap and tutor chat; each unit ends in a Resources disclosure | the module page's checklist and resource list folded in, so nothing it had is lost |
-| Guidebook with no concept | a link | toggles the module's outline (topics and subtopics) inline under the unit header | the brief: no concept note to open |
-| Rail | three cards | a fourth, "About this course" (credits, prerequisites, notes, capstone, related courses), and an inferred-roadmap note in the header card | what the old course page showed, kept |
-| Path node dot | `#FFFFFF` | `bg-white` / `text-white` | the kit's literal in both themes; the accent button already uses `text-white` |
+| Path, per-node tools | not drawn | any topic row opens the topic's concepts, subtopics, done tick, note, recap and tutor chat; the module's resources are item rows under the topics, with the learner's own and an add form | the module page's checklist and resource list folded in, so nothing it had is lost |
+| Guidebook with no concept | a link | no Guidebook button; "Show learning objectives" lists the topics' subtopics for every module | the brief: no concept note to open. Before the Coursera rebuild the button toggled the same outline |
+| Rail | three cards | Course progress (percent, bar, Continue, Reset), Next up only while the next topic is in another module, About this course (credits, track, prerequisites, notes, capstone, the inferred-roadmap note), Related courses | what the old course page showed, kept, in Coursera's stacked rail cards |
+| Course home, Coursera slots | partner logo, instructors, ratings, level, time left, deadlines, item types (video, reading), grades, the weekly target and course timeline, the Grades and Notes links | left out; the module's meta row counts topics, concepts, assets and done instead, and the sidebar's one secondary link is the course's assets in the library | no data behind any of them, and the owner's rule is not to invent it |
+| Course home, type | Source Sans, the module title 600 20/24 | Figtree throughout, the module title 600 22/28 and not Georgia | our font; one family, as Coursera uses, since the page title sits in a column rather than over the page |
+| Course home, asset rows | not drawn (the old rail had 72 by 48 thumbnails) | kind icons | Coursera's item rows carry a 20px icon, and a row per asset needs no poster read |
 | Review, Again interval | "10 min" | "1 day" | the scheduler is SM-2 with no learning steps: a failed card comes back in a day. The buttons print what a grade will write |
 | Review, the four intervals | Hard 1 day, Good 4, Easy 9 | often equal, and Hard can pass Good by a day | SM-2 only lets the grade change the interval from the third repetition on, and `schedule.mjs` fuzzes intervals of a week or more by up to 5% keyed on the interval itself. Honest, and a scheduler question, not a page one |
 | Review, answer panel | a citation, Why?, Open concept on every card | the citation and Why? only when the check block has `source:` and `why:` | most notes have neither; nothing is invented to fill the slot |
@@ -701,7 +746,7 @@ Left on purpose:
   Inside a flex row that parent is sized by its content, a percentage of
   nothing, so the track rendered 0px wide and the Learn index showed a p(L)
   with no bar beside it. Put the width (and `shrink-0`) on a wrapping
-  element, as the course path's module bars and the Learn index do. A
+  element, as the Learn index does. A
   breakpoint width such as `md:w-[150px]` does win, because media rules come
   later, which is why the session close screen's bars were never affected.
 - **A primitive sets its own `display`, so hide it with a wrapper.**

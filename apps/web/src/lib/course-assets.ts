@@ -3,14 +3,15 @@ import "server-only";
 import { assetsForTopic, type AssetRef } from "@self-learn/catalog/state";
 import { connection } from "next/server";
 
-import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
-import { readAssetAccess, thumbnailFor, thumbnailStatusFor, withCatalog, type AssetAccess } from "@/lib/asset-library";
+import { assetDisplayTitle, assetKindLabel, familyOf, type Family } from "@/components/asset-meta";
+import { withCatalog } from "@/lib/asset-library";
 import { assetHref, compareByKindThenId, isCompanionKind, libraryHref } from "@/lib/library";
 import { currentScope } from "@/lib/owner";
 
 /**
- * The assets a course path shows per module: the count on each unit's
- * "Assets" chip and the first few in the rail's "Assets for this module".
+ * The assets a course page shows per module: the count in the module's meta
+ * row and the first few as item rows under its topics, each with its kind's
+ * icon, then a link to the rest in the library.
  *
  * A module's assets are its `topic:` slug's, through `assetsForTopic`: the
  * required `asset_topic` join every indexer writes. Companion kinds
@@ -20,10 +21,10 @@ import { currentScope } from "@/lib/owner";
  *
  * Server only: it reads the catalog. What crosses to the client path is the
  * plain `ModuleAssets` below, with the thumbnail and the link already
- * resolved, the way the library's cards receive theirs.
+ * resolved.
  */
 
-/** One asset as the rail draws it. */
+/** One asset as a module page draws it. */
 export interface PathAsset {
   id: string;
   href: string;
@@ -31,12 +32,8 @@ export interface PathAsset {
   /** False when `title` is a filename or a host rather than a real title. */
   titled: boolean;
   kindLabel: string;
-  /** A poster or the diagram itself, or null for the placeholder. */
-  thumb: string | null;
-  /** Where the thumbnail asks why it failed; absent when there is no thumbnail. */
-  thumbStatus?: string;
-  /** A diagram is fitted whole; a video poster fills the box. */
-  diagram: boolean;
+  /** Which icon the row carries. */
+  family: Family;
 }
 
 export interface ModuleAssets {
@@ -55,8 +52,8 @@ export interface CourseAssets {
   byTopic: Record<string, ModuleAssets>;
 }
 
-/** How many a rail lists before pointing at the library. */
-export const RAIL_ASSET_LIMIT = 3;
+/** How many a module page lists before pointing at the library. */
+export const MODULE_ASSET_LIMIT = 6;
 
 export async function loadCourseAssets(topicSlugs: readonly string[]): Promise<CourseAssets> {
   await connection();
@@ -68,34 +65,26 @@ export async function loadCourseAssets(topicSlugs: readonly string[]): Promise<C
   const shown = slugs.map((_, i) =>
     (rows[i] ?? []).filter((row) => !isCompanionKind(row.kind)).sort(compareByKindThenId),
   );
-  // Only the rows a rail draws are asked about, per row: a video shows its
-  // stored poster, a diagram its stored SVG.
-  const access = await readAssetAccess(shown.flatMap((list) => list.slice(0, RAIL_ASSET_LIMIT)));
   const byTopic: Record<string, ModuleAssets> = {};
   for (const [i, slug] of slugs.entries()) {
     const list = shown[i] ?? [];
     byTopic[slug] = {
       count: list.length,
-      top: list.slice(0, RAIL_ASSET_LIMIT).map((row) => toPathAsset(row, access)),
+      top: list.slice(0, MODULE_ASSET_LIMIT).map(toPathAsset),
       libraryHref: libraryHref({ topic: slug }),
     };
   }
   return { reachable: true, byTopic };
 }
 
-function toPathAsset(row: AssetRef, access: AssetAccess): PathAsset {
+function toPathAsset(row: AssetRef): PathAsset {
   const name = assetDisplayTitle(row);
-  // `thumbnailFor` reads the kind and the id; the topic list it also accepts
-  // is not consulted.
-  const withTopics = { ...row, topics: [] };
   return {
     id: row.id,
     href: assetHref(row.id),
     title: name.text,
     titled: name.source === "title",
     kindLabel: assetKindLabel(row.kind),
-    thumb: thumbnailFor(withTopics, access),
-    thumbStatus: thumbnailStatusFor(withTopics, access),
-    diagram: row.kind === "diagram_svg",
+    family: familyOf(row.kind),
   };
 }
