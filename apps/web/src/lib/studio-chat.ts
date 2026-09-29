@@ -19,6 +19,17 @@ import { refusalNumber, refusalReason, refusalString } from "@/lib/studio-drafts
 /* -------------------------------------------------------------------------- */
 
 /** The unpaid opening turn the studio writes into an empty conversation. */
+/**
+ * The composer after a refused turn. A turn typed in the composer comes back
+ * unless something new was typed meanwhile (the person's newer words win, as
+ * before). A turn that was never in the composer (the Extend opener) goes back
+ * in front of whatever it holds, so neither is lost.
+ */
+export function wordsBack(held: string, body: string, keptComposer: boolean): string {
+  if (held === "") return body;
+  return keptComposer ? `${body}\n${held}` : held;
+}
+
 export const OPENING_TURN =
   "Tell me what the diagram should make clear. A sentence is enough; I'll ask if I need more.";
 

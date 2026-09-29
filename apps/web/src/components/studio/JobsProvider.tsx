@@ -37,7 +37,7 @@ import {
  * mounted across navigations within its segment, so a provider there keeps the
  * list, the events and the open `EventSource` through a route change — where the
  * same provider inside each page would tear the connection down and rebuild it
- * on every click. The URL carries which panel is open (`?job=`, `?new=`), which
+ * on every click. The URL carries which panel is open (`?job=`, `?draft=`), which
  * is the part a person navigates to and bookmarks; the connection is not that.
  *
  * **The stream is a cache and the polled GET is the record (D8, rule 8).** An

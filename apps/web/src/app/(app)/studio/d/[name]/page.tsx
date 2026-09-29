@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { commitDiagram, exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/(app)/studio/actions";
-import { BriefForm } from "@/components/studio/BriefForm";
 import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspector";
+import { ExtendLink } from "@/components/studio/ExtendLink";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
@@ -19,14 +19,13 @@ import {
   StudioStrip,
   VerbNotice,
 } from "@/components/studio/StudioChrome";
-import { topicOptionsOf } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
-import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
+import { vocabularyBanner, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   canvasHref,
   displayTitle,
+  extendHref,
   freshness,
-  panelHref,
   parsePanel,
   readOutcome,
   type Diagram,
@@ -108,7 +107,7 @@ export default async function CanvasPage({
   const query = await searchParams;
   const outcome = readOutcome(query);
   // The canvas route has no view — no filters, no sort, no selection — but it
-  // has the same right panel, so it reads the same three parameters.
+  // has the same right panel, so it reads the same panel parameters.
   const panel = parsePanel(query);
 
   // A page's `params` are not URL-decoded, unlike a route handler's. The two
@@ -181,16 +180,12 @@ export default async function CanvasPage({
     timeoutMs: 60_000,
   });
 
-  // The topics come from the runner's D13 copy, as on `/studio`: the app's own
-  // content read is database-only and this screen has to work without it.
-  const [jobList, vocabulary, one] = await Promise.all([
+  const [jobList, one] = await Promise.all([
     studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
-    studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000 }),
     // After the mirror start, which brought the checkout up to date: whether
     // the canvas now holds edits nobody committed.
     studioApi<Diagram>(`/api/diagrams/${encodeURIComponent(name)}`),
   ]);
-  const topics = vocabulary.ok ? vocabularyTopics(vocabulary.data) : [];
   const staleVocabulary = vocabularyBanner(health.data.vocabulary);
   const checkout = one.ok ? (one.data.checkout ?? null) : null;
   // Only on the render that shows a picture: `GET /api/jobs` carries neither
@@ -255,18 +250,7 @@ export default async function CanvasPage({
           )}
         </div>
         <aside className="hidden w-80 shrink-0 border-l border-[var(--border)] lg:block">
-          {panel.brief !== null ? (
-            <BriefForm
-              path={path}
-              topics={topicOptionsOf(topics)}
-              from={panel.brief}
-              // This screen names one document, so a new job started from it is
-              // about that document until somebody says otherwise: the slug is
-              // taken and the mode is `extend`, which is the only mode the
-              // runner would accept against a file that already exists.
-              suggested={{ slug: diagram.name, title: diagram.title, topic: diagram.topic }}
-            />
-          ) : panel.job !== null ? (
+          {panel.job !== null ? (
             <JobPanel jobId={panel.job} path={path} />
           ) : (
             <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
@@ -341,9 +325,13 @@ function Strip({ diagram, path, uncommitted }: { diagram: Diagram; path: string;
       <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" />
       <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
       <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" />
-      <ButtonLink href={panelHref(path, { brief: "", job: null })} filled>
-        New job
-      </ButtonLink>
+      {/* A change is asked for in a conversation on the grid, which opens on
+          this diagram with its thumbnail pinned (docs/STUDIO-CHAT-FIRST.md,
+          "Extend from a tile"). */}
+      <ExtendLink
+        href={extendHref(diagram.name)}
+        className="inline-flex h-8 shrink-0 items-center rounded-md bg-[var(--accent)] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-strong)]"
+      />
     </StudioStrip>
   );
 }

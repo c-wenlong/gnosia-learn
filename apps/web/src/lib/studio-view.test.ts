@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  conversationHref,
+  extendFromHref,
   DEFAULT_VIEW,
   NO_TOPIC,
   canvasHref,
@@ -16,6 +18,7 @@ import {
   sortDiagrams,
   studioHref,
   thumbnailHref,
+  titleOf,
   toggleTopic,
   topicChips,
   type Diagram,
@@ -101,7 +104,8 @@ describe("writing the view back into a URL", () => {
       selected: "dot-product",
       panel: false,
       job: "job-1",
-      brief: "job-2",
+      extend: "tailscale",
+      talk: true,
       stream: false,
       shot: "after",
       draft: "draft-1",
@@ -272,21 +276,42 @@ describe("the hrefs", () => {
 });
 
 /**
- * The right panel has three contents and the URL says which.
+ * The panel holds one thing at a time and the URL says which.
  *
  * In the query string rather than in a component, for the reason the filters
- * are: opening a job and opening the brief form are things a person navigates
- * to, comes back from, and hands to somebody else as a link. The job *state* is
- * not here — the runner holds that, and these are pointers at it.
+ * are: opening a job or a conversation is a thing a person navigates to, comes
+ * back from, and hands to somebody else as a link. The job *state* is not here
+ * — the runner holds that, and these are pointers at it.
  */
-describe("what the right panel holds", () => {
-  it("reads a job and a blank form apart from a prefilled one", () => {
-    expect(parsePanel({ job: "job-1" })).toMatchObject({ job: "job-1", brief: null });
-    // `?new=` is a blank form and `?new=job-1` is one prefilled from that job.
-    // An empty value is meaningful, which is why this is not read like the rest.
-    expect(parsePanel({ new: "" })).toMatchObject({ brief: "" });
-    expect(parsePanel({ new: "job-1" })).toMatchObject({ brief: "job-1" });
-    expect(parsePanel({})).toMatchObject({ job: null, brief: null, stream: true });
+describe("what the panel holds", () => {
+  it("reads a job and an extend in flight", () => {
+    expect(parsePanel({ job: "job-1" })).toMatchObject({ job: "job-1", extend: null });
+    expect(parsePanel({ extend: "dot-product" })).toMatchObject({ job: null, extend: "dot-product" });
+    expect(parsePanel({})).toMatchObject({ job: null, extend: null, stream: true });
+  });
+
+  it("drops the brief form's old parameter when it rebuilds a link", () => {
+    // `?new=` opened the form, which is gone; a bookmark carrying it lands on
+    // the grid rather than on a panel that no longer exists.
+    expect(studioHref(parseView({ new: "job-1", q: "dot" }))).toBe("/studio?q=dot");
+  });
+
+  it("finds a title by the diagram's own name and nothing inherited", () => {
+    const titles = { "dot-product": "Dot product" };
+    expect(titleOf(titles, "dot-product")).toBe("Dot product");
+    expect(titleOf(titles, "constructor")).toBeNull();
+    expect(titleOf(titles, "toString")).toBeNull();
+  });
+
+  it("opens an extend from a tile's panel, and a picture does not follow it", () => {
+    expect(panelHref("/studio?q=x&sel=dot-product", { extend: "dot-product", selected: null })).toBe(
+      "/studio?q=x&extend=dot-product",
+    );
+    expect(panelHref("/studio?job=j&shot=after", { extend: "dot-product", job: null })).toBe(
+      "/studio?extend=dot-product",
+    );
+    expect(panelHref("/studio?extend=dot-product", { extend: null, draft: "d1" })).toBe("/studio?draft=d1");
+    expect(studioHref({ ...DEFAULT_VIEW, extend: "dot-product" })).toBe("/studio?extend=dot-product");
   });
 
   it("turns the stream off only on the word that means it", () => {
@@ -299,7 +324,6 @@ describe("what the right panel holds", () => {
     expect(panelHref("/studio/d/dot-product", { job: "job-1" })).toBe(
       "/studio/d/dot-product?job=job-1",
     );
-    expect(panelHref("/studio?sel=dot-product", { brief: "" })).toBe("/studio?sel=dot-product&new=");
   });
 
   it("closes one by dropping its parameter rather than by adding another", () => {
@@ -314,6 +338,33 @@ describe("what the right panel holds", () => {
     expect(panelHref("/studio?q=x", { draft: "d2" })).toBe("/studio?q=x&draft=d2");
     expect(panelHref("/studio?draft=d1&job=j", { draft: null, job: null })).toBe("/studio");
     expect(studioHref({ ...DEFAULT_VIEW, draft: "d1" })).toBe("/studio?draft=d1");
+  });
+
+  it("marks a Talk it through press in the URL, and drops the mark with the press", () => {
+    const href = extendFromHref("/studio/d/dot-product?job=j1", "dot-product", { talk: true });
+    expect(href).toBe("/studio?extend=dot-product&talk=1");
+    expect(parsePanel(Object.fromEntries(new URL(href, "http://x").searchParams))).toMatchObject({
+      extend: "dot-product",
+      talk: true,
+    });
+    // The hand-off to the conversation, and Close, both end the press.
+    expect(panelHref(href, { extend: null, draft: "d1" })).toBe("/studio?draft=d1");
+    expect(panelHref(href, { extend: null, draft: null })).toBe("/studio");
+    // Another press is an ordinary one unless it says so.
+    expect(panelHref(href, { extend: "other" })).toBe("/studio?extend=other");
+    // The mark means nothing on its own.
+    expect(parsePanel({ talk: "1" }).talk).toBe(false);
+    expect(parsePanel({ extend: "dot-product" }).talk).toBe(false);
+  });
+
+  it("opens an Extend press from either screen", () => {
+    expect(extendFromHref("/studio?q=x&job=j1", "dot-product")).toBe("/studio?q=x&extend=dot-product");
+    expect(extendFromHref("/studio/d/dot-product?job=j1", "dot-product")).toBe("/studio?extend=dot-product");
+  });
+
+  it("leads from a job back to its conversation, from either screen", () => {
+    expect(conversationHref("/studio?q=x&job=j1", "d1")).toBe("/studio?q=x&draft=d1");
+    expect(conversationHref("/studio/d/dot-product?job=j1", "d1")).toBe("/studio?draft=d1");
   });
 
   it("opens and closes a tile's panel by its selection", () => {

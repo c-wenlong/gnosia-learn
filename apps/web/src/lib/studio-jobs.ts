@@ -384,7 +384,14 @@ export function narration(events: readonly StudioEvent[], cap = 20): { at: strin
 /* What a failure means                                                       */
 /* -------------------------------------------------------------------------- */
 
-export type FailureAction = "retry" | "edit" | "doctor" | "resume";
+/**
+ * What the failure panel offers. `talk` is the way to change what gets drawn:
+ * back to the conversation the job came from, where the gate's findings are
+ * already a studio note (E8 of docs/STUDIO-CHAT-FIRST.md). It replaced the
+ * brief form's Edit brief: a link to the job's own conversation, or for a
+ * job the form started, a new conversation prefilled with what it was for.
+ */
+export type FailureAction = "retry" | "talk" | "doctor" | "resume";
 
 export interface FailureReport {
   /** The last tldrawkc exit code the gate recorded, when there was one. */
@@ -427,7 +434,7 @@ export function failureReport(job: Job): FailureReport {
       detail,
       // The doctor action is offered because a code 1 is usage *or*
       // environment and the message is the only thing that says which.
-      actions: ["edit", "doctor"],
+      actions: ["talk", "doctor"],
     };
   }
   if (code === 2) {
@@ -437,7 +444,7 @@ export function failureReport(job: Job): FailureReport {
       // The bridge rewrites the stack so the line number points at the
       // snippet's own line rather than at the page bundle's.
       detail: gateDetail(job, 2) ?? detail,
-      actions: ["retry", "edit"],
+      actions: ["retry", "talk"],
     };
   }
 
@@ -449,7 +456,7 @@ export function failureReport(job: Job): FailureReport {
         detail,
         // The session id is kept on a timeout, so a revision continues the
         // transcript rather than paying for the drawing again.
-        actions: ["retry", "edit"],
+        actions: ["retry", "talk"],
       };
     case "spawn":
       return {
@@ -483,7 +490,7 @@ export function failureReport(job: Job): FailureReport {
         code: null,
         headline: job.gate === null ? "nothing was written" : "the check refused what it drew",
         detail: job.gate?.findings.join(" ") ?? detail,
-        actions: ["retry", "edit"],
+        actions: ["retry", "talk"],
       };
   }
 }
@@ -538,105 +545,6 @@ export function failureFooter(job: Job): string {
       // what a gate failure looked like before kinds were written.
       return `${unchanged} The agent's permission file never allowed it.`;
   }
-}
-
-/* -------------------------------------------------------------------------- */
-/* What a refused enqueue means                                               */
-/* -------------------------------------------------------------------------- */
-
-export type RefusalCode = "daily-cap" | "target-held" | "draft-busy" | "brief" | "unavailable" | "unknown";
-
-export interface RefusalReport {
-  code: RefusalCode;
-  headline: string;
-  detail: string | null;
-  /** The same vocabulary the failure panel uses, so one component renders both. */
-  actions: FailureAction[];
-}
-
-/**
- * `POST /api/jobs` said no. What that means, keyed on the runner's status.
- *
- * The failure panel keys a *job's* ending on the runner's codes; a refused
- * enqueue produces no job at all, so it has nowhere to be shown and was a bare
- * sentence in a red box. Phase 7 adds one case that has to be distinguishable,
- * so the whole set is keyed the same way the endings are.
- *
- * **`daily-cap` offers nothing.** Every other refusal here has an action behind
- * it: a held target is something to accept or discard, a bad brief is something
- * to fix in the form in front of you, a runner that is not answering is
- * something `doctor` reports on. A cap is none of those. Retrying is the one
- * thing that is certainly wrong, because the answer will not change until
- * either the window moves or a person raises the number, and neither is a thing
- * this screen can do. So there is no button, and the sentence carries the two
- * facts that let somebody decide: what has been spent against what, and when
- * the total can first fall.
- */
-export function refusalReport(status: number, body: unknown): RefusalReport {
-  const envelope = (typeof body === "object" && body !== null ? body : {}) as {
-    error?: unknown;
-    detail?: unknown;
-  };
-  const message = typeof envelope.error === "string" ? envelope.error : null;
-  const detail = (
-    typeof envelope.detail === "object" && envelope.detail !== null ? envelope.detail : {}
-  ) as Record<string, unknown>;
-
-  if (status === 429) {
-    const spent = typeof detail.totalUsd === "number" ? detail.totalUsd : null;
-    const cap = typeof detail.capUsd === "number" ? detail.capUsd : null;
-    const clears = typeof detail.oldestAgesOutAt === "string" ? detail.oldestAgesOutAt : null;
-    return {
-      code: "daily-cap",
-      headline:
-        spent === null || cap === null
-          ? "the daily spend cap is reached"
-          : `$${spent.toFixed(2)} of the $${cap.toFixed(2)} daily cap is spent`,
-      detail:
-        message ??
-        (clears === null
-          ? "Nothing was queued. Raise STUDIO_DAILY_USD, or wait for the window to move."
-          : `Nothing was queued. The oldest counted attempt leaves the 24 hour window at ${clears}, which is the earliest this can fall.`),
-      actions: [],
-    };
-  }
-  // A brief sent with its conversation's `draftId` (the brief form opened
-  // from the chat) can be refused for the conversation's sake rather than
-  // the target's: phase 1a's `assertDrawable` and the Draw lock.
-  const reason = typeof detail.reason === "string" ? detail.reason : null;
-  if (status === 409 && (reason === "not-briefed" || reason === "in-flight" || reason === "draw-in-progress")) {
-    return {
-      code: "draft-busy",
-      headline:
-        reason === "in-flight"
-          ? "the planner is still answering in this conversation"
-          : reason === "draw-in-progress"
-            ? "Draw was just pressed in this conversation"
-            : "this conversation cannot start a job right now",
-      detail: message,
-      actions: [],
-    };
-  }
-  if (status === 409) {
-    return { code: "target-held", headline: "that path is spoken for", detail: message, actions: [] };
-  }
-  if (status === 400 || status === 422) {
-    return { code: "brief", headline: "the brief was refused", detail: message, actions: ["edit"] };
-  }
-  if (status === 502 || status === 503 || status === 504) {
-    return {
-      code: "unavailable",
-      headline: "the runner is not answering",
-      detail: message,
-      actions: ["doctor"],
-    };
-  }
-  return {
-    code: "unknown",
-    headline: `the runner answered ${status}`,
-    detail: message,
-    actions: [],
-  };
 }
 
 /** The last exit code the gate recorded on a step that did not pass. */
@@ -711,189 +619,15 @@ export function announcement(job: Job): Announcement | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* The brief, as a form fills it in                                           */
+/* Where a job draws                                                          */
 /* -------------------------------------------------------------------------- */
 
-export interface DraftElement {
-  label: string;
-  note: string;
-}
-
-export interface DraftRelation {
-  from: string;
-  to: string;
-  label: string;
-}
-
-/** The form's own state. Strings throughout, because that is what inputs hold. */
-export interface BriefDraft {
-  intent: string;
-  topic: string;
-  slug: string;
-  title: string;
-  mode: "new" | "extend";
-  elements: DraftElement[];
-  relations: DraftRelation[];
-  concepts: string[];
-  layout: string;
-  mermaid: string;
-  source: string;
-  model: "sonnet" | "opus";
-  notes: string;
-}
-
-export function emptyDraft(): BriefDraft {
-  return {
-    intent: "",
-    topic: "",
-    slug: "",
-    title: "",
-    mode: "new",
-    elements: [
-      { label: "", note: "" },
-      { label: "", note: "" },
-    ],
-    relations: [],
-    concepts: [],
-    layout: "",
-    mermaid: "",
-    source: "",
-    model: "sonnet",
-    notes: "",
-  };
-}
-
-/** Prefill from a job, which is what Edit brief on a failed one means. */
-export function draftFromBrief(brief: Brief): BriefDraft {
-  return {
-    ...emptyDraft(),
-    intent: brief.intent,
-    topic: brief.topic,
-    slug: brief.slug,
-    title: brief.title,
-    mode: brief.mode,
-    elements: brief.elements.map((element) => ({ label: element.label, note: element.note ?? "" })),
-    relations: brief.relations.map((relation) => ({
-      from: relation.from,
-      to: relation.to,
-      label: relation.label ?? "",
-    })),
-    concepts: [...(brief.concepts ?? [])],
-    layout: brief.layout ?? "",
-    mermaid: brief.mermaid ?? "",
-    source: brief.source ?? "",
-    model: brief.model ?? "sonnet",
-    notes: brief.notes ?? "",
-  };
-}
-
-/** tldrawkc's own slug shape, which is also what a file name can carry. */
-export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
 /**
- * The same refusals the runner makes, made before the request is sent.
- *
- * Not a replacement for the server's: `brief.ts` is the boundary and re-checks
- * every one of these, plus the topic vocabulary and the caps. This is the UI
- * doing its own job, which the design states plainly — a job cannot start until
- * every required field is filled, and **the UI's job is to ask rather than to
- * guess**. A form that posted an empty `elements` array and rendered the 400 it
- * got back would be asking the runner to do the asking.
- */
-export function draftErrors(draft: BriefDraft): Record<string, string> {
-  const errors: Record<string, string> = {};
-  if (draft.intent.trim() === "") {
-    errors.intent = "Say in a sentence or two what the diagram has to make clear.";
-  }
-  if (draft.topic.trim() === "") {
-    errors.topic = "Pick the topic this is filed under: the indexer refuses a diagram without one.";
-  }
-  if (draft.title.trim() === "") errors.title = "The title is stamped onto the SVG and labels the card.";
-  if (draft.slug.trim() === "") {
-    errors.slug = "The slug is the file name: learn/assets/<slug>.tldr.";
-  } else if (!SLUG_PATTERN.test(draft.slug.trim())) {
-    errors.slug = "Lowercase letters, digits and single hyphens only.";
-  }
-
-  const labels = draft.elements.map((element) => element.label.trim()).filter((label) => label !== "");
-  if (labels.length === 0) {
-    errors.elements = "Name at least one thing that has to appear. They are half of what the gate checks.";
-  } else if (new Set(labels).size !== labels.length) {
-    errors.elements = "Two elements share a label, and a relation names its ends by label.";
-  }
-
-  const known = new Set(labels);
-  for (const [at, relation] of draft.relations.entries()) {
-    const from = relation.from.trim();
-    const to = relation.to.trim();
-    if (from === "" && to === "") continue;
-    if (!known.has(from) || !known.has(to)) {
-      errors[`relations.${at}`] = "An arrow binds two elements, so both ends have to be elements.";
-    }
-  }
-  return errors;
-}
-
-/**
- * The draft as the runner takes it: structured JSON, and nothing else.
- *
- * The one path from this form to a job. The mermaid source rides in the body as
- * a field the runner writes to the job scratch directory and lifts with
- * `from-mermaid --source`; it never enters a prompt (A5), and there is no
- * second route here that would let it.
- */
-export function draftToBrief(draft: BriefDraft, idempotencyKey: string): Brief & { idempotencyKey: string } {
-  const elements = draft.elements
-    .map((element) => ({ label: element.label.trim(), note: element.note.trim() }))
-    .filter((element) => element.label !== "")
-    .map((element) => (element.note === "" ? { label: element.label } : element));
-  const labels = new Set(elements.map((element) => element.label));
-  const relations = draft.relations
-    .map((relation) => ({
-      from: relation.from.trim(),
-      to: relation.to.trim(),
-      label: relation.label.trim(),
-    }))
-    .filter((relation) => labels.has(relation.from) && labels.has(relation.to))
-    .map((relation) => (relation.label === "" ? { from: relation.from, to: relation.to } : relation));
-
-  const optional = <T,>(value: T | "", key: string): Record<string, T> =>
-    value === "" ? {} : ({ [key]: value } as Record<string, T>);
-
-  return {
-    intent: draft.intent.trim(),
-    topic: draft.topic.trim(),
-    slug: draft.slug.trim(),
-    title: draft.title.trim(),
-    mode: draft.mode,
-    elements,
-    relations,
-    concepts: draft.concepts,
-    model: draft.model,
-    ...optional(draft.layout, "layout"),
-    ...optional(draft.mermaid.trim(), "mermaid"),
-    ...optional(draft.source.trim(), "source"),
-    ...optional(draft.notes.trim(), "notes"),
-    idempotencyKey,
-  };
-}
-
-/**
- * The line under the Start button: where the job will draw,
+ * The line beside Draw on the confirm card: where the job will draw,
  * `$STUDIO_HOME/jobs/<job>/candidate/<slug>.tldr`. Each job draws in its own
  * workspace and nothing lands until Accept, so the job's id is not known yet
  * and the line says so rather than naming a path in the repository.
  */
 export function candidatePathFor(slug: string): string {
   return `$STUDIO_HOME/jobs/<job>/candidate/${slug === "" ? "<slug>" : slug}.tldr`;
-}
-
-/** A slug suggested from a title, which is what a person would have typed anyway. */
-export function slugFromTitle(title: string): string {
-  return title
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
 }

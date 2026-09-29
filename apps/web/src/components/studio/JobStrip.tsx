@@ -52,7 +52,7 @@ export function JobStrip({ path, stream = true }: { path: string; stream?: boole
     <div className="flex h-8 shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-xs">
       <Dot job={job} />
       <Link
-        href={panelHref(path, { job: job.jobId, brief: null })}
+        href={panelHref(path, { job: job.jobId })}
         scroll={false}
         className="flex min-w-0 flex-1 items-center gap-3 hover:underline"
         title="Open this job in the panel"

@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { NoteProse } from "@/components/NoteProse";
-import { BriefForm } from "@/components/studio/BriefForm";
 import { ConfirmCard } from "@/components/studio/ConfirmCard";
 import { JobPanel } from "@/components/studio/JobPanel";
-import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
+import { PinnedDiagram } from "@/components/studio/PinnedDiagram";
 import { useStartDraft } from "@/components/studio/PlusCard";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
@@ -42,6 +42,7 @@ import {
   threadProblem,
   turnIndicator,
   visibleEntries,
+  wordsBack,
   type DrawRefusal,
   type CapStatus,
   type Suggestion,
@@ -57,17 +58,21 @@ import {
   type DraftView,
   type TranscriptEntry,
 } from "@/lib/studio-drafts";
+import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, sessionStore, takeOpener } from "@/lib/studio-extend";
 import { isTerminal, type Job } from "@/lib/studio-jobs";
-import { panelHref, thumbnailHref } from "@/lib/studio-view";
+import { panelHref, titleOf } from "@/lib/studio-view";
 
 /**
  * The conversation, in the studio's panel (docs/STUDIO-CHAT-FIRST.md, "UI").
  *
- * Three bodies under one header, and the URL says which: the chat
- * (`?draft=`), the job Draw started with a bar back to the chat
- * (`?draft=&job=`), and the brief form as "Fill the brief myself"
- * (`?draft=&new=`). One component holds all three so the conversation's
- * state and its event stream live through the trip to the job and back.
+ * Two bodies under one header, and the URL says which: the chat
+ * (`?draft=`), and the job Draw started with a bar back to the chat
+ * (`?draft=&job=`). One component holds both so the conversation's state and
+ * its event stream live through the trip to the job and back.
+ *
+ * An extend conversation (a draft with `source`) pins the diagram at the top
+ * of the thread, and on arrival from Extend sends the opening message
+ * `ExtendStart` handed it, so the planner's first reply says what it sees.
  *
  * **The runner owns the draft; this is a cache of it**, as `JobsProvider` is
  * of the jobs. `GET /api/drafts/{id}` is the record. The event stream adds
@@ -94,20 +99,20 @@ type Status = "loading" | "ready" | "gone" | "down";
 export function DraftPanel({
   draftId,
   jobId,
-  form,
   path,
   topics,
+  titles,
   suggestions,
   cap: initialCap,
 }: {
   draftId: string;
   /** `?job=`: the job view, with the bar back to the chat. */
   jobId: string | null;
-  /** `?new=`: the brief form. `""` prefills from the draft's brief, a job id from that job's. */
-  form: string | null;
   /** The page's own URL, which every link here patches. */
   path: string;
   topics: TopicOption[];
+  /** Each diagram's display title by name, for an extend conversation's header and picture. */
+  titles: Readonly<Record<string, string>>;
   suggestions: Suggestion[];
   /** `dailyCap` from `/api/health` at render time. A 429 replaces it. */
   cap: CapStatus | null;
@@ -133,6 +138,7 @@ export function DraftPanel({
   const focused = useRef(false);
   const { start: startDraft, busy: starting, error: startError } = useStartDraft(path);
 
+  const arriving = arrivingSource(draftId);
   const topicMap = useMemo(() => new Map(topics.map((topic) => [topic.slug, topic])), [topics]);
 
   /* ---------------------------------------------------------------- */
@@ -268,7 +274,7 @@ export function DraftPanel({
   /* Focus and scroll                                                  */
   /* ---------------------------------------------------------------- */
 
-  const mode: "chat" | "job" | "form" = jobId !== null ? "job" : form !== null ? "form" : "chat";
+  const mode: "chat" | "job" = jobId !== null ? "job" : "chat";
 
   useEffect(() => {
     // Opening focuses the composer, once it exists.
@@ -288,17 +294,22 @@ export function DraftPanel({
   /* Verbs                                                             */
   /* ---------------------------------------------------------------- */
 
-  async function send(raw: string) {
+  /**
+   * One person turn. `keepComposer` is for a turn that was not typed in the
+   * composer (the opener an Extend press hands over), whose composer may hold
+   * a second message that sending this one must not clear.
+   */
+  async function send(raw: string, { keepComposer = false }: { keepComposer?: boolean } = {}) {
     const body = raw.trim();
     if (body === "" || view === null) return;
     setSendError(null);
     setPending({ text: body, seq: null });
-    setText("");
+    if (!keepComposer) setText("");
     const result = await sendMessage(draftId, body);
     if (!result.ok) {
       setPending(null);
       // Give the words back: a refused turn should not cost the typing.
-      setText((held) => (held === "" ? body : held));
+      setText((held) => wordsBack(held, body, keepComposer));
       if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
       setSendError(sendRefusal(result.status, result.refusal));
       void load();
@@ -316,6 +327,10 @@ export function DraftPanel({
 
   async function draw() {
     if (view === null || !drawIsLive || block !== null || drawing || liveSeq === null) return;
+    // The notification prompt rides on the press that starts a job: a browser
+    // will not show one without a gesture, and the job's ending is what it is
+    // for. Not awaited, so Draw does not wait on the person answering it.
+    void askToNotify();
     setDrawing(true);
     setRefused(null);
     const result = await drawDraft(draftId, drawKey(draftId, liveSeq, view.jobId));
@@ -327,7 +342,7 @@ export function DraftPanel({
       return;
     }
     await refreshJobs();
-    router.push(panelHref(path, { job: result.data.jobId, brief: null, draft: draftId }), { scroll: false });
+    router.push(panelHref(path, { job: result.data.jobId, draft: draftId }), { scroll: false });
     setDrawing(false);
     void load();
   }
@@ -352,6 +367,29 @@ export function DraftPanel({
   }
 
   const drawReady = drawIsLive && block === null;
+
+  // Arriving from Extend, or from Talk it through on a failed job: the opener
+  // left for this draft, taken once so a reload never sends it again, and
+  // sent only into a conversation that is still empty.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!ready || view === null || opened.current) return;
+    opened.current = true;
+    const store = sessionStore();
+    const opener = takeOpener(store, draftId);
+    if (opener === null) return;
+    // Arrived: a reload of the press that made this draft may now mint a new one.
+    if (opener.source !== null) forgetExtendKey(store, opener.source);
+    // The composer first, and a send that leaves it alone: a message queued
+    // during the read and a second one still being typed both survive.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (opener.compose !== "") setText(opener.compose);
+    if (opener.send !== null && isEmptyConversation(view.transcript) && !view.inFlight) {
+      void send(opener.send, { keepComposer: true });
+    }
+    // `send` is this render's; the guard makes this run once whatever changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, view, draftId]);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     // Cmd or Ctrl+Enter presses a live Draw from anywhere in the panel, and
@@ -389,6 +427,23 @@ export function DraftPanel({
     );
   }
 
+  if (status === "loading" && arriving !== null) {
+    // Straight from Extend: the picture and the header stay where they were
+    // while the record is read, rather than blinking to a blank panel.
+    const arrivingTitle = titleOf(titles, arriving) ?? arriving;
+    return (
+      <>
+        <DialogHeader title={`Extending ${arrivingTitle}`} />
+        <div className="flex min-h-0 flex-1 flex-col gap-5 px-5 py-5">
+          <PinnedDiagram name={arriving} title={arrivingTitle} />
+          <p className="text-center text-[13px] text-text3" role="status">
+            Opening the conversation…
+          </p>
+        </div>
+      </>
+    );
+  }
+
   if (status !== "ready" || view === null) {
     return (
       <>
@@ -412,7 +467,8 @@ export function DraftPanel({
     );
   }
 
-  const title = view.title ?? liveBrief?.title ?? "New diagram";
+  const sourceTitle = view.source === null ? null : (titleOf(titles, view.source) ?? view.source);
+  const title = view.title ?? liveBrief?.title ?? (sourceTitle === null ? "New diagram" : `Extending ${sourceTitle}`);
 
   if (mode === "job" && jobId !== null) {
     const job = jobs.find((entry) => entry.jobId === jobId) ?? null;
@@ -441,31 +497,12 @@ export function DraftPanel({
               <Failure text={startError} className="basis-full" />
             </div>
           )}
-          <JobPanel jobId={jobId} path={path} embedded />
+          <JobPanel jobId={jobId} path={path} embedded inConversation />
           {settled && !ended && (
             <p className="px-5 pb-5 text-[13px] text-text3">
               Accept or Discard above. Either way, the conversation is where the next diagram starts.
             </p>
           )}
-        </div>
-      </>
-    );
-  }
-
-  if (mode === "form") {
-    return (
-      <>
-        <DialogHeader title="Fill the brief yourself" />
-        <BackBar href={panelHref(path, { brief: null })} />
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <BriefForm
-            path={path}
-            topics={topics}
-            from={form ?? ""}
-            initial={form === "" ? (view.brief ?? liveBrief ?? undefined) : undefined}
-            draftId={view.state === "briefed" ? draftId : null}
-            embedded
-          />
         </div>
       </>
     );
@@ -489,25 +526,16 @@ export function DraftPanel({
         aria-label="Conversation"
         className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5"
       >
-        {view.source !== null && (
-          <figure className="flex flex-col items-center gap-1.5">
-            <div className="flex h-40 w-full items-center justify-center overflow-hidden rounded-xl border-2 border-border bg-[#f7f6f3]">
-              {/* The runner streams the stored SVG; see DiagramTile. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={thumbnailHref(view.source)} alt="" className="h-full w-full object-contain p-2" />
-            </div>
-            <figcaption className="text-[12px] text-text3">
-              Extending <span className="font-mono">{view.source}</span>
-            </figcaption>
-          </figure>
-        )}
+        {view.source !== null && sourceTitle !== null && <PinnedDiagram name={view.source} title={sourceTitle} />}
 
         {empty && (
           <TutorMessage label="Planner">
-            <p className="max-w-[60ch]">{OPENING_TURN}</p>
+            <p className="max-w-[60ch]">{view.source === null ? OPENING_TURN : EXTEND_OPENING_TURN}</p>
           </TutorMessage>
         )}
-        {empty && suggestions.length > 0 && (
+        {/* The corpus's topics are a way into a new diagram; an extend
+            conversation already has its subject. */}
+        {empty && view.source === null && suggestions.length > 0 && (
           <div className="-mt-2 flex flex-wrap gap-2 px-1.5" aria-label="Suggestions">
             {suggestions.map((suggestion) => (
               <Chip
@@ -558,7 +586,6 @@ export function DraftPanel({
             problem={problem}
             onRetry={lastPerson === null ? null : () => void send(lastPerson)}
             onAskAgain={problem.case === "E6" ? () => void send(askAgainText(problem)) : null}
-            formHref={panelHref(path, { brief: "" })}
             onStartOver={() => setConfirmStartOver(true)}
             cutOffShown={entries.at(-1)?.interrupted === true}
           />
@@ -598,9 +625,6 @@ export function DraftPanel({
           onModEnter={drawReady ? () => void draw() : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
-          <Link href={panelHref(path, { brief: "" })} scroll={false} className="underline-offset-4 hover:text-text2 hover:underline">
-            Fill the brief myself
-          </Link>
           {confirmStartOver ? (
             <span className="flex items-center gap-2">
               <span className="text-text2">Close this conversation for good?</span>
@@ -678,6 +702,7 @@ function Entry({
             onDraw={onDraw}
             jobHref={view.jobId === null ? null : panelHref(path, { job: view.jobId })}
             holderHref={(holder) => panelHref(path, jobPatch(holder, view, jobs))}
+            sourceChanged={view.sourceChanged === true}
           />
         </div>
       )}
@@ -742,7 +767,6 @@ function Problem({
   problem,
   onRetry,
   onAskAgain,
-  formHref,
   onStartOver,
   cutOffShown,
 }: {
@@ -751,7 +775,6 @@ function Problem({
   cutOffShown: boolean;
   onRetry: (() => void) | null;
   onAskAgain: (() => void) | null;
-  formHref: string;
   onStartOver: () => void;
 }) {
   if (problem.case === "E2" && cutOffShown) {
@@ -795,9 +818,6 @@ function Problem({
                 Ask again
               </Button>
             )}
-            <Button size="sm" variant="secondary" href={formHref}>
-              Fill the brief myself
-            </Button>
             <Button size="sm" variant="ghost" onClick={onStartOver}>
               Start over
             </Button>

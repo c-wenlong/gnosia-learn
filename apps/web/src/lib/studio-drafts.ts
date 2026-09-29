@@ -89,6 +89,13 @@ export interface DraftView {
   state: DraftState;
   /** The diagram's slug, on a draft opened to extend one. */
   source: string | null;
+  /**
+   * C11: the diagram's checkout moved on since the EXTENDING block was built
+   * from it. Optional: a runner from before it does not send it.
+   */
+  sourceChanged?: boolean;
+  /** The revision the EXTENDING block summarised. Optional, as above. */
+  sourceRevision?: number | null;
   title: string | null;
   transcript: TranscriptEntry[];
   brief: Brief | null;
@@ -115,6 +122,19 @@ export interface DraftSummary {
   costUsd: number | null;
   updated: string;
   jobId: string | null;
+}
+
+/**
+ * What the app says when the runner does not answer: the studio proxy's 502
+ * when nothing listens on the runner's port, and this file's own status 0
+ * when the fetch itself fails. One string, so a caller can tell a runner
+ * that is down from a runner that answered 502 about the request.
+ */
+export const RUNNER_DOWN = "the studio runner is not answering";
+
+/** True for either way the runner can be down. */
+export function runnerDown(status: number, refusal: Refusal): boolean {
+  return status === 0 || (status === 502 && refusal.error === RUNNER_DOWN);
 }
 
 /** The runner's refusal envelope, on every route. */
@@ -230,7 +250,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<ApiResult<
     return {
       ok: false,
       status: 0,
-      refusal: { error: "the studio runner is not answering", detail: (error as Error).message },
+      refusal: { error: RUNNER_DOWN, detail: (error as Error).message },
     };
   }
   const body: unknown = await response.json().catch(() => null);

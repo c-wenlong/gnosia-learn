@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { currentOwner, NoOwnerError } from "@/lib/owner";
 import { requireStudio, studioOrigin } from "@/lib/studio";
+import { RUNNER_DOWN } from "@/lib/studio-drafts";
 
 /**
  * `/studio/api/*` → `127.0.0.1:7250/api/*`.
@@ -171,7 +172,7 @@ async function proxy(request: NextRequest, segments: string[]): Promise<Response
   } catch (error) {
     return NextResponse.json(
       {
-        error: "the studio runner is not answering",
+        error: RUNNER_DOWN,
         detail:
           `Nothing is listening on ${studioOrigin()}. Start it with \`npm run studio\`. ` +
           `(${(error as Error).message})`,
