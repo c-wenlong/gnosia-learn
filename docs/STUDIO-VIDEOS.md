@@ -1718,19 +1718,207 @@ An earlier run of the same brief, before the merge, cost $2.03 in 220 s.
       2a and 2b there; the video screens below are 2c), which also adds to this
       phase's done-when. The menu ships with this phase, not before it (the
       owner's decision, 2026-09-29)
-- [ ] The video confirm card, the one-press Make video, and the video job
+- [x] The video confirm card, the one-press Make video, and the video job
       view: the steps, the sheet strip, the player with chapters, Accept,
-      Discard, Change
-- [ ] The settings panel: Videos and Diagrams, model and effort each, the
+      Discard, Change (2c, #203 and #204; each used in Phase 2 measured)
+- [x] The settings panel: Videos and Diagrams, model and effort each, the
       two preference keys, the server action, and the resolved default shown
       in each menu; the rate table priced for every model the menu offers
-- [ ] Studio videos in the grid as poster tiles, with Change from the tile
+      (#204)
+- [x] Studio videos in the grid as poster tiles, with Change from the tile
+      (#203)
 
 Done when: five video drafts go from a first message to a brief that passes
 validation within one retry, recorded in the PR; one of them is made from the
 chat, watched in the panel and accepted; a picture-only change to it runs as
 a revise and passes the gate; and a model changed in the panel shows on the
 next job's record.
+
+Done 2026-09-29: every part of that held, measured below. The done-when
+STUDIO-MENTIONS.md adds to this phase is not all measured here: Make both and
+an untagged question were each run once (below), and its five Diagram and
+Video drafts, five untagged conversations, T29 and T31, a draft from before
+2a, the composer on phones and with VoiceOver, and the `/studio` bundle size
+are still open there.
+
+#### Phase 2 measured
+
+*Measured* on 2026-09-29, end to end through the real web app, with paid
+runs. The web app (`next start`, built from 394b91d) and the studio runner ran
+from a worktree on their own ports against a scratch database built from
+`seed/` the way `scripts/e2e.mjs` builds it, with a scratch `STUDIO_HOME` and
+blob store. `MANIMKC_ROOT` pointed read-only at the main checkout's manimkc
+(5dc0e02, for its venvs); the worktree's pointer is 2e619ac. `claude` 2.1.274,
+the planner on `sonnet` (`STUDIO_PLANNER_MODEL` unset). The browser was
+headless Chrome for Testing 153 driven by `playwright-core`: every message
+was typed into the composer with its chip picked from the @ menu, and every
+press was a click. Nothing was written to the owner's `self_learn` database,
+under `~/.self-learn/manimkc` (its clip count, timing log and file count were
+the same after as before) or into the main checkout's manimkc.
+
+**Five video drafts, first message to a brief that passes
+`validateVideoBrief`.** Each first message tagged Video.
+
+| # | First message (abridged) | Person turns | Questions | Retry | New topic | Brief: scenes / beats / spoken characters, target | Cost | Reply |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | "a short video, about a minute, on the ReAct loop: the model reasons, calls a tool, reads the observation, and repeats" | 1 | 0 | no | no | 4 / 10 / 998, 60 s | $0.058 | 34 s |
+| 2 | "how self-attention in a transformer lets each token weigh every other token when building its meaning" | 1 | 0 | no | no | 6 / 14 / 1,908, 150 s | $0.063 | 52 s |
+| 3 | "TCP's three-way handshake: SYN, SYN-ACK, ACK, and why it takes three messages rather than two" | 1 | 0 | no | yes, `tcp-three-way-handshake` in a new domain `networking` | 7 / 15 / 1,670, 120 s | $0.053 | 44 s |
+| 4 | "something about recursion", then untagged "factorial, and keep it to about two minutes" | 2 | 1 (which example) | no | yes, `recursion` under `foundations` | 5 / 17 / 1,673, 120 s | $0.116 | 9 s, 82 s |
+| 5 | "why does the dot product tell you the angle between two vectors? under two minutes, for someone who already knows what a vector is" | 1 | 0 | no | no | 5 / 10 / 1,114, 90 s | $0.046 | 38 s |
+
+Five of five passed with no retry, at $0.336 over six person turns (median
+one turn and $0.058 a draft), close to the $0.05 to $0.15 guessed in "Cost
+and limits". Draft 4 showed the Video chip as waiting with "Video brief still to
+come" and Stop waiting under the composer, and the untagged answer ended in
+its card (T30, once). Every draft stopped at a live Make video.
+
+**The made video (draft 1), from the chat.** Make video on the card, then the
+job view watched to the end, the video played in the panel (chapter seek and
+captions), and Accept.
+
+| | |
+| --- | --- |
+| Verdict | `awaiting_review` on attempt 1, all ten gate steps passed, one warning: 76 s against a 60 s target |
+| Cost | **$2.88** (`result`) |
+| Model, effort | `claude-fable-5-1[1m]` passed (resolved `claude-fable-5-1`), `high`; both `source: claude-settings` |
+| Requests, turns | 21 distinct API requests, 26 turns (11 Edit, 7 Read, 6 Bash, 1 Write) |
+| Tokens | 77,656 written to the cache, 1,138,421 read, 20,630 out (5,646 of them thinking) |
+| Preview rounds, builds | 3 (the first failed after 26 s and the agent fixed it), 1 |
+| Wall time | **6 min 41 s**, press to review; the first write of the scene file alone took 2 min 50 s |
+| Narration | 0 of 10 lines seeded, 10 voiced, no line changed |
+| Video | 76.3 s, 1080p, audio, faststart, 2.5 MB, poster 8.6 kB, 4 chapters |
+| Accept | the `video` row, five asset rows (video, transcript, chapters, captions, poster), one `video` revision; the library page played it with its chapters, transcript and captions |
+
+The same machine's phase 1 run was $1.69 in 197 s on a three-scene, 709
+character brief; this brief is a third longer, and this run cost 70% more
+and took twice as long. n=1 each.
+
+**The picture-only change.** On the accepted job, Change, then "In the first
+scene the small 'no live data' tag is too faint to read and sits under the
+play button. Make it larger, with light text on a solid red fill, and move it
+just above the arrow", then Change the picture.
+
+| | |
+| --- | --- |
+| Ran as | a revise with `parentJob` the accepted job, continuing its session (the same session id) |
+| Clips | 10 of 10 seeded from the parent, none voiced again |
+| Cost | **$0.60** (`result`), 10 turns, 6 requests, one Edit |
+| Preview rounds, builds | 1, 1 |
+| Wall time | 78 s |
+| Gate | all ten passed, the same length warning |
+| Result | the tag in solid red with light text, above the arrow (a frame looked at) |
+| Accept | a second `video` revision over the first |
+
+**A model changed in the panel.** Settings, Videos, Model: Sonnet. The panel
+said "Saved", the `preference` row read `studioVideoAgent = {"model":
+"sonnet", "effort": "default"}`, and `/api/health`'s `agent.video.model` read
+`source: panel` at once. The next video job (Make both's, below) recorded
+`agentModel {requested: sonnet, passed: sonnet, source: panel}`,
+`agentEffort {requested: default, passed: high, source: claude-settings}` and
+`resolvedModel claude-sonnet-5`, and its job view read "4:00 · $0.64 ·
+claude-sonnet-5".
+
+**Make both, once.** "@Diagram @Video what an agent keeps in its context
+window versus its long-term memory, and how a fact moves from one to the
+other. Keep the video under a minute." One reply carried both briefs. The
+video brief was refused once (`targetSeconds` under 60) and passed on the
+retry at 60; $0.099 for the two turns. Make both started the diagram and the
+video 1.5 s apart and both ran at once.
+
+| Job | Model (source) | Cost | Turns | Wall | Gate |
+| --- | --- | --- | --- | --- | --- |
+| Diagram | `sonnet` (`default`) | $0.48 | 10 | 84 s | passed: 11 shapes, 0 lints, 4 of 4 verify checks |
+| Video | `sonnet` (`panel`) | $0.64 | 11 (8 requests, 1 preview, 1 build) | 4 min 1 s | all ten passed, no warning; 55.6 s |
+
+Both were then discarded. The video's workspace kept `source/`, the sheets
+and the clips, and had no `render/` or `candidate/`. The Sonnet video is
+sparser than the Fable one (small shapes in a mostly empty frame); one look
+at one video each.
+
+**An untagged question, once.** "why do transformers need positional
+encodings at all? couldn't attention work out word order by itself?" A plain
+answer, no brief, $0.006 in 6.6 s, with a Diagram suggestion; its button put
+the Diagram chip in the composer and sent nothing.
+
+**Spend.** $5.04 in all: the planner $0.44 over nine turns (seven drafts), and
+the four jobs $4.60 (the video $2.88, the revise $0.60, the Sonnet video
+$0.64, the diagram $0.48).
+
+**Bugs and rough edges found**, none fixed here.
+
+In the runner and the planner prompt:
+
+1. **The live cost leaves out almost all output tokens**
+   (`services/studio/src/cost.ts`, the stream accumulator). The stream's
+   per-message usage carries the output count as it stood when the message
+   began: 932 output tokens summed from the stream against 20,630 in the
+   result for the made video, and 56 against 21,001 for the Sonnet one. The
+   cache reads and writes match exactly. The live figure read $1.82 twenty
+   seconds before the made video's $2.88 result, and a video job killed
+   mid-run would record about a third too little, below the 80% to 93% the
+   diagram jobs measured.
+2. **File handles left to the garbage collector** in the sheet and media
+   routes (`services/studio/src/video/routes.ts`, `sheetBytes` and `media`).
+   After the videos were played and seeked, the runner's log held 36 "Closing
+   file descriptor N on garbage collection" warnings and a DEP0137. Likely
+   cause: the handle is closed only on the read stream's `close`, which
+   `pipe` never causes when the browser aborts a range request mid-body.
+3. **"Under a minute" cannot be honoured, and the retry says so in jargon.**
+   The video section of the prompt does not give the 60 s floor, so the brief
+   went under it and was refused; the retry's reply, shown to the person, read
+   "(fix: `targetSeconds` set to 60, a valid whole number in range; script
+   unchanged, total narration length still fits)". Nothing told the person
+   that the shortest video is a minute.
+4. **Every planner reply restates its card**: title, topic, idea, audience,
+   length and a scene list by raw names (`why_it_matters`) above a card that
+   shows the same (six of six video briefs). And every video brief opens
+   with a scene named `why_it_matters` (six of six).
+5. The job log's auth line shows variable names to the person: "(apiKeySource
+   none, STUDIO_AGENT_AUTH=login)".
+
+In the web app:
+
+6. **The library player shows "0:02 / –:––" and no chapter marks** when
+   playback starts right after the page loads, three times of three on
+   `/library/video:react-loop-walkthrough`; waiting three seconds first shows
+   1:16. `apps/web/src/components/VideoPlayer.tsx` reads the duration only in
+   `onLoadedMetadata` and `onDurationChange`, which fire before hydration on
+   a server-rendered page, and never reads `video.duration` at mount.
+7. **Two sets of chapter titles in one panel.** The job view's chapter list
+   uses the brief's scene names ("Why it matters", "The loop steps") while the
+   player bar under it and the stored chapters use the agent's own titles
+   ("Why a model needs a loop", "The three steps"); the library shows only the
+   second. `video/VideoJobPanel.tsx`.
+8. **After Make both the cards lag.** Six seconds after the press both cards
+   still read "Queuing…" and "Queuing the video…", the video card still said
+   "Nothing is made or spent until you press it", and it had no link to its
+   job, though the runner had started both jobs a second after the press. A
+   reload showed both links. `DraftPanel.tsx`, `ConfirmCardVideo.tsx`.
+9. The dialog header shows the conversation's planner cost ($0.058) beside a
+   job view that shows the job's ($2.88); nothing shows the two together.
+10. The running job view's first paint lists every step as pending under
+    "Step 3 of 11"; the steps catch up at the first update. The first "What
+    happened" line names the scene classes (`RLW1_WhyItMatters`, ...) while the
+    job runs, and the titles once it is over. `video/VideoJobPanel.tsx`.
+11. The diagram card and the diagram job view print filesystem paths to the
+    person: `$STUDIO_HOME/jobs/<job>/candidate/<slug>.tldr` beside Draw, and
+    the absolute candidate path twice in the job view (`ConfirmCard.tsx`,
+    `JobPanel.tsx`; older than phase 2).
+12. The settings model menu lists every model twice ("Fable" and "Claude
+    Fable 5.1", and so on), and the default is cut to "Claude Code default
+    (claude-f…" with the raw `[1m]` suffix (`StudioSettings.tsx`).
+13. The Change form reads "Change the picture has the agent rework it from
+    its own source.", the button's name used as the sentence's subject.
+14. The caption button is labelled "Subtitles off (c)" while `aria-pressed`
+    is true and captions show (`VideoPlayer.tsx`).
+15. In the @ menu, Diagram's description wraps under its name while Video's
+    sits beside it.
+
+Seen once and not reproduced: the panel of a tab showing the running video
+job closed (its URL went back to `/studio`) at the moment a second tab of the
+same browser was opened. Opening a tab, starting a conversation and sending in
+it later did not close it again.
 
 ### Phase 3. Measured tightening, only if the first jobs ask for it
 
