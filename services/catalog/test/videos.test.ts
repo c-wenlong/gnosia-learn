@@ -636,6 +636,46 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     }
   });
 
+  it("keeps the refusal for a different concurrent --discard-parent request under the same key", async () => {
+    const slug = "different-change";
+    const { job: parent } = await jobReady(slug);
+    const holder = connect({ url: scratch.url, copyOk: true });
+    try {
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      const held = holder.db.transaction(async (tx) => {
+        await tx.execute(sql`select id from job where id = ${parent.id} for update`);
+        await released;
+      });
+      const submit = (idea: string) =>
+        runEnqueue({
+          brief: {
+            kind: "video",
+            topic: TOPIC,
+            target: `videos/${slug}.mp4`,
+            idempotencyKey: "different-change-1",
+            parentJob: parent.id,
+            brief: briefOf(slug, { mode: "change", idea }),
+          },
+          discardParent: parent.id,
+        });
+      const first = submit("First change.");
+      const second = submit("Second change.");
+      await waitForBlocked(scratch.db, scratch.name, 2);
+      release();
+      await held;
+      const results = await Promise.allSettled([first, second]);
+      const landed = results.filter((r) => r.status === "fulfilled");
+      const refused = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      expect(landed).toHaveLength(1);
+      expect(landed[0]?.status === "fulfilled" && landed[0].value.created).toBe(true);
+      expect(refused).toHaveLength(1);
+      expect(String(refused[0]?.reason)).toMatch(/is discarded, not awaiting_review/);
+    } finally {
+      await holder.close();
+    }
+  });
+
   it("refuses a video row naming another owner's blob, at the seam", async () => {
     await expect(
       writeContents(scratch.db, [

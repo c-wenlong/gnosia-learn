@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   asset,
   assetJob,
+  canonicalJson,
   canTransition,
   COST_SOURCES,
   job as jobTable,
@@ -521,10 +522,13 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
         // inserted the child, and the loser, waiting on the parent's row lock,
         // then finds it discarded. The honest answer is the winner's job,
         // exactly as for the key race below.
+        //
+        // Only when the job found is this same request, though: a different
+        // change that happened to use the key gets this request's own
+        // refusal, not someone else's job as if it were its retry.
         if (discardParent !== undefined) {
           const winner = await byIdempotencyKey(db, idempotencyKey);
-          if (theirs(winner)) throw keyTaken();
-          if (winner !== undefined) {
+          if (winner !== undefined && sameRequest(winner, row, scoped ? owner : undefined)) {
             return { ok: true as const, command: "enqueue" as const, created: false, job: summarise(winner), discarded: null };
           }
         }
@@ -724,6 +728,24 @@ function noTopic(slug: string): JobError {
   return new JobError(
     `no topic "${slug}" in the catalog. Add it with \`npm run catalog -- topic add\`, ` +
       `or enqueue under a slug that exists.`,
+  );
+}
+
+/**
+ * Whether a job already under a key is the request now being made: the same
+ * owner, kind, parent, target, topic, draft and brief. Asked where a refusal
+ * would otherwise be answered with the job under the key, so a different
+ * request sharing the key keeps its refusal.
+ */
+function sameRequest(found: Job, row: NewJob, owner: string | undefined): boolean {
+  return (
+    (owner === undefined || found.ownerId === owner) &&
+    found.kind === row.kind &&
+    found.parentJobId === (row.parentJobId ?? null) &&
+    found.targetPath === row.targetPath &&
+    found.topicSlug === row.topicSlug &&
+    found.draftId === (row.draftId ?? null) &&
+    canonicalJson(found.brief) === canonicalJson(row.brief ?? {})
   );
 }
 
