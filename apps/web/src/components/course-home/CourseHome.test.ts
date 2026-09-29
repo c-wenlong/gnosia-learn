@@ -192,6 +192,12 @@ describe("CourseHome", () => {
     expect(router.replace).toHaveBeenCalledWith("/courses/c/m3");
   });
 
+  it("leaves a malformed hash alone instead of throwing", () => {
+    window.location.hash = "#m1%zz";
+    expect(() => render()).not.toThrow();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it("leaves a hash that names no module alone", () => {
     window.location.hash = "#resources";
     render();

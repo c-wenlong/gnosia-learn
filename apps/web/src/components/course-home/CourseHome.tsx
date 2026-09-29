@@ -70,7 +70,12 @@ export function CourseHome({
   const router = useRouter();
   useEffect(() => {
     if (moduleSlug !== undefined) return;
-    const hash = decodeURIComponent(window.location.hash.slice(1));
+    let hash: string;
+    try {
+      hash = decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+      return; // a malformed escape ("#m1%zz") names no module
+    }
     const target = hash ? course.modules.find((m) => m.slug === hash || m.id === hash) : undefined;
     if (target) router.replace(`/courses/${course.slug}/${target.slug}`);
   }, [course, moduleSlug, router]);
