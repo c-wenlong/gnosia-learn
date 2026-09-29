@@ -418,6 +418,29 @@ export interface FailureReport {
  * gate's own finding" is only the right words for the last of them.
  */
 export function failureReport(job: Job): FailureReport {
+  const report = rawFailureReport(job);
+  // Files written outside the job's paths are the finding: a person has to
+  // find them to clean up, so that report keeps its paths. Every other names
+  // the job's own files, which nobody acts on (phase 2, bug 11).
+  if (job.errorKind === "wrote-outside") return report;
+  return { ...report, headline: plainPaths(report.headline), detail: report.detail === null ? null : plainPaths(report.detail) };
+}
+
+/**
+ * A runner's sentence with the job's own files said in words: its candidate
+ * drawing and picture (`jobs/<id>/candidate/<slug>.tldr`, relative or
+ * absolute) are "the job's drawing" and "the job's picture", and the
+ * diagram's logical name (`learn/assets/<slug>.tldr`) is "the diagram".
+ */
+export function plainPaths(text: string): string {
+  return text
+    .replace(/(?:\/[^\s"'`]*)?\bjobs\/[^\s"'`/]+\/candidate\/[^\s"'`]+?\.(tldr|svg)\b/g, (_, ext: string) =>
+      ext === "svg" ? "the job's picture" : "the job's drawing",
+    )
+    .replace(/\blearn\/assets\/[^\s"'`]+?\.(?:tldr|svg)\b/g, "the diagram");
+}
+
+function rawFailureReport(job: Job): FailureReport {
   const code = lastGateCode(job);
   const detail = job.error ?? null;
 
@@ -521,7 +544,9 @@ function agentReport(detail: string | null): FailureReport {
  * reason is only given where it is the reason.
  */
 export function failureFooter(job: Job): string {
-  const unchanged = `${job.target} is unchanged.`;
+  // Not the target's logical name (`learn/assets/<slug>.tldr`): a new
+  // diagram has no row yet, and a path is nothing a person acts on.
+  const unchanged = "Nothing in the catalog changed.";
   switch (job.errorKind) {
     case "agent": {
       const source =

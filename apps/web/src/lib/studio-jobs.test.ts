@@ -325,6 +325,28 @@ describe("what a failure says", () => {
     expect(report.detail).toContain("429");
   });
 
+  it("says a failure without the job's file paths, except where the paths are the finding (phase 2, bug 11)", () => {
+    const candidate = "/Users/someone/.self-learn/studio/jobs/54b0211a-4683-43d3-8497-1fed9c9f36d8/candidate/dot-parts.tldr";
+    const failed = job({
+      state: "failed",
+      errorKind: "gate",
+      target: "learn/assets/dot-parts.tldr",
+      error: `Nothing was written to ${candidate}. That is the file the diagram has to be drawn into; no other path counts as output.`,
+      gate: gate({ ok: false, findings: [`Nothing was written to ${candidate}. That is the file the diagram has to be drawn into.`], steps: [] }),
+    });
+    const report = failureReport(failed);
+    expect(`${report.headline} ${report.detail}`).not.toMatch(/\/Users|jobs\/|candidate\/|\.tldr/);
+    expect(report.detail).toContain("Nothing was written to the job's drawing.");
+    expect(failureFooter(failed)).not.toMatch(/learn\/assets|\.tldr/);
+    expect(failureFooter(failed)).toContain("Nothing in the catalog changed.");
+    // The relative form the catalog stores, and an SVG beside it.
+    const relative = failureReport(job({ state: "failed", errorKind: "timeout", error: "stopped before jobs/j1/candidate/x.svg was exported" }));
+    expect(relative.detail).toBe("stopped before the job's picture was exported");
+    // Files written where they should not be are the finding, and a person has to find them.
+    const strayed = failureReport(job({ state: "failed", errorKind: "wrote-outside", error: "left tools/x/y.ts dirty" }));
+    expect(strayed.detail).toBe("left tools/x/y.ts dirty");
+  });
+
   it("names the permission file only where it is the reason the target is safe", () => {
     const refused = job({ state: "failed", errorKind: "agent", apiKeySource: "ANTHROPIC_API_KEY" });
     const agentFooter = failureFooter(refused);
