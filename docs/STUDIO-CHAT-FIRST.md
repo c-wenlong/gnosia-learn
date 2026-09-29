@@ -1132,10 +1132,9 @@ the numbers are in the PR; an extend draft on `dot-product` names that
 diagram's elements in its first reply; and the gate passes on the extended
 drawing.
 
-**Not ticked yet.** Three of the four parts held (below). The fourth, the gate
-on the extended drawing, was not recorded: the drawing job ran, but reading
-its result was refused by the measuring session's permission layer, so its
-outcome is unknown rather than failed.
+**Held, all four parts** (below). The extend job's result was read by the
+owner after the measuring session's permission layer refused the read: the
+gate passed.
 
 #### Phase 2 measured
 
@@ -1237,15 +1236,16 @@ which are the diagram's labels. The second message asked for
 refused on `relations[1].to`: it drew arrows to the existing sign-case shapes
 without listing them as elements. The retry listed them and passed (5
 elements, 4 relations, $0.053 for the draft's three counted turns). Draw
-queued job `30ad124a`, which ran. Its gate result was not recorded (see "Not
-ticked yet" above). One thing for the planner prompt: an extend brief whose
+queued job `30ad124a`, which reached `awaiting_review` with the gate passed:
+44 shapes and 12 bindings before, 51 and 16 after, 0 lints, all four `verify`
+checks, 17 turns, $0.835 (`result`), on the first attempt. It was discarded.
+One thing for the planner prompt: an extend brief whose
 arrows land on existing shapes has to name them as elements, and the prompt
 does not say so.
 
-**Spend.** $1.36 known: $0.245 for the ten drafts, $0.068 to re-measure the
-manual, $0.429 and $0.566 for the two drawings, and $0.053 for the extend
-draft. The extend job's own cost was not read, so the total is higher by that
-amount, about $0.4 to $0.6 going by the two drawings above.
+**Spend.** $2.20: $0.245 for the ten drafts, $0.068 to re-measure the
+manual, $0.429 and $0.566 for the two drawings, $0.053 for the extend draft
+and $0.835 for the extend drawing.
 
 ### Phase 3. Polish
 
