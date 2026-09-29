@@ -333,13 +333,6 @@ export function panelHref(
 }
 
 /**
- * The conversation a job came from, from wherever the job is showing.
- *
- * The conversation panel lives on `/studio` only, so from the canvas route
- * this leaves for the grid rather than patching a path that has no panel for
- * a draft. On `/studio` it keeps the filters and swaps the panel.
- */
-/**
  * The name the full-width Before/After view gives its picture: the job's
  * title, never its target (`learn/assets/<slug>.tldr` is a path, not a name).
  */
@@ -348,6 +341,13 @@ export function shotTitle(jobs: readonly { jobId: string; title?: string | null 
   return title === "" ? "the diagram" : title;
 }
 
+/**
+ * The conversation a job came from, from wherever the job is showing.
+ *
+ * The conversation panel lives on `/studio` only, so from the canvas route
+ * this leaves for the grid rather than patching a path that has no panel for
+ * a draft. On `/studio` it keeps the filters and swaps the panel.
+ */
 export function conversationHref(path: string, draftId: string): string {
   const [base] = path.split("?");
   const from = base === "/studio" ? path : "/studio";
