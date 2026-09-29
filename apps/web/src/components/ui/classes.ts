@@ -139,11 +139,22 @@ export function chipClasses({
   );
 }
 
-/** Kit `Input`: 44px, 2px border, radius 8, or a pill for search. */
-export function inputClasses({ pill = false, className }: { pill?: boolean; className?: string } = {}): string {
+/**
+ * Kit `Input`: 44px, 2px border, radius 8, or a pill for search. `sm` is 36px
+ * with a 12px inset, for a field that sits in a row of text rather than in a
+ * form: the confirm card's inline edits, where a 44px field would push every
+ * row apart the moment editing starts.
+ */
+export function inputClasses({
+  pill = false,
+  size = "md",
+  className,
+}: { pill?: boolean; size?: "md" | "sm"; className?: string } = {}): string {
   return cx(
-    "h-11 w-full min-w-0 border-2 border-border bg-surface px-3.5 text-[14px] text-text",
+    size === "md" ? "h-11 px-3.5" : "h-9 px-3",
+    "w-full min-w-0 border-2 border-border bg-surface text-[14px] text-text",
     "placeholder:text-text3 outline-none transition-colors duration-100 focus:border-accent",
+    "aria-invalid:border-danger",
     DISABLED,
     pill ? "rounded-full" : "rounded-lg",
     className,

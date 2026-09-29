@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { DiagramPanelBody, type JobRow } from "@/components/studio/DiagramInspector";
 import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
 import { DraftPanel } from "@/components/studio/DraftPanel";
+import { DraftsList } from "@/components/studio/DraftsList";
 import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
@@ -20,6 +21,8 @@ import {
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { capFrom, suggestions } from "@/lib/studio-chat";
+import { listPath } from "@/lib/studio-draft-list";
+import type { DraftSummary } from "@/lib/studio-drafts";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   filterDiagrams,
@@ -124,11 +127,15 @@ export default async function StudioPage({
   // screen still browses and draws then. The runner answers from its D13 copy,
   // and with no copy at all the chips fall back to slugs and the banner below
   // says why.
-  const [listed, jobList, vocabulary] = await Promise.all([
+  const [listed, jobList, vocabulary, draftList] = await Promise.all([
     studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000 }),
     studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
     studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000 }),
+    // The conversations to pick up again. A runner that cannot list them
+    // costs the section, never the page.
+    studioApi<{ drafts: DraftSummary[] }>(listPath()),
   ]);
+  const drafts = draftList.ok && Array.isArray(draftList.data.drafts) ? draftList.data.drafts : null;
   const topics = vocabulary.ok ? vocabularyTopics(vocabulary.data) : [];
   const staleVocabulary = vocabularyBanner(health.data.vocabulary);
   const topicTitles = topicTitleMap(topics);
@@ -296,6 +303,11 @@ export default async function StudioPage({
           />
         ) : (
           <div className="space-y-6 p-4">
+            <DraftsList
+              initial={drafts}
+              path={path}
+              titles={titles}
+            />
             {/* The plus card is the first tile under any filter, and on an
                 empty directory it is the whole grid: one way in (D31). */}
             {(visible.length === 0 || groups.length === 0) &&

@@ -9,6 +9,7 @@ import {
   sectionsOf,
   triggerText,
   typeaheadIndex,
+  valueText,
   type FilterOption,
 } from "./filter-menu";
 
@@ -42,6 +43,9 @@ export function FilterMenu<V extends string>({
   defaultValue,
   onChange,
   busy = false,
+  bare = false,
+  invalid = false,
+  describedBy,
   className,
 }: {
   /** The group's name: "Type", "Course", "Status". The trigger prints it before the value. */
@@ -53,6 +57,15 @@ export function FilterMenu<V extends string>({
   onChange: (value: V) => void;
   /** A navigation for the last pick is under way (the trigger dims). */
   busy?: boolean;
+  /**
+   * The trigger prints the value alone, for a menu that sits beside a label
+   * of its own (a form row): "Topic: Consensus" next to "Topic" would say it
+   * twice. The label still names the trigger and the list to a screen reader.
+   */
+  bare?: boolean;
+  /** A check refused the value: the trigger takes the danger border, and `describedBy` says why. */
+  invalid?: boolean;
+  describedBy?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -139,6 +152,13 @@ export function FilterMenu<V extends string>({
   };
 
   const onListKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      // Closes the list only. Inside a modal `<dialog>` an Escape nobody
+      // cancels is also the dialog's close request, and would take the whole
+      // panel with it; the document listener below does the closing.
+      event.preventDefault();
+      return;
+    }
     const next = nextIndexForKey(event.key, active, options.length);
     if (next !== null) {
       event.preventDefault();
@@ -180,14 +200,16 @@ export function FilterMenu<V extends string>({
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-busy={busy || undefined}
+        aria-label={bare ? triggerText(label, options, value) : undefined}
+        aria-describedby={describedBy}
         onClick={() => (open ? close(false) : show(Math.max(selected, 0), false))}
         onKeyDown={onTriggerKey}
         className={chipClasses({
           active: value !== defaultValue,
-          className: cx("pr-2.5", busy && "opacity-70"),
+          className: cx("max-w-full pr-2.5", busy && "opacity-70", invalid && "border-danger"),
         })}
       >
-        <span>{triggerText(label, options, value)}</span>
+        <span className="min-w-0 truncate">{bare ? valueText(options, value) : triggerText(label, options, value)}</span>
         <svg
           aria-hidden
           viewBox="0 0 16 16"
