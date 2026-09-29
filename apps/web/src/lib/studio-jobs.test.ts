@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   activeJob,
   announcement,
-  candidatePathFor,
   elapsedMs,
   failureFooter,
   failureReport,
@@ -385,10 +384,3 @@ describe("what is said when nobody is looking", () => {
   });
 });
 
-describe("where a job draws", () => {
-  it("names the job's own workspace as where the result will be written, not the repository", () => {
-    expect(candidatePathFor("dot-product")).toBe("$STUDIO_HOME/jobs/<job>/candidate/dot-product.tldr");
-    expect(candidatePathFor("dot-product")).not.toContain("learn/assets");
-    expect(candidatePathFor("")).toContain("<slug>");
-  });
-});

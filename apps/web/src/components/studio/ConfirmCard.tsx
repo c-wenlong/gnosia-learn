@@ -28,7 +28,7 @@ import { composerKey } from "@/components/ui/composer-keys";
 import { kindCardEditable, madeLine, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
 import { modeLine, type DrawBlock } from "@/lib/studio-chat";
 import type { PendingTopic, Refusal } from "@/lib/studio-drafts";
-import { candidatePathFor, type Brief } from "@/lib/studio-jobs";
+import type { Brief } from "@/lib/studio-jobs";
 
 /** What a save came back with: the card places a refusal on its field. */
 export type SaveOutcome = { ok: true } | { ok: false; status: number; refusal: Refusal };
@@ -600,7 +600,6 @@ export function ConfirmCard({
               >
                 {busy ? (proposed ? "Creating the topic…" : "Queuing…") : pressLabel("diagram", proposed)}
               </Button>
-              <span className="min-w-0 break-all font-mono text-[12px] text-text3">{candidatePathFor(brief.slug)}</span>
             </div>
             {block !== null && <p className="text-[12px] leading-4 text-text2">{block.reason}</p>}
             {refusal !== null && refusal.text !== null && block === null && (

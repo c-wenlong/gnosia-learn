@@ -617,17 +617,3 @@ export function announcement(job: Job): Announcement | null {
       return null;
   }
 }
-
-/* -------------------------------------------------------------------------- */
-/* Where a job draws                                                          */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The line beside Draw on the confirm card: where the job will draw,
- * `$STUDIO_HOME/jobs/<job>/candidate/<slug>.tldr`. Each job draws in its own
- * workspace and nothing lands until Accept, so the job's id is not known yet
- * and the line says so rather than naming a path in the repository.
- */
-export function candidatePathFor(slug: string): string {
-  return `$STUDIO_HOME/jobs/<job>/candidate/${slug === "" ? "<slug>" : slug}.tldr`;
-}
