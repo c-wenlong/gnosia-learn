@@ -235,8 +235,9 @@ and `app_web` gets no content writes before it does.
 
 ## The blob store
 
-Videos, their posters and sidecars, and diagram SVGs have moved out of the
-repository and the manimkc data root into a content-addressed blob store
+Videos, their posters and sidecars, diagram SVGs and course cover photos have
+moved out of the repository and the manimkc data root into a content-addressed
+blob store
 (docs/CONTENT-MIGRATION.md 0.4, D5). Until go-live it is local only: the `fs`
 adapter in `packages/blob`, keeping objects under `$SELF_LEARN_HOME/blobs`, or
 `~/.self-learn/blobs` when the variable is unset.
@@ -256,6 +257,31 @@ adapter in `packages/blob`, keeping objects under `$SELF_LEARN_HOME/blobs`, or
   as they serve nothing now. The cloud adapter (R2 on Hobby, Vercel Blob on
   Pro, open question 3 of the plan) and its token arrive with the cloud
   database in step 0.1, and the bytes move with the rows in the same window.
+- **Course covers show only where the `fs` store is.** A course row names its
+  cover by blob key (`collection.cover_blob_key`), and the web app serves it
+  from `/api/courses/<slug>/cover`, so a deployment with no store to read
+  draws every card's code placeholder instead of a photo. That is the
+  intended degrade, not a failure: the course list reads the covers
+  separately from the courses and falls back to none, and the route answers
+  a 404 or 503 the card never asks for. The photos come back in production
+  with the cloud adapter, with no change to the rows or the page.
+
+### Course covers
+
+```bash
+npm run catalog -- course cover cs2111 --file ./cs2111.webp \
+  --photographer "Compagnons (@sigmund)" --source https://unsplash.com/photos/... \
+  --licence "Unsplash License" --reason "why" [--dry-run]
+npm run catalog -- course cover cs2111 --clear --reason "why"
+```
+
+The image must be a WebP, JPEG or PNG by its first bytes and at most 2 MiB (a
+card shows it at 960x540). It is stored first (`pending` row, put, `head`,
+`present`), then the course row is pointed at its key and given the credit in
+one revision. The same image and credit again changes nothing. The ten photos
+that were `apps/web/public/course-covers/` moved with
+`node scripts/move-course-covers.mjs --from <dir of the ten .webp files>
+[--dry-run]`, whose credits are `scripts/course-covers.json`.
 
 ### Filling it
 

@@ -1,7 +1,7 @@
 # @self-learn/blob
 
 One interface for every place the catalog keeps bytes: videos, their posters and
-sidecars, diagram SVGs. Postgres holds a `blob_object` row per object (its key,
+sidecars, diagram SVGs, course cover photos. Postgres holds a `blob_object` row per object (its key,
 size, hash and type); this package holds the bytes. It is step 0.4 of
 [docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md#04-the-blob-store),
 and decisions D5, D7 and D8 there say why the bytes live outside Postgres.

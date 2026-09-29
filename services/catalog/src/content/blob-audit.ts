@@ -1,10 +1,11 @@
 import path from "node:path";
 
 import type { BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, diagram, video } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, collection, diagram, video } from "@self-learn/schema";
 import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { sqlstate } from "../state/errors";
 import { POSTER_PREFIX } from "./asset-upload";
 import { markBlobPending, ownerCapLock, ownerUsage, type OwnerUsage } from "./blob";
 import {
@@ -28,9 +29,9 @@ import {
  * | --- | --- | --- |
  * | `orphan` | An object with no row: an upload whose row write failed after the store took the bytes | deleted once it is a day old, so an upload in flight is never swept |
  * | `missing`, `corrupt` | A `present` row whose object is gone, or whose bytes no longer hash to its key | the row goes back to `pending`, so its asset answers `not-uploaded` until the upload reruns |
- * | `stale-pending` | A `pending` row a day old with no object behind it and no asset or diagram pointing at it | the row is deleted |
+ * | `stale-pending` | A `pending` row a day old with no object behind it and no asset, diagram or course cover pointing at it | the row is deleted |
  * | `pending` | Any other `pending` row: an upload that has not finished, or one the audit sent back | none; rerun the upload |
- * | `unreferenced` | A `present` row no asset, diagram or studio video points at: the old bytes of something re-rendered, or the blobs of a `video put` whose transaction was refused | none; listed so it can be seen, and still counted toward the owner's byte cap |
+ * | `unreferenced` | A `present` row no asset, diagram, studio video or course cover points at: the old bytes of something re-rendered, or the blobs of a `video put` whose transaction was refused | none; listed so it can be seen, and still counted toward the owner's byte cap |
  * | `orphan-poster` | A poster asset derived from no video: its video was pruned, or the upload unhooked it from a re-render it could not cut a new poster for | none; the next upload with ffmpeg makes and hooks up a new one |
  * | `partial` | A staged write under `<root>/.tmp` a day old: an upload a crash stopped before its rename | deleted |
  *
@@ -155,6 +156,10 @@ export async function auditBlobs(
       if (key !== null) referenced.add(key);
     }
   }
+  // A course's cover photo (0016). Left out, every cover would read as
+  // unreferenced, and a pending one as safe to sweep. A database from before
+  // 0016 has no column, and so no cover to count.
+  for (const key of await coverKeys(db)) referenced.add(key);
 
   // 1. Objects the table does not know.
   let objects = 0;
@@ -196,7 +201,7 @@ export async function auditBlobs(
         }
         findings.push(finding);
       } else if (!referenced.has(row.key)) {
-        findings.push({ kind: "unreferenced", key: row.key, detail: "no asset or diagram points at it" });
+        findings.push({ kind: "unreferenced", key: row.key, detail: "no asset, diagram or course points at it" });
       }
       continue;
     }
@@ -295,4 +300,18 @@ export async function auditBlobs(
   ).length;
   const byOwner = await ownerUsage(db, { now: new Date(now) });
   return { provider: store.provider, owner, rows: rows.length, objects, fix, findings, outstanding, byOwner };
+}
+
+/** Every course cover's key, or none on a database from before 0016 (undefined_column). */
+async function coverKeys(db: CatalogDatabase): Promise<string[]> {
+  try {
+    const rows = await db
+      .select({ key: collection.coverBlobKey })
+      .from(collection)
+      .where(isNotNull(collection.coverBlobKey));
+    return rows.map((row) => row.key).filter((key): key is string => key !== null);
+  } catch (error) {
+    if (sqlstate(error) === "42703") return [];
+    throw error;
+  }
 }

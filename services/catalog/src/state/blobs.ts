@@ -1,5 +1,5 @@
-import { asset, assetDerivation, blobObject, type OwnerScope } from "@self-learn/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { asset, assetDerivation, blobObject, collection, type OwnerScope } from "@self-learn/schema";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { ownedBy } from "../content/scope";
@@ -21,7 +21,7 @@ import { sqlstate } from "./errors";
  * unreachable.
  */
 
-/** undefined_table, undefined_column: the schema predates 0010. */
+/** undefined_table, undefined_column: the schema predates 0010 (or, for covers, 0016). */
 const BEFORE_BLOBS = new Set(["42P01", "42703"]);
 
 let warned = false;
@@ -34,7 +34,9 @@ async function orNoBlobs<T>(read: () => Promise<T>, none: T): Promise<T> {
     if (code === undefined || !BEFORE_BLOBS.has(code)) throw error;
     if (!warned) {
       warned = true;
-      console.warn("asset blobs: this database predates the blob store (0010); run `npm run catalog -- migrate`");
+      console.warn(
+        "blobs: this database predates the blob store (0010) or course covers (0016); run `npm run catalog -- migrate`",
+      );
     }
     return none;
   }
@@ -163,5 +165,65 @@ export async function posterBlob(db: CatalogDatabase, videoId: string, scope: Ow
         .limit(1),
     [],
   );
+  return row ?? null;
+}
+
+/** A course's cover photo, with its blob, for the course list and the cover route. */
+export interface CourseCoverBlob {
+  courseId: string;
+  /** The course's URL segment, which the cover route is keyed by. */
+  slug: string;
+  key: string;
+  /** `pending` until the upload is confirmed; the list and the route show only `present`. */
+  state: string;
+  bytes: number;
+  mime: string;
+  sha256: string;
+}
+
+const COVER_COLUMNS = {
+  courseId: collection.id,
+  slug: collection.slug,
+  key: blobObject.key,
+  state: blobObject.state,
+  bytes: blobObject.bytes,
+  mime: blobObject.mime,
+  sha256: blobObject.sha256,
+} as const;
+
+/**
+ * Live courses with a cover, readable by `scope`: the course row and the
+ * blob's owner both (phase 4), as `keyedFor` asks of an asset. `slug`
+ * narrows it to one course. A database that has not had 0016 has no
+ * `cover_blob_key` and answers no covers, as one before 0010 answers no blobs.
+ */
+async function covers(db: CatalogDatabase, scope: OwnerScope, slug?: string): Promise<CourseCoverBlob[]> {
+  return orNoBlobs(
+    () =>
+      db
+        .select(COVER_COLUMNS)
+        .from(collection)
+        .innerJoin(blobObject, and(eq(blobObject.key, collection.coverBlobKey), ownedBy(blobObject.ownerId, scope.readable)))
+        .where(
+          and(
+            eq(collection.kind, "course"),
+            isNull(collection.archivedAt),
+            ownedBy(collection.ownerId, scope.readable),
+            slug === undefined ? undefined : eq(collection.slug, slug),
+          ),
+        )
+        .orderBy(collection.slug),
+    [],
+  );
+}
+
+/** Every readable course's cover, by course slug. A course with none is absent. */
+export async function courseCovers(db: CatalogDatabase, scope: OwnerScope): Promise<Map<string, CourseCoverBlob>> {
+  return new Map((await covers(db, scope)).map((row) => [row.slug, row] as const));
+}
+
+/** One course's cover by its slug, or null when the course is not readable or has none. */
+export async function courseCoverBlob(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<CourseCoverBlob | null> {
+  const [row] = await covers(db, scope, slug);
   return row ?? null;
 }

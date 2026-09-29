@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 
 import type { RevisionEntityType } from "@self-learn/schema";
 import { canonical, canonicalJson, type JsonValue } from "@self-learn/schema/shared";
-import { inArray } from "drizzle-orm";
+import { getTableName, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
-import { column, contentColumns, ENTITIES } from "./entities";
+import { column, contentColumns, ENTITIES, OMITTED_WHEN_NULL } from "./entities";
 
 /**
  * The snapshot a revision stores: the whole entity after the write, with its
@@ -66,6 +66,7 @@ export async function readSnapshots(
   if (unique.length === 0) return out;
 
   const entityColumns = contentColumns(spec.table);
+  const omitted = OMITTED_WHEN_NULL.get(getTableName(spec.table));
   const keyColumn = column(spec.table, spec.key);
   const entities = new Map<string, Record<string, unknown>>();
   for (const part of chunks(unique)) {
@@ -97,7 +98,7 @@ export async function readSnapshots(
   }
 
   for (const [id, row] of entities) {
-    const entity = project(row, entityColumns);
+    const entity = project(row, entityColumns, omitted);
     const owned = links.get(id) ?? {};
     for (const name of Object.keys(owned)) {
       owned[name] = sortRows(owned[name] ?? []);
@@ -113,10 +114,22 @@ export async function readSnapshots(
   return out;
 }
 
-/** A row keyed by SQL column name, holding only content columns, in canonical form. */
-function project(row: Record<string, unknown>, columns: [string, string][]): Record<string, JsonValue> {
+/**
+ * A row keyed by SQL column name, holding only content columns, in canonical
+ * form. A column in `omitted` is left out while it is null
+ * (`OMITTED_WHEN_NULL` in `entities.ts`).
+ */
+function project(
+  row: Record<string, unknown>,
+  columns: [string, string][],
+  omitted?: ReadonlySet<string>,
+): Record<string, JsonValue> {
   const out: Record<string, unknown> = {};
-  for (const [key, name] of columns) out[name] = row[key] ?? null;
+  for (const [key, name] of columns) {
+    const value = row[key] ?? null;
+    if (value === null && omitted?.has(name) === true) continue;
+    out[name] = value;
+  }
   return canonical(out) as Record<string, JsonValue>;
 }
 

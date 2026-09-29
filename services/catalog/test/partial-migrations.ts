@@ -19,12 +19,29 @@ import { MIGRATIONS_FOLDER } from "../src/migrations";
 export const BEFORE_BLOB_CONTRACT = 13;
 
 export async function partialMigrations(count = 2): Promise<string> {
+  return migrationsWhere((_, index) => index < count);
+}
+
+/**
+ * Every migration but phase 2's contract, 0013: a database holding the rows
+ * the contract forbids (a stored-kind asset with a path and no blob) that has
+ * had every other migration since. A suite that writes content through
+ * today's code needs the columns added after 0013 (0016's
+ * `collection.cover_blob_key`, which every collection upsert names), and a
+ * database stopped at 0012 has none of them.
+ */
+export async function withoutBlobContract(): Promise<string> {
+  return migrationsWhere((tag) => tag !== "0013_asset_blob_contract");
+}
+
+/** A migrations folder holding the journal's entries `keep` accepts, in order. */
+async function migrationsWhere(keep: (tag: string, index: number) => boolean): Promise<string> {
   const folder = await mkdtemp(path.join(tmpdir(), "catalog-partial-"));
   await mkdir(path.join(folder, "meta"), { recursive: true });
   const journal = JSON.parse(
     await readFile(path.join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8"),
   ) as { entries: { tag: string }[] };
-  const kept = journal.entries.slice(0, count);
+  const kept = journal.entries.filter((entry, index) => keep(entry.tag, index));
   for (const entry of kept) {
     await copyFile(
       path.join(MIGRATIONS_FOLDER, `${entry.tag}.sql`),
