@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement } from "react";
+import { act, createElement, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -14,7 +14,13 @@ describe("Collapse", () => {
     const host = document.createElement("div");
     const root = createRoot(host);
     const draw = (open: boolean) =>
-      act(() => root.render(createElement(Collapse, { open, id: "r", children: createElement("input", { name: "kept" }) })));
+      act(() => root.render(createElement(
+          Collapse,
+          // Children as an argument, as the lint rule wants; the props type
+          // requires them, hence the cast.
+          { open, id: "r" } as ComponentProps<typeof Collapse>,
+          createElement("input", { name: "kept" }),
+        )));
 
     draw(false);
     const region = host.querySelector("#r") as HTMLElement;
