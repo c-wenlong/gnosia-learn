@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  shotTitle,
   conversationHref,
   extendFromHref,
   DEFAULT_VIEW,
@@ -375,5 +376,14 @@ describe("what the panel holds", () => {
 
   it("drops a verb outcome, so a stale message does not read as this panel's", () => {
     expect(panelHref("/studio?v=export&ok=0&m=it+failed", { job: "job-1" })).toBe("/studio?job=job-1");
+  });
+});
+
+describe("the full-width picture's title (review of #217)", () => {
+  it("names the job, never its target's path", () => {
+    const jobs = [{ jobId: "j1", title: "Dot product, part by part", target: "learn/assets/dot.tldr" }, { jobId: "j2", title: null, target: "learn/assets/x.tldr" }];
+    expect(shotTitle(jobs, "j1")).toBe("Dot product, part by part");
+    expect(shotTitle(jobs, "j2")).toBe("the diagram");
+    expect(shotTitle(jobs, "gone")).toBe("the diagram");
   });
 });

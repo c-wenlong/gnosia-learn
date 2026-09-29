@@ -46,6 +46,7 @@ import {
   panelHref,
   parseView,
   readOutcome,
+  shotTitle,
   sortDiagrams,
   studioHref,
   titleOf,
@@ -370,7 +371,7 @@ export default async function StudioPage({
             jobId={view.job}
             which={view.shot}
             path={path}
-            title={allJobs.find((job) => job.jobId === view.job)?.target ?? view.job}
+            title={shotTitle(allJobs, view.job)}
             comparison={shown?.comparison ?? null}
             mode={shown?.brief?.mode}
           />

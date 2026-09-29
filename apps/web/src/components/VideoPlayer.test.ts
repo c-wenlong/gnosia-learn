@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement, type ReactElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { VideoPlayer } from "./VideoPlayer";
 import type { TranscriptCue, VideoChapter } from "./media";
@@ -351,5 +352,44 @@ describe("VideoPlayer", () => {
     expect(
       host.querySelector('ol[aria-label="Transcript"] [aria-current="true"]')?.textContent,
     ).toContain("First line.");
+  });
+
+  it("reads a length the element already had when it hydrated", () => {
+    // The server's <video preload="metadata"> starts loading before React is
+    // attached, so `loadedmetadata` and `durationchange` can fire before any
+    // listener exists: the element knows its length and never says so again.
+    const element = createElement(VideoPlayer, { src: "/v.mp4", chapters, transcript });
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(element);
+    document.body.append(host);
+    const el = video(host);
+    Object.defineProperty(el, "readyState", { get: () => 1, configurable: true });
+    Object.defineProperty(el, "duration", { get: () => 30, configurable: true });
+    let root: ReturnType<typeof hydrateRoot> | null = null;
+    act(() => {
+      root = hydrateRoot(host, element);
+    });
+    mounted.push(() => {
+      act(() => root?.unmount());
+      host.remove();
+    });
+    expect(host.textContent).toContain("0:00 / 0:30");
+    expect(host.textContent).not.toContain("–:––");
+    expect(slider(host).getAttribute("aria-valuemax")).toBe("30");
+  });
+
+  it("names the subtitles toggle once, and says whether it is on by aria-pressed alone", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", transcript }));
+    const button = () => host.querySelector('[aria-label^="Subtitles"]') as HTMLButtonElement;
+    const before = button().getAttribute("aria-pressed") === "true";
+    act(() => button().click());
+    // A toggle keeps its name; its state is aria-pressed. "Subtitles off" while
+    // pressed read as the action and the state at once, one of them wrong.
+    expect(button().getAttribute("aria-label")).toBe("Subtitles (c)");
+    expect(button().getAttribute("title")).toBe("Subtitles (c)");
+    expect(button().getAttribute("aria-pressed")).toBe(String(!before));
+    act(() => button().click());
+    expect(button().getAttribute("aria-label")).toBe("Subtitles (c)");
+    expect(button().getAttribute("aria-pressed")).toBe(String(before));
   });
 });

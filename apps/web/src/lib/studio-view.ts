@@ -333,6 +333,15 @@ export function panelHref(
 }
 
 /**
+ * The name the full-width Before/After view gives its picture: the job's
+ * title, never its target (`learn/assets/<slug>.tldr` is a path, not a name).
+ */
+export function shotTitle(jobs: readonly { jobId: string; title?: string | null }[], jobId: string): string {
+  const title = jobs.find((job) => job.jobId === jobId)?.title?.trim() ?? "";
+  return title === "" ? "the diagram" : title;
+}
+
+/**
  * The conversation a job came from, from wherever the job is showing.
  *
  * The conversation panel lives on `/studio` only, so from the canvas route

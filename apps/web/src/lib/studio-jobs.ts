@@ -418,6 +418,38 @@ export interface FailureReport {
  * gate's own finding" is only the right words for the last of them.
  */
 export function failureReport(job: Job): FailureReport {
+  const report = rawFailureReport(job);
+  // Files written outside the job's paths are the finding: a person has to
+  // find them to clean up, so that report keeps its paths. Every other names
+  // the job's own files, which nobody acts on (phase 2, bug 11).
+  if (job.errorKind === "wrote-outside") return report;
+  return { ...report, headline: plainPaths(report.headline), detail: report.detail === null ? null : plainPaths(report.detail) };
+}
+
+/**
+ * A runner's sentence with the job's own files said in words: its candidate
+ * drawing and picture (`jobs/<id>/candidate/<slug>.tldr`, or
+ * `learn/assets/.candidates/<slug>.tldr` for a job recorded before the move)
+ * are "the job's drawing" and "the job's picture", and the diagram's logical
+ * name (`learn/assets/<slug>.tldr`) is "the diagram". Each is replaced whole
+ * with any absolute prefix, which may hold spaces (a `$STUDIO_HOME` under
+ * "/Users/a b/"): the prefix starts at a slash that opens a word and runs
+ * through whole directory names to the known tail.
+ */
+export function plainPaths(text: string): string {
+  const candidate = (_: string, ext: string): string => (ext === "svg" ? "the job's picture" : "the job's drawing");
+  return text
+    .replace(pathTo(String.raw`jobs\/[^\s"'\x60/]+\/candidate\/[^\s"'\x60/]+?\.(tldr|svg)\b`), candidate)
+    .replace(pathTo(String.raw`learn\/assets\/\.candidates\/[^\s"'\x60]+?\.(tldr|svg)\b`), candidate)
+    .replace(pathTo(String.raw`learn\/assets\/[^\s"'\x60]+?\.(?:tldr|svg)\b`), "the diagram");
+}
+
+/** `tail`, relative or behind an absolute prefix whose directory names may hold spaces. */
+function pathTo(tail: string): RegExp {
+  return new RegExp(String.raw`(?:(?<![^\s"'\x60(])\/(?:[^/\n"'\x60]*\/)*?)?\b` + tail, "g");
+}
+
+function rawFailureReport(job: Job): FailureReport {
   const code = lastGateCode(job);
   const detail = job.error ?? null;
 
@@ -521,7 +553,9 @@ function agentReport(detail: string | null): FailureReport {
  * reason is only given where it is the reason.
  */
 export function failureFooter(job: Job): string {
-  const unchanged = `${job.target} is unchanged.`;
+  // Not the target's logical name (`learn/assets/<slug>.tldr`): a new
+  // diagram has no row yet, and a path is nothing a person acts on.
+  const unchanged = "Nothing in the catalog changed.";
   switch (job.errorKind) {
     case "agent": {
       const source =
@@ -543,7 +577,7 @@ export function failureFooter(job: Job): string {
     default:
       // `gate`, `wrote-outside`, and a record with no kind at all, which is
       // what a gate failure looked like before kinds were written.
-      return `${unchanged} The agent's permission file never allowed it.`;
+      return "Nothing in the catalog changed: the agent's permission file does not let it write there.";
   }
 }
 
@@ -616,18 +650,4 @@ export function announcement(job: Job): Announcement | null {
     default:
       return null;
   }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Where a job draws                                                          */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The line beside Draw on the confirm card: where the job will draw,
- * `$STUDIO_HOME/jobs/<job>/candidate/<slug>.tldr`. Each job draws in its own
- * workspace and nothing lands until Accept, so the job's id is not known yet
- * and the line says so rather than naming a path in the repository.
- */
-export function candidatePathFor(slug: string): string {
-  return `$STUDIO_HOME/jobs/<job>/candidate/${slug === "" ? "<slug>" : slug}.tldr`;
 }

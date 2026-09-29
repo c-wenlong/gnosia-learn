@@ -372,17 +372,16 @@ function DiagramJobPanel({
         <p className={`mt-2 text-xs ${said.ok ? "text-[var(--ok-text)]" : "text-[var(--danger)]"}`}>{said.text}</p>
       )}
 
-      <div className="mt-4">
-        <PanelHeading>Facts</PanelHeading>
-        <p className="text-xs text-[var(--muted-strong)]">{job.note}</p>
-        <p className="mt-2 font-mono text-xs break-all text-[var(--muted)]">{job.candidate}</p>
-        {connection === "polling" && isActive(job.state) && (
-          <p className="mt-2 text-xs text-[var(--muted)]">
-            The event stream is not connected, so this panel is being driven by{" "}
-            <Mono>GET /api/jobs</Mono>, which is the record either way.
-          </p>
-        )}
-      </div>
+      {/* The runner's `note` and the candidate's path were printed here as
+          "Facts": the note restates the chips and, once accepted, lists the
+          names the diagram was stored under, and neither path is anything a
+          person acts on. The raw log above keeps every path for whoever needs one. */}
+      {connection === "polling" && isActive(job.state) && (
+        <p className="mt-4 text-xs text-[var(--muted)]">
+          The event stream is not connected, so this panel is being driven by{" "}
+          <Mono>GET /api/jobs</Mono>, which is the record either way.
+        </p>
+      )}
     </div>
   );
 }

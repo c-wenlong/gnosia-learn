@@ -273,16 +273,69 @@ export function chapterTitle(name: string): string {
   return words === "" ? name : words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** `why_it_matters` → `WhyItMatters`, as manimkc spells a scene class (`camel` in the runner's checkout). */
+function className(name: string): string {
+  return name
+    .split(/[-_\s]+/)
+    .filter((word) => word !== "")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join("");
+}
+
+/** A scene class, `<PREFIX><n>_<Name>`: its 1-based number and its name. */
+const CLASS_NAME = /^[A-Za-z]+(\d+)_([A-Za-z0-9]+)$/;
+
 /**
- * A scene class's chapter title. The class is `<PREFIX><n>_<Name>`, the brief
- * scene at the same index names it; with no brief, the part after the number.
+ * Where a scene class sits in play order: its place in the job's classes,
+ * else, before the view has read them, its own number when the brief's scene
+ * there has that name. -1 when neither says.
  */
-export function sceneTitle(job: Pick<VideoJob, "classes" | "brief">, scene: string): string {
-  const index = job.classes.indexOf(scene);
+function sceneIndex(job: Pick<VideoJob, "classes" | "brief">, scene: string): number {
+  const listed = job.classes.indexOf(scene);
+  if (listed >= 0) return listed;
+  const match = CLASS_NAME.exec(scene);
+  if (match === null) return -1;
+  const index = Number(match[1]) - 1;
+  const name = job.brief?.scenes[index]?.name;
+  return name !== undefined && className(name) === match[2] ? index : -1;
+}
+
+/**
+ * The stored chapter a scene became: matched by its class, else by position
+ * when the chapters carry no class and there is one per scene.
+ */
+function chapterOf(
+  job: Pick<VideoJob, "classes" | "brief">,
+  scene: string,
+  chapters: readonly VideoChapter[] | null,
+): VideoChapter | undefined {
+  if (chapters === null || chapters.length === 0) return undefined;
+  const named = chapters.find((entry) => entry.scene === scene);
+  if (named !== undefined) return named;
+  const count = job.classes.length > 0 ? job.classes.length : (job.brief?.scenes.length ?? -1);
+  const index = sceneIndex(job, scene);
+  return index >= 0 && chapters.length === count && chapters.every((entry) => entry.scene === undefined) ? chapters[index] : undefined;
+}
+
+/**
+ * A scene class's chapter title, one name per scene everywhere the view says
+ * it: the stored chapter's title once the video has chapters (the agent
+ * titles them in its scene code, and the player's bar and the library show
+ * those), else the brief's scene name at the same place, else the class's
+ * own name after its number, in words.
+ */
+export function sceneTitle(
+  job: Pick<VideoJob, "classes" | "brief">,
+  scene: string,
+  chapters: readonly VideoChapter[] | null = null,
+): string {
+  const stored = chapterOf(job, scene, chapters)?.title.trim() ?? "";
+  if (stored !== "") return stored;
+  const index = sceneIndex(job, scene);
   const name = index >= 0 ? job.brief?.scenes[index]?.name : undefined;
   if (name !== undefined) return chapterTitle(name);
-  const match = /^[A-Za-z]+\d+_(.+)$/.exec(scene);
-  return chapterTitle((match?.[1] ?? scene).replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase());
+  const match = CLASS_NAME.exec(scene);
+  return chapterTitle((match?.[2] ?? scene).replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase());
 }
 
 /* -------------------------------------------------------------------------- */
@@ -376,12 +429,17 @@ export function stepRows(job: VideoJob): StepRow[] {
   const settled = job.state === "awaiting_review" || job.state === "accepted";
   const active = furthestRunning(job.steps);
   const sentFailed = job.steps.some((step) => step.state === "failed");
+  // Running with no steps yet: the runner sends none until the job's
+  // checkout is built, and only names its phase. What it would send then is
+  // known: the brief is the storyboard, and the phase is the step under way.
+  const unsent = job.state === "running" && job.steps.length === 0;
   const rows: StepRow[] = [];
   for (const name of VIDEO_STEP_NAMES) {
     if (name === "narration" && !narrated) continue;
     const step = sent.get(name);
     let status: StepStatus;
     if (job.state === "queued") status = name === "storyboard" ? "done" : "pending";
+    else if (unsent) status = name === "storyboard" ? "done" : name === job.phase ? "current" : "pending";
     else if (step === undefined) status = "pending";
     else if (step.state !== "running") status = step.state;
     else if (name !== active) status = step.rounds > 0 ? "done" : "pending";
@@ -393,7 +451,7 @@ export function stepRows(job: VideoJob): StepRow[] {
       label: STEP_LABELS[name],
       status,
       rounds: step !== undefined && step.rounds > 1 && REPEATS.has(name) ? `Round ${step.rounds}` : null,
-      note: sentence(step?.note ?? null),
+      note: sentence(step?.note ?? (unsent && name === "narration" ? seededNote(job) : null)),
     });
     if (name === "narration" || (name === "storyboard" && !narrated)) {
       const changed = job.lineChanges.filter((change) => change.kind !== "unchanged").length;
@@ -420,6 +478,12 @@ export function stepRows(job: VideoJob): StepRow[] {
     if (next !== undefined) next.status = "failed";
   }
   return rows;
+}
+
+/** The runner's seeding as its narration step words it, before the step exists. */
+function seededNote(job: VideoJob): string | null {
+  const seeded = job.seeded ?? null;
+  return seeded === null ? null : `${seeded.seeded} of ${seeded.wanted} lines already voiced`;
 }
 
 /** The furthest step, in the skill's order, that the runner reports running. */
@@ -623,9 +687,9 @@ export interface StoryboardScene {
  * The lines are the brief's, with the runner's changes applied: a reworded or
  * split line is replaced by what was voiced, a dropped line is gone, an added
  * one is appended to its scene. The runner sends only the changes, so a line
- * with none is voiced as the brief wrote it. A chapter's title is the brief's
- * scene name, and its start comes from the chapters file matched by scene,
- * else by position.
+ * with none is voiced as the brief wrote it. A chapter's title and start come
+ * from the stored chapters matched by scene, else by position, and the title
+ * falls back to the brief's scene name (`sceneTitle`).
  */
 export function storyboard(
   job: Pick<VideoJob, "classes" | "brief" | "lineChanges">,
@@ -657,7 +721,7 @@ export function storyboard(
       chapters?.find((entry) => entry.scene === scene) ?? (chapters !== null && chapters.length === scenes.length ? chapters[index] : undefined);
     return {
       scene,
-      title: sceneTitle({ classes: job.classes, brief }, scene),
+      title: sceneTitle({ classes: job.classes, brief }, scene, chapters),
       start: chapter === undefined ? null : chapter.start,
       lines,
     };
@@ -668,11 +732,22 @@ export function storyboard(
  * One line of the making-of log, in a person's words: the runner names a
  * scene by its class (`read the sheet Aw2_ScoringAndScaling`), and the view
  * says its chapter title ("Read the sheet for Scoring and scaling").
+ *
+ * The job's classes are the list to look for, and any other word shaped like
+ * a class too: the runner's first line lists the classes as it sets them,
+ * and the view's copy of the record, read on a timer, can still have none.
  */
-export function logLine(note: string, job: Pick<VideoJob, "classes" | "brief">): string {
+export function logLine(
+  note: string,
+  job: Pick<VideoJob, "classes" | "brief">,
+  chapters: readonly VideoChapter[] | null = null,
+): string {
   let text = note.trim();
-  for (const scene of job.classes) {
-    const title = sceneTitle(job, scene);
+  // A prefix of up to four capitals (`prefixFor` in the runner), a number, a CamelCase name.
+  const shaped = text.match(/\b[A-Z][A-Za-z]{0,3}\d+_[A-Z][A-Za-z0-9]*\b/g) ?? [];
+  const scenes = [...new Set([...job.classes, ...shaped])].sort((a, b) => b.length - a.length);
+  for (const scene of scenes) {
+    const title = sceneTitle(job, scene, chapters);
     text = text
       .replaceAll(`the sheet ${scene}.sheet`, `the sheet for ${title}`)
       .replaceAll(`the sheet ${scene}`, `the sheet for ${title}`)
@@ -682,10 +757,13 @@ export function logLine(note: string, job: Pick<VideoJob, "classes" | "brief">):
 }
 
 /** The changed lines to list under the player, with their scene's title. */
-export function changedLines(job: Pick<VideoJob, "classes" | "brief" | "lineChanges">): (LineChange & { title: string })[] {
+export function changedLines(
+  job: Pick<VideoJob, "classes" | "brief" | "lineChanges">,
+  chapters: readonly VideoChapter[] | null = null,
+): (LineChange & { title: string })[] {
   return job.lineChanges
     .filter((change) => change.kind !== "unchanged")
-    .map((change) => ({ ...change, title: sceneTitle(job, change.scene) }));
+    .map((change) => ({ ...change, title: sceneTitle(job, change.scene, chapters) }));
 }
 
 /** What a change was, in a word a person reads. */
@@ -856,6 +934,19 @@ export function changeProblem(text: string): string | null {
   if (trimmed === "") return "Say what should change.";
   if (trimmed.length > CHANGE_LIMIT) return `At most ${CHANGE_LIMIT.toLocaleString("en")} characters; this is ${trimmed.length.toLocaleString("en")}.`;
   return null;
+}
+
+/**
+ * The line under the Change box: what each send does, before it is pressed.
+ * Change the picture revises the job from the agent's own source, and on a
+ * job in review sets the reviewed video aside in the same step (D52); Change
+ * what is said, offered only with a conversation, goes back to it.
+ */
+export function changeHint(reviewing: boolean, canTalk: boolean): string {
+  const picture = reviewing
+    ? "This video is set aside, and the agent reworks the picture from the source it wrote."
+    : "The agent reworks the picture from the source it wrote.";
+  return canTalk ? `${picture} Changing the words goes back to the conversation, where you approve the new script first.` : picture;
 }
 
 /** Which of Accept, Discard and Change a job offers. */
