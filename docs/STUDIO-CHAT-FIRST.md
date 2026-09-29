@@ -6,9 +6,10 @@ discard. This one carries only what changes when a person stops filling in a
 form and starts talking.
 
 **Status: phase 1 built** (#172, #173); **phase 2 built** (#175, #179) and
-measured, with three of its four "done when" parts holding and the fourth not
-recorded ([Phase 2 measured](#phase-2-measured)). Numbers marked
-*measured* were taken on this machine on 2026-09-27 against the installed CLI
+measured ([Phase 2 measured](#phase-2-measured)): the drafts part of its "done
+when" held in a narrower reading, stated there, and the other three held.
+Numbers marked *measured* were taken on this machine on 2026-09-27, or on
+2026-09-29 where a section says so, against the installed CLI
 (`claude` 2.1.274, `claude-sonnet-5`) and the installed tldrawkc build; every
 other number is a guess and says so.
 
@@ -1132,9 +1133,13 @@ the numbers are in the PR; an extend draft on `dot-product` names that
 diagram's elements in its first reply; and the gate passes on the extended
 drawing.
 
-**Held, all four parts** (below). The extend job's result was read by the
-owner after the measuring session's permission layer refused the read: the
-gate passed.
+**Held, with one part read narrowly** (below). The ten drafts reached a live
+Draw button with no form and a valid brief within one retry, but Draw was
+pressed on only one of them (twice, for the comparison); the other nine were
+not drawn, to keep the spend down. Read as "reached Draw", the part held; read
+as "was drawn", it held for one draft in ten. The other three parts held. The
+extend job's result was read by the owner after the measuring session's
+permission layer refused the read: the gate passed.
 
 #### Phase 2 measured
 
@@ -1145,7 +1150,8 @@ built from `seed/` the way `scripts/e2e.mjs` builds it (five topics in four
 domains). They were driven over HTTP with no browser and no form.
 
 **Ten drafts, first message to a brief that passes `validateBrief`.** Draw
-was not pressed on any of them.
+was pressed on one of them, twice, for the comparison below; the other nine
+stopped at a live Draw button.
 
 | # | First message (abridged) | Person turns | Questions | Retry | New topic | Brief | Cost |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1203,8 +1209,11 @@ each.**
 | Gate | passed: 14 shapes, 7 bindings, 0 lints, 4 of 4 verify checks | passed: 15 shapes (a title), 7 bindings, 0 lints, 4 of 4 verify checks |
 
 Neither run's first request read anything from the cache, so both paid their
-own write. The manual added $0.137, which is the $0.14 predicted, and saved
-no requests: the run without it made none of the source reads or refused
+own write. The run with the manual cost $0.137 more, close to the $0.14
+predicted for the manual alone, but the two runs did not do the same work: only
+it ran `verify` and looked at the PNG, and only the other ran `canvas api`. So
+$0.137 is the difference between these two runs, not an isolated cost of the
+manual. It saved no requests: the run without it made none of the source reads or refused
 commands the tailscale job made (11 of 32). This brief needs only `box` and
 `connect`, whose usage lines `canvas api` already prints. The run with the
 manual drew in one pass rather than two, added a title, and routed the return
