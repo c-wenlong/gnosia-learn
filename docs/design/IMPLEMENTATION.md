@@ -83,8 +83,17 @@ a hex value in a component.
 **Type.** `font-sans` is Figtree (next/font, self-hosted), the body default
 at 15px/1.5. `font-display` is Georgia from the system: page titles at
 28/700, concept titles at 26 to 32/700, the wordmark at 20/700. Card titles
-16/700, eyebrows 11/700 uppercase, button labels 15/600, dense rows 14,
-lesson prose 17. `font-mono` is still Geist Mono, for code.
+16/700, eyebrows and small labels 12/600 in `--text2` (`LABEL` in
+`components/ui/classes.ts`), button labels 15/600, dense rows 14, lesson
+prose 17. `font-mono` is still Geist Mono, for code.
+
+**Sentence case, everywhere.** No `uppercase`, no tracked-out label, no
+title, badge, table head or button typed in capitals; an acronym stays one.
+Until 2026-09-29 the eyebrows were 11/700 uppercase tracked and the stat
+tile strip was uppercase; the owner retired both, with every label that
+repeats what the layout, a heading or an icon already says. The rule and its
+reasons are in [DESIGN.md](DESIGN.md#sentence-case-2026-09-29) and
+AGENTS.md; `apps/web/src/lib/sentence-case.test.ts` enforces the styling.
 
 **Radius.** 20 cards, 16 panels and unit headers, 12 choice rows and
 placeholders, 8 inputs, a pill for buttons, chips, pills and search. No
@@ -117,12 +126,12 @@ Import from `@/components/ui` or from the file.
 | `Button` | `variant?: "primary" \| "secondary" \| "ghost" \| "ok" \| "warn" \| "accent" \| "brand"` (default primary), `size?: "md" \| "sm"` (44px or 36px), `block?: boolean`, `href?: string` (renders a `next/link`, plus `prefetch?`), `disabledReason?: string` (with `disabled`: why, as 12px text beside the button tied by `aria-describedby`, since a disabled button takes no focus and its `title` reaches nobody; omit it when the reason is already on screen), `className?`, and every `<button>` or `<a>` attribute. Default `type="button"`. A link has no disabled state | `Btn` |
 | `Card` | `title?: ReactNode`, `action?: ReactNode`, `tight?: boolean` (padding 14), `as?: "section" \| "div" \| "article" \| "li"`, `className?`, `id?`, `aria-label?` | `Card` |
 | `CardAction` | `href`, `children`: the "See all" link for a card's `action` slot | `Card` action |
-| `Panel` | `title?`, `actions?` (a 48px header with a hairline under it), `as?: "section" \| "div" \| "aside"`, `className?`, `bodyClassName?` | `Panel` |
+| `Panel` | `title?`, `actions?` (a 48px header with a hairline under it), `as?: "section" \| "div" \| "aside"`, `className?`, `headerClassName?` (hide the header where a tab row already names the panel), `bodyClassName?` | `Panel` |
 | `Chip` | `active?: boolean`, `size?: "md" \| "sm"` (34px or 28px), `href?` (a link), `onClick?` (a toggle with `aria-pressed`), `title?`, `className?`. Neither `href` nor `onClick` renders a static label | `Chip` |
 | `FilterMenu` | `label: string` ("Type"), `options: FilterOption[]` (`value`, `label`, `short?` for the trigger, `count?` at the right, `detail?` as a muted second line, `section?` heading), `value`, `defaultValue` (the "All" value; any other fills the trigger), `onChange(value)`, `busy?` (dims the trigger while a navigation runs), `className?`. A `Chip`-styled trigger reading "Label: Value" over an ARIA listbox: arrows, Home, End, typeahead, Enter or Space picks, Escape, Tab or a click outside closes. The first option is "All" and is how a filter is cleared. Single-select. A client component, the kit's only one; its model is the React-free `filter-menu.ts` | none (see Deviations) |
 | `Composer` | `value`, `onChange(value)`, `onSubmit(value)`, `label` (screen-reader name), `placeholder?`, `maxLength?`, `disabled?` (the field and Send), `sendDisabled?` (Send only, as while a reply arrives), `disabledReason?` (12px under the field, tied by `aria-describedby`), `autoFocus?`, `inputRef?`, `onModEnter?` (Cmd/Ctrl+Enter; sends when absent), `maxRows?` (default 6), `sendLabel?`. The chat input the concept tutor and the studio's planner share: a 52px textarea at radius 16 growing to six lines, Enter sends, Shift+Enter is a new line, and an IME's Enter is left alone. A client component; its key and height rules are the React-free `composer-keys.ts` | the tutor's input |
 | `Pill` | `dot?: string` (a CSS colour, e.g. `"var(--streak)"`), `title?`, `className?` | `Pill` |
-| `Eyebrow` | `as?: "p" \| "span" \| "h2" \| "h3" \| "div"`, `className?` | `Eyebrow` |
+| `Eyebrow` | `as?: "p" \| "span" \| "h2" \| "h3" \| "h4" \| "div"`, `className?`. 12/600 sentence case in `--text2` since 2026-09-29; only for a label the heading under it does not already say | `Eyebrow` |
 | `MasteryDot` | `bucket: MasteryBucket`, `size?: number` (px, default 14), `showLabel?: boolean`, `pL?: number \| null` (printed with the label), `className?` | `Mastery`, `MasteryLabel` |
 | `ProgressBar` | `percent?: number` (0 to 100) or `progress?: ProgressCounts`, `showLabel?` (defaults on only with `progress`), `size?: "md" \| "sm"` (8px or 6px), `tone?: "accent" \| "ok" \| "hi" \| "mid"` (`hi` and `mid` are the mastered and learning colours), `label?` (accessible name), `className?`. Full width of its container: size it with a wrapper, not `className` (see Gotchas) | `Bar` |
 | `TargetBar` | `done: number`, `total: number`, `label?`, `className?`: a 20px track with "x / y" beside it | `TargetBar` |
@@ -331,7 +340,7 @@ What 1c shipped, and the contract 1d (session focus mode) builds on.
 | [`@/lib/concept-workspace`](../../apps/web/src/lib/concept-workspace.ts) | Server. `readConceptWorkspace(slug)` (and `loadConceptWorkspace` for pages) does the reads: the knowledge base, the note, the event log, the review card, the asset links. The page, `GET /api/concepts/[slug]` and the tutor all go through it |
 | [`@/lib/concept-graph`](../../apps/web/src/lib/concept-graph.ts) | Pure. `neighbourhood`, `courseScope` (course, or the note's folder when it is in no course, with the transitive reduction applied), `dependantsOf`, `backlinksOf`, `defaultSelection`, `layoutGraph` |
 | [`ConceptGraph`](../../apps/web/src/components/ConceptGraph.tsx) | The graph drawing, rewritten: mastery-bucket dots, prerequisites above, the selected concept ringed, its own edges in the accent. Nodes are links (`hrefFor`, server) or buttons (`onSelect`, client) |
-| [`Cite`](../../apps/web/src/components/ui/Cite.tsx), [`TutorMessage`, `UserMessage`](../../apps/web/src/components/ui/Message.tsx) | The kit's citation chip and chat turns, server-safe, imported from their files |
+| [`Cite`](../../apps/web/src/components/ui/Cite.tsx), [`TutorMessage`, `UserMessage`](../../apps/web/src/components/ui/Message.tsx) | The kit's citation chip and chat turns, server-safe, imported from their files. `TutorMessage`'s `label` ("Tutor", "Planner") names the turn for a screen reader only; the visible eyebrow over each reply went on 2026-09-29, since the turn's shape already says who is speaking |
 
 **Backlinks** are the concepts whose `requires` or `assumes` names this one;
 **dependants** ("Leads to") are the `requires` half only. **Check status** in
@@ -580,13 +589,14 @@ in that session.
 | Where | Hi-fi | Built | Why |
 | --- | --- | --- | --- |
 | Library filter row | six kind chips and three course chips on one line | a Type menu and a Course menu, then the sort and the search on the right; the companion kinds (captions, chapters, diagram source, transcript) are a "Companion files" section at the foot of the Type menu, and the count line says how many rows All kinds leaves out | ten courses and four companion kinds did not fit one line; the companion kinds are values of the same `?kind=`, so a second control for them would disagree with the Type trigger whenever one was chosen |
+| Library card | a "video" label in the empty thumbnail, a lowercase kind chip, "concept note" on the meta line | an empty thumbnail box, the kind chip in sentence case ("Note"), and the meta line without "concept note"; "svg" is "SVG"; a note whose concept is itself shows the mastery label instead of its title a second time | the kind was printed up to three times on one card (2026-09-29) |
 | Library course options | "CP4281" | the course code, with its title as a muted second line and its asset count at the right | the title was a tooltip on the old chips; in a list it has room to be read |
 | Library count | "208 assets" | the standalone count (135), or "12 of 135 assets" once anything is filtered | the other 71 rows are companion files the default view leaves out |
 | Library card meta | "4:12 · manim" | the tool and the size ("manim · 9.6 MB") | the catalog records no duration |
 | Library card concept | a concept with a mastery dot on every card | the first concept from `asset_concept` with its dot and "+n" for more; with none, the asset's topic in plain text and no dot | only notes, sessions and the two diagrams have `asset_concept` rows; no video does yet |
 | Library grid | fixed 300px cards | an auto-fill grid, 280px minimum | four across at 1392px and one on a phone |
 | Library search | DESIGN.md's API table proposed a search endpoint | the page's own `?q=`, searched on the server during render; no JSON endpoint | the library is the only caller today; phase 1c's Learn search can lift `searchHits` and `readSearchText` behind a route when it needs one |
-| Asset page eyebrow | "RENDERED 2026-09-12" | "INDEXED" and the day the row entered the catalog | the catalog knows when it indexed a file, not when manimkc rendered it |
+| Asset page eyebrow | "RENDERED 2026-09-12" | "indexed" and the day the row entered the catalog | the catalog knows when it indexed a file, not when manimkc rendered it |
 | Asset page Mark watched | on a video | "Mark read" on anything that is not a video; a video has no button and records itself | one `watched` event kind either way; a video appends it once 90% of it has played (`POST /api/learner/playback`), since a button asked the reader to report something the player already knew |
 | Asset page Add to note | always drawn | drawn only when the asset explains a concept, linking to that concept's workspace | with no concept there is no note to add to |
 | Asset page Explains | always two rows | "No concept is linked to this asset yet." when there are none; "not started" in place of p(L) for a concept with no evidence | a prior is not a measurement |

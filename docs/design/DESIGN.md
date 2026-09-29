@@ -255,7 +255,7 @@ the habit layer.
 | Primary button | Brilliant button3d | pill, 44px face over a 4px same-hue lip, black face in light and `#e5e5e5` in dark | no hover in the reference (Safari-only tint), ours is left for implementation |
 | Secondary button, input, search | Brilliant flat button and form input | 2px border, pill for buttons and search, radius 8 for inputs | height 44 instead of 48 and 52 |
 | Top bar, stat pills | Brilliant app header | selected tab in text colour with a 2px underline, stat pills at pill radius with 2px border | pills carry the streak and target instead of keys and Premium |
-| Eyebrow labels | Brilliant badge | 11px, 700, uppercase, tracked | used as section labels, not badges |
+| Eyebrow labels | Brilliant badge | 11px, 700, uppercase, tracked | used as section labels, not badges. Since 2026-09-29: 12px, 600, sentence case, no tracking, `--text2`, and only where the label says something the heading does not (see [Sentence case](#sentence-case-2026-09-29)) |
 | Workspace shell | NotebookLM | three panels on the page colour, radius 16, no border, 16px gutter, side panels about 290px, 48px panel header with a hairline | our side panels are 290 and 310 at 1440 wide |
 | Chat | NotebookLM | user bubble tinted with radius 20, tutor prose bare, citation as a numbered circle | the circle grows into a short pill holding the source and locator |
 | Filter and suggestion chips | NotebookLM choice chip | pill, 1px border, accent fill when selected | 34px tall instead of 40 |
@@ -265,7 +265,7 @@ the habit layer.
 | Target bar | Duolingo goal bar | 20px track at radius 10 with the "x / y" label | label beside the bar; accent fill, not gold |
 | Feedback footer | Duolingo lesson footer | tinted bar, icon circle, title, ghost actions, coloured 3D continue | Brilliant's green and yellow, since our "not quite" is not red |
 | Choice rows | Duolingo choice row | 56px row with a keyboard-number badge, tinted when selected, recoloured when graded | Brilliant tokens for the colours |
-| Stat tiles | Duolingo lesson-complete cards | coloured frame, uppercase strip, value box | one colour per metric: green, accent, purple, orange |
+| Stat tiles | Duolingo lesson-complete cards | coloured frame, uppercase strip, value box | one colour per metric: green, accent, purple, orange; the strip is sentence case since 2026-09-29 |
 | Rating row, mastery dot, step bar, table | none | designed here from the palette; the extracts confirm no reference has them | |
 
 ### Hi-fi tokens
@@ -293,11 +293,44 @@ dark". "derived" means a value we made from a reference one.
 | lip_shade | `#D4D4D4` | `#0F0F0F` | derived: the lip under an untouched path node, after Duolingo's black at 20% |
 
 Type: Figtree 15/400 body (14 in dense rows, 17 in lesson prose), 16/700
-card titles, 11/700 uppercase tracked eyebrows, 15/600 button labels;
+card titles, 11/700 uppercase tracked eyebrows (12/600 sentence case
+since 2026-09-29, below), 15/600 button labels;
 Georgia 26 to 32/700 for page and concept titles. Radius: 20 cards, 16
 panels and unit headers, 12 choice rows, pill for buttons, chips, pills and
 search, 8 inputs. Borders: 2px on cards, inputs and secondary buttons, 1px
 hairlines. No shadows on any surface.
+
+### Sentence case (2026-09-29)
+
+The owner's call, after the studio's New diagram panel showed an uppercase
+"PLANNER" over the planner's first message: no all-caps anywhere in the
+interface, and no label that says what the layout, a heading, an icon or the
+content already says. The hi-fi above is left as drawn, since it is the
+record of what was designed; this is what changed on top of it.
+
+- **Eyebrows and small labels** are 12/600, sentence case, no
+  letter-spacing, in `--text2` (`LABEL` in
+  `apps/web/src/components/ui/classes.ts`). The capitals were what made the
+  old 11/700 label read as a label, so it moves from `--text3`, a hint
+  colour, to `--text2`, which clears 4.5:1 on every surface.
+- **Stat tiles** keep the coloured strip; its text is sentence case ("Next
+  due", not "NEXT DUE").
+- **Table heads, filter-menu sections and the theme menu's heading** are
+  sentence case too; the same rule covers every page, not only the public
+  ones BRAND.md already covered.
+- **A chat has no speaker label.** Two parties are told apart by shape (bare
+  prose against a tinted bubble), so a "Tutor" or "Planner" line over each
+  reply only repeated it. ChatGPT, Claude and NotebookLM print none either.
+  A chat with three or more voices would need one; there is none today.
+- **A label that repeats the page goes.** A recall card's "Recall ·
+  Transformer block" over "Recall: Transformer block"; the library card's
+  kind printed three times (in the empty thumbnail, on the chip, and as
+  "concept note"); a note card's concept line that was its own title again;
+  the workspace panel header under the phone tab that just opened it.
+
+The list of every label removed or restyled is in the pull request that made
+the change. `apps/web/src/lib/sentence-case.test.ts` fails the build of an
+`uppercase` class, wide tracking, or JSX text typed in capitals.
 
 ### What the references could not give us
 

@@ -470,6 +470,24 @@ not have to be worked out again.
   defines would leak its light value into the dark palette. Both system modes
   are resolved by an inline script in the root layout, not by CSS, so
   `matchMedia` is the only place `prefers-color-scheme` is read.
+- **Sentence case, and no label that repeats the page.** The owner's call
+  on 2026-09-29, after the studio's New diagram panel printed an uppercase
+  "PLANNER" over the planner's first message. Nothing in the interface is
+  all-caps: titles, eyebrows, labels, badges, table heads and buttons are
+  sentence case, with no `uppercase` class and no tracked-out letters (an
+  acronym such as SVG stays one). A small label is `LABEL` in
+  `apps/web/src/components/ui/classes.ts`, or `Eyebrow`, which renders it.
+  And a label that says what the layout, a heading, an icon or the content
+  already says is left out: a two-party chat has no speaker label, because
+  the turn's shape says who is talking (`TutorMessage`'s `label` is for a
+  screen reader only); an eyebrow does not restate the heading under it; a
+  card does not name its kind twice. A new label has to carry something the
+  reader cannot get otherwise, such as a metric's name, a form field, a
+  status or a place; a one-off convention nobody else uses (a mono caps
+  kicker, internal jargon) does not count. The contract is
+  [docs/design/DESIGN.md](docs/design/DESIGN.md#sentence-case-2026-09-29), and
+  `apps/web/src/lib/sentence-case.test.ts` fails the build of an `uppercase`
+  class, wide tracking, or JSX text typed in capitals.
 - **The OG image is declared by hand in `apps/web/src/app/layout.tsx`.** Next 16 builds
   with Turbopack, which ignores the documented `app/opengraph-image.alt.txt`
   sidecar, so the file convention would ship a social card with no alt text.
