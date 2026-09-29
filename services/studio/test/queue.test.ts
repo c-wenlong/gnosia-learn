@@ -468,6 +468,70 @@ describe("a claim the catalog refuses", () => {
   });
 });
 
+describe("a kick while a job's enqueue has not answered", () => {
+  /*
+   * The record is on disk and in the store before `catalog job enqueue` is
+   * asked, so the queue can see it before the catalog has its row. Another
+   * job finishing kicks the queue at any moment; if that kick started this
+   * one, its claim was refused (there is no row yet) and the local record
+   * failed, while the row then landed `queued` and held the slug's lease
+   * against the next press. The stand-in catalog answers the enqueue when the
+   * test says so, and refuses a claim of a row it has not written, as the
+   * real one does.
+   */
+  let rows: Set<string>;
+  let answer: ((result: typeof ok | { ok: false; json: null; error: string; offline: boolean }) => void) | null;
+
+  beforeEach(() => {
+    rows = new Set();
+    answer = null;
+    catalogMock.jobEnqueue.mockImplementation(async (briefFile: string) => {
+      const { id } = JSON.parse(await readFile(briefFile, "utf8")) as { id: string };
+      const result = await new Promise<{ ok: boolean }>((resolve) => {
+        answer = resolve;
+      });
+      if (result.ok) rows.add(id);
+      return result;
+    });
+    catalogMock.jobClaim.mockImplementation(async (id: string) =>
+      rows.has(id) ? ok : { ok: false, json: null, error: `no job ${id} is queued`, offline: false },
+    );
+  });
+
+  it("does not start the job before the catalog has its row, and runs it once it does", async () => {
+    const enqueued = runner.enqueue(await brief());
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    // What another job finishing does. `kick` registers a job it starts before
+    // its first await, so `busy` read straight after it is the answer.
+    void runner.kick();
+    expect(runner.busy).toBe(0);
+
+    answer!(ok);
+    const { record } = await enqueued;
+    await runner.settled(record.id);
+
+    expect(catalogMock.jobClaim).toHaveBeenCalledTimes(1);
+    expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
+    expect(store.get(record.id)?.state).toBe("awaiting_review");
+  });
+
+  it("forgets a job the catalog refused without ever having started it", async () => {
+    const enqueued = runner.enqueue(await brief()).catch((error: unknown) => error);
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    void runner.kick();
+    expect(runner.busy).toBe(0);
+
+    answer!({ ok: false, json: null, error: `the lease on ${targetPath(SLUG)} is already held by job y`, offline: false });
+    expect(await enqueued).toBeInstanceOf(JobRefused);
+
+    // Nothing ran under the record the refusal forgot.
+    expect(store.list()).toHaveLength(0);
+    expect(runner.busy).toBe(0);
+    expect(catalogMock.sessionStart).not.toHaveBeenCalled();
+    expect(catalogMock.jobClaim).not.toHaveBeenCalled();
+  });
+});
+
 describe("the job ceiling", () => {
   beforeEach(() => {
     agentMock.startAgent.mockReset();

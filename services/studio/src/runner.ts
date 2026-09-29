@@ -152,6 +152,14 @@ export class Runner {
   private readonly settledJobs = new Map<string, Promise<void>>();
   /** Enqueues between their idempotency check and their record, by key. See `enqueue`. */
   private readonly enqueuing = new Map<string, Promise<{ record: JobRecord; created: boolean; jobsAhead: number }>>();
+  /**
+   * Jobs in the store whose `catalog job enqueue` has not answered yet, which
+   * `kick` passes over. The record is created first (rule 7), so without this
+   * a kick from another job finishing could start one before its row existed:
+   * the claim was refused, the local record failed, and the row then landed
+   * `queued`, holding the slug's lease against every later press.
+   */
+  private readonly unanswered = new Set<string>();
   private draining = false;
   /**
    * Whether a canvas is open on a diagram, by its logical name. Set by
@@ -492,6 +500,22 @@ export class Runner {
       indexed: false,
       catalogErrors: [],
     };
+    // Before `create`, which puts the record in the store before its write
+    // does, so there is no moment a kick can see it and not this.
+    this.unanswered.add(id);
+    try {
+      await this.recordAndEnqueue(record, brief, options);
+    } finally {
+      this.unanswered.delete(id);
+    }
+
+    void this.kick();
+    return { record, created: true, jobsAhead: Math.max(0, this.queued().length - 1) };
+  }
+
+  /** Write the record, then ask the catalog for its row: the window `unanswered` covers. */
+  private async recordAndEnqueue(record: JobRecord, brief: ValidBrief, options: { draftId?: string | null }): Promise<void> {
+    const { id, targetPath: target } = record;
     await this.store.create(record);
 
     const briefFile = path.join(jobDir(id), "brief.json");
@@ -538,9 +562,6 @@ export class Runner {
       // The row is reconciled from `job.json` when the database is back.
       await this.store.noteCatalogError(id, enqueued.error ?? "");
     }
-
-    void this.kick();
-    return { record, created: true, jobsAhead: Math.max(0, this.queued().length - 1) };
   }
 
   /* ------------------------------------------------------------------ */
@@ -639,7 +660,7 @@ export class Runner {
   async kick(): Promise<void> {
     if (this.draining) return;
     while (this.running.size < CONCURRENCY) {
-      const next = this.queued().find((record) => !this.running.has(record.id));
+      const next = this.queued().find((record) => !this.running.has(record.id) && !this.unanswered.has(record.id));
       if (next === undefined) return;
       // Registered before the first await, so a second kick cannot claim it.
       const entry: Running = {

@@ -106,6 +106,8 @@ export class VideoRunner {
   private readonly running = new Map<string, Running>();
   private readonly settledJobs = new Map<string, Promise<void>>();
   private readonly enqueuing = new Map<string, Promise<{ record: VideoJobRecord; created: boolean; jobsAhead: number }>>();
+  /** Jobs whose `catalog job enqueue` has not answered, which `kick` passes over: the diagram runner's `unanswered` says why. */
+  private readonly unanswered = new Set<string>();
   private draining = false;
 
   constructor(store: VideoStore, deps: VideoRunnerDeps) {
@@ -309,6 +311,34 @@ export class VideoRunner {
       indexed: false,
       catalogErrors: [],
     };
+    // Before `create`, which puts the record in the store before its write does.
+    this.unanswered.add(id);
+    try {
+      await this.recordAndEnqueue(record, brief, parent, options);
+    } finally {
+      this.unanswered.delete(id);
+    }
+    if (parent?.discard === true) {
+      const previous = this.store.get(parent.jobId);
+      if (previous !== undefined) {
+        // `replacedBy` rides on the state change itself, so whoever follows
+        // the parent (its draft) reads a replacement, not a verdict.
+        await this.store.update(parent.jobId, { state: "discarded", reviewedAt: new Date().toISOString(), replacedBy: id });
+        await this.cleanup(previous, { candidate: true });
+      }
+    }
+    void this.kick();
+    return { record, created: true, jobsAhead: Math.max(0, this.queued().length - 1) };
+  }
+
+  /** Write the record, then ask the catalog for its row: the window `unanswered` covers. */
+  private async recordAndEnqueue(
+    record: VideoJobRecord,
+    brief: ValidVideoBrief,
+    parent: VideoParent | undefined,
+    options: { draftId?: string | null },
+  ): Promise<void> {
+    const { id, targetPath: target } = record;
     await mkdir(jobDir(id), { recursive: true });
     await this.store.create(record);
     const briefFile = path.join(jobDir(id), "brief.json");
@@ -354,17 +384,6 @@ export class VideoRunner {
       );
     }
     if (!enqueued.ok) await this.store.noteCatalogError(id, enqueued.error ?? "");
-    if (parent?.discard === true) {
-      const previous = this.store.get(parent.jobId);
-      if (previous !== undefined) {
-        // `replacedBy` rides on the state change itself, so whoever follows
-        // the parent (its draft) reads a replacement, not a verdict.
-        await this.store.update(parent.jobId, { state: "discarded", reviewedAt: new Date().toISOString(), replacedBy: id });
-        await this.cleanup(previous, { candidate: true });
-      }
-    }
-    void this.kick();
-    return { record, created: true, jobsAhead: Math.max(0, this.queued().length - 1) };
   }
 
   private queued(): VideoJobRecord[] {
@@ -374,7 +393,7 @@ export class VideoRunner {
   async kick(): Promise<void> {
     if (this.draining) return;
     while (this.running.size < VIDEO_CONCURRENCY) {
-      const next = this.queued().find((record) => !this.running.has(record.id));
+      const next = this.queued().find((record) => !this.running.has(record.id) && !this.unanswered.has(record.id));
       if (next === undefined) return;
       const entry: Running = {
         record: next,
