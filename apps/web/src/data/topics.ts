@@ -32,29 +32,16 @@ export function topicDomainMap(topics: readonly TopicEntry[]): ReadonlyMap<strin
 export interface TopicOption {
   slug: string;
   title: string;
-  domain: string;
-  /** `maps.concepts`, which is what the brief's concept picker may offer. */
-  concepts: string[];
 }
 
 /**
  * The vocabulary as a client component can hold it.
  *
- * The brief form is a client component and this module is `server-only`, so
- * the combobox cannot import it: what crosses is this array, serialised as a
- * prop. Only the four fields a picker needs, because a prop is bytes in the
- * page and the summaries and aliases are not on that screen.
- *
- * The concepts come with it for the same reason the runner checks them: a
- * concept that is not filed under the chosen topic would be dropped from the
- * asset row after the diagram was drawn, so the form offers the topic's own and
- * nothing else.
+ * The studio's conversation is a client component and this module is
+ * `server-only`, so the confirm card cannot import it: what crosses is this
+ * array, serialised as a prop. Only the slug and the title the card shows,
+ * because a prop is bytes in the page.
  */
 export function topicOptionsOf(topics: readonly TopicEntry[]): TopicOption[] {
-  return topics.map((topic) => ({
-    slug: topic.slug,
-    title: topic.title,
-    domain: topic.domain,
-    concepts: topic.maps.concepts,
-  }));
+  return topics.map((topic) => ({ slug: topic.slug, title: topic.title }));
 }

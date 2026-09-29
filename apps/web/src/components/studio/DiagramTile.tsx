@@ -32,11 +32,14 @@ import {
 export function DiagramTile({
   diagram,
   selectHref,
+  extendHref,
   selected,
   showConcepts,
 }: {
   diagram: Diagram;
   selectHref: string;
+  /** Where Extend goes: this view with a conversation opening on the diagram. */
+  extendHref: string;
   selected: boolean;
   showConcepts: boolean;
 }) {
@@ -78,17 +81,25 @@ export function DiagramTile({
           )}
         </div>
       </Link>
-      {/* Selecting fills the panel; opening goes to the canvas. Two targets,
-          because a grid where one click does both has no way to browse. */}
-      <Link
-        href={canvasHref(diagram.name)}
-        className="absolute right-2 top-2 hidden h-8 items-center rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-2 text-xs font-medium text-[var(--foreground)] shadow-sm group-hover:flex focus-visible:flex"
-      >
-        Open canvas
-      </Link>
+      {/* Selecting opens the tile's panel; the two controls here go straight
+          to the canvas, or to a conversation about extending the diagram.
+          Separate targets, because a grid where one click does everything has
+          no way to browse. Shown on hover, and on keyboard focus anywhere in
+          the tile, so Tab reaches them; invisible controls take no clicks. */}
+      <div className="pointer-events-none absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 motion-reduce:transition-none">
+        <Link href={canvasHref(diagram.name)} className={HOVER_CONTROL}>
+          Open canvas
+        </Link>
+        <Link href={extendHref} scroll={false} className={HOVER_CONTROL}>
+          Extend
+        </Link>
+      </div>
     </div>
   );
 }
+
+const HOVER_CONTROL =
+  "flex h-8 items-center rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-2 text-xs font-medium text-[var(--foreground)] shadow-sm hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]";
 
 /**
  * The exported SVG, or what to do about there not being one.

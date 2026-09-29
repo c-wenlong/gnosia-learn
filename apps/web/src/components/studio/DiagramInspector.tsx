@@ -3,6 +3,7 @@ import Link from "next/link";
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
 import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Button as KitButton } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/classes";
 import {
   canvasHref,
   displayTitle,
@@ -88,18 +89,38 @@ function DirectoryFacts({ listing }: { listing: DiagramListing }) {
 
 /**
  * One diagram's panel inside the studio's dialog: the same content as the
- * inspector, with Open canvas pinned at the foot (docs/STUDIO-CHAT-FIRST.md,
- * "The plus card and the panel"). Extend joins it in phase 2.
+ * inspector, with Extend and Open canvas pinned at the foot
+ * (docs/STUDIO-CHAT-FIRST.md, "The plus card and the panel"). Extend is the
+ * primary one: asking for a change is what the studio is for, and editing by
+ * hand is the way around it.
  */
-export function DiagramPanelBody({ diagram, jobs, path }: { diagram: Diagram; jobs: JobRow[]; path: string }) {
+export function DiagramPanelBody({
+  diagram,
+  jobs,
+  path,
+  extendHref,
+}: {
+  diagram: Diagram;
+  jobs: JobRow[];
+  path: string;
+  /** Where Extend goes: a conversation opening on this diagram. */
+  extendHref: string;
+}) {
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <SelectedDiagram diagram={diagram} jobs={jobs} path={path} embedded />
       </div>
-      <div className="flex shrink-0 items-center gap-3 border-t border-hair px-5 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
-        <KitButton href={canvasHref(diagram.name)}>Open canvas</KitButton>
-        <span className="min-w-0 text-[12px] text-text3">Edit it by hand on a live tldraw canvas.</span>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-hair px-5 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+        <Link href={extendHref} scroll={false} className={buttonClasses({})}>
+          Extend
+        </Link>
+        <KitButton href={canvasHref(diagram.name)} variant="secondary">
+          Open canvas
+        </KitButton>
+        <span className="min-w-0 flex-1 basis-48 text-[12px] text-text3">
+          Tell the planner what to add, or edit it by hand on a live canvas.
+        </span>
       </div>
     </>
   );
@@ -237,7 +258,7 @@ function SelectedDiagram({
                 {/* Each row opens that job in this panel: the history is a way
                     back into a job, not a list of dates. */}
                 <Link
-                  href={panelHref(path, { job: job.jobId, brief: null, selected: embedded ? null : undefined })}
+                  href={panelHref(path, { job: job.jobId, selected: embedded ? null : undefined })}
                   scroll={false}
                   className="flex h-8 items-center gap-2 rounded-md px-1 text-xs hover:bg-[var(--surface-hover)]"
                 >

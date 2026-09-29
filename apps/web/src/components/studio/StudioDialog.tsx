@@ -10,8 +10,8 @@ import { cx } from "@/components/ui/classes";
  * over the dimmed grid (D31, D37 of docs/STUDIO-CHAT-FIRST.md).
  *
  * It holds whichever of four things the URL names: a conversation
- * (`?draft=`), a job (`?job=`), the brief form (`?new=`) or a tile's panel
- * (`?sel=`). The URL is the state, as it is for everything else on `/studio`,
+ * (`?draft=`), an Extend press becoming one (`?extend=`), a job (`?job=`) or
+ * a tile's panel (`?sel=`). The URL is the state, as it is for everything else on `/studio`,
  * so closing is a navigation that drops those parameters, and a reload with
  * one of them comes straight back here.
  *

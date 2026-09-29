@@ -35,7 +35,7 @@ export function useStartDraft(path: string): {
       return;
     }
     router.push(
-      panelHref(path, { draft: result.data.draftId, job: null, brief: null, selected: null, shot: null }),
+      panelHref(path, { draft: result.data.draftId, job: null, extend: null, selected: null, shot: null }),
       { scroll: false },
     );
     setBusy(false);

@@ -21,7 +21,7 @@ import {
   type PhaseRow,
   type StudioEvent,
 } from "@/lib/studio-jobs";
-import { panelHref } from "@/lib/studio-view";
+import { conversationHref, panelHref } from "@/lib/studio-view";
 
 /**
  * The right panel while a job is happening, and after it stops.
@@ -42,9 +42,15 @@ export function JobPanel({
   jobId,
   path,
   embedded = false,
+  inConversation = false,
 }: {
   jobId: string;
   path: string;
+  /**
+   * Shown under the conversation's own "From your conversation" bar, which
+   * already leads back to it: the failure panel does not offer it twice.
+   */
+  inConversation?: boolean;
   /**
    * Inside the studio's panel, which carries the title and Close in its own
    * header and is 720px wide rather than 320px: the same parts, more room.
@@ -101,7 +107,7 @@ export function JobPanel({
     // behind it.
     const next = typeof result.data.jobId === "string" ? result.data.jobId : null;
     if (result.ok && next !== null && next !== jobId) {
-      router.push(panelHref(path, { job: next, brief: null }), { scroll: false });
+      router.push(panelHref(path, { job: next }), { scroll: false });
       router.refresh();
     }
   };
@@ -241,18 +247,18 @@ export function JobPanel({
             disabled={busy}
             onDone={(text, ok) => setSaid({ ok, text })}
             onQueued={(next) => {
-              router.push(panelHref(path, { job: next, brief: null }), { scroll: false });
+              router.push(panelHref(path, { job: next }), { scroll: false });
               router.refresh();
             }}
           />
         )}
-        {report?.actions.includes("edit") === true && (
+        {report?.actions.includes("talk") === true && typeof job.draftId === "string" && !inConversation && (
           <Link
-            href={panelHref(path, { brief: job.jobId, job: null })}
+            href={conversationHref(path, job.draftId)}
             scroll={false}
             className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium hover:bg-[var(--surface-hover)]"
           >
-            Edit brief
+            Tell the planner what to change
           </Link>
         )}
         {report?.actions.includes("doctor") === true && (

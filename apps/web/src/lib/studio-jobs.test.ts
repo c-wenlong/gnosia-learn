@@ -4,11 +4,7 @@ import {
   activeJob,
   announcement,
   candidatePathFor,
-  draftErrors,
-  draftFromBrief,
-  draftToBrief,
   elapsedMs,
-  emptyDraft,
   failureFooter,
   failureReport,
   finishedHeadline,
@@ -18,10 +14,7 @@ import {
   narration,
   PHASES,
   phaseRows,
-  refusalReport,
-  slugFromTitle,
   stepLabel,
-  type Brief,
   type GateResult,
   type GateStep,
   type Job,
@@ -274,7 +267,7 @@ describe("what a failure says", () => {
     expect(report.code).toBe(2);
     expect(report.headline).toBe("the snippet threw");
     expect(report.detail).toContain("snippet:4");
-    expect(report.actions).toEqual(["retry", "edit"]);
+    expect(report.actions).toEqual(["retry", "talk"]);
   });
 
   it("offers doctor on exit 1, because the message is the only thing that says why", () => {
@@ -392,172 +385,10 @@ describe("what is said when nobody is looking", () => {
   });
 });
 
-describe("the brief a form fills in", () => {
-  const filled = () => ({
-    ...emptyDraft(),
-    intent: "show how a projection falls out of the dot product",
-    topic: "vector-and-linear-algebra-basics",
-    slug: "dot-product-projection",
-    title: "Dot product projection",
-    elements: [
-      { label: "vector a", note: "the one being projected" },
-      { label: "vector b", note: "" },
-    ],
-  });
-
-  it("asks for every required field rather than posting a brief to be guessed at", () => {
-    const errors = draftErrors(emptyDraft());
-    expect(Object.keys(errors).sort()).toEqual(["elements", "intent", "slug", "title", "topic"]);
-  });
-
-  it("accepts a complete one", () => {
-    expect(draftErrors(filled())).toEqual({});
-  });
-
-  it.each(["Dot Product", "dot_product", "dot--product", "dot-product-"])(
-    "refuses %j as a slug, because it is a file name",
-    (slug) => {
-      expect(draftErrors({ ...filled(), slug }).slug).toBeDefined();
-    },
-  );
-
-  it("refuses two elements with the same label, since a relation names its ends by label", () => {
-    const draft = filled();
-    draft.elements = [
-      { label: "vector a", note: "" },
-      { label: "vector a", note: "" },
-    ];
-    expect(draftErrors(draft).elements).toContain("share a label");
-  });
-
-  it("refuses an arrow whose end is not an element", () => {
-    const draft = filled();
-    draft.relations = [{ from: "vector a", to: "vector c", label: "" }];
-    expect(draftErrors(draft)["relations.0"]).toBeDefined();
-  });
-
-  it("posts a structured brief, dropping the empty optionals rather than sending blanks", () => {
-    const brief = draftToBrief(filled(), "key-1");
-    expect(brief).toMatchObject({
-      intent: "show how a projection falls out of the dot product",
-      topic: "vector-and-linear-algebra-basics",
-      slug: "dot-product-projection",
-      mode: "new",
-      model: "sonnet",
-      relations: [],
-      idempotencyKey: "key-1",
-    });
-    expect(brief.elements).toEqual([
-      { label: "vector a", note: "the one being projected" },
-      { label: "vector b" },
-    ]);
-    expect("layout" in brief).toBe(false);
-    expect("mermaid" in brief).toBe(false);
-    expect("notes" in brief).toBe(false);
-  });
-
-  it("keeps the mermaid source as a field, which is the only way it reaches the runner", () => {
-    // A5: it is written to the job's scratch directory and lifted with
-    // `from-mermaid --source`. A form that pasted it into any text would be a
-    // second path around the one structural defence the design has.
-    const draft = { ...filled(), mermaid: "flowchart LR\n  a --> b" };
-    expect(draftToBrief(draft, "k").mermaid).toBe("flowchart LR\n  a --> b");
-  });
-
-  it("drops a relation whose ends stopped being elements, rather than posting a broken one", () => {
-    const draft = filled();
-    draft.relations = [{ from: "vector a", to: "gone", label: "projects onto" }];
-    expect(draftToBrief(draft, "k").relations).toEqual([]);
-  });
-
-  it("round-trips a brief into a draft, which is what Edit brief does", () => {
-    const brief: Brief = {
-      intent: "i",
-      topic: "t",
-      slug: "s",
-      title: "T",
-      mode: "extend",
-      elements: [{ label: "one" }],
-      relations: [{ from: "one", to: "one" }],
-      concepts: ["c"],
-      model: "opus",
-    };
-    const draft = draftFromBrief(brief);
-    expect(draft.mode).toBe("extend");
-    expect(draft.model).toBe("opus");
-    expect(draft.elements).toEqual([{ label: "one", note: "" }]);
-    expect(draft.relations).toEqual([{ from: "one", to: "one", label: "" }]);
-  });
-
+describe("where a job draws", () => {
   it("names the job's own workspace as where the result will be written, not the repository", () => {
     expect(candidatePathFor("dot-product")).toBe("$STUDIO_HOME/jobs/<job>/candidate/dot-product.tldr");
     expect(candidatePathFor("dot-product")).not.toContain("learn/assets");
     expect(candidatePathFor("")).toContain("<slug>");
-  });
-
-  it.each([
-    ["Dot product projection", "dot-product-projection"],
-    ["  Gram–Schmidt, step 1  ", "gram-schmidt-step-1"],
-  ])("suggests a slug from %j", (title, expected) => {
-    expect(slugFromTitle(title)).toBe(expected);
-  });
-});
-
-describe("a refused enqueue", () => {
-  /** The 429 body the runner sends, as `refuseOverCap` builds it. */
-  const capBody = {
-    error:
-      "the studio has spent $0.52 in the last 24 hours, which is at or over the $0.50 " +
-      "STUDIO_DAILY_USD cap. Nothing was queued.",
-    detail: {
-      reason: "daily-cap",
-      totalUsd: 0.5231,
-      capUsd: 0.5,
-      jobs: 4,
-      windowHours: 24,
-      oldestCountedAt: "2026-09-21T22:00:00.000Z",
-      oldestAgesOutAt: "2026-09-22T22:00:00.000Z",
-    },
-  };
-
-  it("offers no action at all on the daily cap", () => {
-    const report = refusalReport(429, capBody);
-    expect(report.code).toBe("daily-cap");
-    // Retrying is the one thing that is certainly wrong: the answer does not
-    // change until the window moves or a person raises the number, and this
-    // screen can do neither.
-    expect(report.actions).toEqual([]);
-  });
-
-  it("says what was spent against what", () => {
-    const report = refusalReport(429, capBody);
-    expect(report.headline).toBe("$0.52 of the $0.50 daily cap is spent");
-    expect(report.detail).toContain("Nothing was queued");
-  });
-
-  it("tells a conversation's own 409 from a held target", () => {
-    const busy = refusalReport(409, { error: "draft d1 is open", detail: { reason: "not-briefed", state: "open" } });
-    expect(busy.code).toBe("draft-busy");
-    expect(busy.detail).toBe("draft d1 is open");
-    expect(refusalReport(409, { error: "x", detail: { reason: "in-flight" } }).headline).toMatch(/still answering/);
-    expect(refusalReport(409, { error: "x", detail: { reason: "draw-in-progress" } }).headline).toMatch(/just pressed/);
-    expect(refusalReport(409, { error: "held", detail: { holder: "j1" } }).code).toBe("target-held");
-  });
-
-  it("falls back to the runner's own sentence when the body carries no figures", () => {
-    const report = refusalReport(429, { error: "over the cap" });
-    expect(report.code).toBe("daily-cap");
-    expect(report.headline).toBe("the daily spend cap is reached");
-    expect(report.detail).toBe("over the cap");
-    expect(report.actions).toEqual([]);
-  });
-
-  it("keeps the other refusals distinguishable, and their actions", () => {
-    // One guard on top of five: a cap must not make "that path is spoken for"
-    // read like "come back tomorrow".
-    expect(refusalReport(409, { error: "already held by job x" }).code).toBe("target-held");
-    expect(refusalReport(400, { error: "elements is required" }).actions).toEqual(["edit"]);
-    expect(refusalReport(503, { error: "no runner" }).actions).toEqual(["doctor"]);
-    expect(refusalReport(418, {}).headline).toBe("the runner answered 418");
   });
 });
