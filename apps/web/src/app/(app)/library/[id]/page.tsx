@@ -6,6 +6,7 @@ import type { AssetRef, AssetWithTopics } from "@self-learn/catalog/state";
 import { assetDisplayTitle, assetKindLabel, formatBytes } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
+import { WatchProgress } from "@/components/library/WatchProgress";
 import { MarkWatched } from "@/components/library/MarkWatched";
 import { Notice } from "@/components/library/Notice";
 import { NoteProse } from "@/components/NoteProse";
@@ -337,7 +338,15 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
     {
       id: "details",
       label: "Details",
-      content: <CatalogFacts asset={asset} titles={titles} className="max-w-3xl" />,
+      content: (
+        <CatalogFacts
+          asset={asset}
+          titles={titles}
+          indexed={dayKey(asset.createdAt, zone)}
+          watched={<WatchProgress />}
+          className="max-w-3xl"
+        />
+      ),
     },
   ];
 
@@ -381,8 +390,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           transcript={sidecars?.state === "read" ? sidecars.cues : undefined}
           saved={playback}
           heading={heading}
-          // "Video" is what the page already shows, so the facts start after it.
-          meta={eyebrow.split(" · ").slice(1).join(" · ")}
+          watchedDay={playback?.watchedAt ? dayKey(playback.watchedAt, zone) : null}
           actions={addToNote ?? undefined}
           notes={
             <>
@@ -487,7 +495,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           <UnreadableFile path={asset.path} href={fileHref} />
         )}
 
-        <CatalogRow asset={asset} titles={titles} />
+        <CatalogRow asset={asset} titles={titles} indexed={dayKey(asset.createdAt, zone)} />
       </div>
 
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-2">{rail}</div>
@@ -623,7 +631,15 @@ function FamilyGroup({ title, rows }: { title: string; rows: AssetRef[] }) {
  * path, the source, the size and the topic slugs. A reader here is checking
  * what to type, so every value is the identifier rather than a label.
  */
-function CatalogRow({ asset, titles }: { asset: AssetWithTopics; titles: Record<string, string> }) {
+function CatalogRow({
+  asset,
+  titles,
+  indexed,
+}: {
+  asset: AssetWithTopics;
+  titles: Record<string, string>;
+  indexed: string;
+}) {
   return (
     <details className="group rounded-[20px] border-2 border-border bg-surface">
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-[18px] px-5 py-4 text-[16px] font-bold text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
@@ -641,7 +657,7 @@ function CatalogRow({ asset, titles }: { asset: AssetWithTopics; titles: Record<
         </svg>
         Catalog row
       </summary>
-      <CatalogFacts asset={asset} titles={titles} className="px-5 pb-5" />
+      <CatalogFacts asset={asset} titles={titles} indexed={indexed} className="px-5 pb-5" />
     </details>
   );
 }
@@ -650,14 +666,23 @@ function CatalogRow({ asset, titles }: { asset: AssetWithTopics; titles: Record<
 function CatalogFacts({
   asset,
   titles,
+  indexed,
+  watched,
   className,
 }: {
   asset: AssetWithTopics;
   titles: Record<string, string>;
+  /** The day the row was indexed, in the habit's time zone. */
+  indexed: string;
+  /** How much of a video has played; only a video has one. */
+  watched?: ReactNode;
   className?: string;
 }) {
+  const size = formatBytes(asset.bytes);
   return (
     <dl className={cx("flex flex-col gap-2", className)}>
+      {watched !== undefined && <Fact label="Watched">{watched}</Fact>}
+      <Fact label="Indexed">{indexed}</Fact>
       <Fact label="Id">
         <span className="font-mono text-[12px]">{asset.id}</span>
       </Fact>
@@ -665,7 +690,9 @@ function CatalogFacts({
         <span className="font-mono text-[12px]">{asset.path ?? asset.url ?? "none"}</span>
       </Fact>
       <Fact label="Source">{asset.sourceRepo}</Fact>
-      <Fact label="Bytes">{asset.bytes === null ? "unknown" : asset.bytes.toLocaleString("en")}</Fact>
+      <Fact label="Size">
+        {asset.bytes === null ? "unknown" : `${size} (${asset.bytes.toLocaleString("en")} bytes)`}
+      </Fact>
       <Fact label="Topics">
         {asset.topics.length === 0 ? (
           "none"
