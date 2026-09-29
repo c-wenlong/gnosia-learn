@@ -15,6 +15,7 @@ import {
   jobDir,
   REPO_ROOT,
   rejectedDir,
+  sessionLogPath,
   targetPath,
   targetSvgPath,
   workDir,
@@ -608,11 +609,24 @@ describe("an agent whose first request is refused", () => {
     // The attempt waits for the note before it goes on, so by the time the job
     // has settled it is in the log, and ahead of the event that ended the job.
     const events = store.subscribe(record.id, 0, () => undefined).replay;
-    const credential = events.find((event) => event.note.includes("ANTHROPIC_API_KEY"));
+    const credential = events.find((event) => event.note.includes("API key from the runner's environment"));
     const ending = events.find((event) => event.type === "error");
-    expect(credential?.note).toContain("STUDIO_AGENT_AUTH=login");
+    // A sentence for the person, not the settings behind it (Phase 2 measured).
+    expect(credential?.note).toBe(
+      "the agent is using an API key from the runner's environment, though the runner is set to use this machine's Claude login",
+    );
+    for (const event of events) {
+      expect(event.note).not.toMatch(/apiKeySource|STUDIO_AGENT_AUTH|ANTHROPIC_API_KEY/);
+    }
     expect(ending).toBeDefined();
     expect(credential?.seq ?? Infinity).toBeLessThan(ending?.seq ?? -Infinity);
+    // The raw values stay in the session log, for whoever debugs a refused request.
+    const log = await readFile(sessionLogPath(record.id), "utf8");
+    const raw = log
+      .split("\n")
+      .filter((line) => line.includes('"type":"credential"'))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(raw).toEqual([expect.objectContaining({ apiKeySource: "ANTHROPIC_API_KEY", STUDIO_AGENT_AUTH: "login" })]);
   });
 
   it("still reports a stray write first, because a dirty file is what a person has to look at", async () => {

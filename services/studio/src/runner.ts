@@ -1239,6 +1239,7 @@ export class Runner {
     // The one record here: which model the session says it is, since a
     // `--model` alias, or no flag at all, names it only indirectly.
     if (init.model !== null) await this.store.update(id, { resolvedModel: init.model });
+    await this.store.appendRaw(id, credentialRecord(auth, init.apiKeySource));
     await this.store.emit(id, {
       type: "step",
       note: credentialNote(auth, init.apiKeySource),
@@ -1698,26 +1699,40 @@ export function settingNote(name: "model" | "effort", setting: AgentSetting): st
 }
 
 /**
- * One sentence on which credential the agent is using, from the CLI's own
- * `apiKeySource` and the rule the runner spawned it under.
+ * One sentence, for the person, on which credential the agent is using, from
+ * the CLI's own `apiKeySource` and the rule the runner spawned it under.
  *
- * The CLI's value is quoted rather than translated wherever this file cannot be
- * sure what it means, so a source added in a later CLI still reads truthfully.
+ * Plain words only: the job view's log is read by the person who pressed Draw,
+ * and "(apiKeySource none, STUDIO_AGENT_AUTH=login)" was a setting's name where
+ * a sentence should have been (Phase 2 measured, docs/STUDIO-VIDEOS.md). The
+ * raw values are not lost: the init event carries `apiKeySource` verbatim in
+ * `session.ndjson`, `credentialRecord` writes both beside it, and `job.json`
+ * keeps `apiKeySource` and `agentAuth`.
  */
 export function credentialNote(auth: AgentAuth, source: string | null): string {
-  const setting = `STUDIO_AGENT_AUTH=${auth}`;
   switch (source) {
     case null:
-      return `the agent did not say which credential it is using (${setting})`;
+      return "the agent did not say which credential it is using";
     case "ANTHROPIC_API_KEY":
-      return `the agent is using ANTHROPIC_API_KEY from the runner's environment (${setting})`;
+      return auth === "env"
+        ? "the agent is using the API key from the runner's environment, as the runner is set to"
+        : "the agent is using an API key from the runner's environment, though the runner is set to use this machine's Claude login";
     case "none":
     case "oauth":
     case "/login managed key":
-      return `the agent is using this machine's claude login (apiKeySource ${source}, ${setting})`;
+      return "the agent is using this machine's Claude login";
     default:
-      return `the agent's credential came from ${source} (${setting})`;
+      return "the agent is using a credential the studio does not recognise; the raw log names it";
   }
+}
+
+/**
+ * The raw line behind `credentialNote`, for `session.ndjson` only: what the CLI
+ * said and the rule the runner spawned it under, under the names a person
+ * debugging a refused request will search for.
+ */
+export function credentialRecord(auth: AgentAuth, source: string | null): string {
+  return JSON.stringify({ type: "credential", apiKeySource: source, STUDIO_AGENT_AUTH: auth, at: new Date().toISOString() });
 }
 
 /** The plain-English line every response carries. manimkc's `_enrich_status`. */
