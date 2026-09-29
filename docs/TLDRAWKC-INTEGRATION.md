@@ -388,7 +388,7 @@ browser on this machine.
 | `GET` | `/api/jobs/{id}/events` | Live progress, SSE | `Last-Event-ID` on reconnect | `text/event-stream` of `phase`, `step`, `gate`, `done` |
 | `GET` | `/api/jobs/{id}/log` | Windowed raw log | `?from=0&limit=200` | `{ lines, from, next, total }` |
 | `POST` | `/api/jobs/{id}/cancel` | Stop a running or queued job | none | `{ jobId, state: "running" \| "cancelled", cancelRequestedAt }` |
-| `GET` | `/api/jobs/{id}/shot` | Either half of the comparison, as a picture | `?which=before\|after` | `image/png`, or 404 when there is none |
+| `GET` | `/api/jobs/{id}/shot` | Either half of the comparison, as a picture; or `live`, the newest screenshot the agent took, for the grid's preview (docs/STUDIO-CHAT-FIRST.md, "The job in the grid") | `?which=before\|after\|live` | `image/png`, or 404 when there is none; `live` also answers `304` on its `ETag` |
 | `POST` | `/api/jobs/{id}/accept` | Close any mirror on the target, then land the candidate | none | `{ jobId, state: "accepted", written, indexed, mirrorClosed, note }` |
 | `POST` | `/api/jobs/{id}/discard` | Delete the candidate | none | `{ jobId, state: "discarded" }` |
 | `POST` | `/api/jobs/{id}/compare` | Re-read the before side against the committed file as it is now | none | `{ jobId, comparison, note }` |

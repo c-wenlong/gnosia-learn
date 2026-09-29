@@ -210,19 +210,41 @@ function Backdrop({
   thumbnail: string | null;
 }) {
   const [afterMissing, setAfterMissing] = useState(false);
+  const [afterShown, setAfterShown] = useState(false);
+  const afterImage = useRef<HTMLImageElement>(null);
+  // The server renders this `<img>`, so a cached picture can finish loading
+  // before React attaches `onLoad`, and the event is never seen: ask the
+  // element itself once it is mounted.
+  useEffect(() => {
+    const image = afterImage.current;
+    if (image !== null && image.complete && image.naturalWidth > 0) setAfterShown(true);
+  }, [stage]);
 
   if (stage === "review") {
-    const src = afterMissing ? (live.current ?? thumbnail) : afterShotHref(job.jobId);
+    const fallback = live.current ?? thumbnail;
+    const src = afterMissing ? fallback : afterShotHref(job.jobId);
     return (
       <div className="absolute inset-0">
+        {/* Until the candidate's picture has loaded (a canvas shot can be a
+            3000px PNG), the last picture stays, blurred, rather than a blank. */}
+        {!afterShown && fallback !== null && (
+          <div aria-hidden className="absolute inset-0 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element -- see Thumbnail. */}
+            <img src={fallback} alt="" className="absolute inset-0 h-full w-full object-contain p-2 blur-[3px]" />
+            <div className="studio-veil absolute inset-0" />
+          </div>
+        )}
         {src !== null && (
           // eslint-disable-next-line @next/next/no-img-element -- a runner file behind the proxy, see Thumbnail.
           <img
+            ref={afterImage}
             src={src}
             alt=""
             decoding="async"
+            onLoad={() => setAfterShown(true)}
             onError={() => setAfterMissing(true)}
-            className="studio-fade-in h-full w-full object-contain p-2"
+            // Clear of the status bar, so the bar never sits on the drawing.
+            className={`relative h-full w-full object-contain px-2 pt-2 pb-14 ${afterShown ? "studio-fade-in" : "opacity-0"}`}
           />
         )}
       </div>
@@ -230,7 +252,11 @@ function Backdrop({
   }
 
   const blur = stage === "failed" ? "blur-[6px]" : "blur-[3px]";
-  const layer = `absolute inset-0 h-full w-full scale-110 object-cover ${blur}`;
+  // Contained, and framed as the tile's own thumbnail is, never cropped to
+  // fill: the first real run added a note in the bottom corner of a nearly
+  // square drawing, and a cover-cropped backdrop cut exactly that change off.
+  // Framed the same, the thumbnail blurs in place when a job starts.
+  const layer = `absolute inset-0 h-full w-full object-contain p-2 ${blur}`;
   return (
     <div aria-hidden className="absolute inset-0 overflow-hidden">
       {live.current === null && thumbnail !== null && (
