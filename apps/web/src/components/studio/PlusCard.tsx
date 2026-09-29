@@ -48,7 +48,8 @@ export function useStartDraft(path: string): {
  * The grid's first tile, and the one way into a new diagram (D31).
  *
  * `DiagramTile`'s 4:3 frame and radius with a dashed border, a 40px plus in
- * `--text3`, and "New diagram" in the title role under it. A `<button>`, so it
+ * `--text3`, and "New diagram or video" in the title role under it (open
+ * question 2 of docs/STUDIO-MENTIONS.md, shipped with the Video entry). A `<button>`, so it
  * is first in the tab order, and the grid keeps it under any filter.
  */
 export function PlusCard({ path, layout = "grid" }: { path: string; layout?: "grid" | "list" }) {
@@ -72,7 +73,7 @@ export function PlusCard({ path, layout = "grid" }: { path: string; layout?: "gr
           <span className="flex h-6 w-12 shrink-0 items-center justify-center rounded border border-dashed border-border text-text3">
             <PlusGlyph className="h-3.5 w-3.5" />
           </span>
-          {busy ? "Opening a conversation…" : "New diagram"}
+          {busy ? "Opening a conversation…" : "New diagram or video"}
         </button>
         {error !== null && (
           <p id="studio-plus-error" role="alert" className="px-2 text-xs text-danger">
@@ -111,9 +112,9 @@ export function PlusCard({ path, layout = "grid" }: { path: string; layout?: "gr
         </span>
       </span>
       <span className="flex min-w-0 flex-col gap-0.5 px-3 pb-3 max-sm:pb-0 max-sm:pl-0">
-        <span className="text-sm font-semibold text-text">{busy ? "Opening a conversation…" : "New diagram"}</span>
+        <span className="text-sm font-semibold text-text">{busy ? "Opening a conversation…" : "New diagram or video"}</span>
         {error === null ? (
-          <span className="text-xs text-text3">Say what it should show. The planner writes the brief.</span>
+          <span className="text-xs text-text3">Talk an idea through, then tag what to make.</span>
         ) : (
           <span id="studio-plus-error" role="alert" className="text-xs text-danger">
             {error}

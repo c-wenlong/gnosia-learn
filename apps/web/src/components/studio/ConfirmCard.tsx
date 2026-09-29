@@ -25,7 +25,8 @@ import {
   type FieldProblem,
 } from "@/lib/studio-brief-edit";
 import { composerKey } from "@/components/ui/composer-keys";
-import { cardEditable, drawLabel, modeLine, type CardStatus, type DrawBlock } from "@/lib/studio-chat";
+import { kindCardEditable, madeLine, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
+import { modeLine, type DrawBlock } from "@/lib/studio-chat";
 import type { PendingTopic, Refusal } from "@/lib/studio-drafts";
 import { candidatePathFor, type Brief } from "@/lib/studio-jobs";
 
@@ -71,12 +72,17 @@ export function ConfirmCard({
   onEditNewest,
   editBlock = null,
   jobHref,
+  jobRunning = false,
   holderHref,
   sourceChanged = false,
+  holdReason = null,
+  onUse,
+  after,
+  keyShortcut = true,
 }: {
   brief: Brief;
   pendingTopic: PendingTopic | null;
-  status: CardStatus;
+  status: KindCardStatus;
   topics: readonly TopicOption[];
   /** Why Draw is disabled right now, or null. */
   block: DrawBlock | null;
@@ -97,6 +103,14 @@ export function ConfirmCard({
   editBlock?: string | null;
   /** On a `drawn` card: the job this brief started. */
   jobHref: string | null;
+  /** On a `drawn` card: the job is still running, so the line says "Drawing". */
+  jobRunning?: boolean;
+  /** On an `onHold` card: the planner's few words for why (D60). */
+  holdReason?: string | null;
+  /** Use this brief on an `onHold` card: takes it off hold with no turn. */
+  onUse?: () => Promise<string | null>;
+  /** Under the card's own press: Make both, when this card is the later of a pair. */
+  after?: ReactNode;
   /** Opens a job by id: the holder of a leased target. */
   holderHref: (jobId: string) => string;
   /**
@@ -105,12 +119,19 @@ export function ConfirmCard({
    * starts), so this is said, not enforced.
    */
   sourceChanged?: boolean;
+  /**
+   * Whether Cmd or Ctrl+Enter presses this card: only when it is the one live
+   * card (T9). With two, the key moves focus instead, and neither says so.
+   */
+  keyShortcut?: boolean;
 }) {
   const live = status === "live";
   const [held, setHeld] = useState<BriefEdit | null>(null);
   const [saving, setSaving] = useState(false);
   const [problems, setProblems] = useState<FieldProblem[]>([]);
   const [focusNext, setFocusNext] = useState<FocusKey | null>(null);
+  const [using, setUsing] = useState(false);
+  const [useError, setUseError] = useState<string | null>(null);
   const root = useRef<HTMLDivElement | null>(null);
   const base = useId();
 
@@ -119,7 +140,9 @@ export function ConfirmCard({
   // brief arriving mid-edit (a planner reply, another tab) makes this card an
   // older one: the edits stay on it, frozen and said so, rather than
   // vanishing, and the person is offered the newer brief to edit instead.
-  const editable = cardEditable(status) && onSave !== undefined;
+  const onHold = status === "onHold";
+  // A held card is put back by editing it too, since editing is choosing it (D60).
+  const editable = (kindCardEditable(status) || onHold) && onSave !== undefined;
   const edit = held;
   const editing = held !== null && editable;
   const frozen = held !== null && !editable;
@@ -269,6 +292,16 @@ export function ConfirmCard({
     if (!outcome.ok) setProblems([saveRefusal(outcome.status, outcome.refusal, toEdit(brief))]);
   }
 
+  /** Use this brief on a card the planner put on hold. */
+  async function takeOffHold() {
+    if (onUse === undefined || using) return;
+    setUsing(true);
+    setUseError(null);
+    const error = await onUse();
+    setUsing(false);
+    setUseError(error);
+  }
+
   function discard() {
     setHeld(null);
     setProblems([]);
@@ -309,9 +342,10 @@ export function ConfirmCard({
       tight
       as="article"
       aria-label={`Brief: ${brief.title}`}
-      className={cx("mt-1", !cardEditable(status) && !frozen && "opacity-60")}
+      className={cx("mt-1", !kindCardEditable(status) && !onHold && !frozen && "opacity-60")}
     >
       <div ref={root} onKeyDown={onKeyDown} aria-busy={saving || undefined} className="flex flex-col gap-3.5">
+        <div className={cx("flex flex-col gap-3.5", onHold && held === null && "opacity-60")}>
         <div>
           <div className="flex min-h-9 items-center gap-3">
             {edit !== null ? (
@@ -474,6 +508,24 @@ export function ConfirmCard({
           </Row>
         )}
 
+        </div>
+
+        {onHold && held === null && (
+          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+            <p className="text-[13px] leading-5 text-text">On hold: {holdReason ?? "the conversation contradicted this brief"}</p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <Button size="sm" variant="secondary" onClick={() => void takeOffHold()} disabled={using || editBlock !== null} title={editBlock ?? undefined}>
+                {using ? "Saving…" : "Use this brief"}
+              </Button>
+            </div>
+            {useError !== null && (
+              <p role="alert" className="text-[13px] leading-5 text-danger">
+                {useError}
+              </p>
+            )}
+          </div>
+        )}
+
         {frozen && (
           <div role="status" className="flex flex-col gap-2 border-t border-hair pt-3.5">
             <p className="text-[13px] leading-5 text-text">
@@ -541,10 +593,11 @@ export function ConfirmCard({
               <Button
                 onClick={onDraw}
                 disabled={busy || block !== null}
-                aria-keyshortcuts="Meta+Enter Control+Enter"
+                aria-keyshortcuts={keyShortcut ? "Meta+Enter Control+Enter" : undefined}
                 data-studio-draw
+                data-card-kind="diagram"
               >
-                {busy ? (proposed ? "Creating the topic…" : "Queuing…") : drawLabel(proposed)}
+                {busy ? (proposed ? "Creating the topic…" : "Queuing…") : pressLabel("diagram", proposed)}
               </Button>
               <span className="min-w-0 break-all font-mono text-[12px] text-text3">{candidatePathFor(brief.slug)}</span>
             </div>
@@ -562,19 +615,22 @@ export function ConfirmCard({
             {block === null && refusal === null && (
               <p className="text-[12px] text-text3">
                 Nothing is drawn or spent until you press it.
-                <span className="max-md:hidden">
-                  {" "}
-                  <kbd className="font-sans">⌘</kbd>/Ctrl+Enter works too.
-                </span>
+                {keyShortcut && (
+                  <span className="max-md:hidden">
+                    {" "}
+                    <kbd className="font-sans">⌘</kbd>/Ctrl+Enter works too.
+                  </span>
+                )}
               </p>
             )}
+            {after}
           </div>
         )}
 
         {status === "drawn" && jobHref !== null && (
           <div className="border-t border-hair pt-3">
             <Link href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
-              Drawn from this brief. Open the job
+              {madeLine("diagram", jobRunning)}. Open the job
             </Link>
           </div>
         )}
@@ -914,7 +970,7 @@ function EndSelect({
 }
 
 /** The topic the planner proposed (D39): what it is, and what it is close to. */
-function ProposedTopic({
+export function ProposedTopic({
   proposed,
   topics,
   editing,
