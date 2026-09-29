@@ -89,10 +89,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
       {reviewable && (
         <div className="mb-3 rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
           <p className="font-medium text-[var(--ok-text)]">{finishedHeadline(job)}</p>
-          <p className="mt-1">
-            Nothing in the catalog has changed yet. The candidate is at{" "}
-            <Mono>{job.candidate}</Mono>, and Accept stores it as the diagram.
-          </p>
+          <p className="mt-1">Nothing in the catalog has changed yet. Accept stores this drawing as the diagram.</p>
         </div>
       )}
 
@@ -193,13 +190,9 @@ function Accepted({
         <p className="font-medium text-[var(--ok-text)]">
           Landed in the catalog
         </p>
-        <ul className="mt-1 space-y-0.5">
-          {job.written.map((file) => (
-            <li key={file} className="font-mono text-xs break-all text-[var(--muted-strong)]">
-              {file}
-            </li>
-          ))}
-        </ul>
+        {/* The names it was stored under (`job.written`) are the catalog's, not
+            a person's: the drawing is the diagram's newest revision, and says so. */}
+        <p className="mt-1 text-[var(--muted-strong)]">The drawing is now the diagram&apos;s newest revision.</p>
       </div>
 
       {!job.indexed && (
@@ -283,7 +276,7 @@ function Thumbnail({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={shotSrc(job.jobId, which)}
-            alt={`${label}: ${job.target}`}
+            alt={`${label}: ${job.title ?? "the diagram"}`}
             className="h-full w-full object-contain"
           />
         </Link>

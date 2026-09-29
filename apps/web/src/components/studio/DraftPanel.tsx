@@ -53,6 +53,7 @@ import {
   MENTION_OPENING_TURN,
   mentionOptions,
   modEnterPlan,
+  pressUnderWay,
   suggestionName,
   suggestionsFor,
   topicSuggestionValue,
@@ -257,8 +258,8 @@ export function DraftPanel({
   const [cap, setCap] = useState<CapStatus | null>(initialCap);
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
   const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
-  /** The cards whose press is under way. */
-  const [pressing, setPressing] = useState<ReadonlySet<DraftKind>>(new Set());
+  /** The cards whose press is under way, each with its kind's job before the press. */
+  const [pressing, setPressing] = useState<ReadonlyMap<DraftKind, string | null>>(new Map());
   const [refused, setRefused] = useState<Partial<Record<CardKey, DrawRefusal & { seq: number }>>>({});
   const [bothError, setBothError] = useState<string | null>(null);
   const [confirmStartOver, setConfirmStartOver] = useState(false);
@@ -508,13 +509,13 @@ export function DraftPanel({
     // for. Not awaited, so the press does not wait on the person answering it.
     void askToNotify();
     const key = cardKey(card.seq, card.kind);
-    setPressing((held) => new Set(held).add(card.kind));
-    setRefused((held) => ({ ...held, [key]: undefined }));
     const previous = view.slots?.[card.kind]?.jobId ?? (view.slots === undefined ? view.jobId : null);
+    setPressing((held) => new Map(held).set(card.kind, previous));
+    setRefused((held) => ({ ...held, [key]: undefined }));
     const others = cards.filter((other) => other.kind !== card.kind);
     const result = await drawDraft(draftId, kindDrawKey(draftId, card.seq, card.kind, previous), card.kind);
     setPressing((held) => {
-      const next = new Set(held);
+      const next = new Map(held);
       next.delete(card.kind);
       return next;
     });
@@ -537,14 +538,14 @@ export function DraftPanel({
     void askToNotify();
     setBothError(null);
     const [first, second] = both.cards;
-    setPressing(new Set([first.kind, second.kind]));
+    setPressing(new Map(both.cards.map((card) => [card.kind, view.slots?.[card.kind]?.jobId ?? null] as const)));
     setRefused((held) => ({ ...held, [cardKey(first.seq, first.kind)]: undefined, [cardKey(second.seq, second.kind)]: undefined }));
     const items = both.cards.map((card) => ({
       kind: card.kind,
       idempotencyKey: kindDrawKey(draftId, card.seq, card.kind, view.slots?.[card.kind]?.jobId ?? null),
     }));
     const result = await drawBoth(draftId, items);
-    setPressing(new Set());
+    setPressing(new Map());
     if (!result.ok) {
       setBothError(drawRefusal(result.status, result.refusal).text);
       if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
@@ -791,7 +792,10 @@ export function DraftPanel({
     const kind = job === null ? "diagram" : jobKind(job);
     return (
       <>
-        <DialogHeader title={job?.title ?? title} meta={cost === null ? undefined : <span title={costTitle}>{cost}</span>} />
+        {/* No cost here: the job's own line under it carries the job's, and the
+            conversation's beside it read as one confusing total (phase 2). The
+            conversation's cost is in the conversation. */}
+        <DialogHeader title={job?.title ?? title} />
         <BackBar href={panelHref(path, { job: null })} />
         <div className="min-h-0 flex-1 overflow-y-auto">
           {ended && (
@@ -1071,7 +1075,7 @@ function Entry({
   both: ReturnType<typeof makeBoth>;
   /** Whether Make both is shown anywhere in the thread. */
   makeBothLive: boolean;
-  pressing: ReadonlySet<DraftKind>;
+  pressing: ReadonlyMap<DraftKind, string | null>;
   refused: Partial<Record<CardKey, DrawRefusal & { seq: number }>>;
   entries: readonly TranscriptEntry[];
   /** A person turn is in flight: sent, or being answered. */
@@ -1119,7 +1123,8 @@ function Entry({
     const running = job !== undefined && !isTerminal(job.state);
     const pendingTopic = kindPendingTopic(status, item.kind, entry, view);
     const holdReason = slot?.held?.reason ?? null;
-    const editBlock = answering ? STILL_ANSWERING : pressing.has(item.kind) ? "The press is under way." : null;
+    const underWay = pressUnderWay(pressing, view, item.kind);
+    const editBlock = answering ? STILL_ANSWERING : underWay ? "The press is under way." : null;
     const paired = pairedHere;
     const holderHref = (holder: string) => panelHref(path, jobPatch(holder, { draftId: view.draftId, jobId: jobIdOf }, jobs));
     const inner =
@@ -1130,7 +1135,7 @@ function Entry({
           status={status}
           topics={topics}
           block={block}
-          busy={pressing.has("diagram")}
+          busy={underWay}
           refusal={shownRefusal}
           onDraw={() => live !== null && onPress(live)}
           onSave={(brief) => onSave(brief, entry.seq, "diagram")}
@@ -1152,7 +1157,7 @@ function Entry({
           status={status}
           topics={topics}
           block={block}
-          busy={pressing.has("video")}
+          busy={underWay}
           refusal={shownRefusal}
           onPress={() => live !== null && onPress(live)}
           onUse={() => onUse("video", entry.seq)}
@@ -1188,7 +1193,14 @@ function Entry({
     briefs.length === 0 && retrying.length === 0 && both === null ? null : (
       <div className="flex flex-col gap-3">
         {briefs.map(renderCard)}
-        {both !== null && <MakeBothButton label={both.label} busy={pressing.size > 0} error={bothError} onPress={onPressBoth} />}
+        {both !== null && (
+          <MakeBothButton
+            label={both.label}
+            busy={both.cards.some((card) => pressUnderWay(pressing, view, card.kind))}
+            error={bothError}
+            onPress={onPressBoth}
+          />
+        )}
         {retrying.map((kind) => (
           <p key={kind} className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
             Checking the {kind} brief

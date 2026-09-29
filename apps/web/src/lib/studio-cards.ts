@@ -340,6 +340,31 @@ export function pressLabel(kind: DraftKind, pending: PendingTopic | null | undef
   return pending ? "Create topic and make video" : "Make video";
 }
 
+/** The job a kind's card last started, as the draft's record has it. */
+export function slotJobId(view: Pick<DraftView, "slots" | "jobId">, kind: DraftKind): string | null {
+  if (view.slots === undefined) return kind === "diagram" ? view.jobId : null;
+  return slotOf(view, kind)?.jobId ?? null;
+}
+
+/**
+ * Whether a card's press still reads as under way ("Queuing…"). From the
+ * press until its answer, except once the draft's record already names a new
+ * job for the kind: the runner records each job as it queues it and says so
+ * on the draft's stream, and Make both answers only after both are queued
+ * (seconds later, measured in phase 2). The card then says what the record
+ * says, the job and its link, rather than "Queuing…" over a running job.
+ *
+ * `pressing` holds each pressed kind's job before the press.
+ */
+export function pressUnderWay(
+  pressing: ReadonlyMap<DraftKind, string | null>,
+  view: Pick<DraftView, "slots" | "jobId">,
+  kind: DraftKind,
+): boolean {
+  if (!pressing.has(kind)) return false;
+  return slotJobId(view, kind) === (pressing.get(kind) ?? null);
+}
+
 /** The press's words while it is under way. */
 export function pressBusyLabel(kind: DraftKind, pending: PendingTopic | null | undefined): string {
   if (pending) return "Creating the topic…";

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   drawDraft: vi.fn(),
   drawBoth: vi.fn(),
   push: vi.fn(),
+  events: null as null | { onEvent: (event: { type: string; data: unknown }) => void },
   composer: null as null | {
     value: { text: string; mentions: unknown[] };
     disabled?: boolean;
@@ -49,7 +50,8 @@ vi.mock("next/dynamic", () => ({
     },
 }));
 vi.mock("@/components/studio/StudioDialog", () => ({
-  DialogHeader: ({ title }: { title: ReactNode }) => createElement("h2", null, title),
+  DialogHeader: ({ title, meta }: { title: ReactNode; meta?: ReactNode }) =>
+    createElement("header", { "data-header": true }, createElement("h2", null, title), meta ?? null),
 }));
 vi.mock("@/components/studio/JobsProvider", () => ({
   useStudioJobs: () => ({ jobs: [], refresh: async () => {} }),
@@ -69,7 +71,10 @@ vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
   createDraft: mocks.createDraft,
   drawDraft: mocks.drawDraft,
   drawBoth: mocks.drawBoth,
-  openDraftEvents: () => () => {},
+  openDraftEvents: (_id: string, _after: unknown, handlers: NonNullable<typeof mocks.events>) => {
+    mocks.events = handlers;
+    return () => {};
+  },
   readStudioHealth: async () => null,
 }));
 
@@ -81,6 +86,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   mocks.composer = null;
+  mocks.events = null;
   sessionStorage.clear();
   mocks.sendMessage.mockResolvedValue({ ok: true, status: 202, data: { draftId: "d1", seq: 1, note: "" } });
   mocks.abandonDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", state: "abandoned", note: "" } });
@@ -195,7 +201,7 @@ async function settle() {
   }
 }
 
-async function mount(view: DraftView) {
+async function mount(view: DraftView, jobId: string | null = null) {
   mocks.getDraft.mockResolvedValue({ ok: true, status: 200, data: view });
   const host = document.createElement("div");
   document.body.append(host);
@@ -204,7 +210,7 @@ async function mount(view: DraftView) {
     root.render(
       createElement(DraftPanel, {
         draftId: "d1",
-        jobId: null,
+        jobId,
         path: "/studio?draft=d1",
         topics: [],
         titles: {},
@@ -306,5 +312,63 @@ describe("a conversation opened with Change on a video (p2v-video on #203)", () 
     const srcs = [...host.querySelectorAll("img")].map((img) => img.getAttribute("src"));
     expect(srcs).toContain("/api/assets/video%3Asoftmax-basics/poster");
     expect(srcs.some((src) => src?.includes("/diagrams/"))).toBe(false);
+  });
+});
+
+describe("Make both, while the press is still answering (phase 2 measurement, bug 8)", () => {
+  it("stops saying Queuing once the record has both jobs, and links the video card to its job", async () => {
+    let answer: (value: unknown) => void = () => {};
+    mocks.drawBoth.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const host = await mount(pair());
+    const both = host.querySelector("[data-make-both]") as HTMLButtonElement;
+    await act(async () => both.click());
+    expect(host.textContent).toContain("Queuing");
+
+    // The runner records each job on the draft as it queues it and says so on
+    // the draft's stream, well before the press's own answer comes back.
+    const drawing = pair();
+    drawing.state = "drawing";
+    drawing.slots = {
+      diagram: slot({ brief: DIAGRAM, briefSeq: 2, requestSeq: 1, state: "drawing", jobId: "j-d", live: true, busy: { jobId: "j-d", state: "running" } }),
+      video: slot({ brief: VIDEO, briefSeq: 2, requestSeq: 1, state: "drawing", jobId: "j-v", live: true, busy: { jobId: "j-v", state: "running" } }),
+    } as DraftView["slots"];
+    mocks.getDraft.mockResolvedValue({ ok: true, status: 200, data: drawing });
+    await act(async () => mocks.events!.onEvent({ type: "state", data: { state: "drawing", jobId: "j-v", slots: {} } }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+    await settle();
+
+    expect(host.textContent).not.toContain("Queuing");
+    const video = host.querySelector('[data-card="video"]') as HTMLElement;
+    const link = [...video.querySelectorAll("a")].find((a) => /job=j-v/.test(a.getAttribute("href") ?? ""));
+    expect(link).toBeDefined();
+
+    await act(async () => answer({ ok: true, status: 200, data: { results: [{ kind: "diagram", jobId: "j-d" }, { kind: "video", jobId: "j-v" }] } }));
+    await settle();
+    expect(host.textContent).not.toContain("Queuing");
+  });
+});
+
+describe("the dialog header's cost (bug 9)", () => {
+  const costed = () => ({ ...pair(), costUsd: 0.058, costSource: "result" as const, jobId: "j1" });
+
+  it("shows the conversation's cost in the conversation", async () => {
+    const host = await mount(costed());
+    expect(host.querySelector("[data-header]")?.textContent).toContain("$0.058");
+  });
+
+  it("leaves it out of the job view, whose own line carries the job's cost", async () => {
+    const host = await mount(costed(), "j1");
+    expect(host.querySelector("[data-header]")?.textContent).not.toContain("$0.058");
+  });
+});
+
+describe("the diagram card (bug 11)", () => {
+  it("prints no path for where the job will draw", async () => {
+    const host = await mount(pair());
+    const card = host.querySelector('[data-card="diagram"]') as HTMLElement;
+    expect(card.textContent).toContain("Draw");
+    expect(card.textContent).not.toMatch(/STUDIO_HOME|candidate\/|\.tldr/);
   });
 });

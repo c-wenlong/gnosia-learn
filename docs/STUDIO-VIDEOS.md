@@ -1948,6 +1948,23 @@ job closed (its URL went back to `/studio`) at the moment a second tab of the
 same browser was opened. Opening a tab, starting a conversation and sending in
 it later did not close it again.
 
+Items 6 to 15 were fixed together afterwards, in #217, each reproduced first in
+a failing test or in a browser against a build of `main`. In brief: the player
+reads the element's metadata once hydrated (6); the stored chapters name the
+scenes everywhere in the job view (7); a card stops reading "Queuing…" once the
+draft's record names its job, before the Make both answer (8); the job view's
+header drops the conversation's cost (9); a running job with no steps yet shows
+the storyboard done and the runner's phase current, and the log names scenes it
+sees before the view has the classes (10); the card, the job view and a failed
+job's message print no paths, save a job that wrote outside its own, whose
+paths are the finding (11); the model menu lists each model once by name,
+"Opus 5.5", and the default as "Claude Code default (Fable 5.1)" (12); the
+Change form's line is plain sentences (13); the caption toggle keeps one name
+and says its state with `aria-pressed` (14); the @ menu puts every
+description under its name (15). The closed panel did not reproduce with two
+and three tabs on a running job, including during Make both; the one path
+that pushes `/studio` unasked is a click whose press starts on the backdrop.
+
 ### Phase 3. Measured tightening, only if the first jobs ask for it
 
 - [ ] `mach-lookup` narrowed to an allowlist taken from a traced render, kept

@@ -674,8 +674,12 @@ function Field<K extends string>({
                         className={cx("mt-0.5", !usable ? "text-text3" : active ? "text-accent-text" : "text-text2")}
                       />
                     )}
-                    <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-                      <span className={cx("text-[14px] font-medium leading-6", usable ? "text-text" : "text-text3")}>{option.name}</span>
+                    {/* The name over its description, always: side by side, a
+                        longer description wrapped under its name at one width
+                        and sat beside it at another, so two rows of one menu
+                        were laid out two ways. */}
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className={cx("text-[14px] font-medium leading-5", usable ? "text-text" : "text-text3")}>{option.name}</span>
                       <span className="min-w-0 text-[13px] leading-5 text-text2">{usable ? option.description : option.disabledReason}</span>
                     </span>
                     {tagged.has(option.id) && (

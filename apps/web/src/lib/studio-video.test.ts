@@ -4,6 +4,7 @@ import {
   changedLines,
   changeDraftOutcome,
   childJob,
+  changeHint,
   changeProblem,
   chapterTitle,
   CHANGE_LIMIT,
@@ -149,6 +150,21 @@ describe("the step list", () => {
     expect(rows.slice(1).every((row) => row.status === "pending")).toBe(true);
   });
 
+  it("marks the storyboard done and the runner's phase current before the runner sends any steps", () => {
+    // A job the view opens on during setup: running, `phase: "setup"`, and no
+    // steps until the checkout is built. It read "Step 3 of 11" over a list
+    // that was every step pending, the storyboard included.
+    const early = job({ phase: "setup", steps: [], classes: [], seeded: { wanted: 6, seeded: 4 } });
+    const rows = stepRows(early);
+    expect(rows.find((row) => row.key === "storyboard")?.status).toBe("done");
+    expect(rows.filter((row) => row.status === "current").map((row) => row.key)).toEqual(["setup"]);
+    expect(rows.find((row) => row.key === "narration")).toMatchObject({ status: "pending", note: "4 of 6 lines already voiced" });
+    expect(rows.filter((row) => row.status === "pending").map((row) => row.key)).toContain("scene-code");
+    expect(videoStepCount(early)).toBe("Step 3 of 11");
+    // Running before the runner has even named a phase: the storyboard is still done.
+    expect(stepRows(job({ phase: null, steps: [], classes: [] })).map((row) => row.status).slice(0, 2)).toEqual(["done", "pending"]);
+  });
+
   it("puts the lines the agent changed right after narration, while the job still runs", () => {
     const rows = stepRows(
       job({ lineChanges: [{ scene: CLASSES[0]!, kind: "reworded", brief: "That choice is a set of weights.", voiced: ["That choice is a list of weights."] }] }),
@@ -250,6 +266,25 @@ describe("the making-of log", () => {
     expect(logLine("read the sheet Aw2_ScoringAndScaling", job())).toBe("Read the sheet for Scoring and scaling");
     expect(logLine("read the sheet Aw1_WhyItMatters.sheet", job())).toBe("Read the sheet for Why it matters");
     expect(logLine("rendered 3 scenes at 480p in 14 s", job())).toBe("Rendered 3 scenes at 480p in 14 s");
+  });
+
+  it("names the scenes in a line that arrived before the view had the job's classes", () => {
+    // The runner's first line lists the classes as it sets them; the view's
+    // copy of the record is read on a timer and can still have none.
+    const early = job({ classes: [] });
+    expect(logLine("the topic is ready: Aw1_WhyItMatters, Aw2_ScoringAndScaling", early)).toBe(
+      "The topic is ready: Why it matters, Scoring and scaling",
+    );
+    // With no brief either, the class's own name, in words.
+    expect(logLine("read the sheet Aw2_ScoringAndScaling", { classes: [], brief: undefined })).toBe("Read the sheet for Scoring and scaling");
+  });
+
+  it("uses the stored chapter titles once the video has them", () => {
+    const chapters = [
+      { scene: CLASSES[0], title: "One word, many weights", start: 0, end: 12 },
+      { scene: CLASSES[1], title: "Dot products, then scale", start: 12, end: 20 },
+    ];
+    expect(logLine("read the sheet Aw2_ScoringAndScaling", job(), chapters)).toBe("Read the sheet for Dot products, then scale");
   });
 });
 
@@ -370,6 +405,32 @@ describe("the storyboard beside the player", () => {
     expect(byPosition.map((scene) => scene.start)).toEqual([0, 12.5]);
   });
 
+  it("titles each scene as the stored chapters do, the titles the player's bar shows", () => {
+    // The agent titles its chapters in the scene code; the brief's scene
+    // names are only its plan. One video, one set of names.
+    const chapters = [
+      { scene: CLASSES[0], title: "One word, many weights", start: 0, end: 12 },
+      { scene: CLASSES[1], title: "Dot products, then scale", start: 12, end: 20 },
+    ];
+    const board = storyboard({ classes: CLASSES, brief: BRIEF, lineChanges: changes }, chapters);
+    expect(board.map((scene) => scene.title)).toEqual(["One word, many weights", "Dot products, then scale"]);
+    expect(changedLines({ classes: CLASSES, brief: BRIEF, lineChanges: changes }, chapters).map((line) => line.title)).toEqual([
+      "One word, many weights",
+      "Dot products, then scale",
+      "Dot products, then scale",
+    ]);
+    // By position when the chapters carry no scene and the counts agree.
+    const byPosition = storyboard({ classes: CLASSES, brief: BRIEF, lineChanges: [] }, [
+      { title: "First", start: 0, end: 12 },
+      { title: "Second", start: 12, end: 20 },
+    ]);
+    expect(byPosition.map((scene) => scene.title)).toEqual(["First", "Second"]);
+    // A chapter with no title keeps the brief's name.
+    expect(storyboard({ classes: CLASSES, brief: BRIEF, lineChanges: [] }, [{ scene: CLASSES[0], title: "", start: 0, end: 12 }])[0]?.title).toBe(
+      "Why it matters",
+    );
+  });
+
   it("lists every changed line with its scene's title, for the list under the player", () => {
     expect(changedLines({ classes: CLASSES, brief: BRIEF, lineChanges: changes }).map((line) => `${line.title}: ${line.kind}`)).toEqual([
       "Why it matters: split",
@@ -411,6 +472,16 @@ describe("the review", () => {
     expect(reviewActions(job({ state: "awaiting_review" }))).toEqual({ accept: true, discard: true, change: true });
     expect(reviewActions(job({ state: "accepted" }))).toEqual({ accept: false, discard: false, change: true });
     expect(reviewActions(job({ state: "running" }))).toEqual({ accept: false, discard: false, change: false });
+  });
+
+  it("says what each way to send a change does, in plain sentences", () => {
+    // "Change the picture has the agent rework it" read the button's name as
+    // the sentence's subject, and did not parse.
+    expect(changeHint(false, true)).toBe(
+      "The agent reworks the picture from the source it wrote. Changing the words goes back to the conversation, where you approve the new script first.",
+    );
+    expect(changeHint(true, false)).toBe("This video is set aside, and the agent reworks the picture from the source it wrote.");
+    for (const hint of [changeHint(false, false), changeHint(true, true)]) expect(hint).not.toMatch(/picture (has|sets)/);
   });
 
   it("refuses an empty change, or one longer than the runner takes", () => {
