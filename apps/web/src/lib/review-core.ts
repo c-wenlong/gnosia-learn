@@ -208,6 +208,9 @@ export function queueDomain(domains: readonly (string | null)[]): string | null 
   return best[1] * 2 > domains.length ? `mostly ${best[0]}` : null;
 }
 
+/** What a leech is called on screen. `leech` stays the field's name everywhere else. */
+export const LEECH_LABEL = "Keeps slipping";
+
 /** The prompt of a card built from a note with no check: "Recall: <title>". */
 export function recallPrompt(title: string): string {
   return `Recall: ${title}`;
@@ -221,13 +224,14 @@ export function recallPrompt(title: string): string {
  * say the heading twice and is left out; but a recall card built from a check
  * whose answer cannot become choices keeps the check's question as its
  * prompt, and there the label is the only place the concept is named. A leech
- * says so either way.
+ * says "Keeps slipping" either way: the reader's word for it, where the
+ * catalog and the CLI keep Anki's.
  */
 export function cardEyebrow(item: Pick<ReviewItem, "kind" | "title" | "prompt" | "leech">): string | null {
   const named = item.kind === "recall" && item.prompt.trim() === recallPrompt(item.title).trim();
   const parts = [
     named ? null : `${item.kind === "check" ? "Check" : "Recall"} · ${item.title}`,
-    item.leech ? "Leech" : null,
+    item.leech ? LEECH_LABEL : null,
   ].filter((part): part is string => part !== null);
   return parts.length === 0 ? null : parts.join(" · ");
 }

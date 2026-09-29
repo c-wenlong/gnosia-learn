@@ -13,6 +13,7 @@ import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
+import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
   matchesFilter,
@@ -95,7 +96,7 @@ export function LearnIndex({
           <Button
             variant="secondary"
             disabled
-            disabledReason="Add one with npm run learn -- concept add"
+            disabledReason="New concepts are added as you learn new topics."
           >
             Add concept
           </Button>
@@ -197,7 +198,7 @@ function ConceptTable({
                     >
                       {r.title}
                     </Link>
-                    {r.leech && <span className="shrink-0 text-[12px] font-semibold text-danger">Leech</span>}
+                    {r.leech && <span className="shrink-0 text-[12px] font-semibold text-danger">{LEECH_LABEL}</span>}
                   </span>
                 </td>
                 <td className="px-3 py-2.5 sm:px-4">

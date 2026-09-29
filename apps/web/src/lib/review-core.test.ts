@@ -144,10 +144,10 @@ describe("cardEyebrow", () => {
     );
   });
 
-  it("says a leech is one, even when the prompt names the concept", () => {
-    expect(cardEyebrow({ ...card, leech: true, kind: "recall", prompt: recallPrompt(card.title) })).toBe("Leech");
+  it("says a leech keeps slipping, even when the prompt names the concept", () => {
+    expect(cardEyebrow({ ...card, leech: true, kind: "recall", prompt: recallPrompt(card.title) })).toBe("Keeps slipping");
     expect(cardEyebrow({ ...card, leech: true, kind: "check", prompt: "Why?" })).toBe(
-      "Check · Transformer block · Leech",
+      "Check · Transformer block · Keeps slipping",
     );
   });
 });
