@@ -54,6 +54,7 @@ const { createApi } = await import("../src/api");
 const { Mirrors } = await import("../src/mirrors");
 const { JobStore, RecordStore } = await import("../src/store");
 const { VideoRunner } = await import("../src/video/runner");
+const { clientWentAway } = await import("../src/video/routes");
 
 let server: ReturnType<typeof createApi>;
 let base: string;
@@ -147,6 +148,7 @@ describe("the video routes", () => {
     const handles = () => opened.filter((entry) => entry.file.endsWith(`${job.id}/candidate/two-boxes.mp4`)).map((entry) => entry.handle);
     const closed = () => handles().filter((handle) => handle.fd === -1).length;
     opened.length = 0;
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       await new Promise<void>((resolve, reject) => {
         const req = httpRequest(`${base}/api/jobs/${job.id}/media/two-boxes.mp4`, { headers: { range: "bytes=1024-" } }, (res) => {
@@ -176,9 +178,20 @@ describe("the video routes", () => {
       const after = Date.now() + 3_000;
       while (sheetHandle?.fd !== -1 && Date.now() < after) await new Promise((resolve) => setTimeout(resolve, 20));
       expect(sheetHandle?.fd).toBe(-1);
+      // A seek's abort is not a failure, and the runner's log does not say it is.
+      expect(logged).not.toHaveBeenCalled();
     } finally {
+      logged.mockRestore();
       opened.length = 0;
     }
+  });
+
+  it("tells a client that went away from a read that failed", () => {
+    const failure = (code: string) => Object.assign(new Error(code), { code });
+    expect(clientWentAway(failure("ERR_STREAM_PREMATURE_CLOSE"))).toBe(true);
+    expect(clientWentAway(failure("ECONNRESET"))).toBe(true);
+    expect(clientWentAway(failure("EIO"))).toBe(false);
+    expect(clientWentAway(new Error("no code"))).toBe(false);
   });
 
   it("serves a scene's sheet by its class, and refuses a sheet that is a link", async () => {

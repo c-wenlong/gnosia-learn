@@ -299,11 +299,22 @@ async function openServable(file: string): Promise<{ handle: import("node:fs/pro
 function streamHandle(
   handle: import("node:fs/promises").FileHandle,
   response: ServerResponse,
+  label: string,
   range: { start: number; end: number } | null = null,
 ): void {
   const stream = handle.createReadStream(range === null ? {} : { start: range.start, end: range.end });
-  // A client that went away is the ordinary end of a seek, not an error.
-  pipeline(stream, response).catch(() => undefined);
+  pipeline(stream, response).catch((error: unknown) => {
+    // A client that went away is the ordinary end of a seek, not an error. A
+    // read that failed is, and the runner's log is where it is looked for.
+    if (clientWentAway(error)) return;
+    console.error(`studio: serving ${label} failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
+/** Whether a failed pipeline only means the response was closed before the body was sent. */
+export function clientWentAway(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === "ERR_STREAM_PREMATURE_CLOSE" || code === "ECONNRESET" || code === "EPIPE";
 }
 
 async function sheetBytes(response: ServerResponse, record: VideoJobRecord, name: string): Promise<void> {
@@ -319,7 +330,7 @@ async function sheetBytes(response: ServerResponse, record: VideoJobRecord, name
     "cache-control": "no-cache",
     "last-modified": opened.mtime.toUTCString(),
   });
-  streamHandle(opened.handle, response);
+  streamHandle(opened.handle, response, `the sheet of ${scene} for job ${record.id}`);
 }
 
 /**
@@ -373,7 +384,7 @@ async function media(request: IncomingMessage, response: ServerResponse, record:
     "x-content-type-options": "nosniff",
     "cache-control": "no-cache",
   });
-  streamHandle(opened.handle, response, { start, end });
+  streamHandle(opened.handle, response, `${name} for job ${record.id}`, { start, end });
 }
 
 function events(request: IncomingMessage, response: ServerResponse, store: VideoStore, record: VideoJobRecord): void {
