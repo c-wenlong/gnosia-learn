@@ -108,6 +108,17 @@ describe("the video routes", () => {
     expect(part.status).toBe(206);
     expect(part.headers.get("content-range")).toBe("bytes 2-5/10");
     expect(await part.text()).toBe("2345");
+    // The transcript, which the job view's script panel reads, with ranges like the rest.
+    await writeFile(path.join(candidate, "two-boxes.transcript.json"), '{"segments":[]}');
+    const transcript = await fetch(`${base}/api/jobs/${job.id}/media/two-boxes.transcript.json`);
+    expect(transcript.status).toBe(200);
+    expect(transcript.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(await transcript.text()).toBe('{"segments":[]}');
+    const head = await fetch(`${base}/api/jobs/${job.id}/media/two-boxes.transcript.json`, { headers: { range: "bytes=0-1" } });
+    expect(head.status).toBe(206);
+    expect(await head.text()).toBe('{"');
+    expect((await fetch(`${base}/api/jobs/${job.id}/media/other.transcript.json`)).status).toBe(404);
+    expect((await fetch(`${base}/api/jobs/${job.id}/media/two-boxes.chapters.json`)).status).toBe(404);
     expect((await fetch(`${base}/api/jobs/${job.id}/media/copies.json`)).status).toBe(404);
     expect((await fetch(`${base}/api/jobs/${job.id}/media/..%2Fjob.json`)).status).toBe(404);
   });

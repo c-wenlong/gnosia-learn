@@ -289,12 +289,17 @@ async function sheetBytes(response: ServerResponse, record: VideoJobRecord, name
   createReadStream("", { fd: opened.handle.fd, autoClose: false }).on("close", () => void opened.handle.close()).pipe(response);
 }
 
-/** `GET /api/jobs/{id}/media/{file}`: the gate's copies, named from a fixed list, the mp4 with `Range`. */
+/**
+ * `GET /api/jobs/{id}/media/{file}`: the gate's copies, named from a fixed
+ * list (the mp4, the `.vtt`, the `.transcript.json` and the poster), every one
+ * with `Range`, as the mp4 has always had.
+ */
 async function media(request: IncomingMessage, response: ServerResponse, record: VideoJobRecord, name: string): Promise<void> {
   const names = candidateNames(record.slug);
   const types: Record<string, string> = {
     [names.mp4]: "video/mp4",
     [names.vtt]: "text/vtt; charset=utf-8",
+    [names.transcript]: "application/json; charset=utf-8",
     "poster.jpg": "image/jpeg",
   };
   const type = types[name];
