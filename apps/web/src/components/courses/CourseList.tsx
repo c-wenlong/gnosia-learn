@@ -195,7 +195,11 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
               Module {next.moduleOrder} · {next.moduleTitle}
             </p>
           </div>
-          <Button href={`/courses/${summary.slug}`} size="sm" aria-label={`Resume ${summary.code}: ${next.title}`}>
+          <Button
+            href={`/courses/${summary.slug}/${next.moduleSlug}`}
+            size="sm"
+            aria-label={`Resume ${summary.code}: ${next.title}`}
+          >
             Resume
           </Button>
         </div>

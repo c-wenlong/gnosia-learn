@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,9 +20,14 @@ describe("course covers", () => {
     expect([...COURSE_COVERS].sort()).toEqual(files);
   });
 
-  it("credits every photo", () => {
+  it("credits every photo with its source page", () => {
     if (COURSE_COVERS.size === 0) return;
-    expect(existsSync(path.join(FOLDER, "CREDITS.md"))).toBe(true);
+    const credits = readFileSync(path.join(FOLDER, "CREDITS.md"), "utf8");
+    for (const slug of COURSE_COVERS) {
+      const row = credits.split("\n").find((line) => line.startsWith(`| ${slug} |`));
+      expect(row, `CREDITS.md has no row for ${slug}`).toBeDefined();
+      expect(row).toMatch(/https:\/\/(unsplash\.com|www\.pexels\.com)\/photos?\//);
+    }
   });
 
   it("serves a listed slug and nothing else", () => {

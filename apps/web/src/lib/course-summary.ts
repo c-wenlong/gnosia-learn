@@ -23,9 +23,10 @@ import type { Course, TagMeta } from "@/lib/types";
 export interface CourseSummaryTopic {
   id: string;
   title: string;
-  /** The module the topic sits in: its place in the course and its title. */
+  /** The module the topic sits in: its place in the course, its title and its URL slug. */
   moduleOrder: number;
   moduleTitle: string;
+  moduleSlug: string;
 }
 
 export interface CourseSummary {
@@ -38,7 +39,11 @@ export interface CourseSummary {
   cover: string | null;
   tags: Pick<TagMeta, "id" | "label">[];
   moduleCount: number;
-  /** Every curriculum item, in module order then topic order. */
+  /**
+   * Every curriculum item, in module order then topic order. Module order is
+   * the order the course lists them, the order the course page walks
+   * (`pathStatus`), so the next topic named here is the one the page opens.
+   */
   topics: CourseSummaryTopic[];
 }
 
@@ -51,11 +56,9 @@ export function toCourseSummary(course: Course, tags: readonly TagMeta[]): Cours
     cover: coverSrc(course.slug),
     tags: tags.map(({ id, label }) => ({ id, label })),
     moduleCount: course.modules.length,
-    topics: [...course.modules]
-      .sort((a, b) => a.order - b.order)
-      .flatMap((m) =>
-        m.topics.map((t) => ({ id: t.id, title: t.title, moduleOrder: m.order, moduleTitle: m.title })),
-      ),
+    topics: course.modules.flatMap((m) =>
+      m.topics.map((t) => ({ id: t.id, title: t.title, moduleOrder: m.order, moduleTitle: m.title, moduleSlug: m.slug })),
+    ),
   };
 }
 
