@@ -23,7 +23,7 @@ import {
   VERB_TIMEOUT_MS,
 } from "./config";
 import { costFromLog, JobCostMeter, type CostSource, type SpendEntry } from "./cost";
-import { documentHashOf, ensureCheckout, isDiagramName, listDiagrams } from "./diagrams";
+import { checkoutRevision, documentHashOf, ensureCheckout, isDiagramName, listDiagrams } from "./diagrams";
 import {
   draftDir,
   draftJsonPath,
@@ -34,6 +34,7 @@ import {
   plannerSettingsPath,
   plannerSystemPath,
   studioHome,
+  workPath,
 } from "./paths";
 import {
   buildSystemPrompt,
@@ -182,6 +183,14 @@ export interface DraftView {
   kind: "diagram";
   state: DraftState;
   source: string | null;
+  /**
+   * C11: whether the extend target's checkout differs from what the EXTENDING
+   * block summarised: its document hash, or the revision its checkout record
+   * names. False when unknown (not an extend draft, or no checkout to read).
+   */
+  sourceChanged: boolean;
+  /** The revision the EXTENDING block summarised; null when unknown or not an extend draft. */
+  sourceRevision: number | null;
   title: string | null;
   transcript: TranscriptEntry[];
   brief: DraftBrief | null;
@@ -248,6 +257,27 @@ function sumCost(spend: readonly TurnSpend[]): { costUsd: number | null; costSou
 }
 
 /** The refusal `POST /api/jobs` would give when the catalog cannot read the vocabulary. */
+/**
+ * C11, read from the checkout the planner was told about: two small file reads
+ * and no Chromium, so it is cheap enough for every view. The hash catches an
+ * edit on the canvas (saved or not yet committed); the revision catches a
+ * checkout brought up to a newer revision (an accepted job, a commit), which
+ * happens the next time anything opens the diagram. A missing file, or a draft
+ * that recorded neither, says nothing changed rather than guess.
+ */
+export async function sourceChanged(record: Pick<DraftRecord, "source" | "sourceHash" | "sourceRevision">): Promise<boolean> {
+  if (record.source === null) return false;
+  if (record.sourceHash !== null) {
+    const now = await documentHashOf(workPath(record.source));
+    if (now !== null && now !== record.sourceHash) return true;
+  }
+  if (record.sourceRevision !== null) {
+    const revision = await checkoutRevision(record.source);
+    if (typeof revision === "number" && revision !== record.sourceRevision) return true;
+  }
+  return false;
+}
+
 function vocabularyDown(error: unknown): JobRefused {
   return new JobRefused(
     503,
@@ -481,6 +511,8 @@ export class Drafts {
       kind: record.kind,
       state: record.state,
       source: record.source,
+      sourceChanged: await sourceChanged(record),
+      sourceRevision: record.source === null ? null : record.sourceRevision,
       title: record.title,
       transcript: transcriptOf(await this.events(id)),
       brief: record.brief,

@@ -542,7 +542,7 @@ handler as every other route. Every response carries a `note`.
 | --- | --- | --- | --- |
 | `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch |
 | `GET` | `/api/drafts` | `?state=&limit=` | `{ drafts: [{ draftId, state, title, source, turns, costUsd, updated, jobId }] }` |
-| `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, transcript: [{ seq, role, text, at, brief? }], brief, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }` |
+| `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, transcript: [{ seq, role, text, at, brief? }], brief, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, at most `STUDIO_TEXT_LIMIT` characters | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
 | `GET` | `/api/drafts/{id}/events` | `Last-Event-ID` | SSE: `delta` (text so far), `reply`, `brief`, `brief-invalid`, `studio`, `state`, `error` |
 | `POST` | `/api/drafts/{id}/draw` | `{ idempotencyKey }` | `201 { draftId, jobId, state: "drawing" }`; every refusal `POST /api/jobs` can give, with the same status and body |
