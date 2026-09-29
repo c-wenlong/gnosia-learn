@@ -1035,6 +1035,7 @@ async function usesOf(db: CatalogDatabase, slug: string): Promise<string[]> {
     ],
     ["assets filed under it", sql`select asset_id as id from asset_topic where topic_slug = ${slug} order by asset_id`],
     ["diagrams filed under it", sql`select slug as id from diagram where topic_slug = ${slug} and archived_at is null order by slug`],
+    ["studio videos filed under it", sql`select slug as id from video where topic_slug = ${slug} and archived_at is null order by slug`],
     [
       "open studio jobs for it",
       sql`select id from job where topic_slug = ${slug} and state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)}) order by id`,
@@ -1142,7 +1143,7 @@ export interface RenameResult {
 class RenameNeedsCourses extends Error {}
 
 /** The entity types a rename can touch, which it locks like an import does. */
-const RENAME_LOCKS: readonly RevisionEntityType[] = ["asset", "collection", "concept", "curriculum_item", "diagram", "topic"];
+const RENAME_LOCKS: readonly RevisionEntityType[] = ["asset", "collection", "concept", "curriculum_item", "diagram", "topic", "video"];
 
 /** Every entity whose snapshot names `slug`, by type. Topics are keyed by their slug before the rename. */
 async function namedBy(db: CatalogDatabase, slug: string): Promise<Map<RevisionEntityType, string[]>> {
@@ -1161,6 +1162,7 @@ async function namedBy(db: CatalogDatabase, slug: string): Promise<Map<RevisionE
     ["curriculum_item", await ids(sql`select curriculum_item_id as id from curriculum_item_topic where topic_slug = ${slug}`)],
     ["asset", await ids(sql`select asset_id as id from asset_topic where topic_slug = ${slug}`)],
     ["diagram", await ids(sql`select slug as id from diagram where topic_slug = ${slug}`)],
+    ["video", await ids(sql`select slug as id from video where topic_slug = ${slug}`)],
   ]);
 }
 

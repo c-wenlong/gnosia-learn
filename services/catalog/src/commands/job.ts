@@ -21,6 +21,7 @@ import {
   draft as draftTable,
   session as sessionTable,
   topic as topicTable,
+  video as videoTable,
 } from "@self-learn/schema";
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
@@ -132,6 +133,12 @@ export interface EnqueueResult {
   /** False when the idempotency key had already been used: this is that job. */
   created: boolean;
   job: JobSummary;
+  /**
+   * The parent `--discard-parent` discarded in the same transaction as this
+   * insert (D52 of docs/STUDIO-VIDEOS.md), or null when none was, including
+   * a retried submit that found its job already made.
+   */
+  discarded: { id: string; from: string; to: "discarded" } | null;
 }
 
 export interface ClaimResult {
@@ -253,16 +260,40 @@ function asString(value: unknown, field: string): string {
   return value.trim();
 }
 
+/** Where a studio video's logical name lives: `videos/<slug>.mp4` (docs/STUDIO-VIDEOS.md, "Schema"). */
+export const VIDEOS_DIR = "videos";
+
+/** A studio video's slug: kebab-case, 3 to 60 characters, as the brief's `slug` rule says. */
+export const VIDEO_SLUG = /^(?=.{3,60}$)[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** The slug a video target names, or null when the target is not one. */
+export function videoSlugOf(targetPath: string): string | null {
+  const match = /^videos\/([^/]+)\.mp4$/.exec(targetPath);
+  return match !== null && VIDEO_SLUG.test(match[1] as string) ? (match[1] as string) : null;
+}
+
 /**
- * A target path the lease can be taken on: repo-relative, directly inside
- * `learn/assets/`, and a `.tldr`.
+ * A target path the lease can be taken on, by the job's kind.
  *
- * The `.tldr` is the lease key rather than the SVG because it is the editable
- * source; the export is derived from it and is claimed alongside it.
+ * A diagram's is repo-relative, directly inside `learn/assets/`, and a
+ * `.tldr`: the editable source is the lease key rather than the SVG, since the
+ * export is derived from it and is claimed alongside it.
+ *
+ * A video's is `videos/<slug>.mp4`, a logical name that is no file anywhere
+ * (the cut is a blob, D49), leased exactly as a diagram's is so two drafts
+ * cannot make the same slug at once (edge case V8).
  */
-export function briefTarget(given: string): string {
+export function briefTarget(given: string, kind: JobKind = "diagram"): string {
   const cleaned = given.trim().replaceAll("\\", "/");
   const normalised = path.posix.normalize(cleaned);
+  if (kind === "video") {
+    if (videoSlugOf(normalised) === null) {
+      throw new JobError(
+        `"${given}" is not a video target. Pass ${VIDEOS_DIR}/<slug>.mp4, the slug kebab-case and 3 to 60 characters.`,
+      );
+    }
+    return normalised;
+  }
   if (path.isAbsolute(normalised) || normalised.startsWith("..")) {
     throw new JobError(`"${given}" is not a repo-relative path. Pass ${ASSETS_DIR}/<name>.tldr.`);
   }
@@ -360,6 +391,13 @@ export interface EnqueueOptions {
   repoRoot?: string;
   /** Whose job this is. Default: the CLI's owner. */
   owner?: string;
+  /**
+   * D52 of docs/STUDIO-VIDEOS.md: discard this parent, a video job awaiting
+   * review, in the transaction that inserts the new job, so the lease on the
+   * slug passes from one to the other with no gap and a refused insert leaves
+   * the parent as it was. Must be the brief's `parentJob`.
+   */
+  discardParent?: string;
 }
 
 export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult> {
@@ -371,7 +409,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
     throw new JobError(`unknown job kind "${kind}". Known: ${JOB_KINDS.join(", ")}.`);
   }
   const topicSlug = asString(document.topic, "topic");
-  const targetPath = briefTarget(asString(document.target, "target"));
+  const targetPath = briefTarget(asString(document.target, "target"), kind as JobKind);
   const idempotencyKey = asString(document.idempotencyKey, "idempotencyKey");
   const id = document.id?.trim() || randomUUID();
   // The id is a directory name now, in the candidate path below and in the
@@ -387,6 +425,19 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
   if (typeof brief !== "object" || brief === null || Array.isArray(brief)) {
     throw new JobError(`"brief" must be a JSON object`);
   }
+  if (kind === "video") assertVideoBrief(brief as Record<string, unknown>, targetPath, topicSlug);
+  const discardParent = options.discardParent?.trim() || undefined;
+  if (discardParent !== undefined) {
+    if (kind !== "video") {
+      throw new JobError("--discard-parent is for a video change job (D52 of docs/STUDIO-VIDEOS.md); a diagram revises only a finished job.");
+    }
+    if (document.parentJob?.trim() !== discardParent) {
+      throw new JobError(
+        `--discard-parent ${discardParent} must be the brief's "parentJob" (${JSON.stringify(document.parentJob ?? null)}): ` +
+          `only the job this one changes is discarded for it.`,
+      );
+    }
+  }
 
   // Recorded at enqueue, and deliberately not compared here or at accept.
   //
@@ -400,9 +451,11 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
   // What phase 0 can already see is drift afterwards: `asset_job.content_hash`
   // is what the job landed, and `catalog job show` re-hashes the file and
   // reports `current: false` when the bytes have moved since.
+  // A video's target is no file: its "hash before" is the cut the video row
+  // holds, read below with the database.
   const absolute = path.join(repoRoot, targetPath);
   const targetHashBefore =
-    (await stat(absolute).catch(() => null)) === null
+    kind === "video" || (await stat(absolute).catch(() => null)) === null
       ? null
       : (await fileFacts(absolute)).contentHash;
 
@@ -432,7 +485,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
     const existing = await byIdempotencyKey(db, idempotencyKey);
     if (theirs(existing)) throw keyTaken();
     if (existing !== undefined) {
-      return { ok: true as const, command: "enqueue" as const, created: false, job: summarise(existing) };
+      return { ok: true as const, command: "enqueue" as const, created: false, job: summarise(existing), discarded: null };
     }
     await assertOwnReferences(
       db,
@@ -441,18 +494,29 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
       scoped,
     );
     if (scoped) await assertDrawable(db, row, owner);
+    if (kind === "video") row.targetHashBefore = await videoCutHash(db, targetPath, owner);
     try {
-      const [inserted] = await db
-        .insert(jobTable)
-        .values(scoped ? { ...row, ownerId: owner } : row)
-        .returning();
+      // One transaction, so a discarded parent and the new job land together
+      // or not at all: a refused insert (the topic, the lease, the key) rolls
+      // the discard back and the video in review is untouched.
+      const { inserted, discarded } = await db.transaction(async (tx) => {
+        const discarded =
+          discardParent === undefined ? null : await discardForChange(tx, discardParent, row, scoped ? owner : undefined);
+        const [inserted] = await tx
+          .insert(jobTable)
+          .values(scoped ? { ...row, ownerId: owner } : row)
+          .returning();
+        return { inserted: inserted!, discarded };
+      });
       return {
         ok: true as const,
         command: "enqueue" as const,
         created: true,
-        job: summarise(inserted!),
+        job: summarise(inserted),
+        discarded,
       };
     } catch (error) {
+      if (error instanceof JobError) throw error;
       // Two submits of one key can both miss the lookup above and race to the
       // insert. The loser lands here, and the honest answer is the same one the
       // lookup would have given: this key already belongs to that job. Throwing
@@ -470,6 +534,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
             command: "enqueue" as const,
             created: false,
             job: summarise(winner),
+            discarded: null,
           };
         }
       }
@@ -492,6 +557,21 @@ async function assertDrawable(db: CatalogDatabase, row: NewJob, owner: string): 
     .where(eq(topicTable.slug, row.topicSlug))
     .limit(1);
   if (filed !== undefined && !readableOwners(owner).includes(filed.ownerId)) throw noTopic(row.topicSlug);
+  if (row.kind === "video") {
+    const slug = videoSlugOf(row.targetPath) as string;
+    const [held] = await db
+      .select({ ownerId: videoTable.ownerId })
+      .from(videoTable)
+      .where(eq(videoTable.slug, slug))
+      .limit(1);
+    if (held !== undefined && held.ownerId !== owner) {
+      throw new JobError(
+        `${row.targetPath} names a video this owner cannot make: slugs are shared across owners ` +
+          `(D23 of docs/CONTENT-MIGRATION.md), so choose another name.`,
+      );
+    }
+    return;
+  }
   const slug = path.posix.basename(row.targetPath, ".tldr");
   const [held] = await db
     .select({ ownerId: diagramTable.ownerId })
@@ -504,6 +584,79 @@ async function assertDrawable(db: CatalogDatabase, row: NewJob, owner: string): 
         `(D23 of docs/CONTENT-MIGRATION.md), so choose another name.`,
     );
   }
+}
+
+/**
+ * What the catalog can hold a video job's brief to at enqueue: where it says
+ * which video and which topic, the columns say the same. The brief's own
+ * rules (the script, the length) are `validateVideoBrief`'s, in the studio;
+ * these are only the ones a row would otherwise contradict.
+ */
+function assertVideoBrief(brief: Record<string, unknown>, targetPath: string, topicSlug: string): void {
+  const slug = videoSlugOf(targetPath);
+  if (brief.slug !== undefined && brief.slug !== slug) {
+    throw new JobError(`the brief's slug ${JSON.stringify(brief.slug)} is not the target's, "${slug}" (${targetPath}).`);
+  }
+  if (brief.topic !== undefined && brief.topic !== topicSlug) {
+    throw new JobError(`the brief's topic ${JSON.stringify(brief.topic)} is not the job's, "${topicSlug}".`);
+  }
+}
+
+/** The sha256 of the cut a video holds now, read from its blob key, or null when it has none. */
+async function videoCutHash(db: CatalogDatabase, targetPath: string, owner: string): Promise<string | null> {
+  const slug = videoSlugOf(targetPath);
+  if (slug === null) return null;
+  const [row] = await db
+    .select({ key: videoTable.mp4BlobKey })
+    .from(videoTable)
+    .where(and(eq(videoTable.slug, slug), eq(videoTable.ownerId, owner)))
+    .limit(1);
+  return /\/([0-9a-f]{64})\.[a-z0-9]+$/.exec(row?.key ?? "")?.[1] ?? null;
+}
+
+/**
+ * D52: the parent of a video change job, discarded inside the transaction
+ * that inserts the child. Locked first, so a concurrent Accept of the same
+ * parent either lands before this reads it (and it is `accepted`, which this
+ * refuses) or waits and then finds it discarded. Another owner's job reads as
+ * a missing one.
+ */
+async function discardForChange(
+  tx: CatalogDatabase,
+  parentId: string,
+  child: NewJob,
+  owner: string | undefined,
+): Promise<{ id: string; from: string; to: "discarded" }> {
+  const [parent] = await tx
+    .select()
+    .from(jobTable)
+    .where(and(eq(jobTable.id, parentId), owner === undefined ? undefined : eq(jobTable.ownerId, owner)))
+    .limit(1)
+    .for("update");
+  if (parent === undefined) throw new JobError(`no job "${parentId}" to revise.`);
+  if (parent.kind !== "video") {
+    throw new JobError(`job ${parentId} is a ${parent.kind} job; --discard-parent discards only a video job for its change.`);
+  }
+  if (parent.state !== "awaiting_review") {
+    throw new JobError(
+      `job ${parentId} is ${parent.state}, not awaiting_review, so there is nothing to discard for this change. ` +
+        `Enqueue without --discard-parent` +
+        (parent.state === "queued" || parent.state === "running" ? `, once it has finished.` : `.`),
+    );
+  }
+  if (parent.targetPath !== child.targetPath) {
+    throw new JobError(
+      `job ${parentId} makes ${parent.targetPath} and this job ${child.targetPath}: a change keeps its video's slug, ` +
+        `so the parent it discards is the one holding the same lease.`,
+    );
+  }
+  const updated = await tx
+    .update(jobTable)
+    .set({ state: "discarded", reviewedAt: sql`now()`, updatedAt: sql`now()` })
+    .where(and(eq(jobTable.id, parentId), eq(jobTable.state, "awaiting_review")))
+    .returning({ id: jobTable.id });
+  if (updated.length === 0) throw new JobError(`job ${parentId} moved while it was being discarded; nothing was changed.`);
+  return { id: parentId, from: parent.state, to: "discarded" };
 }
 
 /**
@@ -859,56 +1012,69 @@ export interface VerdictOptions {
  */
 export async function runAccept(options: VerdictOptions): Promise<TransitionResult> {
   const owner = options.owner ?? CLI_OWNER;
-  return withDatabase(({ db }) =>
-    db.transaction(async (tx) => {
-      const mine = await ownedJobs(tx, owner);
-      const rows = await tx
-        .select()
-        .from(jobTable)
-        .where(and(eq(jobTable.id, options.jobId), mine))
-        .limit(1);
-      const before = rows[0];
-      if (before === undefined) throw await explainRefusal(tx, options.jobId, "accepted", owner);
-      // Checked before anything is written, so a job in the wrong state gets
-      // the transition refusal rather than a complaint about its outputs. The
-      // conditional update at the end still guards the row itself: this is the
-      // message, that is the lock.
-      if (!canTransition(JOB_TRANSITIONS, before.state, "accepted")) {
-        throw await explainRefusal(tx, options.jobId, "accepted", owner);
-      }
+  return withDatabase(({ db }) => db.transaction((tx) => acceptJobIn(tx, options.jobId, owner)));
+}
 
-      // An accepted job says what it landed, so one with nothing to point at is
-      // not accepted, it is a row claiming a result it cannot name.
-      const outputs = await jobOutputs(tx, options.jobId);
-      if (outputs.length === 0) {
-        const slug = /^learn\/assets\/(.+)\.tldr$/.exec(before.targetPath)?.[1] ?? "<slug>";
-        throw new JobError(
-          `job ${options.jobId} has no output to accept. Land it first: \`catalog diagram put ` +
-            `--slug ${slug} --tldr <candidate> --svg <candidate.svg> --job ${options.jobId} --reason "..."\`.`,
-        );
-      }
+/**
+ * The checked transition to `accepted`, inside a transaction the caller holds:
+ * `catalog job accept` opens its own, and `catalog video put --job` runs it in
+ * the transaction that lands the video, so a video is never in the catalog
+ * with its job still in review (D49 of docs/STUDIO-VIDEOS.md, "Accept").
+ */
+export async function acceptJobIn(tx: CatalogDatabase, jobId: string, owner: string): Promise<TransitionResult> {
+  const mine = await ownedJobs(tx, owner);
+  const rows = await tx
+    .select()
+    .from(jobTable)
+    .where(and(eq(jobTable.id, jobId), mine))
+    .limit(1);
+  const before = rows[0];
+  if (before === undefined) throw await explainRefusal(tx, jobId, "accepted", owner);
+  // Checked before anything is written, so a job in the wrong state gets
+  // the transition refusal rather than a complaint about its outputs. The
+  // conditional update at the end still guards the row itself: this is the
+  // message, that is the lock.
+  if (!canTransition(JOB_TRANSITIONS, before.state, "accepted")) {
+    throw await explainRefusal(tx, jobId, "accepted", owner);
+  }
 
-      const updated = await tx
-        .update(jobTable)
-        .set({
-          state: "accepted",
-          reviewedAt: sql`now()`,
-          updatedAt: sql`now()`,
-        })
-        .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, sourcesOf("accepted")), mine))
-        .returning();
-      if (updated.length === 0) throw await explainRefusal(tx, options.jobId, "accepted", owner);
+  // An accepted job says what it landed, so one with nothing to point at is
+  // not accepted, it is a row claiming a result it cannot name.
+  const outputs = await jobOutputs(tx, jobId);
+  if (outputs.length === 0) {
+    if (before.kind === "video") {
+      const slug = videoSlugOf(before.targetPath) ?? "<slug>";
+      throw new JobError(
+        `job ${jobId} has no output to accept. A video lands and is accepted in one step: \`catalog video put ` +
+          `--job ${jobId} --slug ${slug} --dir <candidate> --base <revision|none> --reason "..."\`.`,
+      );
+    }
+    const slug = /^learn\/assets\/(.+)\.tldr$/.exec(before.targetPath)?.[1] ?? "<slug>";
+    throw new JobError(
+      `job ${jobId} has no output to accept. Land it first: \`catalog diagram put ` +
+        `--slug ${slug} --tldr <candidate> --svg <candidate.svg> --job ${jobId} --reason "..."\`.`,
+    );
+  }
 
-      return {
-        ok: true as const,
-        command: "accept" as const,
-        from: before.state,
-        to: "accepted",
-        job: summarise(updated[0]!),
-        outputs,
-      };
-    }),
-  );
+  const updated = await tx
+    .update(jobTable)
+    .set({
+      state: "accepted",
+      reviewedAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .where(and(eq(jobTable.id, jobId), inArray(jobTable.state, sourcesOf("accepted")), mine))
+    .returning();
+  if (updated.length === 0) throw await explainRefusal(tx, jobId, "accepted", owner);
+
+  return {
+    ok: true as const,
+    command: "accept" as const,
+    from: before.state,
+    to: "accepted",
+    job: summarise(updated[0]!),
+    outputs,
+  };
 }
 
 /** Discard: the candidate is gone and the lease is released. */
@@ -1087,6 +1253,7 @@ export function formatJob(result: JobResult): string {
     case "enqueue":
       return [
         result.created ? `queued ${result.job.id}` : `already queued as ${result.job.id}`,
+        ...(result.discarded === null ? [] : [`  discarded ${result.discarded.id} (was ${result.discarded.from})`]),
         `  target    ${result.job.targetPath}`,
         `  candidate ${result.job.candidatePath ?? "(none)"}`,
         `  topic     ${result.job.topic}`,
