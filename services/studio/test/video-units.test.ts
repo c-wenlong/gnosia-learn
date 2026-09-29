@@ -80,8 +80,8 @@ describe("the video agent's permission file", () => {
     expect(deny).toContain(`Edit(/${paths.lib}/**)`);
     expect(deny).toContain(`Read(/${paths.bin}/**)`);
     expect(settings.hooks).toEqual({ PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "/usr/local/bin/node /x/bin/bash-guard.cjs" }] }] });
-    // The diagram agent's file is not given one.
-    expect("hooks" in buildSettings({ jobId: "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc", slug: "two-boxes" })).toBe(false);
+    // The diagram agent's file carries its own guard, in the same block.
+    expect(buildSettings({ jobId: "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc", slug: "two-boxes", guard: "/usr/local/bin/node /x/bash-guard.cjs" }).hooks).toEqual({ PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "/usr/local/bin/node /x/bash-guard.cjs" }] }] });
   });
 
   it("denies every other job's workspace and none of its own working directories", () => {

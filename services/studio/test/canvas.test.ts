@@ -75,3 +75,17 @@ describe("a doctor slower than the cache's own lifetime", () => {
     expect(procMock.run).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("a studio home the diagram agent could not type", () => {
+  it("leaves the doctor alone: the studio's own canvas calls take paths as argv, with no shell (Greptile on #206)", async () => {
+    vi.useRealTimers();
+    const saved = process.env.STUDIO_HOME;
+    process.env.STUDIO_HOME = "/tmp/studio-$dollar-home";
+    try {
+      procMock.run.mockResolvedValue(result);
+      expect(await doctor(true)).toEqual(result);
+    } finally {
+      process.env.STUDIO_HOME = saved;
+    }
+  });
+});
