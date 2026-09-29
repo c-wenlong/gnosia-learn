@@ -9,6 +9,7 @@ import {
   releaseHold,
   stopWaiting,
   videoAvailability,
+  diagramAvailability,
   getDraft,
   idempotencyKey,
   listDrafts,
@@ -295,5 +296,13 @@ describe("tags and cards per kind (docs/STUDIO-MENTIONS.md, API)", () => {
       "the video doctor has not finished its first check",
     );
     expect(videoAvailability(undefined)).toEqual({ ok: false, reason: null });
+  });
+});
+
+describe("diagramAvailability (#206)", () => {
+  it("reads health's diagramAgent, and treats a runner without it as able", () => {
+    expect(diagramAvailability({ ok: false, problem: " a bad path " })).toEqual({ ok: false, reason: "a bad path" });
+    expect(diagramAvailability({ ok: true, problem: null })).toEqual({ ok: true, reason: null });
+    expect(diagramAvailability(undefined)).toEqual({ ok: true, reason: null });
   });
 });

@@ -26,7 +26,7 @@ import { AGENT_ROWS, agentDefaults, effortOptions, modelOptions, runnerSettings,
 import { readStudioAgents } from "@/lib/studio-agents";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
-import { videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
+import { diagramAvailability, videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   filterDiagrams,
@@ -80,6 +80,8 @@ interface Health {
   video?: unknown;
   /** The model and effort a job started now would get, per kind (D53). */
   agent?: unknown;
+  /** Whether a diagram job can be queued at all (#206). */
+  diagramAgent?: unknown;
 }
 
 export default async function StudioPage({
@@ -176,6 +178,7 @@ export default async function StudioPage({
   const fromRunner = runnerSettings(runnerAgents?.ok ? runnerAgents.data : null);
   const defaults = fromRunner.defaults ?? agentDefaults(health.data.agent);
   const videoState = videoAvailability(health.data.video);
+  const diagramState = diagramAvailability(health.data.diagramAgent);
 
   // Every diagram's path, filtered or not: a job drawing onto one of these is
   // an extend and goes on its tile; any other target is a new diagram's card.
@@ -229,6 +232,7 @@ export default async function StudioPage({
             suggestions={chatSuggestions}
             cap={cap}
             video={videoState}
+            diagramAgent={diagramState}
           />
         </StudioDialog>
       );

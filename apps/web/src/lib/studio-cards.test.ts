@@ -449,3 +449,16 @@ describe("the runner's own slot fields (#207)", () => {
     expect(kindPendingTopic("stale", "video", entry, bothAsked())).toBe(pending);
   });
 });
+
+describe("a diagram agent that cannot run (#206)", () => {
+  it("disables Draw with the runner's problem, and so Make both, and leaves the video card alone", () => {
+    const down = { ok: false, reason: "the studio home path holds a character the Bash guard cannot allow" };
+    const cards = liveCards(bothAsked(), [], null, { ok: true, reason: null }, down);
+    expect(cards.find((card) => card.kind === "diagram")?.block?.reason).toBe(
+      "The studio home path holds a character the Bash guard cannot allow.",
+    );
+    expect(cards.find((card) => card.kind === "video")?.block).toBeNull();
+    expect(makeBoth(cards)).toBeNull();
+    expect(kindDrawBlock("diagram", DIAGRAM, bothAsked(), [], null, null, { ok: true, reason: null })).toBeNull();
+  });
+});

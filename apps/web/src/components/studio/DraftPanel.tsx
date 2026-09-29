@@ -99,6 +99,7 @@ import {
   stopWaiting,
   releaseHold,
   videoAvailability,
+  diagramAvailability,
   type DraftKind,
   type DraftView,
   type TranscriptBrief,
@@ -215,6 +216,7 @@ export function DraftPanel({
   suggestions,
   cap: initialCap,
   video: initialVideo = null,
+  diagramAgent: initialDiagram = null,
 }: {
   draftId: string;
   /** `?job=`: the job view, with the bar back to the chat. */
@@ -229,6 +231,8 @@ export function DraftPanel({
   cap: CapStatus | null;
   /** The video doctor from `/api/health` at render time: whether Video can be tagged and made. */
   video?: VideoAvailability | null;
+  /** Health's `diagramAgent` at render time (#206): whether Draw can queue a job at all. */
+  diagramAgent?: VideoAvailability | null;
 }) {
   const router = useRouter();
   const { jobs, refresh: refreshJobs } = useStudioJobs();
@@ -243,6 +247,7 @@ export function DraftPanel({
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   const [cap, setCap] = useState<CapStatus | null>(initialCap);
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
+  const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
   /** The cards whose press is under way. */
   const [pressing, setPressing] = useState<ReadonlySet<DraftKind>>(new Set());
   const [refused, setRefused] = useState<Partial<Record<CardKey, DrawRefusal & { seq: number }>>>({});
@@ -390,6 +395,7 @@ export function DraftPanel({
     const next = capFrom(health.dailyCap);
     if (next !== null) setCap(next);
     setVideo(videoAvailability(health.video));
+    setDiagramAgent(diagramAvailability(health.diagramAgent));
   }, []);
   useEffect(() => {
     const wake = () => {
@@ -479,7 +485,10 @@ export function DraftPanel({
     sendRef.current = send;
   });
 
-  const cards = useMemo(() => (view === null ? [] : liveCards(view, jobs, cap, video)), [view, jobs, cap, video]);
+  const cards = useMemo(
+    () => (view === null ? [] : liveCards(view, jobs, cap, video, diagramAgent)),
+    [view, jobs, cap, video, diagramAgent],
+  );
   const both = useMemo(() => (editing ? null : makeBoth(cards)), [cards, editing]);
 
   /** One card's press: Draw, or Make video. */

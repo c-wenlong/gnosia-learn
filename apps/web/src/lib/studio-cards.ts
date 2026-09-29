@@ -290,6 +290,7 @@ export function kindDrawBlock(
   jobs: readonly Job[],
   cap: CapStatus | null,
   video: VideoAvailability | null,
+  diagram: VideoAvailability | null = null,
 ): DrawBlock | null {
   if (view.inFlight) return { reason: STILL_ANSWERING, holder: null };
   const held = slotOf(view, kind)?.held ?? null;
@@ -307,6 +308,9 @@ export function kindDrawBlock(
     const name = holder.title ?? holder.jobId.slice(0, 8);
     const state = holder.state === "awaiting_review" ? "waiting for review" : holder.state;
     return { reason: `“${name}” already holds ${brief.slug} (${state}). Accept or discard it first.`, holder: holder.jobId };
+  }
+  if (kind === "diagram" && diagram !== null && !diagram.ok) {
+    return { reason: diagram.reason === null ? "Diagrams cannot be drawn on this machine right now." : sentenceOf(diagram.reason), holder: null };
   }
   if (kind === "video" && video !== null && !video.ok) {
     return { reason: video.reason === null ? "Videos are not available on this machine." : `Videos are unavailable: ${video.reason}`, holder: null };
@@ -369,6 +373,7 @@ export function liveCards(
   jobs: readonly Job[],
   cap: CapStatus | null,
   video: VideoAvailability | null,
+  diagram: VideoAvailability | null = null,
 ): LiveCard[] {
   const out: LiveCard[] = [];
   for (const kind of ["diagram", "video"] as const) {
@@ -386,7 +391,7 @@ export function liveCards(
       requestSeq: requestSeqOf(view, kind, item, true),
       replaces: replacesJob(view, kind),
       pendingTopic: kindPendingTopic(status, kind, entry, view),
-      block: kindDrawBlock(kind, item.brief, view, jobs, cap, video),
+      block: kindDrawBlock(kind, item.brief, view, jobs, cap, video, diagram),
     });
   }
   return out;
@@ -565,4 +570,11 @@ export function openerValue(opener: { compose: string; mentions?: readonly unkno
     ...kinds.flatMap((kind) => [{ type: "mention" as const, kind }, { type: "text" as const, text: " " }]),
     { type: "text", text: opener.compose },
   ]);
+}
+
+/** A runner's sentence as the card shows it: a capital first, a full stop last. */
+function sentenceOf(text: string): string {
+  const trimmed = text.trim();
+  const capital = trimmed[0]!.toUpperCase() + trimmed.slice(1);
+  return /[.!?]$/.test(capital) ? capital : `${capital}.`;
 }

@@ -694,9 +694,24 @@ export async function readDailyCap(): Promise<unknown> {
  * the Video suggestion can be used (T5, T25). Null when the runner did not
  * answer. Read at the same rate as the cap, for the same reason.
  */
-export async function readStudioHealth(): Promise<{ dailyCap: unknown; video: unknown } | null> {
-  const result = await call<{ dailyCap?: unknown; video?: unknown }>("/studio/api/health");
-  return result.ok ? { dailyCap: result.data.dailyCap ?? null, video: result.data.video ?? null } : null;
+export async function readStudioHealth(): Promise<{ dailyCap: unknown; video: unknown; diagramAgent: unknown } | null> {
+  const result = await call<{ dailyCap?: unknown; video?: unknown; diagramAgent?: unknown }>("/studio/api/health");
+  return result.ok
+    ? { dailyCap: result.data.dailyCap ?? null, video: result.data.video ?? null, diagramAgent: result.data.diagramAgent ?? null }
+    : null;
+}
+
+/**
+ * Whether a diagram job can be queued, from health's `diagramAgent: { ok,
+ * problem }` (#206: the studio's home path holds a character the Bash guard
+ * cannot allow, and every Draw would answer 503). An absent block, from a
+ * runner before it, is available: the press's own refusal still says why.
+ */
+export function diagramAvailability(raw: unknown): VideoAvailability {
+  if (typeof raw !== "object" || raw === null) return { ok: true, reason: null };
+  const agent = raw as { ok?: unknown; problem?: unknown };
+  if (agent.ok !== false) return { ok: true, reason: null };
+  return { ok: false, reason: typeof agent.problem === "string" && agent.problem.trim() !== "" ? agent.problem.trim() : null };
 }
 
 /** Whether a video can be made now, and why not, from health's `video` block. */
