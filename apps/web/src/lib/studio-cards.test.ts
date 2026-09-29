@@ -32,6 +32,7 @@ import {
   waitingKinds,
   waitingLine,
   SAY_WHAT,
+  pressUnderWay,
 } from "./studio-cards";
 import { STILL_ANSWERING } from "./studio-chat";
 
@@ -460,5 +461,25 @@ describe("a diagram agent that cannot run (#206)", () => {
     expect(cards.find((card) => card.kind === "video")?.block).toBeNull();
     expect(makeBoth(cards)).toBeNull();
     expect(kindDrawBlock("diagram", DIAGRAM, bothAsked(), [], null, null, { ok: true, reason: null })).toBeNull();
+  });
+});
+
+describe("a press under way (phase 2, bug 8)", () => {
+  it("lasts until the answer, or until the record names a new job for the kind, whichever is first", () => {
+    const before = view({ slots: { diagram: slot({ jobId: "old-d" }), video: slot() } });
+    const pressing = new Map([
+      ["diagram", "old-d"],
+      ["video", null],
+    ] as const);
+    expect(pressUnderWay(pressing, before, "diagram")).toBe(true);
+    expect(pressUnderWay(pressing, before, "video")).toBe(true);
+    // The runner recorded the video's job; the diagram's is still the old one.
+    const recorded = view({ slots: { diagram: slot({ jobId: "old-d" }), video: slot({ jobId: "new-v", state: "drawing" }) } });
+    expect(pressUnderWay(pressing, recorded, "diagram")).toBe(true);
+    expect(pressUnderWay(pressing, recorded, "video")).toBe(false);
+    // Nothing pressed is never under way.
+    expect(pressUnderWay(new Map(), recorded, "video")).toBe(false);
+    // A runner from before the slots: the draft's one job is the diagram's.
+    expect(pressUnderWay(new Map([["diagram", null]]), view({ slots: undefined, jobId: "j1" }), "diagram")).toBe(false);
   });
 });
