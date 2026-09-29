@@ -630,7 +630,11 @@ SVG, and refuses by name a cover that is missing, not an image, or not the
 type its name says. It sets a cover the course lacks and never changes one it
 has: a file with no `cover:` (an export from before covers) keeps the stored
 cover and credit with no revision, and a `cover:` whose credit, type or bytes
-differ from the stored cover is refused by name. `course import` of one file carries the cover over and
+differ from the stored cover is refused by name. Those decisions are made
+against the covers as the read saw them, and the writer reads them again
+under its locks: a `course cover` that committed in between refuses the
+courses source by name, writing nothing for it, and a rerun reads the new
+cover. `course import` of one file carries the cover over and
 refuses a `cover:` that differs from the course's.
 
 ### The mirror ledger

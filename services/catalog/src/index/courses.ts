@@ -326,6 +326,7 @@ export const coursesIndexer: Indexer = {
         `${assets.length} curated links, ${conceptLinks.length} concept links, ${blobs.length} cover(s)`,
       ],
       blobs,
+      coversRead: new Map(courses.map((course) => [course.id, covers.get(course.id) ?? null] as const)),
     };
   },
 };

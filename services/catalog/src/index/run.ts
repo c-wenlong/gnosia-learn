@@ -185,6 +185,12 @@ export interface RunOptions {
    * prune, archive or unlink (phase 4, D23). Defaults to the CLIs' owner.
    */
   owner?: string;
+  /**
+   * Called after each source's read and before its write, with the source's
+   * name. For tests that land a write in that window, the one a concurrent
+   * `catalog course cover` would take; nothing else passes it.
+   */
+  afterRead?: (source: IndexSource) => Promise<void> | void;
 }
 
 /** The folders an import reads under its root, as git pathspecs. */
@@ -326,6 +332,7 @@ export async function runIndex(
   options: RunOptions = {},
 ): Promise<RunResult> {
   const repoRoot = options.repoRoot ?? REPO_ROOT;
+  const afterRead = options.afterRead;
   const toolsRoot = options.toolsRoot ?? repoRoot;
   // The flag, else $MANIMKC_ROOT, else the submodule. The middle step is the
   // resolver's, so this line is the whole precedence rule.
@@ -514,8 +521,9 @@ export async function runIndex(
   const sources: SourceWrite[] = [];
   let store: BlobStore | undefined;
   for (const indexer of runnable) {
-    const { rows, notes = [], scope, metadata, logs, blobs = [] } =
+    const { rows, notes = [], scope, metadata, logs, blobs = [], coversRead } =
       preread.get(indexer.source) ?? (await indexer.read(context));
+    await afterRead?.(indexer.source);
     // The bytes before the rows that name them, each upload committed on its
     // own: a run that fails after this leaves present objects and no row
     // pointing at them, which the next run finds already there.
@@ -542,6 +550,7 @@ export async function runIndex(
       metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot, database },
       author,
       owner,
+      coversRead,
       reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(indexer.root(context))} (${indexer.source})`,
     };
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);

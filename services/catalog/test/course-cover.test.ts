@@ -474,4 +474,39 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
       await third.drop();
     }
   });
+
+  it("refuses the courses when a cover changes between the read and the write, and a rerun keeps the new cover", async () => {
+    await rm(await variant(noCoverBlock));
+    const moved = await storedBlob(second.db, "a cover set while the import ran", "png");
+    const credit = { photographer: "Someone Else", source: "https://example.com/new", licence: "CC0" };
+    const revisions = async () => (await second.db.execute<{ n: number }>(sql`select count(*)::int as n from content_revision`)).rows[0]?.n;
+    const rowOf = async () => (await second.db.select().from(collection).where(eq(collection.id, "cp4284")))[0];
+
+    let landed: Awaited<ReturnType<typeof rowOf>>;
+    let before = 0;
+    // What a `catalog course cover` committing in that window leaves: the
+    // course pointing at other bytes with another credit.
+    const afterRead = async (source: string) => {
+      if (source !== "courses") return;
+      before = (await revisions()) ?? 0;
+      await second.db.execute(
+        sql`update collection set cover_blob_key = ${moved},
+              metadata = jsonb_set(metadata, '{coverCredit}', ${JSON.stringify(credit)}::jsonb)
+            where id = 'cp4284'`,
+      );
+      landed = await rowOf();
+    };
+    await expect(
+      runIndex(second.db, { repoRoot: bad, only: [...SOURCES], manimkcRoot: NO_MANIMKC, afterRead }),
+    ).rejects.toThrow(/course "cp4284": a cover changed while the import ran .* Run the import again; nothing was written/);
+    // The courses wrote nothing: no revision, and the row as the cover write left it.
+    expect(await revisions()).toBe(before);
+    expect(await rowOf()).toEqual(landed);
+
+    // Read again, the file (no cover:) keeps the cover the course has now.
+    await runIndex(second.db, { repoRoot: bad, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
+    const after = await coverOf(second);
+    expect(after?.key).toBe(moved);
+    expect((after?.metadata as { coverCredit?: unknown }).coverCredit).toEqual(credit);
+  });
 });
