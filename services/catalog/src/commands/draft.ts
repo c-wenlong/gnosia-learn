@@ -108,11 +108,12 @@ export interface DraftDeleteResult {
   id: string;
   deleted: boolean;
   /**
-   * `deleted`: the row is gone. `no-draft`: this owner has no such row, so
-   * no job row can name it either (`job.draft_id` is a foreign key).
-   * `has-jobs`: a job row names it, and it stays (D40).
+   * `deleted`: the row is gone. `has-jobs`: a job row names it, any owner's,
+   * and it stays (D40). `other-owner`: the row is another owner's, and stays.
+   * `no-draft`: there is no row at all, so no job row can name it either
+   * (`job.draft_id` is a foreign key).
    */
-  outcome: "deleted" | "no-draft" | "has-jobs";
+  outcome: "deleted" | "no-draft" | "has-jobs" | "other-owner";
   /** How many job rows name the draft, any owner's. */
   jobs: number;
 }
@@ -373,9 +374,12 @@ export async function runDraftShow(id: string, owner: string = CLI_OWNER): Promi
  * foreign-key check holds a share lock on the row, `FOR UPDATE` waits for it,
  * and the count after the wait is a fresh statement that sees the job.
  *
- * A row that is not there, or is another owner's, is `no-draft` rather than a
- * refusal: the runner's workspace is what it prunes, and a draft whose mirror
- * never landed has nothing here to delete.
+ * A row that is not there at all is `no-draft` rather than a refusal: the
+ * runner's workspace is what it prunes, and a draft whose mirror never landed
+ * has nothing here to delete. Another owner's row is `other-owner`, never
+ * `no-draft`, so a pruner never takes it for a draft with no row and removes
+ * a workspace that row still names. A job naming the draft is `has-jobs`
+ * whoever's row it is.
  */
 export async function runDraftDelete(id: string, owner: string = CLI_OWNER): Promise<DraftDeleteResult> {
   if (!DRAFT_ID.test(id)) {
@@ -384,9 +388,9 @@ export async function runDraftDelete(id: string, owner: string = CLI_OWNER): Pro
   return withDatabase(({ db }) =>
     db.transaction(async (tx) => {
       const [row] = await tx
-        .select({ id: draftTable.id })
+        .select({ ownerId: draftTable.ownerId })
         .from(draftTable)
-        .where(and(eq(draftTable.id, id), eq(draftTable.ownerId, owner)))
+        .where(eq(draftTable.id, id))
         .for("update");
       const [counted] = await tx
         .select({ total: sql<number>`count(*)::int` })
@@ -401,8 +405,9 @@ export async function runDraftDelete(id: string, owner: string = CLI_OWNER): Pro
         outcome,
         jobs,
       });
-      if (row === undefined) return result("no-draft");
       if (jobs > 0) return result("has-jobs");
+      if (row === undefined) return result("no-draft");
+      if (row.ownerId !== owner) return result("other-owner");
       await tx.delete(draftTable).where(and(eq(draftTable.id, id), eq(draftTable.ownerId, owner)));
       return result("deleted");
     }),
@@ -473,7 +478,9 @@ export function formatDraft(result: DraftResult): string {
         ? `deleted ${result.id}`
         : result.outcome === "has-jobs"
           ? `kept ${result.id}: ${result.jobs} job${result.jobs === 1 ? "" : "s"} name it`
-          : `no draft ${result.id}`;
+          : result.outcome === "other-owner"
+            ? `kept ${result.id}: another owner's draft`
+            : `no draft ${result.id}`;
     case "draft ls":
       if (result.drafts.length === 0) return "no drafts";
       return `${result.drafts.map(line).join("\n")}\n\n${result.drafts.length} of ${result.total}`;
