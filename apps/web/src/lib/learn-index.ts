@@ -15,7 +15,9 @@ export const INDEX_FILTERS: readonly { key: IndexFilter; label: string }[] = [
   { key: "learning", label: "Learning" },
   { key: "mastered", label: "Mastered" },
   { key: "untouched", label: "Untouched" },
-  { key: "leeches", label: "Leeches" },
+  // "Leech" is Anki's word and stays the key, the URL value and the catalog's
+  // field; the reader sees what it means (the owner's call, 2026-09-29).
+  { key: "leeches", label: "Keeps slipping" },
 ];
 
 export type IndexView = "table" | "graph";

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   bucketCounts,
+  INDEX_FILTERS,
   dueLabel,
   lastSeenLabel,
   matchesFilter,
@@ -108,5 +109,11 @@ describe("statusFilterOptions", () => {
       ["untouched", 1],
       ["leeches", 1],
     ]);
+  });
+
+  it("calls a leech what it means, and keeps the key the URL carries", () => {
+    const option = statusFilterOptions([row({ id: "b", leech: true })]).find((o) => o.value === "leeches");
+    expect(option?.label).toBe("Keeps slipping");
+    expect(INDEX_FILTERS.some((f) => /leech/i.test(f.label))).toBe(false);
   });
 });

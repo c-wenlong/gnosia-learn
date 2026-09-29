@@ -120,10 +120,9 @@ describe("assetMetaLine", () => {
     expect(assetMetaLine(asset())).toBe("manim · 25 MB");
     expect(
       assetMetaLine(asset({ kind: "diagram_svg", sourceRepo: "tldrawkc", bytes: 12_000 })),
-    ).toBe("svg · tldraw · 12 kB");
-    expect(assetMetaLine(asset({ kind: "note", sourceRepo: "self-learn", bytes: 3_100 }))).toBe(
-      "concept note · 3.1 kB",
-    );
+    ).toBe("SVG · tldraw · 12 kB");
+    // The chip beside it already says "Note", so the line does not.
+    expect(assetMetaLine(asset({ kind: "note", sourceRepo: "self-learn", bytes: 3_100 }))).toBe("3.1 kB");
   });
 
   it("gives a link its host, or says external when the URL does not parse", () => {
@@ -158,10 +157,11 @@ describe("AssetCard", () => {
     expect(host.querySelector('[data-thumbnail="placeholder"]')).toBeNull();
   });
 
-  it("labels the placeholder when a video has no poster, rather than leaving a black hole", () => {
+  it("keeps the box when a video has no poster, and leaves the kind to the chip", () => {
     const host = mount(createElement(AssetCard, { asset: asset() }));
     expect(host.querySelector("img")).toBeNull();
-    expect(host.querySelector('[data-thumbnail="placeholder"]')?.textContent).toBe("video");
+    expect(host.querySelector('[data-thumbnail="placeholder"]')?.textContent).toBe("");
+    expect(host.textContent).toContain("Video");
   });
 
   it("says so when a preview fails to load", () => {
@@ -203,7 +203,7 @@ describe("AssetCard", () => {
     expect(host.textContent).not.toContain("Preview unavailable");
   });
 
-  it("gives a text asset the same labelled box, named for its kind", () => {
+  it("gives a text asset the same box, with its kind on the chip", () => {
     const host = mount(
       createElement(AssetCard, {
         asset: asset({ kind: "transcript", title: null, bytes: 8_400 }),
@@ -215,7 +215,7 @@ describe("AssetCard", () => {
     expect(host.textContent).toContain("8.4 kB");
     // A transcript has no picture, so a thumbnail handed to it is ignored.
     expect(host.querySelector("img")).toBeNull();
-    expect(host.querySelector('[data-thumbnail="placeholder"]')?.textContent).toBe("transcript");
+    expect(host.querySelector('[data-thumbnail="placeholder"]')?.textContent).toBe("");
   });
 
   it("names the concept it explains with a mastery dot, and counts the rest", () => {
@@ -231,6 +231,17 @@ describe("AssetCard", () => {
     expect(host.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe("Mastered");
     // The concept wins over the topic; the topic is the fallback, not a second line.
     expect(host.textContent).not.toContain("transformers");
+  });
+
+  it("does not repeat the title when the concept is the note's own", () => {
+    const host = mount(
+      createElement(AssetCard, {
+        asset: asset({ kind: "note", title: "Dot product", path: "learn/concepts/la/dot-product.md" }),
+        concept: { title: "Dot product", bucket: "learning", more: 0 },
+      }),
+    );
+    expect(host.textContent?.match(/Dot product/g)).toHaveLength(1);
+    expect(host.textContent).toContain("Learning");
   });
 
   it("falls back to the topic, with no dot, when no concept is linked", () => {

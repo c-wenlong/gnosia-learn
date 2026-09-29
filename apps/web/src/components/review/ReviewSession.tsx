@@ -13,6 +13,7 @@ import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { cx, TRACK } from "@/components/ui/classes";
 import {
+  cardEyebrow,
   cardStats,
   formatDue,
   formatInterval,
@@ -249,9 +250,9 @@ export function ReviewSession({
           }.`}
         >
           <div className="flex w-full gap-2.5 md:gap-3.5">
-            <StatTile value={outcomes.length} label="reviewed" tone="ok" />
-            <StatTile value={again} label="again" tone="streak" />
-            <StatTile value={<span className="text-[20px] md:text-[26px]">{next}</span>} label="next due" tone="accent" />
+            <StatTile value={outcomes.length} label="Reviewed" tone="ok" />
+            <StatTile value={again} label="Again" tone="streak" />
+            <StatTile value={<span className="text-[20px] md:text-[26px]">{next}</span>} label="Next due" tone="accent" />
           </div>
         </Closing>
       </Frame>
@@ -262,6 +263,7 @@ export function ReviewSession({
   const domain = queueDomain(items.map((i) => i.domain));
   const left = minutesLeft(total - index);
   const answerShown = phase !== "ask";
+  const eyebrow = cardEyebrow(item);
 
   return (
     <Frame
@@ -270,22 +272,19 @@ export function ReviewSession({
       short={`${position} of ${total}`}
       exit={exit}
     >
+      {/* The frame above already says "Review · n of N", so this line keeps
+          only what it adds: the queue's domain and the time left. */}
       <div className="hidden items-center justify-between gap-4 text-[12px] md:flex">
-        <p className="font-medium text-text2">
-          Review · {position} of {total}
-          {domain !== null && ` · ${domain}`}
-        </p>
-        <p className="text-text3">Est. {left} min left</p>
+        {domain !== null && <p className="font-medium text-text2">{domain}</p>}
+        <p className="ml-auto text-text3">Est. {left} min left</p>
       </div>
 
       <section
         aria-live="polite"
         className="flex flex-col gap-1 rounded-2xl border-2 border-border bg-surface p-4 md:gap-2 md:rounded-[20px] md:p-6"
       >
-        <Eyebrow>
-          {item.kind === "check" ? "Check" : "Recall"} · {item.title}
-          {item.leech && " · leech"}
-        </Eyebrow>
+        {/* Left out only when it would repeat the prompt; see `cardEyebrow`. */}
+        {eyebrow !== null && <Eyebrow>{eyebrow}</Eyebrow>}
         <h1 className="font-display text-[20px] leading-[1.3] font-bold text-text md:text-[24px]">
           <MathText text={item.prompt} />
         </h1>

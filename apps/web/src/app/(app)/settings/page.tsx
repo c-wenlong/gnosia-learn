@@ -9,7 +9,8 @@ export const metadata: Metadata = { title: "Settings" };
 
 /**
  * Settings (hi-fi 12): the habit the learner owns (daily target, streak
- * leeway, reminders), how the app looks and how the tutor talks, and the
+ * leeway; the hi-fi's Reminders row joins them once reminders exist), how the
+ * app looks and how the tutor talks, and the
  * model underneath, read-only, with the export and the reset.
  *
  * The server reads what is stored and what only the server knows (the BKT

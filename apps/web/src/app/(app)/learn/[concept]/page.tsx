@@ -111,7 +111,9 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
         <MasteryDot bucket={w.bucket} showLabel pL={w.pL} />
         <div className="flex flex-wrap items-center gap-3.5">
           <Button href={`/learn/${w.slug}/session`} aria-describedby={canAsk ? undefined : "session-asks-nothing"}>
-            Teach me · focus mode
+            {/* No "· focus mode" suffix: the session page is the focus layout, and
+                Today's button to the same page already says "Continue teaching". */}
+            Teach me
           </Button>
           <Button variant="secondary" href={`/review?concept=${w.slug}`}>
             Review now

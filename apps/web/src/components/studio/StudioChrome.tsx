@@ -144,7 +144,7 @@ export function ButtonLink({
 /** A heading inside the right panel. */
 export function PanelHeading({ children }: { children: ReactNode }) {
   return (
-    <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+    <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
       {children}
     </h2>
   );

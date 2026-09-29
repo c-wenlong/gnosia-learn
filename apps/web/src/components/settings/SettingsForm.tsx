@@ -136,13 +136,6 @@ export function SettingsForm({
             </Select>
           )}
         </Field>
-        <Field label="Reminders" note="Not built yet, so nothing is stored or sent.">
-          {(id) => (
-            <Select id={id} value="off" disabled describedBy={`${id}-note`} onChange={() => undefined}>
-              <option value="off">Off</option>
-            </Select>
-          )}
-        </Field>
       </Card>
 
       <Card title="Appearance and tutor">
@@ -240,16 +233,11 @@ function Select({
   id,
   value,
   onChange,
-  disabled,
-  describedBy,
   children,
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
-  disabled?: boolean;
-  /** The id of the text that says why it is disabled. */
-  describedBy?: string;
   children: ReactNode;
 }) {
   return (
@@ -257,8 +245,6 @@ function Select({
       <select
         id={id}
         value={value}
-        disabled={disabled}
-        aria-describedby={describedBy}
         onChange={(e) => onChange(e.target.value)}
         className={inputClasses({ className: "cursor-pointer appearance-none pr-10" })}
       >

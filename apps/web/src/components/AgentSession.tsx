@@ -288,7 +288,7 @@ export function AgentSession({
       )}
 
       <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+        <h2 className="text-sm font-semibold text-[var(--muted-strong)]">
           By the end you should be able to
         </h2>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-[var(--muted-strong)]">
@@ -362,10 +362,13 @@ export function AgentSession({
                   : "ml-6 border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]"
               }`}
             >
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                {m.role === "assistant" ? "Agent" : "You"}
-                {m.meta ? ` · ${m.meta}` : ""}
-              </p>
+              {/* No "Agent" or "You" over each turn: the two sides are told
+                  apart by their shape, so only the provider, when there is
+                  one, is shown. */}
+              {m.role === "assistant" && m.meta && (
+                <p className="mb-1 text-xs text-[var(--muted)]">{m.meta}</p>
+              )}
+              <span className="sr-only">{m.role === "assistant" ? "Tutor: " : "You: "}</span>
               <div className="whitespace-pre-wrap">
                 <MathText text={m.content} />
               </div>
@@ -409,7 +412,7 @@ export function AgentSession({
 
       <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+          <h2 className="text-sm font-semibold text-[var(--muted-strong)]">
             Keep this session
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-strong)]">
