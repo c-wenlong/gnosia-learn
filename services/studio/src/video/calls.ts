@@ -86,6 +86,30 @@ export async function appendRead(file: string, read: SheetRead): Promise<void> {
 }
 
 /**
+ * The agent's stream, handled one line at a time and in order, with a way
+ * to wait for the last line to be done.
+ *
+ * The stream's callback is synchronous and handling a line is not: a sheet
+ * Read becomes a line in `reads.ndjson`, which the gate reads as soon as the
+ * session ends. With each line's work started and forgotten, the gate could
+ * read that file before the last Read landed and fail a job that had looked
+ * at every sheet (Greptile on #201). Work is chained, so lines are handled in
+ * the order they came, and `settled()` resolves once every line pushed so far
+ * is handled. A line whose handling throws does not stop the ones after it.
+ */
+export class LineQueue {
+  private tail: Promise<void> = Promise.resolve();
+
+  push(work: () => Promise<void>): void {
+    this.tail = this.tail.then(work).catch(() => undefined);
+  }
+
+  settled(): Promise<void> {
+    return this.tail;
+  }
+}
+
+/**
  * A stream line's successful Reads, matched across the two events that make
  * one: the `tool_use` that names the file, in an assistant message, and the
  * `tool_result` that says it worked, in the user message after it. Only a

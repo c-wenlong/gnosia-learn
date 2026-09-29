@@ -16,7 +16,7 @@ import { resolveSource } from "../source-note";
 import type { RecordStore } from "../store";
 import { readClaudeDefaults, readPreference, resolveAgentSettings } from "./agent-model";
 import { isNarrated, type ValidVideoBrief } from "./brief";
-import { appendRead, editsOn, readCalls, readReads, ReadTracker, isToolResult } from "./calls";
+import { appendRead, editsOn, readCalls, readReads, ReadTracker, isToolResult, LineQueue } from "./calls";
 import { buildCheckout, resolvedPaths, scaffold } from "./checkout";
 import { BASH_TIMEOUT_MS, VIDEO_CONCURRENCY, VIDEO_MAX_ATTEMPTS, VIDEO_RUNNER_NAME, videoHangMs, videoMaxTurns } from "./config";
 import { safeCopy, safeHash, safeRead } from "./copy";
@@ -62,6 +62,8 @@ interface Running {
   gateRunning: boolean;
   /** How many wrapper calls the narration log has said something about. */
   callsNarrated: number;
+  /** The stream's lines, handled in order; the gate waits for it. */
+  lines: LineQueue;
 }
 
 export interface VideoParent {
@@ -366,6 +368,7 @@ export class VideoRunner {
         edits: 0,
         gateRunning: false,
         callsNarrated: 0,
+        lines: new LineQueue(),
       };
       this.running.set(next.id, entry);
       let settle: () => void = () => undefined;
@@ -592,7 +595,7 @@ export class VideoRunner {
         model: agentModel.passed,
         effort: agentEffort.passed,
         source: sourceNote,
-        onLine: (line) => void this.onAgentLine(entry, line),
+        onLine: (line) => entry.lines.push(() => this.onAgentLine(entry, line)),
         onInit: (init) => {
           initNoted = (async () => {
             await this.store.update(id, { resolvedModel: init.model, apiKeySource: init.apiKeySource });
@@ -604,6 +607,9 @@ export class VideoRunner {
       entry.agent = agent;
       outcome = await agent.done;
       entry.agent = null;
+      // Every line's work, the last sheet Read's line in reads.ndjson
+      // included, before anything below reads what those lines wrote.
+      await entry.lines.settled();
       await initNoted;
       await this.refreshSteps(entry);
       if (entry.cancelled || outcome.stopReason === "cancelled") break;

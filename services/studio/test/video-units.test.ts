@@ -11,7 +11,7 @@ import { normalisePreference, readClaudeDefaults, resolveAgentSettings, resolveS
 import { predictedSeconds, validateVideoBrief } from "../src/video/brief";
 import { buildSettings } from "../src/settings";
 import { GUARD_REFUSAL, guardSource, wrapperCommandAllowed } from "../src/video/bash-guard";
-import { ReadTracker } from "../src/video/calls";
+import { appendRead, LineQueue, readReads, ReadTracker } from "../src/video/calls";
 import { prefixFor, rebasePaths } from "../src/video/checkout";
 import { CopyRefused, safeCopy } from "../src/video/copy";
 import { videoPaths, type VideoPaths } from "../src/video/paths";
@@ -322,6 +322,28 @@ describe("the sandbox profiles", () => {
     expect(Object.keys(sandboxEnv("gate", { tools, paths, home: "/Users/me", voice: "af_heart" })).sort()).toEqual(["HOME", "LANG", "PATH", "TMPDIR"]);
     expect(renderJobs(12, 24 * 2 ** 30)).toBe(4);
     expect(renderJobs(4, 8 * 2 ** 30)).toBe(1);
+  });
+});
+
+describe("handling the stream's lines", () => {
+  it("handles lines in order and settles only once the last sheet Read is on disk", async () => {
+    const queue = new LineQueue();
+    const reads = path.join(root, "reads.ndjson");
+    const order: string[] = [];
+    const slow = (name: string, ms: number) => async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      order.push(name);
+      await appendRead(reads, { path: `/x/${name}.sheet.png`, at: new Date().toISOString() });
+    };
+    queue.push(slow("A", 60));
+    queue.push(async () => {
+      throw new Error("one line's work failed");
+    });
+    queue.push(slow("B", 5));
+    // The session has ended; the gate asks for the reads now.
+    await queue.settled();
+    expect(order).toEqual(["A", "B"]);
+    expect((await readReads(reads)).map((read) => path.basename(read.path))).toEqual(["A.sheet.png", "B.sheet.png"]);
   });
 });
 
