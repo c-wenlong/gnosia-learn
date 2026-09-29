@@ -92,15 +92,6 @@ export function LearnIndex({
           onChange={(e) => setQuery(e.target.value)}
           className="w-full sm:w-[280px]"
         />
-        <span className="hidden sm:inline-flex">
-          <Button
-            variant="secondary"
-            disabled
-            disabledReason="New concepts are added as you learn new topics."
-          >
-            Add concept
-          </Button>
-        </span>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">

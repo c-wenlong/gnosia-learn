@@ -540,7 +540,7 @@ in that session.
 | Review, header | "CP4281 mostly" | the note folder ("mostly transformers") | a concept belongs to a folder for certain and to a course only through its topics; the folder is the honest label |
 | Review, phone header | "Review" | the wordmark | the shell's rule, as on every phone page |
 | Review, close screen | not drawn | title, three stat tiles (reviewed, again, next due), Back to Today | the brief's close screen, from the session close's parts |
-| Learn index header | "Add concept" button | rendered disabled, with the CLI command beside it as its `disabledReason`; hidden on a phone | concepts are added by the `learn` CLI; the web app never writes the content half |
+| Learn index header | "Add concept" button | not drawn since 2026-09-29 (until then disabled, with the CLI command as its reason) | concepts are added by the `learn` CLI and the web app has no way to add one, so the owner's rule on controls for what the app cannot do applies |
 | Learn index graph card | a placeholder with "toggle: full course" | a Neighbourhood / Course chip pair in the card header; Course reads "Folder" for a concept in no course | 24 of 32 concepts link to no curriculum item, so "course" falls back to the note's folder |
 | Learn index table | no selected row | the selected row is tinted `--surface2`; clicking a row selects it, the title links to the workspace | the graph follows the selection, so the selection has to show |
 | Course graph | not drawn | the transitive reduction of the edges | the algorithms folder drawn with every edge was a hairball |
