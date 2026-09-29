@@ -1482,6 +1482,7 @@ async function draftRoutes(
           draftId: id,
           jobId,
           kind,
+          created,
           state: "drawing",
           replaces,
           note: created
