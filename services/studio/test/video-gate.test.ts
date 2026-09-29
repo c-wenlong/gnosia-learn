@@ -85,7 +85,16 @@ describe.skipIf(!hasPython())("the video gate", () => {
     expect(result.warnings).toContain("lint: a warning to keep");
     expect(result.script?.changes.every((change) => change.kind === "unchanged")).toBe(true);
     const copies = JSON.parse(await readFile(paths.copies, "utf8")) as { files: Record<string, { sha256: string }>; durationSeconds: number };
-    expect(Object.keys(copies.files).sort()).toEqual(["poster.jpg", "two-boxes.chapters.json", "two-boxes.mp4", "two-boxes.transcript.json", "two-boxes.vtt"]);
+    expect(Object.keys(copies.files).sort()).toEqual([
+      "poster.jpg",
+      "source/topic.yml",
+      "source/two_boxes.py",
+      "two-boxes.chapters.json",
+      "two-boxes.mp4",
+      "two-boxes.transcript.json",
+      "two-boxes.vtt",
+    ]);
+    expect(copies.files["source/two_boxes.py"]?.sha256).toBe(laid.sourceHash);
     expect(copies.durationSeconds).toBe(duration);
   });
 

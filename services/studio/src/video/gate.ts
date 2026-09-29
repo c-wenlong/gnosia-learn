@@ -275,9 +275,16 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
   copies = {};
   try {
     for (const [from, name] of wanted) copies[name] = await safeCopy(from, path.join(paths.candidate, name));
-    // The source travels with the video: what Accept stores as the row.
-    await safeCopy(paths.sceneFile, path.join(paths.candidateSource, path.basename(paths.sceneFile)));
-    await safeCopy(paths.topicYml, path.join(paths.candidateSource, "topic.yml"));
+    // The source travels with the video: what Accept stores as the row, each
+    // file hashed here so `video put` can check it is the source the build
+    // came from (a `source/<name>` record for each).
+    const sceneName = path.basename(paths.sceneFile);
+    const sceneCopy = await safeCopy(paths.sceneFile, path.join(paths.candidateSource, sceneName));
+    if (sceneCopy.sha256 !== sourceHash) {
+      throw new CopyRefused("not-regular", `${sceneName} changed while it was being copied`);
+    }
+    copies[`source/${sceneName}`] = sceneCopy;
+    copies["source/topic.yml"] = await safeCopy(paths.topicYml, path.join(paths.candidateSource, "topic.yml"));
   } catch (error) {
     const detail = error instanceof CopyRefused ? error.message : `the copy failed: ${(error as Error).message}`;
     record("build", false, detail);

@@ -348,9 +348,15 @@ PR (phase 0) rather than worked around in the studio:
   `process-info*`, `system-info` and the task-port operations all leave it
   readable; denying every sysctl stops Python starting. Like the read deny
   list below, what it reads has no way out but the video, the render logs
-  and the agent's context, but it is a live credential rather than a file,
-  so it is named here for the owner to decide on. The suite runs the probe
-  and reports it (`services/studio/test/video-sandbox.test.ts`).
+  and the agent's context, but it is a live credential rather than a file.
+  *Decided 2026-09-29 by the owner:* accepted for v1 as documented, like the
+  other deny-list gaps. Rejected: rendering under a separate macOS user
+  (D44's reason stands: it moves the problem to file permissions across the
+  whole disk), and scrubbing the environment of the runner and the agent
+  (it would not cover the owner's other sessions, which is where the token
+  was read). The suite still runs the probe and reports it as a named known
+  gap rather than asserting it blocked
+  (`services/studio/test/video-sandbox.test.ts`).
 - Reads outside the home directory are allowed except where the profile names
   a place data lives: Homebrew's `var/` (the Postgres cluster is
   `/opt/homebrew/var/postgresql@17`), `/usr/local/var`, `/Volumes` and the

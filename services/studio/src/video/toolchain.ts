@@ -38,6 +38,12 @@ export interface Toolchain {
   sandboxExec: string | null;
   /** The real manimkc checkout, every symlink resolved: the venvs, `manim/` and `tools/` the job links to. */
   manimkcRoot: string;
+  /**
+   * The four directories the job links to, each resolved on its own: a
+   * checkout whose venv is itself a link (a second clone sharing one set of
+   * venvs) has them somewhere else, and Seatbelt allows the real path only.
+   */
+  manimkcDirs: { manim: string; venv: string; venvTts: string; tools: string };
   ffmpeg: Program | null;
   ffprobe: Program | null;
   python3: Program | null;
@@ -108,6 +114,14 @@ export function manimkcRoot(): string {
   }
 }
 
+function resolveOr(target: string): string {
+  try {
+    return realpathSync(target);
+  } catch {
+    return target;
+  }
+}
+
 function hubCache(): string {
   const hub = process.env.HF_HUB_CACHE?.trim();
   if (hub) return path.resolve(hub);
@@ -168,6 +182,12 @@ export async function discoverToolchain(): Promise<Toolchain> {
     platform: process.platform,
     sandboxExec: existsSync("/usr/bin/sandbox-exec") ? "/usr/bin/sandbox-exec" : null,
     manimkcRoot: root,
+    manimkcDirs: {
+      manim: resolveOr(path.join(root, "manim")),
+      venv: resolveOr(path.join(root, ".venv")),
+      venvTts: resolveOr(path.join(root, ".venv-tts")),
+      tools: resolveOr(path.join(root, "tools")),
+    },
     ffmpeg: programAt(which("ffmpeg")),
     ffprobe: programAt(which("ffprobe")),
     python3,

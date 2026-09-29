@@ -130,11 +130,8 @@ function execRules(kind: ProfileKind, { tools }: ProfileInput): string[] {
   const pythons = [tools.venvPython, tools.ttsPython, ...(kind === "render" ? [tools.python3] : [])].flatMap((program) =>
     program === null ? [] : [literal(program.link), literal(program.real), ...(program.home === null ? [] : [subpath(program.home)])],
   );
-  const manimkc = [
-    subpath(path.join(tools.manimkcRoot, ".venv")),
-    subpath(path.join(tools.manimkcRoot, ".venv-tts")),
-    ...(kind === "render" ? [subpath(path.join(tools.manimkcRoot, "tools"))] : []),
-  ];
+  const dirs = tools.manimkcDirs;
+  const manimkc = [subpath(dirs.venv), subpath(dirs.venvTts), ...(kind === "render" ? [subpath(dirs.tools)] : [])];
   const system = kind === "render" ? SYSTEM_PROGRAMS.map(literal) : ["/bin/sh", "/usr/bin/uname"].map(literal);
   return [...new Set([...pythons, ...media, ...manimkc, ...system])];
 }
@@ -142,7 +139,7 @@ function execRules(kind: ProfileKind, { tools }: ProfileInput): string[] {
 /** What each profile may read, over and above the system outside the denied places. */
 function readRules(kind: ProfileKind, { tools, paths }: ProfileInput): string[] {
   if (kind === "gate") return [subpath(paths.candidate)];
-  const manimkc = ["manim", ".venv", ".venv-tts", "tools"].map((name) => subpath(path.join(tools.manimkcRoot, name)));
+  const manimkc = [tools.manimkcDirs.manim, tools.manimkcDirs.venv, tools.manimkcDirs.venvTts, tools.manimkcDirs.tools].map(subpath);
   const job = [subpath(paths.checkout), subpath(paths.render)];
   const model = kind === "narrate" && tools.kokoroModel !== null ? [subpath(tools.kokoroModel)] : [];
   return [...manimkc, ...job, ...model];

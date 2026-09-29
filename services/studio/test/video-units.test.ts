@@ -182,6 +182,7 @@ describe("the sandbox profiles", () => {
     platform: "darwin",
     sandboxExec: "/usr/bin/sandbox-exec",
     manimkcRoot: "/opt/manimkc",
+    manimkcDirs: { manim: "/opt/manimkc/manim", venv: "/opt/manimkc/.venv", venvTts: "/opt/manimkc/.venv-tts", tools: "/opt/manimkc/tools" },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },
     ffprobe: { link: "/opt/homebrew/bin/ffprobe", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffprobe", home: "/opt/homebrew/Cellar/ffmpeg/9" },
     python3: { link: "/opt/homebrew/bin/python3", real: "/opt/homebrew/Cellar/python/3/bin/python3", home: "/opt/homebrew/Cellar/python/3" },
