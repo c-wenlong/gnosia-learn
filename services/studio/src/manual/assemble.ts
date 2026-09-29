@@ -33,7 +33,7 @@ export const SNIPPETS: readonly WorkedSnippet[] = [
   {
     name: "flow",
     title: "A flow of boxes and bound arrows",
-    why: "The shape of most briefs with `layout: flow-lr`: place by `after` and `below`, size each gap to its arrow label, connect, then title it.",
+    why: "The shape of `layout: flow-lr`: the first box by coordinates, every other by `after` or `below` with each gap sized to its arrow label, then `connect`, then a title.",
   },
   {
     name: "comparison",
@@ -43,7 +43,7 @@ export const SNIPPETS: readonly WorkedSnippet[] = [
   {
     name: "timeline",
     title: "A timeline on an unbound axis",
-    why: "Geometry that joins nothing is `line` and `stub`, never `connect`. Events are boxes of one size placed against the ticks.",
+    why: "The axis and ticks are `line` and `stub`: geometry that joins nothing, so it binds to nothing and the arrow rules are muted on it. Events are boxes of one size placed against the ticks.",
   },
 ];
 

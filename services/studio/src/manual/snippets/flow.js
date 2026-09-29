@@ -1,5 +1,3 @@
-// A flow of boxes and bound arrows, left to right, with one branch below.
-// Place the first box by coordinates and every other by `after` or `below`.
 helpers.box('request', 'HTTP request', { x: 60, y: 60 })
 // A labelled arrow needs about 120 units plus ten per character of its label:
 // 'matches path' is twelve characters, so the gap is 240.

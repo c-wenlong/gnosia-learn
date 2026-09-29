@@ -53,6 +53,8 @@ out({
   strictMcpConfig: process.argv.includes("--strict-mcp-config"),
   mcpConfig: process.argv.includes("--mcp-config") ? process.argv[process.argv.indexOf("--mcp-config") + 1] : null,
   resumed: process.argv.includes("--resume"),
+  manualFile: process.argv.includes("--append-system-prompt-file") ? process.argv[process.argv.indexOf("--append-system-prompt-file") + 1] : null,
+  appendText: process.argv.includes("--append-system-prompt"),
 });
 out({ type: "system", subtype: "init", model: "claude-sonnet-test", apiKeySource: key ? "ANTHROPIC_API_KEY" : "none" });
 if (key) {
@@ -103,7 +105,7 @@ function shellWithKey(): void {
   process.env.STUDIO_AGENT_TEST_MARKER = "kept";
 }
 
-async function runFake(jobId: string, auth?: "login" | "env", resume = false) {
+async function runFake(jobId: string, auth?: "login" | "env", resume = false, manualPath?: string | null) {
   const lines: string[] = [];
   const inits: { apiKeySource: string | null }[] = [];
   const agent = await startAgent({
@@ -114,6 +116,7 @@ async function runFake(jobId: string, auth?: "login" | "env", resume = false) {
     sessionId: "00000000-0000-4000-8000-00000000abcd",
     resume,
     ...(auth === undefined ? {} : { auth }),
+    ...(manualPath === undefined ? {} : { manualPath }),
     onLine: (line) => lines.push(line),
     onInit: (init) => inits.push(init),
   });
@@ -127,6 +130,30 @@ describe("the agent's working directories", () => {
     const { env } = await runFake("job-dirs");
     expect(env.addDirs).toEqual([scratchDir("job-dirs"), candidateDir("job-dirs")]);
     expect(env.addDirs).not.toContain(jobDir("job-dirs"));
+  });
+});
+
+describe("the tldraw manual on the agent's system prompt", () => {
+  it("is passed as a file with --append-system-prompt-file, never as argv text", async () => {
+    const file = path.join(HOME, "manual", "abc.md");
+    const { env } = await runFake("job-manual", undefined, false, file);
+    expect(env.manualFile).toBe(file);
+    // The text form would put 29,000 characters of manual in every argv.
+    expect(env.appendText).toBe(false);
+  });
+
+  it("is passed on a resumed attempt too, the job's own file", async () => {
+    const file = path.join(HOME, "manual", "abc.md");
+    const { env } = await runFake("job-manual-resume", undefined, true, file);
+    expect(env.resumed).toBe(true);
+    expect(env.manualFile).toBe(file);
+  });
+
+  it("is left off entirely when the job has none", async () => {
+    const { env } = await runFake("job-no-manual", undefined, false, null);
+    expect(env.manualFile).toBeNull();
+    const { env: unset } = await runFake("job-no-manual-2");
+    expect(unset.manualFile).toBeNull();
   });
 });
 

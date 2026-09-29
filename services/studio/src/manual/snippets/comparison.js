@@ -1,5 +1,3 @@
-// A labelled comparison: two panels of the same size, side by side, each with
-// its own members, and a caption centred under both.
 helpers.box('tcp-open', 'three-way handshake', { x: 100, y: 120, w: 220 })
 helpers.box('tcp-send', 'ordered bytes', { below: 'tcp-open', gap: 120, w: 220 })
 helpers.box('tcp-ack', 'resend on loss', { below: 'tcp-send', gap: 120, w: 220 })

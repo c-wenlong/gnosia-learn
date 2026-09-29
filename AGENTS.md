@@ -338,6 +338,19 @@ Rules of engagement:
   dated at its own end. Its tests use `test/fake-claude.ts`, a stand-in
   binary, and never the API. The design is
   [`docs/STUDIO-CHAT-FIRST.md`](docs/STUDIO-CHAT-FIRST.md).
+- The drawing agent's system prompt carries the tldraw manual
+  (`services/studio/src/manual/`, D30 and D38 of
+  [`docs/STUDIO-CHAT-FIRST.md`](docs/STUDIO-CHAT-FIRST.md)): static sections
+  as Markdown, three worked snippets as `.js` files, and the helper listing
+  generated from `canvas api --json` at runner start and again before each
+  enqueue. It is written to `$STUDIO_HOME/manual/<hash>.md` and passed with
+  `--append-system-prompt-file`; the job records `manualHash` in `job.json`
+  and every attempt passes that same file, because the CLI replays the system
+  prompt it recorded on a session's first request whatever a resume passes. A
+  lint rule the tool names and the table does not, or a snippet that stops
+  running clean, makes `/api/health` report `manual: stale`, and
+  `services/studio/test/manual-snippets.test.ts` fails on either. Editing a
+  snippet means running that test with tldrawkc built.
 - Read [`docs/TLDRAWKC-INTEGRATION.md`](docs/TLDRAWKC-INTEGRATION.md) for the
   design this section is shortened from: the schema, the runner's full
   constraints, the gate, and the edge cases behind each rule above.

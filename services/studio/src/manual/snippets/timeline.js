@@ -1,6 +1,3 @@
-// A timeline on an unbound axis. The axis and the ticks are `line` and `stub`:
-// geometry, not connections, so they bind to nothing and the lint rules about
-// arrows are muted on them by default.
 const y = 300
 const x0 = 80
 const step = 260

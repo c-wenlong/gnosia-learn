@@ -5,7 +5,8 @@ document carries the whole studio: the schema, the runner, the gate, accept and
 discard. This one carries only what changes when a person stops filling in a
 form and starts talking.
 
-**Status: accepted, not built.** Nothing below exists yet. Numbers marked
+**Status: phase 1 built** (#172, #173); **phase 2's manual built** (the runner
+half; see [Phases](#phases)). Numbers marked
 *measured* were taken on this machine on 2026-09-27 against the installed CLI
 (`claude` 2.1.274, `claude-sonnet-5`) and the installed tldrawkc build; every
 other number is a guess and says so.
@@ -410,6 +411,22 @@ a cache read at 0.1x), and the 32 requests the real job made:
 | The manual in total | **$0.069** |
 | Less the `canvas api` result it replaces | $0.022 |
 | **Net** | **about $0.047**, against $0.81 for the measured job |
+
+**As built (2026-09-29).** The manual the runner assembles is **11,688
+tokens** (28,812 characters), measured the same way against `claude-sonnet-5`:
+the helper listing is the tool's own 22 entries with every usage line, and the
+options section, the part the measured job was missing, is about a fifth of
+it. At the prices above that is about $0.047 to write and $0.072 to read on
+31 requests, **about $0.10 net per 32-request attempt** after the `canvas api`
+result it replaces, against the $0.047 the draft predicted. Whether it earns
+that back is the phase 2 measurement below.
+
+It is passed as a file, `--append-system-prompt-file
+$STUDIO_HOME/manual/<hash>.md`, rather than as argv text, and checked on the
+installed CLI (2.1.274): a `--resume` sends the system prompt recorded on the
+session's first request and ignores a different file passed later, which is
+M1 holding on the CLI's side. The runner passes the job's own file on every
+attempt as well, so the two agree after a compaction too.
 
 Attempts two and three resume the session inside the hour, so they read the
 manual rather than writing it. Whether the eleven lookup calls disappear is what
@@ -1048,14 +1065,14 @@ the web app. 1b builds against the API table above and lands after 1a.
 - [x] A proposed topic: the `topic` block parsed, `catalog topic add
       --dry-run --json` run on it, stored as `pending_topic`, and created by
       `catalog topic add` on the Draw press before the enqueue
-- [ ] `Composer` extracted from `TutorChat` into `components/ui/`, and
+- [x] `Composer` extracted from `TutorChat` into `components/ui/`, and
       `TutorChat` using it
-- [ ] The plus card, the dialog, the conversation, the confirm card (read-only),
+- [x] The plus card, the dialog, the conversation, the confirm card (read-only),
       the job view and the inspector moved into the panel; the right panel
       removed from `/studio`
-- [ ] The brief form reachable as "Fill the brief myself" at the foot of the
+- [x] The brief form reachable as "Fill the brief myself" at the foot of the
       panel, prefilled from the latest brief when there is one
-- [ ] Tests: the planner spawn's argv (no tool name, the four seals), a brief
+- [x] Tests: the planner spawn's argv (no tool name, the four seals), a brief
       extracted and validated from a recorded reply, the retry sent once and
       only once, a reply refused on `topic` with a matching `topic` block
       re-validated against the widened vocabulary and stored as `briefed` with
@@ -1077,13 +1094,24 @@ Postgres up.
 
 ### Phase 2. The manual, the form removed, extend from a tile
 
-- [ ] `services/studio/src/manual/` with the static sections, and the assembly
-      at start and on a changed build, with `manualHash` on the job
-- [ ] The lint-name comparison and the three-snippet test
+- [x] `services/studio/src/manual/` with the static sections, and the assembly
+      at start and on a changed build, with `manualHash` on the job. The hash
+      is the sha256 of the manual's text and names its file; it lives in
+      `job.json`, the API's job view and the draft's `created` event, not on
+      the catalog row, the same as `agentAuth`, because it is decided when a
+      job starts, after enqueue wrote the row. A revise or resume inherits its
+      parent's, since it continues the parent's recorded system prompt
+- [x] The lint-name comparison and the three-snippet test (`/api/health`
+      reports `manual: ok | stale | missing` with `manualDetail` naming the
+      rule or snippet; the runner also runs the snippets after each new build)
 - [ ] A tldrawkc PR adding each helper's options to `api.json`, then the options
       section generated from it; the submodule pointer bumped through
-      Workflow 1 of the root `AGENTS.md`
-- [ ] The drawing spawn passes the manual with `--append-system-prompt`
+      Workflow 1 of the root `AGENTS.md`. *The studio half is built:
+      `manual/options.ts` generates the section from an `options` field when
+      any helper carries one, and falls back to the static
+      `sections/60-options.md` when none does, which is today's build. The
+      tldrawkc PR and the pointer bump are still open*
+- [x] The drawing spawn passes the manual with `--append-system-prompt-file`
 - [ ] Extend on the tile and in the tile's panel; the EXTENDING block from
       `inspect --json`
 - [ ] The brief form and its route in the UI deleted
