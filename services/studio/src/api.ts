@@ -25,7 +25,8 @@ import { studioBlobStore } from "./blobs";
 import type { Drafts, DraftStreamEvent } from "./drafts";
 import { MirrorRefused, type Mirrors } from "./mirrors";
 import { matchesTag, openNewestShot } from "./live-shot";
-import { scratchDir, shotPath, targetPath, workDir, workSvgPath } from "./paths";
+import { diagramPathProblem } from "./diagram-guard";
+import { scratchDir, shotPath, studioHome, targetPath, workDir, workSvgPath } from "./paths";
 import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
@@ -1732,6 +1733,9 @@ async function health(
   // two are reported apart. A stale bundle still works, which is `doctor`'s own
   // verdict and the reason it is a warning there too.
   const checks: DoctorCheck[] = checked === null ? [] : doctorChecks(checked);
+  // The diagram agent's own precondition, apart from the tool's: a studio
+  // home its Bash guard cannot carry refuses a job, not the grid or the canvas.
+  const diagramAgentProblem = diagramPathProblem(studioHome());
   return {
     ok: tldrawkc && claude,
     tldrawkc,
@@ -1778,10 +1782,13 @@ async function health(
           ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "the video doctor has not finished its first check" }
           : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length },
     agent,
+    diagramAgent: { ok: diagramAgentProblem === null, problem: diagramAgentProblem },
     note: !tldrawkc
       ? "tldrawkc cannot run, so no job can be queued. Build the submodule."
       : !claude
         ? "the claude CLI is not on PATH, so no job can be spawned."
+        : diagramAgentProblem !== null
+          ? `browsing, the canvas and commits work, but no diagram job can be queued: ${diagramAgentProblem}`
         : // Said here as well as in the 429, because a person who has just been
           // refused looks at health next and a green screen would be a lie.
           cap.exceeded

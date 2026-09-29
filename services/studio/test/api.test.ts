@@ -644,6 +644,22 @@ describe("the vocabulary", () => {
     expect(none).toMatchObject({ stale: true, readAt: null });
   }, 60_000);
 
+  it("reports a studio home the diagram agent cannot use as a diagram-agent problem, and nothing else", async () => {
+    const saved = process.env.STUDIO_HOME;
+    const ok = (await get("/api/health")).body;
+    expect(ok.diagramAgent).toEqual({ ok: true, problem: null });
+    process.env.STUDIO_HOME = `${saved}-$dollar`;
+    try {
+      const body = (await get("/api/health")).body;
+      expect(body.diagramAgent).toMatchObject({ ok: false, problem: expect.stringContaining('"$"') });
+      // The tool is as healthy as it was: only queueing a job is refused.
+      expect(body.tldrawkc).toBe(ok.tldrawkc);
+      if (ok.tldrawkc === true && ok.claude === true) expect(body.note).toContain("no diagram job can be queued");
+    } finally {
+      process.env.STUDIO_HOME = saved;
+    }
+  }, 60_000);
+
   it("does not spawn a topic listing per health call, and reads again once the last read is old", async () => {
     await get("/api/vocabulary");
     const calls = catalogMock.topicList.mock.calls.length;

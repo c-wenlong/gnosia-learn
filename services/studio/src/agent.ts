@@ -10,7 +10,8 @@ import {
   MAX_TURNS,
   type AgentAuth,
 } from "./config";
-import { candidateDir, REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
+import { diagramPathProblem, writeDiagramGuard } from "./diagram-guard";
+import { candidateDir, REPO_ROOT, scratchDir, settingsPath, studioHome, tmpDir } from "./paths";
 import { signalGroup, sweepByMarker } from "./proc";
 import { buildSettings, type SettingsInput } from "./settings";
 
@@ -477,7 +478,8 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *
  * The argv is the security surface, so every flag on it earns its place:
  *
- * - `--settings <per-job file>` is the primary control, written first.
+ * - `--settings <per-job file>` is the primary control, written first, with
+ *   the job's Bash guard (`diagram-guard.ts`) as a `PreToolUse` hook in it.
  * - `--setting-sources ""` stops this machine's `~/.claude/settings.json` and
  *   the repo's `.claude/settings.json` contributing rules of their own. Allow
  *   lists **merge** across sources rather than the most specific one winning,
@@ -525,15 +527,22 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *   which it does after a compaction (M1).
  */
 export async function startAgent(options: AgentOptions): Promise<AgentRun> {
-  const settingsInput: SettingsInput = {
-    jobId: options.jobId,
-    slug: options.slug,
-    ...(options.source === undefined ? {} : { source: options.source }),
-  };
   const file = settingsPath(options.jobId);
   await mkdir(scratchDir(options.jobId), { recursive: true });
   await mkdir(candidateDir(options.jobId), { recursive: true });
   await mkdir(tmpDir(options.jobId), { recursive: true });
+  // The enqueue check again, for a job queued before the studio home moved:
+  // refused before anything is spawned, with the same sentence.
+  const pathProblem = diagramPathProblem(studioHome());
+  if (pathProblem !== null) throw new Error(`the diagram agent cannot run from this studio home: ${pathProblem}`);
+  // After the directories, so the policy can name their resolved spellings.
+  const guard = await writeDiagramGuard(options.jobId, options.slug);
+  const settingsInput: SettingsInput = {
+    jobId: options.jobId,
+    slug: options.slug,
+    guard,
+    ...(options.source === undefined ? {} : { source: options.source }),
+  };
   await writeFile(file, `${JSON.stringify(buildSettings(settingsInput), null, 1)}\n`, "utf8");
 
   const argv = [
