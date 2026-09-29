@@ -13,6 +13,12 @@ Numbers marked *measured* were taken on this machine on 2026-09-27, or on
 (`claude` 2.1.274, `claude-sonnet-5`) and the installed tldrawkc build; every
 other number is a guess and says so.
 
+**Amended 2026-09-29 by [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md)**, which
+lets a person tag Diagram, Video or both with `@` on any message. It lifts
+three rules below, each marked where it stands: one brief block per message
+(now one per kind), one Draw on screen ever (now one live card per kind), and
+C14's refusal of messages while a job runs. D42 is superseded in part.
+
 **Refreshed 2026-09-29**, after the content migration's phase 3 cut-over. The
 owner confirmed three things: the layout stays grid first with the chat in a
 modal (D31, D37); a person approves every drawing by pressing Draw (D29); and
@@ -222,7 +228,12 @@ phase 3 inline edit). That answers concern 4 without loosening the gate.
 ## The planner's prompt
 
 In full. It is the system prompt, followed by three data blocks the runner
-appends. Measured size: 1,444 tokens alone; about 9,900 with today's vocabulary
+appends. *Since [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md) (D59, D61)* it
+becomes the diagram section of one planner prompt that carries every built
+kind, with a TAGS rule, `"kind": "diagram"` in its brief block, and one brief
+block per kind in place of one per message.
+
+Measured size: 1,444 tokens alone; about 9,900 with today's vocabulary
 of 86 topics (8,269 tokens) and the three-diagram corpus. The three rules added
 after [Phase 2 measured](#phase-2-measured) are about 110 tokens more, estimated
 from their length rather than counted.
@@ -675,7 +686,9 @@ a STUDIO note (E7) with the draft still `briefed`. Draw carries a
 `disabledReason` when the target is held by another job (named) or the cap is
 spent (with when it frees); each is re-checked when the panel regains focus. A
 newer brief greys the older card and removes its button: one Draw on screen,
-ever.
+ever. *Superseded by D60 of [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md):* one
+live card per kind, and a newer brief greys only the older card of its own
+kind.
 
 In phase 3 each row becomes editable in place (labels and title as `Input`s,
 the topic as a `FilterMenu`, relations as three small fields), through
@@ -786,7 +799,7 @@ C for the chat and planner, M for the manual.
 | C11 | An extend draft's target changes after the draft opens (a human edit in the mirror, an accepted job) | The EXTENDING block is stale. Draw is unaffected, because extend copies the file as it is at job start and the gate judges that. The confirm card says "The diagram changed after this conversation started" when the target's hash differs from the one recorded at creation |
 | C12 | An extend draft's target is deleted | Draw is refused with the existing `extend` 409. The planner is told and offers a `new` brief |
 | C13 | The daily cap is crossed in the middle of a conversation | The turn in flight finishes. The next message is 429. A brief already proposed can still be drawn only when the window allows a job |
-| C14 | Messages arrive while the draft is `drawing` | 409 with "wait for the drawing, or cancel it". Talking about the next diagram while this one draws is an open question |
+| C14 | Messages arrive while the draft is `drawing` | *Superseded by D60 of [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md): accepted, and the press of the kind whose job is running is disabled instead.* Was: 409 with "wait for the drawing, or cancel it" |
 | C15 | The claude.ai connectors load into a spawn anyway | `--strict-mcp-config` is what prevents it; a test asserts the init event's `tools` is empty for the planner, and the runner fails the turn with `agent` if it is not |
 | C16 | A runner serving an owner other than `local` meets a brief on a proposed topic | `catalog topic add` writes as the catalog CLI's owner, `local`, and takes no `--owner` yet, so the topic would be filed under the wrong owner. The Draw press refuses before any write with 409 `topic-owner` and a STUDIO note saying so; a brief whose topic already exists draws as usual. Lifted when the topic verbs take `--owner` |
 | C17 | Two open drafts each propose a topic in a field no domain in the vocabulary covers | A proposed topic is created only at Draw, so neither planner sees the other's proposal and each names a domain on its own (Phase 2 measured: `networking` and `computer-networks`). The prompt asks for the broad field's usual name, one word where one will do, and four networking drafts re-run after that rule all chose `networking`. When they do not, the confirm card shows the proposed domain under "New topic" before the press, and once C4's note is built the second planner is told of the first topic when it lands |
@@ -1043,6 +1056,13 @@ have proposed a colliding `new` slug and been refused at Draw.
 
 ### D42. The draft carries a kind; only `diagram` is built
 
+**Superseded in part by [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md), 2026-09-29.**
+The kind now lives on each brief and each job, not on the draft: the planner's
+one prompt carries every built kind (D59), each brief names its kind and is
+validated by it (D61), and `draft.kind` stays as the newest brief's kind, for
+display (D62). Keeping the diagram brief's own schema and gate, and rejecting a
+generic `asset` brief, still hold.
+
 **Verdict:** `draft.kind`, defaulting to `diagram`, and a planner prompt and
 brief validator chosen by kind. Phase 1 builds `diagram` and nothing else.
 Taken 2026-09-29, when the owner said manimkc videos come through the same
@@ -1065,7 +1085,7 @@ the same plus card and the same panel. What the diagram work leaves for that:
 
 | Piece | Shared, or per kind |
 | --- | --- |
-| Plus card, dialog, conversation, composer, STUDIO notes | Shared. The plus card grows a kind choice, or the planner asks, once a second kind exists |
+| Plus card, dialog, conversation, composer, STUDIO notes | Shared. The kind is an @ tag in the composer ([`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md)), neither a choice on the plus card nor a question |
 | `draft` row, transcript, turn loop, turn cap, spend entries | Shared, keyed by `draft.kind` |
 | Planner system prompt | Per kind: this document's prompt is the diagram one |
 | Brief and its validator | Per kind: `validateBrief` in `brief.ts` is the diagram one |
@@ -1351,9 +1371,10 @@ and a draft whose only job was enqueued with Postgres down.
    and puts a Gmail send tool in a session guarded only by a refusal.
    **Recommendation:** a separate small PR now, adding the flag and an empty
    config to `startAgent`.
-5. **Talking while a drawing runs.** Phase 1 refuses it. **Recommendation:**
-   allow it in phase 3 if the refusal is met in real use; the planner does not
-   depend on the queue.
+5. **Talking while a drawing runs.** *Resolved by D60 of
+   [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md):* allowed, for every kind, since
+   one draft may now have a drawing and a video in flight; the press of the
+   kind whose job runs is what waits.
 6. **`revise` from the chat.** A change to the diagram just drawn could resume
    that job's drawing session through `revise`, cheaper than a fresh extend.
    **Recommendation:** phase 3, when the draft's newest job is terminal and the
