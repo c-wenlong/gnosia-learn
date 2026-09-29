@@ -122,6 +122,41 @@ describe("webStreamFrom", () => {
     expect(total).toBeGreaterThan(7 * MEGABYTE);
   });
 
+  it("closes the file without throwing when the client cancels mid-read", async () => {
+    // What a <video> that seeks away does: the response is cancelled while a
+    // read is outstanding and the file stream still holds a buffered chunk.
+    // `Readable.toWeb` answered that by emitting the chunk into the closed
+    // controller from a nextTick, so `enqueue` threw ERR_INVALID_STATE with no
+    // caller to catch it and `next start` logged an uncaughtException.
+    const thrown: unknown[] = [];
+    const record = (error: unknown) => thrown.push(error);
+    process.prependListener("uncaughtException", record);
+    try {
+      const source = createReadStream(file);
+      const reader = webStreamFrom(source).getReader();
+
+      await reader.read();
+      // Let the paused file stream fill its own buffer behind the web queue.
+      await delay(50);
+      expect(source.readableLength).toBeGreaterThan(0);
+
+      void reader.read().catch(() => {});
+      await reader.cancel();
+      await delay(100);
+
+      expect(thrown).toEqual([]);
+      expect(source.destroyed).toBe(true);
+    } finally {
+      process.removeListener("uncaughtException", record);
+    }
+  });
+
+  it("passes a read error on to the client rather than ending the body early", async () => {
+    const source = createReadStream(path.join(dir, "missing.bin"));
+    const reader = webStreamFrom(source).getReader();
+    await expect(reader.read()).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("measures the queue in bytes", () => {
     expect(BYTE_QUEUE.size(new Uint8Array(4_096))).toBe(4_096);
   });
