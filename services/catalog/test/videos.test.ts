@@ -28,7 +28,7 @@ import { auditBlobs } from "../src/content/blob-audit";
 import { lockEntity } from "../src/content/revisions";
 import { addTopic, archiveTopic, renameTopic } from "../src/content/topics";
 import { ContentWriteError, writeContents } from "../src/content/write";
-import { connect } from "../src/db";
+import { connect, type CatalogDatabase } from "../src/db";
 import {
   checkoutVideo,
   listVideos,
@@ -72,13 +72,74 @@ function causeText(error: unknown): string {
   return parts.join(" | ");
 }
 
-/** Wait until `count` sessions on the database are blocked on a lock. */
-async function waitForBlocked(db: Scratch["db"], name: string, count: number): Promise<void> {
-  for (let i = 0; i < 200; i += 1) {
+interface HeldLock {
+  /** The holder's backend, which `waitForBlocked` leaves out of its count. */
+  pid: number;
+  /** Commit the holder's transaction, and wait for it. */
+  release: () => Promise<void>;
+  /** Release (if nothing has) and close the holder's connection. Safe in a `finally`. */
+  close: () => Promise<void>;
+}
+
+/**
+ * Take a lock on a connection of its own and keep it until `release`,
+ * resolving only once the lock is held. A race test starts its contenders
+ * after this, so they queue behind the holder. Starting them while the
+ * holder's transaction is still connecting lets a contender take the lock
+ * first under load: it then commits before the other has even looked up the
+ * idempotency key, and the test proves nothing about the race.
+ */
+async function holdLock(url: string, take: (tx: CatalogDatabase) => Promise<unknown>): Promise<HeldLock> {
+  const holder = connect({ url, copyOk: true });
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let holding!: (pid: number) => void;
+  const held = new Promise<number>((resolve) => (holding = resolve));
+  const done = holder.db.transaction(async (tx) => {
+    const { rows } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+    await take(tx);
+    holding(Number(rows[0]!.pid));
+    await released;
+  });
+  try {
+    const pid = await Promise.race([
+      held,
+      done.then(() => Promise.reject(new Error("the holder's transaction ended before it held its lock"))),
+    ]);
+    return {
+      pid,
+      release: async () => {
+        release();
+        await done;
+      },
+      // The pool cannot end while the transaction holds its client, so a test
+      // that throws before releasing would otherwise hang until its timeout.
+      close: async () => {
+        release();
+        await done.catch(() => undefined);
+        await holder.close();
+      },
+    };
+  } catch (error) {
+    await holder.close();
+    throw error;
+  }
+}
+
+/**
+ * Wait until `count` client sessions on the database, other than the lock's
+ * holder, are blocked on a lock. Only the contenders a test started can be:
+ * the holder holds, and nothing else runs against a scratch database.
+ */
+async function waitForBlocked(db: Scratch["db"], name: string, count: number, holder: HeldLock): Promise<void> {
+  for (let i = 0; i < 400; i += 1) {
     const { rows } = await db.execute<{ n: string }>(
-      sql`select count(*) as n from pg_stat_activity where datname = ${name} and wait_event_type = 'Lock'`,
+      sql`select count(*) as n from pg_stat_activity
+          where datname = ${name} and backend_type = 'client backend' and pid <> ${holder.pid} and wait_event_type = 'Lock'`,
     );
-    if (Number(rows[0]?.n) >= count) return;
+    const blocked = Number(rows[0]?.n);
+    if (blocked > count) throw new Error(`${blocked} sessions blocked, expected ${count}`);
+    if (blocked === count) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(`fewer than ${count} sessions ever blocked`);
@@ -513,28 +574,24 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     const dir = await candidate(slug);
     const a = connect({ url: scratch.url, copyOk: true });
     const b = connect({ url: scratch.url, copyOk: true });
-    const holder = connect({ url: scratch.url, copyOk: true });
+    // Hold the video's lock, so both puts pass every check outside the
+    // transaction and then queue on the locks inside it: the first behind the
+    // holder, the second behind the first, which is the order they land in.
+    const holder = await holdLock(scratch.url, (tx) => lockEntity(tx, "video", slug));
     try {
-      let release!: () => void;
-      const released = new Promise<void>((resolve) => (release = resolve));
-      // Hold the video's lock, so both puts pass every check outside the
-      // transaction and then queue on the locks inside it.
-      const held = holder.db.transaction(async (tx) => {
-        await lockEntity(tx, "video", slug);
-        await released;
-      });
       const args = { slug, dir, jobId: queued.id, base: null, reason: "r", author: "local", authorKind: "person" as const, ownerId: "local" };
       const first = putVideo(a.db, openBlobStore(), args);
+      await waitForBlocked(scratch.db, scratch.name, 1, holder);
       const second = putVideo(b.db, openBlobStore(), args);
-      await waitForBlocked(scratch.db, scratch.name, 2);
-      release();
-      await held;
+      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await holder.release();
       const results = await Promise.all([first, second]);
-      expect(results.map((r) => r.retry).sort()).toEqual([false, true]);
+      expect(results.map((r) => r.retry)).toEqual([false, true]);
       expect(results[0].revision).toBe(results[1].revision);
       expect(await jobState(queued.id)).toBe("accepted");
     } finally {
-      await Promise.all([a.close(), b.close(), holder.close()]);
+      await holder.close();
+      await Promise.all([a.close(), b.close()]);
     }
   });
 
@@ -610,26 +667,22 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
   it("returns the winner's child to a concurrent second --discard-parent submit", async () => {
     const slug = "double-change";
     const { job: parent } = await jobReady(slug);
-    const holder = connect({ url: scratch.url, copyOk: true });
+    // Both submits look the key up, find nothing and queue on the parent's
+    // row lock, the first behind the holder and the second behind the first.
+    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id} for update`));
     try {
-      let release!: () => void;
-      const released = new Promise<void>((resolve) => (release = resolve));
-      const held = holder.db.transaction(async (tx) => {
-        await tx.execute(sql`select id from job where id = ${parent.id} for update`);
-        await released;
-      });
       const submit = () =>
         runEnqueue({
           brief: { kind: "video", topic: TOPIC, target: `videos/${slug}.mp4`, idempotencyKey: "double-change-1", parentJob: parent.id },
           discardParent: parent.id,
         });
       const first = submit();
+      await waitForBlocked(scratch.db, scratch.name, 1, holder);
       const second = submit();
-      await waitForBlocked(scratch.db, scratch.name, 2);
-      release();
-      await held;
+      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await holder.release();
       const results = await Promise.all([first, second]);
-      expect(results.map((r) => r.created).sort()).toEqual([false, true]);
+      expect(results.map((r) => r.created)).toEqual([true, false]);
       expect(results[0].job.id).toBe(results[1].job.id);
       expect(await jobState(parent.id)).toBe("discarded");
     } finally {
@@ -640,14 +693,12 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
   it("keeps the refusal for a different concurrent --discard-parent request under the same key", async () => {
     const slug = "different-change";
     const { job: parent } = await jobReady(slug);
-    const holder = connect({ url: scratch.url, copyOk: true });
+    // As above: both past the key lookup and queued on the parent's row lock,
+    // in a known order. A submit that looked the key up after the winner
+    // committed would be handed the winner's job, the idempotent answer for a
+    // key already taken, and the refusal under test would never be reached.
+    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id} for update`));
     try {
-      let release!: () => void;
-      const released = new Promise<void>((resolve) => (release = resolve));
-      const held = holder.db.transaction(async (tx) => {
-        await tx.execute(sql`select id from job where id = ${parent.id} for update`);
-        await released;
-      });
       const submit = (idea: string) =>
         runEnqueue({
           brief: {
@@ -661,17 +712,15 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
           discardParent: parent.id,
         });
       const first = submit("First change.");
+      await waitForBlocked(scratch.db, scratch.name, 1, holder);
       const second = submit("Second change.");
-      await waitForBlocked(scratch.db, scratch.name, 2);
-      release();
-      await held;
-      const results = await Promise.allSettled([first, second]);
-      const landed = results.filter((r) => r.status === "fulfilled");
-      const refused = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-      expect(landed).toHaveLength(1);
-      expect(landed[0]?.status === "fulfilled" && landed[0].value.created).toBe(true);
-      expect(refused).toHaveLength(1);
-      expect(String(refused[0]?.reason)).toMatch(/is discarded, not awaiting_review/);
+      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await holder.release();
+      const [landed, refused] = await Promise.allSettled([first, second]);
+      expect(landed?.status === "fulfilled" && landed.value.created).toBe(true);
+      expect(refused?.status).toBe("rejected");
+      expect(String((refused as PromiseRejectedResult).reason)).toMatch(/is discarded, not awaiting_review/);
+      expect(await jobState(parent.id)).toBe("discarded");
     } finally {
       await holder.close();
     }
