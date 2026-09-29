@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  carryMentions,
   filterMentionOptions,
   firstActive,
   inlinePieces,
@@ -196,5 +197,29 @@ describe("the plus menu", () => {
     expect(plusMenuStays(opened, { key: "3", offset: 4, collapsed: true }, "hello")).toBe(false);
     expect(plusMenuStays(opened, { key: "3", offset: 5, collapsed: false }, "hello")).toBe(false);
     expect(plusMenuStays(opened, null, "hello")).toBe(false);
+  });
+});
+
+describe("carryMentions (the plain fallback)", () => {
+  const tagged = { text: "@video the loop", mentions: [{ kind: "video", start: 0, end: 6 }] };
+
+  it("keeps a tag through an edit before, after or around it", () => {
+    expect(carryMentions(tagged, "Make a @video the loop")).toEqual([{ kind: "video", start: 7, end: 13 }]);
+    expect(carryMentions(tagged, "@video the whole loop")).toEqual([{ kind: "video", start: 0, end: 6 }]);
+    expect(carryMentions(tagged, tagged.text)).toEqual(tagged.mentions);
+  });
+
+  it("drops a tag whose token was edited away, and never makes one from typed text", () => {
+    expect(carryMentions(tagged, "@vide the loop")).toEqual([]);
+    expect(carryMentions({ text: "the loop", mentions: [] }, "@video the loop")).toEqual([]);
+  });
+
+  it("keeps two tags in order, and a typed @video beside a tag stays a word", () => {
+    const both = { text: "@diagram and @video", mentions: [{ kind: "diagram", start: 0, end: 8 }, { kind: "video", start: 13, end: 19 }] };
+    expect(carryMentions(both, "@diagram and also @video")).toEqual([
+      { kind: "diagram", start: 0, end: 8 },
+      { kind: "video", start: 18, end: 24 },
+    ]);
+    expect(carryMentions(tagged, "@video the loop, not @video")).toEqual([{ kind: "video", start: 0, end: 6 }]);
   });
 });

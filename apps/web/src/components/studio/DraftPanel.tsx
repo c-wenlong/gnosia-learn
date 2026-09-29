@@ -22,6 +22,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { MentionChip } from "@/components/ui/MentionChip";
 import type { MentionComposerHandle, MentionComposerProps } from "@/components/ui/MentionComposer";
 import {
+  carryMentions,
   EMPTY_MENTION_VALUE,
   inlinePieces,
   isEmptyValue,
@@ -141,8 +142,8 @@ function PlainFallback(props: MentionComposerProps<DraftKind>) {
     <div className="flex flex-col gap-1">
       <Composer
         value={props.value.text}
-        onChange={(text) => props.onChange({ text, mentions: [] })}
-        onSubmit={(text) => props.onSubmit({ text, mentions: [] })}
+        onChange={(text) => props.onChange({ text, mentions: carryMentions(props.value, text) })}
+        onSubmit={(text) => props.onSubmit({ text, mentions: carryMentions(props.value, text) })}
         label={props.label}
         placeholder={props.placeholder}
         disabled={props.disabled}
@@ -150,7 +151,7 @@ function PlainFallback(props: MentionComposerProps<DraftKind>) {
         disabledReason={props.disabledReason}
         onModEnter={props.onModEnter}
       />
-      <p className="px-1 text-[12px] leading-4 text-text3">Tags could not load. Reload the page to tag a diagram or a video.</p>
+      <p className="px-1 text-[12px] leading-4 text-text3">Tags could not load. A tag already in the message still counts; reload the page to add one.</p>
     </div>
   );
 }

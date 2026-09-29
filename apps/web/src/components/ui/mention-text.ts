@@ -147,6 +147,32 @@ export function inlinePieces<K extends string = string>(value: MentionValue<K>):
  * text and reading exactly `@<kind>`, no two overlapping, and a kind once.
  * Returns the ones that pass, in text order.
  */
+/**
+ * The tags a plain-text edit of `previous` still carries: each old mention
+ * whose token is still in `text`, in order, at the occurrence nearest where it
+ * was. For a field that cannot draw chips (the fallback when Lexical will not
+ * load), so a tagged message handed to it sends as tagged. It only keeps tags;
+ * an `@video` typed as text never becomes one, the rule the planner follows.
+ */
+export function carryMentions<K extends string>(previous: MentionValue<K>, text: string): Mention<K>[] {
+  const kept: Mention<K>[] = [];
+  let cursor = 0;
+  const shift = text.length - previous.text.length;
+  for (const mention of validMentions(previous.text, previous.mentions)) {
+    const token = mentionToken(mention.kind);
+    const occurrences: number[] = [];
+    for (let at = text.indexOf(token, cursor); at !== -1; at = text.indexOf(token, at + 1)) occurrences.push(at);
+    if (occurrences.length === 0) continue;
+    // Nearest to where it was, or to where it was plus the edit's net length
+    // (a tag after an insertion moved right by it).
+    const near = (at: number) => Math.min(Math.abs(at - mention.start), Math.abs(at - mention.start - shift));
+    const start = occurrences.reduce((best, at) => (near(at) < near(best) ? at : best));
+    kept.push({ kind: mention.kind, start, end: start + token.length });
+    cursor = start + token.length;
+  }
+  return kept;
+}
+
 export function validMentions<K extends string>(text: string, mentions: readonly Mention<K>[] | null | undefined): Mention<K>[] {
   if (!Array.isArray(mentions)) return [];
   const sorted = [...mentions]
