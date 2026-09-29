@@ -131,7 +131,8 @@ bare tool name anywhere). What differs:
 The agent follows the manimkc-video skill, step for step, with two steps
 moved. `doctor` and `new` are the runner's: the video doctor runs before a
 job is accepted into the queue, and the runner scaffolds the topic with the
-brief's scene names before the agent starts. The storyboard is the brief,
+brief's scene names before the agent starts (with `--silent` for a silent
+video, which gives plain `Scene` stubs). The storyboard is the brief,
 written and approved in the chat. Everything from there is the agent's:
 `api`, the scene code, `lint`, `preview`, looking at every sheet, fixing,
 and `build`, with every error on the way handled inside its own loop as the
@@ -162,7 +163,7 @@ runner's, not the agent's.
 | `manimkc preview` (the agent's call) | yes: `manimgl` imports the scene file | inside the sandbox |
 | `manimkc build` (the agent's call, as the skill's last step) | yes, again, at 1080p | inside the sandbox |
 | Contact sheets, ffprobe, the join | no, but they run under the same `manimkc` process | inside the sandbox |
-| The gate's poster cut and ffprobe of the finished file | no, but they parse a file agent code wrote | under the same profile, run by the runner. The sandbox is the runner's for this reason: a sandbox the CLI put around the agent's Bash would not cover the runner's own steps |
+| The gate's poster cut and ffprobe of the finished file | no, but they parse a file agent code wrote | under the gate's own, narrower profile (the gate, steps 6 and 9), run by the runner. The sandbox is the runner's for this reason: a sandbox the CLI put around the agent's Bash would not cover the runner's own steps |
 
 ### The sandbox (D44)
 
@@ -281,7 +282,8 @@ import, about 9 seconds. With `MPLCONFIGDIR` in the job's render directory:
 | The first `import manimlib` in a fresh job (the font cache built once) | 10.0 s | 0.8 s |
 
 A poster cut with the catalog's filter chain (`format=yuvj420p`) ran under the
-profile too, which is where the gate runs it.
+profile too. The gate runs it under a narrower one of its own (the gate, step
+9), also measured.
 
 The runner seeds each job's `MPLCONFIGDIR` with a copy of a cache it builds at
 start, so no job pays the ten seconds.
@@ -653,7 +655,7 @@ skill, rewritten for a session with one command. Its sections:
 | --- | --- | --- |
 | Your commands | `video api [names]`, `video lint`, `video preview [Scene ...]`, `video build`, spelled as the absolute wrapper path, and that nothing else runs | Static |
 | The loop | The skill's order from step 6: write every scene; `lint` and fix every error; `preview`; **Read every sheet path it prints**; fix and preview only the scenes you changed; when every sheet is clean, `build`, and read its report. An error anywhere is yours to fix and run again, as the owner would | Static, from the manimkc-video skill |
-| Verbatim lines | Each beat is one `with self.voiceover("..."):` block holding that beat's `say` exactly, in order; the closing fade goes after the last block. The clips already exist for exactly these lines, and no other line can be voiced | Static, from manimkc's `AGENTS.md` and the server's prompt |
+| Verbatim lines | Narrated: each beat is one `with self.voiceover("..."):` block holding that beat's `say` exactly, in order; the closing fade goes after the last block. The clips already exist for exactly these lines, and no other line can be voiced. Silent: each beat's `say` is its caption, shown with `CaptionBar` as written, and the beat holds for its `seconds`; no `voiceover` at all | Static, from manimkc's `AGENTS.md`, `lib/cslib.py` and the server's prompt |
 | The frame and the house style | 14.22 by 8 units, keep inside x in [-6.9, 6.9] and y in [-3.8, 3.8], heading at `to_edge(UP, buff=0.45)`, body around y = -0.3; `Text` for words, `Tex` only when the video doctor found tectonic and dvisvgm; the names that do not exist here | Static, from the skill and `AGENTS.md` |
 | The library | Every helper and constant with its usage line | **Generated** by the runner from the real checkout's `manimkc api --json` (12,452 characters today, measured); the agent's own `video api` runs in the job checkout, where the only topic is its own, so the manual's listing is the complete one |
 | Looking at a sheet | The skill's checklist, in its order | Static |
@@ -741,52 +743,71 @@ to synthesise. A scene that voices any other line finds no clip, and the
 sandbox cannot synthesise one (the model's files are outside what it may
 read), so the render fails loudly and the agent corrects the line. A phase 0
 lint rule refuses a `voiceover` whose argument is not a string literal before
-it gets that far.
+it gets that far. A silent video has no narration step.
 
 ## The gate
 
 The runner's own checks, in order, after the agent exits. The agent built the
 video; the gate renders nothing, and checks the finished artefact and the
-source it came from.
+source it came from. Steps marked *narrated* apply to a narrated video; a
+silent one (`voice: "none"`) takes the silent line instead.
 
 1. **Source.** The scene file exists, parses, and is newer than the job's
    start; on a change, it differs from the source the job started from.
 2. **Lint.** `video lint --json` reports no errors. Warnings are kept for the
    job view and do not fail the gate.
 3. **The script.** From the scene file's syntax tree: one class per brief
-   scene, in order, named `<PREFIX><n>_<Name>`; each beat is exactly one
-   `voiceover` literal equal to its `say` (whitespace normalised), in order;
-   and every `labels` entry appears inside some string literal in that class.
-   Loose in one direction only, like the diagram gate: a literal may say more
-   than the label.
+   scene, in order, named `<PREFIX><n>_<Name>`; and every `labels` entry
+   appears inside some string literal in that class. Loose in one direction
+   only, like the diagram gate: a literal may say more than the label.
+   *Narrated:* each beat is exactly one `voiceover` literal equal to its
+   `say` (whitespace normalised), in order. *Silent:* no `voiceover` call at
+   all, and each beat's `say`, its caption, appears as a string literal in
+   the class, in order.
 4. **The topic.** `topic.yml`'s `topic` is still the brief's.
 5. **The finished video, copied once.** `calls.ndjson` shows a `build` that
    exited 0 after the scene file's last change. The runner then copies the
-   deliverable and its three sidecars out of `render/` into `candidate/`,
+   deliverable, and for a narrated video its three sidecars (a silent build
+   writes none), out of `render/` into `candidate/`,
    opening each with `O_NOFOLLOW` and taking only regular files with one
    link, and records each copy's sha256 and size. Every later step, and
    Accept, reads only these copies; `render/` is never read again, so a
    process still running in it changes nothing.
-6. **Probe.** `ffprobe` on the copy, under the job's profile, with the format
-   pinned (`-f mov`): a video stream, an audio stream for a narrated video,
-   the index at the front (faststart), and the duration.
-7. **Sync.** From the copied `transcript.json`: its segments are the brief's
+6. **Probe.** `ffprobe` on the copy, under the gate's profile (step 9), with
+   the format pinned (`-f mov`): a video stream, the index at the front
+   (faststart), and the duration. *Narrated:* an audio stream. *Silent:* none.
+7. **Sync.** *Silent: skipped;* there is no transcript. *Narrated:* from the
+   copied `transcript.json`: its segments are the brief's
    lines, in order, every one voiced; and no scene holds more than four
    seconds of picture after its last line ends (the skill's rule for a held
    frame), from each chapter's end and its last segment's end. This file was
    written by the scene's own `VoiceScene`, so the step catches mistakes, not
    a hostile scene (see the threat table).
 8. **Length.** The duration is within 15 percent of the length the script
-   predicts, which catches dead air the per-scene check misses. Size is
+   predicts, which catches dead air the per-scene check misses. *Narrated:*
+   the prediction is the `say` characters at 15.2 a second, times 1.08.
+   *Silent:* the sum of the beats' `seconds`, within 20 percent, since a
+   silent scene's fades are not in any beat. Size is
    reported, not judged: manimkc's 36 deliverables run at 30 to 35 kB a second
    (*measured*: 2.0 MB for 58 s, 10.5 MB for 349 s, 38.8 MB for 1,210 s), and
    a file over three times that shows as a warning on the card.
 9. **Poster.** `ffmpeg` with the catalog's own filter chain
-   (`services/catalog/src/poster/recipe.ts`, `format=yuvj420p` included),
-   under the job's profile, on the copy, writes `candidate/poster.jpg`, which
-   must be a non-empty JPEG. Run here so a clip ffmpeg cannot cut a still from
-   fails before Accept, not at it, and so no ffmpeg outside a sandbox ever
-   parses a file agent code wrote.
+   (`services/catalog/src/poster/recipe.ts`, `format=yuvj420p` included), on
+   the copy, writes `candidate/poster.jpg`, which must be a non-empty JPEG.
+   Run here so a clip ffmpeg cannot cut a still from fails before Accept, not
+   at it, and so no ffmpeg outside a sandbox ever parses a file agent code
+   wrote. It runs, with step 6's `ffprobe`, under **the gate's profile**, not
+   the render one: the render profile writes only under `render/` and cannot
+   read `candidate/`, so the poster could never be written there. The gate's
+   profile is the render one's deny-by-default base with three changes: the
+   exec list is `ffmpeg` and `ffprobe` only, the job-specific reads are
+   `candidate/` only, and the one write is the literal path
+   `candidate/poster.jpg`. Cutting into `render/` and copying back was
+   rejected: it would put ffmpeg's input back in the directory a lingering
+   process can still write, reopening the gap step 5 closes, and the poster
+   would need its own copy and check. *Measured:* under that profile `ffprobe`
+   read a copied 58 s deliverable, the poster was cut (10,824 bytes), and a
+   write to any other name in `candidate/` or outside it was refused.
 10. **Looked (D50).** For every scene, the agent's stream holds a Read of that
     scene's sheet path after the last wrapper call that rendered it. The
     runner has both halves: which call rendered which scene is in
@@ -812,7 +833,7 @@ advanced by what the runner can see rather than by the agent's say-so:
 | Step | Advanced by |
 | --- | --- |
 | Storyboard | done at the press: the brief is the storyboard |
-| Narration | the runner's own prefetch, before the agent starts: "12 lines, 9 new clips, 21 s" |
+| Narration | the runner's own prefetch, before the agent starts: "12 lines, 9 new clips, 21 s"; absent for a silent video |
 | Setup | the runner's `new` and checkout |
 | Scene code | the agent's first `Edit` of the scene file, then each later one |
 | Lint | each `video lint` in `calls.ndjson` |
@@ -846,7 +867,7 @@ cost, and three actions:
 
 | Action | What happens |
 | --- | --- |
-| Accept | `catalog video put --job` (below), then `catalog job accept`. The panel says where it landed and offers the library page |
+| Accept | `catalog video put --job` (below), which lands the video and moves the job to `accepted` in one transaction. The panel says where it landed and offers the library page |
 | Discard | The job is `discarded`, `render/` and `candidate/` are deleted, the source is kept |
 | Change | A text box: "What should change?" A picture-only change ("the arrow in scene 3 points at the wrong box") revises the job (D52). A change to what is said goes back to the conversation, where the planner writes a new brief with `mode: "change"` |
 
@@ -854,7 +875,7 @@ cost, and three actions:
 
 `catalog video put --job <id> --slug <slug> --dir <candidate> --base
 <revision|none> --reason <text> --owner <owner>`, a new verb built on
-`putDiagram`'s pattern, in one transaction:
+`putDiagram`'s pattern, in one transaction that also accepts the job:
 
 1. `checkJob`: the job is this owner's, `awaiting_review`, its target
    `videos/<slug>.mp4` and its topic the brief's.
@@ -874,7 +895,31 @@ cost, and three actions:
    `poster:video:<slug>`, derived from it too, in the `poster:` namespace the
    blob audit and the re-render unhooking already key on. `asset_topic` for the
    topic and `asset_concept` for each concept.
-5. `asset_job` rows for each output, so `catalog job accept` finds them.
+5. `asset_job` rows for each output.
+6. The job's transition to `accepted`, with `reviewed_at`, through the same
+   checked transition `catalog job accept` makes (`runAccept` in
+   `commands/job.ts`, taking the transaction rather than opening its own).
+
+A silent video has no transcript, chapters or captions, so step 2 uploads the
+mp4 and the poster and step 4 writes no sidecar rows; the library plays it
+without chapters, as it plays manimkc's silent cuts today.
+
+**Why one transaction here, when diagrams take two calls.** `diagram put
+--job` lands the diagram and leaves the job `awaiting_review`; a separate
+`catalog job accept` moves it, and a failure in between is finished by the
+studio's Reindex (`indexed: false`). That split predates this verb and exists
+because the put came first; a new verb has no reason to keep the gap, and
+with it gone there is no state in which the video is in the catalog and its
+job still in review.
+
+**The runner's side, and the retry.** The runner writes `accepted` to
+`job.json` after the catalog returns. If it dies between the commit and that
+write, its reconcile at start asks `catalog job show` for every job it holds
+as `awaiting_review` and adopts `accepted` where the row says so. A second
+`video put --job` for a job already accepted is an idempotent own retry, as
+`putDiagram`'s is: the same job, the same source hash and the same blob keys
+return the landed revision and write nothing; anything else is refused by
+name. So a repeated Accept press or a retry after a timeout is safe.
 
 A change to an accepted video writes the same ids again, a new revision each,
 with the previous revision as `--base`, so a concurrent write refuses rather
@@ -1444,7 +1489,10 @@ profile with no directory other than `render/` writable, and manimkc's
       gate's copy refusing a symbolic link, a hard link and a non-regular
       file; the settings file allowing one Bash prefix and no bare tool; the
       gate's script, labels, sync, length and looked steps against recorded
-      fixtures; model and effort resolved from a panel value, from the user
+      fixtures, for a narrated and a silent brief; the gate's profile cutting
+      the poster and refusing any other write; `video put --job` accepting the
+      job in the same transaction, and a repeated put returning the landed
+      revision; model and effort resolved from a panel value, from the user
       settings, and from neither; `catalog video put` writing rows and blobs
       in one transaction, refusing another owner's job, and surviving a
       `catalog import --only manimkc`
