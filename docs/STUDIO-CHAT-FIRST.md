@@ -527,7 +527,7 @@ draft's `jobId` (D35). `STUDIO_TABLES` gains `draft`.
 | State | Meaning |
 | --- | --- |
 | `open` | A conversation with no valid brief in force |
-| `briefed` | The latest planner reply carried a brief that passed; Draw is live |
+| `briefed` | A brief is in force: the latest planner reply carried one that passed, or the person edited one since; Draw is live |
 | `drawing` | Its newest job is `queued`, `running` or `awaiting_review` |
 | `done` | Its newest job was accepted or discarded |
 | `abandoned` | A person closed it for good, or the turn cap was reached with no Draw |
@@ -535,8 +535,8 @@ draft's `jobId` (D35). `STUDIO_TABLES` gains `draft`.
 ```mermaid
 stateDiagram-v2
     [*] --> open
-    open --> briefed: valid brief
-    briefed --> open: person asks for a change
+    open --> briefed: valid brief, or the person's edit
+    briefed --> open: a planner reply with no brief, over a planner's brief
     briefed --> drawing: Draw, job queued
     drawing --> briefed: job failed, cancelled or interrupted
     drawing --> done: job accepted or discarded
@@ -558,6 +558,15 @@ the offer to resume it) as a STUDIO note, because the next useful thing is to
 talk about what went wrong. A Resume or a Revise of the job carries its draft,
 so the draft follows the new job.
 
+**Who wrote the brief decides what ends it** (the owner, 2026-09-29). A brief
+the planner wrote is out of force as soon as a planner reply carries no brief
+block: the reply asked something, so the brief is no longer what it proposes.
+A brief the person edited (`PUT /api/drafts/{id}/brief`) stays in force when a
+later planner reply carries no brief block, a question or a comment on the
+edit included; only a newer valid planner brief replaces it, and from then on
+the planner's rule applies again. The draft records which (`briefBy`), and a
+cut-off turn or a brief refused twice leaves a person's brief in force too.
+
 ### The events a draft appends
 
 To its own `transcript.ndjson`, never to the catalog's `event` table, which is
@@ -570,7 +579,7 @@ evidence about a learner.
 | `reply` | the planner's full text, the turn's cost and its source |
 | `brief` | the validated brief |
 | `brief-invalid` | the field, the validator's sentence, and whether a retry was sent |
-| `studio` | a note the runner sent to the planner |
+| `studio` | a note the runner sent to the planner; `edit: true` on the note for a person's edit of the brief, which a `brief` event (also `edit: true`) follows |
 | `draw` | the job id, or the refusal and its status |
 | `job` | the job's terminal state, when it reaches one |
 | `abandoned` | who: the person, or the turn cap |
@@ -587,13 +596,13 @@ handler as every other route. Every response carries a `note`.
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
 | `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch |
-| `GET` | `/api/drafts` | `?state=&limit=` | `{ drafts: [{ draftId, state, title, source, turns, costUsd, updated, jobId }] }` |
-| `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, transcript: [{ seq, role, text, at, brief? }], brief, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown |
+| `GET` | `/api/drafts` | `?state=&limit=&nonEmpty=`; `state` may be a comma list (`open,briefed`); `nonEmpty=1` leaves out drafts with no person message (`turns` 0), before the limit is applied | `{ drafts: [{ draftId, kind, state, title, firstMessage, source, turns, costUsd, updated, jobId }] }`. `firstMessage` is the person's first message, whitespace collapsed and cut to 120 characters, or null before one |
+| `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, transcript: [{ seq, role, text, at, brief?, edit? }], brief, briefSeq, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown. `briefSeq` is the seq of the transcript entry carrying `brief` (a planner reply, or the `studio` note of an edit, which has `edit: true`), null with no brief |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, at most `STUDIO_TEXT_LIMIT` characters | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
 | `GET` | `/api/drafts/{id}/events` | `Last-Event-ID` | SSE: `delta` (text so far), `reply`, `brief`, `brief-invalid`, `studio`, `state`, `error` |
 | `POST` | `/api/drafts/{id}/draw` | `{ idempotencyKey }` | `201 { draftId, jobId, state: "drawing" }`; every refusal `POST /api/jobs` can give, with the same status and body |
 | `POST` | `/api/drafts/{id}/abandon` | none | `{ draftId, state: "abandoned" }`. Stops an in-flight turn first |
-| `PUT` | `/api/drafts/{id}/brief` | a whole `Brief` | Phase 3: `{ draftId, brief }` after `validateBrief`; appends a `studio` note so the planner's next turn knows |
+| `PUT` | `/api/drafts/{id}/brief?base=<seq>` | a whole `Brief`, as `GET` returns it; `idempotencyKey` and `mermaid` are dropped (Draw mints the one and attaches the other, C8). `base` is the `briefSeq` of the brief being edited, or `none` on a draft with no brief | `200 { draftId, state: "briefed", brief, briefSeq, pendingTopic, note }` after `validateBrief` against the vocabulary as it is now, widened with the pending topic while the brief still names it (any other topic clears it). Allowed on an `open` or `briefed` draft; an `open` one becomes `briefed`, and the edited brief stays in force (see States). Appends a `studio` note (`edit: true`) listing what changed, carrying the brief as a reply carries one; SSE: `studio`, `brief` (`edit: true`, `replySeq` the note), then `state`. The planner's next turn opens with one note for every edit since it last heard, measured from the brief it last knew, and the whole brief in force. A brief identical to the one in force is `200` and writes nothing, whatever `base` says, so a retry is safe. `400 { field: "base" }` for a missing or malformed base, `400 { field }` as `POST /api/jobs`; `409 { reason: "brief-changed", base }` when `base` is not the brief in force (a planner reply or another tab replaced it; `base` is the current one); `409 { reason: "in-flight" \| "draw-in-progress" \| "drawing" \| "done" \| "abandoned" }`; `503` vocabulary unreadable |
 
 **Job routes.** `POST /api/jobs` accepts an optional `draftId` beside the
 brief; the runner checks the draft exists and is `briefed`, stores it on
@@ -767,7 +776,7 @@ C for the chat and planner, M for the manual.
 | C1 | The runner dies mid-turn | The reconcile pass finds a turn with a `message` and no `reply`, writes a `reply` marked `interrupted` with whatever text arrived, rebuilds the turn's cost from `session.ndjson` as it does for a job, and leaves the draft `open`. Nothing is resent by itself (D15 of the existing doc) |
 | C2 | Two tabs post to one draft at once | The second gets 409 while a turn is in flight. Both tabs follow the same SSE stream, so both show the reply |
 | C3 | The planner's session cannot be resumed (the CLI's transcript was deleted) | The `--resume` exits without a turn, as the runner already detects for a revise. The runner starts a fresh session, replays the transcript into its first message as a fenced data block, and says so in a STUDIO note |
-| C4 | The topic vocabulary changes during a draft | The planner's snapshot is frozen, but Draw validates against `catalog topic ls` as it is. A brief naming a topic since archived is refused with the field named (E7). A topic added since is invisible to the planner until the runner notices the vocabulary hash changed and appends a STUDIO note listing what was added. A proposed topic that someone else created in the meantime makes the Draw press's `topic add` refuse; the runner then re-validates the brief against the new vocabulary and, when it passes, clears `pending_topic` and says so in a STUDIO note, so the next press is a plain Draw |
+| C4 | The topic vocabulary changes during a draft | The planner's snapshot is frozen, but Draw validates against `catalog topic ls` as it is. A brief naming a topic since archived is refused with the field named (E7). A topic added since is invisible to the planner until the runner notices the vocabulary hash changed and appends a STUDIO note listing what was added, changed and archived; it does so at the start of the draft's next turn, never by rewriting the system prompt, which the CLI replays as recorded. The check reuses a vocabulary read under a minute old, which saves a 0.5 to 0.7 second catalog spawn before every turn and can delay the note by one turn; the reply is still judged against a fresh read, so a brief naming an archived topic is refused and retried once rather than accepted. A note stays queued until a turn that carried it gets a reply. A proposed topic that someone else created in the meantime makes the Draw press's `topic add` refuse; the runner then re-validates the brief against the new vocabulary and, when it passes, clears `pending_topic` and says so in a STUDIO note, so the next press is a plain Draw |
 | C5 | Nothing in the vocabulary fits | The planner proposes a topic; the dry run checks it, the brief is stored with `pending_topic`, and the card's button is **Create topic and draw** (see the hand-off). With Postgres down the studio cannot create the topic, so that button is refused with the catalog's unreachable message, as Accept is (D16 of the existing doc) |
 | C6 | The planner proposes a slug that already exists, as `new` | `runner.enqueue` refuses it with 409, which reaches the planner as a STUDIO note. The CORPUS block exists so this is rare, and the refusal exists because the block can be a week old |
 | C7 | The target is held by another job | 409 naming the holder; the confirm card's Draw is disabled with the job's name and an Open link |
@@ -1282,8 +1291,34 @@ and $0.835 for the extend drawing.
 - [ ] Inline edits on the confirm card, through `PUT /api/drafts/{id}/brief`
 - [ ] The drafts list: the drafts in `open` and `briefed`, newest first, as a
       section above the grid when any exist
-- [ ] Pruning per D40, run at runner start and daily
-- [ ] The vocabulary-changed STUDIO note (C4)
+- [x] Pruning per D40, run at runner start and daily
+- [x] The vocabulary-changed STUDIO note (C4)
+
+The runner half of the first two is built: `PUT /api/drafts/{id}/brief`, and
+`firstMessage` and a comma list of states on `GET /api/drafts` (see the API
+table). Pruning is `services/studio/src/prune.ts` and `catalog draft delete`:
+a pass at start and every `STUDIO_PRUNE_EVERY_MS` (a day), over drafts
+untouched for `STUDIO_DRAFT_TTL_MS` (seven days). The disk is asked first (a
+job the draft recorded, a job in memory, any `job.json` naming it), then the
+row's delete, which checks for a job row in the same transaction, with the
+draft row locked, since `job.draft_id` is `ON DELETE SET NULL`. With Postgres
+down the pass stops at the first delete it cannot make and prunes nothing. A
+draft being pruned answers 404 on every route, so nothing starts on it while
+its row goes. Only drafts of the runner's own `STUDIO_OWNER` are considered,
+and a row the catalog says is another owner's (`other-owner`) is kept. The
+pass also stops when the jobs directory or a `job.json` cannot be read, or
+the delete answers anything but `deleted`, `no-draft`, `has-jobs` or
+`other-owner`. After the row goes, a `pruned` tombstone is written into the
+workspace before it is removed, so a removal that fails part way is never
+loaded as a draft again and the next pass finishes it. C4 compares the
+vocabulary at the start of each turn with the one the planner was last told
+of (its system prompt's, then `drafts/<id>/vocabulary-told.md`) and sends the
+topics added, changed and archived, in the VOCABULARY block's own format,
+removals first, capped at 200 lines. The note is written before the baseline
+moves, and a capped note moves it only past the topics it told, so the next
+turn tells the rest. The check reuses the vocabulary the last reply's verdict
+read when it is under a minute old (`STUDIO_TURN_VOCABULARY_MS`), rather than
+running `catalog topic ls` before every turn.
 
 Done when: an edited label reaches the job's brief and the planner's next reply
 refers to it; a draft closed in one tab is reopened from the list in another; a

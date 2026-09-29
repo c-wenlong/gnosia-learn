@@ -144,11 +144,14 @@ function guard(request: IncomingMessage): string | null {
     return `this request is ${site} according to the browser that sent it, and only same-origin is taken`;
   }
 
-  if (request.method === "POST") {
+  // Every method that carries a body. DELETE carries none here, and
+  // `DELETE /api/mirrors` is sent bare.
+  const method = request.method ?? "GET";
+  if (method === "POST" || method === "PUT" || method === "PATCH") {
     const type = (request.headers["content-type"] ?? "").toString().split(";")[0]?.trim().toLowerCase();
     if (type !== "application/json") {
       return (
-        `POST bodies here must be sent as application/json, and this one is "${type || "nothing"}". ` +
+        `${method} bodies here must be sent as application/json, and this one is "${type || "nothing"}". ` +
         `The three content types a browser can send without asking permission first are exactly ` +
         `the ones this refuses, which is the point: curl -H 'content-type: application/json' works.`
       );
@@ -338,6 +341,7 @@ async function handle(
         "/api/drafts",
         "/api/drafts/{id}",
         "/api/drafts/{id}/messages|events|draw|abandon",
+        "PUT /api/drafts/{id}/brief",
         "/api/diagrams",
         "/api/diagrams/{name}",
         "/api/diagrams/{name}/svg",
@@ -1231,7 +1235,8 @@ async function vocabularyRoute(response: ServerResponse): Promise<void> {
 }
 
 /**
- * `/api/drafts`: create, list, read, talk, follow, draw, abandon.
+ * `/api/drafts`: create, list, read, talk, follow, draw, abandon, and edit
+ * the brief by hand.
  *
  * Every refusal is a `JobRefused` from `drafts.ts` with the status the API
  * table in docs/STUDIO-CHAT-FIRST.md names, answered in the `{ error, detail }`
@@ -1269,7 +1274,8 @@ async function draftRoutes(
       const limitRaw = Number.parseInt(url.searchParams.get("limit") ?? "25", 10);
       const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25;
       const state = url.searchParams.get("state") ?? undefined;
-      const list = drafts.list({ limit, ...(state === undefined || state === "" ? {} : { state }) });
+      const nonEmpty = ["1", "true"].includes(url.searchParams.get("nonEmpty") ?? "");
+      const list = drafts.list({ limit, nonEmpty, ...(state === undefined || state === "" ? {} : { state }) });
       return send(response, 200, { drafts: list, note: `${list.length} draft${list.length === 1 ? "" : "s"}, newest first` });
     }
     if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/drafts does`);
@@ -1341,9 +1347,28 @@ async function draftRoutes(
         return refusal(error);
       }
     }
+    case "PUT brief": {
+      const input = await body();
+      if (input === null) return;
+      try {
+        const { record, changed } = await drafts.editBrief(id, input, url.searchParams.get("base"));
+        return send(response, 200, {
+          draftId: id,
+          state: record.state,
+          brief: record.brief,
+          briefSeq: record.briefSeq ?? null,
+          pendingTopic: record.pendingTopic,
+          note: changed
+            ? "the brief is saved; the planner is told on its next turn, and Draw draws this one"
+            : "the brief is unchanged",
+        });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`, {
-        routes: ["POST messages", "GET events", "POST draw", "POST abandon"],
+        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief"],
       });
   }
 }

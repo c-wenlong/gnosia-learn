@@ -5,7 +5,7 @@ import { draft, job, learner, LOCAL_LEARNER_ID, topic } from "@self-learn/schema
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { draftRow, runDraftList, runDraftShow, runDraftUpsert, type DraftDocument } from "../src/commands/draft";
+import { draftRow, runDraftDelete, runDraftList, runDraftShow, runDraftUpsert, type DraftDocument } from "../src/commands/draft";
 import { runEnqueue, runShow } from "../src/commands/job";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, type Fixture } from "./fixture-tree";
@@ -139,6 +139,61 @@ describe.skipIf(!reachable.ok)("catalog draft", () => {
       ).rejects.toThrow(new RegExp(`no draft "${name}"`));
     }
     expect(await scratch.db.select().from(job)).toHaveLength(0);
+  });
+
+  it("deletes a draft only when no job names it, and only the owner's", async () => {
+    await runDraftUpsert(doc("d-idle"));
+    await runDraftUpsert(doc("d-drew", { state: "briefed", brief: { slug: "three" } }));
+    await runDraftUpsert(doc("d-theirs"), OTHER);
+    await runEnqueue({
+      brief: { kind: "diagram", topic: "alpha", target: "learn/assets/three.tldr", idempotencyKey: "k-drew", draft: "d-drew" },
+      repoRoot: fixture.root,
+    });
+
+    expect(await runDraftDelete("d-idle")).toMatchObject({ deleted: true, outcome: "deleted", jobs: 0 });
+    // A job names it, even a failed one: the conversation outlives nothing it explains (D40).
+    expect(await runDraftDelete("d-drew")).toMatchObject({ deleted: false, outcome: "has-jobs", jobs: 1 });
+    // Another owner's row is never mistaken for no row: it stays, and says whose it is not.
+    expect(await runDraftDelete("d-theirs")).toMatchObject({ deleted: false, outcome: "other-owner" });
+    // A job naming a draft is has-jobs whoever asks.
+    expect(await runDraftDelete("d-drew", OTHER)).toMatchObject({ deleted: false, outcome: "has-jobs" });
+    expect(await runDraftDelete("d-never")).toMatchObject({ deleted: false, outcome: "no-draft" });
+    const left = (await scratch.db.select({ id: draft.id }).from(draft)).map((row) => row.id).sort();
+    expect(left).toEqual(["d-drew", "d-theirs"]);
+    const [linked] = await scratch.db.select({ draftId: job.draftId }).from(job);
+    expect(linked?.draftId).toBe("d-drew");
+    await expect(runDraftDelete("../x")).rejects.toThrow(/not a draft id/);
+  });
+
+  it("waits for a job being inserted beside the delete, and then keeps the draft", async () => {
+    await runDraftUpsert(doc("d-racing"));
+    let inserted: () => void = () => undefined;
+    let commit: () => void = () => undefined;
+    const insertedYet = new Promise<void>((resolve) => (inserted = resolve));
+    const committing = new Promise<void>((resolve) => (commit = resolve));
+    // A job insert holds the draft row's key-share lock until it commits.
+    const insert = scratch.db.transaction(async (tx) => {
+      await tx.insert(job).values({
+        id: "j-racing",
+        kind: "diagram",
+        topicSlug: "alpha",
+        targetPath: "learn/assets/racing.tldr",
+        idempotencyKey: "k-racing",
+        draftId: "d-racing",
+      });
+      inserted();
+      await committing;
+    });
+    await insertedYet;
+    const deleting = runDraftDelete("d-racing");
+    // Without the row lock the count would run now, see no committed job, and
+    // the delete would then wait and null the new job's draft_id.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    commit();
+    await insert;
+    expect(await deleting).toMatchObject({ deleted: false, outcome: "has-jobs", jobs: 1 });
+    const [linked] = await scratch.db.select({ draftId: job.draftId }).from(job).where(eq(job.id, "j-racing"));
+    expect(linked?.draftId).toBe("d-racing");
   });
 
   it("holds the paired checks in the table itself", async () => {
