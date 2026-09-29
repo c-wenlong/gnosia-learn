@@ -67,9 +67,33 @@ export type StudioResult<T> =
       /** `down` is nothing listening; `refused` is the runner answering no. */
       reason: "down" | "refused";
       status: number | null;
+      /**
+       * On `down`: true only when the request certainly never reached the
+       * runner (connection refused, the name did not resolve, no route to it).
+       * A timeout, a reset or a caller's abort is false, since the runner may
+       * have received the request and still be acting on it, so a caller that
+       * repeats a write by another road must not do so then.
+       */
+      undelivered?: boolean;
       headline: string;
       detail: string;
     };
+
+/** Socket error codes that mean no request was delivered. */
+const UNDELIVERED_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
+
+/** Walks `error.cause` for a socket error code: fetch wraps it in a `TypeError: fetch failed`. */
+function undelivered(error: unknown): boolean {
+  for (let link: unknown = error, depth = 0; link instanceof Error && depth < 5; depth += 1) {
+    const code = (link as { code?: unknown }).code;
+    if (typeof code === "string" && UNDELIVERED_CODES.has(code)) return true;
+    // An AggregateError (a refused `localhost`, tried on both addresses) holds them one level down.
+    const inner = (link as { errors?: unknown }).errors;
+    if (Array.isArray(inner) && inner.length > 0 && inner.every(undelivered)) return true;
+    link = link.cause;
+  }
+  return false;
+}
 
 /**
  * One call to the runner, from the server, with the failure named rather than
@@ -97,7 +121,7 @@ export async function studioApi<T>(
   path: string,
   init: RequestInit & { timeoutMs?: number } = {},
 ): Promise<StudioResult<T>> {
-  const { timeoutMs = 30_000, ...rest } = init;
+  const { timeoutMs = 30_000, signal: caller, ...rest } = init;
   const url = `${studioOrigin()}${path}`;
   const owner = await currentOwner();
   let response: Response;
@@ -105,7 +129,9 @@ export async function studioApi<T>(
     response = await fetch(url, {
       ...rest,
       cache: "no-store",
-      signal: AbortSignal.timeout(timeoutMs),
+      // The timeout, and the caller's own signal when it gave one (the page
+      // aborts its reads when a blocked screen makes them moot).
+      signal: caller == null ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([caller, AbortSignal.timeout(timeoutMs)]),
       headers: {
         ...(rest.body === undefined ? {} : { "content-type": "application/json" }),
         ...rest.headers,
@@ -117,6 +143,7 @@ export async function studioApi<T>(
       ok: false,
       reason: "down",
       status: null,
+      undelivered: undelivered(error),
       headline: "The studio runner is not answering.",
       detail:
         `Nothing is listening on ${studioOrigin()}. Start it with \`npm run studio\` from the ` +
