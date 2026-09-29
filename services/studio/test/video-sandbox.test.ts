@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,6 +83,34 @@ def attempt(name, fn):
         out[name] = {"outcome": "other", "detail": f"{type(e).__name__}: {e}"}
 `;
 
+/**
+ * A background `NSURLSession` download through the Objective-C runtime,
+ * which is what a scene can reach with ctypes: no network syscall of its
+ * own, only a Mach message to `nsurlsessiond`.
+ */
+const NSURLSESSION_PROBE = String.raw`
+import ctypes, ctypes.util, sys, time
+objc = ctypes.CDLL(ctypes.util.find_library("objc"))
+ctypes.CDLL("/System/Library/Frameworks/Foundation.framework/Foundation")
+objc.objc_getClass.restype = ctypes.c_void_p
+objc.objc_getClass.argtypes = [ctypes.c_char_p]
+objc.sel_registerName.restype = ctypes.c_void_p
+objc.sel_registerName.argtypes = [ctypes.c_char_p]
+send = objc.objc_msgSend
+def msg(obj, sel, *args, argtypes=()):
+    send.restype = ctypes.c_void_p
+    send.argtypes = [ctypes.c_void_p, ctypes.c_void_p, *argtypes]
+    return send(obj, objc.sel_registerName(sel), *args)
+def nsstr(s):
+    return msg(objc.objc_getClass(b"NSString"), b"stringWithUTF8String:", s.encode(), argtypes=(ctypes.c_char_p,))
+url = msg(objc.objc_getClass(b"NSURL"), b"URLWithString:", nsstr(sys.argv[1]), argtypes=(ctypes.c_void_p,))
+config = msg(objc.objc_getClass(b"NSURLSessionConfiguration"), b"backgroundSessionConfigurationWithIdentifier:", nsstr("studio.probe.%d" % time.time_ns()), argtypes=(ctypes.c_void_p,))
+session = msg(objc.objc_getClass(b"NSURLSession"), b"sessionWithConfiguration:", config, argtypes=(ctypes.c_void_p,))
+task = msg(session, b"downloadTaskWithURL:", url, argtypes=(ctypes.c_void_p,))
+msg(task, b"resume")
+time.sleep(3)
+`;
+
 function hostileSceneFiles(targets: Record<string, string>): string {
   return `${WORKED_HEADER}
 ${PROBE_LIB}
@@ -112,6 +141,7 @@ def procargs():
     if libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) != 0:
         raise OSError(ctypes.get_errno(), "sysctl")
 attempt("read ~/.claude.json", lambda: read(T["claude_json"]))
+attempt("stat ~/.claude.json", lambda: os.stat(T["claude_json"]))
 attempt("list ~/.ssh", lambda: os.listdir(T["ssh"]))
 attempt("read the data root's .env", lambda: read(T["data_env"]))
 attempt("read the repository's AGENTS.md", lambda: read(T["agents_md"]))
@@ -194,6 +224,7 @@ describe("the video sandbox", () => {
     const verdicts = await runScene("render", hostileSceneFiles(targets), "hostile_files");
     const existing: Record<string, string | null> = {
       "read ~/.claude.json": targets.claude_json,
+      "stat ~/.claude.json": targets.claude_json,
       "list ~/.ssh": targets.ssh,
       "read the data root's .env": targets.data_env,
       "read the repository's AGENTS.md": targets.agents_md,
@@ -213,7 +244,7 @@ describe("the video sandbox", () => {
       if (target !== undefined && target !== null && !existsSync(target)) continue;
       expect({ name, outcome: verdict.outcome }).toEqual({ name, outcome: "denied" });
     }
-    expect(Object.keys(verdicts)).toHaveLength(13);
+    expect(Object.keys(verdicts)).toHaveLength(14);
     expect(readdirSync(home).some((entry) => entry.startsWith("sandbox-probe-"))).toBe(false);
   }, 120_000);
 
@@ -225,6 +256,54 @@ describe("the video sandbox", () => {
       expect({ name, outcome: verdict.outcome }).toEqual({ name, outcome: "denied" });
     }
     expect(Object.keys(verdicts)).toHaveLength(9);
+  }, 120_000);
+
+  it("never lets a background NSURLSession reach a loopback server", async (context) => {
+    if (skip !== "") return context.skip(skip);
+    // The daemon behind a background session fetches the URL outside the
+    // sandbox, so this reached the server while mach-lookup was a deny list
+    // (the review of #201). The same script run unsandboxed first proves the
+    // probe works on this machine, so a quiet server means the sandbox.
+    const hits: string[] = [];
+    const server = createServer((request, response) => {
+      hits.push(request.url ?? "");
+      response.end("x");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    const probe = path.join(run.paths.checkout, "topics", "studio", "probe", "background_session.py");
+    await mkdir(path.dirname(probe), { recursive: true });
+    await writeFile(probe, NSURLSESSION_PROBE, "utf8");
+    const python = path.join(run.paths.checkout, ".venv", "bin", "python");
+    const arrived = async (marker: string): Promise<boolean> => {
+      for (let waited = 0; waited < 10_000; waited += 250) {
+        if (hits.some((hit) => hit.includes(marker))) return true;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      return false;
+    };
+    try {
+      execFileSync(python, ["-I", probe, `http://127.0.0.1:${port}/leak?d=control`], { cwd: run.paths.checkout, env: { HOME: home, PATH: "/usr/bin:/bin" }, timeout: 30_000 });
+      expect(await arrived("control"), "the probe did not reach the server even unsandboxed, so it proves nothing here").toBe(true);
+      for (const [kind, profile] of [["render", run.paths.renderProfile], ["narrate", run.paths.narrateProfile]] as const) {
+        const result = await runSandboxed({
+          tools: run.tools,
+          paths: run.paths,
+          home,
+          voice: "af_heart",
+          kind,
+          profile,
+          argv: [python, "-I", probe, `http://127.0.0.1:${port}/leak?d=${kind}`],
+          cwd: run.paths.checkout,
+          timeoutMs: 60_000,
+        });
+        expect(result.code, result.stderr.slice(-400)).toBe(0);
+      }
+      await arrived("never");
+      expect(hits.filter((hit) => !hit.includes("control"))).toEqual([]);
+    } finally {
+      server.close();
+    }
   }, 120_000);
 
   it("voices a line of shell words under the narration profile, and reaches nothing else", async (context) => {

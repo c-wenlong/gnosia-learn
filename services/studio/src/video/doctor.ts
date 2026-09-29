@@ -8,7 +8,7 @@ import { VIDEO_DOCTOR_TTL_MS } from "./config";
 import { buildCheckout, resolvedPaths } from "./checkout";
 import { runSandboxed } from "./exec";
 import { WORKED_HEADER, WORKED_NARRATED } from "./manual";
-import { buildProfile } from "./sandbox";
+import { buildProfile, resolvedStudioHome } from "./sandbox";
 import { discoverToolchain, toolchainProblems, type Toolchain } from "./toolchain";
 import type { VideoPaths } from "./paths";
 import { VOICES } from "./voices";
@@ -145,7 +145,7 @@ export async function scratchJob(tools: Toolchain, directory: string, voice = "a
   const home = realpathSync(process.env.HOME ?? "/");
   await buildCheckout(tools, paths, voice);
   for (const [kind, file] of [["render", paths.renderProfile], ["narrate", paths.narrateProfile], ["gate", paths.gateProfile]] as const) {
-    await writeFile(file, buildProfile(kind, { tools, paths, home }), "utf8");
+    await writeFile(file, buildProfile(kind, { tools, paths, home, studioHome: resolvedStudioHome() }), "utf8");
   }
   await mkdir(paths.candidate, { recursive: true });
   return { tools, paths, home };

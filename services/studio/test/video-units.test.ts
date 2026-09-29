@@ -212,9 +212,39 @@ describe("the sandbox profiles", () => {
     expect(gate).not.toContain(paths.render);
     for (const profile of [render, narrate, gate]) {
       expect(profile).toContain('(deny file-write-create (vnode-type SYMLINK))');
-      expect(profile).toContain('(global-name "com.apple.dnssd.service")');
+      // No filterless allow of anything but the process basics: a bare
+      // mach-lookup let a background NSURLSession out, a bare metadata read
+      // was a stat oracle over the owner's home.
+      expect(profile).not.toMatch(/\(allow mach-lookup\)/);
+      expect(profile).not.toMatch(/\(allow file-read-metadata\)/);
+      expect(profile).not.toContain("com.apple.nsurlsessiond");
     }
+    expect(render).toContain('(allow mach-lookup\n  (global-name "com.apple.MTLCompilerService"))');
+    expect(narrate).not.toContain("mach-lookup");
+    expect(gate).not.toContain("mach-lookup");
     expect(() => buildProfile("render", { tools, paths: { ...paths, render: '/tmp/a"b' }, home: "/Users/me" })).toThrow(/cannot go in a sandbox profile/);
+  });
+
+  it("denies the studio home and the jobs root before it re-allows this job", () => {
+    // A studio home outside the owner's home and every other denied place.
+    const studioHome = "/srv/studio";
+    const job = rebasePaths(paths, "/srv/studio/jobs/j1");
+    for (const kind of ["render", "narrate", "gate"] as const) {
+      const profile = buildProfile(kind, { tools, paths: job, home: "/Users/me", studioHome });
+      const denied = profile.indexOf('(deny file-read*');
+      const deniedBlock = profile.slice(denied, profile.indexOf("\n(allow", denied));
+      expect(deniedBlock).toContain('(subpath "/srv/studio")');
+      expect(deniedBlock).toContain('(subpath "/srv/studio/jobs")');
+      const reallowed = profile.indexOf(kind === "gate" ? `(subpath "${job.candidate}")` : `(subpath "${job.checkout}")`, denied);
+      expect(reallowed).toBeGreaterThan(denied);
+      // The way down to this job is stat-able, and nothing beside it.
+      const metadata = profile.slice(profile.indexOf("(allow file-read-metadata"), profile.indexOf("(allow file-write*"));
+      expect(metadata).toContain('(literal "/srv/studio/jobs/j1")');
+      expect(metadata).toContain('(literal "/srv/studio/jobs")');
+      expect(metadata).not.toContain("subpath");
+    }
+    // Without a studio home named, the jobs root is still denied by name.
+    expect(buildProfile("render", { tools, paths: job, home: "/Users/me" })).toContain('(subpath "/srv/studio/jobs")');
   });
 
   it("builds every child's environment from nothing, with no key and no inherited PYTHONPATH", () => {

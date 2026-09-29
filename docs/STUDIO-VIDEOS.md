@@ -217,25 +217,19 @@ allows what a render was measured to need. The one measured on 2026-09-29:
 (deny file-read* (subpath "<home>") (subpath "/opt/homebrew/var")
                  (subpath "/usr/local/var") (subpath "/Volumes")
                  (subpath "/private/tmp") (subpath "/private/var/folders")
-                 (subpath "/private/var/tmp"))
+                 (subpath "/private/var/tmp") (subpath "<studio home>")
+                 (subpath "<studio home>/jobs"))
 (allow file-read* (subpath "<manimkc>/manim") (subpath "<manimkc>/.venv")
                   (subpath "<manimkc>/.venv-tts") (subpath "<manimkc>/tools")
                   (subpath "<job>/checkout") (subpath "<job>/render"))
-(allow file-read-metadata)
+(allow file-read-metadata                ; only the directories on the way down
+  (literal "<job>") (literal "<studio home>/jobs") (literal "<home>") ...)
 (allow file-write* (subpath "<job>/render") (literal "/dev/null")
                    (literal "/dev/dtracehelper"))
 (deny file-write-create (vnode-type SYMLINK))
 (allow file-ioctl) (allow sysctl-read) (allow process-info* (target self))
 (allow iokit-open) (allow iokit-get-properties)
-(allow mach-lookup)                      ; Metal and the font system need services nobody has listed
-(deny mach-lookup (global-name "com.apple.dnssd.service")
-                  (global-name "com.apple.pasteboard.1")
-                  (global-name "com.apple.SecurityServer")
-                  (global-name "com.apple.securityd.xpc")
-                  (global-name "com.apple.security.agent")
-                  (global-name "com.apple.coreservices.launchservicesd")
-                  (global-name "com.apple.lsd.mapdb")
-                  (global-name "com.apple.lsd.modifydb"))
+(allow mach-lookup (global-name "com.apple.MTLCompilerService"))   ; the only one
 (allow ipc-posix-shm*) (allow ipc-posix-sem)
 (allow signal (target same-sandbox))
 (allow user-preference-read) (allow system-fsctl)
@@ -291,6 +285,8 @@ processes' information) are in the profile above:
 | Create a hard link in `render/` to a file outside it | blocked |
 | List `/private/tmp/claude-501/`, where every Claude session keeps its scratchpad and saved tool output | **allowed** until the temporary-directory denies, blocked with them |
 | List the per-user `/var/folders` temporary directory | **allowed** until the same denies, blocked with them |
+| A background `NSURLSession` to a loopback server, through the Objective-C runtime from `ctypes` (review of #201) | **allowed** while `mach-lookup` was a deny list: `nsurlsessiond` fetched the URL outside the sandbox, from the render and the narration profile both. Blocked since `mach-lookup` became an allowlist (render: Metal's shader compiler; narrate and gate: nothing). The suite runs it unsandboxed first, to prove it reaches the server, then under each profile |
+| `stat` a file in the home directory (`~/.claude.json`): whether it exists, its size, when it changed | **allowed** under a filterless `(allow file-read-metadata)`; blocked since that rule names only the directories above what a profile may read |
 | Read another process's arguments and environment (`KERN_PROCARGS2`) | blocked through `ps` (refused at exec); **allowed** when the scene calls the sysctl itself through `ctypes`, measured in phase 1 (see "What is not covered") |
 | Signal the process that started it | blocked |
 
@@ -346,13 +342,19 @@ PR (phase 0) rather than worked around in the studio:
 
 **What is not covered, named rather than hidden.**
 
-- `mach-lookup` is allowed except for the services named, because Metal and
-  the font system use services nobody has listed. A scene that speaks XPC
-  through `ctypes` could reach a service not on the list. That is the one
-  place the profile trusts a deny list, and phase 3 may narrow it to an
-  allowlist taken from a traced render, if Metal still finds its adapter. The
-  owner's rule is parity with a hand-run session, which has no sandbox at
-  all, so this is not a blocker.
+- `mach-lookup` is an allowlist, taken from a traced run of every step a job
+  takes under `(allow mach-lookup (with report))` and cut to what still
+  renders: Metal's shader compiler for the render profile, nothing for
+  narration or the gate. The first version allowed every service but eight,
+  and a background `NSURLSession` reached a loopback server through
+  `nsurlsessiond` (the review of #201); `cfprefsd`, `coreservicesd`,
+  LaunchServices, `notification_center`, distributed notifications,
+  `configd`, `trustd` and the rest are refused now, measured to cost nothing
+  but a log line. Metal's compiler keeps its shader cache in the per-user
+  cache directory, so a scene can leave compiled shaders there; they stay on
+  the machine. A macOS release whose Metal needs another service shows up as
+  the doctor's fixture failing to render, which answers 503 rather than
+  rendering with more open.
 - **Another process's arguments and environment.** Measured in phase 1: a
   scene that calls the sysctl `KERN_PROCARGS2` through `ctypes` reads the
   argv and environment of any process running as this user, other Claude
@@ -363,6 +365,11 @@ PR (phase 0) rather than worked around in the studio:
   readable; denying every sysctl stops Python starting. Like the read deny
   list below, what it reads has no way out but the video, the render logs
   and the agent's context, but it is a live credential rather than a file.
+  That reasoning holds only while nothing else carries data out: no socket,
+  no program outside the exec list, and no Mach service that talks to the
+  network on the scene's behalf. The last was open until the review of #201
+  found `nsurlsessiond`; the allowlist closed it, and the suite's background
+  `NSURLSession` probe keeps it closed.
   *Decided 2026-09-29 by the owner:* accepted for v1 as documented, like the
   other deny-list gaps. Rejected: rendering under a separate macOS user
   (D44's reason stands: it moves the problem to file permissions across the

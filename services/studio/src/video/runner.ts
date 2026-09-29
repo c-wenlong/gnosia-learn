@@ -26,7 +26,7 @@ import { sandboxedGateTools } from "./gate-tools";
 import { apiListing, manualFile, manualText, writeManual } from "./manual";
 import { sheetPath, videoCandidateRef, videoTarget, type VideoPaths } from "./paths";
 import { buildVideoPrompt, buildVideoResumePrompt, buildVideoRetryPrompt, buildVideoRevisePrompt } from "./prompt";
-import { buildProfile } from "./sandbox";
+import { buildProfile, resolvedStudioHome } from "./sandbox";
 import { scanSource, voicedLines } from "./scan";
 import { clipKeys, keepClips, seedClips } from "./seed";
 import { buildVideoSettings } from "./settings";
@@ -477,7 +477,7 @@ export class VideoRunner {
     const voice = isNarrated(brief) ? brief.voice : "none";
     await buildCheckout(tools, paths, voice);
     for (const [kind, file] of [["render", paths.renderProfile], ["narrate", paths.narrateProfile], ["gate", paths.gateProfile]] as const) {
-      await writeFile(file, buildProfile(kind, { tools, paths, home }), "utf8");
+      await writeFile(file, buildProfile(kind, { tools, paths, home, studioHome: resolvedStudioHome() }), "utf8");
     }
     // matplotlib's font cache, built once by the doctor, so no job pays the
     // ten seconds a fresh MPLCONFIGDIR costs (measured).
