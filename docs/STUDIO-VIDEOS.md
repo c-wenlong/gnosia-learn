@@ -277,7 +277,7 @@ processes' information) are in the profile above:
 | Create a hard link in `render/` to a file outside it | blocked |
 | List `/private/tmp/claude-501/`, where every Claude session keeps its scratchpad and saved tool output | **allowed** until the temporary-directory denies, blocked with them |
 | List the per-user `/var/folders` temporary directory | **allowed** until the same denies, blocked with them |
-| Read another process's arguments and environment (`KERN_PROCARGS2`) | blocked |
+| Read another process's arguments and environment (`KERN_PROCARGS2`) | blocked through `ps` (refused at exec); **allowed** when the scene calls the sysctl itself through `ctypes`, measured in phase 1 (see "What is not covered") |
 | Signal the process that started it | blocked |
 
 **Measured: the sandbox costs nothing once one cache is moved.** The first
@@ -339,6 +339,18 @@ PR (phase 0) rather than worked around in the studio:
   allowlist taken from a traced render, if Metal still finds its adapter. The
   owner's rule is parity with a hand-run session, which has no sandbox at
   all, so this is not a blocker.
+- **Another process's arguments and environment.** Measured in phase 1: a
+  scene that calls the sysctl `KERN_PROCARGS2` through `ctypes` reads the
+  argv and environment of any process running as this user, other Claude
+  Code sessions included, whose environment names an OAuth token. No
+  Seatbelt rule found blocks it on 26.5.2: `sysctl-name` filters (by name,
+  prefix or pattern), a `sysctl-read` allowlist of five names, and denies of
+  `process-info*`, `system-info` and the task-port operations all leave it
+  readable; denying every sysctl stops Python starting. Like the read deny
+  list below, what it reads has no way out but the video, the render logs
+  and the agent's context, but it is a live credential rather than a file,
+  so it is named here for the owner to decide on. The suite runs the probe
+  and reports it (`services/studio/test/video-sandbox.test.ts`).
 - Reads outside the home directory are allowed except where the profile names
   a place data lives: Homebrew's `var/` (the Postgres cluster is
   `/opt/homebrew/var/postgresql@17`), `/usr/local/var`, `/Volumes` and the

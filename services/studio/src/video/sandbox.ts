@@ -40,6 +40,18 @@ import type { VideoPaths } from "./paths";
  * because Metal and the font system need services nobody has listed; that is
  * named in the design's "What is not covered".
  *
+ * **A known gap, measured 2026-09-29: another process's arguments and
+ * environment.** A scene can call the sysctl KERN_PROCARGS2 through ctypes
+ * and read the argv and environment of any process running as this user,
+ * other Claude Code sessions included (their OAuth token among the variable
+ * names). No Seatbelt rule found blocks it: `sysctl-name` filters, a strict
+ * `sysctl-read` allowlist and `process-info*` denies all leave it readable,
+ * and denying every sysctl stops Python starting. With no network and no
+ * other program, what it reads can reach only the video, the render logs and
+ * the agent's context, the same class the read deny list is in, but it is a
+ * live credential, so it is named here, in the design's "What is not
+ * covered", and in the suite, which runs the probe and reports it.
+ *
  * Seatbelt matches real paths, so every path written into a profile is
  * resolved first (`/private/tmp`, not `/tmp`) by the caller, and a path
  * holding a character that would end the profile's string literal is refused
