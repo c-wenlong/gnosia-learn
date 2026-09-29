@@ -1,0 +1,252 @@
+[
+ {
+  "name": "alignContainers",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "alignContainers(keys: readonly ShapeKey[], opts?: AlignContainersOptions): TLShapeId[]",
+  "summary": "Put every listed container on one size and return their ids.",
+  "examples": [
+   "helpers.alignContainers(['container:before', 'container:after'])",
+   "helpers.alignContainers(['left', 'middle', 'right'], { axis: 'y' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "attribute",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "attribute(owner: ShapeKey, label: string, side: Side, opts?: AttributeOptions): { textId: TLShapeId; lineId: TLShapeId }",
+  "summary": "Write a short label off one side of a box, joined by a bound line with no arrowhead, and return both ids.",
+  "examples": [
+   "helpers.attribute('user', 'email', 'right', { at: 0.25, gap: 70 })"
+  ],
+  "params": []
+ },
+ {
+  "name": "box",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "box(key: ShapeKey, label: string, opts?: BoxOptions): TLShapeId",
+  "summary": "Create or update a labelled geo shape and return its id.",
+  "examples": [
+   "helpers.box('q', 'query', { x: 60, y: 60 })",
+   "helpers.box('k', 'key', { after: 'q', gap: 120, geo: 'diamond' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "boxShapes",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "boxShapes(keys: readonly ShapeKey[], opts?: BoxShapesOptions): TLShapeId",
+  "summary": "Draw a labelled container behind a set of shapes and return its id.",
+  "examples": [
+   "helpers.boxShapes(['png', 'svg'], { label: 'exports', margin: 40 })",
+   "helpers.boxShapes(['b1', 'b2'], { label: 'after', matchSize: 'container:before' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "clear",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "clear(opts: ClearOptions = {}): number",
+  "summary": "Delete every shape on the current page and return how many went.",
+  "examples": [
+   "helpers.clear({ force: true })"
+  ],
+  "params": []
+ },
+ {
+  "name": "column",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "column(keys: readonly ShapeKey[], opts?: LineOptions): TLShapeId[]",
+  "summary": "Lay existing shapes out top to bottom and return their ids in order.",
+  "examples": [
+   "helpers.column(['input', 'hidden', 'output'], { gap: 80, align: 'center' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "connect",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "connect(from: ShapeKey, to: ShapeKey, opts?: ConnectOptions): TLShapeId",
+  "summary": "Draw an arrow bound at both ends and return its id.",
+  "examples": [
+   "helpers.connect('q', 'k', { label: 'scores', kind: 'elbow' })",
+   "helpers.connect('png', 'agent', { start: 'left', end: 'bottom', dash: 'dashed' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "describe",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "describe(): InspectResult",
+  "summary": "Everything on the current page: the same structure `inspect` prints.",
+  "examples": [
+   "const { shapes, lints } = helpers.describe()"
+  ],
+  "params": []
+ },
+ {
+  "name": "fitCamera",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "fitCamera(opts?: FitCameraOptions): Rect | null",
+  "summary": "Fit the camera to every shape and return the bounds it framed.",
+  "examples": [
+   "helpers.fitCamera({ padding: 48 })"
+  ],
+  "params": []
+ },
+ {
+  "name": "getLints",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "getLints(): Lint[]",
+  "summary": "Run the lint pass over the current page and return the findings. Eight shape rules: `friendless-arrow`, `arrow-crosses-shape`, `overlapping-text`, `overlapping-shapes`, `off-page`, `empty-label`, `unreadable-label` and `missing-glyph`, plus `missing-topic` on the document.",
+  "examples": [
+   "return helpers.getLints()"
+  ],
+  "params": []
+ },
+ {
+  "name": "grid",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "grid(keys: readonly ShapeKey[], cols: number, opts?: GridOptions): TLShapeId[]",
+  "summary": "Lay existing shapes out in rows of `cols` and return their ids in order.",
+  "examples": [
+   "helpers.grid(['a', 'b', 'c', 'd'], 2, { gapX: 60, gapY: 40 })"
+  ],
+  "params": []
+ },
+ {
+  "name": "line",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "line(key: ShapeKey, x1: number, y1: number, x2: number, y2: number, opts?: DrawLineOptions): TLShapeId",
+  "summary": "Draw an unbound line from one page point to another and return its id.",
+  "examples": [
+   "helpers.line('axis-x', 260, 700, 640, 700, { color: 'blue', head: 'end' })",
+   "helpers.line('guide', 340, 460, 340, 700, { dash: 'dashed', size: 's' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "mermaid",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "mermaid(source: string, opts: MermaidOptions = {}): ApplyPlanResult",
+  "summary": "Parse a mermaid flowchart and draw it: boxes, bound arrows, and a container behind each subgraph.",
+  "examples": [
+   "const { nodes, edges, containers, unsupported } = helpers.mermaid(source, { direction: 'LR' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "meta",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "meta(patch?: MetaPatch): DiagramMeta | null",
+  "summary": "Read or amend the document metadata: what this diagram is about.",
+  "examples": [
+   "helpers.meta({ topic: 'dot-product', concepts: ['vector-as-a-list-of-numbers'] })",
+   "const topic = helpers.meta()?.topic ?? '(none)'"
+  ],
+  "params": []
+ },
+ {
+  "name": "note",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "note(key: ShapeKey, str: string, opts?: NoteOptions): TLShapeId",
+  "summary": "Create or update a sticky note and return its id.",
+  "examples": [
+   "helpers.note('why', 'the cache is what makes this cheap', { after: 'page', gap: 80 })",
+   "helpers.note('aside', 'both panels hold the same arrow', { below: ['left', 'right'], gap: 60 })"
+  ],
+  "params": []
+ },
+ {
+  "name": "page",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "page(name: string): TLPageId",
+  "summary": "Switch to a page by name, adding it when the document has none, and return its id. Everything drawn afterwards lands there.",
+  "examples": [
+   "helpers.page('details')"
+  ],
+  "params": []
+ },
+ {
+  "name": "plainText",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "plainText(shape: ShapeKey | TLShape): string",
+  "summary": "The visible text of a shape, read from its rich text.",
+  "examples": [
+   "helpers.plainText('q')   // 'query'"
+  ],
+  "params": []
+ },
+ {
+  "name": "remove",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "remove(keys: ShapeKey | readonly ShapeKey[]): number",
+  "summary": "Delete shapes by key or id and return how many actually went.",
+  "examples": [
+   "helpers.remove(['draft', 'scratch'])"
+  ],
+  "params": []
+ },
+ {
+  "name": "row",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "row(keys: readonly ShapeKey[], opts?: LineOptions): TLShapeId[]",
+  "summary": "Lay existing shapes out left to right and return their ids in order.",
+  "examples": [
+   "helpers.row(['q', 'k', 'v'], { gap: 60, align: 'center' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "stub",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "stub(key: ShapeKey, x: number, y: number, dx: number, dy: number, opts?: DrawLineOptions): TLShapeId",
+  "summary": "`line` with a delta instead of a second point, and the same options.",
+  "examples": [
+   "helpers.stub('legend-dash', 60, 400, 48, 0, { dash: 'dashed', color: 'red' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "text",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "text(key: ShapeKey, str: string, opts?: TextOptions): TLShapeId",
+  "summary": "Create or update a standalone text shape and return its id.",
+  "examples": [
+   "helpers.text('title', 'the render loop', { x: 60, y: 0, size: 'l' })",
+   "helpers.text('title', 'two ways to read it', { above: ['left', 'right'], gap: 40, size: 'l' })"
+  ],
+  "params": []
+ },
+ {
+  "name": "translate",
+  "kind": "function",
+  "path": "src/page/helpers/index.ts",
+  "signature": "translate(keys: readonly ShapeKey[], dx: number, dy: number): TLShapeId[]",
+  "summary": "Move shapes by `(dx, dy)` and return the ids that moved.",
+  "examples": [
+   "helpers.translate(['png', 'svg'], 0, 120)"
+  ],
+  "params": []
+ }
+]

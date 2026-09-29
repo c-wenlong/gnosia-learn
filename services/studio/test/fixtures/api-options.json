@@ -1,0 +1,1165 @@
+[
+  {
+    "name": "alignContainers",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "alignContainers(keys: readonly ShapeKey[], opts?: AlignContainersOptions): TLShapeId[]",
+    "summary": "Put every listed container on one size and return their ids.",
+    "examples": [
+      "helpers.alignContainers(['container:before', 'container:after'])",
+      "helpers.alignContainers(['left', 'middle', 'right'], { axis: 'y' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "AlignContainersOptions",
+      "fields": [
+        {
+          "name": "axis",
+          "type": "\"both\" | \"x\" | \"y\"",
+          "optional": true,
+          "doc": "Which axes to match, default `both`.",
+          "default": "both"
+        }
+      ]
+    }
+  },
+  {
+    "name": "attribute",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "attribute(owner: ShapeKey, label: string, side: Side, opts?: AttributeOptions): { textId: TLShapeId; lineId: TLShapeId }",
+    "summary": "Write a short label off one side of a box, joined by a bound line with no arrowhead, and return both ids.",
+    "examples": [
+      "helpers.attribute('user', 'email', 'right', { at: 0.25, gap: 70 })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "AttributeOptions",
+      "fields": [
+        {
+          "name": "at",
+          "type": "number",
+          "optional": true,
+          "doc": "Where along the side the stub leaves, 0..1, default 0.5. Space several attributes with it.",
+          "default": 0.5
+        },
+        {
+          "name": "gap",
+          "type": "number",
+          "optional": true,
+          "doc": "Stub length, in page units, default 60.",
+          "default": 60
+        },
+        {
+          "name": "size",
+          "type": "TLDefaultSizeStyle",
+          "optional": true,
+          "doc": "Text size, default `s`.",
+          "default": "s"
+        },
+        {
+          "name": "color",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Colour of the text and the stub, default `black`.",
+          "default": "black"
+        },
+        {
+          "name": "font",
+          "type": "TLDefaultFontStyle",
+          "optional": true,
+          "doc": "Text font, default `draw`.",
+          "default": "draw"
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "optional": true,
+          "doc": "Override the derived keys. `<owner>.<label>` by default."
+        }
+      ]
+    }
+  },
+  {
+    "name": "box",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "box(key: ShapeKey, label: string, opts?: BoxOptions): TLShapeId",
+    "summary": "Create or update a labelled geo shape and return its id.",
+    "examples": [
+      "helpers.box('q', 'query', { x: 60, y: 60 })",
+      "helpers.box('k', 'key', { after: 'q', gap: 120, geo: 'diamond' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "BoxOptions",
+      "fields": [
+        {
+          "name": "x",
+          "type": "number",
+          "optional": true,
+          "doc": "Page x of the top-left corner. Required unless `after` or `below` is given."
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "optional": true,
+          "doc": "Page y of the top-left corner. Required unless `after` or `below` is given."
+        },
+        {
+          "name": "w",
+          "type": "number",
+          "optional": true,
+          "doc": "Width, default 180.",
+          "default": 180
+        },
+        {
+          "name": "h",
+          "type": "number",
+          "optional": true,
+          "doc": "Height, default 64.",
+          "default": 64
+        },
+        {
+          "name": "geo",
+          "type": "GeoKind",
+          "optional": true,
+          "doc": "Geo kind, default `rectangle`. `oval` is the capsule; there is no `pill`.",
+          "default": "rectangle"
+        },
+        {
+          "name": "color",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Outline colour, default `black`.",
+          "default": "black"
+        },
+        {
+          "name": "labelColor",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Label colour, defaults to `color`."
+        },
+        {
+          "name": "fill",
+          "type": "TLDefaultFillStyle",
+          "optional": true,
+          "doc": "Interior, default `none`.",
+          "default": "none"
+        },
+        {
+          "name": "dash",
+          "type": "TLDefaultDashStyle",
+          "optional": true,
+          "doc": "Outline style, default `draw`.",
+          "default": "draw"
+        },
+        {
+          "name": "font",
+          "type": "TLDefaultFontStyle",
+          "optional": true,
+          "doc": "Label font, default `draw` (the hand-drawn one).",
+          "default": "draw"
+        },
+        {
+          "name": "size",
+          "type": "TLDefaultSizeStyle",
+          "optional": true,
+          "doc": "Outline and label size, default `m`.",
+          "default": "m"
+        },
+        {
+          "name": "align",
+          "type": "TLDefaultHorizontalAlignStyle",
+          "optional": true,
+          "doc": "Horizontal label alignment, default `middle`.",
+          "default": "middle"
+        },
+        {
+          "name": "verticalAlign",
+          "type": "TLDefaultVerticalAlignStyle",
+          "optional": true,
+          "doc": "Vertical label alignment, default `middle`. A long label wants `start` and a taller box.",
+          "default": "middle"
+        },
+        {
+          "name": "after",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "Place to the right of this shape, sharing its top edge."
+        },
+        {
+          "name": "below",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "Place under this shape, sharing its left edge."
+        },
+        {
+          "name": "gap",
+          "type": "number",
+          "optional": true,
+          "doc": "Distance for `after` or `below`, default 120.",
+          "default": 120
+        },
+        {
+          "name": "parent",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "A frame or group to parent to. Defaults to the current page."
+        },
+        {
+          "name": "meta",
+          "type": "ShapeMeta",
+          "optional": true,
+          "doc": "Arbitrary record metadata, merged over what is there. `lintIgnore` lives here."
+        }
+      ]
+    }
+  },
+  {
+    "name": "boxShapes",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "boxShapes(keys: readonly ShapeKey[], opts?: BoxShapesOptions): TLShapeId",
+    "summary": "Draw a labelled container behind a set of shapes and return its id.",
+    "examples": [
+      "helpers.boxShapes(['png', 'svg'], { label: 'exports', margin: 40 })",
+      "helpers.boxShapes(['b1', 'b2'], { label: 'after', matchSize: 'container:before' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "BoxShapesOptions",
+      "fields": [
+        {
+          "name": "label",
+          "type": "string",
+          "optional": true,
+          "doc": "Container label. An unlabelled container is a plain grouping mark.",
+          "default": ""
+        },
+        {
+          "name": "margin",
+          "type": "number",
+          "optional": true,
+          "doc": "Distance from the container's edge to the outermost shape, default 40.",
+          "default": 40
+        },
+        {
+          "name": "color",
+          "type": "BoxOptions[\"color\"]",
+          "optional": true,
+          "doc": "Outline colour, default `grey`.",
+          "default": "grey"
+        },
+        {
+          "name": "dash",
+          "type": "BoxOptions[\"dash\"]",
+          "optional": true,
+          "doc": "Outline style, default `draw`.",
+          "default": "draw"
+        },
+        {
+          "name": "size",
+          "type": "BoxOptions[\"size\"]",
+          "optional": true,
+          "doc": "Label size, default `s`.",
+          "default": "s"
+        },
+        {
+          "name": "shapeId",
+          "type": "string",
+          "optional": true,
+          "doc": "The container's own key. Derived from the label when omitted."
+        },
+        {
+          "name": "minW",
+          "type": "number",
+          "optional": true,
+          "doc": "Smallest width the container may have, whatever its members need.",
+          "default": 0
+        },
+        {
+          "name": "minH",
+          "type": "number",
+          "optional": true,
+          "doc": "Smallest height the container may have, whatever its members need.",
+          "default": 0
+        },
+        {
+          "name": "matchSize",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "Another container to end up the same size as. Both grow to the larger width and the larger height, each keeping its own top-left corner, so two panels being compared read as two panels rather than as one big and one small. Use `alignContainers` for three or more."
+        },
+        {
+          "name": "meta",
+          "type": "ShapeMeta",
+          "optional": true,
+          "doc": "Extra metadata. `container: true` is always set on top of it."
+        }
+      ]
+    }
+  },
+  {
+    "name": "clear",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "clear(opts: ClearOptions = {}): number",
+    "summary": "Delete every shape on the current page and return how many went.",
+    "examples": [
+      "helpers.clear({ force: true })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "ClearOptions",
+      "fields": [
+        {
+          "name": "force",
+          "type": "boolean",
+          "optional": true,
+          "doc": "Wipe a page this snippet did not create. Say so on purpose."
+        }
+      ]
+    }
+  },
+  {
+    "name": "column",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "column(keys: readonly ShapeKey[], opts?: LineOptions): TLShapeId[]",
+    "summary": "Lay existing shapes out top to bottom and return their ids in order.",
+    "examples": [
+      "helpers.column(['input', 'hidden', 'output'], { gap: 80, align: 'center' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "LineOptions",
+      "fields": [
+        {
+          "name": "gap",
+          "type": "number",
+          "optional": true,
+          "doc": "Gap between neighbours, default 40.",
+          "default": 40
+        },
+        {
+          "name": "align",
+          "type": "Align",
+          "optional": true,
+          "doc": "Alignment on the cross axis, default `start`.",
+          "default": "start"
+        },
+        {
+          "name": "x",
+          "type": "number",
+          "optional": true,
+          "doc": "Page x the line begins at. Defaults to the first shape's current x."
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "optional": true,
+          "doc": "Page y the line begins at. Defaults to the first shape's current y."
+        }
+      ]
+    }
+  },
+  {
+    "name": "connect",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "connect(from: ShapeKey, to: ShapeKey, opts?: ConnectOptions): TLShapeId",
+    "summary": "Draw an arrow bound at both ends and return its id.",
+    "examples": [
+      "helpers.connect('q', 'k', { label: 'scores', kind: 'elbow' })",
+      "helpers.connect('png', 'agent', { start: 'left', end: 'bottom', dash: 'dashed' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "ConnectOptions",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "optional": true,
+          "doc": "Override the derived arrow key. Needed only for a second arrow between the same pair of shapes, since the derived id would collide."
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "optional": true,
+          "doc": "Arrow label.",
+          "default": ""
+        },
+        {
+          "name": "kind",
+          "type": "TLArrowShape[\"props\"][\"kind\"]",
+          "optional": true,
+          "doc": "`elbow` for right-angled segments (default), `arc` for a straight or curved line.",
+          "default": "elbow"
+        },
+        {
+          "name": "start",
+          "type": "AnchorSpec",
+          "optional": true,
+          "doc": "Where the arrow leaves the source. A side name, `{ x, y }` in 0..1, or omitted for auto."
+        },
+        {
+          "name": "end",
+          "type": "AnchorSpec",
+          "optional": true,
+          "doc": "Where the arrow meets the target. Same forms as `start`."
+        },
+        {
+          "name": "bend",
+          "type": "number",
+          "optional": true,
+          "doc": "Curvature, `arc` only, default 0.",
+          "default": 0
+        },
+        {
+          "name": "mid",
+          "type": "number",
+          "optional": true,
+          "doc": "Where the bend lands along an elbow path, 0..1, default 0.5. Use it to keep parallel arrows in separate lanes.",
+          "default": 0.5
+        },
+        {
+          "name": "head",
+          "type": "HeadSpec",
+          "optional": true,
+          "doc": "Which ends get a head, default `end`.",
+          "default": "end"
+        },
+        {
+          "name": "labelPosition",
+          "type": "number",
+          "optional": true,
+          "doc": "Label position along the arrow, 0..1, default 0.5.",
+          "default": 0.5
+        },
+        {
+          "name": "color",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Line colour, default `black`.",
+          "default": "black"
+        },
+        {
+          "name": "labelColor",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Label colour, defaults to `color`."
+        },
+        {
+          "name": "size",
+          "type": "TLDefaultSizeStyle",
+          "optional": true,
+          "doc": "Line weight, default `s`.",
+          "default": "s"
+        },
+        {
+          "name": "dash",
+          "type": "TLDefaultDashStyle",
+          "optional": true,
+          "doc": "Line style, default `draw`.",
+          "default": "draw"
+        },
+        {
+          "name": "font",
+          "type": "TLDefaultFontStyle",
+          "optional": true,
+          "doc": "Label font, default `draw`.",
+          "default": "draw"
+        },
+        {
+          "name": "precise",
+          "type": "boolean",
+          "optional": true,
+          "doc": "Force precise anchoring on or off for both ends. Both ends are precise by default, named or not, because an imprecise binding ignores the anchor and aims at the shape's centre, which throws away the alignment `autoAnchors` just worked out. Pass `false` to hand the entry point back to tldraw's own router.",
+          "default": true
+        },
+        {
+          "name": "meta",
+          "type": "ShapeMeta",
+          "optional": true,
+          "doc": "Arbitrary record metadata. `lintIgnore` lives here."
+        }
+      ]
+    }
+  },
+  {
+    "name": "describe",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "describe(): InspectResult",
+    "summary": "Everything on the current page: the same structure `inspect` prints.",
+    "examples": [
+      "const { shapes, lints } = helpers.describe()"
+    ],
+    "params": []
+  },
+  {
+    "name": "fitCamera",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "fitCamera(opts?: FitCameraOptions): Rect | null",
+    "summary": "Fit the camera to every shape and return the bounds it framed.",
+    "examples": [
+      "helpers.fitCamera({ padding: 48 })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "FitCameraOptions",
+      "fields": [
+        {
+          "name": "padding",
+          "type": "number",
+          "optional": true,
+          "doc": "Room to leave around the shapes. Without it this is a plain `zoomToFit`."
+        }
+      ]
+    }
+  },
+  {
+    "name": "getLints",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "getLints(): Lint[]",
+    "summary": "Run the lint pass over the current page and return the findings. Eight shape rules: `friendless-arrow`, `arrow-crosses-shape`, `overlapping-text`, `overlapping-shapes`, `off-page`, `empty-label`, `unreadable-label` and `missing-glyph`, plus `missing-topic` on the document.",
+    "examples": [
+      "return helpers.getLints()"
+    ],
+    "params": []
+  },
+  {
+    "name": "grid",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "grid(keys: readonly ShapeKey[], cols: number, opts?: GridOptions): TLShapeId[]",
+    "summary": "Lay existing shapes out in rows of `cols` and return their ids in order.",
+    "examples": [
+      "helpers.grid(['a', 'b', 'c', 'd'], 2, { gapX: 60, gapY: 40 })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "GridOptions",
+      "fields": [
+        {
+          "name": "gapX",
+          "type": "number",
+          "optional": true,
+          "doc": "Horizontal gap, default 40.",
+          "default": 40
+        },
+        {
+          "name": "gapY",
+          "type": "number",
+          "optional": true,
+          "doc": "Vertical gap, default 40.",
+          "default": 40
+        },
+        {
+          "name": "x",
+          "type": "number",
+          "optional": true,
+          "doc": "Page x of the grid's top-left. Defaults to the first shape's current x."
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "optional": true,
+          "doc": "Page y of the grid's top-left. Defaults to the first shape's current y."
+        }
+      ]
+    }
+  },
+  {
+    "name": "line",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "line(key: ShapeKey, x1: number, y1: number, x2: number, y2: number, opts?: DrawLineOptions): TLShapeId",
+    "summary": "Draw an unbound line from one page point to another and return its id.",
+    "examples": [
+      "helpers.line('axis-x', 260, 700, 640, 700, { color: 'blue', head: 'end' })",
+      "helpers.line('guide', 340, 460, 340, 700, { dash: 'dashed', size: 's' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "DrawLineOptions",
+      "fields": [
+        {
+          "name": "color",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Line colour, default `black`.",
+          "default": "black"
+        },
+        {
+          "name": "size",
+          "type": "TLDefaultSizeStyle",
+          "optional": true,
+          "doc": "Line weight, default `s`.",
+          "default": "s"
+        },
+        {
+          "name": "dash",
+          "type": "TLDefaultDashStyle",
+          "optional": true,
+          "doc": "Line style, default `draw`.",
+          "default": "draw"
+        },
+        {
+          "name": "head",
+          "type": "HeadSpec",
+          "optional": true,
+          "doc": "Which ends get an arrowhead, default `none`. `end`, `start`, `both`.",
+          "default": "none"
+        },
+        {
+          "name": "kind",
+          "type": "TLArrowShape[\"props\"][\"kind\"]",
+          "optional": true,
+          "doc": "`arc` (default) for a straight or curved line, `elbow` for right-angled segments.",
+          "default": "arc"
+        },
+        {
+          "name": "bend",
+          "type": "number",
+          "optional": true,
+          "doc": "Curvature, `arc` only, default 0. Positive bends a quarter turn anticlockwise from the direction of travel.",
+          "default": 0
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "optional": true,
+          "doc": "A label on the line. Empty by default, which is what a bare axis or rule wants.",
+          "default": ""
+        },
+        {
+          "name": "labelColor",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Label colour, defaults to `color`."
+        },
+        {
+          "name": "parent",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "A frame or group to parent to. The points given stay page coordinates; the helper converts them."
+        },
+        {
+          "name": "lintIgnore",
+          "type": "readonly string[] | true",
+          "optional": true,
+          "doc": "Override the muted rules. An array of rule names, or `true` for all of them. Defaults to `LINE_LINT_IGNORE`; pass `[]` to have the line linted like any other arrow.",
+          "default": [
+            "friendless-arrow",
+            "arrow-crosses-shape"
+          ]
+        },
+        {
+          "name": "meta",
+          "type": "ShapeMeta",
+          "optional": true,
+          "doc": "Arbitrary record metadata. `lintIgnore` is merged over it."
+        }
+      ]
+    }
+  },
+  {
+    "name": "mermaid",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "mermaid(source: string, opts: MermaidOptions = {}): ApplyPlanResult",
+    "summary": "Parse a mermaid flowchart and draw it: boxes, bound arrows, and a container behind each subgraph.",
+    "examples": [
+      "const { nodes, edges, containers, unsupported } = helpers.mermaid(source, { direction: 'LR' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "MermaidOptions",
+      "fields": [
+        {
+          "name": "direction",
+          "type": "Direction",
+          "optional": true,
+          "doc": "Overrides the direction in the header."
+        },
+        {
+          "name": "origin",
+          "type": "Origin",
+          "optional": true,
+          "doc": "Top-left of the layout. Defaults to `{ x: 60, y: 60 }`."
+        },
+        {
+          "name": "spacing",
+          "type": "Spacing",
+          "optional": true,
+          "doc": "Rank and node gaps. Default 120 and 60."
+        },
+        {
+          "name": "rankGap",
+          "type": "number",
+          "optional": true,
+          "doc": "Gap between ranks, default 120.",
+          "default": 120
+        },
+        {
+          "name": "nodeGap",
+          "type": "number",
+          "optional": true,
+          "doc": "Gap inside a rank, default 60.",
+          "default": 60
+        },
+        {
+          "name": "margin",
+          "type": "number",
+          "optional": true,
+          "doc": "Margin between a subgraph container and its members, default 40.",
+          "default": 40
+        },
+        {
+          "name": "respace",
+          "type": "boolean",
+          "optional": true,
+          "doc": "Re-space the ranks against the measured shapes, default `true`. `false` leaves the plan's own coordinates alone: debugging only, expect overlaps.",
+          "default": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "meta",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "meta(patch?: MetaPatch): DiagramMeta | null",
+    "summary": "Read or amend the document metadata: what this diagram is about.",
+    "examples": [
+      "helpers.meta({ topic: 'dot-product', concepts: ['vector-as-a-list-of-numbers'] })",
+      "const topic = helpers.meta()?.topic ?? '(none)'"
+    ],
+    "params": []
+  },
+  {
+    "name": "note",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "note(key: ShapeKey, str: string, opts?: NoteOptions): TLShapeId",
+    "summary": "Create or update a sticky note and return its id.",
+    "examples": [
+      "helpers.note('why', 'the cache is what makes this cheap', { after: 'page', gap: 80 })",
+      "helpers.note('aside', 'both panels hold the same arrow', { below: ['left', 'right'], gap: 60 })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "NoteOptions",
+      "fields": [
+        {
+          "name": "x",
+          "type": "number",
+          "optional": true,
+          "doc": "Page x of the top-left corner. Required unless `after` or `below` is given."
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "optional": true,
+          "doc": "Page y of the top-left corner. Required unless `after` or `below` is given."
+        },
+        {
+          "name": "color",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Note colour, default `yellow`.",
+          "default": "yellow"
+        },
+        {
+          "name": "labelColor",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Text colour, default `black` whatever `color` is.",
+          "default": "black"
+        },
+        {
+          "name": "font",
+          "type": "TLDefaultFontStyle",
+          "optional": true,
+          "doc": "Label font, default `draw` (the hand-drawn one).",
+          "default": "draw"
+        },
+        {
+          "name": "size",
+          "type": "TLDefaultSizeStyle",
+          "optional": true,
+          "doc": "Outline and label size, default `m`.",
+          "default": "m"
+        },
+        {
+          "name": "align",
+          "type": "TLDefaultHorizontalAlignStyle",
+          "optional": true,
+          "doc": "Horizontal label alignment, default `middle`.",
+          "default": "middle"
+        },
+        {
+          "name": "verticalAlign",
+          "type": "TLDefaultVerticalAlignStyle",
+          "optional": true,
+          "doc": "Vertical label alignment, default `middle`. A long label wants `start` and a taller box.",
+          "default": "middle"
+        },
+        {
+          "name": "after",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "Place to the right of this shape, sharing its top edge."
+        },
+        {
+          "name": "gap",
+          "type": "number",
+          "optional": true,
+          "doc": "Distance for `after` or `below`, default 120.",
+          "default": 120
+        },
+        {
+          "name": "parent",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "A frame or group to parent to. Defaults to the current page."
+        },
+        {
+          "name": "meta",
+          "type": "ShapeMeta",
+          "optional": true,
+          "doc": "Arbitrary record metadata, merged over what is there. `lintIgnore` lives here."
+        },
+        {
+          "name": "centerOn",
+          "type": "ShapeKey | readonly ShapeKey[]",
+          "optional": true,
+          "doc": "Centre horizontally on the union bounds of these shapes, at the `y` given. Overrides which shapes `above` and `below` centre on."
+        },
+        {
+          "name": "above",
+          "type": "ShapeKey | readonly ShapeKey[]",
+          "optional": true,
+          "doc": "Sit `gap` clear above the union bounds of these shapes, centred on them."
+        },
+        {
+          "name": "below",
+          "type": "ShapeKey | readonly ShapeKey[]",
+          "optional": true,
+          "doc": "Sit `gap` clear under a shape. One key shares its left edge, the way `box` does; a list uses the union bounds of all of them and centres on it."
+        }
+      ]
+    }
+  },
+  {
+    "name": "page",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "page(name: string): TLPageId",
+    "summary": "Switch to a page by name, adding it when the document has none, and return its id. Everything drawn afterwards lands there.",
+    "examples": [
+      "helpers.page('details')"
+    ],
+    "params": []
+  },
+  {
+    "name": "plainText",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "plainText(shape: ShapeKey | TLShape): string",
+    "summary": "The visible text of a shape, read from its rich text.",
+    "examples": [
+      "helpers.plainText('q')   // 'query'"
+    ],
+    "params": []
+  },
+  {
+    "name": "remove",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "remove(keys: ShapeKey | readonly ShapeKey[]): number",
+    "summary": "Delete shapes by key or id and return how many actually went.",
+    "examples": [
+      "helpers.remove(['draft', 'scratch'])"
+    ],
+    "params": []
+  },
+  {
+    "name": "row",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "row(keys: readonly ShapeKey[], opts?: LineOptions): TLShapeId[]",
+    "summary": "Lay existing shapes out left to right and return their ids in order.",
+    "examples": [
+      "helpers.row(['q', 'k', 'v'], { gap: 60, align: 'center' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "LineOptions",
+      "fields": [
+        {
+          "name": "gap",
+          "type": "number",
+          "optional": true,
+          "doc": "Gap between neighbours, default 40.",
+          "default": 40
+        },
+        {
+          "name": "align",
+          "type": "Align",
+          "optional": true,
+          "doc": "Alignment on the cross axis, default `start`.",
+          "default": "start"
+        },
+        {
+          "name": "x",
+          "type": "number",
+          "optional": true,
+          "doc": "Page x the line begins at. Defaults to the first shape's current x."
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "optional": true,
+          "doc": "Page y the line begins at. Defaults to the first shape's current y."
+        }
+      ]
+    }
+  },
+  {
+    "name": "stub",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "stub(key: ShapeKey, x: number, y: number, dx: number, dy: number, opts?: DrawLineOptions): TLShapeId",
+    "summary": "`line` with a delta instead of a second point, and the same options.",
+    "examples": [
+      "helpers.stub('legend-dash', 60, 400, 48, 0, { dash: 'dashed', color: 'red' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "DrawLineOptions",
+      "fields": [
+        {
+          "name": "color",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Line colour, default `black`.",
+          "default": "black"
+        },
+        {
+          "name": "size",
+          "type": "TLDefaultSizeStyle",
+          "optional": true,
+          "doc": "Line weight, default `s`.",
+          "default": "s"
+        },
+        {
+          "name": "dash",
+          "type": "TLDefaultDashStyle",
+          "optional": true,
+          "doc": "Line style, default `draw`.",
+          "default": "draw"
+        },
+        {
+          "name": "head",
+          "type": "HeadSpec",
+          "optional": true,
+          "doc": "Which ends get an arrowhead, default `none`. `end`, `start`, `both`.",
+          "default": "none"
+        },
+        {
+          "name": "kind",
+          "type": "TLArrowShape[\"props\"][\"kind\"]",
+          "optional": true,
+          "doc": "`arc` (default) for a straight or curved line, `elbow` for right-angled segments.",
+          "default": "arc"
+        },
+        {
+          "name": "bend",
+          "type": "number",
+          "optional": true,
+          "doc": "Curvature, `arc` only, default 0. Positive bends a quarter turn anticlockwise from the direction of travel.",
+          "default": 0
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "optional": true,
+          "doc": "A label on the line. Empty by default, which is what a bare axis or rule wants.",
+          "default": ""
+        },
+        {
+          "name": "labelColor",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Label colour, defaults to `color`."
+        },
+        {
+          "name": "parent",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "A frame or group to parent to. The points given stay page coordinates; the helper converts them."
+        },
+        {
+          "name": "lintIgnore",
+          "type": "readonly string[] | true",
+          "optional": true,
+          "doc": "Override the muted rules. An array of rule names, or `true` for all of them. Defaults to `LINE_LINT_IGNORE`; pass `[]` to have the line linted like any other arrow.",
+          "default": [
+            "friendless-arrow",
+            "arrow-crosses-shape"
+          ]
+        },
+        {
+          "name": "meta",
+          "type": "ShapeMeta",
+          "optional": true,
+          "doc": "Arbitrary record metadata. `lintIgnore` is merged over it."
+        }
+      ]
+    }
+  },
+  {
+    "name": "text",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "text(key: ShapeKey, str: string, opts?: TextOptions): TLShapeId",
+    "summary": "Create or update a standalone text shape and return its id.",
+    "examples": [
+      "helpers.text('title', 'the render loop', { x: 60, y: 0, size: 'l' })",
+      "helpers.text('title', 'two ways to read it', { above: ['left', 'right'], gap: 40, size: 'l' })"
+    ],
+    "params": [],
+    "options": {
+      "param": "opts",
+      "type": "TextOptions",
+      "fields": [
+        {
+          "name": "x",
+          "type": "number",
+          "optional": true,
+          "doc": "Page x of the top-left corner. Required unless `after` or `below` is given."
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "optional": true,
+          "doc": "Page y of the top-left corner. Required unless `after` or `below` is given."
+        },
+        {
+          "name": "w",
+          "type": "number",
+          "optional": true,
+          "doc": "Wrap width. Without one the text sizes itself to its content instead of wrapping."
+        },
+        {
+          "name": "color",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Outline colour, default `black`.",
+          "default": "black"
+        },
+        {
+          "name": "labelColor",
+          "type": "TLDefaultColorStyle",
+          "optional": true,
+          "doc": "Label colour, defaults to `color`."
+        },
+        {
+          "name": "font",
+          "type": "TLDefaultFontStyle",
+          "optional": true,
+          "doc": "Label font, default `draw` (the hand-drawn one).",
+          "default": "draw"
+        },
+        {
+          "name": "size",
+          "type": "TLDefaultSizeStyle",
+          "optional": true,
+          "doc": "Outline and label size, default `m`.",
+          "default": "m"
+        },
+        {
+          "name": "after",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "Place to the right of this shape, sharing its top edge."
+        },
+        {
+          "name": "gap",
+          "type": "number",
+          "optional": true,
+          "doc": "Distance for `after` or `below`, default 120.",
+          "default": 120
+        },
+        {
+          "name": "parent",
+          "type": "ShapeKey",
+          "optional": true,
+          "doc": "A frame or group to parent to. Defaults to the current page."
+        },
+        {
+          "name": "meta",
+          "type": "ShapeMeta",
+          "optional": true,
+          "doc": "Arbitrary record metadata, merged over what is there. `lintIgnore` lives here."
+        },
+        {
+          "name": "centerOn",
+          "type": "ShapeKey | readonly ShapeKey[]",
+          "optional": true,
+          "doc": "Centre horizontally on the union bounds of these shapes, at the `y` given. Overrides which shapes `above` and `below` centre on."
+        },
+        {
+          "name": "above",
+          "type": "ShapeKey | readonly ShapeKey[]",
+          "optional": true,
+          "doc": "Sit `gap` clear above the union bounds of these shapes, centred on them."
+        },
+        {
+          "name": "textAlign",
+          "type": "TLDefaultTextAlignStyle",
+          "optional": true,
+          "doc": "Horizontal alignment of the text itself, default `start`.",
+          "default": "start"
+        },
+        {
+          "name": "below",
+          "type": "ShapeKey | readonly ShapeKey[]",
+          "optional": true,
+          "doc": "Sit `gap` clear under a shape. One key shares its left edge, the way `box` does; a list uses the union bounds of all of them and centres on it."
+        }
+      ]
+    }
+  },
+  {
+    "name": "translate",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "translate(keys: readonly ShapeKey[], dx: number, dy: number): TLShapeId[]",
+    "summary": "Move shapes by `(dx, dy)` and return the ids that moved.",
+    "examples": [
+      "helpers.translate(['png', 'svg'], 0, 120)"
+    ],
+    "params": []
+  }
+]

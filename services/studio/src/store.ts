@@ -175,6 +175,22 @@ export interface JobRecord {
    * attempt's, and null until an agent has started.
    */
   apiKeySource?: string | null;
+  /**
+   * The tldraw manual the agent's system prompt carried: the sha256 of its
+   * text, which names `$STUDIO_HOME/manual/<hash>.md` (docs/STUDIO-CHAT-FIRST.md,
+   * D30 and M1). Written once, before the first spawn, beside `agentAuth`, and
+   * every attempt of the job passes that same file. A revise or a resume
+   * continues its parent's session, whose recorded system prompt is the
+   * parent's manual, so it inherits the parent's hash rather than taking the
+   * newest. Null when the agent ran without one (no manual could be built);
+   * absent on a job recorded before the manual existed.
+   *
+   * Kept in `job.json` and the API's job view, not on the catalog row, the
+   * same as `agentAuth`: it is decided when the job starts, after the row was
+   * written at enqueue, and a column for it would be a migration for a fact
+   * only the studio reads.
+   */
+  manualHash?: string | null;
   gate: GateResult | null;
   /**
    * Before and after, and the difference: the finished-job screen's whole
