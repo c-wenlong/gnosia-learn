@@ -11,6 +11,7 @@ import {
   formatDuration,
   isActive,
   phaseWords,
+  stepLabel,
   type Job,
 } from "@/lib/studio-jobs";
 import { panelHref } from "@/lib/studio-view";
@@ -23,15 +24,15 @@ import { panelHref } from "@/lib/studio-view";
  * grid, which is the whole reason the provider behind it is mounted in the
  * layout rather than in a page.
  *
- * Left to right: a status dot, the diagram name, the phase in words, elapsed
- * counting up, and Cancel. There is no percentage here or anywhere else (D23).
+ * Left to right: a status dot, the diagram name, the phase in words,
+ * `step 4 of 7`, elapsed counting up, and Cancel. There is no percentage here or anywhere else (D23).
  *
  * Slimmer since the job moved into the grid ("The job in the grid" in
  * docs/STUDIO-CHAT-FIRST.md). The tile or the new-diagram card now carries the
- * step count, the moving bar and the picture, so the strip keeps only what
- * says "a job is running, and this is it": it is the one place the job shows
- * when its tile is filtered out, scrolled off, or on the canvas route, which
- * has no grid. Cancel stays in both places on purpose. On the strip it is the
+ * moving bar and the picture; the strip keeps the phase, the step, the attempt
+ * after the first, the time and Cancel, because it is the one place the job
+ * shows when its tile is filtered out, scrolled off, or on the canvas route,
+ * which has no grid. Cancel stays in both places on purpose. On the strip it is the
  * only way to stop a job whose tile is not on screen, and on the tile it is
  * next to the picture a person is watching go wrong; they post the same call,
  * and the second press finds the job already stopping.
@@ -111,7 +112,17 @@ function Words({ job }: { job: Job }) {
   if (!isActive(job.state)) {
     return <span className="truncate text-[var(--muted)]">{job.state}</span>;
   }
-  return <span className="truncate text-[var(--muted-strong)]">{phaseWords(job)}</span>;
+  // The step and the attempt stay: this is the only progress a person sees
+  // when the tile is filtered out, scrolled away, or on the canvas route.
+  return (
+    <>
+      <span className="truncate text-[var(--muted-strong)]">{phaseWords(job)}</span>
+      <span className="shrink-0 tabular-nums text-[var(--muted)]">
+        {stepLabel(job)}
+        {job.attempt > 1 && ` · attempt ${job.attempt}`}
+      </span>
+    </>
+  );
 }
 
 function Dot({ job }: { job: Job }) {

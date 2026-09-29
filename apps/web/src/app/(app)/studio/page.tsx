@@ -369,6 +369,7 @@ export default async function StudioPage({
                         <DiagramRow
                           key={diagram.name}
                           diagram={diagram}
+                          path={path}
                           selected={diagram.name === view.selected}
                           selectHref={studioHref(view, { selected: diagram.name })}
                           showConcepts={view.chips}

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { useNow } from "@/components/studio/JobStrip";
 import { Chip } from "@/components/studio/StudioChrome";
 import { elapsedMs, finishedHeadline, formatDuration, type Job } from "@/lib/studio-jobs";
 import {
+  adoptPicture,
   afterShotHref,
   failureLine,
   jobForTarget,
@@ -16,8 +17,13 @@ import {
   loaderHeadline,
   loaderStep,
   newDiagramJobs,
+  NO_PICTURES,
+  retiredUrls,
+  settlePicture,
+  showsThumbnail,
   tileStage,
   wantsLivePicture,
+  type LivePictures,
   type TileStage,
 } from "@/lib/studio-tile-jobs";
 import { conversationHref, panelHref } from "@/lib/studio-view";
@@ -72,12 +78,27 @@ export function TileJob({
   );
 }
 
-/** The same, as a few words in a list row: the row has no room for a picture. */
-export function RowJob({ target }: { target: string }) {
+/**
+ * The same, as a few words in a list row: the row has no room for a picture.
+ *
+ * A link to the job's own panel, as a new diagram's row is, raised above the
+ * row's stretched selection link (`DiagramRow`), so pressing the words opens
+ * the job rather than selecting the diagram.
+ */
+export function RowJob({ target, title, path }: { target: string; title: string; path: string }) {
   const { jobs, ended, dismissed } = useStudioJobs();
   const job = jobForTarget(jobs, target, ended, dismissed);
   if (job === null) return null;
-  return <RowWords job={job} />;
+  return (
+    <Link
+      href={panelHref(path, { job: job.jobId })}
+      scroll={false}
+      aria-label={`${loaderHeadline(job)}: open the job on ${title}`}
+      className="relative z-10 flex shrink-0 items-center rounded px-1 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+    >
+      <RowWords job={job} />
+    </Link>
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -165,7 +186,7 @@ function JobStage({
 }) {
   const stage = tileStage(job);
   const frame = useRef<HTMLDivElement>(null);
-  const live = useLivePicture(job, frame);
+  const { pictures: live, settle } = useLivePicture(job, frame);
   const headline = loaderHeadline(job);
   const label =
     stage === "review"
@@ -178,7 +199,7 @@ function JobStage({
 
   return (
     <div ref={frame} className="relative h-full w-full bg-[var(--surface2)]">
-      <Backdrop job={job} stage={stage} live={live} thumbnail={thumbnail} />
+      <Backdrop job={job} stage={stage} live={live} settle={settle} thumbnail={thumbnail} />
       <Link
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
@@ -197,16 +218,25 @@ function JobStage({
  * blank surface, blurred and veiled, with the light crossing it. Ready: the
  * candidate as the gate photographed it, sharp, falling back to the last live
  * picture. Failed: whatever was last there, blurred further.
+ *
+ * Any picture sits on the tile thumbnail's own light mat, the constant
+ * `Thumbnail` in `DiagramTile.tsx` uses, and the veil goes over both. A
+ * diagram is drawn for a light page, so without the mat a dark palette showed
+ * its strokes on charcoal until the first live picture came in.
  */
+const MAT = "absolute inset-0 bg-[#f7f6f3]";
+
 function Backdrop({
   job,
   stage,
   live,
+  settle,
   thumbnail,
 }: {
   job: Job;
   stage: TileStage;
   live: LivePictures;
+  settle: () => void;
   thumbnail: string | null;
 }) {
   const [afterMissing, setAfterMissing] = useState(false);
@@ -225,6 +255,7 @@ function Backdrop({
     const src = afterMissing ? fallback : afterShotHref(job.jobId);
     return (
       <div className="absolute inset-0">
+        {src !== null && <div aria-hidden className={MAT} />}
         {/* Until the candidate's picture has loaded (a canvas shot can be a
             3000px PNG), the last picture stays, blurred, rather than a blank. */}
         {!afterShown && fallback !== null && (
@@ -257,9 +288,11 @@ function Backdrop({
   // square drawing, and a cover-cropped backdrop cut exactly that change off.
   // Framed the same, the thumbnail blurs in place when a job starts.
   const layer = `absolute inset-0 h-full w-full object-contain p-2 ${blur}`;
+  const thumbnailShown = thumbnail !== null && showsThumbnail(live);
   return (
     <div aria-hidden className="absolute inset-0 overflow-hidden">
-      {live.current === null && thumbnail !== null && (
+      {(thumbnailShown || live.current !== null) && <div className={MAT} />}
+      {thumbnailShown && (
         // eslint-disable-next-line @next/next/no-img-element -- see Thumbnail.
         <img src={thumbnail} alt="" decoding="async" className={layer} />
       )}
@@ -269,7 +302,13 @@ function Backdrop({
       )}
       {live.current !== null && (
         // eslint-disable-next-line @next/next/no-img-element -- an object URL of a fetched PNG.
-        <img key={live.current} src={live.current} alt="" className={`${layer} studio-fade-in`} />
+        <img
+          key={live.current}
+          src={live.current}
+          alt=""
+          onAnimationEnd={settle}
+          className={`${layer} ${live.settled ? "" : "studio-fade-in"}`}
+        />
       )}
       <div className={`absolute inset-0 ${stage === "failed" ? "studio-veil-strong" : "studio-veil"}`} />
       {stage === "working" && <div className="studio-shimmer absolute inset-0 overflow-hidden" />}
@@ -413,13 +452,6 @@ function capitalise(text: string): string {
 /* The live picture                                                           */
 /* -------------------------------------------------------------------------- */
 
-interface LivePictures {
-  /** The newest picture, as an object URL, or null before the first. */
-  current: string | null;
-  /** The one before it, kept under the new one while it fades in. */
-  previous: string | null;
-}
-
 /**
  * Poll the job's live picture while it runs and the tile is on screen.
  *
@@ -428,65 +460,90 @@ interface LivePictures {
  * decides to keep. A new picture is decoded before it is shown, so the tile
  * never swaps to a half-loaded image. One request when the tile first shows a
  * job that is not running, so a failed card still has its last picture.
+ *
+ * One poll at a time: a tick that finds the last one still going is skipped,
+ * so a large picture slow to decode is not overtaken by a later one, and an
+ * answer to an older poll than the picture showing is dropped regardless
+ * (`adoptPicture`). Leaving the screen aborts the poll in flight. Every object
+ * URL is revoked once nothing shows it, a decode that failed included.
  */
-function useLivePicture(job: Job, frame: RefObject<HTMLElement | null>): LivePictures {
-  const [pictures, setPictures] = useState<LivePictures>({ current: null, previous: null });
+function useLivePicture(
+  job: Job,
+  frame: RefObject<HTMLElement | null>,
+): { pictures: LivePictures; settle: () => void } {
+  const [pictures, setPictures] = useState<LivePictures>(NO_PICTURES);
   const visible = useOnScreen(frame);
   const pageHidden = useSyncExternalStore(subscribeVisibility, () => document.hidden, () => false);
   const tag = useRef<string | null>(null);
   const urls = useRef<string[]>([]);
+  const issued = useRef(0);
   const polling = wantsLivePicture(job, visible, pageHidden);
   const once = visible && !pageHidden && job.state !== "running" && job.state !== "queued";
   const jobId = job.jobId;
 
   useEffect(() => {
     if (!polling && !once) return;
-    let alive = true;
+    const controller = new AbortController();
+    let busy = false;
     const tick = async (): Promise<void> => {
+      if (busy) return;
+      busy = true;
+      const seq = (issued.current += 1);
+      let url: string | null = null;
+      let adopted = false;
       try {
         const response = await fetch(liveShotHref(jobId), {
           cache: "no-store",
+          signal: controller.signal,
           headers: tag.current === null ? {} : { "if-none-match": tag.current },
         });
         if (response.status !== 200) return;
         const etag = response.headers.get("etag");
-        const url = URL.createObjectURL(await response.blob());
+        url = URL.createObjectURL(await response.blob());
         const image = new Image();
         image.src = url;
         await image.decode();
-        if (!alive) {
-          URL.revokeObjectURL(url);
-          return;
-        }
+        if (controller.signal.aborted) return;
+        const made = url;
+        const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         tag.current = etag;
-        urls.current.push(url);
-        // Two are on screen at most, the new one and the one it fades over.
-        while (urls.current.length > 2) {
-          const old = urls.current.shift();
-          if (old !== undefined) URL.revokeObjectURL(old);
-        }
-        setPictures((held) => ({ current: url, previous: held.current }));
+        urls.current.push(made);
+        adopted = true;
+        setPictures((held) => adoptPicture(held, made, seq, still) ?? held);
       } catch {
         // A poll that fails is the next poll's problem: the runner going away
         // is said by the strip and the page, not by a tile.
+      } finally {
+        if (!adopted && url !== null) URL.revokeObjectURL(url);
+        busy = false;
       }
     };
     void tick();
     const timer = polling ? setInterval(() => void tick(), LIVE_POLL_MS) : null;
     return () => {
-      alive = false;
+      controller.abort();
       if (timer !== null) clearInterval(timer);
     };
   }, [jobId, polling, once]);
 
+  // Whatever nothing shows any more is revoked, including a picture a stale
+  // answer brought that `adoptPicture` refused.
   useEffect(() => {
-    const held = urls.current;
-    return () => {
-      for (const url of held) URL.revokeObjectURL(url);
-    };
-  }, []);
+    const retired = new Set(retiredUrls(urls.current, pictures));
+    for (const url of retired) URL.revokeObjectURL(url);
+    urls.current = urls.current.filter((url) => !retired.has(url));
+  }, [pictures]);
 
-  return pictures;
+  useEffect(
+    () => () => {
+      for (const url of urls.current) URL.revokeObjectURL(url);
+      urls.current = [];
+    },
+    [],
+  );
+
+  const settle = useCallback(() => setPictures(settlePicture), []);
+  return { pictures, settle };
 }
 
 function subscribeVisibility(change: () => void): () => void {

@@ -107,13 +107,15 @@ export function DiagramTile({
           the tile, so Tab reaches them, and while Extend is opening; invisible
           controls take no clicks. */}
       <div className="pointer-events-none absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
-        {/* The words are one text run, and the accessible name is the whole
-            sentence. The old form put a screen-reader span between "Open" and
-            "canvas" inside this flex link, and a flex container drops the
-            space at the edge of each text run, so it read "Opencanvas". */}
+        {/* The words are one text run. The old form put a screen-reader span
+            between "Open" and "canvas" inside this flex link, and a flex
+            container drops the space at the edge of each text run, so it read
+            "Opencanvas". The accessible name starts with the visible words
+            (WCAG 2.5.3, label in name), so "click Open canvas" works by voice,
+            and then says which diagram. */}
         <Link
           href={canvasHref(diagram.name)}
-          aria-label={`Open ${displayTitle(diagram)} on the canvas`}
+          aria-label={`Open canvas: ${displayTitle(diagram)}`}
           className={HOVER_CONTROL}
         >
           Open canvas
@@ -175,23 +177,31 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
   );
 }
 
-/** The 32px list row. Same ratio on a 48px thumbnail, per D22's one-ratio rule. */
+/**
+ * The 32px list row. Same ratio on a 48px thumbnail, per D22's one-ratio rule.
+ *
+ * The title is the row's link, stretched over the whole row with an `::after`,
+ * rather than the row being one link: a job drawing onto the diagram puts its
+ * own link to the job panel in the row (`RowJob`), raised above the stretch,
+ * and a link inside a link is not allowed.
+ */
 export function DiagramRow({
   diagram,
+  path,
   selectHref,
   selected,
   showConcepts,
 }: {
   diagram: Diagram;
+  /** This view, which a job's link opens its panel on. */
+  path: string;
   selectHref: string;
   selected: boolean;
   showConcepts: boolean;
 }) {
   return (
-    <Link
-      href={selectHref}
-      scroll={false}
-      className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors ${
+    <div
+      className={`relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors ${
         selected ? "bg-[var(--nav-active-bg)]" : "hover:bg-[var(--surface-hover)]"
       }`}
     >
@@ -206,8 +216,14 @@ export function DiagramRow({
           />
         )}
       </span>
-      <span className="min-w-0 flex-1 truncate font-medium">{displayTitle(diagram)}</span>
-      <RowJob target={diagram.tldr.path} />
+      <Link
+        href={selectHref}
+        scroll={false}
+        className="min-w-0 flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
+      >
+        {displayTitle(diagram)}
+      </Link>
+      <RowJob target={diagram.tldr.path} title={displayTitle(diagram)} path={path} />
       {diagram.topic === null ? (
         <Chip tone="warn">No topic</Chip>
       ) : (
@@ -224,6 +240,6 @@ export function DiagramRow({
       <span className="w-24 shrink-0 text-right text-[var(--muted)]">
         {relativeTime(diagram.tldr.modified)}
       </span>
-    </Link>
+    </div>
   );
 }

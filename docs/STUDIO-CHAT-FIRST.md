@@ -612,7 +612,7 @@ live preview ("The job in the grid" below):
 
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
-| `GET` | `/api/jobs/{id}/shot?which=live` | `If-None-Match` from the last answer | The newest complete PNG in `$STUDIO_HOME/jobs/<id>/scratch/` (top level and one directory down), `image/png` with a strong `ETag`, `cache-control: private, no-cache` and `nosniff`; `304` when the tag matches; `404` before the agent has taken a picture. Reads that one directory only, follows no symlink (`lstat` on each entry, `O_NOFOLLOW` on the open), takes only files that start with the PNG signature and end with the `IEND` chunk (a picture still being written falls back to the one before it), and skips anything over 16 MB. Launches nothing: the pictures are the ones the agent already took of its own work (`live-shot.ts`) |
+| `GET` | `/api/jobs/{id}/shot?which=live` | `If-None-Match` from the last answer | The newest complete PNG in `$STUDIO_HOME/jobs/<id>/scratch/` (top level and one directory down), `image/png` with a strong `ETag`, `cache-control: private, no-cache` and `nosniff`; `304` when the tag matches; `404` before the agent has taken a picture. Reads that one directory only. The file is opened once (`O_NOFOLLOW` on its last component) and that handle is streamed; after the open, the handle's device and inode must match what `lstat` finds at the same path through real directories, `scratch` must still be the directory listed, and a file with a second hard link is refused, so a directory swapped for a link around the open cannot lead outside. It takes only files that start with the PNG signature and end with the `IEND` chunk (a picture still being written falls back to the one before it), and skips anything over 16 MB. Launches nothing: the pictures are the ones the agent already took of its own work (`live-shot.ts`) |
 
 ## UI
 
@@ -705,7 +705,7 @@ tested; the markup is `GridJob.tsx`.
 
 | State | The picture | The bar at its foot |
 | --- | --- | --- |
-| Queued or running | The newest live picture, else the tile's own thumbnail, else the blank surface: blurred 3px, contained and framed as the thumbnail is (so a thumbnail blurs in place when the job starts), under a `--surface` veil at 42%, with a soft light crossing it every 2.8s | A dot, what it is doing now ("Drawing", "Checking the layout"), `Step 3 of 7 · 1:04`, Cancel; an indeterminate 2px strip along the picture's foot |
+| Queued or running | The newest live picture, else the tile's own thumbnail, else the blank surface: blurred 3px, contained and framed as the thumbnail is on the thumbnail's own light mat (so a thumbnail blurs in place when the job starts, and a diagram drawn for a light page stays legible in a dark palette), under a `--surface` veil at 42%, with a soft light crossing it every 2.8s | A dot, what it is doing now ("Drawing", "Checking the layout"), `Step 3 of 7 · 1:04`, Cancel; an indeterminate 2px strip along the picture's foot |
 | Ready to review | The candidate as the gate photographed it (`which=after`), sharp, kept clear of the bar; the last picture blurred until it has loaded | "Ready to review", the gate's one-line verdict, and a Review mark |
 | Failed or interrupted, and this tab watched it happen | The last picture, blurred 6px under a 68% veil | The failure's headline, Talk it through (to the job's conversation) and Dismiss |
 
@@ -721,14 +721,18 @@ of the export (`verify -o <scratch>/verify.png`), so a preview costs no
 Chromium of its own. A visible tile with a running job polls
 `/api/jobs/{id}/shot?which=live` every 3 seconds with `If-None-Match` and
 `cache: "no-store"`, so an unchanged picture is a `304` with no body; a new
-one is decoded before it replaces the old, and fades in over it. Nothing polls
+one is decoded before it replaces the old, and fades in over it (the old one,
+or the thumbnail before the first, is dropped when the fade ends, at once
+under reduced motion). One poll is in flight at a time, an answer older than
+the picture showing is dropped, leaving the screen aborts the poll, and every
+object URL is revoked once nothing shows it. Nothing polls
 off screen (an `IntersectionObserver`), in a hidden tab, or for a job that is
 not running. The cost per visible running tile is one directory read on the
 runner every 3 seconds. The picture is what the agent last looked at, so it
 moves in steps of a pass (tens of seconds), not continuously.
 
-**The strip stays**, slimmer: dot, name, phase, elapsed, Cancel. The step
-count and the moving bar went to the tile. It is still the only place a job
+**The strip stays**, slimmer: dot, name, phase, `step 4 of 7` (and the
+attempt after the first), elapsed, Cancel. The moving bar went to the tile. It is still the only place a job
 shows when its tile is filtered out, scrolled away, or on the canvas route.
 Cancel is in both places on purpose: on the strip it is the only way to stop a
 job whose tile is not on screen, on the tile it sits beside the picture a
