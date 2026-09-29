@@ -1070,13 +1070,19 @@ the same plus card and the same panel. What the diagram work leaves for that:
 | Planner system prompt | Per kind: this document's prompt is the diagram one |
 | Brief and its validator | Per kind: `validateBrief` in `brief.ts` is the diagram one |
 | Confirm card | Per kind: the rows differ; the one button does not |
-| What Draw enqueues | Per kind: a tldrawkc job today; a manimkc job through its own server (`tools/manimkc/server/`) later |
+| What Draw enqueues | Per kind: a tldrawkc job today; a manimkc job through a second runner in this process later (D43 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md), which weighs manimkc's own server and rejects it) |
 | The job view after Draw | Per kind |
 
 A video brief, its planner prompt and whether the manimkc server or this
 runner spawns its agent are a design of their own, written when phase 2 here
 is done. Nothing in phase 1 should assume `diagram` outside the per-kind
 pieces above.
+
+That design is [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md) (proposed 2026-09-29):
+a second runner in the studio process, every render of agent-written Python
+inside a per-job OS sandbox, a brief that carries the script word for word,
+Accept as `catalog video put --job`, and a settings panel for the agent's
+model and effort. Its decisions continue from D43.
 
 ## Phases
 
