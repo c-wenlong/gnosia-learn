@@ -1,0 +1,13 @@
+{
+  "replace": [
+    ["Ada Lovelace", "gi", "Learner"],
+    ["\\bAda\\b", "g", "Learner"],
+    ["ada@example\\.org", "gi", "learner@example.com"],
+    ["Example Institute of Technology", "g", "Example University"],
+    ["Example Scholars Programme 2026[^\"<]*", "g", "Example Program"],
+    ["example-scholars-programme-2026-abc12", "g", "example-program"]
+  ],
+  "badges": [
+    ["[aria-label=\"Example Institute of Technology\"]", "E"]
+  ]
+}
