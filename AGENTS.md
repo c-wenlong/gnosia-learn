@@ -259,7 +259,15 @@ Rules of engagement:
   allowlist of one command prefix, `Bash(npm run --silent canvas:*)`, not a
   deny list, because a deny list over `rm`, `mv`, `git` and the rest does not
   stop a shell redirect, `tee`, or a command substitution from writing
-  anywhere in the tree. Read and write rules in
+  anywhere in the tree. In front of it, a `PreToolUse` hook written into each
+  job's settings (`services/studio/src/diagram-guard.ts`, the check in
+  `canvas-guard.cjs`) refuses every command but `npm run --silent canvas --
+  <verb>` with each file argument an absolute path to the job's candidate,
+  its SVG or its scratch, and no pipe, list, substitution, redirect or
+  variable, failing closed: measured on CLI 2.1.274, the prefix alone ran
+  `canvas -- inspect … | base64` and a `canvas -- new` that wrote outside the
+  workspace. The video agent's guard shares its hook program
+  (`services/studio/src/bash-guard.ts`). Read and write rules in
   `services/studio/src/settings.ts` are absolute paths resolved from
   `REPO_ROOT` and `STUDIO_HOME` at spawn time, not relative ones, because
   manimkc already shipped the bug where a relative rule stops matching the
