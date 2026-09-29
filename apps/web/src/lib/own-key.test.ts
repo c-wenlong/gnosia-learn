@@ -54,8 +54,9 @@ describe("slug-keyed records are read through ownValue", () => {
   it.each(Object.entries(GUARDED))("%s", (file, names) => {
     const source = readFileSync(path.join(WEB_SRC, file), "utf8");
     for (const name of names) {
-      // A numeric index (`concepts[0]` on an array) is not a keyed lookup.
-      const bare = source.match(new RegExp(`\\b${name}\\[(?!\\d)[^\\]]*\\]`, "g")) ?? [];
+      // `titles[slug]`, `titles?.[slug]` and `titles [slug]` alike. A numeric
+      // index (`concepts[0]` on an array) is not a keyed lookup.
+      const bare = source.match(new RegExp(`\\b${name}\\s*(?:\\?\\.)?\\s*\\[(?!\\s*\\d)[^\\]]*\\]`, "g")) ?? [];
       expect(bare, `${file} indexes ${name} directly`).toEqual([]);
     }
   });

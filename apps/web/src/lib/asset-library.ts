@@ -451,12 +451,15 @@ async function optionalNotes(db: CatalogDatabase): Promise<Record<string, string
  * note. Nothing in the corpus collides today.
  */
 function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
-  const out: Record<string, string> = {};
+  // A Map, then `fromEntries`: assigning `out["__proto__"]` on a plain object
+  // sets its prototype instead of a key, so a note by that name would be
+  // unlinkable, and `fromEntries` defines every key as the object's own.
+  const out = new Map<string, string>();
   for (const row of rows) {
     const slug = row.path?.split("/").pop()?.replace(/\.md$/, "");
-    if (slug !== undefined && slug !== "" && !Object.hasOwn(out, slug)) out[slug] = row.id;
+    if (slug !== undefined && slug !== "" && !out.has(slug)) out.set(slug, row.id);
   }
-  return out;
+  return Object.fromEntries(out);
 }
 
 /**

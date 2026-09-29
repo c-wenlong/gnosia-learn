@@ -34,11 +34,27 @@ const rows = [
   },
 ];
 
+// Notes named after `Object.prototype` members, beside an ordinary one.
+const notes = ["graphs", "constructor", "__proto__"].map((slug) => ({
+  id: `note:learn/concepts/x/${slug}.md`,
+  kind: "note",
+  path: `learn/concepts/x/${slug}.md`,
+  url: null,
+  bytes: 10,
+  title: slug,
+  sourceRepo: "self-learn",
+  topics: [],
+}));
+
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
 
 vi.mock("@self-learn/catalog/state", () => ({
-  listAssets: async ({ ids }: { ids?: string[] } = {}) =>
-    ids === undefined ? rows : rows.filter((r) => ids.includes(r.id)),
+  listAssets: async (_db: unknown, filter: { ids?: string[]; kind?: string } = {}) =>
+    filter.kind === "note"
+      ? notes
+      : filter.ids?.some((id) => id.startsWith("note:"))
+        ? notes.filter((r) => filter.ids!.includes(r.id))
+        : rows,
   assetCounts: async () => [{ kind: "video", count: 1 }],
   assetDerivations: async () => ({ sources: [], derived: [] }),
   // The one that fails. Everything else answers normally, which is the shape
@@ -83,6 +99,19 @@ describe("a failing topic-title lookup", () => {
     expect(detail.asset?.id).toBe("manimkc:out/x/y.mp4");
     expect(detail.reachable).toBe(true);
     expect(detail.titles).toEqual({});
+  });
+});
+
+describe("the wikilink index", () => {
+  it("links a note whose slug is an Object.prototype member", async () => {
+    const detail = await readAssetDetail("note:learn/concepts/x/graphs.md");
+    expect(Object.hasOwn(detail.notes, "__proto__")).toBe(true);
+    expect(Object.hasOwn(detail.notes, "constructor")).toBe(true);
+    expect(detail.notes).toEqual({
+      graphs: "note:learn/concepts/x/graphs.md",
+      constructor: "note:learn/concepts/x/constructor.md",
+      ["__proto__"]: "note:learn/concepts/x/__proto__.md",
+    });
   });
 });
 
