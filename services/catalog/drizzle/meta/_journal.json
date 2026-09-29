@@ -106,6 +106,13 @@
       "when": 1790618136842,
       "tag": "0014_studio_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790664024029,
+      "tag": "0015_course_cover_blob",
+      "breakpoints": true
     }
   ]
 }

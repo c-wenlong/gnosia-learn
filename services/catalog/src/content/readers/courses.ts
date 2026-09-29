@@ -1,8 +1,18 @@
-import type { Course, Module, Resource, ResourceType, Topic } from "@self-learn/content";
+import {
+  COURSE_COVER_EXTENSIONS,
+  type Course,
+  type CourseCoverExtension,
+  coverFileName,
+  type Module,
+  type Resource,
+  type ResourceType,
+  type Topic,
+} from "@self-learn/content";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../../db";
 import { ASSET_PREFIX } from "../../index/source";
+import { keyParts, storedCredit } from "../cover-image";
 import { andOwnedBy, type Owners } from "../scope";
 import type { TypeReader } from "./reader";
 
@@ -30,7 +40,11 @@ import type { TypeReader } from "./reader";
  *   its `concept_curriculum_item` rows as `concepts` in their order;
  * - a resource is a curated `link` asset the module holds as a
  *   `collection_item`, in position order, its id without the `link:` prefix
- *   and its `type` the asset's `resource_type`.
+ *   and its `type` the asset's `resource_type`;
+ * - a cover is the course's `cover_blob_key` and `metadata.coverCredit`, named
+ *   as the export names its file (`<code>.cover.<ext>`, the key's extension).
+ *   Read through `to_jsonb`, so a database that has not had 0015 yet reads
+ *   as courses with no cover rather than failing the whole list.
  *
  * Six queries per call, whatever the number of courses, in one snapshot, each
  * ordered the way the export orders it (`../export.ts`), so the reader and the
@@ -43,6 +57,7 @@ interface CourseRow extends Record<string, unknown> {
   title: string;
   position: number;
   metadata: Record<string, unknown>;
+  cover_blob_key: string | null;
 }
 
 interface ModuleRow extends Record<string, unknown> {
@@ -95,8 +110,9 @@ export async function readCourses(db: CatalogDatabase, owners?: Owners): Promise
 async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> {
   const courses = await rows<CourseRow>(
     db,
-    sql`select id, slug, title, position, metadata from collection
-        where kind = 'course' and archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by position, id`,
+    sql`select c.id, c.slug, c.title, c.position, c.metadata, to_jsonb(c) ->> 'cover_blob_key' as cover_blob_key
+        from collection c
+        where c.kind = 'course' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)} order by c.position, c.id`,
   );
   const tags = groupBy(
     await rows<{ collection_id: string; tag_id: string }>(
@@ -200,6 +216,13 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
     if (track !== undefined) course.track = track;
     const notes = optional(meta["notes"]);
     if (notes !== undefined) course.notes = notes;
+    const credit = storedCredit(meta);
+    if (row.cover_blob_key !== null && credit !== null) {
+      const { ext } = keyParts(row.cover_blob_key);
+      if ((COURSE_COVER_EXTENSIONS as readonly string[]).includes(ext)) {
+        course.cover = { file: coverFileName(course.code, ext as CourseCoverExtension), ...credit };
+      }
+    }
     return course;
   });
 }

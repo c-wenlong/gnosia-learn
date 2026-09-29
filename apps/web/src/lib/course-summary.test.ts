@@ -7,6 +7,8 @@ import {
   continueLearning,
   courseStatus,
   coverLine,
+  coverUrl,
+  coverVersion,
   filterCourses,
   isInProgress,
   partnerLine,
@@ -46,9 +48,12 @@ function course(slug: string, code: string, title: string, tags: string[], topic
   } as unknown as Course;
 }
 
+const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+
 const graphics = toCourseSummary(
   course("cp4281", "CP4281", "Computer Graphics", ["graphics"], [["Vectors", "Dot product"], ["Barycentric"]]),
   [TAGS[1]],
+  SHA,
 );
 const hci = toCourseSummary(course("cs2111", "CS2111", "Interaction Design", ["hci"], [["Personas"]]), [TAGS[0]]);
 
@@ -61,10 +66,19 @@ describe("toCourseSummary", () => {
       "m1 Module 1",
       "m2 Module 2",
     ]);
-    // CP4281 has a cover photo; a slug with none falls back to the placeholder.
-    expect(graphics.cover).toBe("/course-covers/cp4281.webp");
-    expect(toCourseSummary(course("zz0000", "ZZ0000", "No cover", [], [["A"]]), []).cover).toBeNull();
     expect(graphics.tags).toEqual([{ id: "graphics", label: "Graphics" }]);
+  });
+
+  it("points a course with a stored cover at the cover route, versioned by the image's hash", () => {
+    expect(graphics.cover).toBe(`/api/courses/cp4281/cover?v=${SHA.slice(0, 16)}`);
+    expect(coverVersion(SHA)).toBe("9f86d081884c7d65");
+    // A course with no cover in the blob store falls back to the placeholder.
+    expect(toCourseSummary(course("zz0000", "ZZ0000", "No cover", [], [["A"]]), []).cover).toBeNull();
+    expect(toCourseSummary(course("zz0000", "ZZ0000", "No cover", [], [["A"]]), [], null).cover).toBeNull();
+  });
+
+  it("encodes the slug, so the URL names one path segment", () => {
+    expect(coverUrl("a/b c", SHA)).toBe(`/api/courses/a%2Fb%20c/cover?v=${SHA.slice(0, 16)}`);
   });
 });
 

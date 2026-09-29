@@ -74,7 +74,8 @@ describe.skipIf(!reachable.ok)("catalog export --subset", () => {
     expect(result.types.map((t) => [t.type, t.files])).toEqual([
       ["topics", 1],
       ["tags", 1],
-      ["courses", 1],
+      // cp4284.yaml and its cover.
+      ["courses", 2],
       ["concepts", 11],
       ["sessions", 1],
       ["diagrams", 2],
@@ -136,7 +137,7 @@ describe.skipIf(!reachable.ok)("catalog export --subset", () => {
     const link = path.join(out, `link-${path.basename(real)}`);
     await symlink(real, link);
     const result = await runExport({ out: path.join(link, "new", "seed"), subset: RECIPE });
-    expect(result.types.reduce((n, t) => n + t.files, 0)).toBe(17);
+    expect(result.types.reduce((n, t) => n + t.files, 0)).toBe(18);
     expect(await readdir(path.join(real, "new", "seed"))).toEqual(["content", "learn"]);
   });
 

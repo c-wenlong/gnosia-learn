@@ -18,7 +18,17 @@
  */
 
 export { ContentError } from "./errors";
-export { COURSES_DIR, courseFileName, loadCourses, parseCourse, type LoadCoursesOptions } from "./courses";
+export {
+  COURSE_COVER_EXTENSIONS,
+  COURSES_DIR,
+  coverFileName,
+  courseFileName,
+  isCoverFile,
+  loadCourses,
+  parseCourse,
+  type CourseCoverExtension,
+  type LoadCoursesOptions,
+} from "./courses";
 export { TAGS_FILE, loadTags } from "./tags";
 export { TOPIC_RELATION_KINDS, TOPICS_FILE, loadTopics } from "./topics";
 export type { LoadOptions } from "./read";
@@ -48,6 +58,7 @@ export {
 } from "./source";
 export type {
   Course,
+  CourseCover,
   Module,
   Resource,
   ResourceType,

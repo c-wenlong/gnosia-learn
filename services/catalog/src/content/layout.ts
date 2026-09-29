@@ -3,8 +3,10 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  COURSE_COVER_EXTENSIONS,
   COURSES_DIR,
   DIAGRAMS_DIR,
+  isCoverFile,
   NOTES_DIR,
   SESSIONS_DIR,
   TAGS_FILE,
@@ -73,7 +75,8 @@ async function filesUnder(root: string, relative: string, extensions: readonly s
  *
  * The same rules the indexers read by, so a file this lists is a file the
  * import reads: `*.yaml` and `*.yml` for courses (the READMEs beside them are
- * not courses), notes one folder deep, logs and diagrams directly in their
+ * not courses) with each course's cover image, `<code>.cover.<ext>`, notes
+ * one folder deep, logs and diagrams directly in their
  * folders (`learn/assets/.candidates/` is the studio's, and is not content).
  */
 export async function typeFiles(root: string, type: ExportType): Promise<string[]> {
@@ -85,7 +88,9 @@ export async function typeFiles(root: string, type: ExportType): Promise<string[
       return listed.filter((p) => p === file);
     }
     case "courses":
-      return filesUnder(root, COURSES_DIR, [".yaml", ".yml"]);
+      return (
+        await filesUnder(root, COURSES_DIR, [".yaml", ".yml", ...COURSE_COVER_EXTENSIONS.map((ext) => `.${ext}`)])
+      ).filter((p) => p.endsWith(".yaml") || p.endsWith(".yml") || isCoverFile(p));
     case "concepts": {
       const domains = (await entries(path.join(root, NOTES_DIR)))
         .filter((e) => e.isDirectory())

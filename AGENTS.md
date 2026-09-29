@@ -466,6 +466,14 @@ happened yet, not that the PR is clean.
 Traps that cost time once already. Each names the file, so the reasoning does
 not have to be worked out again.
 
+- **A path ending in an image extension skips the sign-in check.** The
+  matcher in `apps/web/src/proxy.ts` lets any `.png`, `.jpg`, `.webp`,
+  `.svg` and the rest through signed out, so `public/` images load on the
+  landing page. A route that serves private bytes must not end in one: the
+  course cover route is `/api/courses/<slug>/cover`, not `.../cover.webp`,
+  and checks the session itself as well. The same route is why the cover
+  `<Image>` is `unoptimized`: Next's optimizer fetches its source without the
+  session cookie, and would get the proxy's 401.
 - **`/` is public and everything else is behind `apps/web/src/proxy.ts`.** The
   pages live in two route groups: `apps/web/src/app/(site)/` (the landing page
   and `/sign-in`, no shell, no database) and `apps/web/src/app/(app)/` (every

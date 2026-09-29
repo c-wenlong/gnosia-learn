@@ -100,6 +100,31 @@ Once the courses type is flipped, `catalog import <dir>` skips an export's
 course files while they are the database's own last export and refuses them,
 naming the file, when someone edited one by hand: use `course import` instead.
 
+## A course's cover photo
+
+The card on the Courses page shows the course's cover photo, or its code as a
+placeholder when it has none. The photo is a blob in the store, named by the
+course row, with its credit beside it; one command sets, replaces or clears it:
+
+```bash
+npm run catalog -- course cover cs2111 --file ./cs2111.webp \
+  --photographer "Compagnons (@sigmund)" \
+  --source https://unsplash.com/photos/website-wireframe-sketch-on-paper-4UGmm3WRUoQ \
+  --licence "Unsplash License" --reason "a cover for the course card" --dry-run
+npm run catalog -- course cover cs2111 --clear --reason "the photo was wrong for it"
+```
+
+Resize the photo to the card first: 960x540, WebP. The command refuses
+anything that is not a WebP, JPEG or PNG by its bytes, anything over 2 MiB, a
+credit with a field missing, and a source that is not an http(s) URL. Setting
+the same image and credit again changes nothing.
+
+A course file names its cover under `cover:` ([seed/COURSES.md](../seed/COURSES.md))
+but does not change it: `course import` carries the cover over, and refuses a
+file whose `cover:` differs from the one the course has (a different credit,
+a different image beside the file, or no `cover:` at all for a course with
+one), naming `course cover` as the way to change it.
+
 ## Dropping an item or a module
 
 Nothing a course file stops listing is deleted (D12). `course import` archives

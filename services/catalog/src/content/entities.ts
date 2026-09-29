@@ -135,6 +135,17 @@ export const LINK_FAR_ENDS: Readonly<Record<string, readonly FarEnd[]>> = {
 };
 
 /**
+ * Every column of an entity row that names a blob, by its TypeScript key and
+ * its SQL name: `asset.blob_key`, `diagram.svg_blob_key` and a course's
+ * `collection.cover_blob_key`. Each must be under the row's owner's prefix.
+ */
+export const BLOB_KEY_COLUMNS = [
+  ["blobKey", "blob_key"],
+  ["svgBlobKey", "svg_blob_key"],
+  ["coverBlobKey", "cover_blob_key"],
+] as const;
+
+/**
  * Columns that are facts about the write rather than the content, and so are
  * left out of a snapshot. Leaving them in would make every re-import a change:
  * `updated_at` moves on every upsert, and `collection_item.id` is an identity
@@ -142,6 +153,24 @@ export const LINK_FAR_ENDS: Readonly<Record<string, readonly FarEnd[]>> = {
  */
 const NOT_CONTENT = new Set(["created_at", "updated_at"]);
 const NOT_CONTENT_IN = new Map<string, ReadonlySet<string>>([["collection_item", new Set(["id"])]]);
+
+/**
+ * Columns added to a table after its entities had revisions, left out of a
+ * snapshot while they are null, by SQL table and column name.
+ *
+ * A snapshot holds every content column, so a new column, even an empty one,
+ * would change the hash of every row of its table, and the next write of each
+ * (a `course import` of an unchanged file, say) would append a revision whose
+ * only difference is a key that says nothing. Omitted while null, a row
+ * without the new value snapshots exactly as it did before the migration,
+ * and the first revision that mentions the column is the one that set it.
+ *
+ * `collection.cover_blob_key` came with 0015, after every course and module
+ * had a history.
+ */
+export const OMITTED_WHEN_NULL: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["collection", new Set(["cover_blob_key"])],
+]);
 
 /** One column off a table, by its TypeScript key. Throws rather than passing undefined on. */
 export function column(table: PgTable, key: string): PgColumn {

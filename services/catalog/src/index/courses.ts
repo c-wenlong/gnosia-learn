@@ -1,18 +1,23 @@
+import path from "node:path";
+
+import { key as blobKey } from "@self-learn/blob";
 import { COURSES_DIR, loadCourses } from "@self-learn/content";
-import type {
-  NewAsset,
+import {
+  LOCAL_LEARNER_ID,
+  type NewAsset,
   NewAssetTopic,
-  NewCollection,
-  NewCollectionItem,
-  NewCollectionTag,
-  NewConceptCurriculumItem,
-  NewCurriculumItem,
-  NewCurriculumItemTopic,
+  type NewCollection,
+  type NewCollectionItem,
+  type NewCollectionTag,
+  type NewConceptCurriculumItem,
+  type NewCurriculumItem,
+  type NewCurriculumItemTopic,
 } from "@self-learn/schema";
 
+import { CoverImageError, creditOf, readCoverImage } from "../content/cover-image";
 import { asIndexError } from "./content-errors";
 import { IndexError, IndexErrors } from "./errors";
-import { ASSET_PREFIX, type Indexer, type SourceRows } from "./source";
+import { ASSET_PREFIX, type Indexer, type SourceBlob, type SourceRows } from "./source";
 import { VOCABULARY_FILE } from "./vocabulary";
 
 /**
@@ -52,6 +57,14 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * A course's `tags:` become `collection_tag` rows in list order, pointing at
  * the rows the tags source wrote. The strings stay in `metadata.tags` as well,
  * because the web app reads them there until Track B moves its reader.
+ *
+ * A course's `cover:` names the image beside its file
+ * (`content/courses/<code>.cover.<ext>`). The image is handed back as a
+ * `SourceBlob`, which the runner stores before the rows are written, the way
+ * the diagrams source hands back each SVG; the course row names its key in
+ * `cover_blob_key` and carries the credit as `metadata.coverCredit`. An image
+ * that is missing, is not a WebP, JPEG or PNG by its bytes, or is not the type
+ * its name says, is refused by name, never skipped.
  */
 
 export { COURSES_DIR };
@@ -69,7 +82,7 @@ export const coursesIndexer: Indexer = {
   assetPrefix: ASSET_PREFIX.courses,
   root: () => COURSES_DIR,
 
-  read: async ({ repoRoot, vocabulary, knownConcepts }) => {
+  read: async ({ repoRoot, vocabulary, knownConcepts, owner = LOCAL_LEARNER_ID }) => {
     const courses = asIndexError(() =>
       loadCourses({ root: repoRoot, topics: vocabulary.entries }),
     );
@@ -83,6 +96,7 @@ export const coursesIndexer: Indexer = {
     const assets: NewAsset[] = [];
     const assetTopics: NewAssetTopic[] = [];
     const collectionTags: NewCollectionTag[] = [];
+    const blobs: SourceBlob[] = [];
 
     const problems = new IndexErrors();
     /** Modules seen here, so the vocabulary's own `maps.courses` can be checked back. */
@@ -91,6 +105,29 @@ export const coursesIndexer: Indexer = {
 
     for (const course of courses) {
       const where = `${COURSES_DIR}/${course.code.toLowerCase()}.yaml`;
+      let coverBlobKey: string | null = null;
+      if (course.cover !== undefined) {
+        const named = `${COURSES_DIR}/${course.cover.file}`;
+        try {
+          const image = await readCoverImage(path.join(repoRoot, COURSES_DIR, course.cover.file), named);
+          if (!course.cover.file.endsWith(`.${image.ext}`)) {
+            problems.add(`${where}: cover ${named} holds a ${image.ext.toUpperCase()} image; name it ${course.code.toLowerCase()}.cover.${image.ext}`);
+          } else {
+            coverBlobKey = blobKey(owner, image.sha256, image.ext);
+            blobs.push({
+              file: path.join(repoRoot, COURSES_DIR, course.cover.file),
+              ownerId: owner,
+              mime: image.mime,
+              ext: image.ext,
+              sha256: image.sha256,
+              bytes: image.bytes.length,
+            });
+          }
+        } catch (error) {
+          if (!(error instanceof CoverImageError)) throw error;
+          problems.add(`${where}: its cover cannot be stored: ${error.message}`);
+        }
+      }
       collections.push({
         id: course.id,
         kind: "course",
@@ -110,7 +147,11 @@ export const coursesIndexer: Indexer = {
           inferred: course.inferred,
           tags: course.tags,
           capstone: course.capstone,
+          // Only with a cover: a course without one keeps the metadata it
+          // had before covers existed, so its snapshot does not move.
+          ...(coverBlobKey === null || course.cover === undefined ? {} : { coverCredit: creditOf(course.cover) }),
         },
+        coverBlobKey,
       });
       for (const [index, tagId] of course.tags.entries()) {
         collectionTags.push({ collectionId: course.id, tagId, position: index + 1 });
@@ -248,8 +289,9 @@ export const coursesIndexer: Indexer = {
       rows,
       notes: [
         `${courses.length} courses, ${moduleCount} modules, ${curriculumItems.length} curriculum items`,
-        `${assets.length} curated links, ${conceptLinks.length} concept links`,
+        `${assets.length} curated links, ${conceptLinks.length} concept links, ${blobs.length} cover(s)`,
       ],
+      blobs,
     };
   },
 };

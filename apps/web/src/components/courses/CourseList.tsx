@@ -228,13 +228,11 @@ function CoverCard({ summary, line }: { summary: CourseSummary; line: string[] }
     >
       <div className="relative aspect-video w-full overflow-hidden rounded-lg">
         {summary.cover !== null ? (
-          <Image
-            src={summary.cover}
-            alt=""
-            fill
-            sizes="(min-width: 1440px) 340px, 50vw"
-            className="object-cover"
-          />
+          // Unoptimized: the cover route needs the session cookie, and Next's
+          // image optimizer fetches the source server-side without forwarding
+          // any header, so it would get the proxy's 401. The image is stored
+          // at the card's size already (960x540), so there is little to gain.
+          <Image src={summary.cover} alt="" fill unoptimized className="object-cover" />
         ) : (
           // No photo for this course yet; the code stands in for it.
           <Placeholder label={summary.code} height="100%" className="rounded-none text-[13px]" />

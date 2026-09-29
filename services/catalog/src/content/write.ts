@@ -11,7 +11,7 @@ import { eq, getTableColumns, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ensureLearner } from "../state/learner";
-import { column, ENTITIES, isEntityType, LINK_FAR_ENDS, ROW_FAR_ENDS } from "./entities";
+import { BLOB_KEY_COLUMNS, column, ENTITIES, isEntityType, LINK_FAR_ENDS, ROW_FAR_ENDS } from "./entities";
 import {
   appendRevisions,
   deriveOp,
@@ -222,10 +222,10 @@ async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promi
   // it is asserted here, where every write passes. A key the row already had
   // is let through: after D23's move of a type to the commons a row keeps its
   // `local/` key until `catalog asset upload` re-keys it.
-  for (const column of ["blobKey", "svgBlobKey"] as const) {
+  for (const [column, name] of BLOB_KEY_COLUMNS) {
     const key = input.next.row[column];
     if (typeof key !== "string" || key.startsWith(`${input.owner}/`)) continue;
-    const kept = before?.snapshot.entity[column === "blobKey" ? "blob_key" : "svg_blob_key"];
+    const kept = before?.snapshot.entity[name];
     if (kept === key) continue;
     throw new ContentWriteError(
       "invalid",

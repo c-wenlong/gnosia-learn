@@ -38,6 +38,7 @@ import {
   reserveRevisionIds,
   type PendingRevision,
 } from "../content/revisions";
+import { BLOB_KEY_COLUMNS } from "../content/entities";
 import { placePositions, PositionGapError } from "../content/positions";
 import { readSnapshots, type SnapshotRead } from "../content/snapshot";
 import { CLI_OWNER } from "../content/scope";
@@ -959,7 +960,7 @@ function stampOwner(indexer: Indexer, rows: SourceRows, owner: string): SourceRo
           `indexer "${indexer.source}" produced ${describe(row)} for owner "${String(named)}", and this import writes as "${owner}"`,
         );
       }
-      for (const column of ["blobKey", "svgBlobKey"]) {
+      for (const [column] of BLOB_KEY_COLUMNS) {
         const key = row[column];
         if (typeof key === "string" && !key.startsWith(`${owner}/`)) {
           throw new IndexError(

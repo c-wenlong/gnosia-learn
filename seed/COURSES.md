@@ -42,6 +42,11 @@ track: HCI focus area primary    # optional
 notes: ...                       # optional
 inferred: false                  # required, and must be a real boolean
 tags: [hci]                      # tag ids (content/tags.yaml in an export)
+cover:                           # optional: the card's photo, beside this file
+  file: cs2111.cover.webp        # <code>.cover.<webp|jpg|png>, in lowercase
+  photographer: Compagnons (@sigmund)
+  source: https://unsplash.com/photos/website-wireframe-sketch-on-paper-4UGmm3WRUoQ
+  licence: Unsplash License
 capstone: ...
 modules:
   - id: cs2111-m1                # permanent
@@ -76,6 +81,16 @@ so the key is authored and has to be unique.
 `catalog topic add` or `catalog topic rename` ([README.md](README.md#writing-the-vocabulary-and-the-tags)),
 never here. `course import` lists a new module under that topic's
 `maps.courses` itself, so the two never disagree.
+
+**`cover:` names an image; it does not store one.** In the database a cover
+is a blob the course row names by key, with its credit in the row's metadata;
+the export writes the image beside the course file as `<code>.cover.<ext>`
+and names it here, and `catalog import <dir>` stores it back under the same
+key. The file name is the course code's and nothing else, and the reader
+refuses any other, so no path is ever built out of what a file says.
+`course import` of a single file carries the cover over and refuses a
+`cover:` that differs from the course's; `catalog course cover` is the one
+way to set, replace or clear it ([docs/CURRICULUM.md](../docs/CURRICULUM.md)).
 
 **`concepts:` on every item.** Each item names the concept notes that teach it,
 filed under the module's topic. `npm run catalog -- doctor` lists every item

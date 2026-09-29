@@ -17,6 +17,7 @@ import { loadTags } from "./tags";
 import { loadTopics } from "./topics";
 import type {
   Course,
+  CourseCover,
   Module,
   Resource,
   ResourceType,
@@ -72,6 +73,13 @@ interface RawModule {
   resources?: unknown;
 }
 
+interface RawCover {
+  file?: unknown;
+  photographer?: unknown;
+  source?: unknown;
+  licence?: unknown;
+}
+
 interface RawCourse {
   id?: unknown;
   slug?: unknown;
@@ -86,6 +94,7 @@ interface RawCourse {
   tags?: unknown;
   modules?: unknown;
   capstone?: unknown;
+  cover?: unknown;
 }
 
 export interface LoadCoursesOptions extends LoadOptions {
@@ -96,6 +105,64 @@ export interface LoadCoursesOptions extends LoadOptions {
   topics?: readonly TopicEntry[];
   /** The theme list, likewise. Loaded from `content/tags.yaml` when absent. */
   tags?: readonly TagMeta[];
+}
+
+/**
+ * The image types a cover file may be, by extension: the same closed list as
+ * `COURSE_COVER_TYPES` in `@self-learn/schema`, which this package does not
+ * import. `catalog course cover` decides the type from the bytes; the export
+ * names the file by it.
+ */
+export const COURSE_COVER_EXTENSIONS = ["webp", "jpg", "png"] as const;
+export type CourseCoverExtension = (typeof COURSE_COVER_EXTENSIONS)[number];
+
+/** The cover file beside a course file: `<code>.cover.<ext>`, in lowercase. */
+export function coverFileName(code: string, ext: CourseCoverExtension): string {
+  return `${code.toLowerCase()}.cover.${ext}`;
+}
+
+/** Whether a file name in `content/courses/` is a cover image rather than a course. */
+export function isCoverFile(name: string): boolean {
+  return COURSE_COVER_EXTENSIONS.some((ext) => name.endsWith(`.cover.${ext}`));
+}
+
+const COVER_KEYS = new Set(["file", "photographer", "source", "licence"]);
+
+/**
+ * A course's `cover:` mapping, or undefined when the file has none. The file
+ * name is not free: it is the course code's, with a known image extension,
+ * so a cover can only ever name the file beside its own course, and no path
+ * is ever built out of what a file says. A key outside the four is refused,
+ * since `license` for `licence` would otherwise drop the licence silently.
+ */
+function readCover(value: unknown, where: string, code: string): CourseCover | undefined {
+  if (value === undefined) return undefined;
+  const at = `${where} cover`;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new ContentError(
+      `${at}: expected a mapping of file, photographer, source and licence. Delete the key for no cover.`,
+    );
+  }
+  const unknown = Object.keys(value).filter((key) => !COVER_KEYS.has(key));
+  if (unknown.length > 0) {
+    throw new ContentError(`${at}: unknown key(s) ${unknown.join(", ")}; a cover has file, photographer, source and licence`);
+  }
+  const raw = value as RawCover;
+  const file = requireText(raw.file, at, "file");
+  const allowed = COURSE_COVER_EXTENSIONS.map((ext) => coverFileName(code, ext));
+  if (!allowed.includes(file)) {
+    throw new ContentError(`${at}: file "${file}" must be one of ${allowed.join(", ")}: the image beside this course's file`);
+  }
+  const source = requireText(raw.source, at, "source");
+  if (!/^https?:\/\/\S+$/.test(source)) {
+    throw new ContentError(`${at}: source "${source}" must be an http(s) URL: the page the photo came from`);
+  }
+  return {
+    file,
+    photographer: requireText(raw.photographer, at, "photographer"),
+    source,
+    licence: requireText(raw.licence, at, "licence"),
+  };
 }
 
 /**
@@ -369,6 +436,8 @@ function readCourse(
   if (track !== undefined) course.track = track;
   const notes = optionalText(parsed.notes);
   if (notes !== undefined) course.notes = notes;
+  const cover = readCover(parsed.cover, where, code);
+  if (cover !== undefined) course.cover = cover;
 
   if (references.themes !== null) {
     for (const tag of course.tags) {

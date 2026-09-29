@@ -7,11 +7,13 @@ import { formatBlobAudit, runBlobAudit } from "./commands/blob-audit";
 import { UPLOAD_SOURCES, type UploadSource } from "./content/asset-upload";
 import { DEFAULT_STATE_DIR, formatBackfill, runBackfill } from "./commands/backfill";
 import {
+  formatCourseCover,
   formatCourseExport,
   formatCourseImport,
   formatItem,
   ITEM_VERBS,
   type ItemVerb,
+  runCourseCover,
   runCourseExport,
   runCourseImport,
   runItem,
@@ -236,7 +238,17 @@ Commands:
                            file to edit and import back. Prints it, or
                            writes it to --out FILE, with a first line naming
                            the revision it was read at (left off when --out
-                           is the course's own file in the tree).
+                           is the course's own file in the tree). A cover
+                           stays in the blob store; the file names it.
+  course cover <id>        Set or replace a course's cover photo: --file
+                           IMAGE (WebP, JPEG or PNG by its bytes, at most
+                           2 MiB) with --photographer P --source URL
+                           --licence L, or --clear to remove it. Needs
+                           --reason. Stores the image in the blob store,
+                           then points the course at it in one revision; the
+                           same image and credit again changes nothing.
+                           --owner ID: whose course (default: local).
+                           --dry-run checks and says what would change.
   item <verb> <id>         One curriculum item, with --reason: archive (off
                            the course path, learner rows kept), restore (back
                            on it, or back from a purge), purge (delete an
@@ -265,7 +277,8 @@ Options:
   --dry-run                asset upload: hash and report, write nothing.
                            topic add: validate, place and list near
                            matches, write nothing. course import: plan the
-                           write, commit nothing.
+                           write, commit nothing. course cover: check the
+                           image and credit, store and write nothing.
   --fix                    blob audit: act on what it finds (see above),
                            and only on a store whose .owner names this
                            database; the first --fix claims an unclaimed one.
@@ -503,6 +516,9 @@ export async function main(argv: string[]): Promise<number> {
         course: { type: "string" },
         diagram: { type: "string" },
         owner: { type: "string" },
+        photographer: { type: "string" },
+        licence: { type: "string" },
+        clear: { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -671,8 +687,42 @@ export async function main(argv: string[]): Promise<number> {
           await schemaCurrent();
           const result = await runCourseExport({ id: target, out: values.out });
           emit(result, formatCourseExport(result));
+        } else if (verb === "cover") {
+          if (target === undefined) throw new Usage("course cover needs a course id");
+          const reasons = values.reason ?? [];
+          if (reasons.length !== 1) throw new Usage("course cover takes exactly one --reason");
+          const credit = { photographer: values.photographer, source: values.source, licence: values.licence };
+          if (values.clear) {
+            if (values.file !== undefined || Object.values(credit).some((v) => v !== undefined)) {
+              throw new Usage("course cover --clear takes no --file, --photographer, --source or --licence");
+            }
+          } else if (values.file === undefined || Object.values(credit).some((v) => v === undefined)) {
+            throw new Usage(
+              "usage: course cover <id> --file IMAGE --photographer P --source URL --licence L --reason R | " +
+                "course cover <id> --clear --reason R",
+            );
+          }
+          await schemaCurrent();
+          const result = await runCourseCover({
+            course: target,
+            owner: values.owner,
+            reason: reasons[0] as string,
+            dryRun: values["dry-run"],
+            clear: values.clear,
+            set: values.clear
+              ? undefined
+              : {
+                  file: path.resolve(values.file as string),
+                  photographer: credit.photographer as string,
+                  source: credit.source as string,
+                  licence: credit.licence as string,
+                },
+          });
+          emit(result, formatCourseCover(result));
         } else {
-          throw new Usage("usage: course import <file> --reason <why> | course export <id> [--out FILE]");
+          throw new Usage(
+            "usage: course import <file> --reason <why> | course export <id> [--out FILE] | course cover <id> ...",
+          );
         }
         break;
       }
