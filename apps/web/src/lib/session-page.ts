@@ -2,7 +2,7 @@ import "server-only";
 
 import { conceptSummaries, type AssetRef, type ConceptSummary } from "@self-learn/catalog/state";
 
-import { resolveProviders } from "@/lib/agent/providers";
+import { tutorCredentials } from "@/lib/agent/credentials";
 import { readAssetAccess, readFileProblems } from "@/lib/asset-library";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
@@ -90,12 +90,12 @@ async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
 }
 
 /**
- * Whether a tutor model can be asked at all: some provider key is set, and
- * `resolveProviders` keeps only those. Server-only, like the keys; a client
- * component is handed the answer, never the environment.
+ * Whether a tutor model can be asked at all: the owner saved a key that still
+ * decrypts, or the server's environment holds one (docs/BYOK.md). Server-only,
+ * like the keys; a client component is handed the answer, never a key.
  */
-export function tutorModelConfigured(): boolean {
-  return resolveProviders().length > 0;
+export async function tutorModelConfigured(): Promise<boolean> {
+  return (await tutorCredentials(await currentOwner())).length > 0;
 }
 
 /** Every concept's summary, for wrong options; none when the catalog cannot be read. */
@@ -116,7 +116,7 @@ async function readSummaries(): Promise<ConceptSummary[]> {
  * summaries, so none are read.
  */
 export async function sessionWillAsk(workspace: ConceptWorkspace): Promise<boolean> {
-  const modelAvailable = tutorModelConfigured();
+  const modelAvailable = await tutorModelConfigured();
   const summaries = modelAvailable || workspace.checks.length === 0 ? [] : await readSummaries();
   return sessionCanAsk(
     {
@@ -139,7 +139,7 @@ export async function loadSessionPage(workspace: ConceptWorkspace, mode: Session
     return c === undefined ? [] : [{ id: c.id, title: c.title, domain: c.domain }];
   });
 
-  const modelAvailable = tutorModelConfigured();
+  const modelAvailable = await tutorModelConfigured();
   const plan = withoutEmptySteps(
     buildSessionPlan({
       slug: workspace.slug,

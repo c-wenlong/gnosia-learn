@@ -1,5 +1,5 @@
 {
-  "id": "f6a09aa2-bc19-4f86-9f83-488f5f033049",
+  "id": "e7d2fd37-3efb-47e5-bee2-a110ad881480",
   "prevId": "9af0d488-18bc-4d52-a192-8b87ec9cd50c",
   "version": "7",
   "dialect": "postgresql",
@@ -211,7 +211,7 @@
         },
         "asset_source_repo_check": {
           "name": "asset_source_repo_check",
-          "value": "source_repo in ('self-learn', 'manimkc', 'tldrawkc', 'remotionkc', 'revideokc')"
+          "value": "source_repo in ('self-learn', 'manimkc', 'tldrawkc', 'remotionkc')"
         },
         "asset_location_check": {
           "name": "asset_location_check",
@@ -2818,7 +2818,7 @@
       "checkConstraints": {
         "index_run_source_check": {
           "name": "index_run_source_check",
-          "value": "source in ('topics', 'tags', 'courses', 'concepts', 'manimkc', 'remotionkc', 'revideokc', 'diagrams', 'sessions', 'mirrors')"
+          "value": "source in ('topics', 'tags', 'courses', 'concepts', 'manimkc', 'remotionkc', 'diagrams', 'sessions', 'mirrors')"
         },
         "index_run_written_check": {
           "name": "index_run_written_check",
@@ -3490,6 +3490,122 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.provider_key": {
+      "name": "provider_key",
+      "schema": "",
+      "columns": {
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ciphertext": {
+          "name": "ciphertext",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "iv": {
+          "name": "iv",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auth_tag": {
+          "name": "auth_tag",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last4": {
+          "name": "last4",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "provider_key_owner_id_learner_id_fk": {
+          "name": "provider_key_owner_id_learner_id_fk",
+          "tableFrom": "provider_key",
+          "tableTo": "learner",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "provider_key_owner_id_provider_pk": {
+          "name": "provider_key_owner_id_provider_pk",
+          "columns": [
+            "owner_id",
+            "provider"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "provider_key_provider_check": {
+          "name": "provider_key_provider_check",
+          "value": "provider in ('nvidia', 'gemini', 'openrouter')"
+        },
+        "provider_key_iv_check": {
+          "name": "provider_key_iv_check",
+          "value": "octet_length(iv) = 12"
+        },
+        "provider_key_auth_tag_check": {
+          "name": "provider_key_auth_tag_check",
+          "value": "octet_length(auth_tag) = 16"
+        },
+        "provider_key_ciphertext_check": {
+          "name": "provider_key_ciphertext_check",
+          "value": "octet_length(ciphertext) between 1 and 2048"
+        },
+        "provider_key_key_version_check": {
+          "name": "provider_key_key_version_check",
+          "value": "key_version >= 1"
+        },
+        "provider_key_last4_check": {
+          "name": "provider_key_last4_check",
+          "value": "char_length(last4) = 4"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.recap": {

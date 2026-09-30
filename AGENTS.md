@@ -21,6 +21,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [seed/README.md](seed/README.md) | The export format (the layout `catalog export` writes and `catalog import` reads), and the seed, which is all the content a fresh clone has |
 | [seed/COURSES.md](seed/COURSES.md) | The course YAML of the export format: the shape of a file and what the reader refuses |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
+| [docs/BYOK.md](docs/BYOK.md) | Bring your own key: the owner's model provider keys, saved in Settings and stored AES-256-GCM encrypted in `provider_key` under a key derived from `AUTH_SECRET`, with the env keys as the fallback. The decisions, the threat model, rotation, and what is out of scope |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [docs/proposals/course-items-declare-concepts.md](docs/proposals/course-items-declare-concepts.md) | Proposal: the course file lists each item's concepts, and progress derives from mastery everywhere the path already does |
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
@@ -963,6 +964,20 @@ not have to be worked out again.
   first — so `npm run build` succeeds with no database, which is what Vercel
   has today. Verify both after touching the layout: build with `DATABASE_URL`
   pointed at a dead port, then serve it and load a page.
+- **`provider_key` is named in one module, and a drizzle error near it is
+  never logged whole.** The owner's provider keys ([docs/BYOK.md](docs/BYOK.md))
+  are read and written only by `services/catalog/src/state/provider-keys.ts`;
+  `services/catalog/test/provider-keys.test.ts` fails any other shipped file
+  that names the table, which is what keeps the keys out of every export. So
+  a new exporter, snapshot or route that wants them goes through that module
+  and the web app's `apps/web/src/lib/provider-keys/store.ts`, never a query
+  of its own. And a failed write there is logged by code only (`failureCode`),
+  never by message: a drizzle error's message carries the bind parameters,
+  which on that table are the sealed key. That is also why the two
+  `/api/learner/provider-key` routes do not use `handler` from
+  `apps/web/src/lib/learner-api.ts`, whose failure path logs the message.
+  Rotating `AUTH_SECRET` makes every saved key read as "re-enter this key";
+  that is the design, not a bug.
 - **A drizzle error's message never says why the database failed.** drizzle
   wraps every driver error as `Failed query: <sql>` and puts the driver's error
   on `cause`, and a refused `localhost` connection arrives there as an

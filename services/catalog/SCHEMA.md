@@ -24,7 +24,7 @@ directory being imported: an export, `seed/`, or `content-files-final`.
 | Half | Tables | Source of truth |
 | --- | --- | --- |
 | Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$SELF_LEARN_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
-| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
+| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
 | Studio | `session`, `draft`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
 
@@ -106,6 +106,7 @@ which brief produced them.
 | `progress` | A ticked checklist row, plus the learner's note on it. |
 | `recap` | The durable "what I learnt" record per checklist row. |
 | `preference` | Theme, epoch, last visited, and the studio's two agent settings (`studioVideoAgent`, `studioDiagramAgent`: `{ model, effort }`, D53 of docs/STUDIO-VIDEOS.md), which the runner reads with `catalog preference get`. Key/value, because these change with the UI. |
+| `provider_key` | An owner's own model provider API keys for the tutor, one per provider, AES-256-GCM encrypted by the web app (migration `0018_provider_key`, [docs/BYOK.md](../../docs/BYOK.md)). See "Provider keys" under the state half. |
 
 ### Operational
 
@@ -420,6 +421,7 @@ erDiagram
     learner ||--o{ progress : "ticks"
     learner ||--o{ recap : "keeps"
     learner ||--o{ preference : "sets"
+    learner ||--o{ provider_key : "brings"
     concept ||--o{ event : "may be about"
     concept ||--o{ mastery : "is tracked by"
     concept ||--o{ review : "is scheduled by"
@@ -481,10 +483,53 @@ erDiagram
         text key PK
         jsonb value
     }
+    provider_key {
+        text owner_id PK_FK "no default"
+        text provider PK "nvidia|gemini|openrouter"
+        bytea ciphertext "1..2048 bytes"
+        bytea iv "12 bytes"
+        bytea auth_tag "16 bytes"
+        int key_version ">= 1"
+        text last4 "4 chars"
+    }
 ```
 
 The dotted lines are not foreign keys. They say that `mastery` and `review` are
 computed from `event` and can be thrown away and rebuilt.
+
+### Provider keys
+
+`provider_key` holds the tutor's model provider keys an owner saved in
+Settings, in place of the `NVIDIA_API_KEY`, `GEMINI_API_KEY` and
+`OPENROUTER_API_KEY` variables, which are now the fallback. The design, the
+threat model and rotation are [docs/BYOK.md](../../docs/BYOK.md); what the
+table itself guarantees is here.
+
+- **It holds no key.** The web app seals each key with AES-256-GCM under a
+  key derived from `AUTH_SECRET` (HKDF-SHA256, `key_version` naming the
+  derivation) and stores the ciphertext, the 12-byte nonce and the 16-byte
+  tag. The catalog stores and returns bytes and has nothing that opens them.
+  `last4` is the only part of a key in the clear.
+- **The additional data names the owner, the provider and the version.** A
+  ciphertext moved onto another owner's row, or relabelled as another
+  provider, fails its tag. The cost is that renaming an owner (the
+  `on update cascade` on `learner.id`) leaves their keys unreadable, and
+  Settings asks for them again.
+- **No default owner, and `cascade` on delete.** Every content table defaults
+  `owner_id` to `local` and restricts deletes; this one does neither, so a key
+  is never filed under `local` by omission, and deleting an owner deletes
+  their keys.
+- **One module names it.** `src/state/provider-keys.ts` is the only code that
+  reads or writes the table, and `test/provider-keys.test.ts` fails a
+  reference anywhere else. That is what keeps it out of `catalog export`, the
+  nightly export, `learn vault pull` and the learner export, none of which can
+  reach a table they never name. The same test lists every file that walks
+  all tables without naming one (the `tables` registry, the database's table
+  list, `pg_dump`), so a generic exporter cannot arrive unread. `catalog
+  status` counts it with the state half. A `pg_dump`, such as flip day's backup, does include it, as
+  ciphertext: see the threat model.
+- It carries the copy guard of 0010 like every other table, added by its own
+  migration.
 
 ## Filling it
 

@@ -1,11 +1,14 @@
+import { PROVIDER_IDS, type ProviderId } from "@self-learn/schema/shared";
+
+import { redactSecrets } from "@/lib/agent/redact";
 import { resolveSiteUrl } from "@/lib/site-url";
+
+export type { ProviderId };
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
 };
-
-export type ProviderId = "nvidia" | "gemini" | "openrouter";
 
 export interface ProviderConfig {
   id: ProviderId;
@@ -32,11 +35,20 @@ export interface ProviderAttemptError {
 }
 
 /** Preferred free production cascade: NVIDIA → Gemini Flash → OpenRouter free. */
-export const DEFAULT_PROVIDER_ORDER: ProviderId[] = [
-  "nvidia",
-  "gemini",
-  "openrouter",
-];
+export const DEFAULT_PROVIDER_ORDER: readonly ProviderId[] = PROVIDER_IDS;
+
+/**
+ * Where a key came from: the owner saved it in Settings (`provider_key`,
+ * docs/BYOK.md), or the server's environment set it.
+ */
+export type KeySource = "saved" | "server";
+
+/** A provider the cascade can call, with the key it calls it with. */
+export interface ProviderCredential {
+  config: ProviderConfig;
+  apiKey: string;
+  source: KeySource;
+}
 
 type EnvMap = Record<string, string | undefined>;
 
@@ -87,10 +99,11 @@ export function openRouterReferer(env: EnvMap): string {
   return resolveSiteUrl(env).toString();
 }
 
-export function resolveProviders(
+/** Every provider, in the cascade's order, whether or not a key is set for it. */
+export function providerConfigs(
   env: EnvMap = process.env,
 ): ProviderConfig[] {
-  const configs: ProviderConfig[] = [
+  return [
     {
       id: "nvidia",
       label: "NVIDIA NIM",
@@ -119,24 +132,70 @@ export function resolveProviders(
       },
     },
   ];
-
-  return configs.filter((c) => Boolean(env[c.apiKeyEnv]?.trim()));
 }
 
-export function availableProviderSummary(
+/** The providers the server's environment holds a key for, in the cascade's order. */
+export function resolveProviders(
   env: EnvMap = process.env,
+): ProviderConfig[] {
+  return providerConfigs(env).filter((c) => Boolean(env[c.apiKeyEnv]?.trim()));
+}
+
+/**
+ * The keys the tutor calls with, in the order it tries them (docs/BYOK.md,
+ * decision 4): the owner's saved keys first, in the cascade's order, then the
+ * server's for the providers the owner saved none for.
+ *
+ * A provider appears once. The owner's key stands in for the server's rather
+ * than going ahead of it, so a saved key that stops working shows up as a
+ * failed attempt (and as a failed Test in Settings) instead of being hidden by
+ * the server quietly answering for it. `saved` holds only keys that
+ * decrypted; one that did not is missing, and the server's key applies.
+ */
+export function orderCredentials(
+  saved: Partial<Record<ProviderId, string>>,
+  env: EnvMap = process.env,
+): ProviderCredential[] {
+  const configs = providerConfigs(env);
+  const own: ProviderCredential[] = configs.flatMap((config) => {
+    const apiKey = saved[config.id];
+    return apiKey ? [{ config, apiKey, source: "saved" as const }] : [];
+  });
+  const server: ProviderCredential[] = configs.flatMap((config) => {
+    const apiKey = env[config.apiKeyEnv]?.trim();
+    return !saved[config.id] && apiKey ? [{ config, apiKey, source: "server" as const }] : [];
+  });
+  return [...own, ...server];
+}
+
+/** The server's keys alone, for a caller with no owner (the tests, a script). */
+export function serverCredentials(env: EnvMap = process.env): ProviderCredential[] {
+  return orderCredentials({}, env);
+}
+
+/**
+ * The cascade in words, for the `providers` field of an error: each provider
+ * and where its key came from, never any of the key.
+ */
+export function availableProviderSummary(
+  credentials: readonly ProviderCredential[],
 ): string {
-  const available = resolveProviders(env).map((p) => p.id);
-  if (available.length === 0) {
-    return "none (set NVIDIA_API_KEY, GEMINI_API_KEY, and/or OPENROUTER_API_KEY)";
-  }
-  return available.join(" → ");
+  if (credentials.length === 0) return "none (add a provider key in Settings)";
+  return credentials
+    .map((c) => `${c.config.id} (${c.source === "saved" ? "your key" : "server key"})`)
+    .join(" → ");
+}
+
+/** A provider's error body, with every key the caller holds taken out, then clipped. */
+function providerText(text: string, secrets: readonly string[], max = 400): string {
+  return redactSecrets(text, secrets).slice(0, max);
 }
 
 async function callOpenAiCompatible(
   provider: ProviderConfig,
   apiKey: string,
   messages: ChatMessage[],
+  secrets: readonly string[],
 ): Promise<ChatCompletionResult> {
   const res = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: "POST",
@@ -159,7 +218,8 @@ async function callOpenAiCompatible(
       provider: provider.id,
       model: provider.model,
       status: res.status,
-      message: text.slice(0, 400) || res.statusText,
+      // The reason phrase too: a gateway is free to put anything in it.
+      message: providerText(text, secrets) || providerText(res.statusText, secrets, 200),
     } satisfies ProviderAttemptError;
   }
 
@@ -178,18 +238,21 @@ async function callOpenAiCompatible(
 
   return {
     content,
-    model: data.model || provider.model,
+    // The browser shows this, so it gets the same redaction as an error body.
+    model: typeof data.model === "string" && data.model ? providerText(data.model, secrets, 200) : provider.model,
     provider: provider.id,
     providerLabel: provider.label,
   };
 }
 
 /**
- * Try free providers in order. Continues on rate-limits / 5xx / empty replies.
+ * Try the providers in order. Continues on rate-limits / 5xx / empty replies.
+ * `credentials` is `orderCredentials`' list (the routes get it from
+ * `tutorCredentials`); an empty list is `MISSING_API_KEY`.
  */
 export async function completeWithFallback(
   messages: ChatMessage[],
-  env: EnvMap = process.env,
+  credentials: readonly ProviderCredential[],
 ): Promise<
   | { ok: true; result: ChatCompletionResult; attempts: ProviderAttemptError[] }
   | {
@@ -198,18 +261,17 @@ export async function completeWithFallback(
       code: "MISSING_API_KEY" | "ALL_PROVIDERS_FAILED";
     }
 > {
-  const providers = resolveProviders(env);
-  if (providers.length === 0) {
+  if (credentials.length === 0) {
     return { ok: false, attempts: [], code: "MISSING_API_KEY" };
   }
 
+  // Every key in play, so one provider's error cannot quote another's.
+  const secrets = credentials.map((c) => c.apiKey);
   const attempts: ProviderAttemptError[] = [];
 
-  for (const provider of providers) {
-    const apiKey = env[provider.apiKeyEnv]?.trim();
-    if (!apiKey) continue;
+  for (const { config: provider, apiKey } of credentials) {
     try {
-      const result = await callOpenAiCompatible(provider, apiKey, messages);
+      const result = await callOpenAiCompatible(provider, apiKey, messages, secrets);
       return { ok: true, result, attempts };
     } catch (err) {
       if (
@@ -223,13 +285,100 @@ export async function completeWithFallback(
         attempts.push({
           provider: provider.id,
           model: provider.model,
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: providerText(err instanceof Error ? err.message : "Unknown error", secrets),
         });
       }
     }
   }
 
   return { ok: false, attempts, code: "ALL_PROVIDERS_FAILED" };
+}
+
+/**
+ * The sentence inside a provider's JSON error, when there is one: OpenAI's
+ * and OpenRouter's `{ error: { message } }`, Gemini's the same inside an
+ * array, NVIDIA's problem document `{ detail }` or `{ title }`. Otherwise the
+ * text as it came. Only for Settings' Test, where a person reads it; the
+ * tutor's `attempts` keep the body whole.
+ */
+export function providerMessage(text: string): string {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    const body = (Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown> | null;
+    if (body && typeof body === "object") {
+      const error = body.error;
+      if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+        return (error as { message: string }).message;
+      }
+      for (const field of ["message", "detail", "title", "error"] as const) {
+        if (typeof body[field] === "string" && body[field]) return body[field] as string;
+      }
+    }
+  } catch {
+    // Not JSON: the text is the message.
+  }
+  return text.trim();
+}
+
+/** What a Test in Settings says: the key works, or the provider's words, redacted. */
+export type KeyTestResult =
+  | { ok: true; model: string }
+  | { ok: false; status: number | null; message: string };
+
+/** How long a Test waits for the provider before calling it a failure. */
+export const KEY_TEST_TIMEOUT_MS = 15_000;
+
+/**
+ * One minimal call with one key: a one-token completion, which every provider
+ * authenticates, where a `/models` listing is public on some of them and so
+ * proves nothing. Any 2xx is a working key, whatever the model wrote.
+ * Never throws; a network failure or a timeout is a failed test.
+ */
+export async function testProviderKey(
+  credential: ProviderCredential,
+  timeoutMs: number = KEY_TEST_TIMEOUT_MS,
+): Promise<KeyTestResult> {
+  const { config, apiKey } = credential;
+  const secrets = [apiKey];
+  try {
+    const res = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        ...(config.extraHeaders ?? {}),
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [{ role: "user", content: "Reply with the word ok." }],
+        max_tokens: 1,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    // Everything the provider sent that reaches the browser goes through
+    // `providerText`, the model name and the status text included: a gateway
+    // is free to put anything in either.
+    if (res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { model?: unknown };
+      const model = typeof data.model === "string" && data.model ? providerText(data.model, secrets, 200) : config.model;
+      return { ok: true, model };
+    }
+    const text = await res.text().catch(() => "");
+    // Redacted before and after the JSON is read, so an escape in the body
+    // cannot hide an echo from the first pass.
+    const message = providerText(providerMessage(redactSecrets(text, secrets)), secrets, 300);
+    return { ok: false, status: res.status, message: message || providerText(res.statusText, secrets, 200) || `HTTP ${res.status}` };
+  } catch (err) {
+    const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+    return {
+      ok: false,
+      status: null,
+      message: timedOut
+        ? `The provider did not answer within ${Math.round(timeoutMs / 1000)} seconds.`
+        : providerText(err instanceof Error ? err.message : "The provider could not be reached.", secrets, 300),
+    };
+  }
 }
 
 export function preferredModelLabel(
