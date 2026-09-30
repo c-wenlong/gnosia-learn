@@ -63,6 +63,22 @@ describe("draftRows", () => {
   });
 });
 
+describe("a conversation opened from the concept tutor (docs/STUDIO-TUTOR-HANDOFF.md)", () => {
+  it("is named by its concept until it has a brief, never by a bare tag", () => {
+    const concept = { slug: "tcp-handshake", title: "The TCP three-way handshake" };
+    const [waiting, briefed] = draftRows([
+      draft({ draftId: "a", updated: "2026-09-29T11:00:00.000Z", firstMessage: "@diagram", concept }),
+      draft({ draftId: "b", updated: "2026-09-29T10:00:00.000Z", firstMessage: "@diagram", concept, title: "SYN, SYN-ACK, ACK" }),
+    ]);
+    expect(waiting).toMatchObject({ heading: "The TCP three-way handshake", quoted: false });
+    expect(briefed).toMatchObject({ heading: "SYN, SYN-ACK, ACK", quoted: false });
+  });
+
+  it("falls back as before for a runner that sends no concept", () => {
+    expect(draftRows([draft({ firstMessage: "hello", concept: null })])[0]).toMatchObject({ heading: "hello", quoted: true });
+  });
+});
+
 describe("listPath", () => {
   it("asks the runner for talking and briefed drafts somebody said something in, filtered before the limit", () => {
     expect(listPath()).toBe("/api/drafts?state=open,briefed&nonEmpty=1&limit=50");

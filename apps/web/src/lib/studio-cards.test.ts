@@ -5,6 +5,8 @@ import type { DraftSlot, DraftView, TranscriptEntry, VideoBrief } from "@/lib/st
 import type { Brief, Job } from "@/lib/studio-jobs";
 
 import {
+  conceptOpeningTurn,
+  tutorTurnsWords,
   askAgainValue,
   entryBriefs,
   jobKind,
@@ -518,5 +520,22 @@ describe("a press under way (phase 2, bug 8)", () => {
     expect(pressUnderWay(new Map(), recorded, "video")).toBe(false);
     // A runner from before the slots: the draft's one job is the diagram's.
     expect(pressUnderWay(new Map([["diagram", null]]), view({ slots: undefined, jobId: "j1" }), "diagram")).toBe(false);
+  });
+});
+
+describe("a conversation opened from the concept tutor (docs/STUDIO-TUTOR-HANDOFF.md)", () => {
+  it("opens, when its first message could not be sent, on the concept's note", () => {
+    expect(conceptOpeningTurn("The TCP handshake")).toBe(
+      "I have your note on The TCP handshake. Tag @diagram or @video to make one of it, or ask me about it first.",
+    );
+  });
+
+  it("says how many exchanges with the tutor came along, from the turns the planner got (D69)", () => {
+    expect(tutorTurnsWords(0)).toBeNull();
+    expect(tutorTurnsWords(1)).toBe("and your last exchange with the tutor");
+    expect(tutorTurnsWords(2)).toBe("and your last exchange with the tutor");
+    expect(tutorTurnsWords(5)).toBe("and your last 3 exchanges with the tutor");
+    expect(tutorTurnsWords(6)).toBe("and your last 3 exchanges with the tutor");
+    expect(tutorTurnsWords(Number.NaN)).toBeNull();
   });
 });

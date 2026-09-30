@@ -107,17 +107,18 @@ function exportedBodies(source: string): { name: string; body: string }[] {
 
 describe("every exported server action", () => {
   const file = path.join(STUDIO_DIR, "actions.ts");
-  const actions = exportedBodies(readFileSync(file, "utf8")).filter(
-    // The exported types and the outcome helpers are not endpoints. An action
-    // is the async function a `<form action=…>` posts to.
-    (fn) => fn.body.includes("formData") || fn.body.includes("FormData"),
-  );
+  // Every exported function of a "use server" file is an endpoint, whether a
+  // `<form action=…>` posts FormData to it or a component calls it with an
+  // object (the tutor's hand-off does), so none is filtered out. Such a file
+  // can export only async functions, which is what the parser finds.
+  const actions = exportedBodies(readFileSync(file, "utf8"));
 
   it("finds the actions, so a parser that breaks cannot pass by finding none", () => {
     expect(actions.map((fn) => fn.name).sort()).toEqual([
       "commitDiagram",
       "exportSvg",
       "inspectDiagram",
+      "openConceptConversation",
       "restartMirror",
       "saveStudioAgent",
       "verifySvg",

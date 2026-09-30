@@ -77,19 +77,24 @@ export function draftRows(
       const title = draft.title?.trim() ?? "";
       const first = draft.firstMessage?.trim() ?? "";
       const extending = draft.source === null ? null : (titles[draft.source] ?? draft.source);
+      // A conversation opened from the concept tutor is about that concept,
+      // which says more than its first message, often a bare "@diagram".
+      const concept = typeof draft.concept?.title === "string" ? draft.concept.title.trim() : "";
       const heading =
         title !== ""
           ? title
-          : first !== ""
-            ? first
-            : extending !== null
-              ? `Extending ${extending}`
-              : "A conversation with no brief yet";
+          : concept !== ""
+            ? concept
+            : first !== ""
+              ? first
+              : extending !== null
+                ? `Extending ${extending}`
+                : "A conversation with no brief yet";
       const kinds = Array.isArray(draft.kinds) ? [...new Set(draft.kinds.filter(isDraftKind))] : [];
       return {
         draftId: draft.draftId,
         heading,
-        quoted: title === "" && first !== "",
+        quoted: title === "" && concept === "" && first !== "",
         state: stateWords(draft.state, kinds),
         briefed: draft.state === "briefed",
         updated: draft.updated,

@@ -358,6 +358,47 @@ describe("a conversation opened with Change on a video (p2v-video on #203)", () 
   });
 });
 
+describe("a conversation opened from the concept tutor (docs/STUDIO-TUTOR-HANDOFF.md)", () => {
+  const concept = { slug: "tcp-handshake", title: "The TCP handshake", topic: "tcp", tutorTurns: 6 };
+
+  it("sends the tutor's tagged message on arrival, chips and all, and a bare tag is enough (H8)", async () => {
+    leave({ send: "@video", sendMentions: [{ kind: "video", start: 0, end: 6 }], source: null });
+    await mount(draft({ concept }));
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@video", mentions: [{ kind: "video", start: 0, end: 6 }] });
+  });
+
+  it("pins the concept as a link back, with the exchanges that came along, and no topic suggestions", async () => {
+    const host = await mount(draft({ concept }));
+    const link = [...host.querySelectorAll("a")].find((a) => a.getAttribute("href") === "/learn/tcp-handshake");
+    expect(link?.textContent).toBe("The TCP handshake");
+    expect(host.textContent).toContain("and your last 3 exchanges with the tutor");
+    expect(host.querySelector('[aria-label="Suggestions"]')).toBeNull();
+  });
+
+  it("says nothing about the tutor when no turns came along", async () => {
+    const host = await mount(draft({ concept: { ...concept, tutorTurns: 0 } }));
+    expect(host.textContent).toContain("The TCP handshake");
+    expect(host.textContent).not.toContain("exchange");
+  });
+
+  it("opens on the note when the first message could not be sent (H14), and takes a bare tag back", async () => {
+    const host = await mount(draft({ concept }));
+    expect(host.textContent).toContain(
+      "I have your note on The TCP handshake. Tag @diagram or @video to make one of it, or ask me about it first.",
+    );
+    await act(async () => mocks.composer!.onChange({ text: "@diagram", mentions: [{ kind: "diagram", start: 0, end: 8 }] }));
+    expect(mocks.composer!.sendDisabled).toBe(false);
+  });
+
+  it("still refuses a bare tag in any other empty conversation (T15)", async () => {
+    await mount(draft());
+    await act(async () => mocks.composer!.onChange({ text: "@diagram", mentions: [{ kind: "diagram", start: 0, end: 8 }] }));
+    expect(mocks.composer!.sendDisabled).toBe(true);
+    expect(mocks.composer!.disabledReason).toBe("Say what it should show");
+  });
+});
+
 describe("Make both, while the press is still answering (phase 2 measurement, bug 8)", () => {
   it("stops saying Queuing once the record has both jobs, and links the video card to its job", async () => {
     let answer: (value: unknown) => void = () => {};
