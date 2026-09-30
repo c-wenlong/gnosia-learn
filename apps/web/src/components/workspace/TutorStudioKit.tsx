@@ -5,7 +5,7 @@ import { useMemo, type Ref } from "react";
 import { openConceptConversation } from "@/app/(app)/studio/actions";
 import { MentionComposer, type MentionComposerHandle } from "@/components/ui/MentionComposer";
 import type { MentionValue } from "@/components/ui/mention-text";
-import { lengthSendBlock, MENTION_HINT } from "@/lib/studio-cards";
+import { MENTION_HINT } from "@/lib/studio-cards";
 import { idempotencyKey, type DraftKind } from "@/lib/studio-drafts";
 import { extendKey, forgetExtendKey, leaveOpener, sessionStore } from "@/lib/studio-extend";
 import { conversationHref } from "@/lib/studio-view";
@@ -14,6 +14,7 @@ import {
   handoffRefusal,
   handoffTurns,
   tagSendBlock,
+  tutorLengthBlock,
   tutorMentionOptions,
   TUTOR_MENTION_PLACEHOLDER,
   type ConceptConversation,
@@ -35,9 +36,6 @@ export { OPENING_THE_STUDIO } from "@/lib/tutor-handoff";
  */
 
 type Value = MentionValue<DraftKind>;
-
-/** The tutor's own input limit, which a tagged message keeps too: it is the same field. */
-const INPUT_LIMIT = 4_000;
 
 export function TutorMentionField({
   value,
@@ -65,7 +63,7 @@ export function TutorMentionField({
 }) {
   const options = useMemo(() => tutorMentionOptions(health), [health]);
   const tagBlock = tagSendBlock(value, options);
-  const tooLong = lengthSendBlock(value, INPUT_LIMIT);
+  const tooLong = tutorLengthBlock(value);
   return (
     <MentionComposer<DraftKind>
       handleRef={handleRef}

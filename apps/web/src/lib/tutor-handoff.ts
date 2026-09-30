@@ -122,6 +122,23 @@ export function handoffTurns(
   return kept;
 }
 
+/**
+ * The tutor's own input limit, which a tagged message keeps too: it is the
+ * same field, and the plain one stops typing there (`maxLength`). The studio
+ * dropped its own cap (#231), so this is the tutor's, not the planner's.
+ */
+export const TUTOR_INPUT_LIMIT = 4_000;
+
+/**
+ * Why Send waits on the length of what is in the @ field, or null. Only Send:
+ * the field stays editable, so the person can cut it back down, which the
+ * plain field's `maxLength` does not have to say.
+ */
+export function tutorLengthBlock(value: Value, limit = TUTOR_INPUT_LIMIT): string | null {
+  if (value.text.length <= limit) return null;
+  return `${value.text.length.toLocaleString("en")} of ${limit.toLocaleString("en")} characters. Cut it down to send.`;
+}
+
 /* -------------------------------------------------------------------------- */
 /* The server action's input and answer                                       */
 /* -------------------------------------------------------------------------- */

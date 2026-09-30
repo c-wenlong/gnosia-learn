@@ -10,6 +10,7 @@ import {
   handoffTurns,
   STUDIO_NOT_ANSWERING,
   tagSendBlock,
+  tutorLengthBlock,
   tutorMentionOptions,
   type ConceptConversation,
 } from "@/lib/tutor-handoff";
@@ -66,6 +67,13 @@ describe("Send and a chip the menu now disables", () => {
   it("goes with a chip the menu still offers, and with none", () => {
     expect(tagSendBlock({ text: "@diagram of it", mentions: [{ kind: "diagram", start: 0, end: 8 }] }, options)).toBeNull();
     expect(tagSendBlock({ text: "what is a SYN?", mentions: [] }, options)).toBeNull();
+  });
+});
+
+describe("an over-long message in the @ field", () => {
+  it("holds Send at the tutor's own limit, with the count, and leaves the field editable", () => {
+    expect(tutorLengthBlock({ text: "x".repeat(4_000), mentions: [] })).toBeNull();
+    expect(tutorLengthBlock({ text: "x".repeat(4_500), mentions: [] })).toBe("4,500 of 4,000 characters. Cut it down to send.");
   });
 });
 
