@@ -5,13 +5,17 @@ import {
   abbreviations,
   abbreviationWarning,
   beatCount,
+  briefTool,
   chapterTitle,
   isVideoBrief,
   predictedSeconds,
   shortLength,
+  switchedTool,
+  toolRow,
   videoModeLine,
   videoSummaryLine,
   type VideoBrief,
+  type VideoToolOption,
 } from "./studio-brief-video";
 
 const line = (characters: number) => "x".repeat(characters);
@@ -73,5 +77,34 @@ describe("the video card's arithmetic", () => {
   it("tells a video brief from anything else", () => {
     expect(isVideoBrief(BRIEF)).toBe(true);
     expect(isVideoBrief({ title: "x" })).toBe(false);
+  });
+});
+
+describe("the card's tool row (docs/STUDIO-VIDEO-TOOLS.md, D73)", () => {
+  const manimkc: VideoToolOption = { name: "manimkc", strength: "ManimGL: plots", available: true, reason: null };
+  const revideokc: VideoToolOption = { name: "revideokc", strength: "Revideo: depth", available: false, reason: "revideokc is not in the studio yet" };
+
+  it("reads a brief with no tool as manimkc", () => {
+    expect(briefTool(BRIEF)).toBe("manimkc");
+    expect(briefTool({ tool: "revideokc" })).toBe("revideokc");
+  });
+
+  it("shows the planner's reason, else what the tool is best at", () => {
+    expect(toolRow({ tool: "manimkc", toolReason: "Boxes and arrows" }, [manimkc, revideokc])).toEqual({ tool: "manimkc", line: "Boxes and arrows", choices: [] });
+    expect(toolRow({}, [manimkc, revideokc]).line).toBe("ManimGL: plots");
+    expect(toolRow({}, []).line).toBeNull();
+  });
+
+  it("offers a menu only of tools the studio can make, and only when there are two", () => {
+    expect(toolRow({}, [manimkc, revideokc]).choices).toEqual([]);
+    const ready = { ...revideokc, available: true, reason: null };
+    expect(toolRow({}, [manimkc, ready]).choices).toEqual([manimkc, ready]);
+  });
+
+  it("saves a switch with the new tool and without the old reason", () => {
+    const switched = switchedTool({ ...BRIEF, tool: "manimkc" as const, toolReason: "Boxes and arrows" }, "revideokc");
+    expect(switched.tool).toBe("revideokc");
+    expect(switched).not.toHaveProperty("toolReason");
+    expect(switched.title).toBe(BRIEF.title);
   });
 });

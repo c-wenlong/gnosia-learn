@@ -763,6 +763,8 @@ export const PLANNER_VIDEO_FIELDS = [
   "voice",
   "scenes",
   "concepts",
+  "tool",
+  "toolReason",
 ] as const;
 
 /** A brief as a draft stores it: validated, with no idempotency key until Draw mints one. */

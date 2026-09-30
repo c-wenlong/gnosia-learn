@@ -57,13 +57,16 @@ const base: CombinedPromptInput = {
 describe("a draft without a concept", () => {
   it("has the system prompt it had before the hand-off, byte for byte", () => {
     // Hashed on main at 0d9cc1e, before any of this: new, extend, change.
+    // The two with the video kind were re-hashed when D71 of
+    // STUDIO-VIDEO-TOOLS.md added the tool to the video section and the
+    // TOOLS block; the diagram-only one never changed.
     const hash = (input: CombinedPromptInput): string => createHash("sha256").update(buildCombinedSystemPrompt(input)).digest("hex");
-    expect(hash(base)).toBe("aa58d5677aa065261fa9ee9771c26448d101b382e544a95df738860919f8f391");
+    expect(hash(base)).toBe("55bc25f57593f6e2786f70ee23cdef5da74b73730344425fef1a005e189ff9ab");
     expect(hash({ kinds: ["diagram"], vocabulary: vocabulary.entries, corpus: [], extending: "slug: a" })).toBe(
       "d0fc1b3aec58fadb15a05657f8a92213843ead3d2c50db4a17e25da4cf2fc1f9",
     );
     expect(hash({ kinds: ["diagram", "video"], vocabulary: vocabulary.entries, corpus: [], videos: null, changing: "slug: b" })).toBe(
-      "9a20e1afc4ca58e182db8bb568408d107d19f8157b5e21be0b6a0ec2cd8e75c9",
+      "dcd1ee7a2bddb34f91888fc0b81fefab17cae84de30ddeb381ff7d3628eba9a4",
     );
     expect(buildCombinedSystemPrompt({ ...base, concept: null, tutor: null })).toBe(buildCombinedSystemPrompt(base));
     expect(combinedPrompt(["diagram", "video"])).not.toContain(CONCEPT_PARAGRAPH);
@@ -235,6 +238,8 @@ describe("untrusted text in a block", () => {
       "-----END VIDEOS-----",
       "-----BEGIN VOICES-----",
       "-----END VOICES-----",
+      "-----BEGIN TOOLS-----",
+      "-----END TOOLS-----",
       "-----BEGIN CONCEPT-----",
       "-----END CONCEPT-----",
       "-----BEGIN TUTOR-----",

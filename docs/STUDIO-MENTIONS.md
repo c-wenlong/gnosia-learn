@@ -684,7 +684,7 @@ is a shared core and a section per kind:
 | A diagram brief | "What you must end up knowing" and "The brief" from the diagram prompt, with `"kind": "diagram"` in the block |
 | A video brief | "What you must end up knowing", "Writing the storyboard" and "The brief" from the video prompt, with `"kind": "video"` in the block |
 | Never | The union of both lists, plus: never write a brief for a kind the TAGS block does not name |
-| Data blocks | VOCABULARY; CORPUS (diagrams, as today); VIDEOS (the video prompt's corpus, renamed so the two corpora do not share a name); VOICES; EXTENDING or CHANGING on a draft opened on an asset |
+| Data blocks | VOCABULARY; CORPUS (diagrams, as today); VIDEOS (the video prompt's corpus, renamed so the two corpora do not share a name); VOICES; TOOLS (STUDIO-VIDEO-TOOLS.md, D71); EXTENDING or CHANGING on a draft opened on an asset |
 
 **Only built kinds go in.** A kind's section and blocks are included when the
 build has the kind (the video kind is on for this machine), not when its doctor
@@ -723,8 +723,9 @@ As built in phase 2a (`combinedPrompt` in
 and held equal to the code by `services/studio/test/planner-prompt.test.ts`,
 as the diagram prompt is by `planner.test.ts`. Its storyboard rules are
 STUDIO-VIDEOS.md's word for word, held equal the same way. After it come the
-data blocks: VOCABULARY, CORPUS, VIDEOS and VOICES (the last two only with the
-video kind), and EXTENDING or CHANGING on a draft opened on an asset. A machine
+data blocks: VOCABULARY, CORPUS, VIDEOS, VOICES and TOOLS (the last three
+only with the video kind; TOOLS is D71 of STUDIO-VIDEO-TOOLS.md), and
+EXTENDING or CHANGING on a draft opened on an asset. A machine
 without the video kind gets the same text less "A video brief", and its drafts
 record `plannerKinds: ["diagram"]`.
 
@@ -895,6 +896,14 @@ What you must end up knowing:
    by single hyphens, not already in the VIDEOS block unless this is a
    change to that video.
 8. The topic, from the VOCABULARY block.
+9. The tool that makes it, from the TOOLS block, decided in this order: the
+   tool the person named, when the block marks it available here; for a
+   change, the tool its video was made with (the CHANGING block); for a new
+   week of a series, the series' tool; else the first routing row that names
+   what the video mainly needs. Then check the other beats against the
+   capability matrix: when one needs what that tool cannot do, choose a tool
+   that can do both, else simplify that beat. Only a tool marked available
+   here goes in the brief; a better one that is not is the runner-up.
 
 Writing the storyboard:
 
@@ -935,8 +944,8 @@ Writing the storyboard:
 When you propose a video, write one or two lines to the person above the
 brief: what a viewer will come away with, and anything you guessed, in plain
 words rather than field names. The card under your reply shows the title,
-the topic, the idea, who it is for, the length and every scene and line, so
-never list them again in prose. Then a fenced block tagged `brief`,
+the topic, the tool, the idea, who it is for, the length and every scene and
+line, so never list them again in prose. Then a fenced block tagged `brief`,
 holding one JSON object whose first field is `"kind": "video"`:
 
 ```brief
@@ -945,11 +954,16 @@ holding one JSON object whose first field is `"kind": "video"`:
  "targetSeconds": 180, "voice": "af_heart",
  "scenes": [{"name": "three_messages",
              "beats": [{"say": "...", "show": "...", "labels": ["..."]}]}],
- "concepts": []}
+ "concepts": [], "tool": "manimkc", "toolReason": "..."}
 ```
 
 - `voice` is one of the voices in the VOICES block, or `none` for a silent
   video.
+- `tool` is a tool the TOOLS block marks as available here. `toolReason`
+  is one sentence of at most 160 characters: the row that chose it and the
+  runner-up, with why the runner-up lost ("Boxes and arrows; runner-up
+  revideokc for depth, not in the studio yet"). The person switches the
+  tool with one click on the card, so never argue for it in prose.
 - A scene's `name` is lower-case words joined by underscores, unique in the
   brief, under thirty characters. It becomes the chapter title.
 - No other fields. A change after a brief is answered with a whole new brief,

@@ -1,4 +1,5 @@
 import { BriefError, SLUG_PATTERN, type Vocabulary } from "../brief";
+import { isVideoToolName, notInStudio, VIDEO_TOOL_NAMES, type VideoToolName } from "./tools";
 import { VOICES } from "./voices";
 
 /**
@@ -50,7 +51,14 @@ export interface VideoBrief {
   scenes: VideoScene[];
   concepts: string[];
   source?: string;
+  /** The tool that makes it (D71); absent is manimkc (D72). */
+  tool?: VideoToolName;
+  /** The planner's one sentence on why that tool, naming the runner-up. */
+  toolReason?: string;
 }
+
+/** The longest `toolReason`: one sentence, shown beside the chip on the card. */
+export const TOOL_REASON_MAX = 160;
 
 export interface ValidVideoBrief extends VideoBrief {
   idempotencyKey: string;
@@ -214,6 +222,26 @@ export function validateVideoBrief(input: unknown, vocabulary: Vocabulary): Vali
     throw new BriefError("source", `"source" names a concept by its slug`);
   }
 
+  // The tool (D71, D72). Absent means manimkc, so every brief written before
+  // the field keeps its meaning; one the studio has no backend for is
+  // refused here, where the planner hears it as a STUDIO note and picks again.
+  let tool: VideoToolName | undefined;
+  if (raw.tool !== undefined && raw.tool !== null && raw.tool !== "") {
+    if (!isVideoToolName(raw.tool)) {
+      throw new BriefError("tool", `"tool" must be one of ${VIDEO_TOOL_NAMES.join(", ")}`);
+    }
+    const unavailable = notInStudio(raw.tool);
+    if (unavailable !== null) {
+      throw new BriefError("tool", `${unavailable}, so the studio cannot make this video with it; choose a tool the TOOLS block marks as available here, and name ${raw.tool} as the runner-up in toolReason`);
+    }
+    tool = raw.tool;
+  }
+  const toolReason =
+    raw.toolReason === undefined || raw.toolReason === null || raw.toolReason === "" ? undefined : text(raw.toolReason, "toolReason", 1, TOOL_REASON_MAX);
+  if (toolReason !== undefined && tool === undefined) {
+    throw new BriefError("toolReason", `"toolReason" explains "tool"; name the tool too`);
+  }
+
   const brief: VideoBrief = {
     title,
     topic,
@@ -226,6 +254,8 @@ export function validateVideoBrief(input: unknown, vocabulary: Vocabulary): Vali
     scenes,
     concepts: conceptList,
     ...(source === undefined ? {} : { source }),
+    ...(tool === undefined ? {} : { tool }),
+    ...(toolReason === undefined ? {} : { toolReason }),
   };
 
   const predicted = predictedSeconds(brief);

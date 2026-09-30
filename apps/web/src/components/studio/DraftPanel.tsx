@@ -107,6 +107,7 @@ import {
   type TranscriptEntry,
   type VideoAvailability,
 } from "@/lib/studio-drafts";
+import { switchedTool, type VideoToolOption } from "@/lib/studio-brief-video";
 import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, OPENER_EVENT, sessionStore, takeOpener } from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { panelHref, titleOf } from "@/lib/studio-view";
@@ -874,6 +875,7 @@ export function DraftPanel({
             unavailable={(kind) => kindUnavailable(kind, view, video)}
             onSuggest={(kind) => composer.current?.insertMention(kind)}
             singleCard={cards.length <= 1}
+            videoTools={video?.tools ?? []}
           />
         ))}
 
@@ -1020,6 +1022,7 @@ function Entry({
   unavailable,
   onSuggest,
   singleCard,
+  videoTools,
 }: {
   entry: TranscriptEntry;
   view: DraftView;
@@ -1049,6 +1052,8 @@ function Entry({
   onSuggest: (kind: DraftKind) => void;
   /** Whether at most one card is live, so Cmd+Enter presses it. */
   singleCard: boolean;
+  /** Health's `video.tools`, for the video card's tool row (D73). */
+  videoTools: readonly VideoToolOption[];
 }) {
   if (entry.role === "person") {
     const tagged = waiting.filter((item) => item.requestSeq === entry.seq).map((item) => item.kind);
@@ -1129,6 +1134,11 @@ function Entry({
           editBlock={editBlock}
           paired={paired}
           replacing={live?.replaces != null}
+          tools={videoTools}
+          onSwitchTool={async (tool) => {
+            const outcome = await onSave(switchedTool(item.brief, tool), entry.seq, "video");
+            return outcome.ok ? null : `The tool could not be switched: ${outcome.refusal.error}`;
+          }}
         />
       );
     return (

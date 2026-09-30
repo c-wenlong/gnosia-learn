@@ -92,7 +92,7 @@ describe("the combined prompt", () => {
     expect(diagramOnly).not.toContain(STORYBOARD_RULES);
   });
 
-  it("is followed by VOCABULARY, CORPUS, VIDEOS and VOICES, and CHANGING on a change draft", () => {
+  it("is followed by VOCABULARY, CORPUS, VIDEOS, VOICES and TOOLS, and CHANGING on a change draft", () => {
     const vocabulary = testVocabulary().entries;
     const full = buildCombinedSystemPrompt({
       kinds: ["diagram", "video"],
@@ -104,7 +104,7 @@ describe("the combined prompt", () => {
       ],
       changing: "slug: two-boxes",
     });
-    const order = ["-----BEGIN VOCABULARY-----", "-----BEGIN CORPUS-----", "-----BEGIN VIDEOS-----", "-----BEGIN VOICES-----", "-----BEGIN CHANGING-----"];
+    const order = ["-----BEGIN VOCABULARY-----", "-----BEGIN CORPUS-----", "-----BEGIN VIDEOS-----", "-----BEGIN VOICES-----", "-----BEGIN TOOLS-----", "-----BEGIN CHANGING-----"];
     const at = order.map((fence) => full.indexOf(fence));
     expect(at.every((index) => index > 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
@@ -115,6 +115,7 @@ describe("the combined prompt", () => {
     const diagramOnly = buildCombinedSystemPrompt({ kinds: ["diagram"], vocabulary, corpus: [], videos: [] });
     expect(diagramOnly).not.toContain("-----BEGIN VIDEOS-----");
     expect(diagramOnly).not.toContain("-----BEGIN VOICES-----");
+    expect(diagramOnly).not.toContain("-----BEGIN TOOLS-----");
   });
 
   it("writes the VOICES block from the static list, and says when the video list could not be read", () => {

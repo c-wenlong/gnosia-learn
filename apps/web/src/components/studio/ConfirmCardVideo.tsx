@@ -7,6 +7,7 @@ import { ProposedTopic } from "@/components/studio/ConfirmCard";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
+import { FilterMenu } from "@/components/ui/FilterMenu";
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import type { TopicOption } from "@/data/topics";
@@ -18,9 +19,12 @@ import {
   isNarrated,
   sceneSeconds,
   shortLength,
+  toolRow,
   videoModeLine,
   videoSummaryLine,
   type VideoBrief,
+  type VideoToolName,
+  type VideoToolOption,
 } from "@/lib/studio-brief-video";
 import { madeLine, pressBusyLabel, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
 import type { DrawBlock } from "@/lib/studio-chat";
@@ -43,7 +47,9 @@ import type { PendingTopic } from "@/lib/studio-drafts";
  * `live` with Make video, `onHold` greyed with Use this brief, `held` (out of
  * force) with Use this brief, `drawn` linking to its job, `stale` greyed.
  * Editing a video brief in place is not built yet; a change is asked for in
- * the conversation with the Video tag.
+ * the conversation with the Video tag. The one exception is the tool
+ * (docs/STUDIO-VIDEO-TOOLS.md, D73): a live card whose studio can make more
+ * than one tool offers them in a menu, and a pick saves the brief with it.
  */
 export function ConfirmCardVideo({
   brief,
@@ -65,6 +71,8 @@ export function ConfirmCardVideo({
   editBlock = null,
   paired = false,
   replacing = false,
+  tools = [],
+  onSwitchTool,
 }: {
   brief: VideoBrief;
   pendingTopic: PendingTopic | null;
@@ -91,6 +99,10 @@ export function ConfirmCardVideo({
   paired?: boolean;
   /** The press discards this draft's video in review and queues this one in its place (D52). */
   replacing?: boolean;
+  /** Health's `video.tools`: each tool, what it is best at, and whether the studio can make it. */
+  tools?: readonly VideoToolOption[];
+  /** Save this brief with another tool (D73). Resolves with an error sentence, or null. */
+  onSwitchTool?: (tool: VideoToolName) => Promise<string | null>;
 }) {
   const [using, setUsing] = useState(false);
   const [useError, setUseError] = useState<string | null>(null);
@@ -136,6 +148,11 @@ export function ConfirmCardVideo({
 
           <p className="text-[15px] leading-6 text-text">{brief.idea}</p>
           <p className="text-[13px] leading-5 text-text2">{videoSummaryLine(brief)}</p>
+          <ToolRow
+            brief={brief}
+            tools={tools}
+            onSwitch={live && editBlock === null ? onSwitchTool : undefined}
+          />
           <p className="flex flex-wrap items-center gap-x-1.5 text-[13px] text-text2">
             {mode.lead} <code className="rounded bg-surface2 px-1 py-0.5 font-mono text-[12px] text-text">{mode.slug}</code>
           </p>
@@ -287,6 +304,59 @@ function Storyboard({ brief }: { brief: VideoBrief }) {
         );
       })}
     </ol>
+  );
+}
+
+/**
+ * The tool that makes the video, and why (D73). A chip when there is nothing
+ * to switch to; a menu of the tools the studio can make when there is, on a
+ * live card only. No label: the tool's name and the reason beside it say
+ * what the row is.
+ */
+function ToolRow({
+  brief,
+  tools,
+  onSwitch,
+}: {
+  brief: VideoBrief;
+  tools: readonly VideoToolOption[];
+  onSwitch?: (tool: VideoToolName) => Promise<string | null>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const row = toolRow(brief, tools);
+  const strength = tools.find((option) => option.name === row.tool)?.strength;
+
+  async function pick(tool: VideoToolName) {
+    if (onSwitch === undefined || saving) return;
+    setSaving(true);
+    setError(null);
+    setError(await onSwitch(tool));
+    setSaving(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {row.choices.length > 0 && onSwitch !== undefined ? (
+          <FilterMenu
+            bare
+            label="Video tool"
+            options={row.choices.map((option) => ({ value: option.name, label: option.name, detail: option.strength }))}
+            value={row.tool}
+            defaultValue={row.tool}
+            onChange={(tool) => void pick(tool)}
+            busy={saving}
+          />
+        ) : (
+          <Chip size="sm" title={strength}>
+            {row.tool}
+          </Chip>
+        )}
+        {row.line !== null && row.line !== "" && <span className="min-w-0 text-[13px] leading-5 text-text2">{row.line}</span>}
+      </div>
+      <UseError text={error} />
+    </div>
   );
 }
 

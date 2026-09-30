@@ -1,5 +1,5 @@
 import type { Mention } from "@/components/ui/mention-text";
-import type { VideoBrief } from "@/lib/studio-brief-video";
+import { VIDEO_TOOL_NAMES, type VideoBrief, type VideoToolName, type VideoToolOption } from "@/lib/studio-brief-video";
 import type { Brief } from "@/lib/studio-jobs";
 
 export type { VideoAudience, VideoBeat, VideoBrief, VideoScene } from "@/lib/studio-brief-video";
@@ -750,6 +750,26 @@ export interface VideoAvailability {
   ok: boolean;
   /** The doctor's reason, when it fails. */
   reason: string | null;
+  /** Each video tool and whether the studio can make it (D73); absent from a runner before the field. */
+  tools?: VideoToolOption[];
+}
+
+/** Health's `video.tools`, keeping only well-formed entries for tools the web app knows. */
+export function videoTools(raw: unknown): VideoToolOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry): VideoToolOption[] => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const { name, strength, available, reason } = entry as Record<string, unknown>;
+    if (typeof name !== "string" || !(VIDEO_TOOL_NAMES as readonly string[]).includes(name)) return [];
+    return [
+      {
+        name: name as VideoToolName,
+        strength: typeof strength === "string" ? strength : "",
+        available: available === true,
+        reason: typeof reason === "string" ? reason : null,
+      },
+    ];
+  });
 }
 
 /**
@@ -760,8 +780,9 @@ export interface VideoAvailability {
  */
 export function videoAvailability(raw: unknown): VideoAvailability {
   if (typeof raw !== "object" || raw === null) return { ok: false, reason: null };
-  const video = raw as { ok?: unknown; note?: unknown; checks?: unknown };
-  if (video.ok === true) return { ok: true, reason: null };
+  const video = raw as { ok?: unknown; note?: unknown; checks?: unknown; tools?: unknown };
+  const tools = video.tools === undefined ? {} : { tools: videoTools(video.tools) };
+  if (video.ok === true) return { ok: true, reason: null, ...tools };
   const failing = Array.isArray(video.checks)
     ? video.checks.find((check) => typeof check === "object" && check !== null && (check as { ok?: unknown }).ok === false)
     : undefined;
@@ -772,7 +793,7 @@ export function videoAvailability(raw: unknown): VideoAvailability {
           .map((field) => (failing as Record<string, unknown>)[field])
           .find((value): value is string => typeof value === "string" && value.trim() !== "") ?? null;
   const note = typeof video.note === "string" && video.note.trim() !== "" ? video.note : null;
-  return { ok: false, reason: detail ?? note };
+  return { ok: false, reason: detail ?? note, ...tools };
 }
 
 /* -------------------------------------------------------------------------- */
