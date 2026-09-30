@@ -72,6 +72,7 @@ conversation with one planner session.
 | [`STUDIO-CHAT-FIRST.md`](STUDIO-CHAT-FIRST.md) | The draft, the turn loop, the hand-off, the confirm card, the Composer, D27 to D42 |
 | [`STUDIO-VIDEOS.md`](STUDIO-VIDEOS.md) | The video brief, its planner prompt, its card, its runner, D43 to D54; its phase 2 carries this file's work |
 | [`design/IMPLEMENTATION.md`](design/IMPLEMENTATION.md) | The kit contract, where `Composer`'s props are listed |
+| [`STUDIO-TUTOR-HANDOFF.md`](STUDIO-TUTOR-HANDOFF.md) | The same composer in the concept tutor, where a tag hands the concept to a new studio conversation |
 
 ## What this replaces
 
@@ -200,8 +201,10 @@ becomes a small rich-text field whose only rich content is the chips.
 `MentionComposer` goes in the kit beside `Composer`
 ([`components/ui/`](../apps/web/src/components/ui/)). The studio's
 conversation uses it; the concept tutor keeps `Composer`, which does not
-change. They share what should look and behave the same: the frame's classes
-(52px at one line, radius 16, the 2px border going `--accent` on focus, Send
+change. (Since 2026-09-30 the tutor is to use it too, when the
+studio is on and the runner answers:
+[`STUDIO-TUTOR-HANDOFF.md`](STUDIO-TUTOR-HANDOFF.md).) They share what
+should look and behave the same: the frame's classes (52px at one line, radius 16, the 2px border going `--accent` on focus, Send
 beside it, the disabled line under it) move into `classes.ts`, and both read
 Enter, Shift+Enter, Cmd+Enter and the six-line height rule from
 `composer-keys.ts`. Its props are `Composer`'s, with three changes:
