@@ -42,12 +42,19 @@ const prompt = fs.readFileSync(0, "utf8");
 fs.appendFileSync(dir + "/prompts.ndjson", JSON.stringify(prompt) + "\n");
 // The real CLI's option parser refuses anything after the flags that looks like
 // one it does not know; so does this, so a prompt leaking into argv fails here too.
-const known = new Set(["-p","--system-prompt","--tools","--strict-mcp-config","--mcp-config","--safe-mode","--disable-slash-commands","--setting-sources","--settings","--permission-prompts","--max-turns","--output-format","--verbose","--include-partial-messages","--model","--resume","--session-id"]);
-const takesValue = new Set(["--system-prompt","--tools","--mcp-config","--setting-sources","--settings","--permission-prompts","--max-turns","--output-format","--model","--resume","--session-id"]);
+const known = new Set(["-p","--system-prompt-file","--tools","--strict-mcp-config","--mcp-config","--safe-mode","--disable-slash-commands","--setting-sources","--settings","--permission-prompts","--max-turns","--output-format","--verbose","--include-partial-messages","--model","--resume","--session-id"]);
+const takesValue = new Set(["--system-prompt-file","--tools","--mcp-config","--setting-sources","--settings","--permission-prompts","--max-turns","--output-format","--model","--resume","--session-id"]);
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i];
   if (!known.has(arg)) { process.stderr.write("error: unexpected argument " + JSON.stringify(arg) + "\n"); process.exit(1); }
   if (takesValue.has(arg)) i += 1;
+}
+// The real CLI (2.1.274) reads the system prompt file before any request, and
+// stops with this line and exit 1 when it is not there.
+const systemFile = argv.includes("--system-prompt-file") ? argv[argv.indexOf("--system-prompt-file") + 1] : null;
+if (systemFile !== null) {
+  if (!fs.existsSync(systemFile)) { process.stderr.write("Error: System prompt file not found: " + systemFile + "\n"); process.exit(1); }
+  fs.appendFileSync(dir + "/systems.ndjson", JSON.stringify(fs.readFileSync(systemFile, "utf8")) + "\n");
 }
 const replies = JSON.parse(fs.readFileSync(dir + "/replies.json", "utf8"));
 const countFile = dir + "/count";
@@ -89,6 +96,8 @@ export interface FakeClaude {
   argvs(): Promise<string[][]>;
   /** What each spawn read on stdin, oldest first. */
   prompts(): Promise<string[]>;
+  /** The system prompt each spawn read from its `--system-prompt-file`, oldest first. */
+  systems(): Promise<string[]>;
   cleanup(): Promise<void>;
 }
 
@@ -106,6 +115,7 @@ export async function fakeClaude(): Promise<FakeClaude> {
       await rm(path.join(dir, "count"), { force: true });
       await rm(path.join(dir, "argv.ndjson"), { force: true });
       await rm(path.join(dir, "prompts.ndjson"), { force: true });
+      await rm(path.join(dir, "systems.ndjson"), { force: true });
     },
     async argvs() {
       const body = await readFile(path.join(dir, "argv.ndjson"), "utf8").catch(() => "");
@@ -116,6 +126,13 @@ export async function fakeClaude(): Promise<FakeClaude> {
     },
     async prompts() {
       const body = await readFile(path.join(dir, "prompts.ndjson"), "utf8").catch(() => "");
+      return body
+        .split("\n")
+        .filter((line) => line !== "")
+        .map((line) => JSON.parse(line) as string);
+    },
+    async systems() {
+      const body = await readFile(path.join(dir, "systems.ndjson"), "utf8").catch(() => "");
       return body
         .split("\n")
         .filter((line) => line !== "")
