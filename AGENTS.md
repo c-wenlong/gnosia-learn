@@ -200,6 +200,14 @@ Rules of engagement:
   it from the report's `outRoot` and records it on
   `index_run.metadata.outRoot`. **Never join a remotionkc path onto the
   submodule root**; a deliverable is `outRoot + path`.
+- **remotionkc narrates through gnosia-audio in its own `.venv`, not
+  manimkc's.** It pins gnosia-audio in `requirements-narration.txt`, and
+  `npm run narration-deps` in `tools/remotionkc` installs it (non-editable,
+  with uv). Run that after a fresh clone and after any pointer move that
+  changes the pin, or `narrate` and `build` refuse and `doctor` fails. Only
+  `topics --json`, which the catalog runs, works without it. It still hands
+  gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling `../manimkc`),
+  because that is where the voice settings live, and so the clip keys.
 - The end-to-end process is the `remotionkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/remotionkc-video`.
 
