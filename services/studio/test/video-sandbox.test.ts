@@ -1,10 +1,11 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -87,6 +88,18 @@ def attempt(name, fn):
  * A background `NSURLSession` download through the Objective-C runtime,
  * which is what a scene can reach with ctypes: no network syscall of its
  * own, only a Mach message to `nsurlsessiond`.
+ *
+ * It prints what became of the task: `delivered` (finished without an
+ * error), `queued` (the daemon holds it and has not run it yet) or `refused`
+ * (it failed at once, the daemon out of reach). Then it cancels its session.
+ * A background task never gives up on "connection refused" by itself: it
+ * waits for a network change, for as long as its resource timeout, 7 days by
+ * default. The first version slept 3 seconds and exited, so every run left
+ * one holding a slot in the daemon's background pool, and on 2026-09-30 thirty
+ * of them were persisted there. New tasks queued behind them for 20 seconds
+ * to forever, so the control that waited for a delivery failed in loaded full
+ * runs while passing alone. The cancel and a one-minute resource timeout keep
+ * this probe from adding to such a backlog.
  */
 const NSURLSESSION_PROBE = String.raw`
 import ctypes, ctypes.util, sys, time
@@ -105,10 +118,20 @@ def nsstr(s):
     return msg(objc.objc_getClass(b"NSString"), b"stringWithUTF8String:", s.encode(), argtypes=(ctypes.c_char_p,))
 url = msg(objc.objc_getClass(b"NSURL"), b"URLWithString:", nsstr(sys.argv[1]), argtypes=(ctypes.c_void_p,))
 config = msg(objc.objc_getClass(b"NSURLSessionConfiguration"), b"backgroundSessionConfigurationWithIdentifier:", nsstr("studio.probe.%d" % time.time_ns()), argtypes=(ctypes.c_void_p,))
+msg(config, b"setTimeoutIntervalForResource:", ctypes.c_double(60), argtypes=(ctypes.c_double,))
 session = msg(objc.objc_getClass(b"NSURLSession"), b"sessionWithConfiguration:", config, argtypes=(ctypes.c_void_p,))
 task = msg(session, b"downloadTaskWithURL:", url, argtypes=(ctypes.c_void_p,))
 msg(task, b"resume")
-time.sleep(3)
+def number(obj, sel):
+    send.restype = ctypes.c_long
+    send.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    return send(obj, objc.sel_registerName(sel))
+deadline = time.time() + 15
+while time.time() < deadline and number(task, b"state") != 3:
+    time.sleep(0.1)
+error = msg(task, b"error")
+print("refused" if error else "delivered" if number(task, b"state") == 3 else "queued")
+msg(session, b"invalidateAndCancel")
 `;
 
 function hostileSceneFiles(targets: Record<string, string>): string {
@@ -263,7 +286,10 @@ describe("the video sandbox", () => {
     // The daemon behind a background session fetches the URL outside the
     // sandbox, so this reached the server while mach-lookup was a deny list
     // (the review of #201). The same script run unsandboxed first proves the
-    // probe works on this machine, so a quiet server means the sandbox.
+    // probe works on this machine: the daemon takes the task. Whether it then
+    // runs it is the scheduler's call (a command-line client's downloads are
+    // discretionary), so the control asks for the task taken, not delivered.
+    // Sandboxed, the task must fail at once and nothing may arrive.
     const hits: string[] = [];
     const server = createServer((request, response) => {
       hits.push(request.url ?? "");
@@ -283,8 +309,11 @@ describe("the video sandbox", () => {
       return false;
     };
     try {
-      execFileSync(python, ["-I", probe, `http://127.0.0.1:${port}/leak?d=control`], { cwd: run.paths.checkout, env: { HOME: home, PATH: "/usr/bin:/bin" }, timeout: 30_000 });
-      expect(await arrived("control"), "the probe did not reach the server even unsandboxed, so it proves nothing here").toBe(true);
+      // Async, never execFileSync: the server answering the probe lives in
+      // this process, and the probe waits for that answer.
+      const control = await promisify(execFile)(python, ["-I", probe, `http://127.0.0.1:${port}/leak?d=control`], { cwd: run.paths.checkout, env: { HOME: home, PATH: "/usr/bin:/bin" }, timeout: 60_000 });
+      expect(control.stdout.trim(), "the daemon refused the probe even unsandboxed, so it proves nothing here").not.toBe("refused");
+      expect(["delivered", "queued"]).toContain(control.stdout.trim());
       for (const [kind, profile] of [["render", run.paths.renderProfile], ["narrate", run.paths.narrateProfile]] as const) {
         const result = await runSandboxed({
           tools: run.tools,
@@ -298,6 +327,7 @@ describe("the video sandbox", () => {
           timeoutMs: 60_000,
         });
         expect(result.code, result.stderr.slice(-400)).toBe(0);
+        expect({ kind, task: result.stdout.trim() }).toEqual({ kind, task: "refused" });
       }
       await arrived("never");
       expect(hits.filter((hit) => !hit.includes("control"))).toEqual([]);
