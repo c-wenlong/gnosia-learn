@@ -422,7 +422,7 @@ prompt with `--append-system-prompt`, in these sections:
 | What is in scope | `helpers`, `editor`, `tldraw`, async body, keys as slugs | Static, from `HELPERS.md` |
 | The helpers | All 22, one signature, one summary and the usage lines each | **Generated** from `canvas api --json` |
 | Options | The option fields of `box`, `text`, `note`, `connect`, `line`, `stub`, `boxShapes`, `alignContainers`, `row`, `column`, `grid`, with defaults | Static today; generated once the tool emits them (D38) |
-| The lint rules | All nine, each with when it fires and the fix, and which two are warnings | Static, names checked against the generated half |
+| The lint rules | All ten, each with when it fires and the fix, and which two are warnings | Static, names checked against the generated half |
 | Three worked snippets | A flow of boxes and bound arrows, a labelled comparison of two aligned containers, and a timeline on an unbound axis | Static, each run against the installed tool |
 | Never | The paths, git, the committed corpus, a raw arrow, a `clear` of someone else's canvas | Static |
 
@@ -498,7 +498,7 @@ since, the runner:
 1. Runs `canvas api --json` (no browser; it prints `dist/api.json`) and hashes
    the output.
 2. Parses the lint rule names out of the `getLints` entry's summary, which
-   names all nine, and compares them with the rule names in the static lint
+   names all ten, and compares them with the rule names in the static lint
    table. A rule in one and not the other is logged, reported on
    `/api/health` as `manual: stale`, and the generated names win in the
    manual, so the agent is never told about a rule that no longer exists.
@@ -1490,7 +1490,8 @@ What the runs show:
   without it did. The timeline without the manual hit the trap that
   snippet's comment names: "2017: The Transformer" wraps, its box grows, and
   the dashed leader to its tick runs through the label, which no lint
-  catches because `line` mutes the arrow rules. The timeline with the manual
+  caught because `line` mutes the arrow rules. tldrawkc's
+  `line-crosses-label` (c-wenlong/tldrawkc#21) now fails it as an error. The timeline with the manual
   avoided that, but set the upper row 190 units above the axis with no
   leaders, so which tick is whose is read by position alone. The two
   comparisons read about equally: one has a title, the other's rows line up

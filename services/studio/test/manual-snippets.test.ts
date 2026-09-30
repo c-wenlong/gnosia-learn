@@ -16,7 +16,7 @@ import { checkSnippets } from "../src/manual/source";
  * Two things the manual claims that only the tool can confirm (M2, M3 of
  * docs/STUDIO-CHAT-FIRST.md): each of the three worked snippets runs through
  * `canvas run --no-save` with exit 0 and no lint at error level, and the lint
- * rules the tool names are the nine the static table has fixes for. A
+ * rules the tool names are the ten the static table has fixes for. A
  * tldrawkc change that breaks either fails here, before an agent is told
  * something untrue.
  *
@@ -50,7 +50,7 @@ describe.skipIf(!built)(
       expect((await readdir(scratch)).filter((file) => file.endsWith(".tldr"))).toEqual([]);
     }, 180_000);
 
-    it("names the same nine lint rules the static table has fixes for (M2)", async () => {
+    it("names the same ten lint rules the static table has fixes for (M2)", async () => {
       const api = await canvas(["api", "--json"], 60_000);
       expect(api.code).toBe(0);
       const entries = parseApi(api.json);
