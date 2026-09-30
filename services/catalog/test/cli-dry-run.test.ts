@@ -44,10 +44,11 @@ describe("--dry-run on a command that cannot honour it", () => {
     [["index"], "catalog index"],
     [["flip", "topics"], "catalog flip topics"],
     [["topic", "edit", "some-topic", "--title", "T", "--reason", "r"], "catalog topic edit"],
+    [["ls"], "catalog ls"],
   ])("refuses %j before connecting", async (args, said) => {
     const ran = await catalog(url, ...args, "--dry-run");
     expect(ran.code).toBe(2);
-    expect(ran.stderr).toContain(`${said} has no --dry-run, and would write if run.`);
+    expect(ran.stderr).toContain(`${said} has no --dry-run.`);
     expect(ran.stderr).toContain("catalog asset upload, catalog topic add, catalog course import, catalog course cover");
   });
 });
@@ -55,6 +56,21 @@ describe("--dry-run on a command that cannot honour it", () => {
 describe("--dry-run where it is honoured", () => {
   it("lets asset upload through to the database, which is down", async () => {
     const ran = await catalog(url, "asset", "upload", "--source", "remotionkc", "--dry-run");
+    expect(ran.stderr).not.toContain("has no --dry-run");
+    expect(ran.code).toBe(EXIT_UNREACHABLE);
+  });
+
+  it("lets course import through to the database, which is down", async () => {
+    const ran = await catalog(url, "course", "import", "course.yml", "--reason", "r", "--dry-run");
+    expect(ran.stderr).not.toContain("has no --dry-run");
+    expect(ran.code).toBe(EXIT_UNREACHABLE);
+  });
+
+  it("lets course cover through to the database, which is down", async () => {
+    const ran = await catalog(
+      url, "course", "cover", "cs3230", "--file", "cover.jpg", "--photographer", "P",
+      "--source", "https://example.com", "--licence", "L", "--reason", "r", "--dry-run",
+    );
     expect(ran.stderr).not.toContain("has no --dry-run");
     expect(ran.code).toBe(EXIT_UNREACHABLE);
   });

@@ -494,7 +494,7 @@ function dryRunRefusal(command: string, verb: string | undefined): string | null
   const said = verb === undefined ? command : `${command} ${verb}`;
   if (DRY_RUN_VERBS.includes(said)) return null;
   return (
-    `catalog ${said} has no --dry-run, and would write if run. ` +
+    `catalog ${said} has no --dry-run. ` +
     `--dry-run works with: ${DRY_RUN_VERBS.map((v) => `catalog ${v}`).join(", ")}.`
   );
 }
