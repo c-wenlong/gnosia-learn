@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FocusEvent } from "react";
 
 import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
@@ -8,9 +10,22 @@ import { Chip } from "@/components/ui/Chip";
 import { Cite } from "@/components/ui/Cite";
 import { Composer } from "@/components/ui/Composer";
 import { MathText } from "@/components/Math";
+import { MentionChip } from "@/components/ui/MentionChip";
+import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
+import { inlinePieces, type MentionValue } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { CitationSource } from "@/lib/agent/prompt";
-import { citedNumbers, parseThread, threadKey, trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
+import type { DraftKind } from "@/lib/studio-drafts";
+import { HEALTH_READ_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-studio";
+import {
+  chatTurns,
+  citedNumbers,
+  parseThread,
+  threadKey,
+  trimForRequest,
+  type HandoffMarker,
+  type ThreadItem,
+} from "@/lib/tutor-thread";
 
 /**
  * The workspace's centre panel: a chat with the concept tutor
@@ -25,6 +40,21 @@ import { citedNumbers, parseThread, threadKey, trimForRequest, type TutorTurn } 
  * a list or a formula in a reply reads the way it does in the note. A `[n]`
  * the reply uses becomes a `Cite` chip under the turn when `n` is one of the
  * numbered sources; anything else stays as the text it was.
+ *
+ * **Tags, where the studio can take them** (docs/STUDIO-TUTOR-HANDOFF.md).
+ * With `studio` (the server's `studioEnabled()`), the page reads the studio's
+ * health once it is idle, and again on focus at most every 30 seconds. A good
+ * answer fetches `TutorStudioKit`, the @ composer and the hand-off in one
+ * chunk, and swaps it in for the plain field only while the field is empty
+ * and not focused, so nothing is swapped under a caret or an IME composition
+ * (D68). Until then, and for good when the studio is off, down or the chunk
+ * will not load, the field is the plain `Composer`, and an `@video` typed
+ * there is words to the tutor (H18).
+ *
+ * A message with no chip goes to the tutor as before. A message with a chip
+ * goes to a new studio conversation about this concept, in this tab, and is
+ * sent there on arrival (D64); the thread keeps it as a marker linking to
+ * that conversation (D70), which is never sent to the tutor.
  */
 
 /** The longest question the input takes, well inside the route's payload bound. */
@@ -61,7 +91,7 @@ function readRaw(key: string): string | null {
   }
 }
 
-function writeTurns(key: string, turns: TutorTurn[]): void {
+function writeTurns(key: string, turns: ThreadItem[]): void {
   const raw = turns.length === 0 ? null : JSON.stringify(turns);
   memory.set(key, raw);
   try {
@@ -82,20 +112,29 @@ function errorFor(status: number, data: ChatReply): string {
   return data.error ?? `The tutor did not answer (HTTP ${status}).`;
 }
 
+type Value = MentionValue<DraftKind>;
+type Kit = typeof import("./TutorStudioKit");
+
+const EMPTY: Value = { text: "", mentions: [] };
+
 export function TutorChat({
   slug,
   title,
   sources: initialSources,
   suggestions,
   initialDraft,
+  studio = false,
 }: {
   slug: string;
   title: string;
   sources: CitationSource[];
   suggestions: string[];
-  /** Put in the input, not sent: a session's "Ask the tutor" (`?ask=`). */
+  /** Put in the input, not sent: a session's "Ask the tutor" (`?ask=`). H16: words, never a chip. */
   initialDraft?: string;
+  /** `studioEnabled()` on the server: whether to ask the studio at all (D67). */
+  studio?: boolean;
 }) {
+  const router = useRouter();
   const key = threadKey(slug);
   const raw = useSyncExternalStore(
     subscribe,
@@ -103,13 +142,91 @@ export function TutorChat({
     () => null,
   );
   const turns = useMemo(() => parseThread(raw), [raw]);
-  const setTurns = (next: TutorTurn[]) => writeTurns(key, next);
+  const setTurns = (next: ThreadItem[]) => writeTurns(key, next);
   const [sources, setSources] = useState(initialSources);
-  const [draft, setDraft] = useState(initialDraft ?? "");
+  const [value, setValueState] = useState<Value>(() => ({ text: initialDraft ?? "", mentions: [] }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+
+  /* The studio's half: health, the lazy chunk, the swap and the hand-off. */
+  const [health, setHealth] = useState<unknown>(null);
+  const [kit, setKit] = useState<Kit | null>(null);
+  /** The @ composer is in the plain field's place; once in, it stays. */
+  const [swapped, setSwapped] = useState(false);
+  /** Whether the swapped-in field takes focus when it mounts: only when the plain one had it, after a send. */
+  const [focusOnSwap, setFocusOnSwap] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const richRef = useRef<MentionComposerHandle | null>(null);
+  // Read by the swap, which runs from callbacks that outlive the render that made them.
+  const valueNow = useRef(value);
+  const focused = useRef(false);
+  const kitNow = useRef<Kit | null>(null);
+  const setValue = useCallback((next: Value) => {
+    valueNow.current = next;
+    setValueState(next);
+  }, []);
+
+  /**
+   * Swap the @ composer in if the field is idle: loaded, empty and not
+   * focused (D68). `afterSend` is the one moment a focused field may be
+   * swapped, since it has just been emptied and nothing is being composed;
+   * the new field then takes the focus.
+   */
+  const swapIfIdle = useCallback((afterSend = false) => {
+    if (kitNow.current === null) return;
+    const held = valueNow.current;
+    if (held.text !== "" || held.mentions.length > 0) return;
+    if (focused.current && !afterSend) return;
+    setFocusOnSwap(afterSend && focused.current);
+    setSwapped(true);
+  }, []);
+
+  const readAt = useRef(0);
+  const kitAsked = useRef(false);
+  const check = useCallback(async () => {
+    readAt.current = Date.now();
+    const answer = await readHealth();
+    setHealth(answer);
+    if (!studioCanTag(answer) || kitAsked.current) return;
+    kitAsked.current = true;
+    try {
+      const loaded = await import("./TutorStudioKit");
+      kitNow.current = loaded;
+      setKit(loaded);
+      swapIfIdle();
+    } catch {
+      // A chunk that will not load costs the tags, never the tutor: the
+      // plain field stays, as the studio's own fallback does (D68).
+    }
+  }, [swapIfIdle]);
+
+  useEffect(() => {
+    if (!studio) return;
+    // One read once the page is idle, so the page never waits on the runner,
+    // then on focus at most every 30 seconds (D67).
+    const cancel = whenIdle(() => void check());
+    const onFocus = () => {
+      if (Date.now() - readAt.current >= HEALTH_READ_MS) void check();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancel();
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [studio, check]);
+
+  const onFieldFocus = () => {
+    focused.current = true;
+  };
+  const onFieldBlur = (event: FocusEvent<HTMLDivElement>) => {
+    // Focus moving to Send, or into the menu, is still the field's.
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    focused.current = false;
+    swapIfIdle();
+  };
 
   useEffect(() => {
     // The thread box scrolls, never the page: on a phone the page is where the
@@ -118,19 +235,22 @@ export function TutorChat({
     if (box) box.scrollTop = box.scrollHeight;
   }, [turns.length, busy]);
 
-  async function ask(question: string, history: TutorTurn[] = turns) {
+  async function ask(question: string, history: ThreadItem[] = turns) {
     const text = question.trim();
-    if (!text || busy) return;
-    const next: TutorTurn[] = [...history, { role: "user", content: text }];
+    if (!text || busy || opening) return;
+    const next: ThreadItem[] = [...history, { role: "user", content: text }];
     setTurns(next);
-    setDraft("");
+    setValue(EMPTY);
+    setRefusal(null);
+    swapIfIdle(true);
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conceptSlug: slug, messages: trimForRequest(next) }),
+        // Markers are the person's record of a hand-off, not the tutor's turns.
+        body: JSON.stringify({ conceptSlug: slug, messages: trimForRequest(chatTurns(next)) }),
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
       if (!res.ok) throw new Error(errorFor(res.status, data));
@@ -153,13 +273,41 @@ export function TutorChat({
   }
 
   function prefill(question: string) {
-    setDraft(question);
-    inputRef.current?.focus();
+    setValue({ text: question, mentions: [] });
+    if (swapped) richRef.current?.focus();
+    else inputRef.current?.focus();
+  }
+
+  /** A send from the @ composer: the tutor's without a chip, the studio's with one (D64). */
+  function submitTagged(sent: Value) {
+    if (kit === null) return;
+    const body = kit.trimValue(sent);
+    if (kit.isEmptyValue(body)) return;
+    if (body.mentions.length === 0) void ask(body.text);
+    else void handOff(body);
+  }
+
+  async function handOff(body: Value) {
+    if (kit === null || busy || opening) return;
+    setOpening(true);
+    setRefusal(null);
+    const outcome = await kit.openInStudio({ slug, title, items: parseThread(readRaw(key)), value: body });
+    if (!outcome.ok) {
+      // The message and its chips stay in the field; nothing reached either agent.
+      setOpening(false);
+      setRefusal(outcome.text);
+      return;
+    }
+    // The field stays locked until the page has gone, so nothing typed now is lost.
+    writeTurns(key, [...parseThread(readRaw(key)), outcome.marker]);
+    setValue(EMPTY);
+    router.push(outcome.href);
   }
 
   const known = sources.map((s) => s.n);
   const byNumber = new Map(sources.map((s) => [s.n, s]));
   const lastTutor = turns.map((t) => t.role).lastIndexOf("assistant");
+  const last = turns[turns.length - 1];
   const note = byNumber.get(1);
 
   return (
@@ -182,7 +330,9 @@ export function TutorChat({
         )}
 
         {turns.map((turn, i) =>
-          turn.role === "user" ? (
+          turn.role === "studio" ? (
+            <Handed key={i} marker={turn} />
+          ) : turn.role === "user" ? (
             <UserMessage key={i}>
               <MathText text={turn.content} />
             </UserMessage>
@@ -214,12 +364,12 @@ export function TutorChat({
           </p>
         )}
 
-        {!busy && (error || turns[turns.length - 1]?.role === "user") && (
+        {!busy && (error || last?.role === "user") && (
           // An error, or a thread restored after a reload that cut a request
           // off: either way the last question has no answer, so offer it again.
           <div role={error ? "alert" : "status"} className="flex flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
             <span className="min-w-0 flex-1">{error ?? "Your last question has no answer yet."}</span>
-            {turns[turns.length - 1]?.role === "user" && (
+            {last?.role === "user" && (
               <Button variant="secondary" size="sm" onClick={retry}>
                 Try again
               </Button>
@@ -251,17 +401,71 @@ export function TutorChat({
         ))}
       </div>
 
-      <Composer
-        value={draft}
-        onChange={setDraft}
-        onSubmit={(text) => void ask(text)}
-        label={`Ask the tutor about ${title}`}
-        placeholder="Ask about this concept"
-        maxLength={INPUT_LIMIT}
-        autoFocus={initialDraft !== undefined}
-        inputRef={inputRef}
-        sendDisabled={busy}
-      />
+      <div onFocus={onFieldFocus} onBlur={onFieldBlur} className="flex flex-col gap-1.5">
+        {kit !== null && swapped ? (
+          <kit.TutorMentionField
+            handleRef={richRef}
+            value={value}
+            onChange={setValue}
+            onSubmit={submitTagged}
+            label={`Ask the tutor about ${title}`}
+            health={health}
+            disabled={opening}
+            sendDisabled={busy}
+            disabledReason={opening ? kit.OPENING_THE_STUDIO : undefined}
+            autoFocus={focusOnSwap}
+          />
+        ) : (
+          <Composer
+            value={value.text}
+            onChange={(text) => setValue({ text, mentions: [] })}
+            onSubmit={(text) => void ask(text)}
+            label={`Ask the tutor about ${title}`}
+            placeholder="Ask about this concept"
+            maxLength={INPUT_LIMIT}
+            autoFocus={initialDraft !== undefined}
+            inputRef={inputRef}
+            sendDisabled={busy}
+          />
+        )}
+        {refusal !== null && (
+          <p role="alert" className="rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
+            {refusal}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const KIND_NAMES: Record<string, string> = { diagram: "Diagram", video: "Video" };
+
+/**
+ * A tagged message the studio took (D70): the words with their chips, as the
+ * studio draws a sent message, and a link to the conversation it opened.
+ */
+function Handed({ marker }: { marker: HandoffMarker }) {
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <UserMessage className="w-full">
+        {inlinePieces({ text: marker.content, mentions: marker.mentions }).map((piece, at) =>
+          piece.type === "text" ? (
+            <span key={at}>{piece.text}</span>
+          ) : (
+            <MentionChip
+              key={at}
+              name={KIND_NAMES[piece.kind] ?? piece.kind}
+              icon={piece.kind === "diagram" || piece.kind === "video" ? piece.kind : null}
+            />
+          ),
+        )}
+      </UserMessage>
+      <Link
+        href={`/studio?draft=${encodeURIComponent(marker.draftId)}`}
+        className="rounded-sm px-1.5 text-[12px] text-text2 underline-offset-4 hover:text-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        Opened in the studio
+      </Link>
     </div>
   );
 }

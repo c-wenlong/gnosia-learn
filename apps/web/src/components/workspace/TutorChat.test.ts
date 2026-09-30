@@ -1,0 +1,311 @@
+// @vitest-environment jsdom
+import { act, createElement, useEffect, useImperativeHandle, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { threadKey } from "@/lib/tutor-thread";
+
+/**
+ * The concept tutor's wiring to the studio (docs/STUDIO-TUTOR-HANDOFF.md,
+ * D64 to D70), in a DOM: when it asks the studio anything, when it fetches
+ * the @ composer's chunk, when it swaps it in, and where a tagged message
+ * goes. The chunk is a stand-in that shows the value it is handed and exposes
+ * its callbacks, since Lexical's editing is not what is under test here; the
+ * hand-off's rules are `tutor-handoff.test.ts`.
+ */
+
+type Value = { text: string; mentions: Array<{ kind: string; start: number; end: number }> };
+
+const mocks = vi.hoisted(() => ({
+  push: vi.fn(),
+  focus: vi.fn(),
+  openInStudio: vi.fn(),
+  /** How many times the chunk was imported. */
+  imported: 0,
+  field: null as null | {
+    value: Value;
+    disabled: boolean;
+    sendDisabled: boolean;
+    disabledReason?: string;
+    health: unknown;
+    autoFocus: boolean;
+    onChange: (value: Value) => void;
+    onSubmit: (value: Value) => void;
+  },
+}));
+
+vi.mock("next/navigation", () => {
+  const router = { push: mocks.push, replace: vi.fn() };
+  return { useRouter: () => router };
+});
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => createElement("a", { href, ...rest }, children),
+}));
+vi.mock("@/components/NoteProse", () => ({ NoteProse: ({ source }: { source: string }) => createElement("div", null, source) }));
+vi.mock("@/components/Math", () => ({ MathText: ({ text }: { text: string }) => createElement("span", null, text) }));
+vi.mock("./TutorStudioKit", () => {
+  mocks.imported += 1;
+  function TutorMentionField(props: NonNullable<typeof mocks.field> & { handleRef: { current: unknown } }) {
+    mocks.field = props;
+    useImperativeHandle(props.handleRef as never, () => ({ focus: mocks.focus, insertMention: vi.fn() }), []);
+    const { autoFocus } = props;
+    useEffect(() => {
+      if (autoFocus) mocks.focus();
+      // Mount only, as the real one.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return createElement("div", { "data-rich": JSON.stringify(props.value) });
+  }
+  return {
+    TutorMentionField,
+    openInStudio: mocks.openInStudio,
+    OPENING_THE_STUDIO: "Opening the studio",
+    trimValue: (value: Value) => ({ ...value, text: value.text.trim() }),
+    isEmptyValue: (value: Value) => value.text.trim() === "" && value.mentions.length === 0,
+  };
+});
+
+const { TutorChat } = await import("./TutorChat");
+
+beforeAll(() => {
+  (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom has no layout; the composer measures itself.
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 52 });
+});
+
+const GOOD = { ok: true, diagramAgent: { ok: true, problem: null }, video: { ok: true, checks: [] }, dailyCap: { totalUsd: 0 } };
+let health: unknown = GOOD;
+const fetched: Array<{ url: string; body: unknown }> = [];
+
+beforeEach(() => {
+  mocks.push.mockClear();
+  mocks.focus.mockClear();
+  mocks.openInStudio.mockReset();
+  mocks.field = null;
+  health = GOOD;
+  fetched.length = 0;
+  sessionStorage.clear();
+  vi.stubGlobal("requestIdleCallback", (task: () => void) => setTimeout(task, 0));
+  vi.stubGlobal("cancelIdleCallback", (handle: number) => clearTimeout(handle));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      fetched.push({ url, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+      if (url === "/studio/api/health") {
+        return health === null ? new Response("{}", { status: 502 }) : new Response(JSON.stringify(health), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: { content: "An answer [1]." }, sources: [] }), { status: 200 });
+    }),
+  );
+});
+
+const mounted: Array<() => void> = [];
+afterEach(() => {
+  while (mounted.length) mounted.pop()?.();
+  vi.unstubAllGlobals();
+});
+
+async function settle() {
+  for (let at = 0; at < 6; at += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+}
+
+/**
+ * Each test takes its own concept: the thread store keeps a copy in memory
+ * for a tab whose storage is refused, which outlives one test's `clear()`.
+ */
+let slugs = 0;
+
+async function mount(props: { studio?: boolean; initialDraft?: string; slug?: string } = {}) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      createElement(TutorChat, {
+        slug: `tcp-${(slugs += 1)}`,
+        title: "The TCP handshake",
+        sources: [],
+        suggestions: ["What is a SYN?"],
+        ...props,
+      }),
+    );
+  });
+  await settle();
+  mounted.push(() => {
+    act(() => root.unmount());
+    host.remove();
+  });
+  return host;
+}
+
+const textarea = (host: HTMLElement) => host.querySelector("textarea");
+const studioCalls = () => fetched.filter((call) => call.url.startsWith("/studio/api"));
+const chatCalls = () => fetched.filter((call) => call.url === "/api/agent/chat");
+
+async function typePlain(host: HTMLElement, text: string) {
+  const box = textarea(host)!;
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    setter.call(box, text);
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+describe("with the studio off (H1)", () => {
+  it("asks the studio nothing and never fetches the composer's chunk", async () => {
+    const importedBefore = mocks.imported;
+    const host = await mount({ studio: false });
+    expect(studioCalls()).toEqual([]);
+    expect(mocks.field).toBeNull();
+    expect(textarea(host)).not.toBeNull();
+    expect(mocks.imported).toBe(importedBefore);
+  });
+});
+
+describe("with the studio on", () => {
+  it("keeps the plain field when the runner does not answer (H2)", async () => {
+    health = null;
+    const host = await mount({ studio: true });
+    expect(studioCalls().map((call) => call.url)).toEqual(["/studio/api/health"]);
+    expect(mocks.field).toBeNull();
+    expect(textarea(host)).not.toBeNull();
+  });
+
+  it("keeps the plain field when neither kind can be made", async () => {
+    health = { ...GOOD, diagramAgent: { ok: false, problem: "x" }, video: { ok: false } };
+    await mount({ studio: true });
+    expect(mocks.field).toBeNull();
+  });
+
+  it("swaps the @ composer in after a good read while the field is empty and unfocused, without taking focus", async () => {
+    const host = await mount({ studio: true });
+    expect(textarea(host)).toBeNull();
+    expect(mocks.field).not.toBeNull();
+    expect(mocks.field!.health).toEqual(GOOD);
+    expect(mocks.focus).not.toHaveBeenCalled();
+  });
+
+  it("never swaps a field holding words: the ?ask= prefill waits until it is sent (H16)", async () => {
+    const host = await mount({ studio: true, initialDraft: "Why three packets?" });
+    expect(mocks.field).toBeNull();
+    expect(textarea(host)!.value).toBe("Why three packets?");
+    // Sent: the field is empty, and the @ composer takes its place and its focus.
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+    expect(chatCalls()).toHaveLength(1);
+    expect(mocks.field).not.toBeNull();
+    expect(mocks.field!.value).toEqual({ text: "", mentions: [] });
+  });
+
+  it("never swaps a focused field, and swaps it on blur once it is empty", async () => {
+    health = null;
+    const host = await mount({ studio: true });
+    await act(async () => textarea(host)!.focus());
+    await typePlain(host, "half a thought");
+    health = GOOD;
+    // Focus again after the 30 seconds: a good read, the chunk lands, the field is busy.
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 31_000);
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(mocks.field).toBeNull();
+    await typePlain(host, "");
+    await act(async () => textarea(host)!.blur());
+    await settle();
+    expect(mocks.field).not.toBeNull();
+    vi.restoreAllMocks();
+  });
+});
+
+describe("a message from the @ composer", () => {
+  it("goes to the tutor when it has no chip", async () => {
+    await mount({ studio: true });
+    await act(async () => mocks.field!.onSubmit({ text: "What is a SYN?", mentions: [] }));
+    await settle();
+    expect(chatCalls()).toHaveLength(1);
+    expect(mocks.openInStudio).not.toHaveBeenCalled();
+  });
+
+  it("goes to a new studio conversation when it has one, and leaves a marker the tutor is never sent (D64, D70)", async () => {
+    sessionStorage.setItem(
+      threadKey("tcp-handshake"),
+      JSON.stringify([
+        { role: "user", content: "What is a SYN?" },
+        { role: "assistant", content: "The opener [1]." },
+      ]),
+    );
+    const sent: Value = { text: "@diagram of that", mentions: [{ kind: "diagram", start: 0, end: 8 }] };
+    let answer: (value: unknown) => void = () => {};
+    mocks.openInStudio.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const host = await mount({ studio: true, slug: "tcp-handshake" });
+    await act(async () => mocks.field!.onSubmit(sent));
+    // Locked while the conversation is made.
+    expect(mocks.field!.disabled).toBe(true);
+    expect(mocks.field!.disabledReason).toBe("Opening the studio");
+    const [call] = mocks.openInStudio.mock.calls[0] as [{ slug: string; items: unknown[]; value: Value }];
+    expect(call.slug).toBe("tcp-handshake");
+    expect(call.value).toEqual(sent);
+    expect(call.items).toHaveLength(2);
+    await act(async () =>
+      answer({
+        ok: true,
+        href: "/studio?draft=d-7",
+        marker: { role: "studio", content: sent.text, mentions: sent.mentions, draftId: "d-7" },
+      }),
+    );
+    await settle();
+    expect(mocks.push).toHaveBeenCalledWith("/studio?draft=d-7");
+    expect(chatCalls()).toHaveLength(0);
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Opened in the studio");
+    expect(link?.getAttribute("href")).toBe("/studio?draft=d-7");
+    expect(host.textContent).toContain("Diagram tag of that");
+
+    // The field stays locked until the page has gone. Back (H7): the page
+    // again, the thread with its marker, the field empty.
+    expect(mocks.field!.disabled).toBe(true);
+    mounted.pop()?.();
+    mocks.field = null;
+    const back = await mount({ studio: true, slug: "tcp-handshake" });
+    expect(back.textContent).toContain("Opened in the studio");
+    expect(mocks.field!.value).toEqual({ text: "", mentions: [] });
+    // The next question to the tutor carries the thread without the marker.
+    await act(async () => mocks.field!.onSubmit({ text: "And the ACK?", mentions: [] }));
+    await settle();
+    const messages = (chatCalls()[0]!.body as { messages: Array<{ role: string }> }).messages;
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+  });
+
+  it("keeps the message and its chips, unlocks, and says why when the hand-off is refused", async () => {
+    mocks.openInStudio.mockResolvedValue({ ok: false, text: "The studio runner is not answering." });
+    const sent: Value = { text: "@video", mentions: [{ kind: "video", start: 0, end: 6 }] };
+    const host = await mount({ studio: true });
+    await act(async () => mocks.field!.onChange(sent));
+    await act(async () => mocks.field!.onSubmit(sent));
+    await settle();
+    expect(mocks.field!.disabled).toBe(false);
+    expect(mocks.field!.value).toEqual(sent);
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("The studio runner is not answering.");
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(chatCalls()).toHaveLength(0);
+  });
+});
+
+describe("health on focus", () => {
+  it("is read again after 30 seconds, and a bad answer disables the menu rather than swapping back (H3)", async () => {
+    await mount({ studio: true });
+    expect(studioCalls()).toHaveLength(1);
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(studioCalls()).toHaveLength(1);
+    health = null;
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 31_000);
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(studioCalls()).toHaveLength(2);
+    expect(mocks.field).not.toBeNull();
+    expect(mocks.field!.health).toBeNull();
+    vi.restoreAllMocks();
+  });
+});

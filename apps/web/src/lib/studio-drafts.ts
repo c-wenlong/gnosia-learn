@@ -215,6 +215,13 @@ export interface DraftView {
   sourceChanged?: boolean;
   /** The revision the EXTENDING block summarised. Optional, as above. */
   sourceRevision?: number | null;
+  /**
+   * The concept a hand-off from the concept tutor opened the draft on
+   * (docs/STUDIO-TUTOR-HANDOFF.md), with how many tutor turns reached the
+   * planner after its 6,000-character cap. Null on every other draft, and
+   * absent from a runner before the hand-off.
+   */
+  concept?: DraftConcept | null;
   title: string | null;
   transcript: TranscriptEntry[];
   brief: Brief | null;
@@ -231,6 +238,16 @@ export interface DraftView {
   created: string;
   updated: string;
   note: string;
+}
+
+/** `concept` on a draft's record (D65 of docs/STUDIO-TUTOR-HANDOFF.md). */
+export interface DraftConcept {
+  slug: string;
+  title: string;
+  /** The topic whose concept list names the slug, or null when none does (H13). */
+  topic: string | null;
+  /** The tutor turns the TUTOR block carries, at least in part: what the pinned line counts. */
+  tutorTurns: number;
 }
 
 export interface DraftSummary {
@@ -251,6 +268,8 @@ export interface DraftSummary {
    * yet. Optional: a runner from before phase 3 does not send it.
    */
   firstMessage?: string | null;
+  /** The concept a hand-off from the tutor opened it on: its title names a row with no brief yet. */
+  concept?: { slug: string; title: string } | null;
 }
 
 /**

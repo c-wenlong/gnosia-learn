@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
-import { videoPosterHref } from "@/lib/studio-cards";
+import { Glyph } from "@/components/ui/Glyph";
+import { tutorTurnsWords, videoPosterHref } from "@/lib/studio-cards";
 import { thumbnailHref } from "@/lib/studio-view";
 
 /**
@@ -68,5 +70,28 @@ export function PinnedVideo({ slug, title }: { slug: string; title: string }) {
         <img src={videoPosterHref(slug)} alt={title} onError={() => setMissing(true)} className="h-full w-full object-contain" />
       )}
     </div>
+  );
+}
+
+/**
+ * The concept a conversation from the concept tutor is about, pinned above
+ * its thread (docs/STUDIO-TUTOR-HANDOFF.md, "The studio side"): the title as
+ * a link back to its page, and how many of the tutor's turns came along, so
+ * nothing reached the planner that the person cannot see was sent (D69). No
+ * label over it: the link already says where the conversation came from.
+ */
+export function PinnedConcept({ slug, title, tutorTurns }: { slug: string; title: string; tutorTurns: number }) {
+  const turns = tutorTurnsWords(tutorTurns);
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-xl border-2 border-border px-4 py-2.5 text-[13px] leading-5 text-text2">
+      <Glyph name="book" size={16} className="shrink-0 text-text3" />
+      <Link
+        href={`/learn/${encodeURIComponent(slug)}`}
+        className="rounded-sm font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        {title}
+      </Link>
+      {turns !== null && <span>{turns}</span>}
+    </p>
   );
 }

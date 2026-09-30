@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { citedNumbers, parseThread, threadKey, trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
+import {
+  chatTurns,
+  citedNumbers,
+  handoffTurns,
+  parseThread,
+  threadKey,
+  trimForRequest,
+  type HandoffMarker,
+  type ThreadItem,
+  type TutorTurn,
+} from "@/lib/tutor-thread";
 
 describe("tutor thread", () => {
   it("keys the thread per concept", () => {
@@ -38,5 +48,69 @@ describe("tutor thread", () => {
       { role: "user", content: "last" },
     ];
     expect(trimForRequest(big)).toEqual([{ role: "user", content: "last" }]);
+  });
+});
+
+describe("a hand-off's marker in the thread (D70 of STUDIO-TUTOR-HANDOFF.md)", () => {
+  const marker: HandoffMarker = {
+    role: "studio",
+    content: "a @video of the handshake",
+    mentions: [{ kind: "video", start: 2, end: 8 }],
+    draftId: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed",
+  };
+
+  it("reads back with the turns around it, in order", () => {
+    const stored: ThreadItem[] = [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }, marker];
+    expect(parseThread(JSON.stringify(stored))).toEqual(stored);
+  });
+
+  it("drops a marker it cannot link to or draw, and a mention that is not one", () => {
+    const bad = [
+      { ...marker, draftId: "../../etc" },
+      { ...marker, draftId: 7 },
+      { ...marker, mentions: "video" },
+      { role: "studio", content: "no draft" },
+    ];
+    expect(parseThread(JSON.stringify(bad))).toEqual([]);
+    const oddMention = { ...marker, mentions: [marker.mentions[0], { kind: "video" }, null, "x"] };
+    expect(parseThread(JSON.stringify([oddMention]))).toEqual([marker]);
+  });
+
+  it("is never among the turns sent to the tutor or taken to the studio", () => {
+    const thread: ThreadItem[] = [{ role: "user", content: "what is a SYN?" }, { role: "assistant", content: "The opener." }, marker];
+    expect(chatTurns(thread)).toEqual(thread.slice(0, 2));
+    expect(trimForRequest(chatTurns(thread)).some((turn) => (turn.role as string) === "studio")).toBe(false);
+    expect(handoffTurns(thread)).toEqual(thread.slice(0, 2));
+  });
+});
+
+describe("the turns a hand-off carries (D69)", () => {
+  const turn = (i: number, size = 10): TutorTurn => ({ role: i % 2 === 0 ? "user" : "assistant", content: `${i}`.padEnd(size, "x") });
+
+  it("takes the last six, oldest first", () => {
+    const thread = Array.from({ length: 11 }, (_, i) => turn(i));
+    expect(handoffTurns(thread)).toEqual(thread.slice(-6));
+  });
+
+  it("drops the oldest to fit 6,000 characters, and cuts the oldest kept at its start", () => {
+    const thread = [turn(0, 4_000), turn(1, 3_000), turn(2, 2_500)];
+    const kept = handoffTurns(thread);
+    expect(kept.map((t) => t.content.length)).toEqual([500, 3_000, 2_500]);
+    // The end of the cut turn is kept: the part nearest what came next.
+    expect(kept[0]!.content).toBe(thread[0]!.content.slice(-500));
+    expect(kept.reduce((sum, t) => sum + t.content.length, 0)).toBe(6_000);
+    expect(handoffTurns([turn(0, 4_000), turn(1, 3_000), turn(2, 3_000)]).map((t) => t.content.length)).toEqual([3_000, 3_000]);
+  });
+
+  it("keeps the end of one turn longer than the whole budget", () => {
+    const long = { role: "assistant" as const, content: "a".repeat(100) + "b".repeat(6_000) };
+    expect(handoffTurns([long])).toEqual([{ role: "assistant", content: "b".repeat(6_000) }]);
+  });
+
+  it("leaves out empty turns and sends nothing for an empty thread", () => {
+    expect(handoffTurns([])).toEqual([]);
+    expect(handoffTurns([{ role: "user", content: "   " }, { role: "assistant", content: " ok " }])).toEqual([
+      { role: "assistant", content: "ok" },
+    ]);
   });
 });
