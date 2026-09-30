@@ -59,7 +59,7 @@ export function StudioDialog({
   /**
    * How Close gets there. A router push by default, which renders the page on
    * the server again; the conversation passes `history.pushState`, since
-   * nothing behind it changes when it closes (`ConversationHost`).
+   * nothing behind it changes when it closes (`PanelHost`).
    */
   navigate?: (href: string) => void;
   /** The dialog's accessible name. */

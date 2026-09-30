@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useId, useState } from "react";
 
+import { PanelLink } from "@/components/studio/PanelLink";
 import { ProposedTopic } from "@/components/studio/ConfirmCard";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -195,9 +195,9 @@ export function ConfirmCardVideo({
               </p>
             )}
             {holder !== null && (
-              <Link href={holderHref(holder)} scroll={false} className="w-fit text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+              <PanelLink href={holderHref(holder)} scroll={false} className="w-fit text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
                 Open that job
-              </Link>
+              </PanelLink>
             )}
             {block === null && refusal === null && (
               <p className="text-[12px] text-text3">
@@ -215,9 +215,9 @@ export function ConfirmCardVideo({
 
         {status === "drawn" && jobHref !== null && (
           <div className="border-t border-hair pt-3">
-            <Link href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+            <PanelLink href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
               {madeLine("video", jobRunning)}. Open the job
-            </Link>
+            </PanelLink>
           </div>
         )}
       </div>

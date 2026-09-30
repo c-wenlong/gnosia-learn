@@ -271,7 +271,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
  * filters, so the server's render and the address bar can be compared.
  *
  * The conversation panel opens and closes in the browser, with
- * `history.pushState` and no server render (`ConversationHost`), so the
+ * `history.pushState` and no server render (`PanelHost`), so the
  * address bar can move on from the URL the page was drawn for. A panel the
  * server drew is shown only while the two still agree.
  */
@@ -288,6 +288,49 @@ export function rawParamsOf(search: URLSearchParams): RawParams {
     raw[name] = held === undefined ? value : [...(Array.isArray(held) ? held : [held]), value];
   }
   return raw;
+}
+
+/** The parameters that name a panel, and the three a verb's outcome rides on (`readOutcome`). */
+const PANEL_KEYS = new Set(["draft", "job", "extend", "talk", "sel", "shot", "settings", "v", "ok", "m"]);
+
+/** Everything but the panel: the filters, the sort and the layout, as one string. */
+function viewPart(search: URLSearchParams): string {
+  return [...search]
+    .filter(([name]) => !PANEL_KEYS.has(name))
+    .map(([name, value]) => `${name}=${value}`)
+    .sort()
+    .join("&");
+}
+
+/** A path without a verb's outcome, which is said once, where the verb ran. */
+export function withoutOutcome(path: string): string {
+  const [base, existing] = path.split("?");
+  const params = new URLSearchParams(existing ?? "");
+  for (const name of ["v", "ok", "m"]) params.delete(name);
+  const query = params.toString();
+  return query === "" ? (base ?? "") : `${base}?${query}`;
+}
+
+/**
+ * Whether going from the address bar `from` to `href` only opens, closes or
+ * swaps a panel the browser draws (a conversation, a job, a tile), with the
+ * grid behind it unchanged, so `PanelHost` can move the URL itself.
+ *
+ * Everything else is the server's: another page, other filters, a picture
+ * (the main area, not a panel), and the settings and an Extend press, which
+ * the server draws from reads the page does not send.
+ */
+export function browserPanelMove(from: { pathname: string; search: string }, href: string): boolean {
+  const query = from.search.replace(/^\?/, "");
+  const target = new URL(href, `http://studio${from.pathname}${query === "" ? "" : `?${query}`}`);
+  if (target.pathname !== from.pathname) return false;
+  const now = new URLSearchParams(query);
+  if (viewPart(now) !== viewPart(target.searchParams)) return false;
+  const was = parseView(rawParamsOf(now));
+  const next = parseView(rawParamsOf(target.searchParams));
+  if (was.shot !== null || next.shot !== null || next.settings) return false;
+  // Extend loses to a conversation and to a job, as it does in the page.
+  return next.extend === null || next.draft !== null || next.job !== null;
 }
 
 /**

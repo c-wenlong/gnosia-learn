@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 
+import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
 import { Chip } from "@/components/studio/StudioChrome";
@@ -93,7 +93,7 @@ export function RowJob({ target, title, path }: { target: string; title: string;
   const job = jobForTarget(jobs, target, ended, dismissed);
   if (job === null) return null;
   return (
-    <Link
+    <PanelLink
       href={panelHref(path, { job: job.jobId })}
       scroll={false}
       aria-label={rowJobLabel(job, title)}
@@ -102,7 +102,7 @@ export function RowJob({ target, title, path }: { target: string; title: string;
       className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
     >
       <RowWords job={job} />
-    </Link>
+    </PanelLink>
   );
 }
 
@@ -158,7 +158,7 @@ function NewDiagramCard({ job, path }: { job: Job; path: string }) {
 
 function NewDiagramRow({ job, path }: { job: Job; path: string }) {
   return (
-    <Link
+    <PanelLink
       href={panelHref(path, { job: job.jobId })}
       scroll={false}
       className="flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)]"
@@ -170,7 +170,7 @@ function NewDiagramRow({ job, path }: { job: Job; path: string }) {
       <span className="flex min-w-0 max-w-[45%]">
         <RowWords job={job} />
       </span>
-    </Link>
+    </PanelLink>
   );
 }
 
@@ -207,7 +207,7 @@ function JobStage({
   return (
     <div ref={frame} className="relative h-full w-full bg-[var(--surface2)]">
       <Backdrop job={job} stage={stage} live={live} settle={settle} thumbnail={thumbnail} />
-      <Link
+      <PanelLink
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
         aria-label={label}
@@ -371,9 +371,9 @@ function Status({
         <span className="min-w-0 flex-1 truncate font-medium text-[var(--danger)]">{failureLine(job)}</span>
         <span className="flex w-full justify-end gap-1.5">
           {typeof job.draftId === "string" && (
-            <Link href={conversationHref(path, job.draftId)} scroll={false} className={control}>
+            <PanelLink href={conversationHref(path, job.draftId)} scroll={false} className={control}>
               Talk it through
-            </Link>
+            </PanelLink>
           )}
           <button type="button" onClick={() => dismiss(job.jobId)} className={control}>
             Dismiss
