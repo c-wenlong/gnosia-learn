@@ -5,6 +5,7 @@ import { ExtendLink } from "@/components/studio/ExtendLink";
 import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Button as KitButton } from "@/components/ui/Button";
 import { buttonClasses } from "@/components/ui/classes";
+import { jobStateLabel } from "@/lib/studio-job-state";
 import {
   canvasHref,
   displayTitle,
@@ -261,7 +262,7 @@ function SelectedDiagram({
                     {job.requested.slice(0, 10)}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{job.title ?? job.jobId}</span>
-                  <Chip tone={job.state === "failed" ? "danger" : "muted"}>{job.state}</Chip>
+                  <Chip tone={job.state === "failed" ? "danger" : "muted"}>{jobStateLabel(job.state)}</Chip>
                 </Link>
               </li>
             ))}

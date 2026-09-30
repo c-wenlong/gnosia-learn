@@ -1,5 +1,6 @@
 import type { Brief, Job } from "@/lib/studio-jobs";
 import { isActive } from "@/lib/studio-jobs";
+import { jobPredicate, jobStateInline } from "@/lib/studio-job-state";
 import type { DraftState, DraftView, PendingTopic, Refusal, TranscriptEntry } from "@/lib/studio-drafts";
 import { refusalNumber, refusalReason, refusalString } from "@/lib/studio-drafts";
 
@@ -322,7 +323,7 @@ export function drawBlock(
   const holder = jobs.find((job) => isActive(job.state) && targetSlug(job.target) === brief.slug);
   if (holder !== undefined) {
     const name = holder.title ?? holder.jobId.slice(0, 8);
-    const state = holder.state === "awaiting_review" ? "waiting for review" : holder.state;
+    const state = jobStateInline(holder.state);
     return {
       reason: `“${name}” already holds ${brief.slug} (${state}). Accept or discard it first.`,
       holder: holder.jobId,
@@ -398,9 +399,9 @@ export function drawRefusal(status: number, refusal: Refusal): DrawRefusal {
       // #207: this draft's own job of the kind has not reached a verdict.
       const video = refusalString(refusal, "kind") === "video";
       const state = refusalString(refusal, "state");
-      const waiting = state === "awaiting_review" ? " is waiting for review" : ` is still ${video ? "being made" : "being drawn"}`;
+      const what = jobPredicate(video ? "video" : "diagram", state ?? "running");
       return own(
-        `The ${video ? "video" : "diagram"} from this conversation${waiting}. Accept, discard or cancel it first.`,
+        `The ${video ? "video" : "diagram"} from this conversation ${what}. Accept, discard or cancel it first.`,
         refusalString(refusal, "jobId"),
       );
     }

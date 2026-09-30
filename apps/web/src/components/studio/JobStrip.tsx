@@ -13,6 +13,7 @@ import {
   stepLabel,
   type Job,
 } from "@/lib/studio-jobs";
+import { jobStateLabel } from "@/lib/studio-job-state";
 import { asVideoJob, videoFailureLine, videoPhaseWords, videoStepCount, readyHeadline } from "@/lib/studio-video";
 import { panelHref } from "@/lib/studio-view";
 import { useElapsed } from "@/lib/use-elapsed";
@@ -113,7 +114,7 @@ function Words({ job }: { job: Job }) {
     return <span className="truncate text-[var(--danger)]">{failureReport(job).headline}</span>;
   }
   if (!isActive(job.state)) {
-    return <span className="truncate text-[var(--muted)]">{job.state}</span>;
+    return <span className="truncate text-[var(--muted)]">{jobStateLabel(job.state)}</span>;
   }
   // The step and the attempt stay: this is the only progress a person sees
   // when the tile is filtered out, scrolled away, or on the canvas route.
@@ -137,7 +138,7 @@ function VideoWords({ job }: { job: NonNullable<ReturnType<typeof asVideoJob>> }
     return <span className="truncate text-[var(--danger)]">{videoFailureLine(job)}</span>;
   }
   if (!isActive(job.state)) {
-    return <span className="truncate text-[var(--muted)]">{job.state}</span>;
+    return <span className="truncate text-[var(--muted)]">{jobStateLabel(job.state)}</span>;
   }
   const step = videoStepCount(job);
   return (
