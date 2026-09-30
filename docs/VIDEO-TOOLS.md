@@ -156,7 +156,7 @@ flowchart TD
 ## Not built yet
 
 - **The studio choosing a tool.** The studio's video runner renders manimkc
-  only. Letting the planner put a tool in the video brief, chosen by this
-  table, needs a runner (and a sandbox) per tool; see STUDIO-VIDEOS.md for
-  what one runner took.
+  only. [STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md) is the design for the
+  planner putting a tool in the video brief, chosen by this table, and for a
+  runner backend (and a sandbox) per tool.
 - **Joining chapters from different tools** into one deliverable.
