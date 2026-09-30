@@ -1238,6 +1238,8 @@ export class Drafts {
   }
 
   private async createNew(input: CreateInput, key: string | null): Promise<{ record: DraftRecord; created: boolean }> {
+    // Before any read starts, so a read `drain` has not seen cannot begin.
+    if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
     const source = input.source?.trim() || null;
     const sourceKind: BriefKind = input.sourceKind === undefined || input.sourceKind === null ? "diagram" : (input.sourceKind as BriefKind);
     if (!isBriefKind(sourceKind)) {
@@ -3069,7 +3071,9 @@ export class Drafts {
     this.draining = true;
     for (const run of this.running.values()) await run.stop("shutdown");
     await Promise.all([...this.turnsInFlight.values()].map((turn) => turn.catch(() => undefined)));
-    await Promise.all([...this.readsInFlight].map((read) => read.catch(() => undefined)));
+    while (this.readsInFlight.size > 0) {
+      await Promise.all([...this.readsInFlight].map((read) => read.catch(() => undefined)));
+    }
   }
 }
 

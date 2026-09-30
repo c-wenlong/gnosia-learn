@@ -243,6 +243,13 @@ describe("making a conversation", () => {
     await drained;
     expect(await readdir(cacheDir())).toEqual([expect.stringMatching(/^diagrams\..+\.json$/)]);
   });
+
+  it("refuses a conversation once draining has begun, before starting a read drain would not see", async () => {
+    await drafts.drain();
+    await expect(drafts.create({ idempotencyKey: "late" })).rejects.toMatchObject({ status: 503, detail: { reason: "shutdown" } });
+    expect(catalogMock.diagramList).not.toHaveBeenCalled();
+    expect(catalogMock.topicList).not.toHaveBeenCalled();
+  });
 });
 
 describe("what a person types", () => {
