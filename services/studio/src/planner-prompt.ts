@@ -432,18 +432,27 @@ export const TUTOR_TURN_CAP = 6;
 export const TUTOR_CHAR_CAP = 6_000;
 
 /**
- * Text a person or another model wrote, made safe to sit inside a data block:
- * a run of five or more hyphens (the fence's own) becomes equals signs, so no
- * line of it can read as `-----END CONCEPT-----` or open a block of its own,
- * and control characters other than tab and newline go. Every caller also
- * indents each line, so the one line at column 0 that ends a block is the
- * runner's.
+ * Text a person or another model wrote, made safe to sit inside a data block.
+ *
+ * - Every line break a reader might honour (CR, CRLF, U+2028, U+2029, NEL)
+ *   becomes `\n`, so the caller's indent reaches every line.
+ * - Control characters other than tab and newline go (C0, DEL and C1), and
+ *   so do zero-width and bidirectional formatting characters and the BOM,
+ *   which could hide or reorder a line.
+ * - A run of five or more dashes of any kind (the ASCII hyphen, any
+ *   dash-punctuation character, U+2212 minus, full-width U+FF0D) becomes
+ *   equals signs, so no line of it can read as `-----END CONCEPT-----` or
+ *   open a block of its own.
+ *
+ * Every caller also indents each line, so the one line at column 0 that ends
+ * a block is the runner's. Pure ASCII without control characters comes out as
+ * it did before the dash and line-break rules widened.
  */
 export function inert(text: string): string {
   return text
-    .replace(/\r\n?/g, "\n")
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "")
-    .replace(/-{5,}/g, (run) => "=".repeat(run.length));
+    .replace(/\r\n?|[\u2028\u2029\u0085]/g, "\n")
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "")
+    .replace(/[\p{Pd}\u2212\uff0d]{5,}/gu, (run) => "=".repeat([...run].length));
 }
 
 /** `text`, one line, inert, cut to `cap` characters with an ellipsis. */

@@ -1387,7 +1387,9 @@ export class Drafts {
     this.records.set(id, record);
     await this.write(id, async () => {
       await this.save(id, {});
-      await writeFile(
+      // Atomically, so a crash mid-write never leaves a half prompt the next
+      // turn would pass to the CLI as the whole of it.
+      await atomicWrite(
         plannerSystemPath(id),
         buildCombinedSystemPrompt({
           kinds,
@@ -1399,7 +1401,6 @@ export class Drafts {
           concept: conceptText,
           tutor: tutorText,
         }),
-        "utf8",
       );
       await writeFile(plannerSettingsPath(id), `${JSON.stringify(plannerSettings(), null, 1)}\n`, "utf8");
       await this.append(id, {
@@ -2108,7 +2109,7 @@ export class Drafts {
                   : conceptBlock({ slug: concept.slug, title: concept.title, topic: concept.topic, missing: "(the note was not kept)" }),
             })
           : buildSystemPrompt({ vocabulary: vocabulary.entries, corpus: [] });
-      await writeFile(plannerSystemPath(id), rewritten, "utf8");
+      await atomicWrite(plannerSystemPath(id), rewritten);
       await writeFile(plannerSettingsPath(id), `${JSON.stringify(plannerSettings(), null, 1)}\n`, "utf8");
     }
     const argv = plannerArgv({
