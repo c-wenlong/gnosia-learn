@@ -201,7 +201,7 @@ becomes a small rich-text field whose only rich content is the chips.
 `MentionComposer` goes in the kit beside `Composer`
 ([`components/ui/`](../apps/web/src/components/ui/)). The studio's
 conversation uses it; the concept tutor keeps `Composer`, which does not
-change. (Since 2026-09-30 the tutor is proposed to use it too, when the
+change. (Since 2026-09-30 the tutor is to use it too, when the
 studio is on and the runner answers:
 [`STUDIO-TUTOR-HANDOFF.md`](STUDIO-TUTOR-HANDOFF.md).) They share what
 should look and behave the same: the frame's classes (52px at one line, radius 16, the 2px border going `--accent` on focus, Send

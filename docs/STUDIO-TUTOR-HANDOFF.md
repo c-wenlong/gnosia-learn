@@ -6,7 +6,7 @@ seeded with the concept and the tag, where the planner proposes a brief and
 the person approves it with the usual press. Nothing is made from the tutor
 itself.
 
-**Status: proposed, 2026-09-30. Nothing here is built.** Numbers marked
+**Status: accepted, 2026-09-30, with every open question resolved (below). Nothing here is built.** Numbers marked
 *measured* come from the PR or document named beside them; every other number
 is a guess and says so.
 
@@ -280,21 +280,29 @@ owner's note, for every job with a `source`, not only these. The fix is an
 
 ## Open questions for the owner
 
+All five resolved on 2026-09-30, each as recommended.
+
 1. **Send on arrival, or prefill the studio's field and wait for a second
    Send?** **Recommendation:** send on arrival. The tutor's Send is the press,
    a planner turn starts no job, and Extend already works this way.
+   **Resolved 2026-09-30 by the owner:** send on arrival.
 2. **Carry tutor turns?** **Recommendation:** the last six, capped at 6,000
    characters, and say so above the studio's thread (D69).
+   **Resolved 2026-09-30 by the owner:** the last six turns go along, capped.
 3. **A second tag on the same concept: a new conversation or the last one?**
    **Recommendation:** a new one each time. A draft is one conversation with
    one brief per kind in force, and adding a new request to an old one would
    grey cards the person may still want.
+   **Resolved 2026-09-30 by the owner:** a new conversation each time.
 4. **Should the tutor itself offer a tag**, the way the planner's `suggest`
    block puts a chip in the field? **Recommendation:** not now. It would change
    the tutor's prompt and its reply format, and the menu is enough to learn
    whether tags get used from here at all. Revisit after twenty hand-offs.
+   **Resolved 2026-09-30 by the coordinator:** not now; revisit after twenty
+   hand-offs.
 5. **Same tab or a new one?** **Recommendation:** the same tab, so Back
    returns to the concept and `sessionStorage` carries the opener.
+   **Resolved 2026-09-30 by the owner:** the same tab.
 
 ## Phases
 
