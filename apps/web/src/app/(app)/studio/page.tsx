@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 
-import { DiagramPanelBody, type JobRow } from "@/components/studio/DiagramInspector";
+import type { JobRow } from "@/components/studio/DiagramInspector";
 import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
-import { ConversationHost } from "@/components/studio/ConversationHost";
+import { PanelHost } from "@/components/studio/PanelHost";
 import { DraftsList } from "@/components/studio/DraftsList";
 import { ExtendStart } from "@/components/studio/ExtendStart";
-import { JobPanel } from "@/components/studio/JobPanel";
 import { NewDiagramJobs } from "@/components/studio/GridJob";
 import { NewVideoJobs, VideoRow, VideoTile } from "@/components/studio/video/VideoGridJob";
 import { JobStrip } from "@/components/studio/JobStrip";
@@ -209,9 +208,10 @@ export default async function StudioPage({
   const sections = gridSections(groups, shownVideos, view.group, topicTitles, topicDomains).filter(
     (section) => section.diagrams.length + section.videos.length > 0,
   );
-  const selected = listing.diagrams.find((entry) => entry.name === view.selected) ?? null;
   const allJobs = jobList.ok ? jobList.data.jobs : [];
-  const jobs = allJobs.filter((job) => selected !== null && job.target === selected.tldr.path);
+  // What a tile's history and a job's title need, and no more: the rows are
+  // sent to the browser, which draws those panels (`PanelHost`).
+  const jobRows: JobRow[] = allJobs.map(({ jobId, state, title, target, requested }) => ({ jobId, state, title, target, requested }));
   // Only when a picture is open, and only then: `GET /api/jobs/{id}` is the one
   // route carrying the brief and the comparison, and the full-width view needs
   // both to say why the other side is not there rather than linking to a 404.
@@ -268,20 +268,9 @@ export default async function StudioPage({
         </StudioDialog>
       );
     }
-    // A conversation is `ConversationHost`'s, which opens and closes it in
-    // the browser without coming back here.
-    if (view.draft !== null) return null;
-    if (view.job !== null) {
-      const title = allJobs.find((job) => job.jobId === view.job)?.title ?? "Job";
-      return (
-        <StudioDialog key="job" closeHref={closeHref} label={title}>
-          <DialogHeader title={title} />
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <JobPanel jobId={view.job} path={path} embedded />
-          </div>
-        </StudioDialog>
-      );
-    }
+    // A conversation, a job and a tile are `PanelHost`'s, which opens and
+    // closes them in the browser without coming back here.
+    if (view.draft !== null || view.job !== null) return null;
     if (view.extend !== null) {
       const title = titleOf(titles, view.extend) ?? view.extend;
       return (
@@ -291,31 +280,12 @@ export default async function StudioPage({
         </StudioDialog>
       );
     }
-    if (view.selected !== null) {
-      const title = selected === null ? view.selected : displayTitle(selected);
-      return (
-        <StudioDialog key={`sel:${view.selected}`} closeHref={closeHref} label={title}>
-          <DialogHeader title={title} />
-          {/* A verb run from this panel redirects back to it, so what it did is
-              said here, where the person is looking, and not behind the dimmed
-              grid. */}
-          {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
-          {selected === null ? (
-            <p className="p-5 text-[14px] text-text2">
-              There is no diagram named <span className="font-mono">{view.selected}</span> in this studio.
-            </p>
-          ) : (
-            <DiagramPanelBody diagram={selected} jobs={jobs} path={path} extendHref={extendFrom(selected.name)} />
-          )}
-        </StudioDialog>
-      );
-    }
     return null;
   }
 
   return (
     <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <ConversationHost
+      <PanelHost
         panel={dialog}
         panelKey={panelSignature(params)}
         topics={topicOptions}
@@ -325,6 +295,8 @@ export default async function StudioPage({
         cap={cap}
         video={videoState}
         diagramAgent={diagramState}
+        diagrams={listing.diagrams}
+        jobs={jobRows}
       >
         <StudioStrip>
           <SearchField view={view} />
@@ -450,7 +422,6 @@ export default async function StudioPage({
                             key={diagram.name}
                             diagram={diagram}
                             path={path}
-                            selected={diagram.name === view.selected}
                             selectHref={studioHref(view, { selected: diagram.name })}
                             extendHref={extendFrom(diagram.name)}
                             showConcepts={view.chips}
@@ -470,7 +441,6 @@ export default async function StudioPage({
                             key={diagram.name}
                             diagram={diagram}
                             path={path}
-                            selected={diagram.name === view.selected}
                             selectHref={studioHref(view, { selected: diagram.name })}
                             showConcepts={view.chips}
                           />
@@ -483,7 +453,7 @@ export default async function StudioPage({
             </div>
           )}
         </div>
-      </ConversationHost>
+      </PanelHost>
     </div>
   );
 }

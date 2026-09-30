@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { PanelLink } from "@/components/studio/PanelLink";
 import { ComparisonPanel } from "@/components/studio/ComparisonPanel";
 import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
@@ -230,9 +230,9 @@ function DiagramJobPanel({
           )}
         </p>
         <div className="mt-3">
-          <Link href={panelHref(path, { job: null })} scroll={false} className="text-xs underline underline-offset-2">
+          <PanelLink href={panelHref(path, { job: null })} scroll={false} className="text-xs underline underline-offset-2">
             Back to the diagram
-          </Link>
+          </PanelLink>
         </div>
       </div>
     );
@@ -258,13 +258,13 @@ function DiagramJobPanel({
           <PanelHeading>Job</PanelHeading>
           <h2 className="truncate text-sm font-medium">{job.title ?? job.jobId.slice(0, 8)}</h2>
         </div>
-        <Link
+        <PanelLink
           href={panelHref(path, { job: null })}
           scroll={false}
           className="shrink-0 text-xs text-[var(--muted)] underline underline-offset-2"
         >
           Close
-        </Link>
+        </PanelLink>
       </div>
       )}
 
@@ -352,13 +352,13 @@ function DiagramJobPanel({
         {report?.actions.includes("talk") === true &&
           !inConversation &&
           (typeof job.draftId === "string" ? (
-            <Link
+            <PanelLink
               href={conversationHref(path, job.draftId)}
               scroll={false}
               className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium hover:bg-[var(--surface-hover)]"
             >
               Tell the planner what to change
-            </Link>
+            </PanelLink>
           ) : (
             <TalkItThrough job={job} path={path} failure={report} onFailed={(text) => setSaid({ ok: false, text })} />
           ))}

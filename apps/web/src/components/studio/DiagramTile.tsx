@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ExtendLink } from "@/components/studio/ExtendLink";
+import { PanelLink, SelectableFrame } from "@/components/studio/PanelLink";
 import { RowJob, TileJob } from "@/components/studio/GridJob";
 import { Chip } from "@/components/studio/StudioChrome";
 import {
@@ -42,7 +43,6 @@ export function DiagramTile({
   path,
   selectHref,
   extendHref,
-  selected,
   showConcepts,
 }: {
   diagram: Diagram;
@@ -51,17 +51,19 @@ export function DiagramTile({
   selectHref: string;
   /** Where Extend goes: this view with a conversation opening on the diagram. */
   extendHref: string;
-  selected: boolean;
   showConcepts: boolean;
 }) {
   const untopiced = diagram.topic === null;
   return (
-    <div
+    <SelectableFrame
+      name={diagram.name}
       className={`group relative flex flex-col overflow-hidden rounded-xl border bg-[var(--surface)] transition-colors ${
         untopiced ? "border-[var(--warn-border)]" : "border-[var(--border)]"
-      } ${selected ? "ring-2 ring-[var(--accent)]" : "hover:bg-[var(--surface-hover)]"}`}
+      }`}
+      selectedClassName="ring-2 ring-[var(--accent)]"
+      idleClassName="hover:bg-[var(--surface-hover)]"
     >
-      <Link href={selectHref} scroll={false} className="flex min-w-0 flex-col">
+      <PanelLink href={selectHref} className="flex min-w-0 flex-col">
         <Thumbnail diagram={diagram} />
         <div className="flex min-w-0 flex-col gap-1.5 p-3">
           <span className="line-clamp-2 text-sm font-medium">{displayTitle(diagram)}</span>
@@ -89,7 +91,7 @@ export function DiagramTile({
             </p>
           )}
         </div>
-      </Link>
+      </PanelLink>
       {/* A job drawing onto this diagram covers the thumbnail with its loader.
           After the tile's link rather than inside it, so its own link and
           Cancel are not nested in another link, and before the hover
@@ -122,7 +124,7 @@ export function DiagramTile({
         </Link>
         <ExtendLink href={extendHref} className={HOVER_CONTROL} diagram={displayTitle(diagram)} />
       </div>
-    </div>
+    </SelectableFrame>
   );
 }
 
@@ -189,21 +191,20 @@ export function DiagramRow({
   diagram,
   path,
   selectHref,
-  selected,
   showConcepts,
 }: {
   diagram: Diagram;
   /** This view, which a job's link opens its panel on. */
   path: string;
   selectHref: string;
-  selected: boolean;
   showConcepts: boolean;
 }) {
   return (
-    <div
-      className={`relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors ${
-        selected ? "bg-[var(--nav-active-bg)]" : "hover:bg-[var(--surface-hover)]"
-      }`}
+    <SelectableFrame
+      name={diagram.name}
+      className="relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors"
+      selectedClassName="bg-[var(--nav-active-bg)]"
+      idleClassName="hover:bg-[var(--surface-hover)]"
     >
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[#f7f6f3]">
         {diagram.svg.exists && (
@@ -216,13 +217,12 @@ export function DiagramRow({
           />
         )}
       </span>
-      <Link
+      <PanelLink
         href={selectHref}
-        scroll={false}
         className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
       >
         {displayTitle(diagram)}
-      </Link>
+      </PanelLink>
       <RowJob target={diagram.tldr.path} title={displayTitle(diagram)} path={path} />
       {diagram.topic === null ? (
         <Chip tone="warn">No topic</Chip>
@@ -242,6 +242,6 @@ export function DiagramRow({
       <span className="w-24 shrink-0 text-right text-[var(--muted)]">
         {relativeTime(diagram.tldr.modified)}
       </span>
-    </div>
+    </SelectableFrame>
   );
 }
