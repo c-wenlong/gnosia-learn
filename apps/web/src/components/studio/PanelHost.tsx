@@ -54,6 +54,23 @@ import {
 
 type ConversationProps = Omit<ComponentProps<typeof DraftPanel>, "draftId" | "jobId" | "path">;
 
+/**
+ * A diagram's job history: the rows the page read, brought up to date with
+ * the live list, which the jobs provider keeps current while the page is not
+ * drawn again. A job the page never saw is added; one it saw takes its live
+ * state and title. Newest first.
+ */
+export function historyOf(rows: readonly JobRow[], live: readonly Pick<JobRow, "jobId" | "state" | "title" | "target" | "requested">[], target: string): JobRow[] {
+  const byId = new Map<string, JobRow>();
+  for (const row of rows) if (row.target === target) byId.set(row.jobId, row);
+  for (const job of live) {
+    if (job.target !== target) continue;
+    const { jobId, state, title, requested } = job;
+    byId.set(jobId, { ...byId.get(jobId), jobId, state, title, target, requested });
+  }
+  return [...byId.values()].sort((a, b) => b.requested.localeCompare(a.requested));
+}
+
 /** Move the address bar without a server render. */
 function pushUrl(href: string): void {
   window.history.pushState(null, "", href);
@@ -203,7 +220,7 @@ export function PanelHost({
         ) : (
           <DiagramPanelBody
             diagram={diagram}
-            jobs={jobs.filter((job) => job.target === diagram.tldr.path)}
+            jobs={historyOf(jobs, liveJobs, diagram.tldr.path)}
             path={path}
             extendHref={panelHref(path, { extend: diagram.name, selected: null, job: null, draft: null })}
           />

@@ -29,7 +29,8 @@ vi.mock("@/components/studio/DraftPanel", async () => {
   };
 });
 
-vi.mock("@/components/studio/JobsProvider", () => ({ useStudioJobs: () => ({ jobs: [] }) }));
+const live = vi.hoisted(() => ({ jobs: [] as { jobId: string; state: string; title: string | null; target: string; requested: string }[] }));
+vi.mock("@/components/studio/JobsProvider", () => ({ useStudioJobs: () => ({ jobs: live.jobs }) }));
 vi.mock("@/components/studio/JobPanel", () => ({
   JobPanel: ({ jobId, path }: { jobId: string; path: string }) => createElement("div", { "data-job": jobId, "data-path": path }),
 }));
@@ -38,7 +39,7 @@ vi.mock("@/components/studio/DiagramInspector", () => ({
     createElement("div", { "data-tile": diagram.name, "data-jobs": jobs.map((job) => job.jobId).join(","), "data-extend": extendHref }),
 }));
 
-const { PanelHost } = await import("./PanelHost");
+const { PanelHost, historyOf } = await import("./PanelHost");
 const { usePanelHost } = await import("./panel-host");
 
 type Controls = NonNullable<ReturnType<typeof usePanelHost>>;
@@ -63,6 +64,7 @@ function setUrl(search: string) {
 
 let pushState: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
+  live.jobs = [];
   setUrl("");
   mocks.push.mockReset();
   pushState = vi.spyOn(window.history, "pushState").mockImplementation(() => undefined);
@@ -298,5 +300,22 @@ describe("a job and a tile", () => {
       expect(grabbed.controls!.navigate(href)).toBe(false);
     }
     expect(pushState).not.toHaveBeenCalled();
+  });
+});
+
+describe("a tile's job history", () => {
+  const row = (jobId: string, state: string, requested: string, target = "t") => ({ jobId, state, title: jobId, target, requested });
+
+  it("takes the live state of a job the page read, and adds one it never saw, newest first", () => {
+    const rows = [row("old", "drawing", "2026-09-30T08:00:00Z"), row("elsewhere", "accepted", "2026-09-30T08:30:00Z", "u")];
+    const now = [row("old", "awaiting_review", "2026-09-30T08:00:00Z"), row("new", "queued", "2026-09-30T09:00:00Z")];
+    expect(historyOf(rows, now, "t")).toEqual([row("new", "queued", "2026-09-30T09:00:00Z"), row("old", "awaiting_review", "2026-09-30T08:00:00Z")]);
+  });
+
+  it("is what the tile's panel shows", () => {
+    live.jobs = [row("j9", "queued", "2026-10-01", "learn/assets/graph.tldr")];
+    setUrl("sel=graph");
+    const { container } = mount();
+    expect(container.querySelector("[data-tile]")?.getAttribute("data-jobs")).toBe("j9,j1");
   });
 });
