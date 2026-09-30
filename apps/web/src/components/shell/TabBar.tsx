@@ -9,9 +9,9 @@ import { activeDestination, DESTINATIONS } from "@/lib/nav";
 import { NavIcon } from "./NavIcon";
 
 /**
- * The phone tab bar (hi-fi frames 13 to 15): the same five destinations as
- * the top bar, fixed to the bottom below 768px. 68px plus the home-indicator
- * inset. Hidden on a `data-layout="full"` page, which is the studio's canvas
+ * The phone tab bar (hi-fi frames 13 to 15): the five destinations
+ * (`DESTINATIONS`, without Studio, which is a top-bar destination only),
+ * fixed to the bottom below 768px. 68px plus the home-indicator inset. Hidden on a `data-layout="full"` page, which is the studio's canvas
  * and has no phone layout.
  */
 export function TabBar() {

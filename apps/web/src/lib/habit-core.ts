@@ -393,6 +393,7 @@ export function habitLabels(habit: Habit): {
   streakDetails: string[];
   streakName: string;
   target: string;
+  targetShort: string;
   targetDetails: string[];
   targetName: string;
 } {
@@ -404,6 +405,7 @@ export function habitLabels(habit: Habit): {
       streakShort: String(streak.days),
       streakDetails: [why],
       target: `Target ${target.done} / ${target.total}`,
+      targetShort: `${target.done} / ${target.total}`,
       targetDetails: [why],
     });
   }
@@ -433,6 +435,7 @@ export function habitLabels(habit: Habit): {
     streakShort: String(streak.days),
     streakDetails: [today, leeway],
     target: `Target ${target.done} / ${target.total}`,
+    targetShort: `${target.done} / ${target.total}`,
     targetDetails: [`Today's target: ${goal || "nothing set"}.`, `${progress.charAt(0).toUpperCase()}${progress.slice(1)}.`],
   });
 }
@@ -443,6 +446,7 @@ function named(labels: {
   streakShort: string;
   streakDetails: string[];
   target: string;
+  targetShort: string;
   targetDetails: string[];
 }) {
   return {

@@ -7,8 +7,9 @@ import { ThemeSwitch } from "@/components/ThemeSwitch";
 
 /**
  * The avatar at the right of the top bar, and the small menu behind it:
- * the theme switch, Settings, Studio when this deployment has one, and Sign
- * out. Sign out is a form post rather than a link, so nothing that prefetches
+ * the theme switch, Settings, Studio when this deployment has one (on a phone
+ * only: from 768px up it is a destination in the top bar and is not listed
+ * twice), and Sign out. Sign out is a form post rather than a link, so nothing that prefetches
  * or embeds a URL can end the session (see `api/auth/sign-out`).
  *
  * A disclosure (a button that shows a list of links), not an ARIA `menu`:
@@ -81,9 +82,10 @@ export function AvatarMenu({ studio }: { studio: boolean }) {
             </li>
             {/* Only when the server says there is one: every route under
                 /studio 404s with STUDIO_ENABLED unset (D11), so an
-                unconditional entry would be broken on the deployed site. */}
+                unconditional entry would be broken on the deployed site.
+                `md:hidden`: from 768px up the top bar carries it. */}
             {studio && (
-              <li>
+              <li className="md:hidden">
                 <Link href="/studio" className={item} onClick={() => setOpen(false)}>
                   <Glyph d="M4 16l2.5-.5L15 7l-2-2-8.5 8.5zM12 6l2 2" />
                   Studio
