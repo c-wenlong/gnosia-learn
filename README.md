@@ -92,7 +92,7 @@ tools/manimkc/    Submodule: narrated manim videos
 tools/remotionkc/ Submodule: narrated Remotion videos
 tools/revideokc/  Submodule: narrated Revideo videos
 tools/tldrawkc/   Submodule: tldraw diagrams
-.claude/          launch.json, plus the three skills symlinked from the submodules
+.claude/          launch.json, plus the four skills symlinked from the submodules
 ```
 
 Three of those are npm workspaces (`apps/*`, `packages/*`, `services/*`), so

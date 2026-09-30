@@ -7,3 +7,6 @@
 [submodule "remotionkc"]
 	path = tools/remotionkc
 	url = https://github.com/c-wenlong/remotionkc.git
+[submodule "revideokc"]
+	path = tools/revideokc
+	url = https://github.com/c-wenlong/revideokc.git

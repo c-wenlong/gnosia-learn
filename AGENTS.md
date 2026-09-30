@@ -134,7 +134,7 @@ Rules of engagement:
 - The end-to-end process is the `manimkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/manimkc-video`. Everything
   `.claude/` holds here is either `launch.json` or a symlink into a submodule:
-  that skill, `remotionkc-video` and `tldrawkc-diagram`.
+  that skill, `remotionkc-video`, `revideokc-video` and `tldrawkc-diagram`.
 
 ## Asset generation: tools/remotionkc/
 
@@ -172,6 +172,46 @@ Rules of engagement:
   submodule root**; a deliverable is `outRoot + path`.
 - The end-to-end process is the `remotionkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/remotionkc-video`.
+
+## Asset generation: tools/revideokc/
+
+`tools/revideokc/` is the fourth git **submodule** (its own repo,
+github.com/c-wenlong/revideokc): narrated explainer videos made with Revideo
+0.11, the maintained fork of Motion Canvas that renders headless, the third
+video tool. It is shaped like remotionkc on purpose: the same CLI verbs, the
+same `topics --json` report, the same narration through manimkc and the
+same sidecars, so the catalog indexes it through the same descriptor in
+`services/catalog/src/index/video-tool.ts`, labelled "revideo" in the web app.
+What it adds is its own: a three.js scene inside the 2D stage (depth,
+lights, shadows), `Code` edited in place, springs, masks and additive light.
+
+Rules of engagement:
+
+- **Read `tools/revideokc/AGENTS.md` before working in there**, and
+  `tools/revideokc/docs/CAPABILITIES.md` before storyboarding: it says what
+  Revideo can draw, which of it was rendered here, and the traps each cost
+  time once (`sequence` versus `chain`, a generator that runs nine times per
+  render, `findFirstRange` taking a regex, audio resolved beside the output).
+- **Commits inside `tools/revideokc/` belong to that repo.** Commit and push
+  there first, then commit the updated submodule pointer here. Never commit a
+  dirty submodule pointer.
+- **Drive it through its CLI.** `node tools/revideokc/tools/cli/revideokc.mjs
+  --root <checkout> topics --json` answers with manimkc's report shape.
+  `catalog import` runs it (`--only revideokc`, `--revideokc-root`), and
+  `catalog asset upload --source revideokc` stores the bytes and cuts the
+  posters. A bare import with no CLI skips revideokc, and refuses once it has
+  rows here, as for the other two.
+- **Each topic.yml's `topic:` is required**, as for remotionkc; there is no
+  maps vocabulary.
+- **`REVIDEOKC_ROOT` is the checkout, `REVIDEOKC_HOME` the data root**, with
+  the same split as remotionkc's pair: the catalog reads the first
+  (`services/catalog/src/env.ts`, defaulting to `tools/revideokc`) and takes
+  the second from the report's `outRoot`. **Never join a revideokc path onto
+  the submodule root.**
+- **Rendering needs a Chrome**: the system Chrome, or `REVIDEOKC_CHROME`.
+  Install with `PUPPETEER_SKIP_DOWNLOAD=1 npm ci` in the submodule.
+- The end-to-end process is the `revideokc-video` skill, which lives in the
+  submodule and is symlinked into `.claude/skills/revideokc-video`.
 
 ## Diagrams: tools/tldrawkc/
 
