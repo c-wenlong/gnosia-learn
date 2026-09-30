@@ -1,7 +1,7 @@
 import type { TopicEntry } from "@self-learn/content";
 
 import { topicList } from "./catalog";
-import { MERMAID_LIMIT, MODELS, TEXT_LIMIT, VOCABULARY_STATUS_MS, type Model } from "./config";
+import { MERMAID_LIMIT, MODELS, studioOwner, TEXT_LIMIT, VOCABULARY_STATUS_MS, type Model } from "./config";
 import { readThrough, type CachedRead } from "./content-cache";
 
 /**
@@ -207,11 +207,17 @@ function entryOf(value: unknown): TopicEntry | null {
  * of its own (`catalog.ts` says why), and the rows are the one truth the
  * enqueue's foreign key and the gate check the same slug against: D7 explains
  * why all three checks are worth having. Every good read is kept in
- * `$STUDIO_HOME/cache/topics.json`, and a read that fails for any reason (the
- * database down, the CLI exiting 3, a listing that does not parse) is answered
- * from that copy, marked stale with the time it was read (D13). With Postgres
- * down the studio still browses and still draws (U3), and the topic list is one
- * of the things that makes that true.
+ * `$STUDIO_HOME/cache/topics.<owner>.json`, and a read that fails for any
+ * reason (the database down, the CLI exiting 3, a listing that does not parse)
+ * is answered from that copy, marked stale with the time it was read (D13).
+ * With Postgres down the studio still browses and still draws (U3), and the
+ * topic list is one of the things that makes that true.
+ *
+ * One copy per owner, as the diagram list keeps, since the listing is one
+ * owner's (`topic ls --owner`), and never the old `topics.json`, which a
+ * runner from before that flag wrote from every owner's topics. An upgraded
+ * runner that finds the database down before its first read has no copy,
+ * rather than one naming another owner's topics and concepts.
  *
  * With no copy on disk a failed read throws: `/api/health` then reports
  * `readAt: null`, and a brief cannot be checked until the catalog answers.
@@ -219,7 +225,7 @@ function entryOf(value: unknown): TopicEntry | null {
 export async function loadVocabulary(): Promise<Vocabulary> {
   let read: CachedRead<TopicEntry[]>;
   try {
-    read = await readThrough("topics", readTopics, { isValue: isTopicList });
+    read = await readThrough(`topics.${studioOwner()}`, readTopics, { isValue: isTopicList });
   } catch (error) {
     remember({ readAt: null, stale: true, error: error instanceof Error ? error.message : String(error) });
     throw error;

@@ -18,10 +18,13 @@ import { cachePath } from "../src/content-cache";
  * owner's diagrams in both directions: every `catalog diagram` call read the
  * whole database. Two things close it, and each is pinned here:
  *
- * 1. Every diagram, job and session verb the runner spawns names the owner it
- *    serves (`--owner`), so the catalog reads and writes only what that owner
- *    may, and so does every `learn` verb (`concept show`, a brief's source
- *    note), which read as `local` until it did. The check reads
+ * 1. Every diagram, draft, job, session and topic verb the runner spawns names
+ *    the owner it serves (`--owner`), so the catalog reads and writes only
+ *    what that owner may, and so does every `learn` verb (`concept show`, a
+ *    brief's source note), which read as `local` until it did. The topic
+ *    verbs were the last: `topic ls` handed every owner's topics to the
+ *    planner and the cache, and `topic add` wrote the planner's topic as
+ *    `local`. The check reads
  *    `src/catalog.ts` rather than trusting a list, so a verb added later
  *    without it fails here.
  * 2. The API answers only that owner: a request the web app names as another
@@ -70,8 +73,8 @@ function cliCalls(): CliCall[] {
 const catalogCalls = (): CliCall[] => cliCalls().filter((call) => call.script === "catalog");
 
 describe("the runner's catalog calls", () => {
-  it("name the owner on every diagram, draft, job and session verb", () => {
-    const owning = catalogCalls().filter((call) => /^\[\s*"(diagram|draft|job|session)"/.test(call.args));
+  it("name the owner on every diagram, draft, job, session and topic verb", () => {
+    const owning = catalogCalls().filter((call) => /^\[\s*"(diagram|draft|job|session|topic)"/.test(call.args));
     expect(owning.map((call) => call.fn).sort()).toEqual(
       [
         "diagramCheckout",
@@ -89,6 +92,10 @@ describe("the runner's catalog calls", () => {
         "jobShow",
         "sessionEnd",
         "sessionStart",
+        // `topic ls` without it is every owner's vocabulary, and `topic add` writes as local.
+        "topicAdd",
+        "topicAddDryRun",
+        "topicList",
       ].sort(),
     );
     for (const call of owning) {

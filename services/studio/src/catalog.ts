@@ -236,13 +236,13 @@ export function jobAccept(jobId: string): Promise<CatalogResult> {
 /* -------------------------------------------------------------------------- */
 
 /**
- * `--owner`, on every diagram, job and session verb, and on the `learn` verb
- * (`concept show`): the catalog then lists,
- * shows and checks out only what this studio's owner may read (their own
- * diagrams and the commons'), acts only on their jobs and sessions, and writes
- * as them (phase 4). Without it the CLI would act as its own default owner,
- * which is only the same person by coincidence. `test/owner.test.ts` fails a
- * verb here that leaves it out.
+ * `--owner`, on every diagram, draft, job, session and topic verb, and on the
+ * `learn` verb (`concept show`): the catalog then lists, shows and checks out
+ * only what this studio's owner may read (their own diagrams and topics and
+ * the commons'), acts only on their jobs and sessions, and writes as them
+ * (phase 4). Without it the CLI would act as its own default owner, which is
+ * only the same person by coincidence, and `topic ls` would list every
+ * owner's topics. `test/owner.test.ts` fails a verb here that leaves it out.
  */
 function owned(): string[] {
   return ["--owner", studioOwner()];
@@ -352,21 +352,25 @@ function topicFlags(entry: TopicProposal): string[] {
  * `catalog topic add --dry-run`: whether the planner's proposed topic would be
  * accepted, and which existing topics look like it. Writes nothing.
  *
- * No `--owner`: the topic verbs write as the catalog CLI's own owner and take
- * no such flag (a topic is filed by `catalog topic add` alone, D16 of
- * docs/CONTENT-MIGRATION.md).
+ * `--owner`, so the checks and the near matches are against this owner's
+ * topics and the commons', never another owner's.
  */
 export function topicAddDryRun(entry: TopicProposal): Promise<CatalogResult> {
-  return catalog(["topic", "add", ...topicFlags(entry), "--dry-run"], 60_000);
+  return catalog(["topic", "add", ...topicFlags(entry), "--dry-run", ...owned()], 60_000);
 }
 
 /**
  * `catalog topic add`: the Draw press on a brief whose topic the planner
  * proposed. The person pressed the button, so they are the author, and the
- * reason names the draft the topic came out of.
+ * reason names the draft the topic came out of. `--owner` makes it their
+ * topic: without it the row was `local`'s, which this owner's own enqueue
+ * then could not name.
  */
 export function topicAdd(entry: TopicProposal, reason: string): Promise<CatalogResult> {
-  return catalog(["topic", "add", ...topicFlags(entry), `--reason=${reason}`, `--author=${studioOwner()}`], 60_000);
+  return catalog(
+    ["topic", "add", ...topicFlags(entry), `--reason=${reason}`, `--author=${studioOwner()}`, ...owned()],
+    60_000,
+  );
 }
 
 export function jobDiscard(jobId: string): Promise<CatalogResult> {
@@ -382,12 +386,15 @@ export function jobShow(jobId: string): Promise<CatalogResult> {
 /* -------------------------------------------------------------------------- */
 
 /**
- * `catalog topic ls`: every live topic, with its title, domain and the concepts
- * filed under it. The only way the studio reads the vocabulary, so a brief is
+ * `catalog topic ls --owner`: every live topic this studio's owner may read
+ * (theirs and the commons'), with its title, domain and the concepts filed
+ * under it. The only way the studio reads the vocabulary, so a brief is
  * checked against the rows the enqueue's foreign key checks it against again.
+ * Without `--owner` the listing is the operator's, every owner's topics, and
+ * they would reach the planner, `/api/vocabulary` and the cache.
  */
 export function topicList(): Promise<CatalogResult> {
-  return catalog(["topic", "ls"], 60_000);
+  return catalog(["topic", "ls", ...owned()], 60_000);
 }
 
 /** `catalog status`, used by `/api/health` to say whether Postgres is answering. */

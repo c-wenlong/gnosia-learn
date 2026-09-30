@@ -156,12 +156,54 @@ describe("loadVocabulary through the catalog", () => {
   });
 
   it("will not stand in a cached copy that is not a topic list", async () => {
-    await mkdir(path.dirname(cachePath("topics")), { recursive: true });
+    await mkdir(path.dirname(cachePath("topics.local")), { recursive: true });
     writeFileSync(
-      cachePath("topics"),
-      JSON.stringify({ version: 1, type: "topics", readAt: "2026-09-28T01:00:00.000Z", value: [{ slug: 1 }] }),
+      cachePath("topics.local"),
+      JSON.stringify({ version: 1, type: "topics.local", readAt: "2026-09-28T01:00:00.000Z", value: [{ slug: 1 }] }),
     );
     catalogMock.topicList.mockResolvedValue(topicListDown());
     await expect(loadVocabulary()).rejects.toThrow(/ECONNREFUSED/);
+  });
+});
+
+describe("the cached vocabulary and owners", () => {
+  /** A good copy of `topics` under a cache name, as a runner would have written it. */
+  async function copy(type: string, slugs: string[]): Promise<void> {
+    await mkdir(path.dirname(cachePath(type)), { recursive: true });
+    const value = TOPICS.map((topic, i) => ({ ...topic, slug: slugs[i] ?? topic.slug, incoming: undefined }));
+    writeFileSync(cachePath(type), JSON.stringify({ version: 1, type, readAt: "2026-09-28T01:00:00.000Z", value }));
+  }
+
+  beforeEach(() => {
+    catalogMock.topicList.mockReset().mockResolvedValue(topicListAnswer());
+  });
+  afterEach(() => {
+    delete process.env.STUDIO_OWNER;
+  });
+
+  it("is one copy per owner", async () => {
+    process.env.STUDIO_OWNER = "someone";
+    await loadVocabulary();
+    expect(JSON.parse(readFileSync(cachePath("topics.someone"), "utf8")).value).toHaveLength(TOPICS.length);
+    expect(() => readFileSync(cachePath("topics"), "utf8")).toThrow();
+    expect(() => readFileSync(cachePath("topics.local"), "utf8")).toThrow();
+  });
+
+  it("never stands in the unscoped copy a runner from before topic ls --owner wrote, nor another owner's", async () => {
+    // Both were read from topics this owner may not see.
+    await copy("topics", ["every-owners-topic"]);
+    await copy("topics.local", ["locals-topic"]);
+    process.env.STUDIO_OWNER = "someone";
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    await expect(loadVocabulary()).rejects.toThrow(/ECONNREFUSED/);
+  });
+
+  it("stands in this owner's own copy", async () => {
+    await copy("topics.someone", ["their-topic"]);
+    process.env.STUDIO_OWNER = "someone";
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    const read = await loadVocabulary();
+    expect(read.stale).toBe(true);
+    expect(read.topics.has("their-topic")).toBe(true);
   });
 });
