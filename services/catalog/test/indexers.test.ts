@@ -1090,6 +1090,7 @@ describe("source selection", () => {
       "manimkc",
       "mirrors",
       "remotionkc",
+      "revideokc",
       "sessions",
       "topics",
     ]);

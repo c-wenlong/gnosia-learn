@@ -321,9 +321,10 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       // Courses flip without --strict: two seed items name no concept.
       expect(step("flip courses")["rulesArmed"]).toEqual([]);
       const skipped = (step("import the tree again")["skipped"] as { source: string }[]).map((s) => s.source).sort();
-      // The six types as their own export, and remotionkc because the suites
-      // point its root at nothing (vitest.setup.ts), so it has no CLI to run.
-      expect(skipped).toEqual(["concepts", "courses", "diagrams", "remotionkc", "sessions", "tags", "topics"]);
+      // The six types as their own export, and remotionkc and revideokc
+      // because the suites point their roots at nothing (vitest.setup.ts), so
+      // neither has a CLI to run.
+      expect(skipped).toEqual(["concepts", "courses", "diagrams", "remotionkc", "revideokc", "sessions", "tags", "topics"]);
       // Under the contract the import stored the render and its transcript
       // before their rows, so the upload has nothing left but posters.
       expect(step("asset upload")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0 });
@@ -514,7 +515,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
       expect(report.steps[23]?.gist).toMatch(new RegExp(`${name}-precutover-\\d{8}T\\d{6}Z\\.dump`));
       expect(step("cut-over: migrate")).toMatchObject({ head: latestTag(), held: [] });
       const skipped = (step("cut-over: import the tree")["skipped"] as { source: string }[]).map((s) => s.source).sort();
-      expect(skipped).toEqual(["concepts", "courses", "diagrams", "remotionkc", "sessions", "tags", "topics"]);
+      expect(skipped).toEqual(["concepts", "courses", "diagrams", "remotionkc", "revideokc", "sessions", "tags", "topics"]);
       expect(step("cut-over: import the tree")["totals"]).toMatchObject({ deleted: 0 });
 
       // The parity report is on disk, clean, and every exported file is the tree's.

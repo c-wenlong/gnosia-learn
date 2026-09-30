@@ -22,7 +22,7 @@ built from [`seed/`](seed/README.md), the only content the repository holds:
 ```bash
 createdb self_learn            # Homebrew Postgres 17, already running
 npm run catalog -- migrate
-MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent npm run catalog -- import seed
+MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent npm run catalog -- import seed
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
 npm run catalog -- status
 ```
@@ -102,6 +102,7 @@ there.
 | `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
 | `tools/manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
 | `tools/remotionkc/` | Submodule for narrated Remotion videos, the second video tool, with its own repo and `AGENTS.md` |
+| `tools/revideokc/` | Submodule for narrated Revideo videos, the third video tool, with its own repo and `AGENTS.md` |
 | `tools/tldrawkc/` | Submodule for the tldraw diagram CLI behind `npm run canvas`, with its own repo, `AGENTS.md` and design docs in [`docs/`](tools/tldrawkc/docs/README.md). Needs `npm ci && npm run build` inside it before the script runs |
 | `docs/`, `apps/web/public/` | Long-form notes (the pipeline's is [LEARN.md](docs/LEARN.md)), and static assets including the social card |
 
@@ -133,7 +134,7 @@ bug fixes or docs. All welcome.
    try something out: the tests create and drop their own.
 4. **Never commit an `.env` file.** `.gitignore` covers `.env*` except
    `.env.example`. Provider keys are server-side only.
-5. **Never commit a dirty `tools/manimkc/`, `tools/remotionkc/` or `tools/tldrawkc/` pointer.** All three submodules
+5. **Never commit a dirty `tools/manimkc/`, `tools/remotionkc/`, `tools/revideokc/` or `tools/tldrawkc/` pointer.** All four submodules
    follow the same rule: commit and push inside the submodule first, then
    commit the updated pointer here, and only ever to a commit that is already
    on the submodule's remote. `git diff --submodule=log <name>` before

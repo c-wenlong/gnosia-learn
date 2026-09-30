@@ -3261,7 +3261,10 @@ async function readVideoCorpus(): Promise<VideoCorpusEntry[] | null> {
   return videos
     .filter((video): video is Record<string, unknown> => typeof video === "object" && video !== null)
     .map((video) => ({
-      origin: video.origin === "manimkc" || video.origin === "remotionkc" ? video.origin : "studio",
+      origin:
+        video.origin === "manimkc" || video.origin === "remotionkc" || video.origin === "revideokc"
+          ? video.origin
+          : "studio",
       slug: typeof video.slug === "string" ? video.slug : null,
       assetId: typeof video.assetId === "string" ? video.assetId : "(unknown)",
       title: typeof video.title === "string" ? video.title : null,
