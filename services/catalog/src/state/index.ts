@@ -176,6 +176,13 @@ export {
   writePreference,
 } from "./preference";
 export {
+  deleteProviderKey,
+  readProviderKeys,
+  writeProviderKey,
+  type SealedProviderKey,
+  type StoredProviderKey,
+} from "./provider-keys";
+export {
   asLastVisited,
   asUserResources,
   readLearnerSnapshot,

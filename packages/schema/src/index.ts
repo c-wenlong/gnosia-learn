@@ -44,6 +44,7 @@ import {
   mastery,
   preference,
   progress,
+  providerKey,
   recap,
   review,
 } from "./state";
@@ -85,6 +86,7 @@ export const tables = {
   progress,
   recap,
   preference,
+  providerKey,
   draft,
   job,
   assetJob,
@@ -154,6 +156,9 @@ export const STATE_TABLES = [
   "progress",
   "recap",
   "preference",
+  // The owner's own model provider keys, encrypted (docs/BYOK.md). Counted
+  // here for `catalog status`; no exporter reads it.
+  "providerKey",
 ] as const satisfies readonly TableName[];
 
 /* Row and insert types, inferred from the tables above. These are the shapes
@@ -222,6 +227,8 @@ export type Recap = typeof recap.$inferSelect;
 export type NewRecap = typeof recap.$inferInsert;
 export type Preference = typeof preference.$inferSelect;
 export type NewPreference = typeof preference.$inferInsert;
+export type ProviderKey = typeof providerKey.$inferSelect;
+export type NewProviderKey = typeof providerKey.$inferInsert;
 
 export type Session = typeof session.$inferSelect;
 export type NewSession = typeof session.$inferInsert;

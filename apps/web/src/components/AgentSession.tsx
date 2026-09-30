@@ -139,7 +139,7 @@ export function AgentSession({
             (data.detail ? ` — ${data.detail}` : "") +
             attemptHint +
             (data.code === "MISSING_API_KEY"
-              ? " Use Copy system prompt or Terminal launch below."
+              ? " Or use Copy system prompt or Terminal launch below."
               : ""),
         );
       }

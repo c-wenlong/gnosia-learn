@@ -88,8 +88,8 @@ export function SettingsForm({
   topicIds,
 }: {
   settings: SettingsSnapshot;
-  /** The providers with a key on this server, in the order they are tried. */
-  providers: { id: string; label: string }[];
+  /** The providers the tutor has a key for, in the order they are tried, and whose key each is. */
+  providers: { id: string; label: string; source: "saved" | "server" }[];
   /** Every curriculum item id, for Reset progress. */
   topicIds: string[];
 }) {
@@ -176,10 +176,12 @@ export function SettingsForm({
             </ReadOnly>
           )}
         </Field>
-        <Field label="Model providers" note="Tried in this order. Set by the API keys on the server.">
+        <Field label="Model providers" note="Tried in this order: your own keys first, then the server's. Add yours under Provider keys.">
           {(id) => (
-            <ReadOnly id={id} title={providers.map((p) => p.label).join(" → ")}>
-              {providers.length === 0 ? "None configured on this server" : providers.map((p) => p.id).join(" → ")}
+            <ReadOnly id={id} title={providers.map((p) => `${p.label}, ${p.source === "saved" ? "your key" : "server key"}`).join(" → ")}>
+              {providers.length === 0
+                ? "None yet: add a key under Provider keys"
+                : providers.map((p) => `${p.id} (${p.source === "saved" ? "yours" : "server"})`).join(" → ")}
             </ReadOnly>
           )}
         </Field>
