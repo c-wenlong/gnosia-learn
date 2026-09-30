@@ -46,7 +46,7 @@ export interface NarrationFacts {
 
 let current: NarrationFacts | null = null;
 
-/** The facts in force: gnosia-audio's last answer, or null before one. */
+/** The facts in force: gnosia-audio's latest answer, or null before one or after a discovery it did not answer. */
 export function narrationFacts(): NarrationFacts | null {
   return current;
 }

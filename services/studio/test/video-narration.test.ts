@@ -19,7 +19,7 @@ import {
   videoAbbreviations,
   type NarrationFacts,
 } from "../src/video/narration";
-import { manimkcRoot, toolchainProblems, type Toolchain } from "../src/video/toolchain";
+import { discoverToolchain, manimkcRoot, toolchainProblems, type Toolchain } from "../src/video/toolchain";
 
 import { testVocabulary } from "./vocabulary";
 
@@ -180,4 +180,21 @@ describe("the toolchain without gnosia-audio", () => {
     expect(toolchainProblems(tools)).toEqual(["gnosia-audio, the narration package, does not answer in /opt/manimkc/.venv: run make narration-deps there"]);
     expect(toolchainProblems({ ...tools, narration: FACTS })).toEqual([]);
   });
+});
+
+describe("discovering the toolchain", () => {
+  it("forgets gnosia-audio's last answer when it stops answering, so health says fallback", async () => {
+    keepNarrationFacts(FACTS);
+    const saved = process.env.MANIMKC_ROOT;
+    process.env.MANIMKC_ROOT = "/nonexistent/manimkc";
+    try {
+      const tools = await discoverToolchain();
+      expect(tools.narration).toBeNull();
+      expect(narrationFacts()).toBeNull();
+      expect(narrationHealth().source).toBe("fallback");
+    } finally {
+      if (saved === undefined) delete process.env.MANIMKC_ROOT;
+      else process.env.MANIMKC_ROOT = saved;
+    }
+  }, 60_000);
 });

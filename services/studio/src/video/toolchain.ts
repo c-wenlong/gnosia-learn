@@ -186,10 +186,11 @@ export async function discoverToolchain(): Promise<Toolchain> {
   const python3 = programAt(which("python3"));
   const venvPython = programAt(path.join(root, ".venv", "bin", "python"));
   // Kept for the brief's validator and the card as well, which read it
-  // synchronously; a failed read keeps the last good answer there, and this
-  // toolchain says null so the doctor reports it.
+  // synchronously. A failed read clears it, so health says `fallback` rather
+  // than reporting an installation that no longer answers as current, and
+  // the card makes its own check (Greptile on #257).
   const [narration, sharedAudioCache] = await Promise.all([readNarrationFacts(root, venvPython?.link ?? null), sharedCache(root, python3?.real ?? null)]);
-  if (narration !== null) keepNarrationFacts(narration);
+  keepNarrationFacts(narration);
   const hub = hubCache();
   const model = path.join(hub, "models--hexgrad--Kokoro-82M");
   const kokoroModel = existsSync(model) ? realpathSync(model) : null;
