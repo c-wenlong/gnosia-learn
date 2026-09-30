@@ -32,6 +32,8 @@ vi.mock("@/data/topics", async () => {
 
 const { default: StudioPage } = await import("@/app/(app)/studio/page");
 const { BlockedCard } = await import("@/components/studio/StudioBlocked");
+const { ConversationHost } = await import("@/components/studio/ConversationHost");
+const { panelSignature } = await import("@/lib/studio-view");
 
 const calls = mocks.calls as Call[];
 
@@ -78,8 +80,8 @@ function blockedTitles(tree: ReactNode): string[] {
 }
 
 /** Starts the page and waits until it has asked the runner for everything, boxed so the page itself is not awaited. */
-async function render(): Promise<{ page: Promise<ReactNode> }> {
-  const page = StudioPage({ searchParams: Promise.resolve({}) }) as Promise<ReactNode>;
+async function render(params: Record<string, string> = {}): Promise<{ page: Promise<ReactNode> }> {
+  const page = StudioPage({ searchParams: Promise.resolve(params) }) as Promise<ReactNode>;
   // The page awaits its search params before it calls the runner.
   await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(6));
   return { page };
@@ -169,4 +171,16 @@ describe("the /studio load", () => {
       expect(blockedTitles(await pending)).toEqual([]);
     },
   );
+});
+
+describe("the conversation panel", () => {
+  it("is left to the browser: a ?draft= render draws no dialog of its own, and says which panel it drew", async () => {
+    const { page: pending } = await render({ draft: "d1", sel: "a" });
+    answer("/api/health", { ok: true, data: healthy });
+    answer("/api/diagrams", { ok: true, data: listing });
+    for (const path of ["/api/jobs", "/api/vocabulary", "/api/drafts", "/api/videos"]) answer(path, down);
+    const host = elements(await pending).find((element) => element.type === ConversationHost);
+    expect(host?.props.panel).toBeNull();
+    expect(host?.props.panelKey).toBe(panelSignature({ draft: "d1", sel: "a" }));
+  });
 });

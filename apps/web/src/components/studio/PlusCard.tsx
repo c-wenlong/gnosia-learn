@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useConversationHost } from "@/components/studio/conversation-host";
 import { cx } from "@/components/ui/classes";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
 import { panelHref } from "@/lib/studio-view";
@@ -14,6 +15,9 @@ import { panelHref } from "@/lib/studio-view";
  * over, so there is one way a draft begins. The panel's other parameters are
  * dropped on the way: a new conversation is not about the job or the tile
  * that was open.
+ *
+ * On `/studio` the dialog opens at the press and the URL moves without a
+ * server render (`ConversationHost`); anywhere else it is a router push.
  */
 export function useStartDraft(path: string): {
   start: () => Promise<void>;
@@ -21,6 +25,7 @@ export function useStartDraft(path: string): {
   error: string | null;
 } {
   const router = useRouter();
+  const host = useConversationHost();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,16 +33,17 @@ export function useStartDraft(path: string): {
     if (busy) return;
     setBusy(true);
     setError(null);
+    const token = host?.begin() ?? null;
     const result = await createDraft({ idempotencyKey: idempotencyKey("draft") });
     if (!result.ok) {
+      if (host !== null && token !== null) host.settle(token, null);
       setBusy(false);
       setError(result.refusal.error);
       return;
     }
-    router.push(
-      panelHref(path, { draft: result.data.draftId, job: null, extend: null, selected: null, shot: null }),
-      { scroll: false },
-    );
+    const href = panelHref(path, { draft: result.data.draftId, job: null, extend: null, selected: null, shot: null });
+    if (host !== null && token !== null) host.settle(token, href);
+    else router.push(href, { scroll: false });
     setBusy(false);
   }
 

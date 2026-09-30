@@ -205,6 +205,31 @@ describe("a conversation", () => {
   });
 });
 
+describe("making a conversation", () => {
+  it("reads the corpus beside the vocabulary, not after it", async () => {
+    // Each read is a catalog subprocess, most of a second apiece; one after
+    // the other they were most of the wait between New and the composer.
+    let topics!: () => void;
+    let listed!: () => void;
+    catalogMock.topicList.mockImplementationOnce(() => new Promise((resolve) => (topics = () => resolve(topicListAnswer()))));
+    catalogMock.diagramList.mockImplementationOnce(() => new Promise((resolve) => (listed = () => resolve(ok({ diagrams: [] })))));
+    const made = drafts.create({ idempotencyKey: "parallel" });
+    await until(
+      () => catalogMock.topicList.mock.calls.length === 1 && catalogMock.diagramList.mock.calls.length === 1,
+      "the two reads did not start together",
+    );
+    topics();
+    listed();
+    expect((await made).record.state).toBe("open");
+  });
+
+  it("is still refused when the vocabulary cannot be read, with the corpus read already under way", async () => {
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    await expect(drafts.create({ idempotencyKey: "down" })).rejects.toMatchObject({ status: 503 });
+    expect(catalogMock.diagramList).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("what a person types", () => {
   it("reaches the planner as text on stdin, never as argv, however it starts", async () => {
     const texts = [

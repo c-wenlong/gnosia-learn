@@ -1254,6 +1254,13 @@ export class Drafts {
       throw new JobRefused(400, "tutor turns come with the concept they were about", { field: "tutor" });
     }
 
+    // The corpus and the videos are read beside the vocabulary rather than
+    // after it: each is a catalog subprocess, and one after another they
+    // were most of the wait between New and a conversation to type into.
+    // Neither can reject, so a refusal below leaves nothing unhandled.
+    const listingRead = listDiagrams().catch(() => null);
+    const videosRead = kinds.includes("video") ? readVideoCorpus() : Promise.resolve(null);
+
     let vocabulary: Vocabulary;
     try {
       vocabulary = await this.readVocabulary();
@@ -1281,14 +1288,14 @@ export class Drafts {
       tutorText = told.body;
       tutorTurns = told.shown;
     }
-    const listing = await listDiagrams().catch(() => null);
+    const listing = await listingRead;
     const corpus: CorpusEntry[] = (listing?.diagrams ?? []).map((diagram) => ({
       name: diagram.name,
       title: diagram.title,
       topic: diagram.topic,
       shapes: diagram.shapes,
     }));
-    const videos = kinds.includes("video") ? await readVideoCorpus() : null;
+    const videos = await videosRead;
 
     let extending: string | null = null;
     let changing: string | null = null;

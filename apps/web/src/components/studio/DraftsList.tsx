@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
@@ -17,8 +18,9 @@ import { conversationHref, relativeTime } from "@/lib/studio-view";
  * `?draft=`, the same URL a reload of the panel keeps.
  *
  * The page reads the list on the server, so it is there on the first paint and
- * fresh after every navigation (closing the panel is one). The window
- * regaining focus reads it again from here, for a conversation started or
+ * fresh after every navigation. Closing a conversation is not one (it moves
+ * the URL in the browser, `ConversationHost`), so that reads it again from
+ * here, as the window regaining focus does, for a conversation started or
  * closed in another tab meanwhile. With nothing to list, or the runner not
  * answering, there is no section at all: the grid, the plus card and the
  * page's own runner notice already say everything a person needs.
@@ -54,6 +56,15 @@ export function DraftsList({
     window.addEventListener("focus", wake);
     return () => window.removeEventListener("focus", wake);
   }, [reread]);
+
+  // A conversation closed: it may have words now, or a brief nobody drew.
+  const openDraft = useSearchParams().get("draft");
+  const wasOpen = useRef(openDraft);
+  useEffect(() => {
+    const closed = wasOpen.current !== null && openDraft === null;
+    wasOpen.current = openDraft;
+    if (closed) void reread();
+  }, [openDraft, reread]);
 
   const rows = drafts === null ? [] : draftRows(drafts, titles);
   if (rows.length === 0) return null;
