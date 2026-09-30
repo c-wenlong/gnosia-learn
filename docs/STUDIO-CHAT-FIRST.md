@@ -472,7 +472,9 @@ Re-measured the same way on tldrawkc b0d2d0e (#181 dropped `labelColor` from
 `text`): **15,785 tokens** (38,208 characters; 16,540 input tokens with it
 against 755 with `x`). Whether it earns that back is measured in
 [Phase 2 measured](#phase-2-measured): on one simple brief it cost $0.137
-more and saved no requests.
+more and saved no requests. On two briefs that lean on options it saved one
+`canvas api` call and cost $0.095 more cold, $0.015 warm
+([Manual on option-heavy briefs](#manual-on-option-heavy-briefs)).
 
 It is passed as a file, `--append-system-prompt-file
 $STUDIO_HOME/manual/<hash>.md`, rather than as argv text, and checked on the
@@ -1391,6 +1393,124 @@ does not say so.
 **Spend.** $2.20: $0.245 for the ten drafts, $0.068 to re-measure the
 manual, $0.429 and $0.566 for the two drawings, $0.053 for the extend draft
 and $0.835 for the extend drawing.
+
+#### Manual on option-heavy briefs
+
+*Measured* on 2026-09-30, the follow-up the recommendation above asked for,
+with `claude` 2.1.274, `claude-sonnet-5` at effort `high` for the drawing
+agent (stored on both runners through `PUT /api/settings/agent`), tldrawkc
+70e3c52, and both arms at main e8781b9. Two runners ran from two worktrees of
+that commit on ports 7393 and 7394, each with its own `STUDIO_HOME` and
+`STUDIO_DAILY_USD=5`, against one scratch database built from `seed/` the way
+`scripts/e2e.mjs` builds it. The manual was `7cc219375379`: 38,570
+characters, options generated for all 22 helpers, of which the options
+section is 13,579 and the helper listing 5,514.
+
+The arm without the manual differed by one uncommitted line, `return null` at
+the top of `Runner.manualFor`, which is the runner's own path when no manual
+can be built: no `--append-system-prompt-file`, and step 1 of the prompt says
+to run `canvas -- api` instead of pointing at the manual. That step is the
+only text of the prompt that differs. Keeping the manual's step 1 without the
+manual would tell the agent to work from a system prompt section it does not
+have and not to run `canvas api`, which no configuration ships. Each brief
+went through `POST /api/jobs` once per arm, without the manual first, and
+each candidate was discarded once recorded. **n=1 per brief per arm.**
+
+**A comparison** (`agent-memory-and-state`, `layout: comparison`): context
+window vs long-term memory, two headings and four matched rows per side, and
+a `write` and a `recall` arrow between the headings.
+
+| | Without the manual | With the manual |
+| --- | --- | --- |
+| API requests | 13 | 12 |
+| Agent turns (`num_turns`) | 15 | 14 |
+| Tool calls | 12 | 11 |
+| Calls outside the draw, look, fix loop | 1: `canvas api` | 0 |
+| Source reads, `grep`, `ls`, `cat`, refused commands | 0 | 0 |
+| Options used, each checked against the helper's list | 22 over 4 helpers, all valid | 20 over 5 helpers, all valid |
+| Snippet passes (`canvas run`) | 2: pass 1 had `overlapping-text` on the two arrow labels | 2: the same lint, fixed the same way |
+| First request | 45,758 tokens written to the cache, 0 read | 61,690 written, 0 read |
+| Cache writes / reads over the run | 70,538 / 721,266 | 84,174 / 806,132 |
+| Output tokens (thinking) | 6,591 (1,748) | 8,927 (4,214) |
+| Cost | **$0.492** (`result`) | **$0.587** (`result`) |
+| Wall time | 2 min 0 s | 2 min 45 s |
+| Gate | passed: 14 shapes, 2 bindings, 0 lints, 4 of 4 verify | passed: 15 shapes (a title), 2 bindings, 0 lints, 4 of 4 verify |
+
+**A timeline** (`transformer-architecture-and-training`, no layout): six
+dated milestones from LSTM (1997) to InstructGPT (2022) on an unbound axis,
+labels alternating above and below, no relations.
+
+| | Without the manual | With the manual |
+| --- | --- | --- |
+| API requests | 10 | 11 |
+| Agent turns (`num_turns`) | 11 | 12 |
+| Tool calls | 9 | 10 |
+| Calls outside the draw, look, fix loop | 1: `canvas api` | 2: an `ls` of the job directory and an `rm` of its scratch PNGs, both refused by the guard |
+| Source reads, `grep`, `cat` | 0 | 0 |
+| Options used, each checked against the helper's list | 20 over 5 helpers, all valid | 8 over 4 helpers, all valid |
+| Snippet passes (`canvas run`) | 1 | 1 |
+| First request | 11,187 written, 34,349 read | 11,225 written, 50,273 read |
+| Cache writes / reads over the run | 32,257 / 558,769 | 25,402 / 741,676 |
+| Output tokens (thinking) | 6,772 (3,187) | 7,355 (3,597) |
+| Cost | **$0.309** (`result`) | **$0.324** (`result`) |
+| Wall time | 1 min 43 s | 1 min 47 s |
+| Gate | passed: 25 shapes, 13 bindings, 0 lints, 4 of 4 verify | passed: 14 shapes (a title), 7 bindings, 0 lints, 4 of 4 verify |
+
+The CLI writes its cache with a one-hour lifetime, so each timeline run, the
+second on its runner, read the prefix its own arm's comparison run had
+written (tools and system prompt, the manual included on that side). The
+comparisons are the cold case and the timelines the warm one. A misspelt
+option is ignored rather than refused, so no run could have thrown on one;
+the options row checks every name each final snippet passed against that
+helper's list in `canvas api`.
+
+What the runs show:
+
+- Neither arm read tldrawkc source or guessed an option. The arm without the
+  manual took every option from one `canvas api` call, which now prints each
+  helper's options with type, default and description. The manual's options
+  section is the same text, generated from the same `api.json`, so on these
+  briefs it stood in for exactly one call. That call's result is 17,217
+  characters, about 7,000 tokens (the second request of each run without
+  the manual wrote 7,313 and 7,298 tokens to the cache, most of them that
+  result); the manual's helper listing and options together are 19,093
+  characters.
+- Pricing each run's tokens with the rate table reproduces its
+  `total_cost_usd`. Cold, the manual cost $0.095 more: $0.055 of cache
+  writes, $0.017 of reads and $0.023 of extra output. Warm, $0.015 more: $0.027
+  less in cache writes, $0.037 more in reads and $0.006 more output. The
+  helper listing and options in the system prompt are cached across jobs; the
+  same text as a `canvas api` result is written fresh on every job, at twenty
+  times the read rate.
+- Both runs with the manual drew by its worked snippets: `boxShapes` then
+  `alignContainers` and a title for the comparison, and the timeline
+  snippet's spacing, `stub` ticks and title. Both added a title; neither run
+  without it did. The timeline without the manual hit the trap that
+  snippet's comment names: "2017: The Transformer" wraps, its box grows, and
+  the dashed leader to its tick runs through the label, which no lint
+  catches because `line` mutes the arrow rules. The timeline with the manual
+  avoided that, but set the upper row 190 units above the axis with no
+  leaders, so which tick is whose is read by position alone. The two
+  comparisons read about equally: one has a title, the other's rows line up
+  more closely. That is one look at four pictures.
+
+**Recommendation (n=1 per brief).** Keep the options section; do not trim
+it. On two briefs that used 8 to 22 options each, the arm without the manual
+made no lookups beyond the `canvas api` its prompt asks for, so the manual
+saved one call and no source reads. But the options section is not what to
+cut: its only substitute is `canvas api`, the same text at about the same
+size, which costs more per job once jobs run within the hour of each other,
+and without either the agent is left guessing names that fail silently. The
+plan above to cut it "down to the helpers `canvas api` does not explain" has
+nothing left to cut, since `canvas api` explains all 22. What the gap between
+the arms pays for is the other half of the manual, about 19,500 characters of
+static sections and worked snippets. Whether that earns its size is a
+question of drawing quality that one run per brief cannot settle; testing it
+would take several runs per brief with those sections removed and the
+reference half kept.
+
+**Spend.** $1.71: $0.492 and $0.587 for the comparison, $0.309 and $0.324
+for the timeline.
 
 ### Phase 3. Polish
 
