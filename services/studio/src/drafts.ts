@@ -83,6 +83,7 @@ import { JobRefused, type Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
 import { validateVideoBrief, type ValidVideoBrief } from "./video/brief";
 import { videoKindBuilt } from "./video/config";
+import { briefTool } from "./video/tools";
 import type { VideoRunner, VideoStore } from "./video/runner";
 import type { VideoJobRecord } from "./video/types";
 
@@ -3314,6 +3315,11 @@ export function describeVideoBriefEdit(
     }
     if (JSON.stringify(before.concepts) !== JSON.stringify(after.concepts)) {
       lines.push(`- concepts: ${quoted(before.concepts.join(", "))} -> ${quoted(after.concepts.join(", "))}`);
+    }
+    if (briefTool(before) !== briefTool(after)) {
+      lines.push(`- tool: ${briefTool(before)} -> ${briefTool(after)}, the person's choice: keep it in every brief after this one`);
+    } else if (JSON.stringify(before.toolReason) !== JSON.stringify(after.toolReason)) {
+      lines.push(`- toolReason: ${quoted(before.toolReason)} -> ${quoted(after.toolReason)}`);
     }
     const names = (brief: DraftVideoBrief): string[] => brief.scenes.map((scene) => scene.name);
     for (const scene of after.scenes) if (!names(before).includes(scene.name)) lines.push(`- scene added: ${scene.name}`);

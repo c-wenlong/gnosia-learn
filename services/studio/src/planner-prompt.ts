@@ -1,6 +1,7 @@
 import type { TopicEntry } from "@self-learn/content";
 
 import { corpusBlock, EXTENDING_LINE_CAP, fence, vocabularyBlock, type CorpusEntry } from "./planner";
+import { briefTool, VIDEO_TOOL_CAPABILITIES, VIDEO_TOOL_ROUTES, VIDEO_TOOLS } from "./video/tools";
 import { VOICES } from "./video/voices";
 
 /**
@@ -225,6 +226,18 @@ What you must end up knowing:
    by single hyphens, not already in the VIDEOS block unless this is a
    change to that video.
 8. The topic, from the VOCABULARY block.
+9. The tool that makes it, from the TOOLS block, decided in this order: the
+   tool the person named, when the block marks it available here; for a
+   change, the tool its video was made with (the CHANGING block); for a new
+   week of a series, the series' tool; else the first routing row that names
+   what the video mainly needs. Then check the other beats against the
+   capability matrix: when one needs what that tool cannot do, choose a tool
+   that can do both, else simplify that beat. Only a tool marked available
+   here goes in the brief; a better one that is not is the runner-up. When
+   the person named a tool the block says is not in the studio yet, propose
+   no video brief in that reply (a diagram asked for with it still gets
+   its brief): say in one line that the studio cannot make it yet, and ask
+   whether an available tool should make it instead.
 
 Writing the storyboard:
 
@@ -233,8 +246,8 @@ ${STORYBOARD_RULES}
 When you propose a video, write one or two lines to the person above the
 brief: what a viewer will come away with, and anything you guessed, in plain
 words rather than field names. The card under your reply shows the title,
-the topic, the idea, who it is for, the length and every scene and line, so
-never list them again in prose. Then a fenced block tagged \`brief\`,
+the topic, the tool, the idea, who it is for, the length and every scene and
+line, so never list them again in prose. Then a fenced block tagged \`brief\`,
 holding one JSON object whose first field is \`"kind": "video"\`:
 
 \`\`\`brief
@@ -243,11 +256,16 @@ holding one JSON object whose first field is \`"kind": "video"\`:
  "targetSeconds": 180, "voice": "af_heart",
  "scenes": [{"name": "three_messages",
              "beats": [{"say": "...", "show": "...", "labels": ["..."]}]}],
- "concepts": []}
+ "concepts": [], "tool": "manimkc", "toolReason": "..."}
 \`\`\`
 
 - \`voice\` is one of the voices in the VOICES block, or \`none\` for a silent
   video.
+- \`tool\` is a tool the TOOLS block marks as available here. \`toolReason\`
+  is one sentence of at most 160 characters: the row that chose it and the
+  runner-up, with why the runner-up lost ("Boxes and arrows; runner-up
+  revideokc for depth, not in the studio yet"). The person switches the
+  tool with one click on the card, so never argue for it in prose.
 - A scene's \`name\` is lower-case words joined by underscores, unique in the
   brief, under thirty characters. It becomes the chapter title.
 - No other fields. A change after a brief is answered with a whole new brief,
@@ -370,6 +388,32 @@ export function voicesBlock(): string {
   return fence("VOICES", VOICES.map((voice) => `${voice.id} | ${voice.label}`).join("\n"));
 }
 
+/**
+ * The TOOLS block (D71): each video tool, whether the studio can make a video
+ * with it here, and what it is best at; then docs/VIDEO-TOOLS.md's routing
+ * rows, first match wins, and its capability matrix, which the prompt's
+ * routing steps check a second visual against.
+ */
+export function toolsBlock(): string {
+  const tools = VIDEO_TOOLS.map((tool) => `${tool.name} | ${tool.inStudio ? "available here" : "not in the studio yet"} | ${tool.strength}`);
+  const routes = VIDEO_TOOL_ROUTES.map((route) => `${route.need} | ${route.tool} | ${route.why}`);
+  const matrix = VIDEO_TOOL_CAPABILITIES.map((row) => `${row.capability} | ${row.manimkc} | ${row.remotionkc} | ${row.revideokc}`);
+  return fence(
+    "TOOLS",
+    [
+      "tool | here | best at",
+      ...tools,
+      "",
+      "Pick by what the video mainly needs; the first row that fits wins (need | tool | why):",
+      ...routes,
+      "When nothing in the video needs more than the last row, use manimkc.",
+      "",
+      "The capability matrix (capability | manimkc | remotionkc | revideokc): yes is rendered in a topic, built is constructed but not yet in a narrated topic, no is missing or poor:",
+      ...matrix,
+    ].join("\n"),
+  );
+}
+
 /** What the CHANGING block needs of a studio video: `catalog video show`'s detail. */
 export interface ChangingInput {
   slug: string;
@@ -396,6 +440,7 @@ export function changingSummary(input: ChangingInput): string {
     `audience: ${text(brief.audience) || "(none)"}`,
     `targetSeconds: ${typeof brief.targetSeconds === "number" ? brief.targetSeconds : "(none)"}`,
     `voice: ${text(brief.voice) || "(none)"}`,
+    `tool: ${briefTool(brief)}`,
     `concepts: ${Array.isArray(brief.concepts) ? brief.concepts.filter((c) => typeof c === "string").join(", ") || "(none)" : "(none)"}`,
     "scenes:",
   ];
@@ -587,7 +632,7 @@ export interface CombinedPromptInput {
 
 /**
  * The whole system prompt: the combined prompt, then VOCABULARY, CORPUS,
- * VIDEOS, VOICES, EXTENDING or CHANGING, and CONCEPT and TUTOR. A draft with
+ * VIDEOS, VOICES, TOOLS, EXTENDING or CHANGING, and CONCEPT and TUTOR. A draft with
  * none of the last two is byte for byte what it was before them.
  */
 export function buildCombinedSystemPrompt(input: CombinedPromptInput): string {
@@ -598,7 +643,7 @@ export function buildCombinedSystemPrompt(input: CombinedPromptInput): string {
     combinedPrompt(input.kinds, { concept: concept !== null }),
     vocabularyBlock(input.vocabulary),
     corpusBlock(input.corpus),
-    ...(video ? [videosBlock(input.videos ?? null), voicesBlock()] : []),
+    ...(video ? [videosBlock(input.videos ?? null), voicesBlock(), toolsBlock()] : []),
     ...(input.extending === undefined || input.extending === null ? [] : [fence("EXTENDING", input.extending)]),
     ...(input.changing === undefined || input.changing === null ? [] : [fence("CHANGING", input.changing)]),
     ...(concept === null ? [] : [fence("CONCEPT", concept)]),
