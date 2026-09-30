@@ -239,7 +239,7 @@ describe("pressing", () => {
     const jobs = [job({ jobId: "j1", state: "awaiting_review" })];
     expect(kindBusy(current, "diagram", jobs)?.jobId).toBe("j1");
     expect(kindDrawBlock("diagram", DIAGRAM, current, jobs, null, { ok: true, reason: null })?.reason).toBe(
-      "The diagram is still being drawn.",
+      "The diagram is drawn and ready for review. Accept or discard it first.",
     );
     expect(kindDrawBlock("video", VIDEO, current, jobs, null, { ok: true, reason: null })).toBeNull();
     expect(kindBusy(current, "diagram", [job({ jobId: "j1", state: "accepted" })])).toBeNull();
@@ -405,7 +405,7 @@ describe("a video in review replaced by a newer brief (D52)", () => {
     expect(liveCards(current, jobs, null, null).find((card) => card.kind === "video")?.replaces).toBe("v1");
     expect(pressLabel("video", null, true)).toBe("Replace and make video");
     current.slots!.video.replaces = null;
-    expect(kindDrawBlock("video", VIDEO, current, jobs, null, null)?.reason).toBe("The video is still being made.");
+    expect(kindDrawBlock("video", VIDEO, current, jobs, null, null)?.reason).toBe("The video is made and ready for review. Accept or discard it first.");
   });
 });
 
