@@ -301,7 +301,8 @@ Options:
                            topic add: validate, place and list near
                            matches, write nothing. course import: plan the
                            write, commit nothing. course cover: check the
-                           image and credit, store and write nothing.
+                           image and credit, store and write nothing. Any
+                           other command refuses it, exit 2.
   --fix                    blob audit: act on what it finds (see above),
                            and only on a store whose .owner names this
                            database; the first --fix claims an unclaimed one.
@@ -480,6 +481,25 @@ function isCommand(value: string | undefined): value is Command {
 class Usage extends Error {}
 
 /**
+ * The command and verb pairs that read `--dry-run`. The flag is parsed for
+ * every command, so anywhere else it used to be accepted and ignored, and the
+ * command wrote: `catalog import --dry-run` stored 33 rows and 12 blobs on the
+ * owner's database when remotionkc's first videos landed. Refusing is the
+ * only safe answer to a flag that promises nothing will be written.
+ */
+const DRY_RUN_VERBS: readonly string[] = ["asset upload", "topic add", "course import", "course cover"];
+
+/** Why `--dry-run` cannot be taken here, or null when this command and verb honour it. */
+function dryRunRefusal(command: string, verb: string | undefined): string | null {
+  const said = verb === undefined ? command : `${command} ${verb}`;
+  if (DRY_RUN_VERBS.includes(said)) return null;
+  return (
+    `catalog ${said} has no --dry-run, and would write if run. ` +
+    `--dry-run works with: ${DRY_RUN_VERBS.map((v) => `catalog ${v}`).join(", ")}.`
+  );
+}
+
+/**
  * Exit codes: 0 ok, 1 the command failed, 2 the invocation was wrong, 3 the
  * database is unreachable, 4 migrations are outstanding.
  *
@@ -580,6 +600,14 @@ export async function main(argv: string[]): Promise<number> {
   if (!isCommand(command)) {
     process.stderr.write(`Unknown command: ${command}\n\n${USAGE}`);
     return 2;
+  }
+  if (values["dry-run"]) {
+    // Before anything connects, so a refused dry run touches nothing.
+    const refusal = dryRunRefusal(command, positionals[1]);
+    if (refusal !== null) {
+      process.stderr.write(`${refusal}\n`);
+      return 2;
+    }
   }
 
   const emit = (result: unknown, human: string) => {
