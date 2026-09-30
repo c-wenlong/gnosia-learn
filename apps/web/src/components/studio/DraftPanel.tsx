@@ -9,7 +9,7 @@ import { ConfirmCard, type SaveOutcome } from "@/components/studio/ConfirmCard";
 import { ConfirmCardVideo } from "@/components/studio/ConfirmCardVideo";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
-import { PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
+import { PinnedConcept, PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
 import { useStartDraft } from "@/components/studio/PlusCard";
 import { Sentence } from "@/components/studio/Sentence";
 import { DialogHeader } from "@/components/studio/StudioDialog";
@@ -45,6 +45,7 @@ import {
   makeBoth,
   MENTION_HINT,
   CHANGE_OPENING_TURN,
+  conceptOpeningTurn,
   MENTION_OPENING_TURN,
   mentionOptions,
   modEnterPlan,
@@ -779,14 +780,23 @@ export function DraftPanel({
   const problemKind = problemKindOf(view);
   const empty = isEmptyConversation(view.transcript) && pending === null;
   const composing = composerState(view, cap, pending !== null, empty, editing);
-  const valueBlock = valueSendBlock(value, empty);
+  const concept = view.concept ?? null;
+  // H8: a conversation opened on a concept takes a bare tag, which means "of this concept".
+  const valueBlock = valueSendBlock(value, empty && concept === null);
   const busy = view.inFlight || pending !== null;
   const lastPerson = pending?.value ?? lastPersonValue(view.transcript);
   const waiting = waitingKinds(view);
   const suggested = suggestionsFor(view);
   const options = mentionOptions(view, video);
   const kinds = view.slots !== undefined;
-  const opening = kinds ? MENTION_OPENING_TURN : view.source === null ? MENTION_OPENING_TURN : EXTEND_OPENING_TURN;
+  const opening =
+    concept !== null
+      ? conceptOpeningTurn(concept.title)
+      : kinds
+        ? MENTION_OPENING_TURN
+        : view.source === null
+          ? MENTION_OPENING_TURN
+          : EXTEND_OPENING_TURN;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
@@ -801,6 +811,7 @@ export function DraftPanel({
         className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5"
       >
         {view.source !== null && sourceTitle !== null && (diagramSource ? <PinnedDiagram name={view.source} title={sourceTitle} /> : <PinnedVideo slug={view.source} title={sourceTitle} />)}
+        {concept !== null && <PinnedConcept slug={concept.slug} title={concept.title} tutorTurns={concept.tutorTurns} />}
 
         {empty && (
           <TutorMessage label="Planner">
@@ -808,8 +819,8 @@ export function DraftPanel({
           </TutorMessage>
         )}
         {/* The corpus's topics are a way into a new diagram; an extend
-            conversation already has its subject. */}
-        {empty && view.source === null && suggestions.length > 0 && (
+            conversation, or one opened on a concept, already has its subject. */}
+        {empty && view.source === null && concept === null && suggestions.length > 0 && (
           <div className="-mt-2 flex flex-wrap gap-2 px-1.5" aria-label="Suggestions">
             {suggestions.map((suggestion) => (
               <Chip

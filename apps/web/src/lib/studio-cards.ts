@@ -59,6 +59,26 @@ export const CHANGE_OPENING_TURN = "I've read this video's brief. Tell me what i
 export function videoPosterHref(slug: string): string {
   return `/api/assets/${encodeURIComponent(`video:${slug}`)}/poster`;
 }
+/**
+ * A conversation the concept tutor opened (H14 of docs/STUDIO-TUTOR-HANDOFF.md):
+ * the unpaid opening turn, shown only when the tagged message could not be
+ * sent on arrival.
+ */
+export function conceptOpeningTurn(title: string): string {
+  return `I have your note on ${title}. Tag @diagram or @video to make one of it, or ask me about it first.`;
+}
+
+/**
+ * What the pinned concept line adds when tutor turns came along (D69): the
+ * turns the planner was given, as exchanges, one question and its answer
+ * each. Null when none came.
+ */
+export function tutorTurnsWords(turns: number): string | null {
+  if (!Number.isFinite(turns) || turns <= 0) return null;
+  const exchanges = Math.ceil(turns / 2);
+  return exchanges === 1 ? "and your last exchange with the tutor" : `and your last ${exchanges} exchanges with the tutor`;
+}
+
 export const MENTION_PLACEHOLDER = "Ask about an idea, or type @ to make something";
 /** The menu's foot line: the one thing a person cannot see from the entries. */
 export const MENTION_HINT = "Tag one or both";

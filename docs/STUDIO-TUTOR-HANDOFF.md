@@ -6,7 +6,7 @@ seeded with the concept and the tag, where the planner proposes a brief and
 the person approves it with the usual press. Nothing is made from the tutor
 itself.
 
-**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, is built ("As built" below says where it differs); phase 2, the web app, is not.** Numbers marked
+**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, and phase 2, the web app, are built ("As built" under each says where they differ); phase 2's paid hand-offs and device checks are still to run.** Numbers marked
 *measured* come from the PR or document named beside them; every other number
 is a guess and says so.
 
@@ -352,17 +352,34 @@ what it was; `test/planner.test.ts`'s seals pass unchanged; and the local gate
 
 ### Phase 2: the web app
 
-- [ ] `studio` passed from the concept page to `TutorChat` by `studioEnabled()`
-- [ ] The health read after idle and on focus, and the kind reasons from it
-- [ ] `MentionComposer` loaded after a good read and swapped in only while the
+- [x] `studio` passed from the concept page to `TutorChat` by `studioEnabled()`
+- [x] The health read after idle and on focus, and the kind reasons from it
+- [x] `MentionComposer` loaded after a good read and swapped in only while the
       field is empty and unfocused; `PlainFallback` when the chunk fails
-- [ ] `openConceptConversation` in `studio/actions.ts` with `requireStudio()`,
+- [x] `openConceptConversation` in `studio/actions.ts` with `requireStudio()`,
       reading the workspace for `currentOwner()`
-- [ ] The opener's `send` carrying mentions, in `studio-extend.ts` and
+- [x] The opener's `send` carrying mentions, in `studio-extend.ts` and
       `DraftPanel.tsx`
-- [ ] The locked field, the refusals, and the marker in the tutor's thread
+- [x] The locked field, the refusals, and the marker in the tutor's thread
       (never sent to `/api/agent/chat`)
-- [ ] The studio's pinned concept line, opening turn and drafts-list title
+- [x] The studio's pinned concept line, opening turn and drafts-list title
+
+**As built (phase 2).** Where the web PR differs from the plan above, or
+says more than it:
+
+| What | As built |
+| --- | --- |
+| The chunk | `components/workspace/TutorStudioKit.tsx`: the field (`MentionComposer`, imported directly) and `openInStudio`, fetched with `import()` after a good read. `TutorChat` imports only types from the studio's modules, which `lib/tutor-studio.test.ts` checks, and decides from `studioCanTag` in `lib/tutor-studio.ts` (no imports). The words and rules are `lib/tutor-handoff.ts` |
+| A chunk that fails | The plain `Composer` stays. The kit carries Lexical, so a failed import means the swap never happened and there are no chips to carry; `PlainFallback`'s job is done by the field that is already there |
+| The opener's chips | Already carried since #224 (`sendMentions`, sent by `openerSend`), so `studio-extend.ts` and `DraftPanel.tsx` did not change for it. The tutor leaves its opener with `leaveOpener`, and keeps its idempotency key in `extendKey`'s store under `tutor:<slug>`, forgotten once the draft exists so the next tagged message makes a new one (D70). The key is kept with a print of the message and the turns (`handoffPrint`), so a retry after a timeout finds the draft the first press may have made, and an edited retry gets a new key rather than a draft built from the first message's blocks. An opener the tab's storage refuses is kept in the page's memory (`leaveOpener` reads its write back), which the conversation takes from after the in-app navigation |
+| The marker | A `{ role: "studio", content, mentions, draftId }` item in the tutor's own `sessionStorage` thread. `chatTurns` leaves it out of what `/api/agent/chat` and the next hand-off are sent. It draws its chips with `markerPieces` in `tutor-thread.ts`, since importing `mention-text.ts` put every one of its exports on the first load |
+| A disabled chip | A chip whose kind the menu disables since it was placed (the cap spent, videos gone) holds Send with the menu's reason. Diagram is disabled when `diagramAgent.ok` is false, with its `problem` |
+| The swap | Done when the chunk lands, on blur, and after a send; only after a send may a focused field be swapped, and the new field then takes the focus. A blur because the window lost focus swaps nothing. The field, and the suggested questions, are locked from Send until the page has gone |
+| `?ask=` | Its first send takes it off the URL with `history.replaceState`, and the field is filled only while the URL still carries it, so Back from the studio does not fill the field again |
+| A refusal | A timeout (`undelivered: false` from `studioApi`) says the studio did not answer in time, without the `npm run studio` hint a runner that is off gets |
+| The owner | `readConceptWorkspace(slug, owner)` takes the owner the action resolved with `currentOwner()`. `studio-gate.test.ts` now reads every exported function of `actions.ts` as an endpoint, not only those taking `FormData` |
+| The studio header | Stays "New conversation" until a brief names it: the pinned line carries the concept's title, and a second copy in the header would repeat it |
+| First load of `/learn/[concept]` | 240.8 kB gzipped before, 243.0 kB after (+2.2 kB, 12 files to 13, the new one the 281-byte `import()` loader), summed from the build's client reference manifest. Above the guess of under 2 kB |
 
 Done when:
 

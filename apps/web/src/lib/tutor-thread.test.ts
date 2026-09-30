@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { citedNumbers, parseThread, threadKey, trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
+import {
+  chatTurns,
+  citedNumbers,
+  markerPieces,
+  parseThread,
+  threadKey,
+  trimForRequest,
+  type HandoffMarker,
+  type ThreadItem,
+  type TutorTurn,
+} from "@/lib/tutor-thread";
 
 describe("tutor thread", () => {
   it("keys the thread per concept", () => {
@@ -38,5 +48,47 @@ describe("tutor thread", () => {
       { role: "user", content: "last" },
     ];
     expect(trimForRequest(big)).toEqual([{ role: "user", content: "last" }]);
+  });
+});
+
+describe("a hand-off's marker in the thread (D70 of STUDIO-TUTOR-HANDOFF.md)", () => {
+  const marker: HandoffMarker = {
+    role: "studio",
+    content: "a @video of the handshake",
+    mentions: [{ kind: "video", start: 2, end: 8 }],
+    draftId: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed",
+  };
+
+  it("reads back with the turns around it, in order", () => {
+    const stored: ThreadItem[] = [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }, marker];
+    expect(parseThread(JSON.stringify(stored))).toEqual(stored);
+  });
+
+  it("drops a marker it cannot link to or draw, and a mention that is not one", () => {
+    const bad = [
+      { ...marker, draftId: "../../etc" },
+      { ...marker, draftId: 7 },
+      { ...marker, mentions: "video" },
+      { role: "studio", content: "no draft" },
+    ];
+    expect(parseThread(JSON.stringify(bad))).toEqual([]);
+    const oddMention = { ...marker, mentions: [marker.mentions[0], { kind: "video" }, null, "x"] };
+    expect(parseThread(JSON.stringify([oddMention]))).toEqual([marker]);
+  });
+
+  it("is drawn with its chips where they were typed, and a range that does not read as a chip as words", () => {
+    expect(markerPieces(marker)).toEqual([{ text: "a " }, { kind: "video" }, { text: " of the handshake" }]);
+    const both = { content: "@video and @diagram", mentions: [{ kind: "diagram", start: 11, end: 19 }, { kind: "video", start: 0, end: 6 }] };
+    expect(markerPieces(both)).toEqual([{ kind: "video" }, { text: " and " }, { kind: "diagram" }]);
+    const off = { content: "a @video", mentions: [{ kind: "video", start: 0, end: 6 }, { kind: "video", start: 2, end: 99 }] };
+    expect(markerPieces(off)).toEqual([{ text: "a @video" }]);
+    const twice = { content: "@video @video", mentions: [{ kind: "video", start: 0, end: 6 }, { kind: "video", start: 7, end: 13 }] };
+    expect(markerPieces(twice)).toEqual([{ kind: "video" }, { text: " @video" }]);
+  });
+
+  it("is never among the turns sent to the tutor or taken to the studio", () => {
+    const thread: ThreadItem[] = [{ role: "user", content: "what is a SYN?" }, { role: "assistant", content: "The opener." }, marker];
+    expect(chatTurns(thread)).toEqual(thread.slice(0, 2));
+    expect(trimForRequest(chatTurns(thread)).some((turn) => (turn.role as string) === "studio")).toBe(false);
   });
 });

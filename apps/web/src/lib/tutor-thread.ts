@@ -1,14 +1,95 @@
 /**
- * The concept tutor's thread as the browser keeps it, and the two pure rules
- * the chat needs: which `[n]` markers in a reply are real citations, and how
- * much of a long thread to send back.
+ * The concept tutor's thread as the browser keeps it, and the pure rules the
+ * chat needs: which `[n]` markers in a reply are real citations, how much of
+ * a long thread to send back, and which turns go to the studio with a tagged
+ * message (docs/STUDIO-TUTOR-HANDOFF.md, D69 and D70).
  *
- * React-free so the rules are testable; `TutorChat.tsx` is the only caller.
+ * React-free so the rules are testable. `TutorChat.tsx` reads the thread;
+ * the hand-off (`tutor-handoff.ts` and the studio's server action) takes its
+ * turns from it through `chatTurns`.
+ *
+ * Kept small on purpose: the concept page loads it whether or not a studio
+ * exists, so nothing here imports the studio's code.
  */
 
 export interface TutorTurn {
   role: "user" | "assistant";
   content: string;
+}
+
+/**
+ * A tagged message the tutor handed to the studio (D70): drawn at the end of
+ * the thread with its chips and a link to the conversation it opened. It is
+ * the person's record of where the message went, never a turn of the
+ * tutor's: `chatTurns` leaves it out of what `/api/agent/chat` is sent and of
+ * what the next hand-off carries.
+ */
+export interface HandoffMarker {
+  role: "studio";
+  /** The message as sent, `@diagram` and `@video` where the chips were. */
+  content: string;
+  /** Where the chips sit in `content`, as a studio message's `mentions` do. */
+  mentions: { kind: string; start: number; end: number }[];
+  /** The conversation it opened. */
+  draftId: string;
+}
+
+export type ThreadItem = TutorTurn | HandoffMarker;
+
+/** A runner's draft id: a UUID today; anything else stored is not linked to. */
+const DRAFT_ID = /^[A-Za-z0-9-]{1,100}$/;
+
+function isTurn(t: unknown): t is TutorTurn {
+  return (
+    t !== null &&
+    typeof t === "object" &&
+    ((t as TutorTurn).role === "user" || (t as TutorTurn).role === "assistant") &&
+    typeof (t as TutorTurn).content === "string"
+  );
+}
+
+function isMarker(t: unknown): t is HandoffMarker {
+  if (t === null || typeof t !== "object") return false;
+  const m = t as HandoffMarker;
+  return (
+    m.role === "studio" &&
+    typeof m.content === "string" &&
+    typeof m.draftId === "string" &&
+    DRAFT_ID.test(m.draftId) &&
+    Array.isArray(m.mentions)
+  );
+}
+
+/**
+ * A marker's words cut at its chips, for drawing: each chip a range inside
+ * the words reading exactly `@<kind>`, taken in order, overlaps and repeats
+ * left as words. The rule `inlinePieces` in `mention-text.ts` applies, kept
+ * here because that module (the studio composer's rules) would add every one
+ * of its exports to each concept page's first load, and a marker only needs
+ * this.
+ */
+export function markerPieces(marker: Pick<HandoffMarker, "content" | "mentions">): ({ text: string } | { kind: string })[] {
+  const { content } = marker;
+  const chips = marker.mentions
+    .filter((m) => m.start >= 0 && m.end <= content.length && m.end > m.start && content.slice(m.start, m.end) === `@${m.kind}`)
+    .sort((a, b) => a.start - b.start);
+  const pieces: ({ text: string } | { kind: string })[] = [];
+  const seen = new Set<string>();
+  let at = 0;
+  for (const chip of chips) {
+    if (chip.start < at || seen.has(chip.kind)) continue;
+    seen.add(chip.kind);
+    if (chip.start > at) pieces.push({ text: content.slice(at, chip.start) });
+    pieces.push({ kind: chip.kind });
+    at = chip.end;
+  }
+  if (at < content.length) pieces.push({ text: content.slice(at) });
+  return pieces;
+}
+
+/** The tutor's own turns, markers left out: the only thing the chat route or the planner is sent. */
+export function chatTurns(items: readonly ThreadItem[]): TutorTurn[] {
+  return items.filter((item): item is TutorTurn => item.role !== "studio");
 }
 
 /**
@@ -20,18 +101,28 @@ export function threadKey(slug: string): string {
   return `self-learn:tutor:${slug}`;
 }
 
-/** A stored thread back into turns, dropping anything that is not one. */
-export function parseThread(raw: string | null): TutorTurn[] {
+/**
+ * A stored thread back into turns and markers, dropping anything that is
+ * neither. A marker's chips are checked against its words where they are
+ * drawn, not here.
+ */
+export function parseThread(raw: string | null): ThreadItem[] {
   if (raw === null) return [];
   try {
     const value: unknown = JSON.parse(raw);
     if (!Array.isArray(value)) return [];
-    return value.filter(
-      (t): t is TutorTurn =>
-        t !== null &&
-        typeof t === "object" &&
-        ((t as TutorTurn).role === "user" || (t as TutorTurn).role === "assistant") &&
-        typeof (t as TutorTurn).content === "string",
+    return value.filter((t): t is ThreadItem => isTurn(t) || isMarker(t)).map((t) =>
+      t.role === "studio"
+        ? {
+            role: "studio",
+            content: t.content,
+            draftId: t.draftId,
+            mentions: t.mentions.filter(
+              (m): m is HandoffMarker["mentions"][number] =>
+                m !== null && typeof m === "object" && typeof m.kind === "string" && Number.isInteger(m.start) && Number.isInteger(m.end),
+            ),
+          }
+        : t,
     );
   } catch {
     return [];
