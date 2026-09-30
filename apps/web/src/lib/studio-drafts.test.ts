@@ -305,6 +305,24 @@ describe("tags and cards per kind (docs/STUDIO-MENTIONS.md, API)", () => {
     );
     expect(videoAvailability(undefined)).toEqual({ ok: false, reason: null });
   });
+
+  it("reads health's video tools, keeping only well-formed ones it knows (STUDIO-VIDEO-TOOLS.md, D73)", () => {
+    const tools = [
+      { name: "manimkc", strength: "ManimGL", available: true, reason: null },
+      { name: "revideokc", strength: "Revideo", available: false, reason: "revideokc is not in the studio yet" },
+      { name: "blender", strength: "?", available: true, reason: null },
+      "manimkc",
+    ];
+    expect(videoAvailability({ ok: true, checks: [], tools })).toEqual({
+      ok: true,
+      reason: null,
+      tools: [
+        { name: "manimkc", strength: "ManimGL", available: true, reason: null },
+        { name: "revideokc", strength: "Revideo", available: false, reason: "revideokc is not in the studio yet" },
+      ],
+    });
+    expect(videoAvailability({ ok: false, checks: [], note: "n", tools: "nonsense" })).toEqual({ ok: false, reason: "n", tools: [] });
+  });
 });
 
 describe("diagramAvailability (#206)", () => {

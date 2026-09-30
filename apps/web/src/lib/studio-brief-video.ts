@@ -38,6 +38,55 @@ export interface VideoBrief {
   scenes: VideoScene[];
   concepts: string[];
   source?: string;
+  /** The tool that makes it (docs/STUDIO-VIDEO-TOOLS.md, D71); absent is manimkc (D72). */
+  tool?: VideoToolName;
+  /** The planner's one sentence on why that tool, naming the runner-up. */
+  toolReason?: string;
+}
+
+/** The three video tools, as the runner's `services/studio/src/video/tools.ts` names them. */
+export const VIDEO_TOOL_NAMES = ["manimkc", "remotionkc", "revideokc"] as const;
+export type VideoToolName = (typeof VIDEO_TOOL_NAMES)[number];
+
+/** One tool as health's `video.tools` reports it. */
+export interface VideoToolOption {
+  name: VideoToolName;
+  /** What it is best at, in one line. */
+  strength: string;
+  /** Whether the studio can make a video with it. */
+  available: boolean;
+  /** Why not, when it cannot. */
+  reason: string | null;
+}
+
+/** The tool a brief names, absent meaning manimkc (D72). */
+export function briefTool(brief: Pick<VideoBrief, "tool">): VideoToolName {
+  return brief.tool !== undefined && (VIDEO_TOOL_NAMES as readonly string[]).includes(brief.tool) ? brief.tool : "manimkc";
+}
+
+/**
+ * The card's tool row (D73): the tool, the line beside it (the planner's
+ * reason, or once a person has switched, what the new tool is best at), and
+ * the tools a person may switch to. Only tools the studio can make are
+ * offered, and only when there are two of them: a menu of one is a chip. A
+ * change keeps its video's tool (D74), so a change card offers none.
+ */
+export function toolRow(
+  brief: Pick<VideoBrief, "tool" | "toolReason" | "mode">,
+  tools: readonly VideoToolOption[],
+): { tool: VideoToolName; line: string | null; choices: VideoToolOption[] } {
+  const tool = briefTool(brief);
+  const own = tools.find((option) => option.name === tool);
+  const line = brief.toolReason ?? own?.strength ?? null;
+  const available = tools.filter((option) => option.available);
+  return { tool, line, choices: brief.mode === "change" || available.length < 2 ? [] : available };
+}
+
+/** The brief a person's switch saves: the new tool, and no reason, since the planner's was for the old one. */
+export function switchedTool<T extends Pick<VideoBrief, "tool" | "toolReason">>(brief: T, tool: VideoToolName): T {
+  const next: T = { ...brief, tool };
+  delete next.toolReason;
+  return next;
 }
 
 /** The voice value for a video with no narration. */

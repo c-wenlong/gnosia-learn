@@ -469,6 +469,8 @@ decides is everything on screen.
 | length | narrated: the `say` total, at 15.2 characters a second times 1.08, within 20 percent of `targetSeconds`; silent: the `seconds` total within 20 percent | See below |
 | `concepts` | ids filed under the topic, or empty | As for diagrams |
 | `source` | optional: a concept slug, whose note the runner hands the agent as material | As the diagram brief's `source` |
+| `tool` | optional: `manimkc`, `remotionkc` or `revideokc`, one the studio can make; absent is manimkc | Which tool makes the video ([STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md), D71 to D74). A change keeps its video's tool |
+| `toolReason` | optional, with `tool`: one sentence, at most 160 characters | The row that chose the tool and the runner-up, shown beside the chip on the card |
 
 There is no `model` field. The agent's model and effort come from the
 settings panel (D53), so a person never picks one per video.
@@ -672,6 +674,7 @@ The blocks, fenced as in the diagram prompt:
 | `VOCABULARY` | topic, exactly as the diagram planner's | `catalog topic ls --json`, the runner's existing cache |
 | `CORPUS` | video: `slug \| title \| topic \| length \| studio or manimkc` | `catalog video list --owner --json`: studio videos, and the owner's manimkc-indexed videos so the planner can say one already exists |
 | `VOICES` | kokoro voice: `id \| language and voice` | a static list in `services/studio/src/video/voices.ts`, checked against kokoro's installed voices by the video doctor |
+| `TOOLS` | video tool: `name \| available here or not \| best at`, then VIDEO-TOOLS.md's routing rows | `services/studio/src/video/tools.ts`, pinned to [VIDEO-TOOLS.md](VIDEO-TOOLS.md) by `test/video-tools.test.ts` ([STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md), D71) |
 | `CHANGING` | only on a draft opened on a studio video: its title, topic, the brief it was made from (scenes and every line), capped at 200 lines | the `video` row's stored brief (the source's `brief.json`) |
 
 **Measured: one probe of this prompt** (its draft, before the counting rule and
