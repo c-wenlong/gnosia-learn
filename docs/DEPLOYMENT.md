@@ -110,8 +110,10 @@ vercel env add AUTH_SECRET production         # openssl rand -base64 32
 Set both for Preview too if preview deployments should be usable. With either
 missing the deployment fails closed: every protected page redirects to
 `/sign-in`, which names the missing variable. Rotating `AUTH_SECRET` signs
-every browser out; changing `OWNER_PASSWORD` does not, since the cookie is
-signed with the secret and not the password. Sessions last thirty days.
+every browser out, and makes the provider keys saved in Settings unreadable
+until they are entered again ([docs/BYOK.md](BYOK.md), "Rotation"); changing
+`OWNER_PASSWORD` does neither, since the cookie is signed with the secret and
+not the password. Sessions last thirty days.
 
 The only brake on password guessing is a fixed 600ms delay per wrong attempt
 in `apps/web/src/app/api/auth/sign-in/route.ts`. That is proportionate for one
@@ -127,17 +129,29 @@ caller already goes through.
 | --- | --- | --- |
 | `DATABASE_URL` | Postgres holding the learner state and the catalog | Vercel (once a cloud database exists), CI, locally |
 | `OWNER_PASSWORD` | The one password that opens the app (see [Signing in](#signing-in)) | Vercel, locally |
-| `AUTH_SECRET` | Signs the session cookie; 32+ characters from `openssl rand -base64 32` | Vercel, locally |
-| `NVIDIA_API_KEY` | Provider 1 of the tutoring chat cascade | Vercel |
-| `GEMINI_API_KEY` | Provider 2 | Vercel |
-| `OPENROUTER_API_KEY` | Provider 3 | Vercel |
+| `AUTH_SECRET` | Signs the session cookie, and seals the provider keys saved in Settings; 32+ characters from `openssl rand -base64 32` | Vercel, locally |
+| `NVIDIA_API_KEY` | Provider 1 of the tutoring chat cascade, the fallback for an owner who saved no NVIDIA key | Vercel (optional) |
+| `GEMINI_API_KEY` | Provider 2, likewise | Vercel (optional) |
+| `OPENROUTER_API_KEY` | Provider 3, likewise | Vercel (optional) |
 | `CODECOV_TOKEN` | Codecov **upload** token, from the repo's Configuration page on app.codecov.io | GitHub Actions only (optional) |
 
-The three provider keys go in the Vercel project's **Settings → Environment
-Variables** (Production, and Preview if you want previews to run live chat),
-because the serverless routes read them at request time. CI does not need
-them: `npm run build` runs without keys, and the tutoring chat degrades to the
-copy-the-prompt fallbacks when none are set.
+The tutor's provider keys live in the database now: the owner saves them in
+the app's own Settings, under Provider keys, sealed with AES-256-GCM under a
+key derived from `AUTH_SECRET` ([docs/BYOK.md](BYOK.md)). Nothing needs a
+restart, and a local machine needs no key in `.env.local` at all. The three
+variables above are the fallback: the tutor tries the owner's saved keys
+first, then the server's for any provider the owner saved none for, so a
+deployment that sets them keeps working unchanged. Set them in the Vercel
+project's **Settings → Environment Variables** (Production, and Preview if you
+want previews to run live chat); the serverless routes read them at request
+time. CI needs neither: `npm run build` runs without keys, and the tutoring
+chat degrades to the copy-the-prompt fallbacks when there are none.
+
+Rotating `AUTH_SECRET` makes every saved provider key unreadable as well as
+signing every browser out. Settings then asks for each key again, and the
+tutor uses the server's keys meanwhile; nothing fails. A database backup is
+safe to store only where `AUTH_SECRET` is not: the two together open every
+saved key.
 
 `CODECOV_TOKEN` is the only GitHub Actions secret the repo uses, and CI skips
 the coverage upload when it is absent:
