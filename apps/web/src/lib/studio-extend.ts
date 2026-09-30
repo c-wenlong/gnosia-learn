@@ -239,6 +239,29 @@ export function leaveOpener(storage: Storage | null, draftId: string, opener: Ex
 }
 
 /**
+ * The opener an Extend press leaves, given the one an earlier run of the same
+ * press left for the same draft (or null). A reload between the hand-off and
+ * the navigation landing runs the press again with nothing typed, and the
+ * runner answers its key with the same draft; left as it was, the second run
+ * would replace a message the person queued with the default opener. What
+ * the person did since the reload wins: a message they queued (`queued`) is
+ * the one sent, and words they typed are the ones composed. Otherwise the
+ * earlier run's are kept.
+ */
+export function carryOpener(earlier: ExtendOpener | null, next: ExtendOpener, queued: boolean): ExtendOpener {
+  if (earlier === null) return next;
+  const keepSend = !queued && earlier.send !== null;
+  const keepCompose = next.compose.trim() === "";
+  return {
+    ...next,
+    send: keepSend ? earlier.send : next.send,
+    sendMentions: keepSend ? (earlier.sendMentions ?? []) : (next.sendMentions ?? []),
+    compose: keepCompose ? earlier.compose : next.compose,
+    composeMentions: keepCompose ? (earlier.composeMentions ?? []) : (next.composeMentions ?? []),
+  };
+}
+
+/**
  * Said on `window` after `leaveOpener`, for a conversation that is already
  * on screen: its panel read its opener when it mounted and will not mount
  * again, so the video job view's Change, shown inside that conversation,
