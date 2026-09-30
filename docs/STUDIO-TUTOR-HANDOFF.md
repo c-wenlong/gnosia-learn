@@ -6,7 +6,7 @@ seeded with the concept and the tag, where the planner proposes a brief and
 the person approves it with the usual press. Nothing is made from the tutor
 itself.
 
-**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, and phase 2, the web app, are built ("As built" under each says where they differ); phase 2's paid hand-offs and device checks are still to run.** Numbers marked
+**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, and phase 2, the web app, are built ("As built" under each says where they differ); phase 2's paid hand-offs, the drawn and accepted diagram, the "of that" hand-off and the iOS Safari touch check were measured on 2026-09-30 ("Measured, 2026-09-30" under phase 2). On iOS the hand-off itself works by touch, but the check found two layout defects that are still open (the page zooms when the field is focused, and a long message slides under the tab bar), so iOS is run, not passed. Android Chrome and VoiceOver are still to run, by the owner.** Numbers marked
 *measured* come from the PR or document named beside them; every other number
 is a guess and says so.
 
@@ -398,6 +398,90 @@ Done when:
 - The field is worked by keyboard, by mouse, by touch at 400px on iOS Safari
   and Android Chrome, and with VoiceOver, as STUDIO-MENTIONS.md's phase 2
   checks the studio's.
+
+### Measured, 2026-09-30
+
+Run on `main` at `779cb47`, from a worktree, against a scratch database built
+from `seed/` the way `scripts/e2e.mjs` builds one, a runner of its own on port
+7263 (`STUDIO_DAILY_USD=5`, its own `STUDIO_HOME`) and `next start` on the
+production build. Every message was typed into the concept page's tutor in a
+real browser and sent from there. Nothing here touched `self_learn` or the
+owner's runner.
+
+**The tutor's answers came from a local stand-in, not a free provider.** No
+`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY` is set on this
+machine (the owner's `apps/web/.env.local` has none either, so the owner's own
+local tutor answers 503). `NVIDIA_BASE_URL` pointed the provider cascade at a
+small OpenAI-compatible endpoint that answered each turn with a sealed
+`claude -p --model haiku` (no tools, no MCP, no settings) under the tutor's own
+system prompt and messages. The tutor route, its prompt, its citations and the
+thread in `sessionStorage` were the real ones; only the model behind them
+differs from production.
+
+| # | Concept | Tags | Message after the chip | Tutor turns | First-turn cost | Cards on first reply | `source` / `concepts` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `self-attention` | Diagram (typed `@`, Enter) | "showing how each token's query is scored against every key and the scores become weights over the values" | 4 ("your last 2 exchanges") | $0.0392 | Diagram | `self-attention` / includes `self-attention` |
+| 2 | `tool-calling` | Diagram (typed `@`, clicked) | "of one tool call round trip: model emits the call, the harness runs it, the result comes back into context" | 4 | $0.0367 | Diagram | `tool-calling` / `[tool-calling]` |
+| 3 | `softmax` | Video (typed `@vid`, Enter) | "explaining how softmax turns a vector of scores into probabilities and why the exponential makes it peaked" | 4 | $0.0638 | Video | `softmax` / `[softmax]` |
+| 4 | `dot-product` | Video (the plus, clicked) | "showing the dot product as alignment: same direction large, perpendicular zero, opposite negative" | 4 | $0.0624 | Video | `dot-product` / `[dot-product]` |
+| 5 | `react-loop` | Diagram and Video | "of one ReAct iteration: thought, action, observation, and the next thought revising the plan" | 4 | $0.0690 | Diagram, Video and Make both | `react-loop` / `[react-loop]` on both |
+| 6 | `positional-encoding` | Diagram | "of that" | 4 | $0.0408 | Diagram | `positional-encoding` / `[positional-encoding]` |
+| 7 | `attention-weights` (iOS) | Diagram (tapped) | "of how scaled query-key scores become attention weights" | 0 | $0.0348 | Diagram | `attention-weights` / `[attention-weights]` |
+
+Each brief's topic files its concept, so every brief got the concept in
+`concepts`. Not every seed topic files concepts (two list none), but no brief
+here landed on one, so a brief whose topic does not file its concept was not
+exercised. Every
+cost is `costSource: result`. First turns ran $0.035 to $0.069, a diagram
+about $0.04 and a video or a pair about $0.065, against the guess of $0.05 to
+$0.08. Two replies used the tutor turns without being asked: the softmax video
+was "built on the tutor's [1, 2, 3] example", and the ReAct diagram's loop-back
+edge is labelled "trace is appended, not hidden", the tutor's own point.
+Returning to a concept page showed the sent message with its chip and "Opened
+in the studio" at the end of the tutor's thread.
+
+**Drawn and accepted.** Hand-off 1 was drawn with Draw: one attempt, 19 turns,
+`claude-sonnet-5-5`, $0.5377, 18 shapes and no lints. Accept stored
+`self-attention-query-key-scoring` as a `diagram` row with its SVG, linked to
+`self-attention`, `query-key-value-projections`, `attention-weights` and
+`softmax`, and it shows under Assets on `/learn/self-attention` ("Diagram ·
+Self-attention: from query-key scores to weighted values"), its SVG thumbnail
+loading. No video was made; no Make video or Make both was pressed.
+
+**"Of that" (hand-off 6).** The tutor's second answer was that attention "only
+knows what each token is, not where it sits", so "dog bites man" and "man bites
+dog" have the same tokens and it "can't tell subject from object". The message
+was the Diagram chip and the words "of that". The brief came back about exactly
+that:
+
+> intent: Show why self-attention alone cannot tell 'dog bites man' from 'man
+> bites dog', and how adding positional encoding lets it recover word order.
+>
+> elements: "Attention without positions: sees what each token is, not where
+> it sits"; "Subject and object told apart: who bites whom is recoverable"
+
+**iOS Safari, by touch.** iPhone 17 Pro simulator (402 points wide), iOS 26.3,
+Safari, signed in with the test password. On `/learn/attention-weights` the
+Tutor tab's field showed the @ placeholder; typing `@` opened the menu with
+Diagram and Video, tapping Diagram put the chip in the field, and tapping Send
+opened the studio conversation with its Diagram card (hand-off 7 above). Two
+problems on the way, both listed below.
+
+**Spend.** $1.01 in all: seven planner turns $0.3467, the one diagram job
+$0.5377, and 13 stand-in tutor turns $0.1214 (one of them a smoke test of the
+stand-in).
+
+**Found.**
+
+| What | Where | Repro |
+| --- | --- | --- |
+| Focusing the @ field zooms the page on iOS Safari, and the zoom carries into the studio | `MentionComposer`'s editable is 15px; Safari zooms any focused field under 16px | On an iPhone, open a concept's Tutor tab and tap the field: the page zooms and clips at the right. Send a tagged message: the studio opens still zoomed, the card and Send cut off at the right edge |
+| At phone width the growing field slides under the fixed tab bar | The concept page's tutor at 402 points | Type a message that wraps to four lines: the field's last line and the top half of Send sit behind the bottom tab bar |
+| A card whose job is waiting for review says "The diagram is still being drawn" | `KIND_BUSY` in `apps/web/src/lib/studio-cards.ts`, used for a job in review too | Draw a brief, wait for `awaiting_review`, reopen the conversation: the card says the diagram is still being drawn, though it is ready to accept |
+| The job panel shows the raw state "awaiting_review" as a badge | The studio's job view | Open a finished job from "Open that job": the first badge reads `awaiting_review`, against the sentence-case rule |
+
+The first two belong to the shared composer and the page layout rather than
+to the hand-off. The last two are the studio's and predate this change.
 
 ## Decisions
 
