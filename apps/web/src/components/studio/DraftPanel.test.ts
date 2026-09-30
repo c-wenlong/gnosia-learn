@@ -241,6 +241,49 @@ describe("the Extend opener", () => {
   });
 });
 
+describe("the Extend opener with chips", () => {
+  it("sends a message queued during the read with its chips, once", async () => {
+    leave({
+      send: "A @video of how it opens",
+      sendMentions: [{ kind: "video", start: 2, end: 8 }],
+      source: "tcp-handshake",
+    });
+    await mount(draft({ source: "tcp-handshake" }));
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", {
+      text: "A @video of how it opens",
+      mentions: [{ kind: "video", start: 2, end: 8 }],
+    });
+  });
+
+  it("puts unsent words in the composer with their chip where it was typed, and sends nothing", async () => {
+    leave({
+      compose: "then a @diagram of the close",
+      composeMentions: [{ kind: "diagram", start: 7, end: 15 }],
+      source: "tcp-handshake",
+    });
+    await mount(draft({ source: "tcp-handshake" }));
+    expect(mocks.composer!.value).toEqual({
+      text: "then a @diagram of the close",
+      mentions: [{ kind: "diagram", start: 7, end: 15 }],
+    });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the queued message's chips and the unsent words' chips apart", async () => {
+    leave({
+      send: "@video first",
+      sendMentions: [{ kind: "video", start: 0, end: 6 }],
+      compose: "and a @diagram",
+      composeMentions: [{ kind: "diagram", start: 6, end: 14 }],
+      source: "tcp-handshake",
+    });
+    await mount(draft({ source: "tcp-handshake" }));
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@video first", mentions: [{ kind: "video", start: 0, end: 6 }] });
+    expect(mocks.composer!.value).toEqual({ text: "and a @diagram", mentions: [{ kind: "diagram", start: 6, end: 14 }] });
+  });
+});
+
 describe("a Change's opener on an open conversation", () => {
   it("goes in front of what the person had typed, with its Video chip, and is not sent", async () => {
     await mount(pair());
