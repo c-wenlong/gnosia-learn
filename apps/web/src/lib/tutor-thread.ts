@@ -6,7 +6,7 @@
  *
  * React-free so the rules are testable. `TutorChat.tsx` reads the thread;
  * the hand-off (`tutor-handoff.ts` and the studio's server action) takes its
- * turns through `handoffTurns`.
+ * turns from it through `chatTurns`.
  *
  * Kept small on purpose: the concept page loads it whether or not a studio
  * exists, so nothing here imports the studio's code.
@@ -58,6 +58,33 @@ function isMarker(t: unknown): t is HandoffMarker {
     DRAFT_ID.test(m.draftId) &&
     Array.isArray(m.mentions)
   );
+}
+
+/**
+ * A marker's words cut at its chips, for drawing: each chip a range inside
+ * the words reading exactly `@<kind>`, taken in order, overlaps and repeats
+ * left as words. The rule `inlinePieces` in `mention-text.ts` applies, kept
+ * here because that module (the studio composer's rules) would add every one
+ * of its exports to each concept page's first load, and a marker only needs
+ * this.
+ */
+export function markerPieces(marker: Pick<HandoffMarker, "content" | "mentions">): ({ text: string } | { kind: string })[] {
+  const { content } = marker;
+  const chips = marker.mentions
+    .filter((m) => m.start >= 0 && m.end <= content.length && m.end > m.start && content.slice(m.start, m.end) === `@${m.kind}`)
+    .sort((a, b) => a.start - b.start);
+  const pieces: ({ text: string } | { kind: string })[] = [];
+  const seen = new Set<string>();
+  let at = 0;
+  for (const chip of chips) {
+    if (chip.start < at || seen.has(chip.kind)) continue;
+    seen.add(chip.kind);
+    if (chip.start > at) pieces.push({ text: content.slice(at, chip.start) });
+    pieces.push({ kind: chip.kind });
+    at = chip.end;
+  }
+  if (at < content.length) pieces.push({ text: content.slice(at) });
+  return pieces;
 }
 
 /** The tutor's own turns, markers left out: the only thing the chat route or the planner is sent. */
@@ -141,41 +168,5 @@ export function trimForRequest(
     chars += turn.content.length;
   }
   while (kept.length > 1 && kept[0].role !== "user") kept.shift();
-  return kept;
-}
-
-/** How many tutor turns a hand-off carries (D69): three exchanges. */
-export const HANDOFF_TURNS = 6;
-/** The most characters of them it carries, the newest kept first. */
-export const HANDOFF_CHARS = 6_000;
-
-/**
- * The tutor turns a tagged message takes to the studio (D69): the last six,
- * oldest dropped first to fit 6,000 characters, and the oldest one kept cut
- * at its start when it does not fit whole. The runner's TUTOR block applies
- * the same rule (`tutorBlock`), so what is sent is what the planner reads,
- * and the studio's "last N exchanges" line counts turns the person can see
- * were sent. Markers are left out: they are not the tutor's.
- */
-export function handoffTurns(
-  items: readonly ThreadItem[],
-  { maxTurns = HANDOFF_TURNS, maxChars = HANDOFF_CHARS }: { maxTurns?: number; maxChars?: number } = {},
-): TutorTurn[] {
-  const recent = chatTurns(items)
-    .slice(-maxTurns)
-    .map((turn) => ({ role: turn.role, content: turn.content.trim() }))
-    .filter((turn) => turn.content !== "");
-  const kept: TutorTurn[] = [];
-  let room = maxChars;
-  for (let i = recent.length - 1; i >= 0 && room > 0; i -= 1) {
-    const turn = recent[i];
-    if (turn.content.length <= room) {
-      kept.unshift(turn);
-      room -= turn.content.length;
-    } else {
-      kept.unshift({ role: turn.role, content: turn.content.slice(turn.content.length - room) });
-      room = 0;
-    }
-  }
   return kept;
 }

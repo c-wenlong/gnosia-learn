@@ -50,14 +50,14 @@ describe("whether a health answer lets the tutor tag", () => {
  */
 describe("the concept page's first load", () => {
   const source = readFileSync(path.resolve(import.meta.dirname, "..", "components", "workspace", "TutorChat.tsx"), "utf8");
-  const imports = [...source.matchAll(/^import\s+(type\s+)?[^;]*?from\s+"([^"]+)";/gms)].map((match) => ({
+  const imports = [...source.matchAll(/^import\s+(type\s+)?[^;]*?from\s+"([^"]+)";/gm)].map((match) => ({
     typeOnly: match[1] !== undefined,
     from: match[2]!,
   }));
 
   it("takes nothing of the studio's but types", () => {
     // `tutor-studio` is this file's subject, the small reader the page does load.
-    const studio = imports.filter(({ from }) => /\/(studio|MentionComposer$|TutorStudioKit)/.test(from));
+    const studio = imports.filter(({ from }) => /\/(studio|MentionComposer$|mention-text$|TutorStudioKit)/.test(from));
     expect(studio.length).toBeGreaterThan(0);
     for (const { typeOnly, from } of studio) expect({ from, typeOnly }).toEqual({ from, typeOnly: true });
   });

@@ -12,7 +12,7 @@ import { Composer } from "@/components/ui/Composer";
 import { MathText } from "@/components/Math";
 import { MentionChip } from "@/components/ui/MentionChip";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
-import { inlinePieces, type MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { CitationSource } from "@/lib/agent/prompt";
 import type { DraftKind } from "@/lib/studio-drafts";
@@ -20,6 +20,7 @@ import { HEALTH_READ_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-
 import {
   chatTurns,
   citedNumbers,
+  markerPieces,
   parseThread,
   threadKey,
   trimForRequest,
@@ -448,8 +449,8 @@ function Handed({ marker }: { marker: HandoffMarker }) {
   return (
     <div className="flex flex-col items-end gap-1">
       <UserMessage className="w-full">
-        {inlinePieces({ text: marker.content, mentions: marker.mentions }).map((piece, at) =>
-          piece.type === "text" ? (
+        {markerPieces(marker).map((piece, at) =>
+          "text" in piece ? (
             <span key={at}>{piece.text}</span>
           ) : (
             <MentionChip

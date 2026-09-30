@@ -10,7 +10,7 @@ import {
   type DraftKind,
 } from "@/lib/studio-drafts";
 import { extendRefusal } from "@/lib/studio-extend";
-import { HANDOFF_TURNS, handoffTurns, type TutorTurn } from "@/lib/tutor-thread";
+import { chatTurns, type ThreadItem, type TutorTurn } from "@/lib/tutor-thread";
 
 /**
  * A tagged message in the concept tutor, handed to a new studio conversation
@@ -84,6 +84,42 @@ export function tagSendBlock(value: Value, options: readonly MentionOption<Draft
     if (reason) return reason;
   }
   return null;
+}
+
+/** How many tutor turns a hand-off carries (D69): three exchanges. */
+export const HANDOFF_TURNS = 6;
+/** The most characters of them it carries, the newest kept first. */
+export const HANDOFF_CHARS = 6_000;
+
+/**
+ * The tutor turns a tagged message takes to the studio (D69): the last six,
+ * oldest dropped first to fit 6,000 characters, and the oldest one kept cut
+ * at its start when it does not fit whole. The runner's TUTOR block applies
+ * the same rule (`tutorBlock`), so what is sent is what the planner reads,
+ * and the studio's "last N exchanges" line counts turns the person can see
+ * were sent. Markers are left out: they are not the tutor's.
+ */
+export function handoffTurns(
+  items: readonly ThreadItem[],
+  { maxTurns = HANDOFF_TURNS, maxChars = HANDOFF_CHARS }: { maxTurns?: number; maxChars?: number } = {},
+): TutorTurn[] {
+  const recent = chatTurns(items)
+    .slice(-maxTurns)
+    .map((turn) => ({ role: turn.role, content: turn.content.trim() }))
+    .filter((turn) => turn.content !== "");
+  const kept: TutorTurn[] = [];
+  let room = maxChars;
+  for (let i = recent.length - 1; i >= 0 && room > 0; i -= 1) {
+    const turn = recent[i];
+    if (turn.content.length <= room) {
+      kept.unshift(turn);
+      room -= turn.content.length;
+    } else {
+      kept.unshift({ role: turn.role, content: turn.content.slice(turn.content.length - room) });
+      room = 0;
+    }
+  }
+  return kept;
 }
 
 /* -------------------------------------------------------------------------- */

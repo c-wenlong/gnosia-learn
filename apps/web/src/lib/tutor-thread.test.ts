@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   chatTurns,
   citedNumbers,
-  handoffTurns,
+  markerPieces,
   parseThread,
   threadKey,
   trimForRequest,
@@ -76,41 +76,19 @@ describe("a hand-off's marker in the thread (D70 of STUDIO-TUTOR-HANDOFF.md)", (
     expect(parseThread(JSON.stringify([oddMention]))).toEqual([marker]);
   });
 
+  it("is drawn with its chips where they were typed, and a range that does not read as a chip as words", () => {
+    expect(markerPieces(marker)).toEqual([{ text: "a " }, { kind: "video" }, { text: " of the handshake" }]);
+    const both = { content: "@video and @diagram", mentions: [{ kind: "diagram", start: 11, end: 19 }, { kind: "video", start: 0, end: 6 }] };
+    expect(markerPieces(both)).toEqual([{ kind: "video" }, { text: " and " }, { kind: "diagram" }]);
+    const off = { content: "a @video", mentions: [{ kind: "video", start: 0, end: 6 }, { kind: "video", start: 2, end: 99 }] };
+    expect(markerPieces(off)).toEqual([{ text: "a @video" }]);
+    const twice = { content: "@video @video", mentions: [{ kind: "video", start: 0, end: 6 }, { kind: "video", start: 7, end: 13 }] };
+    expect(markerPieces(twice)).toEqual([{ kind: "video" }, { text: " @video" }]);
+  });
+
   it("is never among the turns sent to the tutor or taken to the studio", () => {
     const thread: ThreadItem[] = [{ role: "user", content: "what is a SYN?" }, { role: "assistant", content: "The opener." }, marker];
     expect(chatTurns(thread)).toEqual(thread.slice(0, 2));
     expect(trimForRequest(chatTurns(thread)).some((turn) => (turn.role as string) === "studio")).toBe(false);
-    expect(handoffTurns(thread)).toEqual(thread.slice(0, 2));
-  });
-});
-
-describe("the turns a hand-off carries (D69)", () => {
-  const turn = (i: number, size = 10): TutorTurn => ({ role: i % 2 === 0 ? "user" : "assistant", content: `${i}`.padEnd(size, "x") });
-
-  it("takes the last six, oldest first", () => {
-    const thread = Array.from({ length: 11 }, (_, i) => turn(i));
-    expect(handoffTurns(thread)).toEqual(thread.slice(-6));
-  });
-
-  it("drops the oldest to fit 6,000 characters, and cuts the oldest kept at its start", () => {
-    const thread = [turn(0, 4_000), turn(1, 3_000), turn(2, 2_500)];
-    const kept = handoffTurns(thread);
-    expect(kept.map((t) => t.content.length)).toEqual([500, 3_000, 2_500]);
-    // The end of the cut turn is kept: the part nearest what came next.
-    expect(kept[0]!.content).toBe(thread[0]!.content.slice(-500));
-    expect(kept.reduce((sum, t) => sum + t.content.length, 0)).toBe(6_000);
-    expect(handoffTurns([turn(0, 4_000), turn(1, 3_000), turn(2, 3_000)]).map((t) => t.content.length)).toEqual([3_000, 3_000]);
-  });
-
-  it("keeps the end of one turn longer than the whole budget", () => {
-    const long = { role: "assistant" as const, content: "a".repeat(100) + "b".repeat(6_000) };
-    expect(handoffTurns([long])).toEqual([{ role: "assistant", content: "b".repeat(6_000) }]);
-  });
-
-  it("leaves out empty turns and sends nothing for an empty thread", () => {
-    expect(handoffTurns([])).toEqual([]);
-    expect(handoffTurns([{ role: "user", content: "   " }, { role: "assistant", content: " ok " }])).toEqual([
-      { role: "assistant", content: "ok" },
-    ]);
   });
 });

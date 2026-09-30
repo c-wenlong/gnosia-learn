@@ -12,12 +12,13 @@ import { conversationHref } from "@/lib/studio-view";
 import {
   handoffKeyName,
   handoffRefusal,
+  handoffTurns,
   tagSendBlock,
   tutorMentionOptions,
   TUTOR_MENTION_PLACEHOLDER,
   type ConceptConversation,
 } from "@/lib/tutor-handoff";
-import { handoffTurns, type HandoffMarker, type ThreadItem } from "@/lib/tutor-thread";
+import type { HandoffMarker, ThreadItem } from "@/lib/tutor-thread";
 
 export { isEmptyValue, trimValue } from "@/components/ui/mention-text";
 export { OPENING_THE_STUDIO } from "@/lib/tutor-handoff";

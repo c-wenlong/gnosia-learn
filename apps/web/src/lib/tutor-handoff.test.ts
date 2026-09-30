@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { extendKey } from "@/lib/studio-extend";
+import type { HandoffMarker, TutorTurn } from "@/lib/tutor-thread";
 import {
   CAP_SPENT,
   checkHandoffInput,
   handoffKeyName,
   handoffRefusal,
+  handoffTurns,
   STUDIO_NOT_ANSWERING,
   tagSendBlock,
   tutorMentionOptions,
@@ -159,5 +161,42 @@ describe("the press's idempotency key (H6)", () => {
     expect(extendKey(storage, handoffKeyName("tcp-handshake"), fresh, 2_000)).toBe(first);
     // A diagram named like the concept has its own press.
     expect(extendKey(storage, "tcp-handshake", fresh, 2_000)).not.toBe(first);
+  });
+});
+
+describe("the turns a hand-off carries (D69)", () => {
+  const turn = (i: number, size = 10): TutorTurn => ({ role: i % 2 === 0 ? "user" : "assistant", content: `${i}`.padEnd(size, "x") });
+
+  it("takes the last six, oldest first", () => {
+    const thread = Array.from({ length: 11 }, (_, i) => turn(i));
+    expect(handoffTurns(thread)).toEqual(thread.slice(-6));
+  });
+
+  it("drops the oldest to fit 6,000 characters, and cuts the oldest kept at its start", () => {
+    const thread = [turn(0, 4_000), turn(1, 3_000), turn(2, 2_500)];
+    const kept = handoffTurns(thread);
+    expect(kept.map((t) => t.content.length)).toEqual([500, 3_000, 2_500]);
+    // The end of the cut turn is kept: the part nearest what came next.
+    expect(kept[0]!.content).toBe(thread[0]!.content.slice(-500));
+    expect(kept.reduce((sum, t) => sum + t.content.length, 0)).toBe(6_000);
+    expect(handoffTurns([turn(0, 4_000), turn(1, 3_000), turn(2, 3_000)]).map((t) => t.content.length)).toEqual([3_000, 3_000]);
+  });
+
+  it("keeps the end of one turn longer than the whole budget", () => {
+    const long = { role: "assistant" as const, content: "a".repeat(100) + "b".repeat(6_000) };
+    expect(handoffTurns([long])).toEqual([{ role: "assistant", content: "b".repeat(6_000) }]);
+  });
+
+  it("leaves out a hand-off's marker: it is not the tutor's", () => {
+    const marker: HandoffMarker = { role: "studio", content: "@video", mentions: [{ kind: "video", start: 0, end: 6 }], draftId: "d-1" };
+    const thread = [turn(0), turn(1), marker];
+    expect(handoffTurns(thread)).toEqual([turn(0), turn(1)]);
+  });
+
+  it("leaves out empty turns and sends nothing for an empty thread", () => {
+    expect(handoffTurns([])).toEqual([]);
+    expect(handoffTurns([{ role: "user", content: "   " }, { role: "assistant", content: " ok " }])).toEqual([
+      { role: "assistant", content: "ok" },
+    ]);
   });
 });
