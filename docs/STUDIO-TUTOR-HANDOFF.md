@@ -146,7 +146,7 @@ before the validator runs so the validator checks the result:
 
 | Field | Filled when | Why |
 | --- | --- | --- |
-| `source` | Absent. Set to the concept's slug, on a diagram and on a video brief | The job agent then reads the whole note as material: `source-note.ts` for a diagram, the video agent's source note for a video. Both validators already take a slug there |
+| `source` | Always, on a diagram and on a video brief: set to the concept's slug, replacing any other value a reply or an edit carried | The job agent then reads the whole note as material: `source-note.ts` for a diagram, the video agent's source note for a video. Both validators already take a slug there. Replacing rather than filling, because a draft opened on a concept is about that concept, and the planner and the card's edit have no business pointing the agent at other material; neither can set a `source` today, so this changes nothing a person does |
 | `concepts` | The brief's topic files the concept and the list lacks it. The slug is added | That link is what puts the made diagram or video on the concept page's right-hand panel (`assetsForConcept`). Added only when the topic files it, because the validator refuses a concept not filed under the brief's topic |
 
 `topic` is not stamped: the planner chooses it, as D28 says, and the prompt
@@ -159,18 +159,20 @@ the planner picks one or proposes one (D39).
 | --- | --- |
 | Prefill the note into the first message | It would show as the person's words in the transcript, and the drafts list would title the draft with it |
 | `sourceKind: "concept"` | `sourceKind` is a `BriefKind`, and `draft.kind` is set from it, which the catalog's `DRAFT_KINDS` check refuses for anything but `diagram` and `video`. `source` also means "the asset a brief changes" (extend and change), and a concept is material, not a target |
-| The runner reads the note itself (`learn concept show --json`, as `source-note.ts` does) | That command reads as `local` and takes no `--owner`, so for any `STUDIO_OWNER` but `local` it reads another owner's note. The page already holds the owner-scoped read. The job's own `source` read has this gap today; it is flagged below, not fixed here |
+| The runner reads the note itself (`learn concept show --json`, as `source-note.ts` does) | That command reads as `local` and takes no `--owner`, so for any `STUDIO_OWNER` but `local` it reads another owner's note. The page already holds the owner-scoped read. The job's own `source` read has this gap today, and phase 1 closes it (below) |
 | The planner told to set `source` | A rule it can forget, for a value the runner already knows |
 
 ### The runner change, exactly
 
-The runner PR (phase 1) touches three files and their tests, all owned by the
-studio sessions:
+The runner PR (phase 1) touches four studio files and one `learn` CLI file,
+with their tests. The CLI change is small, and is there so the job's read of
+the note is the signed-in owner's.
 
 | File | Change |
 | --- | --- |
+| `services/catalog/src/learn/cli.ts` and `services/studio/src/catalog.ts` | `learn concept show` gains `--owner <id>`, reading with `ownerScope(id)` in place of `cliScope()` (the default stays `local`, so the plugin's calls are unchanged), and the studio's `conceptShow` passes `--owner studioOwner()` as every other catalog read it makes does. This is what `resolveSource` calls when a job's brief has a `source`, so without it the stamping in D66 would hand a job the `local` owner's note whenever `STUDIO_OWNER` is anyone else. It fixes every job with a `source`, not only these |
 | `services/studio/src/api.ts` | `POST /api/drafts` reads `concept` (an object) and `tutor` (a list) and passes them to `drafts.create`. `note` says "a conversation about the concept <slug>" |
-| `services/studio/src/drafts.ts` | `CreateInput` gains `concept` and `tutor`. `createNew` checks them: `concept.slug` a concept slug, `title` 1 to 200 characters, `body` up to 200 kB, `concept` with `source` refused as `400 { field: "concept" }` ("a conversation opens on a concept or on an asset, not both"), `tutor` at most 6 entries of `{ role: "user" \| "assistant", content }` else `400 { field: "tutor" }`. It finds the topic in the vocabulary and records `concept: { slug, title, topic }` on the record and on the `created` event, with `tutorTurns`. The bare-tag refusal at the first turn is skipped when `record.concept` is set. A `withConcept` step fills `source` and `concepts` before both validations. `GET /api/drafts/{id}` and each list row gain `concept: { slug, title } \| null`. The crash fallback that rewrites a missing prompt file writes a CONCEPT block from the record (slug, title, topic, "the note was not kept") |
+| `services/studio/src/drafts.ts` | `CreateInput` gains `concept` and `tutor`. `createNew` checks them: `concept.slug` a concept slug, `title` 1 to 200 characters, `body` up to 256 KiB (the web note reader's own `NOTE_READ_LIMIT`, so every note the page can read is accepted, and the block's 12,000-character cap is the only cut), `concept` with `source` refused as `400 { field: "concept" }` ("a conversation opens on a concept or on an asset, not both"), `tutor` at most 6 entries of `{ role: "user" \| "assistant", content }` else `400 { field: "tutor" }`. It finds the topic in the vocabulary and records `concept: { slug, title, topic }` on the record and on the `created` event, with `tutorTurns`. The bare-tag refusal at the first turn is skipped when `record.concept` is set. A `withConcept` step fills `source` and `concepts` before both validations. `GET /api/drafts/{id}` and each list row gain `concept: { slug, title } \| null`. The crash fallback that rewrites a missing prompt file writes a CONCEPT block from the record (slug, title, topic, "the note was not kept") |
 | `services/studio/src/planner-prompt.ts` | `CombinedPromptInput` gains `concept` and `tutor` (block bodies); `buildCombinedSystemPrompt` appends `CONCEPT` and `TUTOR` after `CHANGING`, and the paragraph above goes in only with a CONCEPT block. New `conceptBlock` and `tutorBlock` build and cap the bodies |
 
 No migration: the concept lives in `draft.json` and on the `created` event,
@@ -272,11 +274,12 @@ H for hand-off, so they do not collide with C, M, E, U, V or T.
 | H17 | The prompt file lost in a crash at creation | The fallback writes a CONCEPT block from the record, without the note; the job agent still reads it through `source` |
 | H18 | An `@video` typed into the plain field | Text to the tutor, as T14 |
 
-**Flagged, not fixed here.** `source-note.ts` reads a brief's concept note
-with `learn concept show`, which reads as `local` whatever `STUDIO_OWNER` is.
-With the default owner that is right; with any other it reads the wrong
-owner's note, for every job with a `source`, not only these. The fix is an
-`--owner` on `learn concept show`, a catalog change of its own.
+**Fixed in phase 1.** `source-note.ts` reads a brief's concept note with
+`learn concept show`, which today reads as `local` whatever `STUDIO_OWNER` is.
+With the default owner that is right; with any other it would read the wrong
+owner's note, for every job with a `source`. D66 makes every concept brief
+carry a `source`, so phase 1 gives the command `--owner` and the studio passes
+it, before the stamping can ship.
 
 ## Open questions for the owner
 
@@ -315,19 +318,22 @@ holds them builds phase 1. The opener change in `studio-extend.ts` and
 
 ### Phase 1: the runner
 
+- [ ] `learn concept show --owner`, and `conceptShow` passing the studio's
+      owner, so a job's `source` read is owner-scoped
 - [ ] `concept` and `tutor` on `POST /api/drafts`, checked as above
 - [ ] The CONCEPT and TUTOR blocks, and the paragraph only with a CONCEPT block
 - [ ] `concept` on the record, the `created` event, `GET /api/drafts/{id}` and
       the list rows
 - [ ] The bare-tag refusal skipped on a concept draft
-- [ ] `withConcept` filling `source` and `concepts` on a reply's brief and on
-      `PUT .../brief`
+- [ ] `withConcept` setting `source` (replacing any other) and adding the
+      concept to `concepts` on a reply's brief and on `PUT .../brief`
 - [ ] The crash fallback writing a CONCEPT block from the record
 
 Done when: tests with `test/fake-claude.ts` and no API call cover each check
 and refusal, the blocks and their caps, the stamping (including a brief whose
-topic does not file the concept, which gets `source` and no `concepts`), and a
-bare tag; the system prompt of a draft without a concept is byte for byte
+topic does not file the concept, which gets `source` and no `concepts`, and
+a brief carrying another `source`, which is replaced), a 256 KiB body
+accepted, a bare tag, and `conceptShow` reading as a non-`local` owner; the system prompt of a draft without a concept is byte for byte
 what it was; `test/planner.test.ts`'s seals pass unchanged; and the local gate
 (`npm run lint && npm run typecheck && npm test && npm run build`) is green.
 
@@ -383,7 +389,7 @@ how the planner already learns about what a draft opened on.
 
 ### D66. The runner fills `source` and the concept on each brief of a concept draft
 
-`source` is set to the concept when absent, and the concept is added to
+`source` is set to the concept, replacing any other, and the concept is added to
 `concepts` when the brief's topic files it. Why: the job agent then reads the
 whole note, and the made asset lands on the concept's page. The runner knows
 both values; a prompt rule could be forgotten.
