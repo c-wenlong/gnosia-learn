@@ -93,15 +93,24 @@ describe("a refused Extend", () => {
 
 describe("the first turn an Extend press hands over", () => {
   it("is the opener on an ordinary press, and a message sent during the read instead of it", () => {
-    expect(firstTurn(null, false)).toBe(EXTEND_OPENER);
-    expect(firstTurn("Add the projection", false)).toBe("Add the projection");
+    expect(firstTurn(null, false)).toEqual({ text: EXTEND_OPENER, mentions: [] });
+    expect(firstTurn({ text: "Add the projection", mentions: [] }, false)).toEqual({ text: "Add the projection", mentions: [] });
+  });
+
+  it("keeps the chips of a message sent during the read", () => {
+    const queued = { text: "@video of the handshake", mentions: [{ kind: "video" as const, start: 0, end: 6 }] };
+    expect(firstTurn(queued, false)).toBe(queued);
+    expect(firstTurn(queued, true)).toBe(queued);
   });
 
   it("is never the opener on a Talk it through press, with a prefill or without one", () => {
     // Storage lost the prefill: still nothing is sent on the person's behalf.
     expect(firstTurn(null, true)).toBeNull();
     // The person sent their own words during the read: those go.
-    expect(firstTurn("Add the length panel again, smaller", true)).toBe("Add the length panel again, smaller");
+    expect(firstTurn({ text: "Add the length panel again, smaller", mentions: [] }, true)).toEqual({
+      text: "Add the length panel again, smaller",
+      mentions: [],
+    });
   });
 });
 
@@ -178,14 +187,28 @@ describe("the opener handed to the conversation", () => {
   it("is read once, so a reload never sends it again", () => {
     const store = memory();
     leaveOpener(store, "d1", { send: EXTEND_OPENER, compose: "", source: null });
-    expect(takeOpener(store, "d1")).toEqual({ send: EXTEND_OPENER, compose: "", source: null, mentions: [] });
+    expect(takeOpener(store, "d1")).toEqual({
+      send: EXTEND_OPENER,
+      sendMentions: [],
+      compose: "",
+      composeMentions: [],
+      source: null,
+      mentions: [],
+    });
     expect(takeOpener(store, "d1")).toBeNull();
   });
 
   it("carries the chips a video's Change starts the composer with, and nothing else", () => {
     const store = memory();
     leaveOpener(store, "d1", { send: null, compose: "say it slower", source: null, mentions: ["video"] });
-    expect(takeOpener(store, "d1")).toEqual({ send: null, compose: "say it slower", source: null, mentions: ["video"] });
+    expect(takeOpener(store, "d1")).toEqual({
+      send: null,
+      sendMentions: [],
+      compose: "say it slower",
+      composeMentions: [],
+      source: null,
+      mentions: ["video"],
+    });
     store.setItem("studio:extend-opener:d2", JSON.stringify({ compose: "x", mentions: ["video", "video", "audio", 3] }));
     expect(takeOpener(store, "d2")?.mentions).toEqual(["video"]);
   });
@@ -195,17 +218,70 @@ describe("the opener handed to the conversation", () => {
     leaveOpener(store, "d1", { send: "Add the projection of a onto b", compose: "and label the angle", source: "dot-product" });
     expect(takeOpener(store, "d1")).toEqual({
       send: "Add the projection of a onto b",
+      sendMentions: [],
       compose: "and label the angle",
+      composeMentions: [],
       source: "dot-product",
       mentions: [],
     });
+  });
+
+  it("carries where the chips sit in the queued message and in the unsent words", () => {
+    const store = memory();
+    leaveOpener(store, "d1", {
+      send: "A @diagram of the handshake",
+      sendMentions: [{ kind: "diagram", start: 2, end: 10 }],
+      compose: "then a @video of it",
+      composeMentions: [{ kind: "video", start: 7, end: 13 }],
+      source: "tcp",
+    });
+    expect(takeOpener(store, "d1")).toEqual({
+      send: "A @diagram of the handshake",
+      sendMentions: [{ kind: "diagram", start: 2, end: 10 }],
+      compose: "then a @video of it",
+      composeMentions: [{ kind: "video", start: 7, end: 13 }],
+      source: "tcp",
+      mentions: [],
+    });
+  });
+
+  it("reads a chip it cannot vouch for as words: wrong range, unknown kind, twice, or no message to carry it", () => {
+    const store = memory();
+    store.setItem(
+      "studio:extend-opener:d1",
+      JSON.stringify({
+        send: "@video and @video",
+        sendMentions: [
+          { kind: "video", start: 0, end: 6 },
+          { kind: "video", start: 11, end: 17 },
+          { kind: "audio", start: 7, end: 10 },
+          { kind: "diagram", start: 0, end: 6 },
+          "video",
+          null,
+        ],
+        compose: "x",
+        composeMentions: [{ kind: "video", start: 0, end: 6 }],
+      }),
+    );
+    expect(takeOpener(store, "d1")).toMatchObject({ sendMentions: [{ kind: "video", start: 0, end: 6 }], composeMentions: [] });
+    store.setItem("studio:extend-opener:d2", JSON.stringify({ send: "  ", sendMentions: [{ kind: "video", start: 0, end: 6 }] }));
+    expect(takeOpener(store, "d2")).toMatchObject({ send: null, sendMentions: [] });
+    store.setItem("studio:extend-opener:d3", JSON.stringify({ send: "@video", sendMentions: "video", composeMentions: 3 }));
+    expect(takeOpener(store, "d3")).toMatchObject({ sendMentions: [], composeMentions: [] });
   });
 
   it("is nothing when missing, malformed, or unreadable", () => {
     const store = memory();
     expect(takeOpener(store, "d1")).toBeNull();
     store.setItem("studio:extend-opener:d2", "{not json");
-    expect(takeOpener(store, "d2")).toEqual({ send: null, compose: "", source: null, mentions: [] });
+    expect(takeOpener(store, "d2")).toEqual({
+      send: null,
+      sendMentions: [],
+      compose: "",
+      composeMentions: [],
+      source: null,
+      mentions: [],
+    });
     expect(takeOpener(blocked(), "d3")).toBeNull();
     expect(takeOpener(null, "d4")).toBeNull();
   });

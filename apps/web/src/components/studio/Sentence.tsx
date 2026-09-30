@@ -1,0 +1,19 @@
+import { MentionChip } from "@/components/ui/MentionChip";
+import { inlinePieces, type MentionValue } from "@/components/ui/mention-text";
+import { KIND_NAME } from "@/lib/studio-cards";
+import type { DraftKind } from "@/lib/studio-drafts";
+
+/** A sent message's words, with its chips drawn back where they were (D57). */
+export function Sentence({ value, waiting = [] }: { value: MentionValue<DraftKind>; waiting?: readonly DraftKind[] }) {
+  return (
+    <>
+      {inlinePieces(value).map((piece, at) =>
+        piece.type === "text" ? (
+          <span key={at}>{piece.text}</span>
+        ) : (
+          <MentionChip key={at} name={KIND_NAME[piece.kind] ?? piece.kind} icon={piece.kind} waiting={waiting.includes(piece.kind)} />
+        ),
+      )}
+    </>
+  );
+}

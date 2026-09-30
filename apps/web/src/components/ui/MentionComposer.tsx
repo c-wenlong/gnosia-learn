@@ -120,6 +120,19 @@ export interface MentionComposerProps<K extends string = string> {
   sendLabel?: string;
   className?: string;
   handleRef?: Ref<MentionComposerHandle>;
+  /**
+   * Focus the field once it is on screen. It loads lazily, so a caller that
+   * wants focus on open cannot know when to ask: this asks when the field
+   * mounts. A function is asked with the element that has focus by then and
+   * decides whether the field may take it, so a person who has already gone
+   * somewhere else keeps their focus.
+   */
+  autoFocus?: boolean | ((active: Element | null) => boolean);
+  /**
+   * What the plain stand-in says under the field when this one will not load,
+   * in place of its "reload the page" line. Not read here.
+   */
+  fallbackNote?: string;
 }
 
 export function MentionComposer<K extends string = string>(props: MentionComposerProps<K>) {
@@ -272,6 +285,7 @@ function Field<K extends string>({
   sendLabel = "Send",
   className,
   handleRef,
+  autoFocus,
 }: MentionComposerProps<K>) {
   const [editor] = useLexicalComposerContext();
   const base = useId();
@@ -482,6 +496,15 @@ function Field<K extends string>({
   );
 
   useImperativeHandle(handleRef, () => ({ insertMention, focus: () => editor.focus() }), [insertMention, editor]);
+
+  // Once, when the field mounts: the panel behind it asked for focus before
+  // this chunk arrived, and the asking has to happen here.
+  useEffect(() => {
+    if (!autoFocus || latest.current.disabled) return;
+    if (autoFocus === true || autoFocus(document.activeElement)) editor.focus();
+    // Mount only: a later render must not pull focus back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
 
   const openFromPlus = useCallback(() => {
     if (latest.current.disabled) return;

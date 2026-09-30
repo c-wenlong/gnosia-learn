@@ -479,6 +479,15 @@ normally the asset's own kind. The video job view's Change box, when the change
 is to what is said, hands its text back to the composer with the Video chip
 already in it, so the request is one send.
 
+The Extend panel before the conversation exists uses the same composer
+(`ExtendStart`), so an `@Video` or `@Diagram` typed while the diagram is being
+read is a chip there and stays one across the hand-off. The opener in
+`sessionStorage` carries where each chip sits, in the message sent during the
+read (`sendMentions`) and in the words left unsent (`composeMentions`), on top
+of the kinds-only `mentions` a video's Change puts ahead of its words. The
+conversation reads them back with `openerSend` and `openerValue`, and a range
+that does not read `@<kind>` in its text is words.
+
 **After a job's verdict**, the STUDIO note tells the planner as today; it
 answers the next message as conversation and proposes nothing unprompted.
 
