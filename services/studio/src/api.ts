@@ -39,6 +39,7 @@ import { priceableAs, ratesFor } from "./cost";
 const CLI_DEFAULT_MODEL = "claude-opus-5";
 import { EFFORTS, readClaudeDefaults } from "./video/agent-model";
 import type { VideoDoctor } from "./video/doctor";
+import { narrationHealth } from "./video/narration";
 import { postVideoJob, videoJobRoutes, videoView, type VideoDeps } from "./video/routes";
 import { toolsHealth } from "./video/tools";
 
@@ -1831,10 +1832,10 @@ async function health(
     // be queued now, from the doctor's last answer.
     video:
       video === undefined
-        ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "this studio was started without the video runner", tools: toolsHealth() }
+        ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "this studio was started without the video runner", tools: toolsHealth(), narration: narrationHealth() }
         : videoReport === null
-          ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "the video doctor has not finished its first check", tools: toolsHealth() }
-          : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length, tools: toolsHealth() },
+          ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "the video doctor has not finished its first check", tools: toolsHealth(), narration: narrationHealth() }
+          : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length, tools: toolsHealth(), narration: narrationHealth() },
     agent,
     diagramAgent: { ok: diagramAgentProblem === null, problem: diagramAgentProblem },
     // When each answer above was checked. `stale` means it is older than that

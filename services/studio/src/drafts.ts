@@ -83,6 +83,7 @@ import { JobRefused, type Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
 import { validateVideoBrief, type ValidVideoBrief } from "./video/brief";
 import { videoKindBuilt } from "./video/config";
+import { videoAbbreviations } from "./video/narration";
 import { briefTool } from "./video/tools";
 import type { VideoRunner, VideoStore } from "./video/runner";
 import type { VideoJobRecord } from "./video/types";
@@ -309,6 +310,12 @@ export interface EntryBrief {
   pendingTopic?: PendingTopic;
   /** The tagged message it answered; null on an edit or a draft from before. */
   requestSeq: number | null;
+  /**
+   * A video brief's words the voice would read as words (V11), from
+   * gnosia-audio's pronunciation table; absent until gnosia-audio has
+   * answered, when the card makes its own rougher check.
+   */
+  abbreviations?: string[];
 }
 
 export interface TranscriptEntry {
@@ -3688,20 +3695,24 @@ function streamEventOf(event: TranscriptEvent): DraftStreamEvent | null {
       const entry = entryOf(event);
       return entry === null ? null : { id: event.seq, event: event.type, data: entry };
     }
-    case "brief":
+    case "brief": {
+      const kind = kindOfEvent(event);
+      const abbreviations = kind === "video" ? videoAbbreviations(event.brief as { voice?: unknown; scenes?: unknown }) : null;
       return {
         id: event.seq,
         event: "brief",
         data: {
           seq: event.seq,
           replySeq: event.replySeq,
-          kind: kindOfEvent(event),
+          kind,
           brief: event.brief,
           pendingTopic: event.pendingTopic ?? null,
           requestSeq: typeof event.requestSeq === "number" ? event.requestSeq : null,
           ...(event.edit === true ? { edit: true } : {}),
+          ...(abbreviations === null ? {} : { abbreviations }),
         },
       };
+    }
     case "brief-invalid":
       return {
         id: event.seq,
@@ -3798,11 +3809,15 @@ export function transcriptOf(events: readonly TranscriptEvent[]): TranscriptEntr
       const kind = kindOfEvent(event);
       const pendingTopic = event.pendingTopic === null || event.pendingTopic === undefined ? undefined : (event.pendingTopic as PendingTopic);
       const briefs = (reply.briefs ?? []).filter((brief) => brief.kind !== kind);
+      // Worked out as the transcript is read rather than stored on the event,
+      // so a fix to the pronunciation table reaches every card at once.
+      const abbreviations = kind === "video" ? videoAbbreviations(event.brief as { voice?: unknown; scenes?: unknown }) : null;
       briefs.push({
         kind,
         brief: event.brief as AnyDraftBrief,
         ...(pendingTopic === undefined ? {} : { pendingTopic }),
         requestSeq: typeof event.requestSeq === "number" ? event.requestSeq : null,
+        ...(abbreviations === null ? {} : { abbreviations }),
       });
       reply.briefs = briefs;
       reply.brief = event.brief as AnyDraftBrief;

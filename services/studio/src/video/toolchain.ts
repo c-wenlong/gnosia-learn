@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { REPO_ROOT } from "../paths";
 import { run } from "../proc";
+import { readNarrationFacts, settleNarrationRead, startNarrationRead, type NarrationFacts } from "./narration";
 
 /**
  * Where the programs a render runs actually live on this machine.
@@ -61,6 +62,14 @@ export interface Toolchain {
   voicesInstalled: string[];
   /** The owner's shared TTS cache, read to seed a job and never written. Null when manimkc cannot say. */
   sharedAudioCache: string | null;
+  /**
+   * gnosia-audio, the narration package in `<manimkc>/.venv`, as its
+   * `home --json` answered (narration.ts). Null when it is not installed
+   * there, which is `make narration-deps` in the checkout. Optional so a
+   * toolchain built by hand (a test's) need not name it; `discoverToolchain`
+   * always does.
+   */
+  narration?: NarrationFacts | null;
 }
 
 /** Search `PATH` the way a shell would, for an executable regular file. */
@@ -175,6 +184,15 @@ async function sharedCache(root: string, python: string | null): Promise<string 
 export async function discoverToolchain(): Promise<Toolchain> {
   const root = manimkcRoot();
   const python3 = programAt(which("python3"));
+  const venvPython = programAt(path.join(root, ".venv", "bin", "python"));
+  // Kept for the brief's validator and the card as well, which read it
+  // synchronously. A failed read clears it, so health says `fallback` rather
+  // than reporting an installation that no longer answers as current, and
+  // the card makes its own check; an older read that finishes late changes
+  // nothing (Greptile on #257).
+  const ticket = startNarrationRead();
+  const [narration, sharedAudioCache] = await Promise.all([readNarrationFacts(root, venvPython?.link ?? null), sharedCache(root, python3?.real ?? null)]);
+  settleNarrationRead(ticket, narration);
   const hub = hubCache();
   const model = path.join(hub, "models--hexgrad--Kokoro-82M");
   const kokoroModel = existsSync(model) ? realpathSync(model) : null;
@@ -191,13 +209,14 @@ export async function discoverToolchain(): Promise<Toolchain> {
     ffmpeg: programAt(which("ffmpeg")),
     ffprobe: programAt(which("ffprobe")),
     python3,
-    venvPython: programAt(path.join(root, ".venv", "bin", "python")),
+    venvPython,
     ttsPython: programAt(path.join(root, ".venv-tts", "bin", "python")),
     node: process.execPath,
     hfHubCache: existsSync(hub) ? realpathSync(hub) : hub,
     kokoroModel,
     voicesInstalled: kokoroModel === null ? [] : voicesIn(kokoroModel),
-    sharedAudioCache: await sharedCache(root, python3?.real ?? null),
+    sharedAudioCache,
+    narration,
   };
 }
 
@@ -215,6 +234,9 @@ export function toolchainProblems(tools: Toolchain): string[] {
   if (tools.python3 === null) problems.push("python3 is not on PATH (the manimkc CLI runs on it)");
   if (tools.venvPython === null) problems.push(`${tools.manimkcRoot}/.venv is missing: run manimkc doctor for the fix`);
   if (tools.ttsPython === null) problems.push(`${tools.manimkcRoot}/.venv-tts is missing, so no narrated video can be voiced`);
+  if (tools.venvPython !== null && tools.narration === null) {
+    problems.push(`gnosia-audio, the narration package, does not answer in ${tools.manimkcRoot}/.venv: run make narration-deps there`);
+  }
   if (tools.kokoroModel === null) problems.push("the kokoro model is not in the Hugging Face cache, and the narration step never downloads it (V9)");
   if (!/^[A-Za-z0-9/._-]+$/.test(tools.node)) problems.push(`node's path ${JSON.stringify(tools.node)} holds a character the wrapper's first line cannot carry`);
   return problems;

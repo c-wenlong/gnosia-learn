@@ -22,20 +22,23 @@ import type { Toolchain } from "./toolchain";
  * videos. Two worked scenes instead, below, which the suite renders.
  */
 
-/** A narrated worked scene built on `labeled_box` and `routed_arrow`. */
+/** A narrated worked scene built on `labeled_box` and `routed_arrow`, whose first line cues its two boxes on their words. */
 export const WORKED_NARRATED = `class WK1_Pipeline(VoiceScene):
     """A request crosses two services"""
 
     def construct(self):
         heading = title_text("Two services", size=40)
         heading.to_edge(UP, buff=0.45)
-        with self.voiceover("A request starts at the client and ends at the database."):
+        with self.voiceover("A request starts at the client and ends at the database.") as line:
             self.play(FadeIn(heading, shift=DOWN * 0.2), run_time=0.7)
             client = labeled_box("Client", width=2.2, color=IF_C)
             db = labeled_box("Database", width=2.4, color=MEM_C)
             client.move_to(LEFT * 4 + DOWN * 0.3)
             db.move_to(RIGHT * 4 + DOWN * 0.3)
-            self.play(FadeIn(client), FadeIn(db))
+            line.wait_until("client")
+            self.play(FadeIn(client))
+            line.wait_until("database")
+            self.play(FadeIn(db))
         with self.voiceover("In between sits the API, which checks the request before it goes on."):
             api = labeled_box("API", width=1.8, color=EX_C).move_to(DOWN * 0.3)
             first = routed_arrow([client.get_right(), api.get_left()], color=GREY_B)
@@ -90,7 +93,7 @@ You have one command, and everything else is refused:
 
     ${wrapper} api [name ...]       the rules, the palette and every helper; a name prints one entry
     ${wrapper} lint                 check the scene file; fix every error, read every warning
-    ${wrapper} narrate [Scene ...]  voice the file's voiceover lines that are not voiced yet
+    ${wrapper} narrate [Scene ...]  voice the file's voiceover lines that are not voiced yet, and time the cued ones
     ${wrapper} preview [Scene ...]  voice, render at 480p, write one contact sheet per scene
     ${wrapper} build                voice, render every scene at 1080p, join, write the transcript
 
@@ -114,6 +117,22 @@ The brief's lines are the script the person approved. In a narrated video, start
 You may reword, split or respell a line when the picture or the voice needs it, as the owner would; say which and why in your final message. \`preview\` and \`build\` voice whatever the file says, and \`narrate\` re-voices on its own. Every changed line is shown to the person beside the brief's. A voiceover argument must be one plain double-quoted literal: no f-string, no variable, no concatenation at run time, because the narration step reads the file's literals and a line it cannot read has no clip.
 
 In a silent video there is no voiceover at all. Each beat's \`say\` is its caption, shown with \`CaptionBar\` exactly as written: \`cap = CaptionBar(self)\`, then \`cap.say("the caption", hold=<the beat's seconds>)\` (or \`self.play(cap.set("the caption"))\`), in beat order.
+
+## Word cues
+
+A line that names things in order can start each one's animation on the word that names it. Bind the block with \`as line\` and cue the word:
+
+    with self.voiceover("A hit is served at once; a miss goes to memory.") as line:
+        self.play(FadeIn(cache))
+        line.wait_until("miss")
+        self.play(ShowCreation(arrow))
+
+- \`line.wait_until("word")\` holds the scene until the voice reaches the word, so the next \`play\` starts on it. \`line.until("word")\` is the seconds from now until the word, for a \`run_time=\` that finishes on it. A word said twice takes its count: \`line.wait_until("cache", 2)\`.
+- Cue only when the line names things in order and the screen brings them in in that order, as the first worked scene below does. A line that names one thing, or nothing on screen, is a plain block.
+- The word and its count are literals, the word written as the line spells it ("RAW", not "R A W"). \`lint\` checks each cue is in its line, and later in it than the cue before; fix what it says.
+- Bind on the \`with\` line itself and cue through that name inside the block: that form is how the narration step finds the lines to time.
+- Word times come from the narration step, the only step that can load the voice. \`preview\` and \`build\` run it first, so a line you bind is timed before it renders. After adding \`as line\` to a line, run \`narrate\` (or \`preview\`, which runs it) before you rely on the timing; a render never times a line itself.
+- Never \`self.wait_until(...)\`: that is ManimGL's own wait, and it dies on a word.
 
 A scene's chapter title is the first line of its class docstring, else its class name: give each scene a docstring whose first line is a short title a viewer reads in the chapter list ("Multiply, then add"), never a note about what the screen does.
 
@@ -151,7 +170,7 @@ The file header, which the stubs already have:
 ${WORKED_HEADER.trim()}
 \`\`\`
 
-A narrated scene built from \`labeled_box\` and \`routed_arrow\`:
+A narrated scene built from \`labeled_box\` and \`routed_arrow\`, its first line cueing each box on its word:
 
 \`\`\`python
 ${WORKED_NARRATED.trim()}
