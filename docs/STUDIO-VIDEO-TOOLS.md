@@ -83,7 +83,10 @@ The rows alone are not the routing: VIDEO-TOOLS.md's procedure also puts a
 tool the person named first, keeps a series' tool, and checks a second visual
 against the matrix. So the video section of the planner's prompt restates
 the procedure's steps in the studio's terms, in order: the tool the person
-named, when the studio can make it; a change keeps its video's tool; a week
+named, when the studio can make it (when it cannot, the planner proposes no
+brief, says so in one line and asks whether an available tool should make
+it, as the page's procedure says to on a conflict); a change keeps its
+video's tool; a week
 of a series keeps the series' tool; the main visual's row; a second beat the
 matrix says that tool cannot do moves the choice to a tool that can do both,
 else the beat is simplified; and `toolReason` names the step or row and the
@@ -133,7 +136,9 @@ what the new tool is best at). When the studio can make two or more tools,
 the chip is a `FilterMenu` trigger whose options are those tools, each with
 its strength as the option's `detail` line; a tool the studio cannot make is
 not offered, and the planner's reason names it as the runner-up instead. A
-menu of one is just the chip, which is all phase 1 shows. There is no label:
+menu of one is just the chip, which is all phase 1 shows, and a change card
+offers no switch at all, since a change keeps its video's tool (D74). There
+is no label:
 the chip's content says what it is (DESIGN.md, "Sentence case").
 
 Picking one is `PUT /api/drafts/{id}/brief` with the new `tool` and no
