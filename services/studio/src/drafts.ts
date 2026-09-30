@@ -660,9 +660,10 @@ export class Drafts {
   /** Mirrors in flight, and whether another write arrived while one ran. */
   private readonly mirroring = new Map<string, { again: boolean; done: Promise<void> }>();
   /**
-   * Reads started without anyone awaiting them to the end: the corpus and the
-   * videos a create reads beside the vocabulary, which go on (and write the
-   * listing's cache) after a refused vocabulary has already failed the create.
+   * Work that writes under `STUDIO_HOME` with nobody bound to await it to the
+   * end: every create, and the corpus and the videos a create reads beside the
+   * vocabulary, which go on (and write the listing's cache) after a refused
+   * vocabulary has already failed the create.
    */
   private readonly background = new Set<Promise<unknown>>();
   /**
@@ -1219,7 +1220,7 @@ export class Drafts {
    */
   async create(input: CreateInput): Promise<{ record: DraftRecord; created: boolean }> {
     const key = input.idempotencyKey?.trim() || null;
-    if (key === null) return this.createNew(input, null);
+    if (key === null) return this.inBackground(this.createNew(input, null));
     if (key.length > 200) throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
     const existing = [...this.records.values()].find((record) => record.idempotencyKey === key && !this.pruning.has(record.id));
     if (existing !== undefined) return { record: existing, created: false };
@@ -1227,7 +1228,7 @@ export class Drafts {
     // the vocabulary, the corpus or an inspect is being read gets this draft.
     const pending = this.creating.get(key);
     if (pending !== undefined) return { record: (await pending).record, created: false };
-    const made = this.createNew(input, key);
+    const made = this.inBackground(this.createNew(input, key));
     this.creating.set(key, made);
     try {
       return await made;
@@ -1237,6 +1238,7 @@ export class Drafts {
   }
 
   private async createNew(input: CreateInput, key: string | null): Promise<{ record: DraftRecord; created: boolean }> {
+    if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
     const source = input.source?.trim() || null;
     const sourceKind: BriefKind = input.sourceKind === undefined || input.sourceKind === null ? "diagram" : (input.sourceKind as BriefKind);
     if (!isBriefKind(sourceKind)) {
@@ -3052,16 +3054,16 @@ export class Drafts {
     return this.require(id);
   }
 
-  /** Hold `read` until it ends, so `settledAll` can wait for it. */
-  private inBackground<T>(read: Promise<T>): Promise<T> {
-    this.background.add(read);
-    void read.catch(() => undefined).finally(() => this.background.delete(read));
-    return read;
+  /** Hold `work` until it ends, so `settledAll` can wait for it. */
+  private inBackground<T>(work: Promise<T>): Promise<T> {
+    this.background.add(work);
+    void work.catch(() => undefined).finally(() => this.background.delete(work));
+    return work;
   }
 
   /**
-   * Resolves once every read, write and mirror this service started has
-   * landed, for every draft and for a create that was refused. A landed write
+   * Resolves once every create, read, write and mirror this service started
+   * has landed, for every draft and for a create that was refused. A landed write
    * can queue another (a failed mirror notes its error, a turn's end closes a
    * capped draft), so this looks again until a pass finds nothing new.
    */
@@ -3081,8 +3083,11 @@ export class Drafts {
   }
 
   /**
-   * Stop every planner turn, then wait for everything they and anything else
-   * here started to be written. Their replies are written as cut off. Deleting
+   * Stop every planner turn and refuse new creates, then wait for everything
+   * they and anything else here started to be written. Their replies are
+   * written as cut off. A catalog read can hold this for as long as its own
+   * timeout, so the process's shutdown bounds it rather than awaiting it
+   * bare. Deleting
    * `STUDIO_HOME` before this resolves pulls the directory out from under a
    * live write, which is how a refused create's corpus read failed a test
    * teardown with `ENOTEMPTY`.

@@ -247,6 +247,22 @@ describe("making a conversation", () => {
     await draining;
     expect(JSON.parse(await readFile(cachePath("diagrams.local"), "utf8")).value).toEqual([]);
   });
+
+  it("is not drained while a create is still under way, and refuses one that starts after", async () => {
+    let topics!: () => void;
+    catalogMock.topicList.mockImplementationOnce(() => new Promise((resolve) => (topics = () => resolve(topicListAnswer()))));
+    const made = drafts.create({ idempotencyKey: "late" });
+    await until(() => catalogMock.topicList.mock.calls.length === 1, "the create never read the vocabulary");
+    let drained = false;
+    const draining = drafts.drain().then(() => (drained = true));
+    for (let tick = 0; tick < 20; tick++) await Promise.resolve();
+    expect(drained).toBe(false);
+    await expect(drafts.create({ idempotencyKey: "after" })).rejects.toMatchObject({ status: 503 });
+    topics();
+    const { record } = await made;
+    await draining;
+    expect(JSON.parse(await readFile(draftJsonPath(record.id), "utf8")).id).toBe(record.id);
+  });
 });
 
 describe("what a person types", () => {
