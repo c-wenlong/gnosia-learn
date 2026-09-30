@@ -23,6 +23,7 @@ describe("resourceLink", () => {
   it("falls back to the raw text when the link does not parse, and never calls it internal", () => {
     expect(resourceLink("not a url")).toEqual({ where: "not a url", internal: false });
     expect(resourceLink("//cdn.example.com/x")).toEqual({ where: "//cdn.example.com/x", internal: false });
+    expect(resourceLink("/\\example.com/path")).toEqual({ where: "/\\example.com/path", internal: false });
     expect(resourceLink("mailto:a@b.co")).toEqual({ where: "mailto:a@b.co", internal: false });
   });
 });

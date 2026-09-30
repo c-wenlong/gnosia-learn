@@ -19,11 +19,13 @@ export interface ResourceLink {
  * are `/library/manimkc%3A…` links), and the raw path is no place name. So a
  * `/library/` link reads "Library", any other site-relative link reads "This
  * site", an absolute http(s) link keeps its host (minus `www.`), and anything
- * that parses as neither falls back to the raw text. `//host/path` is
- * protocol-relative, an external site, so it is not internal.
+ * that parses as neither falls back to the raw text. `//host/path` and `/\host/path`
+ * point at another site, so they are not internal.
  */
 export function resourceLink(url: string): ResourceLink {
-  if (url.startsWith("/") && !url.startsWith("//")) {
+  // A browser reads `\` as `/` in a URL, so `/\host/x` goes to another site
+  // exactly as `//host/x` does: only a `/` followed by something else is ours.
+  if (/^\/(?![/\\])/.test(url)) {
     return { where: url.startsWith("/library/") ? "Library" : "This site", internal: true };
   }
   try {

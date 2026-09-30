@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { cx, inputClasses } from "@/components/ui/classes";
@@ -20,9 +21,34 @@ const TYPE_LABEL: Record<Resource["type"], string> = {
   other: "Link",
 };
 
-/** An outside link opens a new tab; a link into this app stays in the one the learner is in. */
-function newTab(internal: boolean) {
-  return internal ? {} : { target: "_blank", rel: "noopener noreferrer" };
+/**
+ * An outside link opens a new tab. A link into this app goes through `Link`,
+ * so the page stays alive: a full reload could cancel a learner-state write
+ * still in flight and lose an optimistic edit.
+ */
+function ResourceAnchor({
+  href,
+  internal,
+  className,
+  children,
+}: {
+  href: string;
+  internal: boolean;
+  className: string;
+  children: ReactNode;
+}) {
+  if (internal) {
+    return (
+      <Link href={href} className={className}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+      {children}
+    </a>
+  );
 }
 
 /**
@@ -71,7 +97,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
         const link = resourceLink(r.url);
         return (
           <li key={r.id}>
-            <a href={r.url} {...newTab(link.internal)} className={cx(ROW, ROW_HOVER, FOCUS_RING)}>
+            <ResourceAnchor href={r.url} internal={link.internal} className={cx(ROW, ROW_HOVER, FOCUS_RING)}>
               <Glyph name={RESOURCE_GLYPH[r.type] ?? "link"} className="text-text2" />
               <span className="min-w-0 flex-1 pl-1">
                 <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
@@ -79,7 +105,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
                   {TYPE_LABEL[r.type] ?? "Link"} · {link.where}
                 </span>
               </span>
-            </a>
+            </ResourceAnchor>
           </li>
         );
       })}
@@ -88,9 +114,9 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
         return (
           <li key={r.id}>
             <div className={cx(ROW, ROW_HOVER)}>
-              <a
+              <ResourceAnchor
                 href={r.url}
-                {...newTab(link.internal)}
+                internal={link.internal}
                 className={cx("flex min-w-0 flex-1 items-center gap-2", STRETCHED)}
               >
                 <Glyph name="link" className="text-text2" />
@@ -98,7 +124,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
                   <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
                   <span className={ROW_META}>Yours · {link.where}</span>
                 </span>
-              </a>
+              </ResourceAnchor>
               <button
                 type="button"
                 onClick={() => removeResource(moduleId, r.id)}
