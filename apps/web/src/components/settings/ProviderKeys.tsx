@@ -200,9 +200,13 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyView; disabled: boolea
                 <Button type="submit" size="sm" disabled={busy || draft.trim() === ""}>
                   Save key
                 </Button>
+                {/* Not while a save is in flight: the request has left, so
+                    closing the editor would say "cancelled" about a key that
+                    is about to be stored. */}
                 <Button
                   variant="secondary"
                   size="sm"
+                  disabled={busy}
                   onClick={() => {
                     setDraft("");
                     setEditing(false);
@@ -223,7 +227,7 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyView; disabled: boolea
                 <Button variant="warn" size="sm" disabled={busy} onClick={() => void remove()}>
                   Remove key
                 </Button>
-                <Button variant="secondary" size="sm" onClick={() => setConfirmingRemove(false)}>
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirmingRemove(false)}>
                   Cancel
                 </Button>
               </div>

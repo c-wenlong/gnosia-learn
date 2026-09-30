@@ -354,15 +354,19 @@ export async function testProviderKey(
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
+    // Everything the provider sent that reaches the browser goes through
+    // `providerText`, the model name and the status text included: a gateway
+    // is free to put anything in either.
     if (res.ok) {
       const data = (await res.json().catch(() => ({}))) as { model?: unknown };
-      return { ok: true, model: typeof data.model === "string" && data.model ? data.model : config.model };
+      const model = typeof data.model === "string" && data.model ? providerText(data.model, secrets, 200) : config.model;
+      return { ok: true, model };
     }
     const text = await res.text().catch(() => "");
     // Redacted before and after the JSON is read, so an escape in the body
     // cannot hide an echo from the first pass.
     const message = providerText(providerMessage(redactSecrets(text, secrets)), secrets, 300);
-    return { ok: false, status: res.status, message: message || res.statusText || `HTTP ${res.status}` };
+    return { ok: false, status: res.status, message: message || providerText(res.statusText, secrets, 200) || `HTTP ${res.status}` };
   } catch (err) {
     const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
     return {

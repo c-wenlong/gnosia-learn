@@ -307,6 +307,14 @@ describe("provider errors never carry a key", () => {
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${key}`);
   });
 
+  it("redacts a key echoed in a success's model name or an error's status text", async () => {
+    const [credential] = orderCredentials({ nvidia: key }, {});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ model: `model-for-${key}` }) }));
+    expect(await testProviderKey(credential!)).toEqual({ ok: true, model: "model-for-[redacted]" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401, statusText: `Bad key ${key}`, text: async () => "" }));
+    expect(await testProviderKey(credential!)).toEqual({ ok: false, status: 401, message: "Bad key [redacted]" });
+  });
+
   it("calls any 2xx a working key, and a network failure a failed test rather than a throw", async () => {
     const [credential] = orderCredentials({ gemini: "AIzaSyExampleExampleExample0123456789" }, {});
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ model: "gemini-2.5-flash" }) }));

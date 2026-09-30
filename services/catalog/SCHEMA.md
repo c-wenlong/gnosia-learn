@@ -522,8 +522,10 @@ table itself guarantees is here.
   reads or writes the table, and `test/provider-keys.test.ts` fails a
   reference anywhere else. That is what keeps it out of `catalog export`, the
   nightly export, `learn vault pull` and the learner export, none of which can
-  reach a table they never name. `catalog status` counts it with the state
-  half. A `pg_dump`, such as flip day's backup, does include it, as
+  reach a table they never name. The same test lists every file that walks
+  all tables without naming one (the `tables` registry, the database's table
+  list, `pg_dump`), so a generic exporter cannot arrive unread. `catalog
+  status` counts it with the state half. A `pg_dump`, such as flip day's backup, does include it, as
   ciphertext: see the threat model.
 - It carries the copy guard of 0010 like every other table, added by its own
   migration.

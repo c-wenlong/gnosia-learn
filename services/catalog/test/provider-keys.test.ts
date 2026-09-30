@@ -217,26 +217,30 @@ describe.skipIf(!reachable.ok)("provider keys never leave through an export", ()
   }, 240_000);
 });
 
+/** A source file parsed, so comments, strings and templates are told apart properly. */
+function parseSource(text: string, name = "file.ts"): ts.SourceFile {
+  const kind = name.endsWith("x") ? ts.ScriptKind.TSX : /\.(mjs|cjs|js)$/.test(name) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
+  return ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, kind);
+}
+
 /**
  * Whether code (not a comment) names the table: an identifier, or a string
- * or template holding the SQL name. The scanner skips comments, so prose
- * about the table is free to say its name.
+ * or template holding the SQL name. Prose about the table is free to say it.
  */
-function namesTable(text: string): boolean {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.JSX, text);
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    const value = scanner.getTokenValue() ?? "";
-    if (token === ts.SyntaxKind.Identifier && (value === "providerKey" || value === "provider_key")) return true;
-    if (
-      (token === ts.SyntaxKind.StringLiteral ||
-        token === ts.SyntaxKind.NoSubstitutionTemplateLiteral ||
-        token === ts.SyntaxKind.TemplateHead) &&
-      /\bprovider_key\b|\bproviderKey\b/.test(value)
+function namesTable(text: string, name?: string): boolean {
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+    if (ts.isIdentifier(node) && (node.text === "providerKey" || node.text === "provider_key")) found = true;
+    else if (
+      (ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) &&
+      /\bprovider_key\b|\bproviderKey\b/.test(node.text)
     ) {
-      return true;
-    }
-  }
-  return false;
+      found = true;
+    } else ts.forEachChild(node, visit);
+  };
+  visit(parseSource(text, name));
+  return found;
 }
 
 /**
@@ -265,8 +269,9 @@ describe("the one door to provider_key", () => {
     expect(namesTable('query("delete from provider_key")')).toBe(true);
   });
 
-  it("is named by no shipped source but the schema and the catalog's provider-keys module", async () => {
-    const offenders: string[] = [];
+  /** Every shipped source file under the roots, with its path relative to the repository. */
+  async function shippedSources(): Promise<{ file: string; relative: string; text: string }[]> {
+    const out: { file: string; relative: string; text: string }[] = [];
     for (const root of ROOTS) {
       for (const entry of await readdir(root, { withFileTypes: true, recursive: true })) {
         if (!entry.isFile()) continue;
@@ -274,12 +279,70 @@ describe("the one door to provider_key", () => {
         const relative = path.relative(REPO_ROOT, file);
         if (SKIP.test(relative) || !/\.(ts|tsx|mts|mjs|js|cjs|sql)$/.test(file) || /\.test\.(ts|mjs)$/.test(file)) continue;
         if (relative.startsWith("services/catalog/test/")) continue;
-        if (ALLOWED.has(file)) continue;
-        const text = await readFile(file, "utf8");
-        const named = file.endsWith(".sql") ? /\bprovider_key\b/i.test(text) : namesTable(text);
-        if (named) offenders.push(relative);
+        out.push({ file, relative, text: await readFile(file, "utf8") });
       }
     }
+    return out;
+  }
+
+  it("is named by no shipped source but the schema and the catalog's provider-keys module", async () => {
+    const offenders: string[] = [];
+    for (const { file, relative, text } of await shippedSources()) {
+      if (ALLOWED.has(file)) continue;
+      const named = file.endsWith(".sql") ? /\bprovider_key\b/i.test(text) : namesTable(text, file);
+      if (named) offenders.push(relative);
+    }
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * The other way in: code that never names the table but walks all of them,
+   * through the schema's `tables` registry or the database's own table list,
+   * or dumps the whole database. Each such file is listed here with what it
+   * does with the rows, so a new one (a generic exporter, say) fails until
+   * someone has read it and decided it cannot carry a key out.
+   */
+  const GENERIC_READERS: Record<string, string> = {
+    "services/catalog/src/commands/status.ts": "counts each table's rows; no row leaves",
+    "services/catalog/src/content/link-owners.ts": "reads table names only, to skip a table a database lacks",
+    "scripts/lib/pg.mjs": "copies a whole database into another database (a scratch copy), which is a database dump in the threat model",
+    "scripts/flip-rehearsal.mjs": "takes the pg_dump backup before flip day, a database dump in the threat model",
+    "scripts/e2e.mjs": "checks pg_dump exists and copies a template database through scripts/lib/pg.mjs",
+    "services/catalog/src/content/rules.ts": "reads trigger names and states from pg_trigger joined to pg_class; no rows",
+  };
+  const GENERIC = [
+    /\bObject\s*\.\s*(keys|values|entries)\s*\(\s*tables\s*\)/,
+    /\btables\s*\[/,
+    /\bfor\s*\(\s*(const|let|var)\s+\w+\s+(of|in)\s+(Object\s*\.\s*\w+\s*\(\s*)?tables\b/,
+    /information_schema\s*\.\s*tables|\bpg_tables\b|\bpg_class\b/i,
+    /\bpg_dump\b|\bpg_dumpall\b/,
+    /\.query\s*\[/,
+  ];
+
+  /** The file's code with its comments removed. */
+  function code(text: string, name?: string): string {
+    return ts.createPrinter({ removeComments: true }).printFile(parseSource(text, name));
+  }
+
+  it("finds a generic read the way it is meant to", () => {
+    const hit = (text: string) => GENERIC.some((pattern) => pattern.test(code(text)));
+    expect(hit("// Object.keys(tables) is how status counts\nconst x = 1;")).toBe(false);
+    expect(hit("for (const key of Object.keys(tables)) dump(key);")).toBe(true);
+    expect(hit("return tables[name];")).toBe(true);
+    expect(hit("for (const t of Object.values(tables)) rows.push(await db.select().from(t));")).toBe(true);
+    expect(hit("db.execute(sql`select table_name from information_schema.tables`)")).toBe(true);
+    expect(hit("spawn('pg_dump', [db])")).toBe(true);
+  });
+
+  it("is walked, all tables at once, only by readers someone has checked cannot carry a key out", async () => {
+    const found: string[] = [];
+    for (const { relative, text, file } of await shippedSources()) {
+      if (file.endsWith(".sql")) continue;
+      const body = code(text, file);
+      if (GENERIC.some((pattern) => pattern.test(body))) found.push(relative);
+    }
+    expect(found.filter((relative) => !(relative in GENERIC_READERS))).toEqual([]);
+    // And no entry above outlives the code it vouches for.
+    expect(Object.keys(GENERIC_READERS).filter((relative) => !found.includes(relative))).toEqual([]);
   });
 });

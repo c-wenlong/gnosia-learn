@@ -110,6 +110,11 @@ is the only code that reads or writes `provider_key`, and
 `services/catalog/test/provider-keys.test.ts` scans every shipped source file
 (comments skipped) and fails one that names it. The exports are built by type,
 each from its own queries, so an exporter cannot read a table it never names.
+The same test covers the other way in, code that walks every table without
+naming any: iterating the schema's `tables` registry, listing the database's
+tables, or running `pg_dump`. Each file that does is listed in the test with
+what it does with the rows (`catalog status` counts them, the rehearsal's
+backup is a database dump), and a new one fails until someone has read it.
 
 ## Threat model
 
