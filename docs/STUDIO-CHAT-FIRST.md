@@ -1469,7 +1469,9 @@ What the runs show:
 - Neither arm read tldrawkc source or guessed an option. The arm without the
   manual took every option from one `canvas api` call, which now prints each
   helper's options with type, default and description. The manual's options
-  section is the same text, generated from the same `api.json`, so on these
+  section is generated from the same `api.json` option data, formatted more
+  tersely (a plain type or a default its description already states is left
+  out) and with a static list of the allowed style values added, so on these
   briefs it stood in for exactly one call. That call's result is 17,217
   characters, about 7,000 tokens (the second request of each run without
   the manual wrote 7,313 and 7,298 tokens to the cache, most of them that
