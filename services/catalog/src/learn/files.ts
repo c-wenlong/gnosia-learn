@@ -16,7 +16,7 @@ import {
   writeNoteRow,
   type NoteRow,
 } from "../content/note-rows";
-import { CLI_OWNER, cliScope } from "../content/scope";
+import { CLI_OWNER, cliScope, type OwnerScope } from "../content/scope";
 import { ContentWriteError } from "../content/write";
 import { writeThrough } from "../content/write-through";
 import { NOTE_KEYS, type NoteFields } from "../content/notes";
@@ -114,7 +114,7 @@ async function rowsFor(type: "concepts" | "sessions" | "courses", write: boolean
   );
 }
 
-/** A files read or write with no tree of files to go to. */
+/** A files read or write with no tree of files to go to, or one files cannot answer (another owner's read). */
 export class FilesGoneError extends Error {
   constructor(message: string) {
     super(message);
@@ -263,11 +263,26 @@ async function readConceptAt(
   }
 }
 
-export async function readConcept(id: string): Promise<ConceptNote | null> {
+/**
+ * One note, as `scope` may read it: the owner's own and the commons', and by
+ * default the CLI's owner's (`cliScope()`). `learn concept show --owner` is
+ * the one caller that passes another owner, for the studio runner, which
+ * serves `STUDIO_OWNER` and must never be handed `local`'s note in its place.
+ *
+ * A tree of files has no owners, so it answers only the CLI's owner: another
+ * owner's read is refused rather than served whatever the tree holds.
+ */
+export async function readConcept(id: string, scope: OwnerScope = cliScope()): Promise<ConceptNote | null> {
   const db = await rowsFor("concepts", false);
   if (db !== null) {
-    const [row] = await readNoteRows(db, [id], cliScope().readable);
+    const [row] = await readNoteRows(db, [id], scope.readable);
     return row === undefined ? null : noteFromRow(row);
+  }
+  if (scope.owner !== CLI_OWNER) {
+    throw new FilesGoneError(
+      `the notes are files in the tree ${LEARN_ROOT_ENV} names, which has no owners, so ${scope.owner}'s notes ` +
+        `cannot be told apart from anyone else's; only the database answers for an owner other than ${CLI_OWNER}.`,
+    );
   }
   const { index } = await scanConcepts();
   const entry = index.get(id);
