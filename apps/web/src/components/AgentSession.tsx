@@ -398,7 +398,7 @@ export function AgentSession({
                 : "Or type to begin without the auto seed…"
             }
             disabled={busy}
-            className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm outline-none ring-[var(--accent)] focus:ring-2"
+            className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base outline-none ring-[var(--accent)] focus:ring-2 md:text-sm"
           />
           <button
             type="submit"

@@ -701,7 +701,7 @@ function RemoveIcon() {
 
 /** A chip's box, as a field: the same 28px pill, so nothing moves when editing starts. */
 const CHIP_FIELD = cx(
-  "h-7 min-w-[5ch] max-w-full rounded-full border border-border bg-surface text-[13px] text-text outline-none",
+  "h-7 min-w-[5ch] max-w-full rounded-full border border-border bg-surface text-base text-text outline-none md:text-[13px]",
   "transition-colors duration-100 placeholder:text-text3 focus:border-accent aria-invalid:border-danger",
   "[field-sizing:content]",
 );

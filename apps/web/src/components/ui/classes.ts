@@ -152,7 +152,8 @@ export function inputClasses({
 }: { pill?: boolean; size?: "md" | "sm"; className?: string } = {}): string {
   return cx(
     size === "md" ? "h-11 px-3.5" : "h-9 px-3",
-    "w-full min-w-0 border-2 border-border bg-surface text-[14px] text-text",
+    // 16px below 768px: iOS Safari zooms the page when it focuses a field under that.
+    "w-full min-w-0 border-2 border-border bg-surface text-base text-text md:text-[14px]",
     "placeholder:text-text3 outline-none transition-colors duration-100 focus:border-accent",
     "aria-invalid:border-danger",
     DISABLED,
