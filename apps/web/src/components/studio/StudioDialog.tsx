@@ -174,6 +174,7 @@ export function DialogHeader({ title, meta, children }: { title: ReactNode; meta
         type="button"
         onClick={close}
         aria-label="Close"
+        data-dialog-close=""
         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text2 transition-colors hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <svg aria-hidden viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

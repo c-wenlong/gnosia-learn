@@ -19,6 +19,7 @@ import {
   makeBoth,
   mentionOptions,
   modEnterPlan,
+  openerSend,
   openerValue,
   lengthSendBlock,
   newestBriefSeq,
@@ -415,6 +416,50 @@ describe("openerValue", () => {
     });
     expect(openerValue({ compose: "just words" })).toEqual({ text: "just words", mentions: [] });
     expect(openerValue({ compose: "", mentions: [] })).toBeNull();
+  });
+
+  it("puts a chip typed into unsent words back where it was typed", () => {
+    expect(openerValue({ compose: "then a @video of it", composeMentions: [{ kind: "video", start: 7, end: 13 }] })).toEqual({
+      text: "then a @video of it",
+      mentions: [{ kind: "video", start: 7, end: 13 }],
+    });
+    // A chip that does not read as one where it says is words.
+    expect(openerValue({ compose: "then a @video of it", composeMentions: [{ kind: "video", start: 0, end: 6 }] })).toEqual({
+      text: "then a @video of it",
+      mentions: [],
+    });
+    // A chip alone still has something to carry.
+    expect(openerValue({ compose: "@diagram", composeMentions: [{ kind: "diagram", start: 0, end: 8 }] })).toEqual({
+      text: "@diagram",
+      mentions: [{ kind: "diagram", start: 0, end: 8 }],
+    });
+  });
+
+  it("does not add a kind ahead of the words that already carry it", () => {
+    expect(
+      openerValue({ compose: "say @video slower", composeMentions: [{ kind: "video", start: 4, end: 10 }], mentions: ["video", "diagram"] }),
+    ).toEqual({
+      text: "@diagram say @video slower",
+      mentions: [
+        { kind: "diagram", start: 0, end: 8 },
+        { kind: "video", start: 13, end: 19 },
+      ],
+    });
+  });
+});
+
+describe("openerSend", () => {
+  it("is the message with its chips, or nothing when the opener sends none", () => {
+    expect(openerSend({ send: null })).toBeNull();
+    expect(openerSend({ send: "Add a thing" })).toEqual({ text: "Add a thing", mentions: [] });
+    expect(openerSend({ send: "A @diagram of it", sendMentions: [{ kind: "diagram", start: 2, end: 10 }] })).toEqual({
+      text: "A @diagram of it",
+      mentions: [{ kind: "diagram", start: 2, end: 10 }],
+    });
+    expect(openerSend({ send: "A @diagram of it", sendMentions: [{ kind: "diagram", start: 3, end: 11 }] })).toEqual({
+      text: "A @diagram of it",
+      mentions: [],
+    });
   });
 });
 

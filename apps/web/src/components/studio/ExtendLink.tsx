@@ -2,6 +2,8 @@
 
 import Link, { useLinkStatus } from "next/link";
 
+import { preloadMentionComposer } from "@/components/studio/preload-composer";
+
 /**
  * Extend, wherever it appears: a link to `?extend=<name>`, which opens the
  * panel that starts the conversation.
@@ -12,7 +14,8 @@ import Link, { useLinkStatus } from "next/link";
  * rather than leaving a control that looks as if it did nothing, and
  * `data-pending` lets a hover row stay visible while it waits. No prefetch:
  * every visible tile would otherwise make those reads for a panel nobody
- * opened.
+ * opened. Hover, focus and press start loading the composer the panel will
+ * type in, so it is there when the panel is.
  */
 export function ExtendLink({
   href,
@@ -29,7 +32,15 @@ export function ExtendLink({
   diagram?: string;
 }) {
   return (
-    <Link href={href} scroll={false} prefetch={false} className={className}>
+    <Link
+      href={href}
+      scroll={false}
+      prefetch={false}
+      className={className}
+      onPointerEnter={preloadMentionComposer}
+      onFocus={preloadMentionComposer}
+      onClick={preloadMentionComposer}
+    >
       <Label diagram={diagram} />
     </Link>
   );
