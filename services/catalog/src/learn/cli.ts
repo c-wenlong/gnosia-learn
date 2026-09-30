@@ -71,7 +71,7 @@ import {
 } from "../../../../scripts/learn/lib/session-log.mjs";
 
 import { ContentError } from "@self-learn/content";
-import { LOCAL_LEARNER_ID } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@self-learn/schema";
 
 import { runDiagramCommand } from "../commands/diagram";
 import { classifyConnectionFailure, describeConnectionFailure, EXIT_UNREACHABLE } from "../connection-failure";
@@ -124,6 +124,7 @@ import {
   writeConcept,
 } from "./files";
 import { NoteWriteError } from "../content/note-rows";
+import { cliScope } from "../content/scope";
 import { LogError } from "../content/session-logs";
 import { ContentWriteError } from "../content/write";
 import { courseTree, type CourseTree } from "./course-tree";
@@ -345,6 +346,7 @@ interface Values {
   force?: boolean;
   "body-file"?: string;
   out?: string;
+  owner?: string;
 }
 
 interface Parsed {
@@ -909,9 +911,12 @@ commands.concept = async ({ values, positionals }, session) => {
   if (sub === "show") {
     const id = positionals[2] ?? values.id;
     if (id === undefined) fail("concept show requires an id");
-    const concept = await readConcept(id);
+    // `--owner`: the studio runner reads a brief's note as the owner it
+    // serves, never as `local` (services/studio/src/source-note.ts).
+    const scope = scopeOf(values);
+    const concept = await readConcept(id, scope);
     if (concept === null) fail(`no such concept: ${id}`);
-    const model = await readModel(await session.db());
+    const model = await readModel(await session.db(), scope.owner);
     if (values.json) {
       return out({ ...concept, pL: masteryOf(model, id) }, true);
     }
@@ -1874,6 +1879,8 @@ commands.help = async () => {
                                    note moved since the checkout
   concept edit <id> --body-file F --reason R
                                  replaces the body in one step
+  concept show <id> --owner ID   reads as that owner: their notes and the
+                                   commons', and their mastery (default local)
   concept list|show <id>
                                  requires = cannot be understood without it:
                                    gates teaching, carries evidence
@@ -1972,7 +1979,28 @@ const OPTIONS = {
   force: { type: "boolean", default: false },
   "body-file": { type: "string" },
   out: { type: "string" },
+  owner: { type: "string" },
 } as const;
+
+/**
+ * The commands `--owner` means something to. Everywhere else the CLI reads
+ * and writes as its own owner (`CLI_OWNER`), and a flag it would quietly
+ * ignore is refused instead: `--owner x` on a read that still answered as
+ * `local` is the leak the flag exists to close.
+ */
+const OWNER_COMMANDS = new Set(["concept show"]);
+
+/**
+ * Whose notes a read may see: `--owner`'s own and the commons', the scope
+ * the catalog verbs build from the same flag (`ownerScope`), or the CLI's
+ * owner's when it is not given.
+ */
+function scopeOf(values: Values): OwnerScope {
+  if (values.owner === undefined) return cliScope();
+  const owner = values.owner.trim();
+  if (owner === "") fail("--owner cannot be empty");
+  return ownerScope(owner);
+}
 
 /**
  * `learn diagram <verb>`: the plugin's door to diagrams in the database
@@ -2030,6 +2058,10 @@ export async function main(argv: string[]): Promise<number> {
     return 1;
   }
   const command = commands[name] as Command;
+  if (parsed.values.owner !== undefined && !OWNER_COMMANDS.has(`${name} ${parsed.positionals[1] ?? ""}`)) {
+    process.stderr.write(`learn: --owner is taken by ${[...OWNER_COMMANDS].join(", ")} only; ${name} reads and writes as the CLI's owner.\n`);
+    return 1;
+  }
 
   const session = new Session();
   bindCatalog(() => session.db());

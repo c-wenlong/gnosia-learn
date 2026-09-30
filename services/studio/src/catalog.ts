@@ -236,7 +236,8 @@ export function jobAccept(jobId: string): Promise<CatalogResult> {
 /* -------------------------------------------------------------------------- */
 
 /**
- * `--owner`, on every diagram, job and session verb: the catalog then lists,
+ * `--owner`, on every diagram, job and session verb, and on the `learn` verb
+ * (`concept show`): the catalog then lists,
  * shows and checks out only what this studio's owner may read (their own
  * diagrams and the commons'), acts only on their jobs and sessions, and writes
  * as them (phase 4). Without it the CLI would act as its own default owner,
@@ -398,9 +399,14 @@ export function status(): Promise<CatalogResult> {
  * One concept note as the database holds it (`learn concept show --json`):
  * its title and body, among the rest. The studio reads it for a brief whose
  * source names a note, since the cut-over left no file to read.
+ *
+ * `--owner`, like every catalog verb here: without it the `learn` CLI reads
+ * as its own owner, `local`, so a studio serving anyone else was handed
+ * `local`'s note under that slug, or none when the note was the owner's own.
+ * `test/owner.test.ts` fails a `learn` verb here that leaves it out.
  */
 export function conceptShow(slug: string): Promise<CatalogResult> {
-  return npmCli("learn", ["concept", "show", slug], 60_000);
+  return npmCli("learn", ["concept", "show", slug, ...owned()], 60_000);
 }
 
 /* -------------------------------------------------------------------------- */

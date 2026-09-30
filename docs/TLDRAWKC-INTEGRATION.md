@@ -451,7 +451,7 @@ rather than to guess.
 | `concepts` | no | `meta.tldrawkc.concepts`, the concept slugs under that topic |
 | `layout` | no | A hint: `flow-lr`, `layered`, `comparison`, `radial` |
 | `mermaidPath` | no | A pasted flowchart, written to the job scratch directory and lifted with `from-mermaid`. The text never enters the prompt |
-| `source` | no | `meta.tldrawkc.source`: the concept or session that prompted the diagram. A concept is named by slug, the form's placeholder (an older brief's `learn/concepts/<domain>/<slug>.md` or `<slug>.md` still works). A note is a row since the cut-over, so when no such file is on disk the runner reads it with `learn concept show --json` into the job's scratch directory, `source/<slug>.md`, and the agent is pointed there (`services/studio/src/source-note.ts`); a slug the database does not answer for leaves the agent drawing from the brief alone |
+| `source` | no | `meta.tldrawkc.source`: the concept or session that prompted the diagram. A concept is named by slug, the form's placeholder (an older brief's `learn/concepts/<domain>/<slug>.md` or `<slug>.md` still works). A note is a row since the cut-over, so when no such file is on disk the runner reads it with `learn concept show --owner <STUDIO_OWNER> --json` (the studio owner's note or the commons', never another owner's) into the job's scratch directory, `source/<slug>.md`, and the agent is pointed there (`services/studio/src/source-note.ts`); a slug the database does not answer for leaves the agent drawing from the brief alone |
 | `model` | no | `sonnet` (default) or `opus`. Drawing loops are mechanical, so the default is the cheaper tier |
 | `notes` | no | Anything else the person wants the agent to know, as data |
 
