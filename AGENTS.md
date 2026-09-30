@@ -30,6 +30,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/STUDIO-VIDEOS.md](docs/STUDIO-VIDEOS.md) | Proposed: manimkc videos through the studio's chat. The video runner, the per-job sandbox around agent-written Python, the script as the brief, the gate, `catalog video put`, and the panel for the agent's model and effort |
 | [docs/STUDIO-MENTIONS.md](docs/STUDIO-MENTIONS.md) | Proposed: choosing what the studio's chat makes with @ tags. The menu, the inline chip and the studio's Lexical `MentionComposer`, tags as data on a message, untagged messages as conversation with one-click suggestions, one live brief per kind and Make both, the combined planner prompt, and "Add from library" as a later phase. Supersedes D51 of STUDIO-VIDEOS.md; ships with video phase 2 |
 | [docs/STUDIO-TUTOR-HANDOFF.md](docs/STUDIO-TUTOR-HANDOFF.md) | Accepted; phase 1 (the runner) and phase 2 (the web app) built, the paid and device checks still open: the concept tutor on `/learn/<concept>` gets the @ composer, and a Diagram or Video tag hands the concept to a new studio conversation (the note and the last tutor turns as data blocks, the message sent on arrival). When tags show, when Lexical loads, the runner change, D64 to D70 |
+| [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the three video tools (manimkc, remotionkc, revideokc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
 | [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into Postgres and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
 | [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (top bar, tab bar, `data-layout`), the habit data, `/courses`, and the screenshot tool |
@@ -72,6 +73,18 @@ this repository is refused, since notes written there are untracked files in
 `git status`, and a vault pulled into a `learn/` would be read by the next
 `catalog import` of that tree. The rules are in `services/catalog/src/learn/vault.ts` and
 [docs/LEARN.md](docs/LEARN.md), "Where the notes and logs live".
+
+## Video tools: choosing one
+
+Three submodules make narrated videos: manimkc (ManimGL), remotionkc
+(Remotion) and revideokc (Revideo, the Motion Canvas fork). They share one
+voice, one report shape and one deliverable format, and differ in what they
+draw well. **Before making a video, run the `video-router` skill**
+(`.claude/skills/video-router/`); it applies
+[docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md), picks a tool, says why, and hands
+over to that tool's skill. Change the routing in that page, never in the
+skill. Each tool's own capability doc is where to look for what it can do
+beyond the videos made so far.
 
 ## Asset generation: tools/manimkc/
 
@@ -134,8 +147,10 @@ Rules of engagement:
   [`tools/manimkc/server/DESIGN.md`](tools/manimkc/server/DESIGN.md) for what it needs from a machine and how it decides one can take a job.
 - The end-to-end process is the `manimkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/manimkc-video`. Everything
-  `.claude/` holds here is either `launch.json` or a symlink into a submodule:
-  that skill, `remotionkc-video`, `revideokc-video` and `tldrawkc-diagram`.
+  `.claude/` holds here is `launch.json`, a symlink into a submodule (that
+  skill, `remotionkc-video`, `revideokc-video` and `tldrawkc-diagram`), or
+  `video-router`, the one skill that belongs to no single tool because it
+  chooses between them.
 
 ## Asset generation: tools/remotionkc/
 
