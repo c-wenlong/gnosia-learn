@@ -52,6 +52,7 @@ export function LibraryVideo({
   statusHref,
   poster,
   title,
+  sourceRepo,
   chapters,
   transcript,
   saved,
@@ -66,6 +67,8 @@ export function LibraryVideo({
   statusHref: string;
   poster?: string;
   title: string;
+  /** The tool that made the video, for the upload command a failure names. */
+  sourceRepo?: string;
   chapters?: VideoChapter[];
   transcript?: TranscriptCue[];
   /** What the store held when the page was rendered, or null for a first visit. */
@@ -222,6 +225,7 @@ export function LibraryVideo({
         statusHref={statusHref}
         poster={poster}
         title={title}
+        sourceRepo={sourceRepo}
         chapters={chapters}
         transcript={transcript}
         startAt={startAt}

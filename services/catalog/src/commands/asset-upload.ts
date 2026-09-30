@@ -1,11 +1,11 @@
 import { uploadAssets, type AssetUploadResult, type UploadSource } from "../content/asset-upload";
 import { openBlobStore } from "../content/blob";
 import { withDatabase } from "../db";
-import { databaseUrl, REPO_ROOT, redactUrl, resolveManimkcRoot } from "../env";
+import { databaseUrl, REPO_ROOT, redactUrl, resolveManimkcRoot, resolveRemotionkcRoot } from "../env";
 import { findFfmpeg } from "../poster/extract";
 
 /**
- * `catalog asset upload --source manimkc [--dry-run]`: the connection, the
+ * `catalog asset upload --source manimkc|remotionkc [--dry-run]`: the connection, the
  * store and the printing. What it uploads and why each rule holds is in
  * `../content/asset-upload.ts`.
  *
@@ -20,6 +20,7 @@ export interface AssetUploadCommandOptions {
   source: UploadSource;
   dryRun: boolean;
   manimkcRoot?: string;
+  remotionkcRoot?: string;
   reason?: string;
 }
 
@@ -37,8 +38,11 @@ export async function runAssetUpload(options: AssetUploadCommandOptions): Promis
     blobRoot: store.root,
     ...(await uploadAssets(db, {
       store,
+      source: options.source,
       repoRoot: REPO_ROOT,
-      manimkcRoot: options.manimkcRoot ?? resolveManimkcRoot(REPO_ROOT),
+      ...(options.source === "remotionkc"
+        ? { remotionkcRoot: options.remotionkcRoot ?? resolveRemotionkcRoot(REPO_ROOT) }
+        : { manimkcRoot: options.manimkcRoot ?? resolveManimkcRoot(REPO_ROOT) }),
       dryRun: options.dryRun,
       ffmpeg,
       reason: options.reason,

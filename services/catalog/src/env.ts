@@ -26,7 +26,12 @@ export const MANIMKC_DIR = path.join("tools", "manimkc");
 /** The tldrawkc submodule, relative to the repo root. Same, for the other tool. */
 export const TLDRAWKC_DIR = path.join("tools", "tldrawkc");
 
+/** The remotionkc submodule, relative to the repo root. The second video tool. */
+export const REMOTIONKC_DIR = path.join("tools", "remotionkc");
+
 export const MANIMKC_ROOT_ENV = "MANIMKC_ROOT";
+
+export const REMOTIONKC_ROOT_ENV = "REMOTIONKC_ROOT";
 
 /**
  * Set to `1` to write to a database whose `catalog_instance` row says `copy`
@@ -125,6 +130,18 @@ function checkoutRoot(variable: string, fallback: string, repoRoot: string): str
  */
 export function resolveManimkcRoot(repoRoot: string = REPO_ROOT): string {
   return checkoutRoot(MANIMKC_ROOT_ENV, MANIMKC_DIR, repoRoot);
+}
+
+/**
+ * The remotionkc checkout: where its CLI is run from, and the default for
+ * `--remotionkc-root`. The same rule as `MANIMKC_ROOT`, for the same reason:
+ * remotionkc's own CLI resolves its checkout from `--root`, then this
+ * variable, so the name means one thing in both repositories. Where its
+ * renders land is `$REMOTIONKC_HOME`, which this repo never reads: it arrives
+ * as each report's `outRoot`, as manimkc's data root does.
+ */
+export function resolveRemotionkcRoot(repoRoot: string = REPO_ROOT): string {
+  return checkoutRoot(REMOTIONKC_ROOT_ENV, REMOTIONKC_DIR, repoRoot);
 }
 
 /**

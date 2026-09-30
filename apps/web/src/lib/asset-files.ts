@@ -18,7 +18,7 @@ import {
 import type { ContentType } from "@self-learn/content";
 
 import { ContentUnavailableError, contentSource } from "@/data/source";
-import type { RouteProblemCode } from "@/lib/asset-problems";
+import { isRenderSource, uploadCommand, type RouteProblemCode } from "@/lib/asset-problems";
 import { assetBlobStore } from "@/lib/blob-store";
 import { currentScope } from "@/lib/owner";
 
@@ -334,14 +334,15 @@ const noStoredCopy = (row: AssetRef): AssetFileProblem =>
 /**
  * The command that stores this kind's bytes. A diagram's SVG is stored by the
  * diagram writer, never by the manimkc upload, which would walk the videos
- * and leave the SVG missing.
+ * and leave the SVG missing. A render names the upload of the tool that made
+ * it, manimkc's or remotionkc's.
  */
 function uploadHint(row: AssetRef): string {
   if (row.kind === "diagram_svg") {
     const slug = path.basename(row.path ?? row.id).replace(/\.svg$/, "");
     return `Run \`npm run catalog -- diagram put --slug ${slug} --tldr <file> --svg <file> --reason <text>\` to store the diagram and its SVG.`;
   }
-  return "Run `npm run catalog -- asset upload --source manimkc` for a video or its sidecars.";
+  return `Run \`${uploadCommand(isRenderSource(row.sourceRepo) ? row.sourceRepo : "manimkc")}\` for a video or its sidecars.`;
 }
 
 /**
@@ -449,8 +450,8 @@ export async function posterSource(db: CatalogDatabase, id: string): Promise<Ass
     code: "not-uploaded",
     error: "No such asset poster.",
     detail:
-      `No poster is stored for ${id}. \`npm run catalog -- asset upload --source manimkc\` cuts one ` +
-      `for each video it uploads.`,
+      `No poster is stored for ${id}. \`${uploadCommand(isRenderSource(row.sourceRepo) ? row.sourceRepo : "manimkc")}\` ` +
+      `cuts one for each video it uploads.`,
   };
 }
 

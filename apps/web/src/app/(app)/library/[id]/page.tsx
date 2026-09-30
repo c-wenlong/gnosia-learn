@@ -277,6 +277,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           statusHref={statusHref}
           poster={poster}
           title={name.text}
+          sourceRepo={asset.sourceRepo}
           chapters={sidecars?.state === "read" ? sidecars.chapters : undefined}
           transcript={sidecars?.state === "read" ? sidecars.cues : undefined}
           saved={playback}
@@ -334,13 +335,13 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
       <div className="min-w-0">
         {asset.kind === "video" ? (
           servable ? null : (
-            fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} />
+            fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={asset.sourceRepo} />
           )
         ) : asset.kind === "diagram_svg" ? (
           servable ? (
             <DiagramView src={fileHref} statusHref={statusHref} title={name.text} heading={false} />
           ) : (
-            fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} />
+            fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={asset.sourceRepo} />
           )
         ) : asset.kind === "link" ? (
           <LinkPanel url={asset.url} />
@@ -377,7 +378,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
             </TextPanel>
           )
         ) : fileProblem !== null ? (
-          <Unavailable kind={asset.kind} code={fileProblem} />
+          <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={asset.sourceRepo} />
         ) : (
           // The file resolves and still did not come back as text: larger than
           // the preview cap, not UTF-8, or gone in the moment since it was
@@ -467,12 +468,13 @@ function TextPanel({ title, href, children }: { title: string; href: string; chi
  * sends a player or an `<img>` that is certain to fail. A video's panel takes
  * the player's footprint, as the hi-fi's 400px placeholder does.
  */
-function Unavailable({ kind, code }: { kind: string; code: RouteProblemCode }) {
+function Unavailable({ kind, code, sourceRepo }: { kind: string; code: RouteProblemCode; sourceRepo: string }) {
   const subject = kind === "video" ? "This video" : kind === "diagram_svg" ? "This diagram" : "This file";
   return (
     <WidgetFailure
       headline={`${subject} cannot be shown here.`}
       code={code}
+      sourceRepo={sourceRepo}
       className={kind === "video" ? "min-h-64 w-full sm:min-h-[400px]" : "min-h-48"}
     />
   );

@@ -17,8 +17,8 @@ import type { SourceWrite } from "../index/writer";
  * once the database owns content the files are one format it imports, not
  * what it indexes; `index` stays as an alias that says so once. Either way
  * every source writes through the revision writer, a type the database owns
- * is skipped or refused by its `content_source` row, and the pinned manimkc
- * and tldrawkc checkouts are the repository's, since an export directory
+ * is skipped or refused by its `content_source` row, and the pinned manimkc,
+ * remotionkc and tldrawkc checkouts are the repository's, since an export directory
  * holds no tools.
  *
  * Reports two things per source, and the second matters more than the first:
@@ -31,6 +31,7 @@ export interface IndexResult {
   database: string;
   repoRoot: string;
   manimkcRoot: string;
+  remotionkcRoot: string;
   sources: SourceWrite[];
   /** Sources `--only` did not name but that had to run, and why they had to. */
   addedForSafety: string[];
@@ -44,6 +45,7 @@ export interface IndexResult {
 export interface IndexOptions {
   only?: readonly IndexSource[];
   manimkcRoot?: string;
+  remotionkcRoot?: string;
 }
 
 export interface ImportOptions extends IndexOptions {
@@ -63,11 +65,13 @@ export async function runImportCommand(options: ImportOptions): Promise<IndexRes
       toolsRoot: REPO_ROOT,
       only: options.only,
       manimkcRoot: options.manimkcRoot,
+      remotionkcRoot: options.remotionkcRoot,
     });
     return {
       database: redactUrl(url),
       repoRoot: result.repoRoot,
       manimkcRoot: result.manimkcRoot,
+      remotionkcRoot: result.remotionkcRoot,
       sources: result.sources,
       addedForSafety: result.addedForSafety,
       addedAsPrerequisite: result.addedAsPrerequisite,
@@ -79,9 +83,10 @@ export async function runImportCommand(options: ImportOptions): Promise<IndexRes
 
 export function formatIndex(result: IndexResult): string {
   const lines = [
-    `database     ${result.database}`,
-    `read from    ${result.repoRoot}`,
-    `manimkc root ${result.manimkcRoot}`,
+    `database        ${result.database}`,
+    `read from       ${result.repoRoot}`,
+    `manimkc root    ${result.manimkcRoot}`,
+    `remotionkc root ${result.remotionkcRoot}`,
     "",
   ];
   for (const skip of result.skipped) {

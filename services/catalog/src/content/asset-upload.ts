@@ -9,8 +9,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { fileFacts } from "../index/files";
-import { MANIMKC_MIME, readTopicsReport, type TopicsReport } from "../index/manimkc";
-import { ASSET_PREFIX } from "../index/source";
+import { readToolReport, VIDEO_TOOL_MIME, videoTool, type TopicsReport } from "../index/video-tool";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
 import {
@@ -26,16 +25,19 @@ import { ContentWriteError, writeContents, type WriteContentInput } from "./writ
 import { CLI_OWNER } from "./scope";
 
 /**
- * `catalog asset upload --source manimkc`: manimkc's rendered videos and their
- * sidecars into the blob store, a poster made for each video on the way, and
+ * `catalog asset upload --source manimkc|remotionkc`: a video tool's rendered
+ * videos and their sidecars into the blob store, a poster made for each video on the way, and
  * every `asset` row pointed at its blob (docs/CONTENT-MIGRATION.md, Track E;
  * D5, D7, D8, D11; edge cases 5 and 9).
  *
- * **Which files.** The same report the manimkc indexer reads,
- * `manimkc topics --json`, with its `outRoot`: nothing here re-derives
- * manimkc's layout. A deliverable is only uploaded onto an asset row the
- * indexer already wrote (`manimkc:<out/...>`), because the row is what the
- * page asks for and a blob no row points at is an orphan on arrival.
+ * **Which files.** The same report the tool's indexer reads,
+ * `<tool> topics --json`, with its `outRoot`: nothing here re-derives the
+ * tool's layout. manimkc is described below; remotionkc's report has the same
+ * shape and its rows the `remotionkc:` namespace, and everything holds for it
+ * with that name in place of manimkc's. A deliverable is only uploaded onto
+ * an asset row the indexer already wrote (`manimkc:<out/...>`), because the
+ * row is what the page asks for and a blob no row points at is an orphan on
+ * arrival.
  *
  * **The bytes must be the indexed bytes.** A file whose sha256 is not its
  * row's `content_hash` has been re-rendered since the last index, and hooking
@@ -80,18 +82,26 @@ export function posterId(videoId: string): string {
   return `${POSTER_PREFIX}${videoId}`;
 }
 
-/** Media types for what this command uploads, by extension: manimkc's own, and the poster. */
-const MIME: Readonly<Record<string, string>> = { ...MANIMKC_MIME, jpg: POSTER_CONTENT_TYPE };
+/** Media types for what this command uploads, by extension: the video tools' own, and the poster. */
+const MIME: Readonly<Record<string, string>> = { ...VIDEO_TOOL_MIME, jpg: POSTER_CONTENT_TYPE };
 
-export type UploadSource = "manimkc";
-export const UPLOAD_SOURCES: readonly UploadSource[] = ["manimkc"];
+/** The video tools whose renders this command stores: each one an index source of the same name. */
+export type UploadSource = "manimkc" | "remotionkc";
+export const UPLOAD_SOURCES: readonly UploadSource[] = ["manimkc", "remotionkc"];
 
 export interface AssetUploadOptions {
   store: BlobStore;
-  /** Where the pinned manimkc CLI resolves from (the repository). */
+  /** Which tool's renders. Defaults to manimkc. */
+  source?: UploadSource;
+  /** Where the pinned tool CLIs resolve from (the repository). */
   repoRoot: string;
-  /** The manimkc checkout the CLI reads, as `catalog import` takes it. */
-  manimkcRoot: string;
+  /**
+   * The checkout the source's CLI reads, as `catalog import` takes it:
+   * `manimkcRoot` for manimkc, `remotionkcRoot` for remotionkc. Absent, the
+   * tool's variable, else its submodule under `repoRoot`.
+   */
+  manimkcRoot?: string;
+  remotionkcRoot?: string;
   dryRun?: boolean;
   /** Absolute path to ffmpeg, or null when there is none: posters are then skipped and said so. */
   ffmpeg: string | null;
@@ -321,8 +331,14 @@ export async function unhookPosters(
 
 export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOptions): Promise<AssetUploadResult> {
   const dryRun = options.dryRun ?? false;
-  const report = options.report ?? (await readTopicsReport(options.repoRoot, options.manimkcRoot));
-  const outRoot = str(report.outRoot) ?? options.manimkcRoot;
+  const source: UploadSource = options.source ?? "manimkc";
+  const tool = videoTool(source);
+  const checkout =
+    (source === "manimkc" ? options.manimkcRoot : options.remotionkcRoot) ?? tool.resolveRoot(options.repoRoot);
+  const report = options.report ?? (await readToolReport(tool, options.repoRoot, checkout));
+  const outRoot = str(report.outRoot) ?? checkout;
+  /** What a refusal says to run when a row is missing or stale. */
+  const reindex = `npm run catalog -- import --only ${source}`;
   const { store } = options;
   const author = options.author ?? LOCAL_LEARNER_ID;
   const readable = readableOwners(options.owner ?? CLI_OWNER);
@@ -331,11 +347,11 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     readable.includes(row.ownerId)
       ? null
       : `${row.id} belongs to ${row.ownerId}, and this upload writes only ${readable.join(" and ")}'s rows; nothing was stored`;
-  const reason = options.reason ?? "catalog asset upload --source manimkc: bytes into the blob store";
+  const reason = options.reason ?? `catalog asset upload --source ${source}: bytes into the blob store`;
 
   const found = deliverables(report);
-  const ids = found.flatMap((d) => [d.videoPath, ...d.sidecars]).map((p) => `${ASSET_PREFIX.manimkc}${p}`);
-  const posterIds = found.map((d) => posterId(`${ASSET_PREFIX.manimkc}${d.videoPath}`));
+  const ids = found.flatMap((d) => [d.videoPath, ...d.sidecars]).map((p) => `${tool.prefix}${p}`);
+  const posterIds = found.map((d) => posterId(`${tool.prefix}${d.videoPath}`));
   // The rows and the revision each was read at, in one snapshot. Every write
   // below copies the row it read and changes its blob key, so it is based on
   // that revision: a `catalog import` that rewrote the row in the minutes an
@@ -361,7 +377,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
 
   const items: UploadItem[] = [];
   const result: AssetUploadResult = {
-    source: "manimkc",
+    source,
     outRoot,
     dryRun,
     counts: { videos: 0, sidecars: 0, posters: 0 },
@@ -473,7 +489,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         row.id,
         row.kind,
         `${row.path} has changed since it was indexed (sha256 ${facts.contentHash.slice(0, 12)}, row ` +
-          `${row.contentHash?.slice(0, 12) ?? "none"}). Run \`npm run catalog -- import --only manimkc\`, then upload again.`,
+          `${row.contentHash?.slice(0, 12) ?? "none"}). Run \`${reindex}\`, then upload again.`,
       );
       return null;
     }
@@ -518,15 +534,15 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
   };
 
   const groups: Group[] = found.map((d) => {
-    const videoId = `${ASSET_PREFIX.manimkc}${d.videoPath}`;
+    const videoId = `${tool.prefix}${d.videoPath}`;
     const plan = (p: string): Planned | null => {
-      const row = rows.get(`${ASSET_PREFIX.manimkc}${p}`);
+      const row = rows.get(`${tool.prefix}${p}`);
       return row === undefined ? null : { row, file: path.join(outRoot, p), ext: extOf(p) };
     };
     const sidecars: Planned[] = [];
     for (const p of d.sidecars) {
       const planned = plan(p);
-      if (planned === null) refuse(`${ASSET_PREFIX.manimkc}${p}`, "sidecar", `not in the catalog. Run \`npm run catalog -- import --only manimkc\` first.`);
+      if (planned === null) refuse(`${tool.prefix}${p}`, "sidecar", `not in the catalog. Run \`${reindex}\` first.`);
       else sidecars.push(planned);
     }
     return { videoId, video: plan(d.videoPath), sidecars };
@@ -534,7 +550,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
 
   for (const group of groups) {
     if (group.video === null) {
-      refuse(group.videoId, "video", "not in the catalog. Run `npm run catalog -- import --only manimkc` first.");
+      refuse(group.videoId, "video", `not in the catalog. Run \`${reindex}\` first.`);
       continue;
     }
     const writes: WriteContentInput[] = [];
@@ -730,7 +746,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
             contentHash: sha256,
             bytes: done.bytes,
             title: `${video.row.title ?? video.row.id} (poster)`,
-            // Made by this repository's upload command, not rendered by manimkc.
+            // Made by this repository's upload command, not rendered by the tool.
             sourceRepo: "self-learn",
             blobKey: done.key,
             resourceType: null,

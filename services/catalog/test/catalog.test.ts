@@ -111,20 +111,24 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
   });
 
   describe("import", () => {
-    it("skips the two manimkc sources with a reason, since there is no CLI to run", async () => {
+    it("skips the manimkc and remotionkc sources with a reason, since there is no CLI to run", async () => {
       const result = await importSeed();
       const ran = result.sources.map((s) => s.source);
       // `mirrors` reads the same CLI out of the same checkout, so it is
       // absent for exactly the same reason `manimkc` is and never on its own.
       expect(ran).not.toContain("manimkc");
       expect(ran).not.toContain("mirrors");
+      // remotionkc's root is a directory that does not exist (vitest.setup.ts),
+      // so it is left out the same way, and says which submodule is missing.
+      expect(ran).not.toContain("remotionkc");
       expect(result.skipped).toEqual([
         { source: "manimkc", reason: expect.stringContaining("never been indexed") },
+        { source: "remotionkc", reason: "the remotionkc submodule is not initialised, and it has never been indexed here" },
         { source: "mirrors", reason: expect.stringContaining("never been indexed") },
       ]);
     });
 
-    it("refuses --only manimkc or --only mirrors when there is no manimkc CLI", async () => {
+    it("refuses --only manimkc, mirrors or remotionkc when its CLI is not there", async () => {
       // Asked for explicitly, so dropping it silently would answer a different
       // question than the one put to it.
       await expect(runImportCommand({ dir: SEED, only: ["manimkc"] })).rejects.toThrow(
@@ -132,6 +136,9 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       );
       await expect(runImportCommand({ dir: SEED, only: ["mirrors"] })).rejects.toThrow(
         /submodule is not initialised.*manimkc mirrors --json/s,
+      );
+      await expect(runImportCommand({ dir: SEED, only: ["remotionkc"] })).rejects.toThrow(
+        /the remotionkc submodule is not initialised, so `remotionkc topics --json` cannot run\. Run `git submodule update --init tools\/remotionkc`, or set REMOTIONKC_ROOT/,
       );
     });
 

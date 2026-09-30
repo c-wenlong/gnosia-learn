@@ -121,6 +121,11 @@ describe("the combined prompt", () => {
     expect(voicesBlock()).toContain("af_heart | American English, female");
     expect(videosBlock(null)).toContain("(the video list could not be read)");
     expect(videosBlock([])).toContain("(no videos yet)");
+    expect(
+      videosBlock([
+        { origin: "remotionkc", slug: null, assetId: "remotionkc:out/a/b.mp4", title: "B", topic: "t", durationSeconds: 52 },
+      ]),
+    ).toContain("remotionkc:out/a/b.mp4 | B | t | 52 s | remotionkc");
     expect(lengthOf(52)).toBe("52 s");
     expect(lengthOf(0)).toBe("(unknown length)");
   });
