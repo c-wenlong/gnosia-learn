@@ -18,6 +18,18 @@ vi.mock("@/lib/agent/providers", () => ({
   completeWithFallback,
   availableProviderSummary: () => "none",
 }));
+// The owner's keys (docs/BYOK.md): whose keys the turn is paid with, read per
+// request for the signed-in owner. Mocked here; the ordering has its own test.
+const tutorCredentials = vi.hoisted(() => vi.fn());
+const signedIn = vi.hoisted(() => ({ value: true }));
+vi.mock("@/lib/agent/credentials", () => ({ tutorCredentials }));
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => signedIn.value,
+}));
+
+/** A stand-in for `tutorCredentials`' answer; the route only passes it on. */
+const CREDENTIALS = [{ config: { id: "gemini" }, apiKey: "own-gemini-key", source: "saved" }];
 
 const ORIGIN = "http://localhost:3000";
 let ip = 0;
@@ -80,6 +92,9 @@ describe("POST /api/agent/session", () => {
   beforeEach(() => {
     readConceptWorkspace.mockReset();
     completeWithFallback.mockReset();
+    tutorCredentials.mockReset();
+    tutorCredentials.mockResolvedValue(CREDENTIALS);
+    signedIn.value = true;
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
     readTutorStyle.mockReset();
     readTutorStyle.mockResolvedValue("guide-concise");
@@ -153,6 +168,23 @@ describe("POST /api/agent/session", () => {
     expect((await call({ conceptSlug: "nope", step: "probe" })).json.code).toBe("CONCEPT_NOT_FOUND");
     readConceptWorkspace.mockResolvedValue({ state: "unreachable", message: "down" });
     expect((await call({ conceptSlug: "nope", step: "probe" })).status).toBe(503);
+    expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("pays for the question with the signed-in owner's keys, and points at Settings when there are none", async () => {
+    completeWithFallback.mockResolvedValue({ ok: false, attempts: [], code: "MISSING_API_KEY" });
+    const { json } = await call({ conceptSlug: "dot-product", step: "probe" });
+    expect(tutorCredentials).toHaveBeenCalledWith("local");
+    expect(completeWithFallback.mock.calls[0]?.[1]).toBe(CREDENTIALS);
+    expect(json.error).toMatch(/Settings/);
+    expect(String(json.error)).not.toMatch(/_API_KEY/);
+    expect(JSON.stringify(json)).not.toContain("own-gemini-key");
+  });
+
+  it("is a 401 with no session, before any key is read", async () => {
+    signedIn.value = false;
+    expect((await call({ conceptSlug: "dot-product", step: "probe" })).status).toBe(401);
+    expect(tutorCredentials).not.toHaveBeenCalled();
     expect(completeWithFallback).not.toHaveBeenCalled();
   });
 });

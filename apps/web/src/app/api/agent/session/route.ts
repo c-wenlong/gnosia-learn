@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
+import { tutorCredentials } from "@/lib/agent/credentials";
 import { availableProviderSummary, completeWithFallback } from "@/lib/agent/providers";
 import {
   buildSessionQuestionPrompt,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/agent/session";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
+import { requestOwner } from "@/lib/learner-api";
 import { readTutorStyle } from "@/lib/settings";
 
 export const runtime = "nodejs";
@@ -41,6 +43,8 @@ const MAX_AVOID = 4;
 export async function POST(req: Request) {
   const crossOrigin = enforceSameOrigin(req);
   if (crossOrigin) return crossOrigin;
+  const owner = await requestOwner();
+  if (owner instanceof NextResponse) return owner;
 
   let body: unknown;
   try {
@@ -75,18 +79,23 @@ export async function POST(req: Request) {
   // The learner's tutor style shapes the explanation; read after the concept,
   // as the chat does.
   const style = await readTutorStyle();
+  const credentials = await tutorCredentials(owner);
   const outcome = await completeWithFallback([
     {
       role: "system",
       content: buildSessionQuestionPrompt(toConceptPromptInput(read.workspace), step as QuestionStep, asked, style),
     },
     { role: "user", content: sessionQuestionRequest(step as QuestionStep) },
-  ]);
+  ], credentials);
 
   if (!outcome.ok) {
     return outcome.code === "MISSING_API_KEY"
       ? NextResponse.json(
-          { error: "No tutor model is configured on this server.", code: "MISSING_API_KEY", providers: availableProviderSummary() },
+          {
+            error: "No model provider key is set. Add one in Settings, under Provider keys.",
+            code: "MISSING_API_KEY",
+            providers: availableProviderSummary(credentials),
+          },
           { status: 503 },
         )
       : NextResponse.json(
