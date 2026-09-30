@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FIELD_TEXT } from "@/components/ui/classes";
 import type {
   Course,
   KnowledgeInput,
@@ -166,7 +167,7 @@ export function RecapEditor({
   );
 
   const fieldClass =
-    "mt-1 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base text-[var(--foreground)] outline-none md:text-sm ring-[var(--accent)] focus:ring-2";
+    `mt-1 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none ring-[var(--accent)] focus:ring-2 ${FIELD_TEXT.sm}`;
   const labelClass =
     "text-xs font-semibold text-[var(--muted-strong)]";
 
