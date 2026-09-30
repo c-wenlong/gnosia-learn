@@ -21,9 +21,12 @@ import { useHabitRefresh } from "./use-habit-refresh";
  * Below 768px it is the phone header (kit `Phone`): 56px, the wordmark, a
  * number-only streak pill and the avatar. The five destinations move to
  * `TabBar`; Studio does not, and stays in the avatar menu on a phone.
- * Between 768 and 1024 both pills shorten to their number and the gaps
- * tighten, so six destinations (Studio on) still fit at 768 with room to spare
- * (with five, the avatar was already cut off at exactly 768).
+ * Between 768 and 1024 both pills shorten to their number, the labels drop
+ * to 14px and the gaps tighten, so six destinations (Studio on) still fit at
+ * 768 with room for a 4-digit streak and a "21 / 21" target (the widest the
+ * pills get: `TARGET_MAX_CONCEPTS` is 20), and the pills sit 24px apart up to
+ * 1280 so the long pills with those numbers still fit at 1024. With five, the
+ * avatar was already cut off at exactly 768.
  * On a `data-layout="focus"` page it is hidden from 768px up: focus mode
  * draws its own step bar and exit instead.
  *
@@ -48,7 +51,7 @@ export function TopBar({ habit, studio }: { habit: Habit; studio: boolean }) {
         </Link>
 
         <nav aria-label="Primary" className="hidden h-full md:block">
-          <ul className="flex h-full gap-4 lg:gap-7">
+          <ul className="flex h-full gap-3.5 lg:gap-7">
             {topBarDestinations(studio).map((d) => {
               const on = d.key === active;
               return (
@@ -57,7 +60,7 @@ export function TopBar({ habit, studio }: { habit: Habit; studio: boolean }) {
                     href={d.href}
                     aria-current={on ? "page" : undefined}
                     className={cx(
-                      "group/nav flex h-full flex-col items-center justify-center gap-2 text-[15px] transition-colors duration-100",
+                      "group/nav flex h-full flex-col items-center justify-center gap-2 text-[14px] transition-colors duration-100 lg:text-[15px]",
                       "focus-visible:outline-none",
                       on ? "font-semibold text-text" : "font-medium text-text2 hover:text-text",
                     )}
@@ -73,7 +76,7 @@ export function TopBar({ habit, studio }: { habit: Habit; studio: boolean }) {
           </ul>
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 md:gap-3 lg:gap-8">
+        <div className="ml-auto flex items-center gap-2 md:gap-3 lg:gap-6 xl:gap-8">
           {/* Visibility is on wrappers: a class that hides the pill itself
               would compete with the pill's own display utility. */}
           <span className="flex lg:hidden">

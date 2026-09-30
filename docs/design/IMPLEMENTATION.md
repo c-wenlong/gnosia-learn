@@ -208,11 +208,12 @@ layout holds only the document, the fonts and the theme class. Its client parts 
   active for `/studio` and everything under it), the streak pill, the target
   pill, and the avatar menu (theme, Settings, and on a phone only, Studio).
   `topBarDestinations(studio)` in `lib/nav.ts` is the list. Between 768 and
-  1024px both pills show their number only ("0" and "0 / 2") and the gaps
-  tighten (24px side padding, 20px after the wordmark, 16px between
-  destinations, 12px between pills), so six destinations fit at 768 with about
-  20px to spare; with five they already overflowed there by 54px, the avatar
-  cut off at the edge.
+  1024px both pills show their number only ("0" and "0 / 2"), the labels are
+  14px and the gaps tighten (24px side padding, 20px after the wordmark,
+  14px between destinations, 12px between pills), so six destinations fit at
+  768 even with a 4-digit streak and a "21 / 21" target (the widest the
+  pills get); the pills sit 24px apart up to 1280. With five destinations the
+  avatar was already cut off at 768, by 54px.
 - **Phone**, below 768px: a 56px header with the wordmark, the number-only
   streak pill and the avatar; the five destinations (`DESTINATIONS`, without
   Studio) move to a 68px tab bar fixed to the bottom, whose grid is five
