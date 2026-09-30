@@ -165,6 +165,21 @@ describe("the video runner's refusals", () => {
     await expect(made.enqueue(brief({ slug: "third-video", mode: "change" }))).rejects.toMatchObject({ status: 409 });
   });
 
+  it("refuses a tool the studio cannot make, and a change whose tool is not its video's (D72, D74)", async () => {
+    const made = await runner();
+    await expect(made.enqueue(brief({ tool: "revideokc" }))).rejects.toMatchObject({ status: 409, message: expect.stringContaining("not in the studio yet") });
+    // A video made with another tool: its change must keep that tool.
+    catalogMock.videoShow.mockResolvedValue(ok({ video: { slug: "two-boxes", revision: 2, brief: { tool: "revideokc" } } }));
+    await expect(made.enqueue(brief({ mode: "change" }))).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining("was made with revideokc, and a change keeps its video's tool"),
+    });
+    // A stored brief with no tool is manimkc's, so a manimkc change of it is admitted.
+    catalogMock.videoShow.mockResolvedValue(ok({ video: { slug: "two-boxes", revision: 2, brief: { title: "Two boxes" } } }));
+    const { created } = await made.enqueue(brief({ mode: "change", tool: "manimkc" }));
+    expect(created).toBe(true);
+  });
+
   it("counts video spend against the one daily cap, and refuses at it", async () => {
     const made = await runner();
     const { record } = await made.enqueue(brief());

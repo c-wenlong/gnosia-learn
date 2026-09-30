@@ -40,6 +40,7 @@ const CLI_DEFAULT_MODEL = "claude-opus-5";
 import { EFFORTS, readClaudeDefaults } from "./video/agent-model";
 import type { VideoDoctor } from "./video/doctor";
 import { postVideoJob, videoJobRoutes, videoView, type VideoDeps } from "./video/routes";
+import { toolsHealth } from "./video/tools";
 
 /**
  * The HTTP surface: JSON in, JSON out, on `127.0.0.1:7250`.
@@ -1830,10 +1831,10 @@ async function health(
     // be queued now, from the doctor's last answer.
     video:
       video === undefined
-        ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "this studio was started without the video runner" }
+        ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "this studio was started without the video runner", tools: toolsHealth() }
         : videoReport === null
-          ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "the video doctor has not finished its first check" }
-          : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length },
+          ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "the video doctor has not finished its first check", tools: toolsHealth() }
+          : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length, tools: toolsHealth() },
     agent,
     diagramAgent: { ok: diagramAgentProblem === null, problem: diagramAgentProblem },
     // When each answer above was checked. `stale` means it is older than that
