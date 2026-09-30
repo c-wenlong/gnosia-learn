@@ -1,4 +1,5 @@
-import { runnerDown, type Refusal } from "@/lib/studio-drafts";
+import { validMentions, type MentionValue } from "@/components/ui/mention-text";
+import { isDraftKind, runnerDown, type DraftKind, type DraftMention, type Refusal } from "@/lib/studio-drafts";
 
 /**
  * Extend from a tile (docs/STUDIO-CHAT-FIRST.md, phase 2): the words, the
@@ -22,12 +23,12 @@ import { runnerDown, type Refusal } from "@/lib/studio-drafts";
 
 /**
  * What an Extend press hands over as the first turn: a message the person
- * sent during the read, else the opener, except on a Talk it through press,
- * which never sends one (the person edits the prefill, or writes their own,
- * before anything is paid for).
+ * sent during the read, chips and all, else the opener, except on a Talk it
+ * through press, which never sends one (the person edits the prefill, or
+ * writes their own, before anything is paid for).
  */
-export function firstTurn(queued: string | null, talk: boolean): string | null {
-  return queued ?? (talk ? null : EXTEND_OPENER);
+export function firstTurn(queued: MentionValue<DraftKind> | null, talk: boolean): MentionValue<DraftKind> | null {
+  return queued ?? (talk ? null : { text: EXTEND_OPENER, mentions: [] });
 }
 
 /**
@@ -213,14 +214,23 @@ export function forgetExtendKey(storage: Storage | null, name: string): void {
  */
 export interface ExtendOpener {
   send: string | null;
+  /**
+   * Where the chips sit in `send`, each range reading `@<kind>` there, as a
+   * message's `mentions` do: a message queued in an Extend press, whose
+   * composer is the conversation's own. Absent is none.
+   */
+  sendMentions?: DraftMention[];
   compose: string;
+  /** The same for `compose`: chips typed into the words left unsent. Absent is none. */
+  composeMentions?: DraftMention[];
   source: string | null;
   /**
    * Chips the composer starts with, before `compose`: a video's Change hands
    * its words to the conversation with the Video chip already in place
-   * (STUDIO-MENTIONS.md, 2c). Absent is none.
+   * (STUDIO-MENTIONS.md, 2c). Kinds only, since they sit ahead of the words.
+   * Absent is none.
    */
-  mentions?: ("diagram" | "video")[];
+  mentions?: DraftKind[];
 }
 
 export function leaveOpener(storage: Storage | null, draftId: string, opener: ExtendOpener): void {
@@ -251,16 +261,44 @@ export function takeOpener(storage: Storage | null, draftId: string): ExtendOpen
   if (held === null) return null;
   safely(() => storage.removeItem(OPENER_PREFIX + draftId), undefined);
   const parsed = safely(
-    () => JSON.parse(held) as { send?: unknown; compose?: unknown; source?: unknown; mentions?: unknown },
+    () =>
+      JSON.parse(held) as {
+        send?: unknown;
+        sendMentions?: unknown;
+        compose?: unknown;
+        composeMentions?: unknown;
+        source?: unknown;
+        mentions?: unknown;
+      },
     {},
   );
   const send = typeof parsed.send === "string" && parsed.send.trim() !== "" ? parsed.send : null;
   const compose = typeof parsed.compose === "string" ? parsed.compose : "";
   const source = typeof parsed.source === "string" && parsed.source !== "" ? parsed.source : null;
-  const mentions = Array.isArray(parsed.mentions)
-    ? [...new Set(parsed.mentions.filter((kind): kind is "diagram" | "video" => kind === "diagram" || kind === "video"))]
-    : [];
-  return { send, compose, source, mentions };
+  const mentions = Array.isArray(parsed.mentions) ? [...new Set(parsed.mentions.filter(isDraftKind))] : [];
+  return {
+    send,
+    sendMentions: send === null ? [] : chipsIn(send, parsed.sendMentions),
+    compose,
+    composeMentions: chipsIn(compose, parsed.composeMentions),
+    source,
+    mentions,
+  };
+}
+
+/**
+ * The chips of `raw` that read as chips in `text`: a known kind, a range
+ * inside the text that reads exactly `@<kind>`, no overlap, a kind once.
+ * Storage is the tab's own, but a value this side cannot vouch for is words,
+ * never a chip nobody picked.
+ */
+function chipsIn(text: string, raw: unknown): DraftMention[] {
+  if (!Array.isArray(raw)) return [];
+  const known = raw.filter(
+    (mention): mention is DraftMention =>
+      typeof mention === "object" && mention !== null && isDraftKind((mention as { kind?: unknown }).kind),
+  );
+  return validMentions(text, known);
 }
 
 /** `window.sessionStorage`, or null where reading it throws or there is no window. */

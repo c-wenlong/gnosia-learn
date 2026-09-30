@@ -1,5 +1,5 @@
 import type { MentionOption, MentionValue } from "@/components/ui/mention-text";
-import { isBareTag, isEmptyValue, prependValue, validMentions, valueOf } from "@/components/ui/mention-text";
+import { inlinePieces, isBareTag, isEmptyValue, prependValue, validMentions, valueOf } from "@/components/ui/mention-text";
 import type { Brief, Job } from "@/lib/studio-jobs";
 import { isActive, isTerminal } from "@/lib/studio-jobs";
 import { isVideoBrief, type VideoBrief } from "@/lib/studio-brief-video";
@@ -18,6 +18,7 @@ import {
 import { replacesJob } from "@/lib/studio-drafts";
 import type {
   DraftKind,
+  DraftMention,
   DraftSlot,
   DraftView,
   PendingTopic,
@@ -529,6 +530,9 @@ export function suggestionName(kind: DraftKind): string {
 /* The composer                                                               */
 /* -------------------------------------------------------------------------- */
 
+/** The same limit the runner takes, `STUDIO_TEXT_LIMIT`'s default. */
+export const TEXT_LIMIT = 8_000;
+
 /**
  * Why Send waits on the length of what is in the field, or null. Only Send:
  * the field stays editable, so the person can cut it back down.
@@ -594,17 +598,37 @@ export function valueBack(
 }
 
 /**
- * An opener's words and chips as the composer's value (the video job view's
- * Change hands its text over with the Video chip, 2c): the chips first, each
- * followed by a space, then the words. Never sent; the person sends it.
+ * An opener's words and chips as the composer's value: chips first, each
+ * followed by a space (the video job view's Change hands its text over with
+ * the Video chip, 2c), then the words with any chips typed into them where
+ * they were typed (an Extend press's unsent text). A kind the words carry
+ * already is not added ahead of them too: one chip per kind. Never sent; the
+ * person sends it.
  */
-export function openerValue(opener: { compose: string; mentions?: readonly unknown[] }): MentionValue<DraftKind> | null {
-  const kinds = [...new Set((opener.mentions ?? []).filter((kind): kind is DraftKind => kind === "diagram" || kind === "video"))];
+export function openerValue(opener: {
+  compose: string;
+  composeMentions?: readonly DraftMention[];
+  mentions?: readonly unknown[];
+}): MentionValue<DraftKind> | null {
+  const words = inlinePieces<DraftKind>({ text: opener.compose, mentions: [...(opener.composeMentions ?? [])] });
+  const inWords = new Set(words.flatMap((piece) => (piece.type === "mention" ? [piece.kind] : [])));
+  const kinds = [
+    ...new Set((opener.mentions ?? []).filter((kind): kind is DraftKind => kind === "diagram" || kind === "video")),
+  ].filter((kind) => !inWords.has(kind));
   if (opener.compose === "" && kinds.length === 0) return null;
   return valueOf<DraftKind>([
     ...kinds.flatMap((kind) => [{ type: "mention" as const, kind }, { type: "text" as const, text: " " }]),
-    { type: "text", text: opener.compose },
+    ...words,
   ]);
+}
+
+/**
+ * The first turn an opener sends into an empty conversation, chips where
+ * the person put them, or null when it sends none.
+ */
+export function openerSend(opener: { send: string | null; sendMentions?: readonly DraftMention[] }): MentionValue<DraftKind> | null {
+  if (opener.send === null) return null;
+  return { text: opener.send, mentions: validMentions(opener.send, [...(opener.sendMentions ?? [])]) };
 }
 
 /** A runner's sentence as the card shows it: a capital first, a full stop last. */

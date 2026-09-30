@@ -2,15 +2,25 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PinnedDiagram } from "@/components/studio/PinnedDiagram";
+import { Sentence } from "@/components/studio/Sentence";
+import { MentionComposer } from "@/components/studio/StudioComposer";
 import { DialogHeader, useStudioDialog } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses } from "@/components/ui/classes";
-import { Composer } from "@/components/ui/Composer";
+import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
+import {
+  EMPTY_MENTION_VALUE,
+  isEmptyValue,
+  prependValue,
+  trimValue,
+  type MentionValue,
+} from "@/components/ui/mention-text";
 import { UserMessage } from "@/components/ui/Message";
-import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
+import { lengthSendBlock, MENTION_HINT, mentionOptions, TEXT_LIMIT, valueSendBlock } from "@/lib/studio-cards";
+import { createDraft, DRAFT_KINDS, idempotencyKey, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 import {
   firstTurn,
   extendKey,
@@ -24,6 +34,8 @@ import {
 } from "@/lib/studio-extend";
 import { canvasHref, panelHref } from "@/lib/studio-view";
 
+type Value = MentionValue<DraftKind>;
+
 /**
  * The panel between pressing Extend and the conversation existing
  * (`?extend=<name>`, docs/STUDIO-CHAT-FIRST.md, "Extend from a tile").
@@ -36,6 +48,12 @@ import { canvasHref, panelHref } from "@/lib/studio-view";
  * first turn in place of the studio's opener; the draft replaces this panel
  * (`router.replace`, so Back does not come here and post again).
  *
+ * The composer is the conversation's own (`MentionComposer`, docs/STUDIO-MENTIONS.md),
+ * so an `@Video` or `@Diagram` typed during the read is a chip here and stays
+ * one across the hand-off: a queued message goes as `{ text, mentions }`, and
+ * unsent words go into the conversation's composer with their chips where they
+ * were typed (`ExtendOpener`).
+ *
  * A refusal stays in this panel, where the press was, with what to do about
  * it (`extendRefusal`). Once the draft exists the composer closes and says
  * so, and what it holds goes with the hand-off: a message sent here as the
@@ -47,6 +65,7 @@ export function ExtendStart({
   path,
   listed,
   talk = false,
+  video = null,
 }: {
   name: string;
   title: string;
@@ -55,6 +74,8 @@ export function ExtendStart({
   listed: boolean;
   /** From Talk it through (`&talk=1`): no opener is sent, prefill or not. */
   talk?: boolean;
+  /** The video doctor, as the conversation's menu reads it: whether Video can be tagged. Unknown reads as available. */
+  video?: VideoAvailability | null;
 }) {
   const router = useRouter();
   const { close, isClosing } = useStudioDialog();
@@ -63,22 +84,22 @@ export function ExtendStart({
   const [opening, setOpening] = useState(false);
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
-  const [text, setTextState] = useState("");
-  const [queued, setQueuedState] = useState<string | null>(null);
+  const [value, setValueState] = useState<Value>(EMPTY_MENTION_VALUE);
+  const [queued, setQueuedState] = useState<Value | null>(null);
   // What the post's continuation hands over. Written with the state, in the
   // same handler, rather than by an effect after the render: a keystroke
   // made just before the post resolved is in these, where an effect would
   // not have run yet.
-  const typed = useRef({ text: "", queued: null as string | null });
-  const setText = useCallback((next: string) => {
-    typed.current.text = next;
-    setTextState(next);
+  const typed = useRef<{ value: Value; queued: Value | null }>({ value: EMPTY_MENTION_VALUE, queued: null });
+  const setValue = useCallback((next: Value) => {
+    typed.current.value = next;
+    setValueState(next);
   }, []);
-  const setQueued = useCallback((next: string | null) => {
+  const setQueued = useCallback((next: Value | null) => {
     typed.current.queued = next;
     setQueuedState(next);
   }, []);
-  const composer = useRef<HTMLTextAreaElement | null>(null);
+  const composer = useRef<MentionComposerHandle | null>(null);
   const running = useRef(false);
   // Closing the panel mid-read does not stop the post, and its answer must not
   // reopen a conversation the person just closed.
@@ -108,9 +129,10 @@ export function ExtendStart({
       setRefused(extendRefusal(result.status, result.refusal, title));
       // A message that was waiting goes back into the composer: a refused
       // press should not cost the typing.
-      const { queued: held, text: current } = typed.current;
+      // Its chips too, ahead of whatever was typed since.
+      const { queued: held, value: current } = typed.current;
       setQueued(null);
-      if (held !== null) setText(current === "" ? held : `${held}\n${current}`);
+      if (held !== null) setValue(prependValue(held, current));
       return;
     }
     // From here the composer is closed (`opening`), so what it holds now is
@@ -118,14 +140,17 @@ export function ExtendStart({
     // and whatever is left unsent lands in the conversation's composer.
     setOpening(true);
     noteArrival(result.data.draftId, name);
-    const { text: draftText, queued: waiting } = typed.current;
+    const { value: unsent, queued: waiting } = typed.current;
+    const first = firstTurn(waiting, talk);
     leaveOpener(store, result.data.draftId, {
-      send: firstTurn(waiting, talk),
-      compose: draftText,
+      send: first === null ? null : first.text,
+      sendMentions: first === null ? [] : first.mentions,
+      compose: unsent.text,
+      composeMentions: unsent.mentions,
       source: name,
     });
     router.replace(panelHref(path, { extend: null, draft: result.data.draftId }), { scroll: false });
-  }, [name, title, path, talk, router, isClosing, setQueued, setText]);
+  }, [name, title, path, talk, router, isClosing, setQueued, setValue]);
 
   useEffect(() => {
     // The post runs from an effect because this panel is what a link opens:
@@ -146,15 +171,41 @@ export function ExtendStart({
     // After the dialog's own effect, which runs after this one and focuses
     // its first control (Close) when it opens: typing straight away should
     // land in the composer, and an Enter there should not close the panel.
+    let frame = 0;
+    let stopped = false;
     const later = setTimeout(() => {
       // Only a Talk it through press reads a prefill, so a stale one left by
       // a press that never arrived cannot land in an ordinary Extend.
       const prefill = talk ? takePrefill(sessionStore(), name) : null;
-      if (prefill !== null) setText(prefill);
-      composer.current?.focus();
+      if (prefill !== null) setValue({ text: prefill, mentions: [] });
+      // The composer loads lazily and is not on screen yet, so this tries for
+      // a couple of seconds' worth of frames rather than once.
+      let frames = 0;
+      const attempt = () => {
+        if (stopped) return;
+        if (composer.current !== null) {
+          composer.current.focus();
+          return;
+        }
+        if ((frames += 1) < 120) frame = requestAnimationFrame(attempt);
+      };
+      attempt();
     }, 0);
-    return () => clearTimeout(later);
-  }, [name, talk, setText]);
+    return () => {
+      stopped = true;
+      clearTimeout(later);
+      cancelAnimationFrame(frame);
+    };
+  }, [name, talk, setValue]);
+
+  // The draft is new, so it will have the current runner's kinds: both. The
+  // conversation re-reads them from its record, and a tag it cannot take
+  // comes back into its composer with the reason.
+  const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
+  // A bare tag gives the planner nothing to go on in a conversation with no
+  // turn yet (T15), and this one has none.
+  const valueBlock = valueSendBlock(value, true);
+  const tooLong = lengthSendBlock(value, TEXT_LIMIT);
 
   const words = readingWords(now - startedAt);
 
@@ -171,7 +222,11 @@ export function ExtendStart({
       >
         {listed && <PinnedDiagram name={name} title={title} />}
 
-        {queued !== null && <UserMessage>{queued}</UserMessage>}
+        {queued !== null && (
+          <UserMessage>
+            <Sentence value={queued} />
+          </UserMessage>
+        )}
 
         {refused === null ? (
           <div role="status" className="mx-auto flex max-w-[56ch] flex-col items-center gap-1 text-center text-[13px] leading-5 text-text3">
@@ -218,28 +273,30 @@ export function ExtendStart({
           sitting there disabled. */}
       {refused === null && (
         <div className="shrink-0 border-t border-hair px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 md:px-5">
-          <Composer
-            value={text}
-            onChange={setText}
-            onSubmit={(value) => {
-              const body = value.trim();
-              if (body === "" || queued !== null || opening) return;
+          <MentionComposer
+            handleRef={composer}
+            value={value}
+            onChange={setValue}
+            onSubmit={(next) => {
+              const body = trimValue(next);
+              if (isEmptyValue(body) || queued !== null || opening) return;
+              if (valueSendBlock(body, true) !== null || lengthSendBlock(body, TEXT_LIMIT) !== null) return;
               setQueued(body);
-              setText("");
+              setValue(EMPTY_MENTION_VALUE);
             }}
             label="Tell the planner what to add to this diagram"
             placeholder="What should it gain?"
-            maxLength={8_000}
+            mentions={options}
+            mentionHint={MENTION_HINT}
             disabled={opening}
-            sendDisabled={queued !== null}
+            sendDisabled={queued !== null || valueBlock !== null || tooLong !== null}
             disabledReason={
               opening
                 ? "Opening the conversation. What is here goes with it."
                 : queued !== null
                   ? "Your message goes as soon as the diagram is read."
-                  : undefined
+                  : (valueBlock ?? tooLong ?? undefined)
             }
-            inputRef={composer}
           />
         </div>
       )}
