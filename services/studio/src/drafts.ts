@@ -1756,7 +1756,7 @@ export class Drafts {
         );
       });
       const replayed = [
-        fence("CONVERSATION", conversationText(history).slice(-40_000)),
+        fence("CONVERSATION", replayOf(conversationEntries(history), REPLAY_LIMIT)),
         "The block above is this conversation so far, as data. Carry on from it.",
         prompt,
       ].join("\n\n");
@@ -3566,8 +3566,35 @@ export function transcriptOf(events: readonly TranscriptEvent[]): TranscriptEntr
   return entries;
 }
 
-/** The conversation as plain text, for a fresh session that could not resume the old one (C3); a tagged message keeps its TAGS block (T22). */
-function conversationText(events: readonly TranscriptEvent[]): string {
+/**
+ * The most of the conversation a fresh session is handed (C3), in characters:
+ * the runner's 1 MB body limit, since a chat message has no cap of its own and
+ * one message may be that long.
+ */
+const REPLAY_LIMIT = 1_000_000;
+
+/**
+ * The conversation for a fresh session, newest entries first until `limit`,
+ * each whole: a message is never cut part way, and the newest is kept however
+ * long it is. When older ones are left out, the text says so.
+ */
+export function replayOf(entries: readonly string[], limit: number): string {
+  const kept: string[] = [];
+  let size = 0;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]!;
+    if (kept.length > 0 && size + entry.length > limit) {
+      kept.unshift(`(${index + 1} earlier ${index === 0 ? "entry" : "entries"} left out for length)`);
+      break;
+    }
+    kept.unshift(entry);
+    size += entry.length;
+  }
+  return kept.join("\n\n");
+}
+
+/** The conversation as plain entries, for a fresh session that could not resume the old one (C3); a tagged message keeps its TAGS block (T22). */
+function conversationEntries(events: readonly TranscriptEvent[]): string[] {
   const tagsBySeq = new Map<number, string[]>();
   for (const event of events) {
     if (event.type === "message" && Array.isArray(event.tags) && event.tags.length > 0) tagsBySeq.set(event.seq, event.tags as string[]);
@@ -3577,8 +3604,7 @@ function conversationText(events: readonly TranscriptEvent[]): string {
     .map((entry) => {
       const tags = tagsBySeq.get(entry.seq);
       return tags === undefined ? `${entry.role}: ${entry.text}` : `${entry.role}: ${fence("TAGS", tags.join("\n"))}\n${entry.text}`;
-    })
-    .join("\n\n");
+    });
 }
 
 /**
