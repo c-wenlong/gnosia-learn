@@ -99,6 +99,14 @@ export function openRouterReferer(env: EnvMap): string {
   return resolveSiteUrl(env).toString();
 }
 
+/**
+ * NVIDIA's default chat model. `meta/llama-3.1-8b-instruct`, the previous
+ * default, reached end of life on 2026-08-26 and answers 410 Gone; see the
+ * note in docs/DEPLOYMENT.md on how this one was picked and how to swap it.
+ * `NVIDIA_MODEL` overrides it.
+ */
+export const DEFAULT_NVIDIA_MODEL = "google/gemma-4-31b-it";
+
 /** Every provider, in the cascade's order, whether or not a key is set for it. */
 export function providerConfigs(
   env: EnvMap = process.env,
@@ -108,8 +116,7 @@ export function providerConfigs(
       id: "nvidia",
       label: "NVIDIA NIM",
       baseUrl: baseUrl(env, "nvidia", "NVIDIA_BASE_URL"),
-      model:
-        env.NVIDIA_MODEL?.trim() || "meta/llama-3.1-8b-instruct",
+      model: env.NVIDIA_MODEL?.trim() || DEFAULT_NVIDIA_MODEL,
       apiKeyEnv: "NVIDIA_API_KEY",
     },
     {
@@ -245,6 +252,48 @@ async function callOpenAiCompatible(
   };
 }
 
+/** Models already reported as gone, so a busy route logs each once. */
+const reportedGone = new Set<string>();
+
+/**
+ * A 410 means the model is gone. A 404 is ambiguous: the model may be gone, or
+ * the configured base URL (a proxy, a gateway) may not serve the route at all.
+ * The cascade falls through to the next provider either way and the user sees
+ * a slower tutor with no error, which is how the retired NVIDIA default went
+ * unnoticed. Say it once per model, naming the model, and name both causes
+ * for a 404 so the log does not send an operator after the wrong one.
+ */
+/**
+ * The host of a base URL and nothing else. A gateway may carry an access token
+ * in its path, query or userinfo, and the secret redaction on provider errors
+ * covers API keys, not this, so a log line gets the origin only.
+ */
+function originOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).origin;
+  } catch {
+    return "the configured base URL";
+  }
+}
+
+function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string): void {
+  if (attempt.status !== 404 && attempt.status !== 410) return;
+  const key = `${attempt.provider}/${attempt.model}`;
+  if (reportedGone.has(key)) return;
+  reportedGone.add(key);
+  const variable = `${attempt.provider.toUpperCase()}_MODEL`;
+  console.error(
+    attempt.status === 410
+      ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, set ${variable}`
+      : `agent: ${attempt.provider} answered 404 for model ${attempt.model} at ${originOf(baseUrl)}; the model may be retired (set ${variable}) or the base URL may not serve /chat/completions`,
+  );
+}
+
+/** Test hook: forget which gone models were already reported. */
+export function resetGoneModelReports(): void {
+  reportedGone.clear();
+}
+
 /**
  * Try the providers in order. Continues on rate-limits / 5xx / empty replies.
  * `credentials` is `orderCredentials`' list (the routes get it from
@@ -280,7 +329,9 @@ export async function completeWithFallback(
         "provider" in err &&
         "message" in err
       ) {
-        attempts.push(err as ProviderAttemptError);
+        const attempt = err as ProviderAttemptError;
+        attempts.push(attempt);
+        reportIfModelGone(attempt, provider.baseUrl);
       } else {
         attempts.push({
           provider: provider.id,
