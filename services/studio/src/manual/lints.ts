@@ -1,5 +1,5 @@
 /**
- * The nine lint rules, each with when it fires and what fixes it.
+ * The ten lint rules, each with when it fires and what fixes it.
  *
  * The static half of the manual's lint section. The names are checked against
  * the installed tool's own list (the `getLints` entry of `canvas api --json`)
@@ -40,6 +40,17 @@ export const LINT_RULES: readonly LintRule[] = [
       "(`'top'`, `'bottom'`...), move the bend with `mid`, or use `kind: 'arc'` with a `bend` " +
       "that clears it. Put `meta: { lintIgnore: ['arrow-crosses-shape'] }` only on a marker the " +
       "arrow is meant to pass through.",
+  },
+  {
+    name: "line-crosses-label",
+    severity: "error",
+    fires:
+      "A `line`, a `stub` or an arrow not bound at both ends runs more than 4 units into the words " +
+      "of a label. The outline and the padding around the words are fine; `line` does not mute it.",
+    fix:
+      "Start or end the line at the shape's edge as `helpers.describe()` reports it once the label is " +
+      "set: `h` is only a minimum, and a label that wraps makes the box taller. Otherwise move the line " +
+      "or the label clear of each other.",
   },
   {
     name: "overlapping-text",
