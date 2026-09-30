@@ -47,7 +47,8 @@ const { Drafts, emptySlot } = await import("../src/drafts");
 const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
 const { spendWindow } = await import("../src/cost");
-const { cacheDir } = await import("../src/content-cache");
+const { cacheDir, cachePath } = await import("../src/content-cache");
+const { studioOwner } = await import("../src/config");
 const { draftDir, draftJsonPath, draftSessionLogPath, draftTranscriptPath } = await import("../src/paths");
 
 type DraftsT = InstanceType<typeof Drafts>;
@@ -258,15 +259,20 @@ describe("making a conversation", () => {
     let topics!: () => void;
     catalogMock.topicList.mockImplementationOnce(() => new Promise((resolve) => (topics = () => resolve(topicListAnswer()))));
     const made = drafts.create({ idempotencyKey: "late" });
-    // Its corpus read is done and cached, so only the create itself is left.
-    await until(() => existsSync(path.join(cacheDir(), "diagrams.local.json")), "the corpus read never landed");
     let drained = false;
-    const draining = drafts.drain().then(() => (drained = true));
-    // Nothing can resolve `drain` but the create, so however long this yields it is still waiting.
-    for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setImmediate(resolve));
-    expect(drained).toBe(false);
-    await expect(drafts.create({ idempotencyKey: "after" })).rejects.toMatchObject({ status: 503 });
-    topics();
+    let draining: Promise<unknown>;
+    try {
+      // Its corpus read is done and cached, so only the create itself is left.
+      await until(() => existsSync(cachePath(`diagrams.${studioOwner()}`)), "the corpus read never landed");
+      draining = drafts.drain().then(() => (drained = true));
+      // Nothing can resolve `drain` but the create, so however long this yields it is still waiting.
+      for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setImmediate(resolve));
+      expect(drained).toBe(false);
+      await expect(drafts.create({ idempotencyKey: "after" })).rejects.toMatchObject({ status: 503 });
+    } finally {
+      // Released whatever happened above, so a failure here cannot leave the teardown's drain waiting on it.
+      topics();
+    }
     const { record } = await made;
     await draining;
     expect(JSON.parse(await readFile(draftJsonPath(record.id), "utf8")).id).toBe(record.id);
