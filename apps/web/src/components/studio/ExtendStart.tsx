@@ -20,7 +20,7 @@ import {
   type MentionValue,
 } from "@/components/ui/mention-text";
 import { UserMessage } from "@/components/ui/Message";
-import { lengthSendBlock, MENTION_HINT, mentionOptions, TEXT_LIMIT, valueSendBlock } from "@/lib/studio-cards";
+import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
 import { createDraft, DRAFT_KINDS, idempotencyKey, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 import {
   carryOpener,
@@ -204,7 +204,6 @@ export function ExtendStart({
   // A bare tag gives the planner nothing to go on in a conversation with no
   // turn yet (T15), and this one has none.
   const valueBlock = valueSendBlock(value, true);
-  const tooLong = lengthSendBlock(value, TEXT_LIMIT);
 
   const words = readingWords(now - startedAt);
 
@@ -279,7 +278,7 @@ export function ExtendStart({
             onSubmit={(next) => {
               const body = trimValue(next);
               if (isEmptyValue(body) || queued !== null || opening) return;
-              if (valueSendBlock(body, true) !== null || lengthSendBlock(body, TEXT_LIMIT) !== null) return;
+              if (valueSendBlock(body, true) !== null) return;
               setQueued(body);
               setValue(EMPTY_MENTION_VALUE);
             }}
@@ -292,13 +291,13 @@ export function ExtendStart({
             // A reload here would lose what was typed and queued.
             fallbackNote="Tags could not load, so none can be added here."
             disabled={opening}
-            sendDisabled={queued !== null || valueBlock !== null || tooLong !== null}
+            sendDisabled={queued !== null || valueBlock !== null}
             disabledReason={
               opening
                 ? "Opening the conversation. What is here goes with it."
                 : queued !== null
                   ? "Your message goes as soon as the diagram is read."
-                  : (valueBlock ?? tooLong ?? undefined)
+                  : (valueBlock ?? undefined)
             }
           />
         </div>

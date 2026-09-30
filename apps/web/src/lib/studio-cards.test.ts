@@ -21,7 +21,6 @@ import {
   modEnterPlan,
   openerSend,
   openerValue,
-  lengthSendBlock,
   newestBriefSeq,
   plannerKindsOf,
   pressLabel,
@@ -460,13 +459,6 @@ describe("openerSend", () => {
       text: "A @diagram of it",
       mentions: [],
     });
-  });
-});
-
-describe("an over-long message", () => {
-  it("blocks Send with the count, and only Send", () => {
-    expect(lengthSendBlock({ text: "x".repeat(8_000), mentions: [] }, 8_000)).toBeNull();
-    expect(lengthSendBlock({ text: "x".repeat(16_500), mentions: [] }, 8_000)).toBe("16,500 of 8,000 characters. Cut it down to send.");
   });
 });
 

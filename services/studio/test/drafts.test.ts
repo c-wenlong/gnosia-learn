@@ -516,6 +516,10 @@ describe("what goes wrong", () => {
     expect(prompts[1]).toContain("-----BEGIN CONVERSATION-----");
     // A tagged message keeps its TAGS block in the replay (T22).
     expect(prompts[1]).toContain("person: -----BEGIN TAGS-----\ndiagram\n-----END TAGS-----\n@diagram one");
+    // The turn's own message goes once, as the prompt, not in the replay too.
+    const replay = prompts[1]!.slice(0, prompts[1]!.indexOf("-----END CONVERSATION-----"));
+    expect(replay).not.toContain("two");
+    expect(prompts[1]!.split("two")).toHaveLength(2);
     expect(drafts.get(record.id)!.plannerSessionId).not.toBe(before);
     const view = await drafts.view(record.id);
     expect(view.transcript.at(-1)).toMatchObject({ role: "planner", text: "carried on" });
