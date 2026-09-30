@@ -218,7 +218,8 @@ async function callOpenAiCompatible(
       provider: provider.id,
       model: provider.model,
       status: res.status,
-      message: providerText(text, secrets) || res.statusText,
+      // The reason phrase too: a gateway is free to put anything in it.
+      message: providerText(text, secrets) || providerText(res.statusText, secrets, 200),
     } satisfies ProviderAttemptError;
   }
 
@@ -237,7 +238,8 @@ async function callOpenAiCompatible(
 
   return {
     content,
-    model: data.model || provider.model,
+    // The browser shows this, so it gets the same redaction as an error body.
+    model: typeof data.model === "string" && data.model ? providerText(data.model, secrets, 200) : provider.model,
     provider: provider.id,
     providerLabel: provider.label,
   };

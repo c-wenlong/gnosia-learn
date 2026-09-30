@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { MIN_SECRET_LENGTH } from "@/lib/auth/core";
 import { checkKeyShape, CURRENT_KEY_VERSION, openKey, sealKey, type Sealed } from "@/lib/provider-keys/seal";
 
 /**
@@ -76,6 +77,15 @@ describe("sealKey and openKey", () => {
 
   it("refuses to seal with no secret", () => {
     expect(() => sealKey(KEY, { ...CONTEXT, secret: "" })).toThrow(/AUTH_SECRET/);
+  });
+
+  it("holds the sign-in floor on the secret: one character short neither seals nor opens", () => {
+    const short = "s".repeat(MIN_SECRET_LENGTH - 1);
+    const enough = "s".repeat(MIN_SECRET_LENGTH);
+    expect(() => sealKey(KEY, { ...CONTEXT, secret: short })).toThrow(/AUTH_SECRET/);
+    const sealed = sealKey(KEY, { ...CONTEXT, secret: enough });
+    expect(openKey(sealed, { ...CONTEXT, secret: enough })).toBe(KEY);
+    expect(openKey(sealed, { ...CONTEXT, secret: short })).toBeNull();
   });
 });
 

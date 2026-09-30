@@ -289,6 +289,31 @@ describe("provider errors never carry a key", () => {
     expect(text).toContain("Invalid key");
   });
 
+  it("redacts a key echoed in the reason phrase of a failed attempt and in the model of a reply", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 401, statusText: `Unauthorized ${key}`, text: async () => "" })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ choices: [{ message: { content: "hello" } }], model: `echo-${key}` }),
+        }),
+    );
+    const outcome = await completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      orderCredentials({ nvidia: key, gemini: "AIzaSyExampleExampleExample0123456789" }, {}),
+    );
+    expect(outcome.ok).toBe(true);
+    const text = JSON.stringify(outcome);
+    expect(text).not.toContain(key);
+    expect(text).not.toContain("Zk3x");
+    expect(text).not.toContain("gJ0sA");
+    if (!outcome.ok) return;
+    expect(outcome.attempts[0]?.message).toBe("Unauthorized [redacted]");
+    expect(outcome.result.model).toBe("echo-[redacted]");
+  });
+
   it("tests a key with one minimal call and reports the provider's words, redacted", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,

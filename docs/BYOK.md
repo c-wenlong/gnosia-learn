@@ -125,6 +125,7 @@ What each kind of attacker gets.
 | A database dump alone (a backup, flip day's `pg_dump`, a leaked replica, a read-only SQL injection) | Which providers each owner saved a key for, the last four characters, the dates | Any key. AES-256-GCM under a 256-bit key derived from a secret that is not in the database |
 | Write access to the database alone | The power to delete or corrupt rows, which reads as "re-enter this key" | A key, or the use of one owner's key for another (D7), or a key of their own choosing slipped in (they cannot seal one) |
 | The environment alone (`AUTH_SECRET`, as in a leaked Vercel variable or `.env.local`) | A forged session, so the use of the owner's keys through the tutor and Test, bounded by the rate limits; and the server's fallback keys, which sit in the environment in the clear as they always have | The stored keys. The app never returns one, and without the database there is no ciphertext |
+| Write access to the environment (a Vercel project member, a tampered `.env.local`) | Every owner's decrypted key, on their next tutor turn: setting `NVIDIA_BASE_URL`, `GEMINI_BASE_URL` or `OPENROUTER_BASE_URL` to a host of their own makes the server send each saved key there as the `Authorization` header | Nothing, beyond what the next rows grant. **Accepted while there is one owner**, who is also the only person who can write the environment. **Revisit before accounts arrive**, for example by pinning the base URLs used with saved keys to the providers' own hosts, so an operator's environment cannot redirect an owner's key |
 | Both the database and the environment | Every stored key, decrypted | Nothing more to protect. This is where the keys were before this change, when they sat in `.env` in the clear |
 | Code running on the server | Every key it touches, in memory | Out of scope: no design that lets the server call a provider can hide the key from the server |
 | Script running in the Settings page (an XSS) | A key while it is being typed, and the use of saved keys through Test | A saved key: no response carries one |
@@ -186,4 +187,7 @@ each moves to version 2 when its key is next saved. No migration.
 - A log of which key paid for which turn, and per-owner spend caps.
 - Choosing the model per owner. The model and base URL still come from the
   environment (`<PROVIDER>_MODEL`, `<PROVIDER>_BASE_URL`), so an owner's key
-  cannot point the server at a host of their choosing.
+  cannot point the server at a host of their choosing. The other side of that
+  is the environment-write row of the threat model: whoever sets the base URL
+  receives the saved keys, which must be closed before a second account
+  exists.

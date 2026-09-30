@@ -3,6 +3,8 @@ import "server-only";
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { PROVIDER_KEY_LIMITS, type ProviderId } from "@self-learn/schema/shared";
 
+import { MIN_SECRET_LENGTH } from "@/lib/auth/core";
+
 /**
  * Sealing and opening an owner's provider key (docs/BYOK.md, decision 2).
  *
@@ -38,7 +40,9 @@ const TAG_BYTES = 16;
 function deriveKey(secret: string, version: number): Buffer | null {
   // Version 1: HKDF over AUTH_SECRET. A dedicated secret would be version 2,
   // read here, with version 1 still derivable while its rows are re-saved.
-  if (version !== 1 || secret.length === 0) return null;
+  // The floor sign-in enforces (`readAuthConfig`), held here too so a short
+  // secret can never seal or open a key, whoever calls this.
+  if (version !== 1 || secret.length < MIN_SECRET_LENGTH) return null;
   return Buffer.from(hkdfSync("sha256", secret, SALT, `gnosia/provider-key/v${version}`, KEY_BYTES));
 }
 
