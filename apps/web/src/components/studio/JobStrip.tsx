@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
 
+import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import {
   failureReport,
@@ -59,7 +59,7 @@ export function JobStrip({ path, stream = true }: { path: string; stream?: boole
   return (
     <div className="flex h-8 shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-xs">
       <Dot job={job} />
-      <Link
+      <PanelLink
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
         className="flex min-w-0 flex-1 items-center gap-3 hover:underline"
@@ -67,7 +67,7 @@ export function JobStrip({ path, stream = true }: { path: string; stream?: boole
       >
         <span className="max-w-[18rem] truncate font-medium">{job.title ?? job.jobId.slice(0, 8)}</span>
         <Words job={job} />
-      </Link>
+      </PanelLink>
       {isActive(job.state) ? (
         <>
           <Elapsed job={job} />

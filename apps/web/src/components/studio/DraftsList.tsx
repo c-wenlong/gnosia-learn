@@ -19,7 +19,7 @@ import { conversationHref, relativeTime } from "@/lib/studio-view";
  *
  * The page reads the list on the server, so it is there on the first paint and
  * fresh after every navigation. Closing a conversation is not one (it moves
- * the URL in the browser, `ConversationHost`), so that reads it again from
+ * the URL in the browser, `PanelHost`), so that reads it again from
  * here, as the window regaining focus does, for a conversation started or
  * closed in another tab meanwhile. With nothing to list, or the runner not
  * answering, there is no section at all: the grid, the plus card and the

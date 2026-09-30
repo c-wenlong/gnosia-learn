@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
+import { PanelLink } from "@/components/studio/PanelLink";
+import { usePanelHost } from "@/components/studio/panel-host";
 import { NoteProse } from "@/components/NoteProse";
 import { ConfirmCard, type SaveOutcome } from "@/components/studio/ConfirmCard";
 import { ConfirmCardVideo } from "@/components/studio/ConfirmCardVideo";
@@ -193,6 +194,7 @@ export function DraftPanel({
   diagramAgent?: VideoAvailability | null;
 }) {
   const router = useRouter();
+  const host = usePanelHost();
   const { jobs, refresh: refreshJobs } = useStudioJobs();
   const [view, setView] = useState<DraftView | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -356,7 +358,7 @@ export function DraftPanel({
     setDiagramAgent(diagramAvailability(health.diagramAgent));
   }, []);
   // Once on opening too: the page that drew the grid read health, and a
-  // conversation opened in the browser (`ConversationHost`) can be minutes
+  // conversation opened in the browser (`PanelHost`) can be minutes
   // younger than that read.
   useEffect(() => {
     const timer = setTimeout(() => void readHealth(), 0);
@@ -483,7 +485,10 @@ export function DraftPanel({
     await refreshJobs();
     // With another card still live, the panel stays on the conversation, so
     // the second card is not hidden behind the first job (D60).
-    if (others.length === 0) router.push(panelHref(path, { job: result.data.jobId, draft: draftId }), { scroll: false });
+    if (others.length === 0) {
+      const href = panelHref(path, { job: result.data.jobId, draft: draftId });
+      if (host === null || !host.navigate(href)) router.push(href, { scroll: false });
+    }
     void load();
   }
 
@@ -1374,7 +1379,7 @@ function Failure({ text, className }: { text: string | null; className?: string 
 function BackBar({ href }: { href: string }) {
   return (
     <div className="flex h-10 shrink-0 items-center border-b border-hair bg-surface2 px-3">
-      <Link
+      <PanelLink
         href={href}
         scroll={false}
         className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium text-text2 transition-colors hover:bg-surface hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -1383,7 +1388,7 @@ function BackBar({ href }: { href: string }) {
           <path d="M12 5l-5 5 5 5" />
         </svg>
         From your conversation
-      </Link>
+      </PanelLink>
     </div>
   );
 }

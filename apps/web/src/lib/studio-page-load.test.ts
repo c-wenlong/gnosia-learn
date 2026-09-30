@@ -32,7 +32,7 @@ vi.mock("@/data/topics", async () => {
 
 const { default: StudioPage } = await import("@/app/(app)/studio/page");
 const { BlockedCard } = await import("@/components/studio/StudioBlocked");
-const { ConversationHost } = await import("@/components/studio/ConversationHost");
+const { PanelHost } = await import("@/components/studio/PanelHost");
 const { panelSignature } = await import("@/lib/studio-view");
 
 const calls = mocks.calls as Call[];
@@ -179,8 +179,20 @@ describe("the conversation panel", () => {
     answer("/api/health", { ok: true, data: healthy });
     answer("/api/diagrams", { ok: true, data: listing });
     for (const path of ["/api/jobs", "/api/vocabulary", "/api/drafts", "/api/videos"]) answer(path, down);
-    const host = elements(await pending).find((element) => element.type === ConversationHost);
+    const host = elements(await pending).find((element) => element.type === PanelHost);
     expect(host?.props.panel).toBeNull();
     expect(host?.props.panelKey).toBe(panelSignature({ draft: "d1", sel: "a" }));
+  });
+
+  it.each<Record<string, string>>([{ job: "j1" }, { sel: "a" }])("leaves %o to the browser too, with the rows it draws from", async (params) => {
+    const { page: pending } = await render(params);
+    answer("/api/health", { ok: true, data: healthy });
+    answer("/api/diagrams", { ok: true, data: listing });
+    answer("/api/jobs", { ok: true, data: { jobs: [{ jobId: "j1", state: "accepted", title: "T", target: "t", requested: "r", brief: { big: true } }] } });
+    for (const path of ["/api/vocabulary", "/api/drafts", "/api/videos"]) answer(path, down);
+    const host = elements(await pending).find((element) => element.type === PanelHost);
+    expect(host?.props.panel).toBeNull();
+    // Only what the panels read goes to the browser.
+    expect(host?.props.jobs).toEqual([{ jobId: "j1", state: "accepted", title: "T", target: "t", requested: "r" }]);
   });
 });

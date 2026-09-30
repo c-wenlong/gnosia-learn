@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { useConversationHost } from "@/components/studio/conversation-host";
+import { usePanelHost } from "@/components/studio/panel-host";
 import { cx } from "@/components/ui/classes";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
 import { panelHref } from "@/lib/studio-view";
@@ -17,7 +17,7 @@ import { panelHref } from "@/lib/studio-view";
  * that was open.
  *
  * On `/studio` the dialog opens at the press and the URL moves without a
- * server render (`ConversationHost`); anywhere else it is a router push.
+ * server render (`PanelHost`); anywhere else it is a router push.
  */
 export function useStartDraft(path: string): {
   start: () => Promise<void>;
@@ -25,7 +25,7 @@ export function useStartDraft(path: string): {
   error: string | null;
 } {
   const router = useRouter();
-  const host = useConversationHost();
+  const host = usePanelHost();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -1,5 +1,5 @@
-import Link from "next/link";
 
+import { PanelLink } from "@/components/studio/PanelLink";
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
@@ -253,7 +253,7 @@ function SelectedDiagram({
               <li key={job.jobId}>
                 {/* Each row opens that job in this panel: the history is a way
                     back into a job, not a list of dates. */}
-                <Link
+                <PanelLink
                   href={panelHref(path, { job: job.jobId, selected: embedded ? null : undefined })}
                   scroll={false}
                   className="flex h-8 items-center gap-2 rounded-md px-1 text-xs hover:bg-[var(--surface-hover)]"
@@ -263,7 +263,7 @@ function SelectedDiagram({
                   </span>
                   <span className="min-w-0 flex-1 truncate">{job.title ?? job.jobId}</span>
                   <Chip tone={job.state === "failed" ? "danger" : "muted"}>{jobStateLabel(job.state)}</Chip>
-                </Link>
+                </PanelLink>
               </li>
             ))}
           </ul>
