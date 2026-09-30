@@ -225,6 +225,7 @@ describe("habitLabels", () => {
     expect(labels.streakDetails).toEqual(["Studied today.", "1 free miss left this week."]);
     expect(labels.streakName).toBe("1 day streak. Studied today. 1 free miss left this week.");
     expect(labels.target).toBe("Target 1 / 2");
+    expect(labels.targetShort).toBe("1 / 2");
     expect(labels.targetDetails).toEqual(["Today's target: 1 concept + due reviews.", "1 concept studied today, 1 review due."]);
     expect(labels.targetName).toBe(
       "Target 1 / 2. Today's target: 1 concept + due reviews. 1 concept studied today, 1 review due.",
