@@ -198,6 +198,38 @@ describe.skipIf(!reachable.ok)("catalog topic ls and add --owner", () => {
       expect(await ownerOf("studio-edge")).toBeUndefined();
     });
 
+    it("refuses, dry run included, a related edge that would be stored under the commons' topic", async () => {
+      // "studio-rel" sorts after "shared", so the edge would live under "shared", which the studio cannot write.
+      for (const dry of [["--dry-run"], ["--reason", "a test"]]) {
+        const stderr = await refused([
+          "topic", "add", "--slug", "studio-rel", "--title", "Related", "--domain", "testing",
+          "--relate", "related:shared", ...dry, "--owner", STUDIO, "--json",
+        ]);
+        expect(stderr).toContain('a related edge to "shared" is stored under "shared"');
+      }
+      expect(await ownerOf("studio-rel")).toBeUndefined();
+    });
+
+    it("places a topic in the whole vocabulary's order, and reports a domain only the owner's topics have", async () => {
+      const theirs = await json([
+        "topic", "add", "--slug", "rival-zeta", "--title", "Rival zeta", "--domain", "zeta", "--reason", "a test", "--owner", OTHER,
+      ]);
+      expect(theirs.newDomain).toBe(true);
+      const mine = await json([
+        "topic", "add", "--slug", "studio-zeta", "--title", "Studio zeta", "--domain", "zeta", "--dry-run", "--owner", STUDIO,
+      ]);
+      // New to the studio, which cannot read the rival's zeta topic, yet placed after it.
+      expect(mine.newDomain).toBe(true);
+      expect(mine.position as number).toBeGreaterThan(theirs.position as number);
+      // A studio topic in a domain it shares with the export goes after that
+      // domain's last topic of any owner, not after its own last topic, which
+      // could sit past the rival's zeta group and split it.
+      await json(["topic", "add", "--slug", "studio-tail", "--title", "Studio tail", "--domain", "testing", "--reason", "a test", "--owner", STUDIO]);
+      const domains = (await json(["topic", "ls"])).topics as { domain: string }[];
+      const runs = domains.map((t) => t.domain).filter((d, i, all) => i === 0 || all[i - 1] !== d);
+      expect(runs).toEqual([...new Set(runs)]);
+    });
+
     it("checks a dry run against what the owner may read: no near match, no title clash, no title named", async () => {
       // Another owner's title is free to this one, and never offered as a near match.
       const dry = await json([

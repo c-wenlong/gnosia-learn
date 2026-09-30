@@ -22,7 +22,7 @@ import { diagramPaths } from "./diagram-document";
 import { restampVideoSource, sourceHash } from "./videos";
 import { type ExportType, sha256 } from "./layout";
 import { POSITION_STEP } from "./positions";
-import { andOwnedBy, type Owners, CLI_OWNER, cliScope, ownedBy, readableFor, scopedRead } from "./scope";
+import { andOwnedBy, type Owners, CLI_OWNER, cliScope, readableFor, scopedRead } from "./scope";
 import {
   type LatestRevision,
   latestRevisions,
@@ -473,8 +473,13 @@ function between(low: number | null, high: number | null, slug: string, after: s
 /**
  * Where a topic goes in `topics.yaml`'s order: after the last live topic of
  * its domain, since the file is written in domain groups, or at the end when
- * the domain is new. Among the topics `owners` may read, so whether a domain
- * is new says nothing about another owner's vocabulary.
+ * the domain is new.
+ *
+ * The position is placed among every owner's topics, since the whole
+ * database's export lists them all in this one order, and a list grouped by
+ * domain stays grouped in any owner's share of it. What the writer is told is
+ * only what `owners` may read: `newDomain` is whether *they* have a topic in
+ * the domain, and a neighbour they cannot read is not named in a refusal.
  */
 async function placeInDomain(
   db: CatalogDatabase,
@@ -484,11 +489,12 @@ async function placeInDomain(
 ): Promise<{ position: number; newDomain: boolean }> {
   const rows = (
     await db
-      .select({ slug: topic.slug, domain: topic.domain, position: topic.position })
+      .select({ slug: topic.slug, domain: topic.domain, position: topic.position, ownerId: topic.ownerId })
       .from(topic)
-      .where(and(isNull(topic.archivedAt), ownedBy(topic.ownerId, owners)))
+      .where(isNull(topic.archivedAt))
       .orderBy(asc(topic.position), asc(topic.slug))
   ).filter((row) => row.slug !== slug);
+  const readable = (row: { ownerId: string }) => owners === undefined || owners.includes(row.ownerId);
   let last = -1;
   rows.forEach((row, i) => {
     if (row.domain === domain) last = i;
@@ -496,9 +502,11 @@ async function placeInDomain(
   const at = last === -1 ? rows.length : last + 1;
   const low = rows[at - 1];
   const high = rows[at];
+  const named = (row: (typeof rows)[number] | undefined) =>
+    row === undefined ? null : readable(row) ? row.slug : "a topic you cannot read";
   return {
-    position: between(low?.position ?? null, high?.position ?? null, slug, low?.slug ?? null, high?.slug ?? null),
-    newDomain: last === -1,
+    position: between(low?.position ?? null, high?.position ?? null, slug, named(low), named(high)),
+    newDomain: !rows.some((row) => row.domain === domain && readable(row)),
   };
 }
 
@@ -679,9 +687,21 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By, writer
   const own: RelationInput[] = [];
   const others = new Map<string, RelationInput[]>();
   for (const { kind, to } of relations) {
-    await readableRow(db, to, "related topic", { readable });
+    const target = await readableRow(db, to, "related topic", { readable });
     await assertNoCycle(db, slug, kind, to, own);
     const { owner, other } = storedAs(slug, kind, to);
+    if (owner !== slug && target.ownerId !== writer) {
+      // A `related` edge lives under the smaller slug, here the other topic,
+      // and a topic is written only by its owner (the seam's `foreign-owner`).
+      // Refused here rather than at the write, so a dry run says what the add
+      // will: the studio's confirm card must not offer a Draw that fails.
+      throw new TopicError(
+        "foreign-owner",
+        `a related edge to "${to}" is stored under "${to}" (a related edge lives under the smaller slug), ` +
+          `and "${to}" belongs to ${target.ownerId}, not ${writer}, so this add cannot write it. ` +
+          `Relate from "${to}" as its owner, or use broader or precedes, which are stored under "${slug}".`,
+      );
+    }
     if (owner === slug) own.push({ kind, to: other });
     else others.set(owner, [...(others.get(owner) ?? []), { kind, to: slug }]);
   }
@@ -706,8 +726,7 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By, writer
     const row = await liveRow(db, owner);
     const current = await relationsOf(db, owner);
     inputs.push({
-      // The writer's, like the new topic: the seam refuses it as `foreign-owner`
-      // when the related topic is the commons', as it always has for `local`.
+      // The writer's own topic: another owner's was refused above.
       owner: writer,
       type: "topic",
       id: owner,
