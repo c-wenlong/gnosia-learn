@@ -3,7 +3,10 @@ import {
   availableProviderSummary,
   completeWithFallback,
   openRouterReferer,
+  orderCredentials,
   resolveProviders,
+  serverCredentials,
+  testProviderKey,
 } from "@/lib/agent/providers";
 import { resolveSiteUrl } from "@/lib/site-url";
 
@@ -142,7 +145,7 @@ describe("openRouterReferer", () => {
 
 describe("availableProviderSummary", () => {
   it("describes missing keys", () => {
-    expect(availableProviderSummary({})).toContain("none");
+    expect(availableProviderSummary([])).toContain("none");
   });
 });
 
@@ -150,7 +153,7 @@ describe("completeWithFallback", () => {
   it("returns MISSING_API_KEY when no keys are configured", async () => {
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      {},
+      serverCredentials({}),
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.code).toBe("MISSING_API_KEY");
@@ -168,10 +171,10 @@ describe("completeWithFallback", () => {
 
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      {
+      serverCredentials({
         NVIDIA_API_KEY: "nv",
         GEMINI_API_KEY: "gm",
-      },
+      }),
     );
 
     expect(outcome.ok).toBe(true);
@@ -202,11 +205,11 @@ describe("completeWithFallback", () => {
 
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      {
+      serverCredentials({
         NVIDIA_API_KEY: "nv",
         GEMINI_API_KEY: "gm",
         OPENROUTER_API_KEY: "or",
-      },
+      }),
     );
 
     expect(outcome.ok).toBe(true);
@@ -216,5 +219,98 @@ describe("completeWithFallback", () => {
       expect(outcome.attempts[0].provider).toBe("nvidia");
     }
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * Bring your own key (docs/BYOK.md, decision 4): the owner's saved keys go
+ * first, in the cascade's order, then the server's for the rest, and each
+ * provider appears once.
+ */
+describe("orderCredentials", () => {
+  const env = { NVIDIA_API_KEY: "server-nvidia-key", OPENROUTER_API_KEY: "server-openrouter-key" };
+
+  it("is the server's keys alone when the owner saved none", () => {
+    expect(orderCredentials({}, env).map((c) => [c.config.id, c.source])).toEqual([
+      ["nvidia", "server"],
+      ["openrouter", "server"],
+    ]);
+  });
+
+  it("puts the owner's keys first, in the cascade's order, then the server's", () => {
+    const order = orderCredentials({ openrouter: "own-openrouter-key", gemini: "own-gemini-key" }, env);
+    expect(order.map((c) => [c.config.id, c.source, c.apiKey])).toEqual([
+      ["gemini", "saved", "own-gemini-key"],
+      ["openrouter", "saved", "own-openrouter-key"],
+      ["nvidia", "server", "server-nvidia-key"],
+    ]);
+  });
+
+  it("uses the owner's key in place of the server's for the same provider, not beside it", () => {
+    const order = orderCredentials({ nvidia: "own-nvidia-key" }, env);
+    expect(order.filter((c) => c.config.id === "nvidia")).toHaveLength(1);
+    expect(order[0]).toMatchObject({ source: "saved", apiKey: "own-nvidia-key" });
+  });
+
+  it("works with no server keys at all, which is a local machine's case", () => {
+    expect(orderCredentials({ gemini: "own-gemini-key" }, {}).map((c) => c.config.id)).toEqual(["gemini"]);
+    expect(orderCredentials({}, {})).toEqual([]);
+  });
+
+  it("says where each key came from, and never any of the key", () => {
+    const summary = availableProviderSummary(orderCredentials({ gemini: "own-gemini-key" }, env));
+    expect(summary).toBe("gemini (your key) → nvidia (server key) → openrouter (server key)");
+    expect(summary).not.toMatch(/own-gemini|server-nvidia|server-openrouter/);
+  });
+});
+
+describe("provider errors never carry a key", () => {
+  const key = "nvapi-Zk3xQ9vB7mW2pL5tR8yN4cH6dF1gJ0sA";
+
+  it("takes a whole or masked echo out of a failed attempt", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        text: async () => `{"error":"Invalid key ${key}, also known as nvapi-Zk3x****gJ0sA"}`,
+      }),
+    );
+    const outcome = await completeWithFallback([{ role: "user", content: "hi" }], orderCredentials({ nvidia: key }, {}));
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    const text = JSON.stringify(outcome.attempts);
+    expect(text).not.toContain(key);
+    expect(text).not.toContain("Zk3x");
+    expect(text).not.toContain("gJ0sA");
+    expect(text).toContain("[redacted]");
+    expect(text).toContain("Invalid key");
+  });
+
+  it("tests a key with one minimal call and reports the provider's words, redacted", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      text: async () => `Authentication failed for key ${key}`,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const [credential] = orderCredentials({ nvidia: key }, {});
+    const result = await testProviderKey(credential!);
+    expect(result).toEqual({ ok: false, status: 401, message: "Authentication failed for key [redacted]" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(JSON.parse(String(init.body))).toMatchObject({ max_tokens: 1 });
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${key}`);
+  });
+
+  it("calls any 2xx a working key, and a network failure a failed test rather than a throw", async () => {
+    const [credential] = orderCredentials({ gemini: "AIzaSyExampleExampleExample0123456789" }, {});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ model: "gemini-2.5-flash" }) }));
+    expect(await testProviderKey(credential!)).toEqual({ ok: true, model: "gemini-2.5-flash" });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    expect(await testProviderKey(credential!)).toMatchObject({ ok: false, status: null, message: "fetch failed" });
   });
 });

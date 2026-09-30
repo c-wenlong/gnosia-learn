@@ -13,11 +13,13 @@ import {
   parseKnowledgeResponse,
   type TranscriptTurn,
 } from "@/lib/agent/summary";
+import { tutorCredentials } from "@/lib/agent/credentials";
 import {
   availableProviderSummary,
   completeWithFallback,
   type ChatMessage,
 } from "@/lib/agent/providers";
+import { requestOwner } from "@/lib/learner-api";
 
 export const runtime = "nodejs";
 
@@ -33,6 +35,8 @@ export async function POST(req: Request) {
   // origin check needs no body at all.
   const crossOrigin = enforceSameOrigin(req);
   if (crossOrigin) return crossOrigin;
+  const owner = await requestOwner();
+  if (owner instanceof NextResponse) return owner;
 
   let body: SummarizeBody;
   try {
@@ -88,16 +92,17 @@ export async function POST(req: Request) {
     },
   ];
 
-  const outcome = await completeWithFallback(payload);
+  const credentials = await tutorCredentials(owner);
+  const outcome = await completeWithFallback(payload, credentials);
 
   if (!outcome.ok) {
     if (outcome.code === "MISSING_API_KEY") {
       return NextResponse.json(
         {
           error:
-            "No free provider API keys configured. Write the recap by hand instead — it saves to the same place.",
+            "No model provider key is set. Add one in Settings, or write the recap by hand instead: it saves to the same place.",
           code: "MISSING_API_KEY",
-          providers: availableProviderSummary(),
+          providers: availableProviderSummary(credentials),
         },
         { status: 503 },
       );
@@ -107,7 +112,7 @@ export async function POST(req: Request) {
         error: "All free providers failed",
         code: "ALL_PROVIDERS_FAILED",
         attempts: outcome.attempts,
-        providers: availableProviderSummary(),
+        providers: availableProviderSummary(credentials),
       },
       { status: 502 },
     );

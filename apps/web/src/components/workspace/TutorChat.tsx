@@ -106,7 +106,7 @@ function writeTurns(key: string, turns: ThreadItem[]): void {
 
 function errorFor(status: number, data: ChatReply): string {
   if (data.code === "MISSING_API_KEY") {
-    return "No tutor model is configured on this server. Set NVIDIA_API_KEY, GEMINI_API_KEY or OPENROUTER_API_KEY and restart it.";
+    return "The tutor has no model provider key yet. Add one in Settings, under Provider keys.";
   }
   if (data.code === "CONCEPT_UNAVAILABLE") return "The knowledge base is unreachable, so the tutor has no note to read.";
   if (status === 429) return "That was a lot of questions in a minute. Wait a moment and try again.";
