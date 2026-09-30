@@ -6,7 +6,7 @@ seeded with the concept and the tag, where the planner proposes a brief and
 the person approves it with the usual press. Nothing is made from the tutor
 itself.
 
-**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, and phase 2, the web app, are built ("As built" under each says where they differ); phase 2's paid hand-offs, the drawn and accepted diagram, the "of that" hand-off and the iOS Safari touch check were measured on 2026-09-30 ("Measured, 2026-09-30" under phase 2). Android Chrome and VoiceOver are still to run, by the owner.** Numbers marked
+**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, and phase 2, the web app, are built ("As built" under each says where they differ); phase 2's paid hand-offs, the drawn and accepted diagram, the "of that" hand-off and the iOS Safari touch check were measured on 2026-09-30 ("Measured, 2026-09-30" under phase 2). On iOS the hand-off itself works by touch, but the check found two layout defects that are still open (the page zooms when the field is focused, and a long message slides under the tab bar), so iOS is run, not passed. Android Chrome and VoiceOver are still to run, by the owner.** Numbers marked
 *measured* come from the PR or document named beside them; every other number
 is a guess and says so.
 
@@ -428,8 +428,10 @@ differs from production.
 | 6 | `positional-encoding` | Diagram | "of that" | 4 | $0.0408 | Diagram | `positional-encoding` / `[positional-encoding]` |
 | 7 | `attention-weights` (iOS) | Diagram (tapped) | "of how scaled query-key scores become attention weights" | 0 | $0.0348 | Diagram | `attention-weights` / `[attention-weights]` |
 
-Every topic in the seed files its concepts, so every brief got the concept in
-`concepts`; the case of a topic that does not was not exercised here. Every
+Each brief's topic files its concept, so every brief got the concept in
+`concepts`. Not every seed topic files concepts (two list none), but no brief
+here landed on one, so a brief whose topic does not file its concept was not
+exercised. Every
 cost is `costSource: result`. First turns ran $0.035 to $0.069, a diagram
 about $0.04 and a video or a pair about $0.065, against the guess of $0.05 to
 $0.08. Two replies used the tutor turns without being asked: the softmax video
