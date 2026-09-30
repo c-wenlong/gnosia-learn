@@ -310,7 +310,8 @@ Rules of engagement:
 - A brief's `source` names the concept the diagram came out of, by slug (the
   form's placeholder), or as `learn/concepts/<domain>/<slug>.md` or
   `<slug>.md` for an old brief. A note is a row since the cut-over, so when no
-  such file is on disk the runner reads it with `learn concept show --json`
+  such file is on disk the runner reads it with `learn concept show --owner
+  <STUDIO_OWNER> --json` (theirs or the commons', never another owner's)
   into the job's scratch directory, `source/<slug>.md`, and points the agent
   there (`services/studio/src/source-note.ts`). Any other file in the tree is
   passed through as it is, and a slug the database does not answer for leaves

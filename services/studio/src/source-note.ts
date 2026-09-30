@@ -13,8 +13,9 @@ import { absolute, scratchDir } from "./paths";
  * Phase 3's cut-over removed `learn/`, and a note is a row now, so a source
  * that names a note and is not on disk is read from the database and written
  * into the job's scratch directory, which the agent may already read, and the
- * agent is pointed there. A source that is a file in the tree (any other
- * document) is left as it is. So is one that names no note the database
+ * agent is pointed there. The note is read as the studio's owner (`--owner`
+ * in `conceptShow`): theirs or the commons', never another owner's. A source
+ * that is a file in the tree (any other document) is left as it is. So is one that names no note the database
  * holds, or a database that does not answer: the agent then finds no file, as
  * it would have before, and draws from the brief alone.
  */

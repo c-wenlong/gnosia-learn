@@ -20,8 +20,10 @@ import { cachePath } from "../src/content-cache";
  *
  * 1. Every diagram, job and session verb the runner spawns names the owner it
  *    serves (`--owner`), so the catalog reads and writes only what that owner
- *    may. The check reads `src/catalog.ts` rather than trusting a list, so a
- *    verb added later without it fails here.
+ *    may, and so does every `learn` verb (`concept show`, a brief's source
+ *    note), which read as `local` until it did. The check reads
+ *    `src/catalog.ts` rather than trusting a list, so a verb added later
+ *    without it fails here.
  * 2. The API answers only that owner: a request the web app names as another
  *    owner's is refused before any route runs.
  */
@@ -29,18 +31,34 @@ import { cachePath } from "../src/content-cache";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CATALOG = path.resolve(HERE, "..", "src", "catalog.ts");
 
-/** The literal argument lists handed to `catalog(...)` in each exported function. */
-function catalogCalls(): { fn: string; args: string }[] {
+interface CliCall {
+  fn: string;
+  /** `catalog` for `catalog(args)`, else the script `npmCli(script, args)` names, as written. */
+  script: string;
+  args: string;
+}
+
+/**
+ * The literal argument lists each exported function hands to a CLI: to
+ * `catalog(args)`, and to `npmCli(script, args)` directly, which is how the
+ * `learn` verbs are spawned.
+ */
+function cliCalls(): CliCall[] {
   const source = ts.createSourceFile(CATALOG, readFileSync(CATALOG, "utf8"), ts.ScriptTarget.Latest, true);
-  const calls: { fn: string; args: string }[] = [];
+  const calls: CliCall[] = [];
   for (const statement of source.statements) {
     if (!ts.isFunctionDeclaration(statement) || statement.name === undefined) continue;
     const exported = statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false;
     if (!exported) continue;
+    const fn = statement.name.text;
     const visit = (node: ts.Node): void => {
-      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "catalog") {
-        const [first] = node.arguments;
-        if (first !== undefined) calls.push({ fn: statement.name!.text, args: first.getText(source) });
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+        const [first, second] = node.arguments;
+        if (node.expression.text === "catalog" && first !== undefined) {
+          calls.push({ fn, script: "catalog", args: first.getText(source) });
+        } else if (node.expression.text === "npmCli" && first !== undefined && second !== undefined) {
+          calls.push({ fn, script: first.getText(source), args: second.getText(source) });
+        }
       }
       ts.forEachChild(node, visit);
     };
@@ -48,6 +66,8 @@ function catalogCalls(): { fn: string; args: string }[] {
   }
   return calls;
 }
+
+const catalogCalls = (): CliCall[] => cliCalls().filter((call) => call.script === "catalog");
 
 describe("the runner's catalog calls", () => {
   it("name the owner on every diagram, draft, job and session verb", () => {
@@ -73,6 +93,17 @@ describe("the runner's catalog calls", () => {
     );
     for (const call of owning) {
       expect(call.args, `${call.fn} leaves the owner to the CLI's default`).toContain("...owned()");
+    }
+  });
+
+  it("name the owner on every learn verb, and spawn the catalog only through catalog()", () => {
+    const direct = cliCalls().filter((call) => call.script !== "catalog");
+    // A `catalog` verb spawned around `catalog()` would escape the check above.
+    expect(direct.map((call) => call.script)).toEqual(direct.map(() => '"learn"'));
+    expect(direct.map((call) => call.fn).sort()).toEqual(["conceptShow"]);
+    for (const call of direct) {
+      // The `learn` CLI reads as `local` unless told otherwise, whoever the studio serves.
+      expect(call.args, `${call.fn} leaves the owner to the learn CLI's default, local`).toContain("...owned()");
     }
   });
 });
