@@ -235,7 +235,7 @@ describe("Draw", () => {
   it("names the job holding the target, with its id to open", () => {
     const block = drawBlock(BRIEF, { inFlight: false }, [job({ state: "awaiting_review" })], null);
     expect(block?.holder).toBe("j1");
-    expect(block?.reason).toContain("waiting for review");
+    expect(block?.reason).toContain("ready for review");
   });
 
   it("says when the cap frees", () => {
@@ -451,7 +451,7 @@ describe("Start over with per-kind slots (Greptile on #204)", () => {
 describe("the press refusals #207 adds", () => {
   it("words kind-busy, held and a video's not-briefed", () => {
     expect(drawRefusal(409, { error: "busy", detail: { reason: "kind-busy", kind: "video", jobId: "v1", state: "awaiting_review" } })).toEqual({
-      text: "The video from this conversation is waiting for review. Accept, discard or cancel it first.",
+      text: "The video from this conversation is made and ready for review. Accept, discard or cancel it first.",
       holder: "v1",
       error: "busy",
     });

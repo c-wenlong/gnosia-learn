@@ -15,6 +15,7 @@ import {
   type DrawBlock,
   type ThreadProblem,
 } from "@/lib/studio-chat";
+import { jobCardSentence, jobStateInline } from "@/lib/studio-job-state";
 import { replacesJob } from "@/lib/studio-drafts";
 import type {
   DraftKind,
@@ -274,11 +275,6 @@ function videoSlug(target: string): string {
   return (target.split("/").at(-1) ?? target).replace(/\.mp4$/, "");
 }
 
-export const KIND_BUSY: Record<DraftKind, string> = {
-  diagram: "The diagram is still being drawn",
-  video: "The video is still being made",
-};
-
 /**
  * This draft's newest job of `kind`, when it has not reached a verdict: the
  * card's press is disabled until it does (D60, T8). A job in review counts,
@@ -330,14 +326,17 @@ export function kindDrawBlock(
   // back, and does not count as another job holding the slug.
   const replaced = replacesJob(view, kind);
   const busy = kindBusy(view, kind, jobs);
-  if (busy !== null && busy.jobId !== replaced) return { reason: `${KIND_BUSY[kind]}.`, holder: busy.jobId };
+  if (busy !== null && busy.jobId !== replaced) {
+    const next = busy.state === "awaiting_review" ? " Accept or discard it first." : "";
+    return { reason: `${jobCardSentence(kind, busy.state)}${next}`, holder: busy.jobId };
+  }
   const holder = jobs.find((job) => {
     if (!isActive(job.state) || jobKind(job) !== kind || job.jobId === replaced) return false;
     return (kind === "video" ? videoSlug(job.target) : targetSlug(job.target)) === brief.slug;
   });
   if (holder !== undefined) {
     const name = holder.title ?? holder.jobId.slice(0, 8);
-    const state = holder.state === "awaiting_review" ? "waiting for review" : holder.state;
+    const state = jobStateInline(holder.state);
     return { reason: `“${name}” already holds ${brief.slug} (${state}). Accept or discard it first.`, holder: holder.jobId };
   }
   if (kind === "diagram" && diagram !== null && !diagram.ok) {

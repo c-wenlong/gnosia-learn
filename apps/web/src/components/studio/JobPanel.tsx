@@ -25,6 +25,7 @@ import {
   type PhaseRow,
   type StudioEvent,
 } from "@/lib/studio-jobs";
+import { jobStateLabel } from "@/lib/studio-job-state";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
 import { leaveOpener, leavePrefill, sessionStore, talkItThroughText, talkTarget } from "@/lib/studio-extend";
 import { conversationHref, extendFromHref, panelHref } from "@/lib/studio-view";
@@ -268,7 +269,7 @@ function DiagramJobPanel({
       )}
 
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        <Chip tone={failed ? "danger" : job.state === "awaiting_review" ? "ok" : "accent"}>{job.state}</Chip>
+        <Chip tone={failed ? "danger" : job.state === "awaiting_review" ? "ok" : "accent"}>{jobStateLabel(job.state)}</Chip>
         <Chip>{job.topic}</Chip>
         {isActive(job.state) && job.state !== "awaiting_review" && (
           <>
