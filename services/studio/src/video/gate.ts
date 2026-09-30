@@ -1,4 +1,4 @@
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // The catalog's own poster recipe, one implementation (docs/STUDIO-VIDEOS.md,
@@ -6,13 +6,16 @@ import path from "node:path";
 // pulls nothing of the catalog's into this service.
 import { ffmpegArgs, POSTER_OFFSETS_SECONDS } from "../../../catalog/src/poster/recipe";
 import type { GateStep } from "../store";
+import { MANIMKC_GATE } from "./backends/manimkc-gate";
 import { isNarrated, predictedSeconds, secondsForLines, type ValidVideoBrief } from "./brief";
 import type { WrapperCall, SheetRead } from "./calls";
 import { topicOf } from "./checkout";
 import { CopyRefused, safeCopy, safeRead } from "./copy";
-import { candidateNames, sheetPath, type VideoPaths } from "./paths";
-import { sceneClasses, voicedLines, type Scan, type ScannedClass } from "./scan";
-import type { CopyRecord, LineChange, VideoGateResult } from "./types";
+import { candidateNames, type VideoPaths } from "./paths";
+import type { Scan } from "./scan";
+import type { CopyRecord, VideoGateResult } from "./types";
+
+export { compareLines } from "./lines";
 
 /**
  * The gate: the runner's own checks after the agent exits
@@ -24,10 +27,19 @@ import type { CopyRecord, LineChange, VideoGateResult } from "./types";
  * program in a sandbox: the lint and the parse in the render profile, the
  * probe and the poster cut in the gate profile. The steps in Node read JSON
  * and eight-byte box headers from the copies, never a file in `render/`.
+ *
+ * Steps 1 to 3 and the sheet step 10 looks for are the tool's own (D75 and
+ * D77 of docs/STUDIO-VIDEO-TOOLS.md), asked of the job's backend through
+ * `VideoGateChecks`; the other steps are the same code for every tool.
  */
 
-/** The sandboxed operations the gate needs, injectable so a test can supply recorded answers. */
+/**
+ * The sandboxed operations the gate needs, injectable so a test can supply
+ * recorded answers. `scan` and `lint` are manimkc's, read only by its source
+ * steps; the probe and the poster serve every tool.
+ */
 export interface GateTools {
+  /** Python's `ast` over the scene file, in the render profile. */
   scan(source: string): Promise<Scan>;
   /** `manimkc lint --json` on the scene file, in the render profile; null when it did not answer. */
   lint(): Promise<{ errors: { line?: number; msg: string }[]; warnings: { line?: number; msg: string }[] } | null>;
@@ -49,7 +61,37 @@ export interface VideoGateInput {
   calls: WrapperCall[];
   reads: SheetRead[];
   tools: GateTools;
+  /** The tool's own steps, from the job's backend; manimkc's, the default tool's (D72), when left out. */
+  backend?: VideoGateChecks;
   onStep?: (step: GateStep) => void;
+}
+
+/** What the source steps are given: the job, and the sandboxed tools to parse and lint with. */
+export type SourceCheckInput = Pick<VideoGateInput, "brief" | "paths" | "classes" | "startedAtMs" | "sourceHashBefore" | "tools">;
+
+/** How a backend's steps report: each step as it finishes, what the agent must fix, and what the card warns of. */
+export interface GateReport {
+  step(name: string, ok: boolean, detail: string): void;
+  finding(...lines: string[]): void;
+  warning(line: string): void;
+}
+
+/**
+ * Steps 1 to 3 as far as they got. Failed, the gate stops and keeps the
+ * script when step 3 was the one that failed; passed, it carries the
+ * source's sha256 (the build must be of it) and the lines it voices, in play
+ * order (step 7's transcript and step 8's prediction).
+ */
+export type SourceCheck =
+  | { ok: false; script: VideoGateResult["script"] }
+  | { ok: true; script: NonNullable<VideoGateResult["script"]>; sourceHash: string; voiced: string[] };
+
+/** What the gate asks of a video tool's backend. */
+export interface VideoGateChecks {
+  /** Steps 1 to 3: the source read and parsed, its lint, and its structure against the brief. */
+  checkSource(input: SourceCheckInput, report: GateReport): Promise<SourceCheck>;
+  /** A scene's contact sheet: what step 10 wants Read after the scene's last render. */
+  sheet(paths: VideoPaths, scene: string): string;
 }
 
 /** A held frame: seconds of picture a scene may run after its last line ends (the skill's rule). */
@@ -60,63 +102,6 @@ export const LENGTH_CHECK = 0.15;
 export const TARGET_WARNING = 0.25;
 /** manimkc's deliverables run at 30 to 35 kB a second (measured); three times that is worth a warning. */
 export const LARGE_BYTES_PER_SECOND = 3 * 35_000;
-
-/** Sequence the brief's lines for one scene against the voiced ones: equal lines anchor, gaps are changes. */
-export function compareLines(scene: string, brief: readonly string[], voiced: readonly string[]): LineChange[] {
-  // Longest common subsequence on exact equality.
-  const n = brief.length;
-  const m = voiced.length;
-  const table: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i -= 1) {
-    for (let j = m - 1; j >= 0; j -= 1) {
-      table[i]![j] = brief[i] === voiced[j] ? table[i + 1]![j + 1]! + 1 : Math.max(table[i + 1]![j]!, table[i]![j + 1]!);
-    }
-  }
-  const changes: LineChange[] = [];
-  let gapBrief: string[] = [];
-  let gapVoiced: string[] = [];
-  const flush = (): void => {
-    if (gapBrief.length === 1 && gapVoiced.length > 1) {
-      changes.push({ scene, kind: "split", brief: gapBrief[0]!, voiced: gapVoiced });
-    } else {
-      const paired = Math.min(gapBrief.length, gapVoiced.length);
-      for (let k = 0; k < paired; k += 1) changes.push({ scene, kind: "reworded", brief: gapBrief[k]!, voiced: [gapVoiced[k]!] });
-      for (const line of gapBrief.slice(paired)) changes.push({ scene, kind: "dropped", brief: line, voiced: [] });
-      for (const line of gapVoiced.slice(paired)) changes.push({ scene, kind: "added", brief: null, voiced: [line] });
-    }
-    gapBrief = [];
-    gapVoiced = [];
-  };
-  let i = 0;
-  let j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && brief[i] === voiced[j]) {
-      flush();
-      changes.push({ scene, kind: "unchanged", brief: brief[i]!, voiced: [voiced[j]!] });
-      i += 1;
-      j += 1;
-    } else if (j < m && (i === n || table[i]![j + 1]! >= table[i + 1]![j]!)) {
-      gapVoiced.push(voiced[j]!);
-      j += 1;
-    } else {
-      gapBrief.push(brief[i]!);
-      i += 1;
-    }
-  }
-  flush();
-  return changes;
-}
-
-/** Is `needle` in order, as whole literals, inside `haystack`? */
-function inOrder(needles: readonly string[], haystack: readonly string[]): string | null {
-  let at = 0;
-  for (const needle of needles) {
-    while (at < haystack.length && haystack[at] !== needle) at += 1;
-    if (at === haystack.length) return needle;
-    at += 1;
-  }
-  return null;
-}
 
 /** The ten steps. */
 export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResult> {
@@ -151,94 +136,16 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
     checkedAt: new Date().toISOString(),
   });
 
-  /* 1. Source: exists, parses, newer than the job, and on a change, changed. */
-  let source: string;
-  try {
-    source = (await safeRead(paths.sceneFile, 2 * 2 ** 20)).toString("utf8");
-  } catch (error) {
-    record("source", false, (error as Error).message);
-    findings.push(`The scene file ${path.basename(paths.sceneFile)} could not be read: ${(error as Error).message}.`);
-    return finish();
-  }
-  const facts = await stat(paths.sceneFile);
-  const scan = await tools.scan(source);
-  if (!scan.ok) {
-    record("source", false, scan.error ?? "does not parse");
-    findings.push(`The scene file does not parse: ${scan.error ?? "no reason given"}. Fix it, preview and build again.`);
-    return finish();
-  }
-  if (facts.mtimeMs + 1000 < input.startedAtMs) {
-    record("source", false, "older than the job");
-    findings.push("The scene file was not written during this job. Write the scenes, preview them, look, and build.");
-    return finish();
-  }
-  const { createHash } = await import("node:crypto");
-  const sourceHash = createHash("sha256").update(source).digest("hex");
-  if (input.sourceHashBefore !== null && sourceHash === input.sourceHashBefore) {
-    record("source", false, "unchanged from the source the job started from");
-    findings.push("The scene file is exactly the source this change started from. Make the change the brief asks for, then preview and build.");
-    return finish();
-  }
-  record("source", true, `${source.length} characters, parses`);
-
-  /* 2. Lint: no errors. Warnings are kept for the card. */
-  const lint = await tools.lint();
-  if (lint === null) {
-    record("lint", false, "manimkc lint did not answer");
-    findings.push("manimkc lint did not answer. Run video lint yourself and fix what it says.");
-    return finish();
-  }
-  for (const warning of lint.warnings) warnings.push(`lint: ${warning.msg}`);
-  if (lint.errors.length > 0) {
-    record("lint", false, `${lint.errors.length} error(s)`);
-    findings.push(`video lint reports ${lint.errors.length} error(s): ${lint.errors.map((error) => `line ${error.line ?? "?"}: ${error.msg}`).join("; ")}.`);
-    return finish();
-  }
-  record("lint", true, `no errors, ${lint.warnings.length} warning(s)`);
-
-  /* 3. The script: the classes, the labels, and the lines. */
-  const classes = sceneClasses(scan);
-  const names = classes.map((entry) => entry.name);
-  const scriptProblems: string[] = [];
-  if (names.join(",") !== input.classes.join(",")) {
-    scriptProblems.push(`the scene classes must be exactly ${input.classes.join(", ")}, in that order; the file has ${names.join(", ") || "none"}`);
-  }
-  const byName = new Map<string, ScannedClass>(classes.map((entry) => [entry.name, entry]));
-  const changes: LineChange[] = [];
-  brief.scenes.forEach((scene, i) => {
-    const cls = byName.get(input.classes[i] ?? "");
-    if (cls === undefined) return;
-    const literals = cls.strings.map((value) => value.toLowerCase());
-    for (const beat of scene.beats) {
-      for (const label of beat.labels) {
-        if (!literals.some((value) => value.includes(label.toLowerCase()))) {
-          scriptProblems.push(`${cls.name} never shows the label "${label}": it must appear in a string literal in that class`);
-        }
-      }
-    }
-    if (narrated) {
-      if (cls.voiceovers.some((voice) => voice.text === null)) {
-        scriptProblems.push(`${cls.name} has a voiceover whose argument is not a plain double-quoted string, which the narration step cannot read`);
-      }
-      const voiced = cls.voiceovers.flatMap((voice) => (voice.text === null ? [] : [voice.text]));
-      if (voiced.length === 0) scriptProblems.push(`${cls.name} has no voiceover at all`);
-      changes.push(...compareLines(cls.name, scene.beats.map((beat) => beat.say), voiced));
-    } else {
-      if (cls.voiceovers.length > 0) scriptProblems.push(`${cls.name} has a voiceover, and this video is silent`);
-      const missing = inOrder(scene.beats.map((beat) => beat.say), cls.captions);
-      if (missing !== null) {
-        scriptProblems.push(`${cls.name} must show each beat's caption, as written and in order, as the first argument of a CaptionBar set or say call; "${missing}" is not there`);
-      }
-    }
+  /* 1 to 3. The source, its lint and its script: the tool's own (D77). */
+  const checks = input.backend ?? MANIMKC_GATE;
+  const checked = await checks.checkSource(input, {
+    step: record,
+    finding: (...lines) => findings.push(...lines),
+    warning: (line) => warnings.push(line),
   });
-  script = { classes: names, changes };
-  if (scriptProblems.length > 0) {
-    record("script", false, scriptProblems.join("; "));
-    findings.push(...scriptProblems.map((problem) => `The script: ${problem}.`));
-    return finish();
-  }
-  const changed = changes.filter((change) => change.kind !== "unchanged").length;
-  record("script", true, narrated ? `${names.length} scenes; ${changed} line(s) differ from the brief` : `${names.length} scenes, every caption in place`);
+  script = checked.script;
+  if (!checked.ok) return finish();
+  const { sourceHash, voiced } = checked;
 
   /* 4. The topic, which the runner wrote and the agent may not edit. */
   let topicYml = "";
@@ -331,9 +238,8 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
     if (segments === null) syncProblems.push("the transcript has no segments");
     else {
       const texts = segments.map((segment) => (typeof segment.text === "string" ? segment.text : ""));
-      const lines = voicedLines(scan);
-      if (texts.join("\u0000") !== lines.join("\u0000")) {
-        syncProblems.push(`the transcript's ${texts.length} lines are not the scene file's ${lines.length} voiceover lines, in order`);
+      if (texts.join("\u0000") !== voiced.join("\u0000")) {
+        syncProblems.push(`the transcript's ${texts.length} lines are not the scene file's ${voiced.length} voiceover lines, in order`);
       }
       // One chapter per scene, in the brief's order, each with an end and at
       // least one line of the transcript: a chapter that is missing,
@@ -372,7 +278,7 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
   }
 
   /* 8. Length, against the script's prediction. */
-  const predicted = narrated ? secondsForLines(voicedLines(scan)) : predictedSeconds(brief);
+  const predicted = narrated ? secondsForLines(voiced) : predictedSeconds(brief);
   const tolerance = narrated ? LENGTH_CHECK : 0.2;
   const bytes = copies[names_.mp4]!.bytes;
   length = { durationSeconds: durationSeconds!, predictedSeconds: Math.round(predicted * 10) / 10, targetSeconds: brief.targetSeconds, bytes };
@@ -418,7 +324,7 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
   const lookProblems: string[] = [];
   for (const scene of input.classes) {
     const render = [...input.calls].reverse().find((call) => call.verb === "preview" && (call.rendered ?? []).includes(scene));
-    const sheet = sheetPath(paths, scene);
+    const sheet = checks.sheet(paths, scene);
     const renderedAt = render?.endedAt ?? null;
     const read =
       renderedAt === null ? undefined : [...input.reads].reverse().find((entry) => entry.path === sheet && Date.parse(entry.at) >= Date.parse(renderedAt));
