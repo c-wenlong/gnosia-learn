@@ -141,13 +141,22 @@ function assetElement(asset: TeachAsset, compact: boolean) {
           </>
         }
         code={asset.code}
+        sourceRepo={asset.sourceRepo}
         className="min-h-[180px]"
       />
     );
   }
   if (asset.kind === "video") {
     if (compact) return null;
-    return <VideoPlayer src={asset.src} statusHref={asset.statusHref} poster={asset.poster ?? undefined} title={asset.title} />;
+    return (
+      <VideoPlayer
+        src={asset.src}
+        statusHref={asset.statusHref}
+        poster={asset.poster ?? undefined}
+        title={asset.title}
+        sourceRepo={asset.sourceRepo}
+      />
+    );
   }
   return (
     <div className={compact ? "overflow-hidden rounded-xl [&_img]:max-h-[126px]" : "overflow-hidden rounded-xl [&_img]:max-h-[360px]"}>

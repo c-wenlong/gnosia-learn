@@ -117,8 +117,9 @@ Rules of engagement:
   and as where the pinned CLI runs from. `MANIMKC_HOME` is the data root and
   nothing in this repo reads it: the indexers take that from each report's
   `outRoot`. `TLDRAWKC_ROOT` is the same idea for the other submodule, read by
-  `npm run canvas` as well so the two cannot run different builds. All three
-  default to the paths in `.gitmodules`, so a clone configures nothing.
+  `npm run canvas` as well so the two cannot run different builds, and
+  `REMOTIONKC_ROOT` the same for remotionkc. All four default to the paths in
+  `.gitmodules`, so a clone configures nothing.
 - **Drive it through its CLI, not by hand.** `tools/manimkc/tools/cli/manimkc` is
   stdlib-only Python, so it still runs when a venv is broken:
   `doctor` (venvs, ffmpeg, narration backend, output dirs), `home` (the data
@@ -132,7 +133,44 @@ Rules of engagement:
 - The end-to-end process is the `manimkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/manimkc-video`. Everything
   `.claude/` holds here is either `launch.json` or a symlink into a submodule:
-  that skill and `tldrawkc-diagram`.
+  that skill, `remotionkc-video` and `tldrawkc-diagram`.
+
+## Asset generation: tools/remotionkc/
+
+`tools/remotionkc/` is the third git **submodule** (its own repo,
+github.com/c-wenlong/remotionkc): narrated explainer videos made with
+Remotion, the second video tool beside manimkc. Its renders enter the catalog
+the way manimkc's do, as `video` assets with transcript, chapters and
+captions sidecars, labelled "remotion" in the web app.
+
+Rules of engagement:
+
+- **Read `tools/remotionkc/AGENTS.md` before working in there.** Its
+  conventions are its own, and the catalog only reads its report.
+- **Commits inside `tools/remotionkc/` belong to that repo.** Commit and push
+  there first, then commit the updated submodule pointer here. Never commit a
+  dirty submodule pointer.
+- **Drive it through its CLI.** `node tools/remotionkc/tools/cli/remotionkc.mjs
+  --root <checkout> topics --json` is plain node and the standard library, and
+  answers with manimkc's report shape field for field, so one reader in
+  `services/catalog/src/index/video-tool.ts` indexes both. `catalog import`
+  runs it (`--only remotionkc`, `--remotionkc-root`), and `catalog asset
+  upload --source remotionkc` stores the bytes and cuts the posters. A bare
+  import with no CLI skips remotionkc, and refuses once it has rows here, as
+  for manimkc.
+- **There is no `maps.remotionkc`.** Each topic.yml's `topic:` is required and
+  names the catalog topic its video is filed under, one the owner can read.
+  An import refuses a folder with none, or with a slug nobody holds, naming
+  the file and the slug; it never skips one.
+- **`REMOTIONKC_ROOT` is the checkout, `REMOTIONKC_HOME` the data root.** The
+  first is remotionkc's own variable with the same meaning here, read by
+  `services/catalog/src/env.ts`, defaulting to `tools/remotionkc`. The second
+  is where its renders land, and nothing in this repo reads it: the run takes
+  it from the report's `outRoot` and records it on
+  `index_run.metadata.outRoot`. **Never join a remotionkc path onto the
+  submodule root**; a deliverable is `outRoot + path`.
+- The end-to-end process is the `remotionkc-video` skill, which lives in the
+  submodule and is symlinked into `.claude/skills/remotionkc-video`.
 
 ## Diagrams: tools/tldrawkc/
 
@@ -555,7 +593,7 @@ not have to be worked out again.
   `https://`, and
   falls back to localhost when parsing fails, because a bad value should cost a
   link preview and not the whole app.
-- **Both submodules and `coverage/` are lint-ignored in `eslint.config.mjs`.**
+- **All three submodules and `coverage/` are lint-ignored in `eslint.config.mjs`.**
   ESLint walks the whole tree from the repo root, so without those entries a
   local `npm run lint` walks manimkc's Python virtualenvs and reports 100k+
   findings from code this repo does not own, and lints tldrawkc's TypeScript
@@ -690,7 +728,8 @@ not have to be worked out again.
   small real slice cut with `catalog export --subset` (seed/README.md), since
   the phase 3 cut-over removed `content/` and `learn/`. A database of your own
   to look at is `createdb`, `migrate`,
-  `MANIMKC_ROOT=/nonexistent npm run catalog -- import seed`, then
+  `MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent npm run catalog --
+  import seed`, then
   `catalog flip` for topics, tags, concepts, sessions, courses and diagrams in
   that order (`scripts/lib/flip-order.mjs`; README.md, "Install"). `npm run
   e2e` builds exactly that database on its own.
@@ -698,8 +737,8 @@ not have to be worked out again.
   is `import` with no directory; it still runs it and prints the new name once
   on stderr, so a `--json` reader is unaffected. A few comments still say
   `catalog index`; both work.
-- **A bare `catalog import` refreshes manimkc and the mirror ledger, and
-  nothing else.** With no directory it reads the repository, which has held no
+- **A bare `catalog import` refreshes manimkc, remotionkc and the mirror
+  ledger, and nothing else.** With no directory it reads the repository, which has held no
   content since the cut-over. Once the database owns every type, a type is
   skipped when the directory holds none of its files, as well as when they
   are its own last export (`ownedSkips` in
@@ -707,7 +746,8 @@ not have to be worked out again.
   tree missing a type's files is refused by name, as it always was. Once
   topics are flipped the vocabulary the other sources resolve slugs against
   comes from the topic rows, not `content/topics.yaml`. So on a database that
-  owns all six types it reads nothing for them and runs manimkc and mirrors.
+  owns all six types it reads nothing for them and runs manimkc, remotionkc
+  and mirrors.
   `catalog import seed` still loads the seed into a fresh database, and an
   export directory (`catalog import <dir>`) is how files come back in.
 - **Writers stop writing files once all six types are flipped (D17

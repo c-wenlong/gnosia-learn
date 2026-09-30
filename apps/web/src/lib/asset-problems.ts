@@ -147,6 +147,37 @@ export const ASSET_PROBLEMS: Readonly<Record<AssetProblemCode, AssetProblem>> = 
   },
 };
 
+/**
+ * The tools whose renders `catalog asset upload --source <tool>` stores, as
+ * an asset row's `sourceRepo` names them: manimkc and remotionkc, the two
+ * video tools. Everything else with no stored copy gets there another way (a
+ * diagram through `catalog diagram put`, a note or a log by its flip).
+ */
+export const RENDER_SOURCES = ["manimkc", "remotionkc"] as const;
+export type RenderSource = (typeof RENDER_SOURCES)[number];
+
+export function isRenderSource(sourceRepo: string | null | undefined): sourceRepo is RenderSource {
+  return (RENDER_SOURCES as readonly (string | null | undefined)[]).includes(sourceRepo);
+}
+
+/** The command that stores one tool's renders: `npm run catalog -- asset upload --source <tool>`. */
+export function uploadCommand(source: RenderSource): string {
+  return `npm run catalog -- asset upload --source ${source}`;
+}
+
+/**
+ * What a surface says about one code for a row made by `sourceRepo`, when
+ * the surface knows it. The same entry as `ASSET_PROBLEMS`, except that the
+ * upload command names the tool that made the render: the table's own
+ * sentence names manimkc's, which is what a surface that cannot tell (a note
+ * embedding a video by URL) keeps showing.
+ */
+export function assetProblem(code: AssetProblemCode, sourceRepo?: string | null): AssetProblem {
+  const problem = ASSET_PROBLEMS[code];
+  if (code !== "not-uploaded" || !isRenderSource(sourceRepo)) return problem;
+  return { ...problem, fix: { kind: "command", text: uploadCommand(sourceRepo) } };
+}
+
 const KNOWN = new Set<string>([...ROUTE_PROBLEM_CODES, ...CLIENT_PROBLEM_CODES]);
 
 export function isAssetProblemCode(value: unknown): value is AssetProblemCode {

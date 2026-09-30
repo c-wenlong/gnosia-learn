@@ -79,6 +79,7 @@ export function VideoPlayer({
   header,
   tabs,
   seekTo,
+  sourceRepo,
 }: {
   src: string;
   /** Where to ask why `src` failed. Without one a failure says it has no reason. */
@@ -104,6 +105,8 @@ export function VideoPlayer({
    * what makes a second press on the same chapter a second jump.
    */
   seekTo?: { seconds: number; key: number };
+  /** The tool that made the video, so a failure names that tool's upload command. */
+  sourceRepo?: string;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -358,6 +361,7 @@ export function VideoPlayer({
       <WidgetFailure
         headline="This video did not load."
         code={failure.code}
+        sourceRepo={sourceRepo}
         onRetry={retry}
         className="min-h-64 w-full sm:min-h-80"
       />

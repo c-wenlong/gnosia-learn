@@ -6,7 +6,7 @@
   "engines": {
     "node": ">=22.22.2"
   },
-  "//workspaces": "apps/ is the deployable surfaces (today: the Next app), packages/ the libraries they share, services/ the long-lived processes and CLIs. tools/ is deliberately absent: manimkc and tldrawkc are git submodules with their own repos, lockfiles and toolchains, and listing them here would make npm try to install them as part of this tree.",
+  "//workspaces": "apps/ is the deployable surfaces (today: the Next app), packages/ the libraries they share, services/ the long-lived processes and CLIs. tools/ is deliberately absent: manimkc, remotionkc and tldrawkc are git submodules with their own repos, lockfiles and toolchains, and listing them here would make npm try to install them as part of this tree.",
   "workspaces": [
     "apps/*",
     "services/*",

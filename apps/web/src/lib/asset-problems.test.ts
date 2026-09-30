@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ASSET_PROBLEMS,
+  assetProblem,
   CLIENT_PROBLEM_CODES,
   ROUTE_PROBLEM_CODES,
   isAssetProblemCode,
@@ -48,6 +49,19 @@ describe("the problem table", () => {
     });
     expect(ASSET_PROBLEMS["not-in-catalog"].fix?.text).toBe("npm run catalog -- import");
     expect(ASSET_PROBLEMS["not-flipped"].fix?.text).toContain("npm run catalog -- flip");
+  });
+
+  it("names the upload of the tool that made the render, when the surface knows it", () => {
+    expect(assetProblem("not-uploaded", "remotionkc").fix).toEqual({
+      kind: "command",
+      text: "npm run catalog -- asset upload --source remotionkc",
+    });
+    expect(assetProblem("not-uploaded", "manimkc")).toEqual(ASSET_PROBLEMS["not-uploaded"]);
+    // Not a render, or not known: the table's own sentence.
+    expect(assetProblem("not-uploaded", "tldrawkc")).toBe(ASSET_PROBLEMS["not-uploaded"]);
+    expect(assetProblem("not-uploaded")).toBe(ASSET_PROBLEMS["not-uploaded"]);
+    // Only the upload names a tool.
+    expect(assetProblem("catalog-unreachable", "remotionkc")).toBe(ASSET_PROBLEMS["catalog-unreachable"]);
   });
 
   it("offers Try again only where asking again could change the answer", () => {
