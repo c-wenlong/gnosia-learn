@@ -112,7 +112,9 @@ come before preferences, so a later step can never undo an earlier one.
    one at a terminal, only manimkc can make it, and only on macOS. If the
    user also named another tool, or the video belongs to a series made with
    another tool, the requests conflict: say so and ask which one gives,
-   rather than choosing silently.
+   rather than choosing silently. On Linux, say it cannot be made unattended
+   there. Otherwise it is manimkc: go to step 6, and no later step changes
+   it.
 2. **The user named a tool.** Use it, and stop.
 3. **Series.** Is this a week or a part of an existing series? Use that
    series' tool, and stop.
