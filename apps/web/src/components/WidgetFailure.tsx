@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { buttonClasses } from "@/components/ui/classes";
-import { ASSET_PROBLEMS, type AssetProblemCode } from "@/lib/asset-problems";
+import { assetProblem, type AssetProblemCode } from "@/lib/asset-problems";
 
 /**
  * The failure state of the Widget placeholder.
@@ -44,6 +44,7 @@ export function WidgetFailure({
   compact = false,
   inset = false,
   onRetry,
+  sourceRepo,
   className = "",
 }: {
   /** What failed, as a full phrase: "This video did not load." */
@@ -55,10 +56,12 @@ export function WidgetFailure({
   inset?: boolean;
   /** Offered only for a code where asking again could work. */
   onRetry?: () => void;
+  /** The tool that made the asset, when the caller knows it, so a fix names that tool's command. */
+  sourceRepo?: string | null;
   /** Sizing from the caller, so the panel takes the footprint of its widget. */
   className?: string;
 }) {
-  const problem = code === null ? null : ASSET_PROBLEMS[code];
+  const problem = code === null ? null : assetProblem(code, sourceRepo);
   const fix = problem?.fix;
   const canRetry = !compact && onRetry !== undefined && problem?.retry === true;
 

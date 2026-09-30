@@ -52,6 +52,12 @@ export interface IndexContext {
   /** Absolute path to the manimkc checkout to read. Only the manimkc source uses it. */
   manimkcRoot: string;
   /**
+   * Absolute path to the remotionkc checkout to read. Only the remotionkc
+   * source uses it; absent means `$REMOTIONKC_ROOT`, else the submodule under
+   * `toolsRoot`, which is what `runIndex` passes anyway.
+   */
+  remotionkcRoot?: string;
+  /**
    * Whether this database is under phase 2's contract (migration 0013): a
    * stored-kind asset row must name its blob, so the manimkc source hands
    * each file to the runner to store before the row that names it, as the
@@ -210,6 +216,7 @@ export const ASSET_PREFIX = {
   concepts: "note:",
   courses: "link:",
   manimkc: "manimkc:",
+  remotionkc: "remotionkc:",
   diagrams: "diagram:",
   sessions: "session:",
 } as const satisfies Partial<Record<IndexSource, string>>;

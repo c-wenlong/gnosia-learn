@@ -70,8 +70,11 @@ export const BLOB_STORED_KINDS = ["video", "transcript", "chapters", "captions",
  */
 export const BLOB_KEY_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}/[0-9a-f]{64}[.][a-z0-9]{1,16}$";
 
-/** Which repository an asset's bytes live in. */
-export const SOURCE_REPOS = ["self-learn", "manimkc", "tldrawkc"] as const;
+/**
+ * Which repository an asset's bytes live in, or which tool made them:
+ * `manimkc` and `remotionkc` are the two video tools, `tldrawkc` the diagrams.
+ */
+export const SOURCE_REPOS = ["self-learn", "manimkc", "tldrawkc", "remotionkc"] as const;
 export type SourceRepo = (typeof SOURCE_REPOS)[number];
 
 /** A `collection` is any ordered container. Courses and modules today, decks next. */

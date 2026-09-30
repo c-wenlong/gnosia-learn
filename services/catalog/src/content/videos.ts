@@ -751,16 +751,19 @@ export function refusal(error: unknown): unknown {
 /* -------------------------------------------------------------------------- */
 
 export interface VideoSummary {
-  /** `studio` for a video made through the studio's chat, `manimkc` for a render the manimkc import indexed. */
-  origin: "studio" | "manimkc";
-  /** The studio video's slug; null for a manimkc render, which is named by its asset id. */
+  /**
+   * `studio` for a video made through the studio's chat, `manimkc` or
+   * `remotionkc` for a render that tool's import indexed.
+   */
+  origin: "studio" | "manimkc" | "remotionkc";
+  /** The studio video's slug; null for a tool's render, which is named by its asset id. */
   slug: string | null;
   assetId: string;
   title: string | null;
   topic: string | null;
   concepts: string[];
   durationSeconds: number | null;
-  /** The studio source's hash; null for a manimkc render, whose source is in manimkc's own repository. */
+  /** The studio source's hash; null for a tool's render, whose source is in the tool's own repository. */
   sourceHash: string | null;
   renderedSourceHash: string | null;
   mp4: { key: string; bytes: number; sha256: string } | null;
@@ -856,7 +859,7 @@ function studioSummary(row: StudioRow): VideoSummary {
   };
 }
 
-interface ManimkcRow extends Record<string, unknown> {
+interface RenderRow extends Record<string, unknown> {
   id: string;
   title: string | null;
   blob_key: string | null;
@@ -871,13 +874,13 @@ interface ManimkcRow extends Record<string, unknown> {
 }
 
 /**
- * Every live studio video and every manimkc render the owner may read: the
- * studio's grid and its planner's CORPUS block. Scoped (phase 4): another
- * owner's video is absent, as a slug nobody holds is.
+ * Every live studio video and every manimkc and remotionkc render the owner
+ * may read: the studio's grid and its planner's CORPUS block. Scoped (phase
+ * 4): another owner's video is absent, as a slug nobody holds is.
  */
 export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promise<VideoSummary[]> {
   const studio = (await studioRows(db, scope)).map(studioSummary);
-  const { rows } = await db.execute<ManimkcRow>(sql`
+  const { rows } = await db.execute<RenderRow>(sql`
     select a.id, a.title, a.blob_key, a.bytes, a.content_hash, a.updated_at,
       (select min(t.topic_slug) from asset_topic t join topic o on o.slug = t.topic_slug
         where t.asset_id = a.id${andOwnedBy(sql`o.owner_id`, scope.readable)}) as topic,
@@ -893,12 +896,13 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
     -- owner move done for the video and not its poster) is absent here, not
     -- served by its key.
     left join asset p on p.id = ${POSTER_PREFIX} || a.id${andOwnedBy(sql`p.owner_id`, scope.readable)}
-    where a.kind = 'video' and starts_with(a.id, ${ASSET_PREFIX.manimkc})${andOwnedBy(sql`a.owner_id`, scope.readable)}
+    where a.kind = 'video'
+      and (starts_with(a.id, ${ASSET_PREFIX.manimkc}) or starts_with(a.id, ${ASSET_PREFIX.remotionkc}))${andOwnedBy(sql`a.owner_id`, scope.readable)}
     order by a.id
   `);
-  const manimkc = rows.map(
+  const renders = rows.map(
     (row): VideoSummary => ({
-      origin: "manimkc",
+      origin: row.id.startsWith(ASSET_PREFIX.remotionkc) ? "remotionkc" : "manimkc",
       slug: null,
       assetId: row.id,
       title: row.title,
@@ -918,7 +922,7 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
       updatedAt: iso(row.updated_at) as string,
     }),
   );
-  return [...studio, ...manimkc];
+  return [...studio, ...renders];
 }
 
 function sourceOf(value: unknown): VideoSource {

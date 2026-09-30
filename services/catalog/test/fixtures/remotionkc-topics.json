@@ -1,0 +1,104 @@
+{
+ "outRoot": "<outRoot>",
+ "topics": [
+  {
+   "path": "algorithms/cs3230/week-02-recursion-tree",
+   "title": "Recursion trees",
+   "topic": "cs3230-recurrences",
+   "concepts": [
+    "recursion-tree-method"
+   ],
+   "tags": [
+    "algorithms",
+    "narrated"
+   ],
+   "prerequisites": [],
+   "materials": [],
+   "prefix": "RT",
+   "out_dir": "out/algorithms/cs3230/week-02-recursion-tree",
+   "sections": [
+    {
+     "section": "narrated",
+     "files": [
+      {
+       "file": "composition.tsx",
+       "scenes": [
+        "S1_Intro"
+       ]
+      }
+     ],
+     "output": "recursion_tree.mp4",
+     "deliverable": {
+      "path": "out/algorithms/cs3230/week-02-recursion-tree/recursion_tree.mp4",
+      "exists": true,
+      "duration": null,
+      "sidecars": {
+       "transcript": {
+        "path": "out/algorithms/cs3230/week-02-recursion-tree/recursion_tree.transcript.json",
+        "exists": true
+       },
+       "chapters": {
+        "path": "out/algorithms/cs3230/week-02-recursion-tree/recursion_tree.chapters.json",
+        "exists": true
+       },
+       "vtt": {
+        "path": "out/algorithms/cs3230/week-02-recursion-tree/recursion_tree.vtt",
+        "exists": true
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "path": "big-data/cs4225/week-02-wordcount-code",
+   "title": "WordCount, in code",
+   "topic": "cs4225-mapreduce",
+   "concepts": [],
+   "tags": [
+    "big-data"
+   ],
+   "prerequisites": [],
+   "materials": [],
+   "prefix": "WC",
+   "out_dir": "out/big-data/cs4225/week-02-wordcount-code",
+   "sections": [
+    {
+     "section": "narrated",
+     "files": [
+      {
+       "file": "composition.tsx",
+       "scenes": [
+        "S1_Intro"
+       ]
+      }
+     ],
+     "output": "wordcount_code.mp4",
+     "deliverable": {
+      "path": "out/big-data/cs4225/week-02-wordcount-code/wordcount_code.mp4",
+      "exists": true,
+      "duration": null,
+      "sidecars": {
+       "transcript": {
+        "path": "out/big-data/cs4225/week-02-wordcount-code/wordcount_code.transcript.json",
+        "exists": true
+       },
+       "chapters": {
+        "path": "out/big-data/cs4225/week-02-wordcount-code/wordcount_code.chapters.json",
+        "exists": false
+       },
+       "vtt": {
+        "path": "out/big-data/cs4225/week-02-wordcount-code/wordcount_code.vtt",
+        "exists": false
+       }
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "drift": {
+  "orphans": [],
+  "unrendered": []
+ }
+}

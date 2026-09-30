@@ -119,6 +119,7 @@ export function formatBytes(bytes: number | null): string | null {
 /** The tool that made a row, as the card's meta line names it. */
 const SOURCE_LABEL: Record<string, string> = {
   manimkc: "manim",
+  remotionkc: "remotion",
   tldrawkc: "tldraw",
 };
 
