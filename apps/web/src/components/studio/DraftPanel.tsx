@@ -1,9 +1,8 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { NoteProse } from "@/components/NoteProse";
 import { ConfirmCard, type SaveOutcome } from "@/components/studio/ConfirmCard";
@@ -12,20 +11,16 @@ import { JobPanel } from "@/components/studio/JobPanel";
 import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
 import { PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
 import { useStartDraft } from "@/components/studio/PlusCard";
+import { Sentence } from "@/components/studio/Sentence";
 import { DialogHeader } from "@/components/studio/StudioDialog";
+import { MentionComposer } from "@/components/studio/StudioComposer";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
-import { Composer } from "@/components/ui/Composer";
 import { chipClasses, cx } from "@/components/ui/classes";
-import { COMPOSER_FRAME } from "@/components/ui/composer-keys";
 import { Glyph } from "@/components/ui/Glyph";
-import { MentionChip } from "@/components/ui/MentionChip";
-import type { MentionComposerHandle, MentionComposerProps } from "@/components/ui/MentionComposer";
+import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
-  carryMentions,
   EMPTY_MENTION_VALUE,
-  fallbackTagLine,
-  inlinePieces,
   isEmptyValue,
   prependValue,
   trimValue,
@@ -46,6 +41,7 @@ import {
   lastPersonValue,
   lengthSendBlock,
   liveCards,
+  openerSend,
   openerValue,
   makeBoth,
   MENTION_HINT,
@@ -56,6 +52,7 @@ import {
   pressUnderWay,
   suggestionName,
   suggestionsFor,
+  TEXT_LIMIT,
   topicSuggestionValue,
   TWO_READY,
   valueBack,
@@ -115,51 +112,6 @@ import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { panelHref, titleOf } from "@/lib/studio-view";
 
 /**
- * The studio's composer, loaded only when a conversation opens: it carries
- * Lexical, which the grid behind the panel has no use for (open question 4
- * of docs/STUDIO-MENTIONS.md). Until it arrives, a frame of the same height
- * stands in, so the panel does not move.
- */
-const MentionComposer = dynamic(
-  () =>
-    import("@/components/ui/MentionComposer")
-      .then((module) => module.MentionComposer as unknown as (props: MentionComposerProps<DraftKind>) => ReactNode)
-      // A chunk that will not load (a rebuild while the tab was open, the
-      // network gone) costs the tags, never the page: the plain composer
-      // stands in, and words still send.
-      .catch(() => PlainFallback),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-end gap-2.5" aria-hidden>
-        <div className={cx("h-[52px] min-w-0 flex-1", COMPOSER_FRAME)} />
-        <div className="h-11 w-[84px] rounded-full bg-surface2" />
-      </div>
-    ),
-  },
-) as (props: MentionComposerProps<DraftKind>) => ReactNode;
-
-/** The kit's plain `Composer` in `MentionComposer`'s place, when Lexical will not load. */
-function PlainFallback(props: MentionComposerProps<DraftKind>) {
-  return (
-    <div className="flex flex-col gap-1">
-      <Composer
-        value={props.value.text}
-        onChange={(text) => props.onChange({ text, mentions: carryMentions(props.value, text) })}
-        onSubmit={(text) => props.onSubmit({ text, mentions: carryMentions(props.value, text) })}
-        label={props.label}
-        placeholder={props.placeholder}
-        disabled={props.disabled}
-        sendDisabled={props.sendDisabled}
-        disabledReason={props.disabledReason}
-        onModEnter={props.onModEnter}
-      />
-      <p className="px-1 text-[12px] leading-4 text-text3">{fallbackTagLine(props.value, props.mentions)}</p>
-    </div>
-  );
-}
-
-/**
  * The conversation, in the studio's panel (docs/STUDIO-CHAT-FIRST.md, "UI",
  * and docs/STUDIO-MENTIONS.md for tags and cards per kind).
  *
@@ -201,9 +153,6 @@ const POLL_IN_FLIGHT_MS = 4_000;
  * cheapest rate at which each read can still be new.
  */
 const CAP_READ_MS = 30_000;
-/** The same limit the runner takes, `STUDIO_TEXT_LIMIT`'s default. */
-const TEXT_LIMIT = 8_000;
-
 type Status = "loading" | "ready" | "gone" | "down";
 type Value = MentionValue<DraftKind>;
 /** A card's identity: its reply and its kind. */
@@ -650,8 +599,9 @@ export function DraftPanel({
         setValue((held) => prependValue(composed, held));
         focusComposerSoon();
       }
-      if (opener.send !== null && isEmptyConversation(current.transcript) && !current.inFlight) {
-        void sendRef.current({ text: opener.send, mentions: [] }, { keepComposer: true });
+      const first = openerSend(opener);
+      if (first !== null && isEmptyConversation(current.transcript) && !current.inFlight) {
+        void sendRef.current(first, { keepComposer: true });
       }
     },
     [draftId, focusComposerSoon],
@@ -1024,21 +974,6 @@ function problemKindOf(view: Pick<DraftView, "transcript" | "error">): DraftKind
   const last = visibleEntries(view.transcript).at(-1);
   const kind = last?.briefInvalid?.kind ?? last?.briefsInvalid?.find((item) => !item.retried)?.kind;
   return kind ?? null;
-}
-
-/** A sent message's words, with its chips drawn back where they were (D57). */
-function Sentence({ value, waiting = [] }: { value: MentionValue<DraftKind>; waiting?: readonly DraftKind[] }) {
-  return (
-    <>
-      {inlinePieces(value).map((piece, at) =>
-        piece.type === "text" ? (
-          <span key={at}>{piece.text}</span>
-        ) : (
-          <MentionChip key={at} name={KIND_NAME[piece.kind] ?? piece.kind} icon={piece.kind} waiting={waiting.includes(piece.kind)} />
-        ),
-      )}
-    </>
-  );
 }
 
 function Entry({
