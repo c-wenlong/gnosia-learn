@@ -267,6 +267,30 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
 }
 
 /**
+ * The panel a URL names, as one string: what it holds and nothing about the
+ * filters, so the server's render and the address bar can be compared.
+ *
+ * The conversation panel opens and closes in the browser, with
+ * `history.pushState` and no server render (`ConversationHost`), so the
+ * address bar can move on from the URL the page was drawn for. A panel the
+ * server drew is shown only while the two still agree.
+ */
+export function panelSignature(params: RawParams): string {
+  const panel = parsePanel(params);
+  return JSON.stringify([panel.draft, panel.job, panel.extend, panel.talk, panel.shot, one(params.sel), one(params.settings) === "1"]);
+}
+
+/** `URLSearchParams` as the page's `searchParams`, a repeated name as a list. */
+export function rawParamsOf(search: URLSearchParams): RawParams {
+  const raw: Record<string, string | string[]> = {};
+  for (const [name, value] of search) {
+    const held = raw[name];
+    raw[name] = held === undefined ? value : [...(Array.isArray(held) ? held : [held]), value];
+  }
+  return raw;
+}
+
+/**
  * The panel's parameters, patched onto any path.
  *
  * `studioHref` rebuilds `/studio` from a whole view, which the canvas route
