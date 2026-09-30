@@ -3,6 +3,7 @@ import "server-only";
 import { conceptSummaries, type AssetRef, type ConceptSummary } from "@self-learn/catalog/state";
 
 import { tutorCredentials } from "@/lib/agent/credentials";
+import { isCallable } from "@/lib/agent/providers";
 import { readAssetAccess, readFileProblems } from "@/lib/asset-library";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
@@ -90,12 +91,14 @@ async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
 }
 
 /**
- * Whether a tutor model can be asked at all: the owner saved a key that still
- * decrypts, or the server's environment holds one (docs/BYOK.md). Server-only,
+ * Whether a tutor model can be asked at all: some entry the tutor would try
+ * has a key, the owner's saved one that still decrypts or the server's
+ * (docs/BYOK.md, docs/TUTOR-MODELS.md). A chain whose every entry lacks a key
+ * cannot. Server-only,
  * like the keys; a client component is handed the answer, never a key.
  */
 export async function tutorModelConfigured(): Promise<boolean> {
-  return (await tutorCredentials(await currentOwner())).length > 0;
+  return (await tutorCredentials(await currentOwner())).some(isCallable);
 }
 
 /** Every concept's summary, for wrong options; none when the catalog cannot be read. */

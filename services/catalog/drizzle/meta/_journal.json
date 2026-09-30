@@ -141,6 +141,13 @@
       "when": 1790758271294,
       "tag": "0019_revideokc_source",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790760340153,
+      "tag": "0020_tutor_model",
+      "breakpoints": true
     }
   ]
 }

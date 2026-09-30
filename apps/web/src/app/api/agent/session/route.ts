@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { tutorCredentials } from "@/lib/agent/credentials";
-import { availableProviderSummary, completeWithFallback } from "@/lib/agent/providers";
+import { availableProviderSummary, completeWithFallback, missingKeyMessage, skippedEntries } from "@/lib/agent/providers";
 import {
   buildSessionQuestionPrompt,
   parseSessionQuestion,
@@ -92,8 +92,9 @@ export async function POST(req: Request) {
     return outcome.code === "MISSING_API_KEY"
       ? NextResponse.json(
           {
-            error: "No model provider key is set. Add one in Settings, under Provider keys.",
+            error: missingKeyMessage(credentials),
             code: "MISSING_API_KEY",
+            attempts: outcome.attempts,
             providers: availableProviderSummary(credentials),
           },
           { status: 503 },
@@ -117,6 +118,7 @@ export async function POST(req: Request) {
       model: outcome.result.model,
       provider: outcome.result.provider,
       providerLabel: outcome.result.providerLabel,
+      ...skippedEntries(outcome.attempts),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

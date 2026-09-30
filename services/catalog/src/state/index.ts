@@ -183,6 +183,17 @@ export {
   type StoredProviderKey,
 } from "./provider-keys";
 export {
+  addTutorModel,
+  moveTutorModel,
+  readTutorModels,
+  removeTutorModel,
+  TutorModelError,
+  tutorModelEntry,
+  type StoredTutorModel,
+  type TutorModelEntry,
+  type TutorModelErrorCode,
+} from "./tutor-models";
+export {
   asLastVisited,
   asUserResources,
   readLearnerSnapshot,

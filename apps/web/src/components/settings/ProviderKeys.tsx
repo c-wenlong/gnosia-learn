@@ -10,6 +10,12 @@ import { cx } from "@/components/ui/classes";
 import type { ProviderKeyView } from "@/lib/provider-keys/settings";
 
 /**
+ * A row, with the model its Test sends and whether the tutor uses this key
+ * at all (`keyTestModel`, docs/TUTOR-MODELS.md T9).
+ */
+export type ProviderKeyRow = ProviderKeyView & { test: { model: string; modelFrom: "chain" | "default"; used: boolean } };
+
+/**
  * The Provider keys card (docs/BYOK.md): the owner's own model provider keys,
  * one row per provider.
  *
@@ -34,6 +40,7 @@ interface Reply {
   model?: string;
   source?: string;
   status?: number | null;
+  tested?: string;
 }
 
 async function send(method: "POST" | "DELETE", path: string, body: unknown): Promise<{ status: number; data: Reply } | null> {
@@ -50,12 +57,12 @@ async function send(method: "POST" | "DELETE", path: string, body: unknown): Pro
   }
 }
 
-export function ProviderKeys({ rows, reachable }: { rows: ProviderKeyView[]; reachable: boolean }) {
+export function ProviderKeys({ rows, reachable }: { rows: ProviderKeyRow[]; reachable: boolean }) {
   return (
     <Card title="Provider keys">
       <p className="text-[14px] text-text2">
-        Your own API keys for the tutor&apos;s model providers. They are tried before the server&apos;s, stored encrypted,
-        and never shown again once saved: only the last four characters are.
+        Your own API keys for the tutor&apos;s model providers. A saved key is used instead of the server&apos;s for its
+        provider, stored encrypted, and never shown again once saved: only the last four characters are.
       </p>
       {!reachable && (
         <p role="status" className="rounded-lg border-2 border-warn bg-warn-tint px-3.5 py-2.5 text-[14px] text-text">
@@ -71,7 +78,7 @@ export function ProviderKeys({ rows, reachable }: { rows: ProviderKeyView[]; rea
   );
 }
 
-function ProviderRow({ row, disabled }: { row: ProviderKeyView; disabled: boolean }) {
+function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean }) {
   const router = useRouter();
   const id = useId();
   const [editing, setEditing] = useState(false);
@@ -117,12 +124,16 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyView; disabled: boolea
     const reply = await send("POST", "/api/learner/provider-key/test", { provider: row.id });
     if (reply === null) return setStatus({ kind: "error", message: "Not tested: the server did not answer." });
     const whose = reply.data.source === "server" ? "The server's key" : "Your key";
+    const tested = reply.data.tested ? ` Tested with ${reply.data.tested}.` : "";
     if (reply.status === 200 && reply.data.ok === true) {
-      return setStatus({ kind: "done", message: `${whose} works${reply.data.model ? ` (${reply.data.model})` : ""}.` });
+      const answered = reply.data.model && reply.data.model !== reply.data.tested ? `, answered by ${reply.data.model}` : "";
+      return setStatus({ kind: "done", message: `${whose} works${answered}.${tested}` });
     }
     if (reply.status === 200) {
-      const code = typeof reply.data.status === "number" ? ` (HTTP ${reply.data.status})` : "";
-      return setStatus({ kind: "error", message: `${whose} was refused${code}: ${reply.data.message ?? "no reason given."}` });
+      // No status is no answer at all (a timeout, a refused connection), not a refusal.
+      const outcome = typeof reply.data.status === "number" ? `was refused (HTTP ${reply.data.status})` : "could not be tested";
+      const reason = (reply.data.message ?? "no reason given").replace(/\.$/, "");
+      return setStatus({ kind: "error", message: `${whose} ${outcome}: ${reason}.${tested}` });
     }
     setStatus({ kind: "error", message: reply.data.error ?? `Not tested (HTTP ${reply.status}).` });
   };
@@ -142,10 +153,16 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyView; disabled: boolea
           <p id={`${id}-name`} className="text-[14px] font-medium text-text">
             {row.label}
           </p>
-          <p className="text-[12px] text-text2">{row.model}</p>
+          <p className="text-[12px] break-all text-text2">{row.test.model}</p>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-2.5">
           <p className={cx("text-[14px]", unreadable ? "text-danger" : "text-text")}>{state}</p>
+          {row.inUse !== null && !row.test.used && (
+            <p className="text-[12px] text-text2">
+              Your models don&apos;t include {row.label}, so the tutor isn&apos;t using this key. Test sends the built-in
+              default, {row.test.model}.
+            </p>
+          )}
           {!editing && !confirmingRemove && (
             <div className="flex flex-wrap items-center gap-2.5">
               {row.inUse !== null && (

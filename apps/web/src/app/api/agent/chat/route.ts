@@ -15,6 +15,8 @@ import { tutorCredentials } from "@/lib/agent/credentials";
 import {
   availableProviderSummary,
   completeWithFallback,
+  missingKeyMessage,
+  skippedEntries,
   type ChatMessage,
 } from "@/lib/agent/providers";
 import { requestOwner } from "@/lib/learner-api";
@@ -238,8 +240,9 @@ async function completeTurn(
     if (outcome.code === "MISSING_API_KEY") {
       return NextResponse.json(
         {
-          error: "No model provider key is set. Add one in Settings, under Provider keys.",
+          error: missingKeyMessage(credentials),
           code: "MISSING_API_KEY",
+          attempts: outcome.attempts,
           providers: availableProviderSummary(credentials),
         },
         { status: 503 },
@@ -263,6 +266,7 @@ async function completeTurn(
     provider: outcome.result.provider,
     providerLabel: outcome.result.providerLabel,
     fallbackAttempts: outcome.attempts.length,
+    ...skippedEntries(outcome.attempts),
     ...extra,
   });
 }

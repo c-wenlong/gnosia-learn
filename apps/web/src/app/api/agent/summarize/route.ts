@@ -17,6 +17,8 @@ import { tutorCredentials } from "@/lib/agent/credentials";
 import {
   availableProviderSummary,
   completeWithFallback,
+  missingKeyMessage,
+  skippedEntries,
   type ChatMessage,
 } from "@/lib/agent/providers";
 import { requestOwner } from "@/lib/learner-api";
@@ -99,9 +101,9 @@ export async function POST(req: Request) {
     if (outcome.code === "MISSING_API_KEY") {
       return NextResponse.json(
         {
-          error:
-            "No model provider key is set. Add one in Settings, or write the recap by hand instead: it saves to the same place.",
+          error: `${missingKeyMessage(credentials)} Or write the recap by hand instead: it saves to the same place.`,
           code: "MISSING_API_KEY",
+          attempts: outcome.attempts,
           providers: availableProviderSummary(credentials),
         },
         { status: 503 },
@@ -137,5 +139,6 @@ export async function POST(req: Request) {
     model: outcome.result.model,
     provider: outcome.result.provider,
     providerLabel: outcome.result.providerLabel,
+    ...skippedEntries(outcome.attempts),
   });
 }

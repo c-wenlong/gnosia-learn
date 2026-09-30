@@ -47,6 +47,7 @@ import {
   providerKey,
   recap,
   review,
+  tutorModel,
 } from "./state";
 import { assetJob, draft, job, session } from "./studio";
 
@@ -87,6 +88,7 @@ export const tables = {
   recap,
   preference,
   providerKey,
+  tutorModel,
   draft,
   job,
   assetJob,
@@ -159,6 +161,8 @@ export const STATE_TABLES = [
   // The owner's own model provider keys, encrypted (docs/BYOK.md). Counted
   // here for `catalog status`; no exporter reads it.
   "providerKey",
+  // The tutor's model chain (docs/TUTOR-MODELS.md): owner configuration, no secret.
+  "tutorModel",
 ] as const satisfies readonly TableName[];
 
 /* Row and insert types, inferred from the tables above. These are the shapes
@@ -229,6 +233,8 @@ export type Preference = typeof preference.$inferSelect;
 export type NewPreference = typeof preference.$inferInsert;
 export type ProviderKey = typeof providerKey.$inferSelect;
 export type NewProviderKey = typeof providerKey.$inferInsert;
+export type TutorModel = typeof tutorModel.$inferSelect;
+export type NewTutorModel = typeof tutorModel.$inferInsert;
 
 export type Session = typeof session.$inferSelect;
 export type NewSession = typeof session.$inferInsert;
