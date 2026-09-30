@@ -13,10 +13,13 @@ import {
   REMOTIONKC_ROOT_ENV,
   resolveManimkcRoot,
   resolveRemotionkcRoot,
+  resolveRevideokcRoot,
+  REVIDEOKC_DIR,
+  REVIDEOKC_ROOT_ENV,
 } from "../env";
 import { IndexError, IndexErrors } from "./errors";
 import { fileFacts } from "./files";
-import { ASSET_PREFIX, type SourceBlob, type SourceRows } from "./source";
+import { ASSET_PREFIX, type IndexContext, type Indexer, type SourceBlob, type SourceRows } from "./source";
 import { VOCABULARY_FILE } from "./vocabulary";
 
 /**
@@ -24,20 +27,22 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * report shape, and whose renders the catalog indexes as `video` assets with
  * transcript, chapters and captions sidecars.
  *
- * Two of them: manimkc (ManimGL, narrated) and remotionkc (Remotion). The
- * report is the same document from both, so everything that turns a report
- * into rows is here once, and what differs is a descriptor:
+ * Three of them: manimkc (ManimGL, narrated), remotionkc (Remotion) and
+ * revideokc (Revideo). The report is the same document from all three, so
+ * everything that turns a report into rows is here once, and what differs is
+ * a descriptor:
  *
  * - the name, which is the index source, the `asset.source_repo` and the
- *   asset id prefix (`manimkc:`, `remotionkc:`);
- * - where the checkout is (`$MANIMKC_ROOT`, `$REMOTIONKC_ROOT`, else the
- *   submodule `.gitmodules` puts under `tools/`), and how its CLI runs
- *   (`python3 tools/cli/manimkc`, `node tools/cli/remotionkc.mjs`);
+ *   asset id prefix (`manimkc:`, `remotionkc:`, `revideokc:`);
+ * - where the checkout is (`$MANIMKC_ROOT`, `$REMOTIONKC_ROOT`,
+ *   `$REVIDEOKC_ROOT`, else the submodule `.gitmodules` puts under `tools/`),
+ *   and how its CLI runs (`python3 tools/cli/manimkc`,
+ *   `node tools/cli/remotionkc.mjs`, `node tools/cli/revideokc.mjs`);
  * - how a topic folder finds its catalog topic. manimkc's folders are mapped
  *   by the vocabulary's `maps.manimkc`, and a `topic:` in its topic.yml must
- *   agree with that map. remotionkc has no map: its topic.yml's `topic:` is
- *   required and is the answer, and must name a topic the importing owner can
- *   read.
+ *   agree with that map. remotionkc and revideokc have no map: a topic.yml's
+ *   `topic:` is required and is the answer, and must name a topic the
+ *   importing owner can read.
  *
  * Both strategies refuse rather than skip: a video with no topic is one
  * nothing in the catalog can find (AGENTS.md, "A catalog indexer must never
@@ -45,13 +50,13 @@ import { VOCABULARY_FILE } from "./vocabulary";
  *
  * The long reasoning behind the two roots (the checkout, and the report's
  * `outRoot` the rendered files are under) is on `manimkc.ts`, where it was
- * first written; it holds for remotionkc word for word, with
- * `$REMOTIONKC_HOME` as its data root.
+ * first written; it holds for remotionkc and revideokc word for word, with
+ * `$REMOTIONKC_HOME` and `$REVIDEOKC_HOME` as their data roots.
  */
 
 const run = promisify(execFile);
 
-export type VideoToolName = "manimkc" | "remotionkc";
+export type VideoToolName = "manimkc" | "remotionkc" | "revideokc";
 
 export interface VideoTool {
   /** The index source, the `asset.source_repo`, and the name in every message. */
@@ -105,10 +110,34 @@ export const REMOTIONKC: VideoTool = {
   topics: "declared",
 };
 
-export const VIDEO_TOOLS: readonly VideoTool[] = [MANIMKC, REMOTIONKC];
+export const REVIDEOKC: VideoTool = {
+  name: "revideokc",
+  prefix: ASSET_PREFIX.revideokc,
+  dir: REVIDEOKC_DIR,
+  rootEnv: REVIDEOKC_ROOT_ENV,
+  rootFlag: "--revideokc-root",
+  homeEnv: "REVIDEOKC_HOME",
+  cli: path.join("tools", "cli", "revideokc.mjs"),
+  resolveRoot: resolveRevideokcRoot,
+  // Node's standard library only, as remotionkc's: `topics` runs in a
+  // checkout that has never seen `npm install`.
+  topicsArgv: (cli, root) => [process.execPath, [cli, "--root", root, "topics", "--json"]],
+  topics: "declared",
+};
+
+export const VIDEO_TOOLS: readonly VideoTool[] = [MANIMKC, REMOTIONKC, REVIDEOKC];
+
+/** The names, in the order the tools run: each one an index source and an upload source. */
+export const VIDEO_TOOL_NAMES: readonly VideoToolName[] = VIDEO_TOOLS.map((tool) => tool.name);
+
+export function isVideoToolName(name: string): name is VideoToolName {
+  return (VIDEO_TOOL_NAMES as readonly string[]).includes(name);
+}
 
 export function videoTool(name: VideoToolName): VideoTool {
-  return name === "manimkc" ? MANIMKC : REMOTIONKC;
+  const tool = VIDEO_TOOLS.find((candidate) => candidate.name === name);
+  if (tool === undefined) throw new Error(`no video tool named ${name}`);
+  return tool;
 }
 
 /** Media types for the tools' files, by extension: the ones an import and `catalog asset upload` store. */
@@ -160,9 +189,9 @@ interface Orphan {
 export interface TopicsReport {
   /**
    * Absolute path the `out/…` strings below are relative to: the tool's data
-   * root (`$MANIMKC_HOME`, `$REMOTIONKC_HOME`), which defaults to the
-   * checkout root. Optional only for defensive parsing; every version of
-   * either CLI this repo pins reports it.
+   * root (`$MANIMKC_HOME`, `$REMOTIONKC_HOME`, `$REVIDEOKC_HOME`), which
+   * defaults to the checkout root. Optional only for defensive parsing; every
+   * version of each CLI this repo pins reports it.
    */
   outRoot?: unknown;
   topics: TopicEntry[];
@@ -232,8 +261,8 @@ function str(value: unknown): string | null {
 
 /**
  * How topic folders become topic slugs. `manimkc` reads the vocabulary's map
- * and checks a declared topic against it; `remotionkc` reads the declared
- * topic alone.
+ * and checks a declared topic against it; `remotionkc` and `revideokc` read
+ * the declared topic alone.
  */
 export type TopicResolution =
   | { by: "vocabulary"; byPath: ReadonlyMap<string, string>; bySlug: ReadonlyMap<string, unknown> }
@@ -447,5 +476,34 @@ export async function buildToolRows(
     // not `index_run.source_root`.
     metadata: { outRoot },
     blobs,
+  };
+}
+
+/**
+ * The indexer of a tool whose folders declare their own topic (remotionkc,
+ * revideokc): the pinned CLI's report against the checkout, each folder filed
+ * under its topic.yml's `topic:`, which must be one the owner can read.
+ * `named` picks the checkout the run named out of the context; absent, it is
+ * the tool's variable, else its submodule under the tools root.
+ */
+export function declaredToolIndexer(
+  tool: VideoTool,
+  named: (context: IndexContext) => string | undefined,
+): Indexer {
+  const checkoutOf = (context: IndexContext): string =>
+    named(context) ?? tool.resolveRoot(context.toolsRoot ?? context.repoRoot);
+  return {
+    source: tool.name,
+    owns: [],
+    assetPrefix: tool.prefix,
+    root: checkoutOf,
+    read: async (context) => {
+      const root = checkoutOf(context);
+      const report = await readToolReport(tool, context.toolsRoot ?? context.repoRoot, root);
+      return buildToolRows(tool, report, root, { by: "declared", bySlug: context.vocabulary.bySlug }, {
+        store: context.blobsRequired === true,
+        ...(context.owner === undefined ? {} : { owner: context.owner }),
+      });
+    },
   };
 }

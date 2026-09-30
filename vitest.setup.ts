@@ -145,6 +145,8 @@ if (!process.env.SELF_LEARN_HOME?.trim()) {
 // shell is exactly the real checkout. A suite that wants a stand-in sets its
 // own, and a child it spawns inherits whichever is set.
 process.env.REMOTIONKC_ROOT = path.join(temp, "self-learn-test-no-remotionkc");
+// revideokc, the third video tool, for the same reason and the same way.
+process.env.REVIDEOKC_ROOT = path.join(temp, "self-learn-test-no-revideokc");
 
 const removedBefore = REMOVED.map((folder) => [existsSync(folder), deepListing(folder)] as const);
 const seedBefore = deepListing(SEED);

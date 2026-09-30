@@ -1,13 +1,13 @@
 import { uploadAssets, type AssetUploadResult, type UploadSource } from "../content/asset-upload";
 import { openBlobStore } from "../content/blob";
 import { withDatabase } from "../db";
-import { databaseUrl, REPO_ROOT, redactUrl, resolveManimkcRoot, resolveRemotionkcRoot } from "../env";
+import { databaseUrl, REPO_ROOT, redactUrl } from "../env";
 import { findFfmpeg } from "../poster/extract";
 
 /**
- * `catalog asset upload --source manimkc|remotionkc [--dry-run]`: the connection, the
- * store and the printing. What it uploads and why each rule holds is in
- * `../content/asset-upload.ts`.
+ * `catalog asset upload --source manimkc|remotionkc|revideokc [--dry-run]`:
+ * the connection, the store and the printing. What it uploads and why each
+ * rule holds is in `../content/asset-upload.ts`.
  *
  * The store is the one `SELF_LEARN_HOME` names, the same one the web app
  * serves. It had a `--blob-root` flag for a scratch store, which wrote rows
@@ -21,6 +21,7 @@ export interface AssetUploadCommandOptions {
   dryRun: boolean;
   manimkcRoot?: string;
   remotionkcRoot?: string;
+  revideokcRoot?: string;
   reason?: string;
 }
 
@@ -40,9 +41,11 @@ export async function runAssetUpload(options: AssetUploadCommandOptions): Promis
       store,
       source: options.source,
       repoRoot: REPO_ROOT,
-      ...(options.source === "remotionkc"
-        ? { remotionkcRoot: options.remotionkcRoot ?? resolveRemotionkcRoot(REPO_ROOT) }
-        : { manimkcRoot: options.manimkcRoot ?? resolveManimkcRoot(REPO_ROOT) }),
+      // The source's own flag, else its variable or submodule (uploadAssets
+      // resolves that against the repository).
+      manimkcRoot: options.manimkcRoot,
+      remotionkcRoot: options.remotionkcRoot,
+      revideokcRoot: options.revideokcRoot,
       dryRun: options.dryRun,
       ffmpeg,
       reason: options.reason,

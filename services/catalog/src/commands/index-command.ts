@@ -18,8 +18,8 @@ import type { SourceWrite } from "../index/writer";
  * what it indexes; `index` stays as an alias that says so once. Either way
  * every source writes through the revision writer, a type the database owns
  * is skipped or refused by its `content_source` row, and the pinned manimkc,
- * remotionkc and tldrawkc checkouts are the repository's, since an export directory
- * holds no tools.
+ * remotionkc, revideokc and tldrawkc checkouts are the repository's, since an
+ * export directory holds no tools.
  *
  * Reports two things per source, and the second matters more than the first:
  * what it wrote, and what it removed. A removal is the catalog agreeing that
@@ -32,6 +32,7 @@ export interface IndexResult {
   repoRoot: string;
   manimkcRoot: string;
   remotionkcRoot: string;
+  revideokcRoot: string;
   sources: SourceWrite[];
   /** Sources `--only` did not name but that had to run, and why they had to. */
   addedForSafety: string[];
@@ -46,6 +47,7 @@ export interface IndexOptions {
   only?: readonly IndexSource[];
   manimkcRoot?: string;
   remotionkcRoot?: string;
+  revideokcRoot?: string;
 }
 
 export interface ImportOptions extends IndexOptions {
@@ -66,12 +68,14 @@ export async function runImportCommand(options: ImportOptions): Promise<IndexRes
       only: options.only,
       manimkcRoot: options.manimkcRoot,
       remotionkcRoot: options.remotionkcRoot,
+      revideokcRoot: options.revideokcRoot,
     });
     return {
       database: redactUrl(url),
       repoRoot: result.repoRoot,
       manimkcRoot: result.manimkcRoot,
       remotionkcRoot: result.remotionkcRoot,
+      revideokcRoot: result.revideokcRoot,
       sources: result.sources,
       addedForSafety: result.addedForSafety,
       addedAsPrerequisite: result.addedAsPrerequisite,
@@ -87,6 +91,7 @@ export function formatIndex(result: IndexResult): string {
     `read from       ${result.repoRoot}`,
     `manimkc root    ${result.manimkcRoot}`,
     `remotionkc root ${result.remotionkcRoot}`,
+    `revideokc root  ${result.revideokcRoot}`,
     "",
   ];
   for (const skip of result.skipped) {

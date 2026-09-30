@@ -127,6 +127,9 @@ export default async function LibraryPage({
   const unservedRenders = unserved.filter((row) => isRenderSource(row.sourceRepo)).length;
   const unservedOther = unserved.length - unservedRenders;
   const renderCommand = renderTools.length === 0 ? undefined : renderTools.map(uploadCommand).join(" && ");
+  // "manimkc", "manimkc and remotionkc", "manimkc, remotionkc and revideokc".
+  const inWords = (names: readonly string[]) =>
+    names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
   const filtered = kind !== null || topic !== null || course !== null || q !== null;
   const kindLabel = (k: string) =>
@@ -205,7 +208,7 @@ export default async function LibraryPage({
         <Notice title="Nothing indexed yet" command="npm run catalog -- import">
           The catalog is reachable and holds no assets. The rows here are written by the catalog
           itself: an import of an export tree or the seed, the note, log and diagram writers, and
-          the manimkc and remotionkc indexers for the videos. None of those has run against this database yet.
+          the manimkc, remotionkc and revideokc indexers for the videos. None of those has run against this database yet.
         </Notice>
       ) : (
         <>
@@ -244,7 +247,7 @@ export default async function LibraryPage({
               {unservedOther > 0 && (
                 <p className="mt-2">
                   {unservedRenders > 0
-                    ? `The command below stores the ${unservedRenders} rendered by ${renderTools.join(" and ")}. `
+                    ? `The command below stores the ${unservedRenders} rendered by ${inWords(renderTools)}. `
                     : ""}
                   {unservedOther === 1 ? "One is" : `${unservedOther} are`} not a render: a diagram is stored by{" "}
                   <code className="font-mono text-[12px]">catalog diagram put</code>, and a note or a session log by

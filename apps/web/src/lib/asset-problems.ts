@@ -149,11 +149,11 @@ export const ASSET_PROBLEMS: Readonly<Record<AssetProblemCode, AssetProblem>> = 
 
 /**
  * The tools whose renders `catalog asset upload --source <tool>` stores, as
- * an asset row's `sourceRepo` names them: manimkc and remotionkc, the two
- * video tools. Everything else with no stored copy gets there another way (a
+ * an asset row's `sourceRepo` names them: manimkc, remotionkc and revideokc,
+ * the video tools. Everything else with no stored copy gets there another way (a
  * diagram through `catalog diagram put`, a note or a log by its flip).
  */
-export const RENDER_SOURCES = ["manimkc", "remotionkc"] as const;
+export const RENDER_SOURCES = ["manimkc", "remotionkc", "revideokc"] as const;
 export type RenderSource = (typeof RENDER_SOURCES)[number];
 
 export function isRenderSource(sourceRepo: string | null | undefined): sourceRepo is RenderSource {
