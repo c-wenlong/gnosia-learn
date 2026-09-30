@@ -388,6 +388,36 @@ describe("Talk it through", () => {
   });
 });
 
+describe("a reload before the hand-off lands", () => {
+  const reload = async () => {
+    mounted.pop()?.();
+    await mount();
+    await resolve(draftMade);
+  };
+
+  it("keeps the message that was waiting, and its unsent words, rather than the default opener", async () => {
+    await mount();
+    await send(VIDEO_OF_IT);
+    await type(DIAGRAM_OF_IT);
+    await resolve(draftMade);
+    await reload();
+    const opener = handedOver()!;
+    expect(openerSend(opener)).toEqual(VIDEO_OF_IT);
+    expect(openerValue(opener)).toEqual(DIAGRAM_OF_IT);
+  });
+
+  it("sends a message queued after the reload instead", async () => {
+    await mount();
+    await send(VIDEO_OF_IT);
+    await resolve(draftMade);
+    mounted.pop()?.();
+    await mount();
+    await send(DIAGRAM_OF_IT);
+    await resolve(draftMade);
+    expect(openerSend(handedOver()!)).toEqual(DIAGRAM_OF_IT);
+  });
+});
+
 describe("an ordinary press", () => {
   it("sends the opener when nothing was typed, and not into a conversation the person closed", async () => {
     await mount();
