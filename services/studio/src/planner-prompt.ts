@@ -233,7 +233,10 @@ What you must end up knowing:
    what the video mainly needs. Then check the other beats against the
    capability matrix: when one needs what that tool cannot do, choose a tool
    that can do both, else simplify that beat. Only a tool marked available
-   here goes in the brief; a better one that is not is the runner-up.
+   here goes in the brief; a better one that is not is the runner-up. When
+   the person named a tool the block says is not in the studio yet, propose
+   no brief in that reply: say in one line that the studio cannot make it
+   yet, and ask whether an available tool should make it instead.
 
 Writing the storyboard:
 

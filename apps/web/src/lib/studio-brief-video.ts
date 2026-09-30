@@ -68,17 +68,18 @@ export function briefTool(brief: Pick<VideoBrief, "tool">): VideoToolName {
  * The card's tool row (D73): the tool, the line beside it (the planner's
  * reason, or once a person has switched, what the new tool is best at), and
  * the tools a person may switch to. Only tools the studio can make are
- * offered, and only when there are two of them: a menu of one is a chip.
+ * offered, and only when there are two of them: a menu of one is a chip. A
+ * change keeps its video's tool (D74), so a change card offers none.
  */
 export function toolRow(
-  brief: Pick<VideoBrief, "tool" | "toolReason">,
+  brief: Pick<VideoBrief, "tool" | "toolReason" | "mode">,
   tools: readonly VideoToolOption[],
 ): { tool: VideoToolName; line: string | null; choices: VideoToolOption[] } {
   const tool = briefTool(brief);
   const own = tools.find((option) => option.name === tool);
   const line = brief.toolReason ?? own?.strength ?? null;
   const available = tools.filter((option) => option.available);
-  return { tool, line, choices: available.length >= 2 ? available : [] };
+  return { tool, line, choices: brief.mode === "change" || available.length < 2 ? [] : available };
 }
 
 /** The brief a person's switch saves: the new tool, and no reason, since the planner's was for the old one. */

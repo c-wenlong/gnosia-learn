@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { BriefError } from "../src/brief";
 import { describeVideoBriefEdit, EDITABLE_VIDEO_FIELDS } from "../src/drafts";
 import { PLANNER_VIDEO_FIELDS } from "../src/planner";
-import { changingSummary, toolsBlock } from "../src/planner-prompt";
+import { changingSummary, combinedPrompt, toolsBlock } from "../src/planner-prompt";
 import { TOOL_REASON_MAX, validateVideoBrief } from "../src/video/brief";
 import { briefTool, notInStudio, toolsHealth, VIDEO_TOOL_CAPABILITIES, VIDEO_TOOL_NAMES, VIDEO_TOOL_ROUTES, VIDEO_TOOLS } from "../src/video/tools";
 
@@ -96,6 +96,14 @@ describe("the TOOLS block", () => {
       { name: "remotionkc", strength: strength("remotionkc"), available: false, reason: "remotionkc is not in the studio yet" },
     ]);
     expect(notInStudio("manimkc")).toBeNull();
+  });
+});
+
+describe("the prompt's routing steps", () => {
+  it("ask before proposing when the person named a tool the studio cannot make yet", () => {
+    const video = combinedPrompt(["diagram", "video"]);
+    expect(video).toContain("propose\n   no brief in that reply");
+    expect(video).toContain("the tool its video was made with (the CHANGING block)");
   });
 });
 

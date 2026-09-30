@@ -90,15 +90,20 @@ describe("the card's tool row (docs/STUDIO-VIDEO-TOOLS.md, D73)", () => {
   });
 
   it("shows the planner's reason, else what the tool is best at", () => {
-    expect(toolRow({ tool: "manimkc", toolReason: "Boxes and arrows" }, [manimkc, revideokc])).toEqual({ tool: "manimkc", line: "Boxes and arrows", choices: [] });
-    expect(toolRow({}, [manimkc, revideokc]).line).toBe("ManimGL: plots");
-    expect(toolRow({}, []).line).toBeNull();
+    expect(toolRow({ tool: "manimkc", toolReason: "Boxes and arrows", mode: "new" }, [manimkc, revideokc])).toEqual({
+      tool: "manimkc",
+      line: "Boxes and arrows",
+      choices: [],
+    });
+    expect(toolRow({ mode: "new" }, [manimkc, revideokc]).line).toBe("ManimGL: plots");
+    expect(toolRow({ mode: "new" }, []).line).toBeNull();
   });
 
-  it("offers a menu only of tools the studio can make, and only when there are two", () => {
-    expect(toolRow({}, [manimkc, revideokc]).choices).toEqual([]);
+  it("offers a menu only of tools the studio can make, only when there are two, and never on a change", () => {
+    expect(toolRow({ mode: "new" }, [manimkc, revideokc]).choices).toEqual([]);
     const ready = { ...revideokc, available: true, reason: null };
-    expect(toolRow({}, [manimkc, ready]).choices).toEqual([manimkc, ready]);
+    expect(toolRow({ mode: "new" }, [manimkc, ready]).choices).toEqual([manimkc, ready]);
+    expect(toolRow({ mode: "change" }, [manimkc, ready]).choices).toEqual([]);
   });
 
   it("saves a switch with the new tool and without the old reason", () => {
