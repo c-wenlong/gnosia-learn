@@ -486,7 +486,8 @@ export function conceptBlock(input: ConceptBlockInput): string {
     ...(input.otherTopics !== undefined && input.otherTopics.length > 0 ? [`also filed under: ${input.otherTopics.join(", ")}`] : []),
     `summary: ${summary || "(none)"}`,
   ];
-  const body = input.body === undefined || input.body === null ? "" : inert(input.body).replace(/\s+$/, "");
+  // Blank lines at either end go: a note's body read after its front matter starts with one.
+  const body = input.body === undefined || input.body === null ? "" : inert(input.body).replace(/^\s*\n/, "").replace(/\s+$/, "");
   if (body.trim() === "") return [...lines, `note: ${input.missing ?? "(no note)"}`].join("\n");
   const noteLines = body.split("\n");
   const kept: string[] = [];

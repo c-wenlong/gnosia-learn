@@ -99,7 +99,7 @@ describe("the CONCEPT block", () => {
       title: "The TCP three-way handshake",
       topic: "tcp",
       summary: "How two hosts agree\non sequence numbers.",
-      body: "# Handshake\n\nSYN, then SYN-ACK, then ACK.",
+      body: "\n\n# Handshake\n\nSYN, then SYN-ACK, then ACK.\n\n",
     });
     expect(body).toBe(
       [
