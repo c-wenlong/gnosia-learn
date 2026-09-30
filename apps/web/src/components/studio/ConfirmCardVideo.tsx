@@ -73,6 +73,7 @@ export function ConfirmCardVideo({
   replacing = false,
   tools = [],
   onSwitchTool,
+  charsPerSecond,
 }: {
   brief: VideoBrief;
   pendingTopic: PendingTopic | null;
@@ -103,6 +104,8 @@ export function ConfirmCardVideo({
   tools?: readonly VideoToolOption[];
   /** Save this brief with another tool (D73). Resolves with an error sentence, or null. */
   onSwitchTool?: (tool: VideoToolName) => Promise<string | null>;
+  /** Health's `video.narration.charsPerSecond`: the runner's speech rate, from gnosia-audio. Absent shows the length as unknown. */
+  charsPerSecond?: number;
 }) {
   const [using, setUsing] = useState(false);
   const [useError, setUseError] = useState<string | null>(null);
@@ -147,7 +150,7 @@ export function ConfirmCardVideo({
           )}
 
           <p className="text-[15px] leading-6 text-text">{brief.idea}</p>
-          <p className="text-[13px] leading-5 text-text2">{videoSummaryLine(brief)}</p>
+          <p className="text-[13px] leading-5 text-text2">{videoSummaryLine(brief, charsPerSecond)}</p>
           <ToolRow
             brief={brief}
             tools={tools}
@@ -157,7 +160,7 @@ export function ConfirmCardVideo({
             {mode.lead} <code className="rounded bg-surface2 px-1 py-0.5 font-mono text-[12px] text-text">{mode.slug}</code>
           </p>
 
-          <Storyboard brief={brief} />
+          <Storyboard brief={brief} charsPerSecond={charsPerSecond} />
 
           {warning !== null && <p className="rounded-lg bg-warn-tint px-3 py-2 text-[13px] leading-5 text-text">{warning}</p>}
         </div>
@@ -243,7 +246,7 @@ export function ConfirmCardVideo({
 }
 
 /** One collapsed row per scene; open, every beat as it will be spoken and shown. */
-function Storyboard({ brief }: { brief: VideoBrief }) {
+function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSecond: number | undefined }) {
   const narrated = isNarrated(brief);
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
   const base = useId();
@@ -274,7 +277,7 @@ function Storyboard({ brief }: { brief: VideoBrief }) {
               <span className="w-5 shrink-0 text-[12px] tabular-nums text-text3">{at + 1}</span>
               <span className="min-w-0 flex-1 text-[14px] font-medium text-text">{chapterTitle(scene.name)}</span>
               <span className="shrink-0 text-[12px] tabular-nums text-text2">
-                {beatCount(scene.beats.length)} · {shortLength(sceneSeconds(scene, narrated))}
+                {beatCount(scene.beats.length)} · {shortLength(sceneSeconds(scene, narrated, charsPerSecond))}
               </span>
               <Glyph name="next" size={16} className={cx("text-text3 transition-transform", expanded && "rotate-90")} />
             </button>

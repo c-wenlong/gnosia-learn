@@ -49,7 +49,7 @@ export type TranscriptBrief =
       brief: VideoBrief;
       requestSeq: number | null;
       pendingTopic?: PendingTopic | null;
-      /** V11's words the voice would read as words. Not built on the runner yet (#207); read when present. */
+      /** V11's words the voice would read as words, from gnosia-audio's pronunciation table; absent from a runner that has not read it. */
       abbreviations?: string[];
     };
 
@@ -329,6 +329,8 @@ export interface BriefEvent {
   requestSeq?: number | null;
   brief: Brief | VideoBrief;
   pendingTopic: PendingTopic | null;
+  /** A video brief's V11 words, as on the transcript's brief. */
+  abbreviations?: string[];
 }
 
 export interface BriefInvalidEvent extends BriefInvalid {
@@ -752,6 +754,8 @@ export interface VideoAvailability {
   reason: string | null;
   /** Each video tool and whether the studio can make it (D73); absent from a runner before the field. */
   tools?: VideoToolOption[];
+  /** The runner's speech rate, characters a second, from gnosia-audio (`video.narration`); absent from a runner before the field. */
+  charsPerSecond?: number;
 }
 
 /** Health's `video.tools`, keeping only well-formed entries for tools the web app knows. */
@@ -780,8 +784,12 @@ export function videoTools(raw: unknown): VideoToolOption[] {
  */
 export function videoAvailability(raw: unknown): VideoAvailability {
   if (typeof raw !== "object" || raw === null) return { ok: false, reason: null };
-  const video = raw as { ok?: unknown; note?: unknown; checks?: unknown; tools?: unknown };
-  const tools = video.tools === undefined ? {} : { tools: videoTools(video.tools) };
+  const video = raw as { ok?: unknown; note?: unknown; checks?: unknown; tools?: unknown; narration?: unknown };
+  const rate = (video.narration as { charsPerSecond?: unknown } | null | undefined)?.charsPerSecond;
+  const tools = {
+    ...(video.tools === undefined ? {} : { tools: videoTools(video.tools) }),
+    ...(typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? { charsPerSecond: rate } : {}),
+  };
   if (video.ok === true) return { ok: true, reason: null, ...tools };
   const failing = Array.isArray(video.checks)
     ? video.checks.find((check) => typeof check === "object" && check !== null && (check as { ok?: unknown }).ok === false)

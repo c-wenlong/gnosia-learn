@@ -876,6 +876,7 @@ export function DraftPanel({
             onSuggest={(kind) => composer.current?.insertMention(kind)}
             singleCard={cards.length <= 1}
             videoTools={video?.tools ?? []}
+            charsPerSecond={video?.charsPerSecond}
           />
         ))}
 
@@ -1023,6 +1024,7 @@ function Entry({
   onSuggest,
   singleCard,
   videoTools,
+  charsPerSecond,
 }: {
   entry: TranscriptEntry;
   view: DraftView;
@@ -1054,6 +1056,8 @@ function Entry({
   singleCard: boolean;
   /** Health's `video.tools`, for the video card's tool row (D73). */
   videoTools: readonly VideoToolOption[];
+  /** Health's `video.narration.charsPerSecond`, for the video card's predicted lengths. */
+  charsPerSecond: number | undefined;
 }) {
   if (entry.role === "person") {
     const tagged = waiting.filter((item) => item.requestSeq === entry.seq).map((item) => item.kind);
@@ -1135,6 +1139,7 @@ function Entry({
           paired={paired}
           replacing={live?.replaces != null}
           tools={videoTools}
+          charsPerSecond={charsPerSecond}
           onSwitchTool={async (tool) => {
             const outcome = await onSave(switchedTool(item.brief, tool), entry.seq, "video");
             return outcome.ok ? null : `The tool could not be switched: ${outcome.refusal.error}`;

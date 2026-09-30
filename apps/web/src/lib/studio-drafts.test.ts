@@ -323,6 +323,15 @@ describe("tags and cards per kind (docs/STUDIO-MENTIONS.md, API)", () => {
     });
     expect(videoAvailability({ ok: false, checks: [], note: "n", tools: "nonsense" })).toEqual({ ok: false, reason: "n", tools: [] });
   });
+
+  it("reads the runner's speech rate from health's video narration, and nothing that is not a positive number", () => {
+    const narration = { source: "gnosia-audio", version: "0.1.0", charsPerSecond: 15.2, spokenWords: 179 };
+    expect(videoAvailability({ ok: true, checks: [], narration })).toEqual({ ok: true, reason: null, charsPerSecond: 15.2 });
+    expect(videoAvailability({ ok: false, checks: [], note: "n", narration })).toEqual({ ok: false, reason: "n", charsPerSecond: 15.2 });
+    for (const bad of [0, -3, "15.2", Number.NaN, null]) {
+      expect(videoAvailability({ ok: true, checks: [], narration: { charsPerSecond: bad } })).toEqual({ ok: true, reason: null });
+    }
+  });
 });
 
 describe("diagramAvailability (#206)", () => {

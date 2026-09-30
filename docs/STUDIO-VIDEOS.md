@@ -486,14 +486,31 @@ the planner can act on: "the lines total 1,500 characters, about 107 seconds;
 the target is 180, so add about 1,100 characters or set `targetSeconds` to
 110".
 
+*Since gnosia-audio:* the 15.2 is no longer a constant in this repository.
+It is `charsPerSecond` in gnosia-audio's `data/timing.json`, the narration
+package manimkc#40 moved manimkc's narration layer into. The runner asks
+`gnosia-audio home --json` in manimkc's `.venv` at every toolchain discovery
+(`services/studio/src/video/narration.ts`), the validator reads the answer,
+and `/api/health` reports it as `video.narration` (`charsPerSecond`, `source`,
+`version`), where the confirm card takes it from. Before the first answer, or
+on a machine without gnosia-audio, where the doctor turns videos off, the
+runner uses a fallback of the same value, which a test holds to the installed
+`timing.json`; the card shows "Length unknown" rather than guess when health
+carries no rate.
+
 **Acronyms.** manimkc's lint warns when a narration line holds a capitalised
-word missing from `narration.SPOKEN`, because the voice reads it as a word
-(`ACL` as "ackle"). The runner runs the same check on the brief's lines at
-validation time and, rather than refusing, adds a STUDIO note listing them, so
-the planner can spell them out ("A C L") in the next brief. The agent may
-also respell one while voicing it (D47), which the job view shows as a
-changed line; it cannot edit `narration.SPOKEN`, since `lib/` is not its to
-edit.
+word missing from the pronunciation table (gnosia-audio's `data/spoken.json`,
+formerly `narration.SPOKEN`), because the voice reads it as a word (`ACL` as
+"ackle"). The runner runs the same check on the brief's lines: it reads the
+table's written forms from the path `gnosia-audio home --json` names, and
+attaches the words it finds to each video brief in the transcript as
+`abbreviations`, which the card shows as its warning. So `CPU` or `API`, which
+the table already spells out, is not flagged, where the card's own fallback
+check (a runner that has not read the table) flags every capitalised word.
+Still to build: a STUDIO note listing them to the planner, so it can spell
+them out ("A C L") in the next brief. The agent may also respell one while
+voicing it (D47), which the job view shows as a changed line; it cannot edit
+the table, which lives in the venv.
 
 ## The planner's prompt
 
@@ -753,7 +770,8 @@ skill, rewritten for a session with one command. Its sections:
 | The frame and the house style | 14.22 by 8 units, keep inside x in [-6.9, 6.9] and y in [-3.8, 3.8], heading at `to_edge(UP, buff=0.45)`, body around y = -0.3; `Text` for words, `Tex` only when the video doctor found tectonic and dvisvgm; the names that do not exist here | Static, from the skill and `AGENTS.md` |
 | The library | Every helper and constant with its usage line | **Generated** by the runner from the real checkout's `manimkc api --json` (12,452 characters today, measured); the agent's own `video api` runs in the job checkout, where the only topic is its own, so the manual's listing is the complete one |
 | Looking at a sheet | The skill's checklist, in its order | Static |
-| Two worked scenes | A narrated scene built from `labeled_box` and `routed_arrow`, and one built on `DataTable`, each rendered in the suite | Static, tested |
+| Word cues | manimkc#38's cues: `with self.voiceover("...") as line:`, then `line.wait_until("word")` or `line.until("word")`. Cue only when a line names things in the order the screen shows them; the word and its count are literals; bind on the `with` line, which is how the narration step finds lines to time; word times come only from the narration step, which `preview` and `build` run first, so after adding `as line` run `narrate` or `preview` before relying on them; never `self.wait_until` | Static, from manimkc's `lib/narration.py` |
+| Two worked scenes | A narrated scene built from `labeled_box` and `routed_arrow`, whose first line cues its two boxes on their words, and one built on `DataTable`, each voiced and rendered inside the profiles in the suite | Static, tested |
 | Known traps | `TracedPath.clear_updaters()` before a fade, `Annulus(center=)`, the `animate` snapshot trap, garbled `ReplacementTransform` between texts of different lengths, the parallel text-render race that a solo re-render fixes | Static, from `AGENTS.md` |
 | Never | Other topics, `new`, `example`, reading `lib/` to find a helper `api` already lists, the network, changing the scenes the brief names | Static |
 
@@ -860,8 +878,14 @@ failed until it moved.
 `render/cache/audio/`. Before the agent starts, the runner copies in the
 clips the owner's shared cache already holds for the brief's lines: it
 computes each clip's key (backend, voice, speed and text) itself, from the
-brief, with manimkc's own `cache_path`, and copies only files that exist, so
-no agent input is involved. A change job is seeded from its parent's kept
+brief, with `gnosia-audio keys --json` (schema 1) run in the job's render
+profile, and copies only files that exist, so no agent input is involved.
+The reply's `clip` is a whole path, and the runner refuses one outside the
+job's own `render/cache/audio/`, since a key computed against another cache
+would seed files the narration step never reads. Each clip's word times,
+`<key>.words.json`, come with it when the source has them, so a line the agent
+binds with `as line` for a word cue is not timed again; after a verdict they
+are kept beside the clips. A change job is seeded from its parent's kept
 cache as well. The agent's narration step then makes only the clips that are
 missing: lines it changed, and lines no one has said before. Jobs never write
 the shared cache, and nothing is promoted into it after Accept.

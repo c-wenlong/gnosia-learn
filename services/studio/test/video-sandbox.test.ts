@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ import { scratchJob, type DoctorRun } from "../src/video/doctor";
 import { runSandboxed } from "../src/video/exec";
 import { posterArgs } from "../src/video/gate";
 import { WORKED_HEADER, WORKED_NARRATED, WORKED_TABLE } from "../src/video/manual";
+import { clipKeys, wordsName } from "../src/video/seed";
 import { discoverToolchain, toolchainProblems, type Toolchain } from "../src/video/toolchain";
 
 /**
@@ -380,6 +381,37 @@ print(json.dumps(out))
       if (name === "read the hugging face token" && verdict.outcome === "missing") continue;
       expect({ name, outcome: verdict.outcome }).toEqual({ name, outcome: "denied" });
     }
+  }, 300_000);
+
+  it("names each clip through gnosia-audio's keys in the render profile as the narration step wrote it, and times a cued line", async (context) => {
+    if (skip !== "") return context.skip(skip);
+    const scene = path.join(run.paths.checkout, "topics", "studio", "cues", "cues.py");
+    await mkdir(path.dirname(scene), { recursive: true });
+    const cued = "A hit is served at once, and a miss goes to memory.";
+    const plain = "The CPU never waits on a hit.";
+    await writeFile(
+      scene,
+      `${WORKED_HEADER}\n\nclass CQ1_Cues(VoiceScene):\n    def construct(self):\n        hit = Text("Hit")\n        miss = Text("Miss")\n` +
+        `        with self.voiceover(${JSON.stringify(cued)}) as line:\n            line.wait_until("hit")\n            self.play(FadeIn(hit))\n            line.wait_until("miss")\n            self.play(FadeIn(miss))\n` +
+        `        with self.voiceover(${JSON.stringify(plain)}):\n            self.play(FadeOut(VGroup(hit, miss)))\n`,
+      "utf8",
+    );
+    const base = { tools: run.tools, paths: run.paths, home, voice: "af_heart" };
+    const voiced = await runSandboxed({
+      ...base,
+      kind: "narrate",
+      profile: run.paths.narrateProfile,
+      argv: [path.join(run.paths.checkout, ".venv", "bin", "python"), "lib/narration.py", scene],
+      cwd: run.paths.checkout,
+      timeoutMs: 300_000,
+    });
+    expect(voiced.code, voiced.stderr.slice(-800)).toBe(0);
+    const keys = await clipKeys(base, [cued, plain, ""]);
+    expect(keys).toHaveLength(2);
+    for (const key of keys) expect(existsSync(path.join(run.paths.audio, key)), key).toBe(true);
+    const times = JSON.parse(await readFile(path.join(run.paths.audio, wordsName(keys[0]!)), "utf8")) as { source: string; words: { word: string }[] };
+    expect(times.source).toBe("kokoro");
+    expect(times.words.map((word) => word.word.toLowerCase().replace(/[^a-z]/g, ""))).toEqual(expect.arrayContaining(["hit", "miss"]));
   }, 300_000);
 
   it("renders the manual's two worked scenes, voiced, inside the profiles", async (context) => {
