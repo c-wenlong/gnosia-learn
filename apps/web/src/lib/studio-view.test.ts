@@ -13,10 +13,12 @@ import {
   freshness,
   groupDiagrams,
   panelHref,
+  browserPanelMove,
   panelSignature,
   parsePanel,
   parseView,
   rawParamsOf,
+  withoutOutcome,
   relativeTime,
   sortDiagrams,
   studioHref,
@@ -405,5 +407,32 @@ describe("the panel a URL names", () => {
   it("turns the address bar into the page's search params, a repeated name as a list", () => {
     expect(rawParamsOf(new URLSearchParams("draft=d1&topic=a&topic=b"))).toEqual({ draft: "d1", topic: ["a", "b"] });
     expect(panelSignature(rawParamsOf(new URLSearchParams("sel=s&view=list")))).toBe(panelSignature({ sel: "s" }));
+  });
+});
+
+describe("a move the browser can make on its own", () => {
+  const at = (search: string) => ({ pathname: "/studio", search });
+
+  it("opens, closes and swaps a conversation, a job and a tile over the same grid", () => {
+    expect(browserPanelMove(at("topic=a"), "/studio?topic=a&sel=x")).toBe(true);
+    expect(browserPanelMove(at("?topic=a&sel=x"), "/studio?topic=a&job=j1")).toBe(true);
+    expect(browserPanelMove(at("job=j1"), "/studio")).toBe(true);
+    expect(browserPanelMove(at("draft=d1"), "/studio?draft=d1&job=j1")).toBe(true);
+    // A verb's outcome is the panel's, not the grid's.
+    expect(browserPanelMove(at("sel=x&v=verify&ok=1&m=done"), "/studio?job=j1")).toBe(true);
+  });
+
+  it("leaves the rest to the server", () => {
+    expect(browserPanelMove(at("topic=a"), "/studio?topic=b&sel=x")).toBe(false);
+    expect(browserPanelMove(at(""), "/studio?job=j1&shot=after")).toBe(false);
+    expect(browserPanelMove(at("job=j1&shot=after"), "/studio?job=j1")).toBe(false);
+    expect(browserPanelMove(at(""), "/studio?settings=1")).toBe(false);
+    expect(browserPanelMove(at("sel=x"), "/studio?extend=x")).toBe(false);
+    expect(browserPanelMove(at(""), "/studio/d/x")).toBe(false);
+  });
+
+  it("drops a verb's outcome from a path and keeps the rest", () => {
+    expect(withoutOutcome("/studio?sel=x&v=verify&ok=1&m=done&topic=a")).toBe("/studio?sel=x&topic=a");
+    expect(withoutOutcome("/studio?v=verify")).toBe("/studio");
   });
 });

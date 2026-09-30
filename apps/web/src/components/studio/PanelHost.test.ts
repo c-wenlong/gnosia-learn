@@ -3,7 +3,7 @@ import { act, createElement, useEffect, type ComponentProps, type ReactNode } fr
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { panelSignature } from "@/lib/studio-view";
+import { panelSignature, type Diagram } from "@/lib/studio-view";
 
 /**
  * The conversation panel opens and closes in the browser: the address bar
@@ -29,10 +29,20 @@ vi.mock("@/components/studio/DraftPanel", async () => {
   };
 });
 
-const { ConversationHost } = await import("./ConversationHost");
-const { useConversationHost } = await import("./conversation-host");
+const live = vi.hoisted(() => ({ jobs: [] as { jobId: string; state: string; title: string | null; target: string; requested: string }[] }));
+vi.mock("@/components/studio/JobsProvider", () => ({ useStudioJobs: () => ({ jobs: live.jobs }) }));
+vi.mock("@/components/studio/JobPanel", () => ({
+  JobPanel: ({ jobId, path }: { jobId: string; path: string }) => createElement("div", { "data-job": jobId, "data-path": path }),
+}));
+vi.mock("@/components/studio/DiagramInspector", () => ({
+  DiagramPanelBody: ({ diagram, jobs, extendHref }: { diagram: { name: string }; jobs: { jobId: string }[]; extendHref: string }) =>
+    createElement("div", { "data-tile": diagram.name, "data-jobs": jobs.map((job) => job.jobId).join(","), "data-extend": extendHref }),
+}));
 
-type Controls = NonNullable<ReturnType<typeof useConversationHost>>;
+const { PanelHost, historyOf } = await import("./PanelHost");
+const { usePanelHost } = await import("./panel-host");
+
+type Controls = NonNullable<ReturnType<typeof usePanelHost>>;
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -54,6 +64,7 @@ function setUrl(search: string) {
 
 let pushState: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
+  live.jobs = [];
   setUrl("");
   mocks.push.mockReset();
   pushState = vi.spyOn(window.history, "pushState").mockImplementation(() => undefined);
@@ -68,31 +79,49 @@ afterEach(() => {
 /** Hands the host's controls to the test, as the plus card would use them. */
 const grabbed: { controls: Controls | null } = { controls: null };
 function Grab(): ReactNode {
-  const value = useConversationHost();
+  const value = usePanelHost();
   useEffect(() => {
     grabbed.controls = value;
   });
   return null;
 }
 
+const DIAGRAM = {
+  name: "graph",
+  title: "A graph",
+  topic: "graphs",
+  concepts: [],
+  tldr: { path: "learn/assets/graph.tldr", modified: null },
+  svg: { exists: true, path: "learn/assets/graph.svg", bytes: 10, modified: null },
+  svgState: "fresh",
+  shapes: 3,
+  created: null,
+  source: null,
+} as unknown as Diagram;
+
 function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
   const container = document.createElement("div");
   document.body.append(container);
   const root: Root = createRoot(container);
-  const props: Omit<ComponentProps<typeof ConversationHost>, "children"> = {
+  const props: Omit<ComponentProps<typeof PanelHost>, "children"> = {
     panel: options.panel ?? null,
     panelKey: options.panelKey ?? panelSignature({}),
     topics: [],
     titles: {},
     suggestions: [],
     cap: null,
+    diagrams: [DIAGRAM],
+    jobs: [
+      { jobId: "j1", state: "accepted", title: "Draw the graph", target: "learn/assets/graph.tldr", requested: "2026-09-30" },
+      { jobId: "j2", state: "failed", title: "Something else", target: "learn/assets/other.tldr", requested: "2026-09-30" },
+    ],
   };
   const draw = () =>
     act(() =>
       root.render(
         // Children as an argument, as the lint rule wants; the props type
         // requires them, hence the cast.
-        createElement(ConversationHost, props as ComponentProps<typeof ConversationHost>, createElement(Grab)),
+        createElement(PanelHost, props as ComponentProps<typeof PanelHost>, createElement(Grab)),
       ),
     );
   draw();
@@ -211,20 +240,82 @@ describe("a panel the server drew", () => {
   const drawn = createElement("div", { "data-server-panel": true });
 
   it("shows while the URL names the panel it was drawn for, whatever the filters", () => {
-    setUrl("sel=graph&topic=a");
-    const { container, go } = mount({ panel: drawn, panelKey: panelSignature({ sel: "graph" }) });
+    setUrl("extend=graph&topic=a");
+    const { container, go } = mount({ panel: drawn, panelKey: panelSignature({ extend: "graph" }) });
     expect(container.querySelector("[data-server-panel]")).not.toBeNull();
-    go("sel=graph&topic=b");
+    go("extend=graph&topic=b");
     expect(container.querySelector("[data-server-panel]")).not.toBeNull();
   });
 
   it("gives way to a conversation opened over it, and does not come back when that closes", () => {
-    setUrl("job=j1");
-    const { container, go } = mount({ panel: drawn, panelKey: panelSignature({ job: "j1" }) });
+    setUrl("extend=graph");
+    const { container, go } = mount({ panel: drawn, panelKey: panelSignature({ extend: "graph" }) });
+    expect(container.querySelector("[data-server-panel]")).not.toBeNull();
     go("draft=d2");
     expect(container.querySelector("[data-server-panel]")).toBeNull();
     expect(container.querySelector("[data-draft]")).not.toBeNull();
     go("");
     expect(container.querySelector("[data-server-panel]")).toBeNull();
+  });
+});
+
+describe("a job and a tile", () => {
+  it("draws a job's panel from the URL, titled from the page's rows, and closes it with pushState", () => {
+    setUrl("job=j1&topic=graphs");
+    const { container } = mount();
+    expect(container.querySelector("[data-job]")?.getAttribute("data-job")).toBe("j1");
+    expect(container.querySelector("dialog")?.getAttribute("aria-label")).toBe("Draw the graph");
+    close(container);
+    expect(pushState).toHaveBeenCalledWith(null, "", "/studio?topic=graphs");
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("draws a tile's panel with that diagram's jobs, and says a verb's outcome there once", () => {
+    setUrl("sel=graph&v=verify&ok=1&m=verified");
+    const { container } = mount();
+    const body = container.querySelector("[data-tile]");
+    expect(body?.getAttribute("data-tile")).toBe("graph");
+    expect(body?.getAttribute("data-jobs")).toBe("j1");
+    expect(body?.getAttribute("data-extend")).toBe("/studio?extend=graph");
+    expect(container.textContent).toContain("verified");
+    // Close drops the outcome with the panel.
+    close(container);
+    expect(pushState).toHaveBeenCalledWith(null, "", "/studio");
+  });
+
+  it("says so for a name the directory does not have", () => {
+    setUrl("sel=missing");
+    const { container } = mount();
+    expect(container.textContent).toContain("There is no diagram named missing");
+  });
+
+  it("moves between panels in the browser, and hands anything else back", () => {
+    setUrl("sel=graph");
+    mount();
+    expect(grabbed.controls!.navigate("/studio?job=j1")).toBe(true);
+    expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio?job=j1");
+    pushState.mockClear();
+    // Other filters, a picture, the settings, an Extend press, another page.
+    for (const href of ["/studio?topic=b", "/studio?job=j1&shot=after", "/studio?settings=1", "/studio?extend=graph", "/library"]) {
+      expect(grabbed.controls!.navigate(href)).toBe(false);
+    }
+    expect(pushState).not.toHaveBeenCalled();
+  });
+});
+
+describe("a tile's job history", () => {
+  const row = (jobId: string, state: string, requested: string, target = "t") => ({ jobId, state, title: jobId, target, requested });
+
+  it("takes the live state of a job the page read, and adds one it never saw, newest first", () => {
+    const rows = [row("old", "drawing", "2026-09-30T08:00:00Z"), row("elsewhere", "accepted", "2026-09-30T08:30:00Z", "u")];
+    const now = [row("old", "awaiting_review", "2026-09-30T08:00:00Z"), row("new", "queued", "2026-09-30T09:00:00Z")];
+    expect(historyOf(rows, now, "t")).toEqual([row("new", "queued", "2026-09-30T09:00:00Z"), row("old", "awaiting_review", "2026-09-30T08:00:00Z")]);
+  });
+
+  it("is what the tile's panel shows", () => {
+    live.jobs = [row("j9", "queued", "2026-10-01", "learn/assets/graph.tldr")];
+    setUrl("sel=graph");
+    const { container } = mount();
+    expect(container.querySelector("[data-tile]")?.getAttribute("data-jobs")).toBe("j9,j1");
   });
 });

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
+import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
 import { Chip } from "@/components/studio/StudioChrome";
@@ -108,13 +109,13 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
         {title}
       </Link>
       {job !== null && (
-        <Link
+        <PanelLink
           href={panelHref(path, { job: job.jobId })}
           scroll={false}
           className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-[var(--surface-hover)]"
         >
           <RowWords job={job} />
-        </Link>
+        </PanelLink>
       )}
       <span className="hidden shrink-0 text-[var(--muted)] sm:inline">{video.topic ?? ""}</span>
       <span className="w-24 shrink-0 text-right tabular-nums text-[var(--muted)]">{spokenLength(video.durationSeconds)}</span>
@@ -245,7 +246,7 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
         </div>
       </div>
     ) : (
-      <Link
+      <PanelLink
         key={job.jobId}
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
@@ -258,7 +259,7 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
         <span className="flex min-w-0 max-w-[45%]">
           <RowWords job={job} />
         </span>
-      </Link>
+      </PanelLink>
     ),
   );
 }
@@ -299,7 +300,7 @@ function VideoStage({
   return (
     <div ref={frame} className="relative h-full w-full bg-[var(--surface2)]">
       <Backdrop job={job} stage={stage} live={live} backdrop={backdrop} />
-      <Link
+      <PanelLink
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
         aria-label={label}
@@ -419,9 +420,9 @@ function Status({ job, stage, headline, path }: { job: VideoJob; stage: VideoTil
         <span className="min-w-0 flex-1 truncate font-medium text-[var(--danger)]">{videoFailureLine(job)}</span>
         <span className="flex w-full justify-end gap-1.5">
           {typeof job.draftId === "string" && (
-            <Link href={conversationHref(path, job.draftId)} scroll={false} className={control}>
+            <PanelLink href={conversationHref(path, job.draftId)} scroll={false} className={control}>
               Talk it through
-            </Link>
+            </PanelLink>
           )}
           <button type="button" onClick={() => dismiss(job.jobId)} className={control}>
             Dismiss
