@@ -39,7 +39,6 @@ import {
   kindPendingTopic,
   kindUnavailable,
   lastPersonValue,
-  lengthSendBlock,
   liveCards,
   openerSend,
   openerValue,
@@ -52,7 +51,6 @@ import {
   pressUnderWay,
   suggestionName,
   suggestionsFor,
-  TEXT_LIMIT,
   topicSuggestionValue,
   TWO_READY,
   valueBack,
@@ -782,7 +780,6 @@ export function DraftPanel({
   const empty = isEmptyConversation(view.transcript) && pending === null;
   const composing = composerState(view, cap, pending !== null, empty, editing);
   const valueBlock = valueSendBlock(value, empty);
-  const tooLong = lengthSendBlock(value, TEXT_LIMIT);
   const busy = view.inFlight || pending !== null;
   const lastPerson = pending?.value ?? lastPersonValue(view.transcript);
   const waiting = waitingKinds(view);
@@ -933,8 +930,8 @@ export function DraftPanel({
           mentions={options}
           mentionHint={MENTION_HINT}
           disabled={composing.disabled}
-          sendDisabled={composing.sendDisabled || valueBlock !== null || tooLong !== null}
-          disabledReason={composing.reason ?? valueBlock ?? tooLong ?? undefined}
+          sendDisabled={composing.sendDisabled || valueBlock !== null}
+          disabledReason={composing.reason ?? valueBlock ?? undefined}
           onModEnter={cards.length > 0 ? () => modEnter(null) : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">

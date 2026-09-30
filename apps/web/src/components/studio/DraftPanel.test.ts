@@ -314,13 +314,13 @@ describe("Cmd+Enter with two live cards", () => {
   });
 });
 
-describe("an over-long message", () => {
-  it("blocks Send with the count and leaves the field editable", async () => {
+describe("a long message", () => {
+  it("is not blocked: the chat has no length cap, only the runner's 1 MB body limit", async () => {
     await mount(pair());
     await act(async () => mocks.composer!.onChange({ text: "x".repeat(16_500), mentions: [] }));
     expect(mocks.composer!.disabled).toBe(false);
-    expect(mocks.composer!.sendDisabled).toBe(true);
-    expect(mocks.composer!.disabledReason).toBe("16,500 of 8,000 characters. Cut it down to send.");
+    expect(mocks.composer!.sendDisabled).toBe(false);
+    expect(mocks.composer!.disabledReason).toBeUndefined();
   });
 });
 

@@ -208,16 +208,32 @@ function fail(response: ServerResponse, status: number, error: string, detail: u
   send(response, status, { error, detail });
 }
 
-async function readJson(request: IncomingMessage, limit = 1_000_000): Promise<unknown> {
+/**
+ * The most the runner reads of one request body. A chat message has no cap of
+ * its own (the apps it imitates publish none), so this is the only one it
+ * meets: a megabyte, some 250,000 tokens of text.
+ */
+const BODY_LIMIT = 1_000_000;
+
+/** A body over `BODY_LIMIT`, answered with 413 rather than as bad JSON. */
+class BodyTooLarge extends Error {}
+
+async function readJson(request: IncomingMessage, limit = BODY_LIMIT): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     size += (chunk as Buffer).length;
-    if (size > limit) throw new Error(`the request body is larger than ${limit} bytes`);
+    if (size > limit) throw new BodyTooLarge(`the request is over ${limit / 1_000_000} MB, the most the runner reads at once`);
     chunks.push(chunk as Buffer);
   }
   if (chunks.length === 0) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+/** The refusal for a body `readJson` could not return. */
+function badBody(response: ServerResponse, error: unknown): void {
+  if (error instanceof BodyTooLarge) return fail(response, 413, error.message);
+  return fail(response, 400, "the request body is not JSON", (error as Error).message);
 }
 
 /** One job, as every route reports it. */
@@ -403,7 +419,7 @@ async function handle(
       try {
         body = await readJson(request);
       } catch (error) {
-        return fail(response, 400, "the request body is not JSON", (error as Error).message);
+        return badBody(response, error);
       }
       // Dispatched on the brief's own kind, never on a draft's: one draft may
       // hold a diagram and a video in flight at once, each on its own queue.
@@ -747,7 +763,7 @@ async function revise(
   try {
     body = (await readJson(request)) as { changes?: unknown };
   } catch (error) {
-    return fail(response, 400, "the request body is not JSON", (error as Error).message);
+    return badBody(response, error);
   }
   const changes = typeof body.changes === "string" ? body.changes.trim() : "";
   if (changes === "") {
@@ -993,7 +1009,7 @@ async function diagrams(
       try {
         body = (await readJson(request)) as { reason?: unknown };
       } catch (error) {
-        return fail(response, 400, "the request body is not JSON", (error as Error).message);
+        return badBody(response, error);
       }
       const reason = typeof body.reason === "string" ? body.reason.trim() : "";
       if (reason === "") {
@@ -1244,7 +1260,7 @@ async function mirrorRoutes(
   try {
     body = (await readJson(request)) as { file?: unknown };
   } catch (error) {
-    return fail(response, 400, "the request body is not JSON", (error as Error).message);
+    return badBody(response, error);
   }
   const file = typeof body.file === "string" ? body.file.trim() : "";
   const name = file.startsWith("learn/assets/") ? file.slice("learn/assets/".length).replace(/\.tldr$/, "") : file;
@@ -1380,7 +1396,7 @@ async function draftRoutes(
       }
       return parsed as Record<string, unknown>;
     } catch (error) {
-      fail(response, 400, "the request body is not JSON", (error as Error).message);
+      badBody(response, error);
       return null;
     }
   };
@@ -1661,7 +1677,7 @@ async function agentSettingsRoute(
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return fail(response, 400, "the request body must be a JSON object");
     body = parsed as Record<string, unknown>;
   } catch (error) {
-    return fail(response, 400, "the request body is not JSON", (error as Error).message);
+    return badBody(response, error);
   }
   if (body.kind !== "video" && body.kind !== "diagram") return fail(response, 400, `"kind" is video or diagram`, { field: "kind" });
   const value = { model: body.model, effort: body.effort };
