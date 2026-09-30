@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -46,6 +46,7 @@ const { Drafts, emptySlot } = await import("../src/drafts");
 const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
 const { spendWindow } = await import("../src/cost");
+const { cacheDir } = await import("../src/content-cache");
 const { draftDir, draftJsonPath, draftSessionLogPath, draftTranscriptPath } = await import("../src/paths");
 
 type DraftsT = InstanceType<typeof Drafts>;
@@ -227,6 +228,27 @@ describe("making a conversation", () => {
     catalogMock.topicList.mockResolvedValue(topicListDown());
     await expect(drafts.create({ idempotencyKey: "down" })).rejects.toMatchObject({ status: 503 });
     expect(catalogMock.diagramList).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the corpus read it refused before to drain, which waits for its cache write", async () => {
+    // The refusal returns while the diagram list is still out; the list then
+    // writes its cache under STUDIO_HOME, which a teardown deleting that
+    // directory used to race (ENOTEMPTY about one run in three).
+    let listed!: () => void;
+    catalogMock.diagramList.mockImplementationOnce(() => new Promise((resolve) => (listed = () => resolve(ok({ diagrams: [] })))));
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    await expect(drafts.create({ idempotencyKey: "down-late" })).rejects.toMatchObject({ status: 503 });
+    const drained = drafts.drain();
+    listed();
+    await drained;
+    expect(await readdir(cacheDir())).toEqual([expect.stringMatching(/^diagrams\..+\.json$/)]);
+  });
+
+  it("refuses a conversation once draining has begun, before starting a read drain would not see", async () => {
+    await drafts.drain();
+    await expect(drafts.create({ idempotencyKey: "late" })).rejects.toMatchObject({ status: 503, detail: { reason: "shutdown" } });
+    expect(catalogMock.diagramList).not.toHaveBeenCalled();
+    expect(catalogMock.topicList).not.toHaveBeenCalled();
   });
 });
 
