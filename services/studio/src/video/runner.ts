@@ -16,6 +16,7 @@ import { resolveSource } from "../source-note";
 import type { RecordStore } from "../store";
 import { readClaudeDefaults, readPreference, resolveAgentSettings } from "./agent-model";
 import { isNarrated, type ValidVideoBrief } from "./brief";
+import { briefTool, notInStudio, type VideoToolName } from "./tools";
 import { appendRead, editsOn, readCalls, readReads, ReadTracker, isToolResult, LineQueue } from "./calls";
 import { buildCheckout, resolvedPaths, scaffold } from "./checkout";
 import { BASH_TIMEOUT_MS, VIDEO_CONCURRENCY, VIDEO_MAX_ATTEMPTS, VIDEO_RUNNER_NAME, videoHangMs, videoMaxTurns } from "./config";
@@ -245,12 +246,12 @@ export class VideoRunner {
   /* ------------------------------------------------------------------ */
 
   /** Whether a studio video has this slug, and its revision: Accept's base. Undefined when the catalog cannot say. */
-  async startingPoint(slug: string): Promise<{ exists: boolean | undefined; revision: number | null | undefined }> {
+  async startingPoint(slug: string): Promise<{ exists: boolean | undefined; revision: number | null | undefined; tool?: VideoToolName }> {
     const shown = await videoShow(slug);
-    const video = (shown.json as { video?: { revision?: unknown } | null } | null)?.video;
+    const video = (shown.json as { video?: { revision?: unknown; brief?: unknown } | null } | null)?.video;
     if (!shown.ok || video === undefined) return { exists: undefined, revision: undefined };
     if (video === null) return { exists: false, revision: null };
-    return { exists: true, revision: typeof video.revision === "number" ? video.revision : undefined };
+    return { exists: true, revision: typeof video.revision === "number" ? video.revision : undefined, tool: briefTool(video.brief) };
   }
 
   /**
@@ -266,6 +267,8 @@ export class VideoRunner {
         doctor: report.checks.filter((check) => !check.ok),
       });
     }
+    const unavailable = notInStudio(briefTool(brief));
+    if (unavailable !== null) throw new JobRefused(409, `${unavailable}, so nothing was queued`, { tool: briefTool(brief) });
     if (isNarrated(brief) && !report.voices.includes(brief.voice)) {
       throw new JobRefused(409, `the voice ${brief.voice} is not installed for kokoro, and the narration step never downloads one (V9)`, {
         installed: report.voices,
@@ -285,6 +288,17 @@ export class VideoRunner {
     }
     if (brief.mode === "change" && start.exists === false && replacing === null) {
       throw new JobRefused(409, `there is no studio video called ${brief.slug} to change`);
+    }
+    // A change edits its parent's source, which only the parent's tool reads
+    // (D74): the parent in review when there is one, else the stored video.
+    if (brief.mode === "change") {
+      const inReview = replacing === null ? undefined : this.store.get(replacing);
+      const parentTool = inReview !== undefined ? briefTool(inReview.brief) : start.tool;
+      if (parentTool !== undefined && parentTool !== briefTool(brief)) {
+        throw new JobRefused(409, `${brief.slug} was made with ${parentTool}, and a change keeps its video's tool; this brief says ${briefTool(brief)}`, {
+          tool: parentTool,
+        });
+      }
     }
     this.assertUnderCap();
     return { revision: start.revision };
