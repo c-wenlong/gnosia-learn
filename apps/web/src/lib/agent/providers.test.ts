@@ -6,6 +6,7 @@ import {
   orderCredentials,
   resolveProviders,
   serverCredentials,
+  providerMessage,
   testProviderKey,
 } from "@/lib/agent/providers";
 import { resolveSiteUrl } from "@/lib/site-url";
@@ -312,5 +313,16 @@ describe("provider errors never carry a key", () => {
     expect(await testProviderKey(credential!)).toEqual({ ok: true, model: "gemini-2.5-flash" });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
     expect(await testProviderKey(credential!)).toMatchObject({ ok: false, status: null, message: "fetch failed" });
+  });
+});
+
+describe("providerMessage", () => {
+  it("reads the sentence out of each provider's error shape", () => {
+    expect(providerMessage('{"error":{"message":"No auth credentials found","code":401}}')).toBe("No auth credentials found");
+    expect(providerMessage('[{"error":{"code":400,"message":"Please pass a valid API key","status":"INVALID_ARGUMENT"}}]')).toBe(
+      "Please pass a valid API key",
+    );
+    expect(providerMessage('{"type":"about:blank","title":"Unauthorized","status":401,"detail":"Invalid key"}')).toBe("Invalid key");
+    expect(providerMessage("Bad Gateway\n")).toBe("Bad Gateway");
   });
 });

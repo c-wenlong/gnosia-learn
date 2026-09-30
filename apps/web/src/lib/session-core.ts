@@ -236,7 +236,7 @@ export function buildSessionPlan(input: {
  * and the workspace all print, so the three cannot drift apart.
  */
 export const NOTHING_TO_ASK =
-  "This note has no check the session can ask, and no tutor model is configured on this server to write one.";
+  "This note has no check the session can ask, and the tutor has no model provider key to write one. Add one in Settings, under Provider keys.";
 
 /**
  * A reason and what follows from it, as one paragraph: "The tutor could not

@@ -608,7 +608,7 @@ async function run() {
     await tutor.getByRole('button', { name: 'Send', exact: true }).click();
     const response = await answered;
     assert(response.status() === 503, `/api/agent/chat answered ${response.status()}, expected 503 with no provider key`);
-    await tutor.getByRole('alert').getByText(/No tutor model is configured/).waitFor();
+    await tutor.getByRole('alert').getByText(/no model provider key yet\. Add one in Settings/).waitFor();
     await tutor.getByRole('button', { name: 'Try again' }).waitFor();
   });
 
@@ -683,6 +683,28 @@ async function run() {
     assert(next !== undefined, `the daily target has no option besides ${currentValue}`);
     await select.selectOption(next);
     await main.getByText('Saved', { exact: true }).waitFor();
+  });
+
+  await step('provider keys: save a key, see its last four, remove it', page, async () => {
+    if (!page.url().endsWith('/settings')) await go('/settings');
+    // docs/BYOK.md: a key goes in once and never comes back out. The server
+    // starts with every provider key blank, so Gemini's row offers "Add your key".
+    const row = main.getByRole('listitem').filter({ has: page.getByText('Google Gemini', { exact: true }) });
+    await clickHydrated(page, row.getByRole('button', { name: 'Add your key' }));
+    const fake = 'e2e-not-a-real-gemini-key-000000000000wxyz';
+    await row.getByLabel(/Paste the key/).fill(fake);
+    const saving = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/api/learner/provider-key' && r.request().method() === 'POST',
+    );
+    await row.getByRole('button', { name: 'Save key' }).click();
+    const response = await saving;
+    assert(response.status() === 200, `the save answered ${response.status()}`);
+    assert(!(await response.text()).includes(fake), 'the save answered with the key in it');
+    await row.getByText(/Your key, ending wxyz\./).waitFor();
+    assert(!(await page.content()).includes(fake), 'the page still holds the key after saving');
+    await row.getByRole('button', { name: 'Remove', exact: true }).click();
+    await row.getByRole('button', { name: 'Remove key', exact: true }).click();
+    await row.getByText('No key. The tutor skips this provider.').waitFor();
   });
 
   await step('theme: Dark adds `dark` to <html>', page, async () => {

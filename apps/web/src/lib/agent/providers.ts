@@ -292,6 +292,32 @@ export async function completeWithFallback(
   return { ok: false, attempts, code: "ALL_PROVIDERS_FAILED" };
 }
 
+/**
+ * The sentence inside a provider's JSON error, when there is one: OpenAI's
+ * and OpenRouter's `{ error: { message } }`, Gemini's the same inside an
+ * array, NVIDIA's problem document `{ detail }` or `{ title }`. Otherwise the
+ * text as it came. Only for Settings' Test, where a person reads it; the
+ * tutor's `attempts` keep the body whole.
+ */
+export function providerMessage(text: string): string {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    const body = (Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown> | null;
+    if (body && typeof body === "object") {
+      const error = body.error;
+      if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+        return (error as { message: string }).message;
+      }
+      for (const field of ["message", "detail", "title", "error"] as const) {
+        if (typeof body[field] === "string" && body[field]) return body[field] as string;
+      }
+    }
+  } catch {
+    // Not JSON: the text is the message.
+  }
+  return text.trim();
+}
+
 /** What a Test in Settings says: the key works, or the provider's words, redacted. */
 export type KeyTestResult =
   | { ok: true; model: string }
@@ -333,7 +359,10 @@ export async function testProviderKey(
       return { ok: true, model: typeof data.model === "string" && data.model ? data.model : config.model };
     }
     const text = await res.text().catch(() => "");
-    return { ok: false, status: res.status, message: providerText(text, secrets, 300) || res.statusText || `HTTP ${res.status}` };
+    // Redacted before and after the JSON is read, so an escape in the body
+    // cannot hide an echo from the first pass.
+    const message = providerText(providerMessage(redactSecrets(text, secrets)), secrets, 300);
+    return { ok: false, status: res.status, message: message || res.statusText || `HTTP ${res.status}` };
   } catch (err) {
     const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
     return {
