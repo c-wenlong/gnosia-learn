@@ -1,4 +1,5 @@
 import { BriefError, SLUG_PATTERN, type Vocabulary } from "../brief";
+import { charsPerSecond } from "./narration";
 import { isVideoToolName, notInStudio, VIDEO_TOOL_NAMES, type VideoToolName } from "./tools";
 import { VOICES } from "./voices";
 
@@ -64,8 +65,6 @@ export interface ValidVideoBrief extends VideoBrief {
   idempotencyKey: string;
 }
 
-/** Speech rate, measured across the 29 kokoro builds in manimkc's timing log (median, characters a second). */
-export const CHARS_PER_SECOND = 15.2;
 /** The finished video over the speech: 1.03 to 1.15 measured, 1.08 taken. */
 export const VIDEO_OVER_SPEECH = 1.08;
 /** How far the script's prediction may sit from the target. */
@@ -86,7 +85,9 @@ export function predictedSeconds(brief: Pick<VideoBrief, "voice" | "scenes">): n
 /** Seconds of video the given narration lines predict. */
 export function secondsForLines(lines: readonly string[]): number {
   const characters = lines.reduce((sum, line) => sum + line.length, 0);
-  return (characters / CHARS_PER_SECOND) * VIDEO_OVER_SPEECH;
+  // The speech rate is gnosia-audio's (its data/timing.json, read through
+  // `home --json` in narration.ts): the median of manimkc's kokoro builds.
+  return (characters / charsPerSecond()) * VIDEO_OVER_SPEECH;
 }
 
 /** Lower-case words joined by underscores: a scene's name, which becomes one class and one chapter. */
@@ -267,7 +268,7 @@ export function validateVideoBrief(input: unknown, vocabulary: Vocabulary): Vali
       );
     }
     const characters = brief.scenes.reduce((sum, scene) => sum + scene.beats.reduce((s, beat) => s + beat.say.length, 0), 0);
-    const want = Math.round((targetSeconds / VIDEO_OVER_SPEECH) * CHARS_PER_SECOND);
+    const want = Math.round((targetSeconds / VIDEO_OVER_SPEECH) * charsPerSecond());
     const fits = Math.round(predicted);
     // Offer the other way out only when it is a length the brief may have:
     // "set targetSeconds to 41" sent a retry straight into the range check.

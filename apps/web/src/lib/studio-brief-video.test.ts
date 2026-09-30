@@ -20,6 +20,9 @@ import {
 
 const line = (characters: number) => "x".repeat(characters);
 
+/** The rate health's `video.narration` reports, gnosia-audio's timing.json figure. */
+const RATE = 15.2;
+
 const BRIEF: VideoBrief = {
   title: "How attention weights are computed",
   topic: "transformers",
@@ -37,17 +40,25 @@ const BRIEF: VideoBrief = {
 };
 
 describe("the video card's arithmetic", () => {
-  it("predicts the length from the script at the measured rate, never from the target", () => {
+  it("predicts the length from the script at the runner's rate, never from the target", () => {
     // 2,533 characters at 15.2 a second, times 1.08: 180 seconds.
-    expect(Math.round(predictedSeconds(BRIEF))).toBe(180);
+    expect(Math.round(predictedSeconds(BRIEF, RATE))).toBe(180);
     const longTarget: VideoBrief = { ...BRIEF, targetSeconds: 600 };
-    expect(videoSummaryLine(longTarget)).toBe("About 3 minutes, narrated (af_heart), for someone who knows the terms");
+    expect(videoSummaryLine(longTarget, RATE)).toBe("About 3 minutes, narrated (af_heart), for someone who knows the terms");
+    // A faster voice is a shorter video: the rate is the runner's, not a constant here.
+    expect(Math.round(predictedSeconds(BRIEF, RATE * 2))).toBe(90);
+  });
+
+  it("says the length is unknown rather than guess when the runner reports no rate", () => {
+    expect(Number.isNaN(predictedSeconds(BRIEF, undefined))).toBe(true);
+    expect(videoSummaryLine(BRIEF, undefined)).toBe("Length unknown, narrated (af_heart), for someone who knows the terms");
+    expect(shortLength(Number.NaN)).toBe("length unknown");
   });
 
   it("uses each beat's seconds for a silent video", () => {
     const silent: VideoBrief = { ...BRIEF, voice: "none", scenes: [{ name: "one", beats: [{ say: "Hi", show: "x", labels: [], seconds: 5 }] }] };
-    expect(predictedSeconds(silent)).toBe(5);
-    expect(videoSummaryLine({ ...silent, audience: "new" })).toBe("About 10 seconds, silent, for someone new to it");
+    expect(predictedSeconds(silent, undefined)).toBe(5);
+    expect(videoSummaryLine({ ...silent, audience: "new" }, undefined)).toBe("About 10 seconds, silent, for someone new to it");
   });
 
   it("words lengths the way a person reads them", () => {

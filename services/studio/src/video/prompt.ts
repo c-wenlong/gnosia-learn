@@ -58,7 +58,7 @@ export function buildVideoPrompt(input: {
     ``,
     `1. Write every scene into the scene file, keeping the class names and their order: ${input.classes.join(", ")}.`,
     narrated
-      ? `2. Start from the brief's lines: each beat is one \`with self.voiceover("...")\` block holding its \`say\`, and its \`show\` is what the screen does inside that block.`
+      ? `2. Start from the brief's lines: each beat is one \`with self.voiceover("...")\` block holding its \`say\`, and its \`show\` is what the screen does inside that block. Where a line names things in the order the screen shows them, cue each on its word (your manual's "Word cues").`
       : `2. Each beat's \`say\` is its caption, shown with CaptionBar exactly as written, held for the beat's \`seconds\`; there is no voice.`,
     `3. Every beat's \`labels\` must be on screen during that beat, as text inside a string literal in that scene's class.`,
     `4. \`lint\`, \`preview\`, Read every sheet it prints, fix, preview what you changed, and when every sheet is clean, \`build\`.`,
