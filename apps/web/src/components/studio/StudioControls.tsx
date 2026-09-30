@@ -63,7 +63,7 @@ export function SearchField({ view }: { view: StudioView }) {
         defaultValue={view.query}
         placeholder="Search diagrams"
         aria-label="Search diagrams"
-        className="h-8 w-40 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none sm:w-60"
+        className="h-8 w-40 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none sm:w-60 md:text-xs"
       />
     </form>
   );

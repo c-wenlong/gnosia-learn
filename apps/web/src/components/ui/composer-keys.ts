@@ -18,8 +18,15 @@
  * two composers read these, so no other route carries them.
  */
 export const COMPOSER_FRAME = "rounded-2xl border-2 border-border bg-surface transition-colors duration-100";
-/** The composer's text: 15px on a 24px line, as the tutor's input always had. */
-export const COMPOSER_TEXT = "text-[15px] leading-6 text-text";
+/**
+ * The composer's text: 15px on a 24px line, as the tutor's input always had,
+ * from 768px up. Below that it is 16px: iOS Safari zooms the page when it
+ * focuses any field under 16px, and then leaves it zoomed. The line stays 24px
+ * either way, so the height arithmetic below holds at both sizes.
+ */
+export const COMPOSER_TEXT = "text-base leading-6 text-text md:text-[15px]";
+/** The placeholder, which has to match the text it stands in for. */
+export const COMPOSER_PLACEHOLDER = "text-base leading-6 text-text3 md:text-[15px]";
 /** The 12px line under a composer saying why it, or Send, is disabled. */
 export const COMPOSER_REASON = "px-1 text-[12px] leading-4 text-text2";
 
