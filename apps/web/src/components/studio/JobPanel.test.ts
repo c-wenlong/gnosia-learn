@@ -128,7 +128,7 @@ describe("a job the provider does not list", () => {
     expect(reads).toHaveLength(2);
     expect(host.textContent).not.toContain("Could not look up");
     expect(host.textContent).not.toContain("does not have a job");
-    expect(host.textContent).toContain("accepted");
+    expect(host.textContent).toContain("Accepted");
   });
 });
 
