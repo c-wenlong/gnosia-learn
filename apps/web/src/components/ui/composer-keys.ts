@@ -6,6 +6,8 @@
  * worth a test.
  */
 
+import { FIELD_TEXT } from "./classes";
+
 /**
  * The composer's frame, shared by `Composer` (a textarea) and
  * `MentionComposer` (a rich-text field with chips): radius 16, a 2px
@@ -20,13 +22,14 @@
 export const COMPOSER_FRAME = "rounded-2xl border-2 border-border bg-surface transition-colors duration-100";
 /**
  * The composer's text: 15px on a 24px line, as the tutor's input always had,
- * from 768px up. Below that it is 16px: iOS Safari zooms the page when it
- * focuses any field under 16px, and then leaves it zoomed. The line stays 24px
- * either way, so the height arithmetic below holds at both sizes.
+ * with a mouse or trackpad from 768px up. On anything touched it is 16px (see
+ * `FIELD_TEXT`: iOS Safari zooms the page when it focuses a field under 16px
+ * and leaves it zoomed). The line stays 24px either way, so the height
+ * arithmetic below holds at both sizes.
  */
-export const COMPOSER_TEXT = "text-base leading-6 text-text md:text-[15px]";
+export const COMPOSER_TEXT = `${FIELD_TEXT.px15} leading-6 text-text`;
 /** The placeholder, which has to match the text it stands in for. */
-export const COMPOSER_PLACEHOLDER = "text-base leading-6 text-text3 md:text-[15px]";
+export const COMPOSER_PLACEHOLDER = `${FIELD_TEXT.px15} leading-6 text-text3`;
 /** The 12px line under a composer saying why it, or Send, is disabled. */
 export const COMPOSER_REASON = "px-1 text-[12px] leading-4 text-text2";
 

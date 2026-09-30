@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { ChipLink } from "@/components/studio/StudioChrome";
+import { FIELD_TEXT } from "@/components/ui/classes";
 import {
   DEFAULT_VIEW,
   NO_TOPIC,
@@ -63,7 +64,7 @@ export function SearchField({ view }: { view: StudioView }) {
         defaultValue={view.query}
         placeholder="Search diagrams"
         aria-label="Search diagrams"
-        className="h-8 w-40 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none sm:w-60 md:text-xs"
+        className={`h-8 w-40 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none sm:w-60 ${FIELD_TEXT.xs}`}
       />
     </form>
   );

@@ -9,7 +9,7 @@ import { Duration } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
-import { cx, LABEL } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
@@ -1016,7 +1016,7 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
             void revise();
           }
         }}
-        className="min-h-20 w-full resize-y rounded-lg border-2 border-border bg-surface px-3 py-2 text-base leading-5 text-text outline-none placeholder:text-text3 focus:border-accent aria-invalid:border-danger md:text-[14px]"
+        className={cx("min-h-20 w-full resize-y rounded-lg border-2 border-border bg-surface px-3 py-2 leading-5 text-text outline-none placeholder:text-text3 focus:border-accent aria-invalid:border-danger", FIELD_TEXT.px14)}
       />
       <p id={hintId} className="text-[12px] leading-4 text-text3">
         {changeHint(reviewing, canTalk)}
