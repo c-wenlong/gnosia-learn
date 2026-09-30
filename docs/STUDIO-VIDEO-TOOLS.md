@@ -84,8 +84,9 @@ tool the person named first, keeps a series' tool, and checks a second visual
 against the matrix. So the video section of the planner's prompt restates
 the procedure's steps in the studio's terms, in order: the tool the person
 named, when the studio can make it (when it cannot, the planner proposes no
-brief, says so in one line and asks whether an available tool should make
-it, as the page's procedure says to on a conflict); a change keeps its
+video brief, says so in one line and asks whether an available tool should
+make it, as the page's procedure says to on a conflict; a diagram asked for
+in the same message still gets its brief); a change keeps its
 video's tool; a week
 of a series keeps the series' tool; the main visual's row; a second beat the
 matrix says that tool cannot do moves the choice to a tool that can do both,
