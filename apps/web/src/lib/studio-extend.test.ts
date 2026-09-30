@@ -178,6 +178,21 @@ describe("the press's idempotency key", () => {
     expect(extendKey(store, "dot-product", fresh, 1 + EXTEND_KEY_TTL_MS)).not.toBe(second);
   });
 
+  it("is reused for the same print only, so an edited press makes its own draft", () => {
+    const store = memory();
+    let minted = 0;
+    const fresh = () => `k${(minted += 1)}`;
+    const first = extendKey(store, "tutor:tcp", fresh, 1_000, "a");
+    expect(extendKey(store, "tutor:tcp", fresh, 2_000, "a")).toBe(first);
+    const edited = extendKey(store, "tutor:tcp", fresh, 3_000, "b");
+    expect(edited).not.toBe(first);
+    // The edited press is now the one a retry finds.
+    expect(extendKey(store, "tutor:tcp", fresh, 4_000, "b")).toBe(edited);
+    // A key kept with no print is not a match for a press that has one, and the reverse.
+    const plain = extendKey(store, "dot-product", fresh, 1_000);
+    expect(extendKey(store, "dot-product", fresh, 2_000, "a")).not.toBe(plain);
+  });
+
   it("still works with no storage, or storage that throws", () => {
     expect(extendKey(null, "x", () => "k")).toBe("k");
     expect(extendKey(blocked(), "x", () => "k")).toBe("k");
@@ -286,6 +301,18 @@ describe("the opener handed to the conversation", () => {
     });
     expect(takeOpener(blocked(), "d3")).toBeNull();
     expect(takeOpener(null, "d4")).toBeNull();
+  });
+
+  it("is kept in the page's memory when the store refuses it, and taken from there once", () => {
+    const opener = { send: "@video", sendMentions: [{ kind: "video" as const, start: 0, end: 6 }], compose: "", source: null };
+    leaveOpener(blocked(), "held-1", opener);
+    expect(readOpener(blocked(), "held-1")).toMatchObject({ send: "@video", sendMentions: opener.sendMentions });
+    expect(takeOpener(null, "held-1")).toMatchObject({ send: "@video" });
+    expect(takeOpener(null, "held-1")).toBeNull();
+    // A store that takes the write and keeps nothing is the same case.
+    const forgetful = { getItem: () => null, setItem: () => {}, removeItem: () => {} } as unknown as Storage;
+    leaveOpener(forgetful, "held-2", opener);
+    expect(takeOpener(forgetful, "held-2")).toMatchObject({ send: "@video" });
   });
 });
 

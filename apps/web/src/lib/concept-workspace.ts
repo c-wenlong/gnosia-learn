@@ -57,9 +57,14 @@ export function courseSlugsOf(courses: readonly Course[], topicIds: readonly str
   return [...out].sort();
 }
 
-/** The read without the request marker, for a route handler or a test. */
-export async function readConceptWorkspace(slug: string): Promise<ConceptWorkspaceRead> {
-  const owner = await currentOwner();
+/**
+ * The read without the request marker, for a route handler, a server action
+ * or a test. `owner` is the signed-in owner, read here when the caller has
+ * not already; the studio's hand-off passes the one it resolved, so the note
+ * it sends the runner is that owner's (D65 of docs/STUDIO-TUTOR-HANDOFF.md).
+ */
+export async function readConceptWorkspace(slug: string, owner?: string): Promise<ConceptWorkspaceRead> {
+  owner ??= await currentOwner();
   const { kb, reachable } = await readKb(owner);
   if (!reachable) return { state: "unreachable", message: "The catalog database could not be reached." };
   const concept = kb.concepts.find((c) => c.id === slug);

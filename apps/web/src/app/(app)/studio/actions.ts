@@ -3,11 +3,14 @@
 import { readPreference, writePreference } from "@self-learn/catalog/state";
 import { redirect } from "next/navigation";
 
+import { noteBody } from "@/lib/concept-workspace-core";
+import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { withLearnerStore } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 import { requireStudio, studioApi, type StudioResult } from "@/lib/studio";
 import { AGENT_KEYS, checkedAgent, storedAgent } from "@/lib/studio-agent-settings";
 import { withOutcome } from "@/lib/studio-view";
+import { checkHandoffInput, type ConceptConversation } from "@/lib/tutor-handoff";
 
 /**
  * The verbs, as server actions.
@@ -219,4 +222,80 @@ function runnerRefused(result: Extract<StudioResult<unknown>, { ok: false }>): b
   if (result.reason !== "refused" || result.status === null) return false;
   if (result.status === 404 || result.status === 405) return false;
   return result.status >= 400 && result.status < 500;
+}
+
+/** The runner's cap on a concept's title (`CONCEPT_TITLE_LIMIT`), which it refuses past rather than cuts. */
+const CONCEPT_TITLE_LIMIT = 200;
+
+/**
+ * A tagged message in the concept tutor opens a studio conversation about
+ * the concept (D64 and D65 of docs/STUDIO-TUTOR-HANDOFF.md): `POST
+ * /api/drafts { concept, tutor, idempotencyKey }`.
+ *
+ * The concept is read here, on the server, for the signed-in owner, with the
+ * same reader the concept page uses, so the note never travels through the
+ * browser and never through a read that forgets its owner. The browser sends
+ * only the slug, its idempotency key and the tutor's last turns, which are
+ * checked and cut again (`checkHandoffInput`). `tutor` is left out when there
+ * are none: the runner refuses an empty list.
+ *
+ * Returned rather than redirected: the tutor leaves the message as the
+ * conversation's opener in `sessionStorage` before it navigates, and on a
+ * refusal it keeps the message in its field and says why under it.
+ */
+export async function openConceptConversation(raw: unknown): Promise<ConceptConversation> {
+  requireStudio();
+  const owner = await currentOwner();
+  const input = checkHandoffInput(raw);
+  if (input === null) return { ok: false, where: "input", reason: null, status: null, said: null };
+
+  const read = await readConceptWorkspace(input.slug, owner);
+  if (read.state !== "ok") return { ok: false, where: "concept", reason: read.state, status: null, said: null };
+  const w = read.workspace;
+  // H10: a note that cannot be read goes as no note; the planner works from
+  // the title, the summary and the turns.
+  const body = w.note.available ? noteBody(w.note.source) : "";
+  const concept = {
+    slug: w.slug,
+    title: w.title.replace(/\s+/g, " ").trim().slice(0, CONCEPT_TITLE_LIMIT) || w.slug,
+    summary: w.summary.trim() === "" ? null : w.summary,
+    body,
+  };
+
+  const result = await studioApi<{ draftId?: unknown }>("/api/drafts", {
+    method: "POST",
+    body: JSON.stringify({
+      concept,
+      ...(input.tutor.length > 0 ? { tutor: input.tutor } : {}),
+      idempotencyKey: input.idempotencyKey,
+    }),
+    // The runner reads the concept with `learn concept show` before it
+    // answers, a subprocess of a second or two on a loaded machine.
+    timeoutMs: 60_000,
+  });
+  if (result.ok) {
+    return typeof result.data.draftId === "string" && result.data.draftId !== ""
+      ? { ok: true, draftId: result.data.draftId }
+      : { ok: false, where: "runner", reason: null, status: 200, said: "the runner answered with no draft" };
+  }
+  return {
+    ok: false,
+    where: "runner",
+    reason: result.reason === "down" ? "down" : detailReason(result.detail),
+    status: result.status,
+    said: result.reason === "down" ? null : result.headline,
+    // A timeout is not a runner that is off: the words differ (H3).
+    ...(result.reason === "down" ? { undelivered: result.undelivered === true } : {}),
+  };
+}
+
+/** The `reason` in a refusal's detail, which `studioApi` hands back as JSON text. */
+function detailReason(detail: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(detail);
+    const reason = typeof parsed === "object" && parsed !== null ? (parsed as { reason?: unknown }).reason : undefined;
+    return typeof reason === "string" ? reason : null;
+  } catch {
+    return null;
+  }
 }

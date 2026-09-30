@@ -184,18 +184,33 @@ function safely<T>(run: () => T, fallback: T): T {
   }
 }
 
-/** The key for this press: the one a recent press on the same diagram left, or a new one. */
-export function extendKey(storage: Storage | null, name: string, fresh: () => string, now = Date.now()): string {
+/**
+ * The key for this press: the one a recent press on the same diagram left, or
+ * a new one.
+ *
+ * `print` is what the press would send, when that can change between two
+ * presses (the tutor's hand-off: its message and the tutor turns). A kept key
+ * is reused only for the same print, so a retry of the same press still finds
+ * the draft the first one made, and an edited one makes its own rather than
+ * landing in a draft built from what was sent before. Extend sends only the
+ * diagram's name, which the key is already stored under, so it passes none.
+ */
+export function extendKey(storage: Storage | null, name: string, fresh: () => string, now = Date.now(), print?: string): string {
   if (storage === null) return fresh();
   const held = safely(() => storage.getItem(KEY_PREFIX + name), null);
   if (held !== null) {
-    const parsed = safely(() => JSON.parse(held) as { key?: unknown; at?: unknown }, {});
-    if (typeof parsed.key === "string" && typeof parsed.at === "number" && now - parsed.at < EXTEND_KEY_TTL_MS) {
+    const parsed = safely(() => JSON.parse(held) as { key?: unknown; at?: unknown; print?: unknown }, {});
+    if (
+      typeof parsed.key === "string" &&
+      typeof parsed.at === "number" &&
+      now - parsed.at < EXTEND_KEY_TTL_MS &&
+      (parsed.print ?? undefined) === print
+    ) {
       return parsed.key;
     }
   }
   const key = fresh();
-  safely(() => storage.setItem(KEY_PREFIX + name, JSON.stringify({ key, at: now })), undefined);
+  safely(() => storage.setItem(KEY_PREFIX + name, JSON.stringify(print === undefined ? { key, at: now } : { key, at: now, print })), undefined);
   return key;
 }
 
@@ -233,9 +248,27 @@ export interface ExtendOpener {
   mentions?: DraftKind[];
 }
 
+/**
+ * Openers a tab could not write to `sessionStorage` (a private window, a
+ * policy, a full store), kept in this page's memory instead. Every hand-off
+ * navigates within the app (`router.push` or `replace`), so the conversation
+ * that takes the opener runs in the same JavaScript and finds it here; only a
+ * reload loses it, which in such a tab loses the thread as well.
+ */
+const heldOpeners = new Map<string, string>();
+
 export function leaveOpener(storage: Storage | null, draftId: string, opener: ExtendOpener): void {
-  if (storage === null) return;
-  safely(() => storage.setItem(OPENER_PREFIX + draftId, JSON.stringify(opener)), undefined);
+  const raw = JSON.stringify(opener);
+  const key = OPENER_PREFIX + draftId;
+  // Read back, since a store can take a write and keep nothing.
+  const stored =
+    storage !== null &&
+    safely(() => {
+      storage.setItem(key, raw);
+      return storage.getItem(key) === raw;
+    }, false);
+  if (stored) heldOpeners.delete(draftId);
+  else heldOpeners.set(draftId, raw);
 }
 
 /**
@@ -280,7 +313,10 @@ export function announceOpener(draftId: string): void {
  */
 export function takeOpener(storage: Storage | null, draftId: string): ExtendOpener | null {
   const opener = readOpener(storage, draftId);
-  if (opener !== null) safely(() => storage!.removeItem(OPENER_PREFIX + draftId), undefined);
+  if (opener !== null) {
+    if (storage !== null) safely(() => storage.removeItem(OPENER_PREFIX + draftId), undefined);
+    heldOpeners.delete(draftId);
+  }
   return opener;
 }
 
@@ -290,8 +326,8 @@ export function takeOpener(storage: Storage | null, draftId: string): ExtendOpen
  * one standing rather than nothing.
  */
 export function readOpener(storage: Storage | null, draftId: string): ExtendOpener | null {
-  if (storage === null) return null;
-  const held = safely(() => storage.getItem(OPENER_PREFIX + draftId), null);
+  const stored = storage === null ? null : safely(() => storage.getItem(OPENER_PREFIX + draftId), null);
+  const held = stored ?? heldOpeners.get(draftId) ?? null;
   if (held === null) return null;
   const parsed = safely(
     () =>

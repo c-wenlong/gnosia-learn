@@ -23,6 +23,7 @@ import { embedTargets } from "@/lib/note-embeds";
 import { NOTHING_TO_ASK } from "@/lib/session-core";
 import { sessionWillAsk } from "@/lib/session-page";
 import { readTutorStyle } from "@/lib/settings";
+import { studioEnabled } from "@/lib/studio";
 
 /**
  * The concept workspace (hi-fi 04): a concept's note and sources on the left,
@@ -153,6 +154,8 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
             sources={session.sources}
             suggestions={session.suggestions}
             initialDraft={ask}
+            // D67: only a deployment with a studio asks it anything.
+            studio={studioEnabled()}
           />
         }
         initialPanel={ask === undefined ? undefined : "tutor"}
