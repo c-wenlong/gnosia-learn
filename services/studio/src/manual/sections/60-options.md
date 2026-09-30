@@ -49,7 +49,8 @@ derived from the pair, so a second plain `connect` rewrites the first); `meta`.
 for axes, ticks, guides and legend dashes. `color` `black`; `size` `s`; `dash`
 `draw`; `head` `none`; `kind` `arc`; `bend` 0; `label`; `labelColor`; `parent`;
 `meta`; `lintIgnore` (defaults to `['friendless-arrow', 'arrow-crosses-shape']`;
-`[]` lints it like an arrow, `true` mutes every rule).
+`[]` lints it like an arrow, `true` mutes every rule). The default leaves
+`line-crosses-label` on: a line may cross a shape, never its words.
 
 <!-- helper: stub -->
 **`stub(key, x, y, dx, dy, opts)`**: `line` with a delta instead of a second
