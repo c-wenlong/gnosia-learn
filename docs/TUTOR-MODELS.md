@@ -55,7 +55,12 @@ stopped working, the same reasoning as BYOK D9.
 with a usable key, saved or server) and then a model id, from that provider's
 live list or typed by hand. The list is fetched on the server from
 `<base URL>/models` with the key the tutor would use and cached in memory for
-five minutes per owner and provider; the key never reaches the browser. The
+five minutes per owner and provider, keyed by a fingerprint of the key and
+base URL; the key never reaches the browser. The form asks the server each
+time it opens, so a key replaced on the same page gets its own account's
+list, and the server's cache answers otherwise. A list is read at most 8 MB
+and an error body at most 64 KB, counted as the bytes arrive, whatever the
+provider declares. The
 id field is a text input with a `<datalist>` of the listed ids, so choosing
 from the list and typing an id are the same field, and a list that failed or
 is incomplete costs nothing. Test sends one minimal chat request (one token)

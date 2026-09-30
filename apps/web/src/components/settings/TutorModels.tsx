@@ -308,23 +308,33 @@ function AddModel({
   const [lists, setLists] = useState<Partial<Record<ProviderId, ListState>>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // Opening the form focuses the model field; closing it, the button that
-  // opens it again. Focused once the change has rendered, not before: a focus
+  // Opening the form focuses the model field, and so does a failed add;
+  // closing it focuses the button that opens it again. Focused once the change has rendered, not before: a focus
   // call on an element React has not committed yet goes nowhere.
   const focusAfter = useRef<string | null>(null);
   useEffect(() => {
     if (focusAfter.current === null) return;
     document.getElementById(focusAfter.current)?.focus();
     focusAfter.current = null;
-  }, [open]);
+  }, [open, saving]);
 
   const chosen = usable.find((p) => p.id === provider) ?? usable[0];
   const list = chosen === undefined ? undefined : lists[chosen.id];
 
+  /**
+   * Ask the server for a provider's list. Every time the form opens or the
+   * provider changes, not once per page: a key replaced in Settings since the
+   * last ask is a different account, and the server's cache already misses
+   * under a new key, so asking again costs a provider request only when the
+   * list could have changed. The latest ask per provider wins.
+   */
+  const asked = useRef<Partial<Record<ProviderId, number>>>({});
   const load = async (id: ProviderId) => {
-    if (lists[id]?.state === "ready" || lists[id]?.state === "loading") return;
+    const token = (asked.current[id] ?? 0) + 1;
+    asked.current[id] = token;
     setLists((l) => ({ ...l, [id]: { state: "loading" } }));
     const reply = await send("POST", "/api/learner/tutor-model/models", { provider: id });
+    if (asked.current[id] !== token) return;
     const next: ListState =
       reply === null
         ? { state: "error", message: "the server did not answer" }
@@ -356,15 +366,19 @@ function AddModel({
     setSaving(true);
     setError(null);
     const reply = await send("POST", "/api/learner/tutor-model", { provider: chosen.id, model });
-    setSaving(false);
-    if (reply === null) return setError("Not added: the server did not answer.");
-    if (reply.status !== 200 || reply.data.ok !== true || reply.data.chain === undefined) {
-      return setError(reply.data.error ?? `Not added (HTTP ${reply.status}).`);
+    if (reply === null || reply.status !== 200 || reply.data.ok !== true || reply.data.chain === undefined) {
+      // The Add button was disabled while the request was out, so focus went
+      // nowhere; put it back in the field the person has to correct.
+      focusAfter.current = `${base}-model`;
+      setError(reply === null ? "Not added: the server did not answer." : (reply.data.error ?? `Not added (HTTP ${reply.status}).`));
+      setSaving(false);
+      return;
     }
     const added = model.trim();
     setModel("");
     focusAfter.current = `${base}-open`;
     setOpen(false);
+    setSaving(false);
     onAdded(reply.data.chain, added);
   };
 
@@ -419,6 +433,7 @@ function AddModel({
           onChange={(e) => setModel(e.target.value)}
           placeholder="Model id"
           aria-describedby={`${base}-list-state`}
+          aria-invalid={error !== null}
         />
         {list?.state === "ready" && (
           <datalist id={listId}>

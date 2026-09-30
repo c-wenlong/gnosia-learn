@@ -7,6 +7,7 @@ import {
   isCallable,
   keyFor,
   listProviderModels,
+  MODEL_LIST_MAX_BYTES,
   orderCredentials,
   resetGoneModelReports,
   tutorSteps,
@@ -253,5 +254,42 @@ describe("listProviderModels", () => {
     const timeout = Object.assign(new Error("timed out"), { name: "TimeoutError" });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(timeout));
     expect(await listProviderModels(credential("openrouter"), 2_000)).toMatchObject({ ok: false, message: expect.stringContaining("2 seconds") });
+  });
+  it("stops reading a list past its cap however long the provider says it is, and an error body past 64 KB", async () => {
+    // A stream that would run to twice the cap, with no Content-Length: the
+    // reader must give up at the cap rather than hold all of it.
+    let sent = 0;
+    let cancelled = false;
+    const chunk = new Uint8Array(1024 * 1024).fill(0x20);
+    const endless = (status: number) =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (sent >= MODEL_LIST_MAX_BYTES * 2) return controller.close();
+            sent += chunk.byteLength;
+            controller.enqueue(chunk);
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status },
+      );
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => endless(200)));
+    expect(await listProviderModels(credential("openrouter"))).toMatchObject({ ok: false, message: expect.stringContaining("too large") });
+    expect(cancelled).toBe(true);
+    expect(sent).toBeLessThanOrEqual(MODEL_LIST_MAX_BYTES + 2 * chunk.byteLength);
+
+    sent = 0;
+    cancelled = false;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => endless(502)));
+    expect(await listProviderModels(credential("openrouter"))).toEqual({ ok: false, status: 502, message: "HTTP 502" });
+    expect(cancelled).toBe(true);
+    expect(sent).toBeLessThan(4 * chunk.byteLength);
+
+    // A declared length past the cap is refused before any of it is read.
+    const declared = new Response("{}", { status: 200, headers: { "content-length": String(MODEL_LIST_MAX_BYTES + 1) } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(declared));
+    expect(await listProviderModels(credential("openrouter"))).toMatchObject({ ok: false, message: expect.stringContaining("too large") });
   });
 });

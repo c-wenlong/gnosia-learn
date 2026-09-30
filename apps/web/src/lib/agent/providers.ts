@@ -547,8 +547,34 @@ export type ModelListResult =
 export const MODEL_LIST_TIMEOUT_MS = 10_000;
 
 /** The most a list may be: OpenRouter's, the longest, is about 2 MB and 350 models. */
-const MODEL_LIST_MAX_BYTES = 8 * 1024 * 1024;
+export const MODEL_LIST_MAX_BYTES = 8 * 1024 * 1024;
 const MODEL_LIST_MAX_MODELS = 2_000;
+/** The most of an error body read: a person sees 300 characters of it. */
+const ERROR_BODY_MAX_BYTES = 64 * 1024;
+
+/**
+ * A response body as text, read chunk by chunk and abandoned past `max`
+ * bytes, so a gateway that sends more than it declares (or declares nothing)
+ * costs at most `max` bytes of memory. Null when it was too large.
+ */
+async function readCapped(res: Response, max: number): Promise<string | null> {
+  if (res.body === null) return "";
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
 
 /**
  * A listed id as the chat endpoint takes it. Gemini's OpenAI-compatible
@@ -581,16 +607,19 @@ export async function listProviderModels(
       cache: "no-store",
     });
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
+      const text = (await readCapped(res, ERROR_BODY_MAX_BYTES).catch(() => "")) ?? "";
       const message = providerText(providerMessage(redactSecrets(text, secrets)), secrets, 300);
       return { ok: false, status: res.status, message: message || providerText(res.statusText, secrets, 200) || `HTTP ${res.status}` };
     }
+    const tooLarge = { ok: false, status: res.status, message: "The model list is too large to read." } as const;
     const declared = Number(res.headers.get("content-length") ?? "0");
     if (Number.isFinite(declared) && declared > MODEL_LIST_MAX_BYTES) {
-      return { ok: false, status: res.status, message: "The model list is too large to read." };
+      await res.body?.cancel().catch(() => {});
+      return tooLarge;
     }
-    const text = await res.text();
-    if (text.length > MODEL_LIST_MAX_BYTES) return { ok: false, status: res.status, message: "The model list is too large to read." };
+    // Capped as it is read too: a declared length is only a claim.
+    const text = await readCapped(res, MODEL_LIST_MAX_BYTES);
+    if (text === null) return tooLarge;
     let body: unknown;
     try {
       body = JSON.parse(text);
