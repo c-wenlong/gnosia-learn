@@ -48,6 +48,7 @@ export function useStudioDialog(): DialogControls {
 
 export function StudioDialog({
   closeHref,
+  navigate,
   label,
   tall = false,
   compact = false,
@@ -55,6 +56,12 @@ export function StudioDialog({
 }: {
   /** Where Close goes: the same view with the panel's parameters dropped. */
   closeHref: string;
+  /**
+   * How Close gets there. A router push by default, which renders the page on
+   * the server again; the conversation passes `history.pushState`, since
+   * nothing behind it changes when it closes (`ConversationHost`).
+   */
+  navigate?: (href: string) => void;
   /** The dialog's accessible name. */
   label: string;
   /**
@@ -79,8 +86,9 @@ export function StudioDialog({
   const close = useCallback(() => {
     if (closing.current) return;
     closing.current = true;
-    router.push(closeHref, { scroll: false });
-  }, [router, closeHref]);
+    if (navigate !== undefined) navigate(closeHref);
+    else router.push(closeHref, { scroll: false });
+  }, [router, closeHref, navigate]);
   const isClosing = useCallback(() => closing.current, []);
 
   // The dialog stays mounted across a change of what it holds (a conversation
