@@ -304,7 +304,8 @@ export const EMPTY_MCP_CONFIG = '{"mcpServers":{}}';
 export const PLANNER_MAX_TURNS = 2;
 
 export interface PlannerArgvInput {
-  systemPrompt: string;
+  /** The draft's `planner-system.md`, absolute. The prompt itself never enters argv. */
+  systemPromptFile: string;
   settingsFile: string;
   sessionId: string;
   /** True once the session has a transcript: continue it rather than start it. */
@@ -329,7 +330,12 @@ export interface PlannerArgvInput {
  * - `--max-turns 2`.
  * - `--output-format stream-json --verbose --include-partial-messages`: text
  *   deltas stream to the panel as they are generated.
- * - `--system-prompt`: replaced, not appended, with the draft's own prompt.
+ * - `--system-prompt-file`: replaced, not appended, with the draft's own
+ *   prompt, read by the CLI from the file the runner wrote at creation. A
+ *   file rather than `--system-prompt <text>` so that nothing a person or a
+ *   note wrote (the CONCEPT and TUTOR blocks of docs/STUDIO-TUTOR-HANDOFF.md,
+ *   an EXTENDING summary) is ever an argv element, and so a long prompt
+ *   cannot meet Linux's 128 KiB limit on one argument.
  * - `--session-id` on the first turn and `--resume` after, with the id minted
  *   and persisted before the first spawn.
  *
@@ -343,8 +349,8 @@ export interface PlannerArgvInput {
 export function plannerArgv(input: PlannerArgvInput): string[] {
   return [
     "-p",
-    "--system-prompt",
-    input.systemPrompt,
+    "--system-prompt-file",
+    input.systemPromptFile,
     "--tools",
     "",
     "--strict-mcp-config",
@@ -881,11 +887,21 @@ export async function evaluateBrief(
   text: string,
   vocabulary: Vocabulary,
   topics: TopicChecker,
+  /**
+   * The runner's own fields, filled after the planner's are picked and
+   * before the validator runs, so the validator checks the result: on a
+   * draft opened on a concept, its `source` and `concepts` (D66 of
+   * docs/STUDIO-TUTOR-HANDOFF.md).
+   */
+  prepare: (raw: Record<string, unknown>, vocabulary: Vocabulary) => Record<string, unknown> = (raw) => raw,
 ): Promise<KindVerdict> {
   const validate = (raw: Record<string, unknown>, against: Vocabulary): AnyDraftBrief =>
     briefKind === "video" ? strip(validateVideoBrief(raw, against)) : strip(validateBrief(raw, against));
   try {
-    const raw = plannerFields(parseJsonObject(body, "brief"), briefKind === "video" ? PLANNER_VIDEO_FIELDS : PLANNER_BRIEF_FIELDS);
+    const raw = prepare(
+      plannerFields(parseJsonObject(body, "brief"), briefKind === "video" ? PLANNER_VIDEO_FIELDS : PLANNER_BRIEF_FIELDS),
+      vocabulary,
+    );
     try {
       return { kind: "valid", brief: validate(raw, vocabulary), pendingTopic: null };
     } catch (error) {

@@ -11,9 +11,9 @@ import {
   type DraftState,
 } from "@self-learn/schema/shared";
 
-import { BriefError, loadVocabulary, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
+import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
 import { canvas, doctor, doctorChecks, type InspectReport } from "./canvas";
-import { draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "./catalog";
+import { conceptShow, draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "./catalog";
 import {
   agentAuth,
   PLANNER_CONCURRENCY,
@@ -71,9 +71,13 @@ import {
   BRIEF_KINDS,
   buildCombinedSystemPrompt,
   changingSummary,
+  conceptBlock,
   isBriefKind,
   lengthOf,
+  tutorBlock,
+  TUTOR_TURN_CAP,
   type BriefKind,
+  type TutorTurn,
   type VideoCorpusEntry,
 } from "./planner-prompt";
 import { JobRefused, type Runner } from "./runner";
@@ -199,6 +203,14 @@ export interface DraftRecord {
   sourceRevision: number | null;
   /** The latest brief's title. */
   title: string | null;
+  /**
+   * The concept a hand-off from the concept tutor opened the draft on (D65 of
+   * docs/STUDIO-TUTOR-HANDOFF.md). Absent or null on every other draft. The
+   * note itself is kept only in the system prompt.
+   */
+  concept?: DraftConcept | null;
+  /** How many tutor turns the TUTOR block carries, at least in part (D69). */
+  tutorTurns?: number;
   plannerSessionId: string;
   /** True once the CLI has a transcript for the session, so the next turn resumes it. */
   sessionStarted: boolean;
@@ -365,6 +377,12 @@ export interface DraftView {
   conversational: boolean;
   sourceKind: BriefKind;
   source: string | null;
+  /**
+   * The concept a hand-off from the tutor opened the draft on, and how many
+   * tutor turns came along: what the studio pins above the thread (D69).
+   * Null on every other draft.
+   */
+  concept: { slug: string; title: string; topic: string | null; tutorTurns: number } | null;
   slots: Partial<Record<BriefKind, SlotView>>;
   /** Kinds whose tagged request is still owed a brief, oldest request first. */
   waiting: BriefKind[];
@@ -408,6 +426,8 @@ export interface DraftSummaryView {
   /** The person's first message, for a row with no title yet. */
   firstMessage: string | null;
   source: string | null;
+  /** The concept a hand-off from the tutor opened the draft on, which titles a row with no brief yet. */
+  concept: { slug: string; title: string } | null;
   turns: number;
   costUsd: number | null;
   updated: string;
@@ -493,6 +513,130 @@ export interface CreateInput {
   /** What `source` names: `diagram` (the default) or a studio `video`. */
   sourceKind?: string | null;
   idempotencyKey?: string | null;
+  /**
+   * The concept a hand-off from the concept tutor opens on, as the web app's
+   * server action read it for the signed-in owner (D65 of
+   * docs/STUDIO-TUTOR-HANDOFF.md): `{ slug, title, summary?, body? }`.
+   * Unchecked here; `parseConcept` checks it.
+   */
+  concept?: unknown;
+  /** The tutor's last turns, oldest first: `[{ role: "user" | "assistant", content }]`, at most six (D69). */
+  tutor?: unknown;
+}
+
+/** A concept as a draft records it: what the planner was told, less the note. */
+export interface DraftConcept {
+  slug: string;
+  title: string;
+  /** The topic whose concept list names the slug, from the vocabulary at creation; null when none does (H13). */
+  topic: string | null;
+}
+
+/** The concept a create was posted with, checked. */
+export interface ConceptInput {
+  slug: string;
+  title: string;
+  summary: string | null;
+  body: string;
+}
+
+/**
+ * The most a concept's `body` may be, in UTF-8 bytes: 256 KiB, the web note
+ * reader's own `NOTE_READ_LIMIT`, so every note the page can read is accepted
+ * and the CONCEPT block's 12,000-character cap is the only cut (D65).
+ */
+export const CONCEPT_BODY_LIMIT = 256 * 1024;
+/** The most a concept's `title` may be, in characters. */
+export const CONCEPT_TITLE_LIMIT = 200;
+
+/**
+ * `concept` on `POST /api/drafts`, checked. The slug is a catalog slug, so it
+ * can be neither a flag nor a path when it is handed to `learn concept show`;
+ * the title and the note are untrusted text, which only ever reach the
+ * planner inside the CONCEPT block (`conceptBlock`). Null when absent.
+ */
+export function parseConcept(raw: unknown): ConceptInput | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new JobRefused(400, `"concept" is an object: { slug, title, summary, body }`, { field: "concept" });
+  }
+  const input = raw as Record<string, unknown>;
+  const slug = typeof input.slug === "string" ? input.slug.trim() : "";
+  if (slug === "" || slug.length > 120 || !SLUG_PATTERN.test(slug)) {
+    throw new JobRefused(400, `"concept.slug" is a concept's slug: lower-case letters, digits and single hyphens`, {
+      field: "concept.slug",
+    });
+  }
+  const title = typeof input.title === "string" ? input.title.replace(/\s+/g, " ").trim() : "";
+  if (title === "" || title.length > CONCEPT_TITLE_LIMIT) {
+    throw new JobRefused(400, `"concept.title" is 1 to ${CONCEPT_TITLE_LIMIT} characters`, { field: "concept.title" });
+  }
+  if (input.summary !== undefined && input.summary !== null && typeof input.summary !== "string") {
+    throw new JobRefused(400, `"concept.summary" is a string or null`, { field: "concept.summary" });
+  }
+  if (input.body !== undefined && input.body !== null && typeof input.body !== "string") {
+    throw new JobRefused(400, `"concept.body" is a string or null`, { field: "concept.body" });
+  }
+  const body = typeof input.body === "string" ? input.body : "";
+  if (Buffer.byteLength(body, "utf8") > CONCEPT_BODY_LIMIT) {
+    throw new JobRefused(400, `"concept.body" is over ${CONCEPT_BODY_LIMIT} bytes; send it empty and the planner works from the title`, {
+      field: "concept.body",
+      limit: CONCEPT_BODY_LIMIT,
+    });
+  }
+  const summary = typeof input.summary === "string" && input.summary.trim() !== "" ? input.summary : null;
+  return { slug, title, summary, body };
+}
+
+/** `tutor` on `POST /api/drafts`, checked: at most six `{ role, content }`. Empty when absent. */
+export function parseTutor(raw: unknown): TutorTurn[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new JobRefused(400, `"tutor" is a list of { role, content }`, { field: "tutor" });
+  }
+  if (raw.length > TUTOR_TURN_CAP) {
+    throw new JobRefused(400, `"tutor" holds at most ${TUTOR_TURN_CAP} turns, the last ones; it has ${raw.length}`, {
+      field: "tutor",
+      limit: TUTOR_TURN_CAP,
+    });
+  }
+  return raw.map((turn, i) => {
+    const entry = typeof turn === "object" && turn !== null && !Array.isArray(turn) ? (turn as Record<string, unknown>) : null;
+    if (entry === null || (entry.role !== "user" && entry.role !== "assistant") || typeof entry.content !== "string") {
+      throw new JobRefused(400, `"tutor[${i}]" is { role: "user" or "assistant", content: a string }`, { field: "tutor" });
+    }
+    return { role: entry.role, content: entry.content };
+  });
+}
+
+/**
+ * D66: the runner's fields on a brief of a draft opened on a concept, filled
+ * before the validator runs so the validator checks the result. `source` is
+ * always the concept's slug, replacing any other value a reply or an edit
+ * carried: the draft is about that concept, and the job agent reads the whole
+ * note through it. The slug joins `concepts` when the brief's topic files it,
+ * which is what puts the made asset on the concept's page. Never when the
+ * topic does not file it: the validator would refuse the brief for it.
+ */
+export function withConcept(
+  raw: Record<string, unknown>,
+  concept: Pick<DraftConcept, "slug"> | null | undefined,
+  vocabulary: Pick<Vocabulary, "topics">,
+): Record<string, unknown> {
+  if (concept === null || concept === undefined) return raw;
+  const next: Record<string, unknown> = { ...raw, source: concept.slug };
+  const topic = typeof next.topic === "string" ? next.topic : null;
+  const files = topic !== null && (vocabulary.topics.get(topic)?.concepts.includes(concept.slug) ?? false);
+  if (files) {
+    const list: unknown[] = Array.isArray(next.concepts) ? next.concepts : [];
+    if (!list.includes(concept.slug)) next.concepts = [...list, concept.slug];
+  }
+  return next;
+}
+
+/** The topics whose concept list names the slug, in the vocabulary's order. */
+export function topicsFiling(vocabulary: Pick<Vocabulary, "entries">, slug: string): string[] {
+  return vocabulary.entries.filter((entry) => entry.maps.concepts.includes(slug)).map((entry) => entry.slug);
 }
 
 export class Drafts {
@@ -759,6 +903,7 @@ export class Drafts {
         title: record.title,
         firstMessage: record.firstMessage ?? null,
         source: record.source,
+        concept: record.concept == null ? null : { slug: record.concept.slug, title: record.concept.title },
         turns: record.turns,
         costUsd: record.costUsd,
         updated: record.updatedAt,
@@ -795,6 +940,7 @@ export class Drafts {
       conversational: record.conversational === true,
       sourceKind: record.sourceKind ?? "diagram",
       source: record.source,
+      concept: record.concept == null ? null : { ...record.concept, tutorTurns: record.tutorTurns ?? 0 },
       ...this.slotsOf(record),
       sourceChanged: await sourceChanged(record),
       sourceRevision: record.source === null ? null : record.sourceRevision,
@@ -1096,12 +1242,45 @@ export class Drafts {
         });
       }
     }
+    // D65: a hand-off from the concept tutor. It opens on a concept, never on
+    // an asset as well, and the tutor's turns come only with it.
+    if (input.concept !== undefined && input.concept !== null && source !== null) {
+      throw new JobRefused(400, "a conversation opens on a concept or on an asset, not both", { field: "concept" });
+    }
+    const concept = parseConcept(input.concept);
+    const tutor = parseTutor(input.tutor);
+    // Any `tutor` at all, an empty list included, names a hand-off: without
+    // its concept it is a malformed one, never an ordinary draft.
+    if (concept === null && input.tutor !== undefined && input.tutor !== null) {
+      throw new JobRefused(400, "tutor turns come with the concept they were about", { field: "tutor" });
+    }
 
     let vocabulary: Vocabulary;
     try {
       vocabulary = await this.readVocabulary();
     } catch (error) {
       throw vocabularyDown(error);
+    }
+
+    let conceptRecord: DraftConcept | null = null;
+    let conceptText: string | null = null;
+    let tutorText: string | null = null;
+    let tutorTurns = 0;
+    if (concept !== null) {
+      await this.assertConcept(concept.slug);
+      const topics = topicsFiling(vocabulary, concept.slug);
+      conceptRecord = { slug: concept.slug, title: concept.title, topic: topics[0] ?? null };
+      conceptText = conceptBlock({
+        slug: concept.slug,
+        title: concept.title,
+        topic: conceptRecord.topic,
+        otherTopics: topics.slice(1),
+        summary: concept.summary,
+        body: concept.body,
+      });
+      const told = tutorBlock(tutor);
+      tutorText = told.body;
+      tutorTurns = told.shown;
     }
     const listing = await listDiagrams().catch(() => null);
     const corpus: CorpusEntry[] = (listing?.diagrams ?? []).map((diagram) => ({
@@ -1177,6 +1356,7 @@ export class Drafts {
       sourceHash,
       sourceRevision,
       title: null,
+      ...(conceptRecord === null ? {} : { concept: conceptRecord, tutorTurns }),
       plannerSessionId: randomUUID(),
       sessionStarted: false,
       transcriptPath: draftTranscriptRef(id),
@@ -1207,10 +1387,20 @@ export class Drafts {
     this.records.set(id, record);
     await this.write(id, async () => {
       await this.save(id, {});
-      await writeFile(
+      // Atomically, so a crash mid-write never leaves a half prompt the next
+      // turn would pass to the CLI as the whole of it.
+      await atomicWrite(
         plannerSystemPath(id),
-        buildCombinedSystemPrompt({ kinds, vocabulary: vocabulary.entries, corpus, videos, extending, changing }),
-        "utf8",
+        buildCombinedSystemPrompt({
+          kinds,
+          vocabulary: vocabulary.entries,
+          corpus,
+          videos,
+          extending,
+          changing,
+          concept: conceptText,
+          tutor: tutorText,
+        }),
       );
       await writeFile(plannerSettingsPath(id), `${JSON.stringify(plannerSettings(), null, 1)}\n`, "utf8");
       await this.append(id, {
@@ -1227,9 +1417,35 @@ export class Drafts {
         corpus: corpus.length,
         corpusStale: listing?.stale ?? true,
         ...(videos === null ? {} : { videos: videos.length }),
+        ...(conceptRecord === null ? {} : { concept: conceptRecord, tutorTurns }),
       });
     });
     return { record: this.require(id), created: true };
+  }
+
+  /**
+   * The concept a hand-off names, resolved as this studio's owner may read it
+   * (`learn concept show`, which carries `--owner` from `catalog.ts` as every
+   * other catalog read here does): their own note or the commons', never
+   * another owner's by the same slug. The slug has already passed
+   * `SLUG_PATTERN`, so it can be neither a flag nor a path.
+   */
+  private async assertConcept(slug: string): Promise<void> {
+    const shown = await conceptShow(slug);
+    if (shown.ok && typeof shown.json === "object" && shown.json !== null) return;
+    if (!shown.ok && shown.offline) {
+      throw new JobRefused(503, `the concept ${slug} could not be read from the catalog: ${shown.error ?? "no reason given"}`, {
+        reason: "catalog-unreachable",
+        field: "concept",
+      });
+    }
+    if (!shown.ok && /no such concept/i.test(shown.error ?? "")) {
+      throw new JobRefused(404, `no concept ${slug} that this studio's owner can read`, { reason: "no-concept", field: "concept", slug });
+    }
+    throw new JobRefused(502, `the concept ${slug} could not be read: ${shown.error ?? "the catalog answered with no note"}`, {
+      reason: "catalog",
+      field: "concept",
+    });
   }
 
   /* ------------------------------------------------------------------ */
@@ -1269,7 +1485,9 @@ export class Drafts {
         });
       }
     }
-    if (mentions.length > 0 && record.turns === 0 && withoutMentions(text, mentions).trim() === "") {
+    // T15, except on a draft opened on a concept, where a bare tag means "of
+    // this concept" (H8 of docs/STUDIO-TUTOR-HANDOFF.md).
+    if (mentions.length > 0 && record.turns === 0 && record.concept == null && withoutMentions(text, mentions).trim() === "") {
       throw new JobRefused(400, "Say what it should show: a tag alone needs a conversation to make it from", { field: "text" });
     }
     if (record.turns >= PLANNER_TURNS) {
@@ -1420,7 +1638,7 @@ export class Drafts {
     if (first === null) return;
     if (notes.length > 0) await this.write(id, () => this.clearDelivered(id, delivered));
     const asked = kinds.filter((kind) => tagged.includes(kind) || waiting.includes(kind));
-    const judged = await this.judgeReply(first.text, asked, conversational);
+    const judged = await this.judgeReply(first.text, asked, conversational, record.concept);
     const refused = await this.write(id, () =>
       this.settleReply(id, { replySeq: first.seq, messageSeq: turn, tagged, judged, hold: first.hold, retry: false }),
     );
@@ -1475,6 +1693,7 @@ export class Drafts {
       second.text,
       toRetry.map((verdict) => verdict.kind),
       conversational,
+      record.concept,
     );
     await this.write(id, async () => {
       const stillRefused = await this.settleReply(id, {
@@ -1645,6 +1864,7 @@ export class Drafts {
     text: string,
     asked: readonly BriefKind[],
     conversational: boolean,
+    concept?: DraftConcept | null,
   ): Promise<{ verdicts: Map<BriefKind, KindVerdict>; ignored: string[] }> {
     const verdicts = new Map<BriefKind, KindVerdict>();
     const ignored: string[] = [];
@@ -1675,7 +1895,9 @@ export class Drafts {
         return { ...result, error: typeof said === "string" ? said : result.error };
       },
     };
-    for (const { kind, body } of wanted) verdicts.set(kind, await evaluateBrief(kind, body, text, vocabulary, topics));
+    // D66: a concept draft's `source` and `concepts`, filled before the validator runs.
+    const prepare = (raw: Record<string, unknown>, against: Vocabulary): Record<string, unknown> => withConcept(raw, concept, against);
+    for (const { kind, body } of wanted) verdicts.set(kind, await evaluateBrief(kind, body, text, vocabulary, topics, prepare));
     return { verdicts, ignored };
   }
 
@@ -1866,20 +2088,33 @@ export class Drafts {
     const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, ...(retry ? { retry: true } : {}) };
     let logChain: Promise<void> = appendFile(draftSessionLogPath(id), `${JSON.stringify(marker)}\n`, "utf8");
     const meter = new JobCostMeter(plannerModel());
-    let systemPrompt = await readFile(plannerSystemPath(id), "utf8").catch(() => null);
+    const systemPrompt = await readFile(plannerSystemPath(id), "utf8").catch(() => null);
     if (systemPrompt === null) {
       // A crash between the record and the prompt at creation: write it now,
-      // from what the studio knows today.
+      // from what the studio knows today. A concept draft's note and tutor
+      // turns were never kept, so its CONCEPT block says so; the job agent
+      // still reads the whole note through the brief's `source` (H17).
       const vocabulary = await loadVocabulary();
-      systemPrompt =
+      const concept = record.concept ?? null;
+      const rewritten =
         record.conversational === true
-          ? buildCombinedSystemPrompt({ kinds: plannerKindsOf(record), vocabulary: vocabulary.entries, corpus: [], videos: [] })
+          ? buildCombinedSystemPrompt({
+              kinds: plannerKindsOf(record),
+              vocabulary: vocabulary.entries,
+              corpus: [],
+              videos: [],
+              concept:
+                concept === null
+                  ? null
+                  : conceptBlock({ slug: concept.slug, title: concept.title, topic: concept.topic, missing: "(the note was not kept)" }),
+            })
           : buildSystemPrompt({ vocabulary: vocabulary.entries, corpus: [] });
-      await writeFile(plannerSystemPath(id), systemPrompt, "utf8");
+      await atomicWrite(plannerSystemPath(id), rewritten);
       await writeFile(plannerSettingsPath(id), `${JSON.stringify(plannerSettings(), null, 1)}\n`, "utf8");
     }
     const argv = plannerArgv({
-      systemPrompt,
+      // The file, never its text: nothing in the prompt is ever an argv element.
+      systemPromptFile: path.resolve(plannerSystemPath(id)),
       settingsFile: plannerSettingsPath(id),
       sessionId: record.plannerSessionId,
       resume: record.sessionStarted,
@@ -2481,8 +2716,8 @@ export class Drafts {
       throw new JobRefused(400, "the request body must be a JSON object holding a brief", { field: "body" });
     }
     const fields = kind === "video" ? EDITABLE_VIDEO_FIELDS : EDITABLE_BRIEF_FIELDS;
-    const raw: Record<string, unknown> = {};
-    for (const field of fields) if (field in input) raw[field] = (input as Record<string, unknown>)[field];
+    const picked: Record<string, unknown> = {};
+    for (const field of fields) if (field in input) picked[field] = (input as Record<string, unknown>)[field];
     let vocabulary: Vocabulary;
     try {
       vocabulary = await this.readVocabulary();
@@ -2494,10 +2729,12 @@ export class Drafts {
       const current = this.assertEditable(id, kind);
       const slot = slotOf(current, kind);
       const pending = slot.pendingTopic;
-      const keepsPending = pending !== null && raw.topic === pending.entry.slug && !vocabulary.topics.has(pending.entry.slug);
+      const keepsPending = pending !== null && picked.topic === pending.entry.slug && !vocabulary.topics.has(pending.entry.slug);
       const checkedAgainst: Vocabulary = keepsPending
         ? { ...vocabulary, topics: new Map([...vocabulary.topics, [pending.entry.slug, { title: pending.entry.title, concepts: [] }]]) }
         : vocabulary;
+      // D66: a concept draft's `source` and `concepts`, as on a planner's brief.
+      const raw = withConcept(picked, current.concept, checkedAgainst);
       let brief: AnyDraftBrief;
       try {
         brief =
@@ -3617,9 +3854,11 @@ export function noteForDraft(record: DraftRecord): string {
       return record.inFlight !== null
         ? "the planner is answering"
         : record.turns === 0
-          ? record.conversational === true
-            ? "a new conversation: ask about an idea, or tag @diagram or @video to make one"
-            : "a new conversation: say what the diagram should make clear"
+          ? record.concept != null
+            ? `a conversation about ${record.concept.title}: tag @diagram or @video to make one of it, or ask about it first`
+            : record.conversational === true
+              ? "a new conversation: ask about an idea, or tag @diagram or @video to make one"
+              : "a new conversation: say what the diagram should make clear"
           : waiting.length > 0
             ? `the planner owes a ${waiting.join(" and a ")} brief`
             : "the planner is waiting for your reply";
