@@ -327,8 +327,8 @@ function AddModel({
    * a key replaced in Settings since the last ask is a different account,
    * and the server's cache misses under a new key while answering from
    * memory otherwise. Switching provider back and forth inside one open
-   * reuses what was asked, so it cannot spend the route's rate limit. A
-   * reply from an earlier open is dropped.
+   * reuses what was asked, so it cannot spend the route's rate limit; a list
+   * that failed is asked again. A reply from an earlier open is dropped.
    */
   const opened = useRef(0);
   const asked = useRef<Partial<Record<ProviderId, number>>>({});
@@ -351,6 +351,9 @@ function AddModel({
                   ? `${typeof reply.data.status === "number" ? `HTTP ${reply.data.status}: ` : ""}${reply.data.message ?? "no reason given"}`
                   : (reply.data.error ?? `HTTP ${reply.status}`),
             };
+    // A failed ask does not count as asked: switching back, or Try again,
+    // asks once more.
+    if (next.state === "error") delete asked.current[id];
     setLists((l) => ({ ...l, [id]: next }));
   };
 
@@ -447,15 +450,22 @@ function AddModel({
             ))}
           </datalist>
         )}
-        <p id={`${base}-list-state`} aria-live="polite" className="text-[12px] text-text2">
-          {list === undefined || list.state === "loading"
-            ? `Loading ${chosen?.label ?? "the provider"}'s models…`
-            : list.state === "ready"
-              ? list.models.length > 0
-                ? `${list.models.length} ${list.models.length === 1 ? "model" : "models"} from ${chosen?.label}. Start typing to pick one, or type any model id.`
-                : `${chosen?.label} listed no models. Type a model id.`
-              : `The list could not be loaded (${list.message}). Type a model id.`}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <p id={`${base}-list-state`} aria-live="polite" className="text-[12px] text-text2">
+            {list === undefined || list.state === "loading"
+              ? `Loading ${chosen?.label ?? "the provider"}'s models…`
+              : list.state === "ready"
+                ? list.models.length > 0
+                  ? `${list.models.length} ${list.models.length === 1 ? "model" : "models"} from ${chosen?.label}. Start typing to pick one, or type any model id.`
+                  : `${chosen?.label} listed no models. Type a model id.`
+                : `The list could not be loaded (${list.message}). Type a model id.`}
+          </p>
+          {list?.state === "error" && chosen !== undefined && (
+            <Button variant="ghost" size="sm" onClick={() => void load(chosen.id)}>
+              Try again
+            </Button>
+          )}
+        </div>
       </div>
       {error !== null && (
         <p role="alert" className="text-[12px] text-danger">

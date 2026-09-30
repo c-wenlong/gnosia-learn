@@ -59,7 +59,8 @@ five minutes per owner and provider, keyed by a fingerprint of the key and
 base URL; the key never reaches the browser. The form asks the server once
 per provider each time it opens, so a key replaced on the same page gets its
 own account's list, and switching provider inside one open reuses what it
-asked rather than spending the route's rate limit. A list is read at most 8 MB
+asked rather than spending the route's rate limit. A list that failed shows
+Try again, and switching back to its provider asks again too. A list is read at most 8 MB
 and an error body at most 64 KB, counted as the bytes arrive, whatever the
 provider declares. The
 id field is a text input with a `<datalist>` of the listed ids, so choosing
