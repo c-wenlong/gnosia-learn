@@ -108,6 +108,18 @@ Rules of engagement:
 - Its venvs (`.venv`, `.venv-ce`) are local artifacts. A fresh clone needs
   `git submodule update --init --recursive` (manim is a nested submodule)
   plus the venv setup in its AGENTS.md before anything renders.
+- **Narration is the gnosia-audio package, and each machine installs it.**
+  Since manimkc#40, `lib/narration.py` is a shim over
+  [gnosia-audio](https://github.com/c-wenlong/gnosia-audio), pinned to one
+  commit in `tools/manimkc/requirements-narration.txt`. Run
+  `make narration-deps` in `tools/manimkc` on a fresh clone after the venv
+  setup, and again on every machine after a pointer bump that moves that pin,
+  before the first render. It installs the package into `.venv` as a normal,
+  non-editable install, which is what the studio's video sandbox needs: its
+  profiles let a job read the venvs and nothing around them, so an editable
+  install pointing at a source tree elsewhere would be unreadable inside the
+  sandbox. `manimkc doctor` warns when `.venv` holds a different commit from
+  the pin.
 - **Rendered videos, the TTS cache and manimkc's own state live under
   `$MANIMKC_HOME`, not necessarily inside the submodule.** That variable is
   manimkc's data root and it defaults to its checkout, so with nothing set
