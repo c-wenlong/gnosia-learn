@@ -21,7 +21,7 @@ source of truth: change routing here, and the skill follows.
 | Scene model | Mobjects and `self.play` animations, narration blocks | A React component per frame, cued on spoken words | One generator per topic on a 2D canvas with signals and flexbox, cued on spoken words |
 | Skill | `manimkc-video` | `remotionkc-video` | `revideokc-video` |
 | Capability doc | [tools/manimkc/docs/CAPABILITIES.md](../tools/manimkc/docs/CAPABILITIES.md) | Remotion's own skills, vendored in `tools/remotionkc/.claude/skills/` | [tools/revideokc/docs/CAPABILITIES.md](../tools/revideokc/docs/CAPABILITIES.md) |
-| The studio can drive it | Yes (the video runner, [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)) | Not yet | Not yet |
+| The studio can drive it | On macOS (the video runner, [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)); off on Linux until its sandbox is measured there, and anywhere with `STUDIO_VIDEO_KIND=off` | Not yet | Not yet |
 | Licence | MIT | Remotion License: free for a person or a company of up to three, a company licence above that | MIT |
 
 ## Pick by what the video needs
@@ -72,7 +72,7 @@ missing or poor.
 | Footage, screen recordings, transitions, SFX | no | yes | partial (`Video`, few transitions) |
 | Springs, masks, additive light, filters | partial | yes (CSS) | yes |
 | Visuals cued on the spoken word | yes (`narration.word_times`) | yes | yes |
-| Studio can make it unattended | yes | not yet | not yet |
+| Studio can make it unattended | on macOS only | not yet | not yet |
 | Render speed, 1080p, measured on the owner's Mac | about 30 s for a 79 s scene, 8 scenes in parallel | 32 to 75 s for 68 to 113 s videos, concurrency 3 | about 25 s for a 62 s video with a 3D stage, 2 workers |
 
 ## Shared ground, and what it allows
@@ -96,42 +96,58 @@ missing or poor.
 - **Remotion's licence changes in 5.0**: contractors count toward the
   three-person free limit, and server renders take a licence key
   (`"free-license"` for free users). Free for this project today.
-- **manimkc is the only tool with a sandboxed, unattended path** (the
-  studio's video runner). A video from the other two needs an agent session
-  with a terminal.
+- **manimkc is the only tool with a sandboxed, unattended path**, the
+  studio's video runner, and only on macOS: the runner's sandbox is Seatbelt,
+  so the video kind is off on Linux until a bubblewrap profile is measured
+  (`videoKindBuilt` in `services/studio/src/video/config.ts`). A video from
+  the other two, or from a Linux machine, needs an agent session with a
+  terminal.
 
 ## The routing procedure
 
-This is what the `video-router` skill does, in order:
+This is what the `video-router` skill does, in this order. Hard constraints
+come before preferences, so a later step can never undo an earlier one.
 
-1. **Series first.** Is this a week or a part of an existing series? Use
-   that series' tool and stop.
-2. **Name the main visual.** Write one sentence: what is on screen for most
+1. **Unattended or not.** If the video has to come out of the studio with no
+   one at a terminal, only manimkc can make it, and only on macOS. If the
+   user also named another tool, or the video belongs to a series made with
+   another tool, the requests conflict: say so and ask which one gives,
+   rather than choosing silently.
+2. **The user named a tool.** Use it, and stop.
+3. **Series.** Is this a week or a part of an existing series? Use that
+   series' tool, and stop.
+4. **Name the main visual.** Write one sentence: what is on screen for most
    of the video? Find it in "Pick by what the video needs", top row first.
-3. **Check the second visual.** If a second beat needs something the chosen
+5. **Check the second visual.** If a second beat needs something the chosen
    tool cannot do (the capability matrix says "no"), prefer the tool that can
    do both; if none can, keep the main visual's tool and simplify that beat.
-4. **Unattended or not.** If the video must come out of the studio without a
-   person at the terminal, it is manimkc today.
-5. **Say why.** Write down the tool, the row that chose it, and the second
-   choice, in the reply or the brief, so the owner can overrule it in one
-   word. Then hand over to that tool's skill.
+6. **Say why.** Write down the tool, the step or row that chose it, and the
+   second choice, in the reply or the brief, so the owner can overrule it in
+   one word. Then hand over to that tool's skill.
 
 ```mermaid
 flowchart TD
-  A[Video request] --> B{Part of an existing series?}
+  A[Video request] --> U{Must the studio make it unattended?}
+  U -- yes --> UC{Named tool or series says otherwise?}
+  UC -- no --> M0[manimkc, on macOS]
+  UC -- yes --> Q[Say the requests conflict and ask]
+  U -- no --> N{User named a tool?}
+  N -- yes --> T[That tool]
+  N -- no --> B{Part of an existing series?}
   B -- yes --> S[That series' tool]
   B -- no --> C{Main visual}
   C -- plots, equation morphs, 3D maths --> M[manimkc]
   C -- real data, captions, editor and terminal, footage --> R[remotionkc]
   C -- depth and light, code edited in place, choreographed motion --> V[revideokc]
   C -- boxes, tables, arrows --> M
-  M --> D{Must the studio make it unattended?}
+  M --> D{Does a second beat need what it lacks?}
   R --> D
   V --> D
-  D -- yes --> M2[manimkc]
-  D -- no --> E[Record the tool, the row and the runner-up, then run its skill]
-  M2 --> E
+  D -- yes --> D2[The tool that does both, else simplify the beat]
+  D -- no --> E[Record the tool, the step or row, and the runner-up, then run its skill]
+  D2 --> E
+  M0 --> E
+  T --> E
   S --> E
 ```
 

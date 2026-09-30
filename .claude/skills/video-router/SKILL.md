@@ -13,13 +13,22 @@ capability matrix before deciding, not this summary.
 
 ## Procedure
 
-1. **The user named a tool?** Use it. Skip to step 6.
-2. **Series first.** If the video is a week or a part of a series that
+The same order as the page: hard constraints first, so a later step never
+undoes an earlier one.
+
+1. **Unattended?** If the video has to come out of the studio with no one at
+   a terminal, only manimkc can make it, and only on macOS (the studio's
+   video kind is off on Linux). If the user also named another tool, or the
+   video belongs to a series made with another tool, say the two requests
+   conflict and ask which gives. Do not pick silently.
+2. **The user named a tool** ("use Revideo", "make it in Remotion")? Use it.
+   Skip to step 6.
+3. **Series first.** If the video is a week or a part of a series that
    already exists (the CS3230, CS4223 and CS4225 lecture videos, or any
    topic folder with siblings), use the tool that series was made with and
    skip to step 6. `npm run --silent catalog -- video list` and the
    `topics/` folders under each tool show which tool made what.
-3. **Name the main visual** in one sentence: what is on screen for most of
+4. **Name the main visual** in one sentence: what is on screen for most of
    the video. Find it in the table, top row first. Roughly:
    - continuous maths, plots, equation morphs, 3D maths objects, or plain
      boxes, tables and arrows: **manimkc**
@@ -28,11 +37,9 @@ capability matrix before deciding, not this summary.
      **remotionkc**
    - depth and light (layers in perspective, a spotlight, shadows), code
      edited in place, springy choreographed diagram motion: **revideokc**
-4. **Check the second visual.** If another beat needs something the chosen
+5. **Check the second visual.** If another beat needs something the chosen
    tool's column in the capability matrix marks "no", prefer the tool that
    does both; if none does, keep the choice and simplify that beat.
-5. **Unattended?** If the video has to come out of the studio with no one at
-   a terminal, it is manimkc: the only tool the studio's runner drives today.
 6. **Say it in two lines** before starting, so the owner can overrule it in a
    word:
    `Tool: revideokc (row: "Depth and light"). Runner-up: remotionkc.`
