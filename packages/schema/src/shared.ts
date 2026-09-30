@@ -141,6 +141,18 @@ export type ProviderId = (typeof PROVIDER_IDS)[number];
  */
 export const PROVIDER_KEY_LIMITS = { minChars: 16, maxChars: 512 } as const;
 
+/** Each provider as a person reads it: every message, card and attempt shows this, never the id. */
+export const PROVIDER_LABELS = {
+  nvidia: "NVIDIA NIM",
+  gemini: "Google Gemini",
+  openrouter: "OpenRouter",
+} as const satisfies Record<ProviderId, string>;
+
+/** A provider's label, or the value itself when it names no provider. */
+export function providerLabel(value: string): string {
+  return isProviderId(value) ? PROVIDER_LABELS[value] : value;
+}
+
 /** Whether `value` names a provider the tutor knows. */
 export function isProviderId(value: unknown): value is ProviderId {
   return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
@@ -159,9 +171,27 @@ export const TUTOR_MODEL_LIMITS = { maxEntries: 10, maxModelChars: 200 } as cons
 export const MODEL_ID_PATTERN = /^[\x21-\x7e]+$/;
 
 /**
+ * Whether a model id looks like an API key rather than a model
+ * (docs/TUTOR-MODELS.md, T11): it starts with a provider key prefix (NVIDIA's
+ * `nvapi-`, OpenRouter's `sk-or-`, OpenAI-style `sk-`, Google's `AIza`), or it
+ * holds a run of 20 or more letters and digits with both in it, which random
+ * key material does and model ids, whose words are split by `-`, `.`, `/` or
+ * `:`, do not. A model chain row is stored in the clear and exported, so a
+ * key pasted into the wrong field must never reach it.
+ */
+export function looksLikeKey(model: string): boolean {
+  if (/^(nvapi-|sk-|AIza)/.test(model)) return true;
+  for (const run of model.match(/[A-Za-z0-9]{20,}/g) ?? []) {
+    if (/[0-9]/.test(run) && /[A-Za-z]/.test(run)) return true;
+  }
+  return false;
+}
+
+/**
  * A model id as sent by a person or a provider, checked (docs/TUTOR-MODELS.md,
- * T5): surrounding whitespace dropped, then 1 to `maxModelChars` characters of
- * printable ASCII with no whitespace. The reason never repeats the value.
+ * T5, T11): surrounding whitespace dropped, then 1 to `maxModelChars`
+ * characters of printable ASCII with no whitespace, and nothing that looks
+ * like an API key. The reason never repeats the value.
  */
 export function checkModelId(value: unknown): { ok: true; model: string } | { ok: false; reason: string } {
   if (typeof value !== "string") return { ok: false, reason: `"model" must be a string.` };
@@ -172,6 +202,9 @@ export function checkModelId(value: unknown): { ok: true; model: string } | { ok
   }
   if (!MODEL_ID_PATTERN.test(model)) {
     return { ok: false, reason: "A model id is printable ASCII with no spaces." };
+  }
+  if (looksLikeKey(model)) {
+    return { ok: false, reason: "That looks like an API key, not a model id. Keys go under Provider keys." };
   }
   return { ok: true, model };
 }

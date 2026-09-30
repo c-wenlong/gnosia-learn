@@ -118,6 +118,9 @@ describe.skipIf(!reachable.ok)("tutor_model", () => {
       ["gemini", "ünïcode"],
       ["gemini", "x".repeat(TUTOR_MODEL_LIMITS.maxModelChars + 1)],
       ["gemini", 42],
+      // A key pasted as a model id would be stored in the clear (T11).
+      ["nvidia", "nvapi-Zk3xQ9vB7mW2pL5tR8yN4cH6dF1gJ0sAqWeRtYuIo"],
+      ["openrouter", "sk-or-v1-0123456789abcdef0123456789abcdef"],
     ] as const) {
       const error = await addTutorModel(scratch.db, LOCAL_LEARNER_ID, provider, model).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(TutorModelError);

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { providerLabel } from "@self-learn/schema/shared";
 import { MathText } from "@/components/Math";
 import { FIELD_TEXT } from "@/components/ui/classes";
 import type {
@@ -125,13 +126,13 @@ export function AgentSession({
         detail?: string;
         model?: string;
         providerLabel?: string;
-        attempts?: Array<{ provider: string; message: string }>;
+        attempts?: Array<{ provider: string; model?: string; message: string }>;
       };
       if (!res.ok) {
         const attemptHint =
           data.attempts && data.attempts.length
             ? ` Attempts: ${data.attempts
-                .map((a) => `${a.provider}: ${a.message.slice(0, 80)}`)
+                .map((a) => `${providerLabel(a.provider)}${a.model ? ` ${a.model}` : ""}: ${a.message.slice(0, 80)}`)
                 .join(" | ")}`
             : "";
         throw new Error(

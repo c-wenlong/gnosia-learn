@@ -22,7 +22,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [seed/COURSES.md](seed/COURSES.md) | The course YAML of the export format: the shape of a file and what the reader refuses |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/BYOK.md](docs/BYOK.md) | Bring your own key: the owner's model provider keys, saved in Settings and stored AES-256-GCM encrypted in `provider_key` under a key derived from `AUTH_SECRET`, with the env keys as the fallback. The decisions, the threat model, rotation, and what is out of scope |
-| [docs/TUTOR-MODELS.md](docs/TUTOR-MODELS.md) | The tutor's model chain: the owner's ordered provider and model list in `tutor_model`, edited in Settings' Models card, tried top to bottom, with the built-in defaults when there is none. Decisions T1 to T9 |
+| [docs/TUTOR-MODELS.md](docs/TUTOR-MODELS.md) | The tutor's model chain: the owner's ordered provider and model list in `tutor_model`, edited in Settings' Models card, tried top to bottom, with the built-in defaults when there is none, a per-call limit and a turn deadline. Decisions T1 to T11 |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [docs/proposals/course-items-declare-concepts.md](docs/proposals/course-items-declare-concepts.md) | Proposal: the course file lists each item's concepts, and progress derives from mastery everywhere the path already does |
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |

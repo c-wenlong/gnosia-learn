@@ -1,3 +1,4 @@
+import { PROVIDER_LABELS } from "@self-learn/schema/shared";
 import { NextResponse } from "next/server";
 
 import { entryCredential } from "@/lib/agent/credentials";
@@ -43,7 +44,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const credential = await entryCredential(owner, provider, model);
-  if (credential === null) return refuse(`There is no key for ${provider} to test with.`, "NO_KEY");
+  if (credential === null) return refuse(`There is no key for ${PROVIDER_LABELS[provider]} to test with.`, "NO_KEY");
 
   const result = await testProviderKey(credential);
   return answer(

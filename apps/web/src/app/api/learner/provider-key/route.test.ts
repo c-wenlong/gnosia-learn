@@ -215,7 +215,13 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
 
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ model: "openrouter/free-model" }), { status: 200 }));
     const ok = await testRoute.POST(request("POST", { provider: "openrouter" }));
-    expect(await expectNoSecret(ok)).toEqual({ ok: true, provider: "openrouter", source: "saved", model: "openrouter/free-model" });
+    expect(await expectNoSecret(ok)).toEqual({
+      ok: true,
+      provider: "openrouter",
+      source: "saved",
+      model: "openrouter/free-model",
+      tested: "openrouter/free",
+    });
   });
 
   it("says there is nothing to test when neither the owner nor the server has a key", async () => {

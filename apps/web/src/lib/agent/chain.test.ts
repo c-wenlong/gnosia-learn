@@ -3,13 +3,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   availableProviderSummary,
   completeWithFallback,
+  DEFAULT_ATTEMPT_TIMEOUT_MS,
   DEFAULT_NVIDIA_MODEL,
+  DEFAULT_TURN_DEADLINE_MS,
   isCallable,
   keyFor,
+  keyTestModel,
+  missingKeyMessage,
   listProviderModels,
   MODEL_LIST_MAX_BYTES,
   orderCredentials,
   resetGoneModelReports,
+  turnTimeouts,
   tutorSteps,
   type ChainEntry,
   type ProviderCredential,
@@ -84,7 +89,13 @@ describe("tutorSteps", () => {
       {},
       ENV,
     );
-    expect(steps[0]).toEqual({ skipped: true, provider: "gemini", model: "gemini-2.5-pro", reason: "no key for gemini" });
+    expect(steps[0]).toEqual({
+      skipped: true,
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      reason: "no key for Google Gemini",
+      keyed: ["nvidia", "openrouter"],
+    });
     expect(isCallable(steps[1]!)).toBe(true);
   });
 
@@ -139,7 +150,7 @@ describe("completeWithFallback over a chain", () => {
     if (!outcome.ok) return;
     expect(outcome.result).toMatchObject({ provider: "openrouter", content: "from the second" });
     expect(outcome.attempts).toEqual([
-      { provider: "gemini", model: "gemini-2.5-pro", message: "no key for gemini", skipped: true },
+      { provider: "gemini", model: "gemini-2.5-pro", message: "no key for Google Gemini", skipped: true },
       expect.objectContaining({ provider: "nvidia", model: "retired/model", status: 410 }),
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -168,7 +179,7 @@ describe("completeWithFallback over a chain", () => {
     expect(outcome).toEqual({
       ok: false,
       code: "MISSING_API_KEY",
-      attempts: [{ provider: "gemini", model: "a", message: "no key for gemini", skipped: true }],
+      attempts: [{ provider: "gemini", model: "a", message: "no key for Google Gemini", skipped: true }],
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -291,5 +302,118 @@ describe("listProviderModels", () => {
     const declared = new Response("{}", { status: 200, headers: { "content-length": String(MODEL_LIST_MAX_BYTES + 1) } });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(declared));
     expect(await listProviderModels(credential("openrouter"))).toMatchObject({ ok: false, message: expect.stringContaining("too large") });
+  });
+});
+
+describe("a turn's time limits", () => {
+  /** A fetch that never answers on its own, and rejects as fetch does when its signal aborts. */
+  function hanging() {
+    return vi.fn((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) return;
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      }),
+    );
+  }
+
+  it("gives up on an entry that never answers and moves on to the next", async () => {
+    const hang = hanging();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) =>
+        JSON.parse(String(init?.body)).model === "hangs" ? hang(url, init) : Promise.resolve(ok("from the second")),
+      ),
+    );
+    const started = Date.now();
+    const outcome = await completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      tutorSteps([{ provider: "nvidia", model: "hangs" }, { provider: "openrouter", model: "answers" }], {}, ENV),
+      { attemptMs: 60, deadlineMs: 5_000 },
+    );
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.result.content).toBe("from the second");
+    expect(outcome.attempts).toEqual([
+      { provider: "nvidia", model: "hangs", message: "No answer within 0 seconds, so the tutor moved on.", timedOut: true },
+    ]);
+  });
+
+  it("stops the walk at the turn's deadline and returns the attempts so far, saying what was not tried", async () => {
+    vi.stubGlobal("fetch", hanging());
+    const started = Date.now();
+    const outcome = await completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      tutorSteps(
+        [
+          { provider: "nvidia", model: "first" },
+          { provider: "nvidia", model: "second" },
+          { provider: "openrouter", model: "third" },
+          { provider: "openrouter", model: "fourth" },
+        ],
+        {},
+        ENV,
+      ),
+      // Each attempt may take 80 ms, the whole turn 200: the third is cut
+      // off by the turn's deadline, and the fourth is never started.
+      { attemptMs: 80, deadlineMs: 200 },
+    );
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(outcome).toMatchObject({ ok: false, code: "ALL_PROVIDERS_FAILED" });
+    if (outcome.ok) return;
+    expect(outcome.attempts.map((a) => [a.model, a.timedOut])).toEqual([
+      ["first", true],
+      ["second", true],
+      ["third", true],
+    ]);
+    expect(outcome.attempts[2]?.message).toMatch(/^Cut off: the turn ran out of its 0 seconds, so 1 more model was not tried\.$/);
+  });
+
+  it("reads its limits from the environment, within bounds, and defaults otherwise", () => {
+    expect(turnTimeouts({})).toEqual({ attemptMs: DEFAULT_ATTEMPT_TIMEOUT_MS, deadlineMs: DEFAULT_TURN_DEADLINE_MS });
+    expect(turnTimeouts({ TUTOR_ATTEMPT_TIMEOUT_MS: "15000", TUTOR_TURN_DEADLINE_MS: " 45000 " })).toEqual({
+      attemptMs: 15_000,
+      deadlineMs: 45_000,
+    });
+    for (const bad of ["", "0", "-5", "abc", "1.5", "999", "300001"]) {
+      expect(turnTimeouts({ TUTOR_ATTEMPT_TIMEOUT_MS: bad }).attemptMs).toBe(DEFAULT_ATTEMPT_TIMEOUT_MS);
+    }
+  });
+});
+
+describe("missingKeyMessage", () => {
+  it("keeps the old message when there is no chain and no key", () => {
+    expect(missingKeyMessage(tutorSteps([], {}, {}))).toBe("No model provider key is set. Add one in Settings, under Provider keys.");
+  });
+
+  it("names the providers that need a key and those that could take a model instead", () => {
+    const steps = tutorSteps(
+      [
+        { provider: "gemini", model: "a" },
+        { provider: "gemini", model: "b" },
+      ],
+      {},
+      ENV,
+    );
+    expect(missingKeyMessage(steps)).toBe(
+      "None of your models has a key. In Settings, add a key for Google Gemini under Provider keys, or add a model from NVIDIA NIM or OpenRouter under Models.",
+    );
+    expect(missingKeyMessage(tutorSteps([{ provider: "gemini", model: "a" }, { provider: "nvidia", model: "b" }], {}, {}))).toBe(
+      "None of your models has a key. In Settings, add a key for Google Gemini or NVIDIA NIM under Provider keys.",
+    );
+  });
+});
+
+describe("keyTestModel", () => {
+  it("is the first chain entry for the provider, else the default, used only when there is no chain", () => {
+    const chain: ChainEntry[] = [
+      { provider: "openrouter", model: "x/one" },
+      { provider: "nvidia", model: "n/first" },
+      { provider: "nvidia", model: "n/second" },
+    ];
+    expect(keyTestModel(chain, "nvidia", {})).toEqual({ model: "n/first", modelFrom: "chain", used: true });
+    expect(keyTestModel(chain, "gemini", {})).toEqual({ model: "gemini-2.5-flash", modelFrom: "default", used: false });
+    expect(keyTestModel([], "gemini", {})).toEqual({ model: "gemini-2.5-flash", modelFrom: "default", used: true });
   });
 });

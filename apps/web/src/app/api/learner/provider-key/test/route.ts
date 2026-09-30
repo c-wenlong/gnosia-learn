@@ -13,8 +13,10 @@ export const runtime = "nodejs";
  * call that key with first: the owner's first chain entry for the provider,
  * else its default (docs/TUTOR-MODELS.md).
  *
- * 200 `{ ok: true, provider, source, model }` when the provider accepted the
- * key, 200 `{ ok: false, provider, source, status, message }` when it did not,
+ * 200 `{ ok: true, provider, source, model, tested }` when the provider
+ * accepted the key, `tested` being the model id sent and `model` the one the
+ * provider says answered; 200 `{ ok: false, provider, source, status,
+ * message, tested }` when it did not,
  * with `message` the provider's own words, any echo of the key taken out.
  * 400 `NO_KEY` when there is no key for that provider to test. The same
  * guards as a save, and a tighter rate limit, since each test spends a
@@ -34,7 +36,14 @@ export async function POST(req: Request): Promise<NextResponse> {
   const result = await testProviderKey(credential);
   return answer(
     result.ok
-      ? { ok: true, provider, source: credential.source, model: result.model }
-      : { ok: false, provider, source: credential.source, status: result.status, message: result.message },
+      ? { ok: true, provider, source: credential.source, model: result.model, tested: credential.config.model }
+      : {
+          ok: false,
+          provider,
+          source: credential.source,
+          status: result.status,
+          message: result.message,
+          tested: credential.config.model,
+        },
   );
 }

@@ -6,6 +6,7 @@ import {
   type ChainEntry,
   type ChainStep,
   keyFor,
+  keyTestModel,
   providerConfigs,
   type ProviderCredential,
   tutorSteps,
@@ -62,10 +63,8 @@ export async function keyTestCredential(
   const config = providerConfigs(env).find((c) => c.id === provider);
   const key = keyFor(provider, saved, env);
   if (config === undefined || key === null) return null;
-  const entry = chain.find((e) => e.provider === provider);
-  return entry === undefined
-    ? { config, ...key, modelFrom: "default" }
-    : { config: { ...config, model: entry.model }, ...key, modelFrom: "chain" };
+  const { model, modelFrom } = keyTestModel(chain, provider, env);
+  return { config: { ...config, model }, ...key, modelFrom };
 }
 
 /**

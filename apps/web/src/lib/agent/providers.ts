@@ -1,4 +1,11 @@
-import { MODEL_ID_PATTERN, PROVIDER_IDS, TUTOR_MODEL_LIMITS, type ProviderId } from "@self-learn/schema/shared";
+import {
+  looksLikeKey,
+  MODEL_ID_PATTERN,
+  PROVIDER_IDS,
+  PROVIDER_LABELS,
+  TUTOR_MODEL_LIMITS,
+  type ProviderId,
+} from "@self-learn/schema/shared";
 
 import { redactSecrets } from "@/lib/agent/redact";
 import { resolveSiteUrl } from "@/lib/site-url";
@@ -38,6 +45,8 @@ export interface ProviderAttemptError {
    * passed over; it is not a failure and does not end the chain.
    */
   skipped?: true;
+  /** The attempt was cut off: its own time ran out, or the turn's did (docs/TUTOR-MODELS.md, T10). */
+  timedOut?: true;
 }
 
 /** Preferred free production cascade: NVIDIA → Gemini Flash → OpenRouter free. */
@@ -68,6 +77,8 @@ export interface SkippedEntry {
   provider: ProviderId;
   model: string;
   reason: string;
+  /** The providers that do have a key, saved or server, for the message that says what to do (T4). */
+  keyed: ProviderId[];
 }
 
 /** One place in the order the tutor tries: a call it can make, or an entry it must pass over. */
@@ -147,21 +158,21 @@ export function providerConfigs(
   return [
     {
       id: "nvidia",
-      label: "NVIDIA NIM",
+      label: PROVIDER_LABELS.nvidia,
       baseUrl: baseUrl(env, "nvidia", "NVIDIA_BASE_URL"),
       model: env.NVIDIA_MODEL?.trim() || DEFAULT_NVIDIA_MODEL,
       apiKeyEnv: "NVIDIA_API_KEY",
     },
     {
       id: "gemini",
-      label: "Google Gemini",
+      label: PROVIDER_LABELS.gemini,
       baseUrl: baseUrl(env, "gemini", "GEMINI_BASE_URL"),
       model: env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
       apiKeyEnv: "GEMINI_API_KEY",
     },
     {
       id: "openrouter",
-      label: "OpenRouter",
+      label: PROVIDER_LABELS.openrouter,
       baseUrl: baseUrl(env, "openrouter", "OPENROUTER_BASE_URL"),
       // Auto-picks from currently available free models
       model: env.OPENROUTER_MODEL?.trim() || "openrouter/free",
@@ -243,15 +254,35 @@ export function tutorSteps(
 ): ChainStep[] {
   if (chain.length === 0) return orderCredentials(saved, env).map((c) => ({ ...c, modelFrom: "default" as const }));
   const configs = new Map(providerConfigs(env).map((c) => [c.id, c]));
+  const keyed = PROVIDER_IDS.filter((id) => keyFor(id, saved, env) !== null);
   return chain.flatMap((entry): ChainStep[] => {
     const config = configs.get(entry.provider);
     if (config === undefined) return [];
     const key = keyFor(entry.provider, saved, env);
     if (key === null) {
-      return [{ skipped: true, provider: entry.provider, model: entry.model, reason: `no key for ${entry.provider}` }];
+      return [{ skipped: true, provider: entry.provider, model: entry.model, reason: `no key for ${config.label}`, keyed }];
     }
     return [{ config: { ...config, model: entry.model }, ...key, modelFrom: "chain" }];
   });
+}
+
+/**
+ * The model a provider's key Test sends, and whether the tutor uses that key
+ * at all (docs/TUTOR-MODELS.md, T9): the owner's first chain entry for the
+ * provider; else, with no chain, the provider's built-in default, which the
+ * tutor uses; else (a chain that names other providers only) the default
+ * too, but the tutor does not call this provider. The Provider keys card
+ * shows it and the key Test route sends it, so the two cannot disagree.
+ */
+export function keyTestModel(
+  chain: readonly ChainEntry[],
+  provider: ProviderId,
+  env: EnvMap = process.env,
+): { model: string; modelFrom: "chain" | "default"; used: boolean } {
+  const entry = chain.find((e) => e.provider === provider);
+  if (entry !== undefined) return { model: entry.model, modelFrom: "chain", used: true };
+  const config = providerConfigs(env).find((c) => c.id === provider);
+  return { model: config?.model ?? "", modelFrom: "default", used: chain.length === 0 };
 }
 
 /** The server's keys alone, for a caller with no owner (the tests, a script). */
@@ -276,18 +307,123 @@ export function availableProviderSummary(
     .join(" → ");
 }
 
+/**
+ * The chain entries a turn passed over for want of a key, for a success
+ * response (T4): empty, and so left out of the body, when there were none.
+ */
+export function skippedEntries(attempts: readonly ProviderAttemptError[]): { skipped?: ProviderAttemptError[] } {
+  const skipped = attempts.filter((a) => a.skipped === true);
+  return skipped.length > 0 ? { skipped } : {};
+}
+
+/** "A", "A or B", "A, B or C". */
+function either(labels: readonly string[]): string {
+  return labels.length <= 1 ? (labels[0] ?? "") : `${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]}`;
+}
+
+/**
+ * What a tutor surface says when nothing it would try has a key (T4). Two
+ * different situations: no provider has a key and there is no chain, which
+ * is the old message; or the owner's chain names only providers without a
+ * key, possibly while others have one, which says which providers need a
+ * key and which could take a model instead.
+ */
+export function missingKeyMessage(steps: readonly ChainStep[]): string {
+  const skips = steps.filter((s): s is SkippedEntry => !isCallable(s));
+  if (skips.length === 0) return "No model provider key is set. Add one in Settings, under Provider keys.";
+  const lacking = [...new Set(skips.map((s) => PROVIDER_LABELS[s.provider]))];
+  const keyed = (skips[0]?.keyed ?? []).map((id) => PROVIDER_LABELS[id]);
+  const addKey = `add a key for ${either(lacking)} under Provider keys`;
+  return keyed.length === 0
+    ? `None of your models has a key. In Settings, ${addKey}.`
+    : `None of your models has a key. In Settings, ${addKey}, or add a model from ${either(keyed)} under Models.`;
+}
+
 /** A provider's error body, with every key the caller holds taken out, then clipped. */
 function providerText(text: string, secrets: readonly string[], max = 400): string {
   return redactSecrets(text, secrets).slice(0, max);
 }
+
+/** The most of an error body read: a person sees 300 characters of it. */
+const ERROR_BODY_MAX_BYTES = 64 * 1024;
+
+/**
+ * A response body as text, read chunk by chunk and abandoned past `max`
+ * bytes, so a gateway that sends more than it declares (or declares nothing)
+ * costs at most `max` bytes of memory. Null when it was too large.
+ */
+async function readCapped(res: Response, max: number): Promise<string | null> {
+  if (res.body === null) return "";
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
+/**
+ * `readCapped` for anything `fetch` answered with. An object with no body
+ * stream at all (a test double, not a real `Response`) is read through its
+ * own `text` or `json`.
+ */
+async function bodyText(res: Response, max: number): Promise<string | null> {
+  if (res.body !== undefined) return readCapped(res, max);
+  const loose = res as unknown as { text?: () => Promise<string>; json?: () => Promise<unknown> };
+  if (typeof loose.text === "function") return loose.text();
+  if (typeof loose.json === "function") return JSON.stringify(await loose.json());
+  return "";
+}
+
+/**
+ * How long one provider call may take, and how long a whole tutor turn may
+ * walk the chain (docs/TUTOR-MODELS.md, T10). Without them a provider that
+ * accepts the connection and never answers holds the turn until the platform
+ * kills the function, and the person gets a bare 504 with no attempts. The
+ * defaults leave room for a slow free model; `TUTOR_ATTEMPT_TIMEOUT_MS` and
+ * `TUTOR_TURN_DEADLINE_MS` override them, between 1 and 300 seconds.
+ */
+export const DEFAULT_ATTEMPT_TIMEOUT_MS = 20_000;
+export const DEFAULT_TURN_DEADLINE_MS = 60_000;
+
+export interface TurnTimeouts {
+  attemptMs: number;
+  deadlineMs: number;
+}
+
+function millis(value: string | undefined, fallback: number): number {
+  const n = Number(value?.trim());
+  return Number.isInteger(n) && n >= 1_000 && n <= 300_000 ? n : fallback;
+}
+
+export function turnTimeouts(env: EnvMap = process.env): TurnTimeouts {
+  return {
+    attemptMs: millis(env.TUTOR_ATTEMPT_TIMEOUT_MS, DEFAULT_ATTEMPT_TIMEOUT_MS),
+    deadlineMs: millis(env.TUTOR_TURN_DEADLINE_MS, DEFAULT_TURN_DEADLINE_MS),
+  };
+}
+
+/** The most of a reply read: a tutor turn is a few KB, and this is far past any. */
+const REPLY_MAX_BYTES = 2 * 1024 * 1024;
 
 async function callOpenAiCompatible(
   provider: ProviderConfig,
   apiKey: string,
   messages: ChatMessage[],
   secrets: readonly string[],
+  signal?: AbortSignal,
 ): Promise<ChatCompletionResult> {
   const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+    signal,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -303,7 +439,7 @@ async function callOpenAiCompatible(
   });
 
   if (!res.ok) {
-    const text = await res.text();
+    const text = (await bodyText(res, ERROR_BODY_MAX_BYTES)) ?? "";
     throw {
       provider: provider.id,
       model: provider.model,
@@ -313,10 +449,16 @@ async function callOpenAiCompatible(
     } satisfies ProviderAttemptError;
   }
 
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-    model?: string;
-  };
+  const text = await bodyText(res, REPLY_MAX_BYTES);
+  if (text === null) {
+    throw { provider: provider.id, model: provider.model, message: "The reply was too large to read." } satisfies ProviderAttemptError;
+  }
+  let data: { choices?: Array<{ message?: { content?: string | null } }>; model?: string };
+  try {
+    data = JSON.parse(text) as typeof data;
+  } catch {
+    throw { provider: provider.id, model: provider.model, message: "The reply was not JSON." } satisfies ProviderAttemptError;
+  }
   const content = data.choices?.[0]?.message?.content?.trim();
   if (!content) {
     throw {
@@ -388,6 +530,7 @@ export function resetGoneModelReports(): void {
 export async function completeWithFallback(
   messages: ChatMessage[],
   steps: readonly ChainStep[],
+  timeouts: TurnTimeouts = turnTimeouts(),
 ): Promise<
   | { ok: true; result: ChatCompletionResult; attempts: ProviderAttemptError[] }
   | {
@@ -403,6 +546,7 @@ export async function completeWithFallback(
     skipped: true,
   });
   const credentials = steps.filter(isCallable);
+  const seconds = (ms: number) => `${Math.round(ms / 1000)} seconds`;
   if (credentials.length === 0) {
     return { ok: false, attempts: steps.flatMap((s) => (isCallable(s) ? [] : [skipped(s)])), code: "MISSING_API_KEY" };
   }
@@ -411,16 +555,39 @@ export async function completeWithFallback(
   const secrets = credentials.map((c) => c.apiKey);
   const attempts: ProviderAttemptError[] = [];
 
-  for (const step of steps) {
+  // The whole walk has one deadline, and each call its own limit inside it.
+  const deadline = AbortSignal.timeout(timeouts.deadlineMs);
+  for (const [index, step] of steps.entries()) {
     if (!isCallable(step)) {
       attempts.push(skipped(step));
       continue;
     }
     const { config: provider, apiKey } = step;
+    const signal = AbortSignal.any([AbortSignal.timeout(timeouts.attemptMs), deadline]);
     try {
-      const result = await callOpenAiCompatible(provider, apiKey, messages, secrets);
+      const result = await callOpenAiCompatible(provider, apiKey, messages, secrets, signal);
       return { ok: true, result, attempts };
     } catch (err) {
+      if (signal.aborted) {
+        // Cut off, whatever the fetch threw on the way out.
+        if (deadline.aborted) {
+          const untried = steps.slice(index + 1).filter(isCallable).length;
+          attempts.push({
+            provider: provider.id,
+            model: provider.model,
+            message: `Cut off: the turn ran out of its ${seconds(timeouts.deadlineMs)}${untried > 0 ? `, so ${untried} more ${untried === 1 ? "model was" : "models were"} not tried` : ""}.`,
+            timedOut: true,
+          });
+          break;
+        }
+        attempts.push({
+          provider: provider.id,
+          model: provider.model,
+          message: `No answer within ${seconds(timeouts.attemptMs)}, so the tutor moved on.`,
+          timedOut: true,
+        });
+        continue;
+      }
       if (
         err &&
         typeof err === "object" &&
@@ -474,6 +641,9 @@ export type KeyTestResult =
   | { ok: true; model: string }
   | { ok: false; status: number | null; message: string };
 
+/** The most of a Test's reply read: one token's worth is well under this. */
+const KEY_TEST_REPLY_MAX_BYTES = 256 * 1024;
+
 /** How long a Test waits for the provider before calling it a failure. */
 export const KEY_TEST_TIMEOUT_MS = 15_000;
 
@@ -510,12 +680,19 @@ export async function testProviderKey(
     // Everything the provider sent that reaches the browser goes through
     // `providerText`, the model name and the status text included: a gateway
     // is free to put anything in either.
+    // Read through the same cap as a model list: a reply to one token is
+    // small, and a gateway that sends more is not read past the cap.
     if (res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { model?: unknown };
+      let data: { model?: unknown } = {};
+      try {
+        data = JSON.parse((await bodyText(res, KEY_TEST_REPLY_MAX_BYTES)) ?? "{}") as { model?: unknown };
+      } catch {
+        // Any 2xx is a working key; an unreadable body only costs the model name.
+      }
       const model = typeof data.model === "string" && data.model ? providerText(data.model, secrets, 200) : config.model;
       return { ok: true, model };
     }
-    const text = await res.text().catch(() => "");
+    const text = (await bodyText(res, ERROR_BODY_MAX_BYTES).catch(() => "")) ?? "";
     // Redacted before and after the JSON is read, so an escape in the body
     // cannot hide an echo from the first pass.
     const message = providerText(providerMessage(redactSecrets(text, secrets)), secrets, 300);
@@ -549,32 +726,6 @@ export const MODEL_LIST_TIMEOUT_MS = 10_000;
 /** The most a list may be: OpenRouter's, the longest, is about 2 MB and 350 models. */
 export const MODEL_LIST_MAX_BYTES = 8 * 1024 * 1024;
 const MODEL_LIST_MAX_MODELS = 2_000;
-/** The most of an error body read: a person sees 300 characters of it. */
-const ERROR_BODY_MAX_BYTES = 64 * 1024;
-
-/**
- * A response body as text, read chunk by chunk and abandoned past `max`
- * bytes, so a gateway that sends more than it declares (or declares nothing)
- * costs at most `max` bytes of memory. Null when it was too large.
- */
-async function readCapped(res: Response, max: number): Promise<string | null> {
-  if (res.body === null) return "";
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let bytes = 0;
-  let text = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.byteLength;
-    if (bytes > max) {
-      await reader.cancel().catch(() => {});
-      return null;
-    }
-    text += decoder.decode(value, { stream: true });
-  }
-  return text + decoder.decode();
-}
 
 /**
  * A listed id as the chat endpoint takes it. Gemini's OpenAI-compatible
@@ -607,7 +758,7 @@ export async function listProviderModels(
       cache: "no-store",
     });
     if (!res.ok) {
-      const text = (await readCapped(res, ERROR_BODY_MAX_BYTES).catch(() => "")) ?? "";
+      const text = (await bodyText(res, ERROR_BODY_MAX_BYTES).catch(() => "")) ?? "";
       const message = providerText(providerMessage(redactSecrets(text, secrets)), secrets, 300);
       return { ok: false, status: res.status, message: message || providerText(res.statusText, secrets, 200) || `HTTP ${res.status}` };
     }
@@ -618,7 +769,7 @@ export async function listProviderModels(
       return tooLarge;
     }
     // Capped as it is read too: a declared length is only a claim.
-    const text = await readCapped(res, MODEL_LIST_MAX_BYTES);
+    const text = await bodyText(res, MODEL_LIST_MAX_BYTES);
     if (text === null) return tooLarge;
     let body: unknown;
     try {
@@ -635,7 +786,7 @@ export async function listProviderModels(
       if (typeof raw !== "string") continue;
       const id = listedId(config.id, raw.trim());
       if (id.length === 0 || id.length > TUTOR_MODEL_LIMITS.maxModelChars || !MODEL_ID_PATTERN.test(id)) continue;
-      if (redactSecrets(id, secrets) !== id || seen.has(id)) continue;
+      if (looksLikeKey(id) || redactSecrets(id, secrets) !== id || seen.has(id)) continue;
       seen.add(id);
       const pricing = (item as { pricing?: { prompt?: unknown; completion?: unknown } }).pricing;
       const free =

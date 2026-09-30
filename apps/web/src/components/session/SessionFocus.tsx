@@ -69,11 +69,13 @@ function randomToken(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 }
 
-function modelProblem(code: string | undefined, fallback: string): string {
-  if (code === "MISSING_API_KEY") return "The tutor has no model provider key yet. Add one in Settings, under Provider keys.";
+function modelProblem(code: string | undefined, error: string | undefined, status: number): string {
+  // The server's own words say which case it is (docs/TUTOR-MODELS.md, T4):
+  // no key anywhere, or a model list whose providers have none.
+  if (code === "MISSING_API_KEY") return error ?? "The tutor has no model provider key yet. Add one in Settings, under Provider keys.";
   if (code === "UNSTRUCTURED_REPLY") return "The tutor answered, but not with a question it could be graded on.";
   if (code === "RATE_LIMITED") return "Too many questions in a minute; the tutor is resting.";
-  return fallback;
+  return error ?? `The tutor did not answer (HTTP ${status}).`;
 }
 
 export function SessionFocus({
@@ -175,7 +177,7 @@ export function SessionFocus({
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as { question?: SessionQuestion; code?: string; error?: string };
         const question = res.ok && body.question !== undefined ? body.question : null;
-        const note = question === null ? modelProblem(body.code, body.error ?? `The tutor did not answer (HTTP ${res.status}).`) : null;
+        const note = question === null ? modelProblem(body.code, body.error, res.status) : null;
         setResolved((prev) => ({ ...prev, [at]: { question, note } }));
       })
       .catch(() => {

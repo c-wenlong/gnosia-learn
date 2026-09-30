@@ -5,6 +5,7 @@ import { SettingsForm } from "@/components/settings/SettingsForm";
 import { TutorModels } from "@/components/settings/TutorModels";
 import { getAllTopicIds, getCourses } from "@/data/courses";
 import { currentOwner } from "@/lib/owner";
+import { keyTestModel } from "@/lib/agent/providers";
 import { loadProviderKeys } from "@/lib/provider-keys/settings";
 import { loadSettings } from "@/lib/settings";
 import { loadTutorModels } from "@/lib/tutor-models/settings";
@@ -46,7 +47,10 @@ export default async function SettingsPage() {
     <div data-layout="app" className="flex max-w-[852px] flex-col gap-4">
       <h1 className="font-display text-[28px] leading-tight font-bold text-text">Settings</h1>
       <SettingsForm settings={settings} providers={providers} chain={models.chain.length > 0} topicIds={getAllTopicIds(courses)} />
-      <ProviderKeys rows={keys.rows} reachable={keys.reachable} />
+      <ProviderKeys
+        rows={keys.rows.map((row) => ({ ...row, test: keyTestModel(models.chain, row.id) }))}
+        reachable={keys.reachable}
+      />
       <TutorModels view={models} />
     </div>
   );

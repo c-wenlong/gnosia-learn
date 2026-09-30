@@ -1,6 +1,6 @@
 "use client";
 
-import { TUTOR_MODEL_LIMITS, type ProviderId } from "@self-learn/schema/shared";
+import { providerLabel, TUTOR_MODEL_LIMITS, type ProviderId } from "@self-learn/schema/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
@@ -159,8 +159,9 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
     else if (reply.status === 200 && reply.data.ok === true) {
       result = { ok: true, text: `Works${reply.data.served && reply.data.served !== entry.model ? `, answered by ${reply.data.served}` : ""}.` };
     } else if (reply.status === 200) {
-      const code = typeof reply.data.status === "number" ? ` (HTTP ${reply.data.status})` : "";
-      result = { ok: false, text: `Refused${code}: ${reply.data.message ?? "no reason given."}` };
+      // No status is no answer at all (a timeout, a refused connection), not a refusal.
+      const outcome = typeof reply.data.status === "number" ? `Refused (HTTP ${reply.data.status})` : "No answer";
+      result = { ok: false, text: `${outcome}: ${reply.data.message ?? "no reason given."}` };
     } else result = { ok: false, text: reply.data.error ?? `Not tested (HTTP ${reply.status}).` };
     focusNext.current = idFor(entry, "test");
     setTests((t) => ({ ...t, [key]: result }));
@@ -216,13 +217,13 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
                       {entry.model}
                     </p>
                     <p className={cx("text-[12px]", provider?.key ? "text-text2" : "text-danger")}>
-                      {provider?.label ?? entry.provider}
+                      {provider?.label ?? providerLabel(entry.provider)}
                       {", "}
                       {provider?.key === "saved"
                         ? "your key"
                         : provider?.key === "server"
                           ? "server key"
-                          : `no key for ${entry.provider}, so the tutor skips it`}
+                          : `no key for ${provider?.label ?? providerLabel(entry.provider)}, so the tutor skips it`}
                     </p>
                     {last !== undefined && (
                       <p className={cx("text-[12px]", last.ok ? "text-ok-text" : "text-danger")}>Last test: {last.text}</p>

@@ -191,6 +191,22 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
     expect((await twice.json()).code).toBe("DUPLICATE");
   });
 
+  it("refuses a model id that is, holds or is part of one of the owner's keys, and never repeats it", async () => {
+    // A key with no key-like shape, so only the comparison with the stored key can catch it.
+    const plain = "my-own-gateway-token-for-gemini";
+    await store.addChainEntry("local", "nvidia", "a/one");
+    const { saveProviderKey } = await import("@/lib/provider-keys/store");
+    await saveProviderKey("local", "gemini", plain);
+    for (const model of [plain, `prefix/${plain}`, plain.slice(3, 20), SERVER_NVIDIA, KEY]) {
+      const response = await routes.POST(request("", "POST", { provider: "nvidia", model }));
+      expect(response.status, model).toBe(400);
+      const text = await response.text();
+      expect(text).not.toContain(model);
+      expect(text).toMatch(/API key/);
+    }
+    expect(await store.readChain("local")).toEqual([{ provider: "nvidia", model: "a/one" }]);
+  });
+
   it("has the provider-key routes' guards: same origin, a session, and a rate limit", async () => {
     const body = { provider: "nvidia", model: "a" };
     expect((await routes.POST(request("", "POST", body, { origin: "https://evil.example" }))).status).toBe(403);
@@ -229,7 +245,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
     await routes.POST(request("", "POST", { provider: "nvidia", model: "a/one" }));
     delete process.env.NVIDIA_API_KEY;
     const steps = await credentials.tutorCredentials("local");
-    expect(steps).toEqual([{ skipped: true, provider: "nvidia", model: "a/one", reason: "no key for nvidia" }]);
+    expect(steps).toEqual([{ skipped: true, provider: "nvidia", model: "a/one", reason: "no key for NVIDIA NIM", keyed: [] }]);
     // Nothing to test it with, and nothing to list.
     const tested = await testRoute.POST(request("/test", "POST", { provider: "nvidia", model: "a/one" }));
     expect(tested.status).toBe(400);
