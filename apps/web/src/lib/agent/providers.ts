@@ -263,6 +263,19 @@ const reportedGone = new Set<string>();
  * unnoticed. Say it once per model, naming the model, and name both causes
  * for a 404 so the log does not send an operator after the wrong one.
  */
+/**
+ * The host of a base URL and nothing else. A gateway may carry an access token
+ * in its path, query or userinfo, and the secret redaction on provider errors
+ * covers API keys, not this, so a log line gets the origin only.
+ */
+function originOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).origin;
+  } catch {
+    return "the configured base URL";
+  }
+}
+
 function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string): void {
   if (attempt.status !== 404 && attempt.status !== 410) return;
   const key = `${attempt.provider}/${attempt.model}`;
@@ -272,7 +285,7 @@ function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string): void
   console.error(
     attempt.status === 410
       ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, set ${variable}`
-      : `agent: ${attempt.provider} answered 404 for model ${attempt.model} at ${baseUrl}; the model may be retired (set ${variable}) or the base URL may not serve /chat/completions`,
+      : `agent: ${attempt.provider} answered 404 for model ${attempt.model} at ${originOf(baseUrl)}; the model may be retired (set ${variable}) or the base URL may not serve /chat/completions`,
   );
 }
 

@@ -299,13 +299,17 @@ describe("completeWithFallback", () => {
       [{ role: "user", content: "hi" }],
       serverCredentials({
         NVIDIA_API_KEY: "nv",
-        NVIDIA_BASE_URL: "https://gateway.example/v1",
+        NVIDIA_BASE_URL: "https://user:pw@gateway.example/t0k3n-path/v1?key=q5",
       }),
     );
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const line = String(errorSpy.mock.calls[0][0]);
     expect(line).toContain(DEFAULT_NVIDIA_MODEL);
-    expect(line).toContain("https://gateway.example/v1");
+    expect(line).toContain("https://gateway.example");
+    // Only the origin: a gateway token in the path, query or userinfo stays out.
+    expect(line).not.toContain("t0k3n-path");
+    expect(line).not.toContain("q5");
+    expect(line).not.toContain("pw");
     expect(line).toContain("base URL");
     expect(line).not.toContain("it is retired");
   });
