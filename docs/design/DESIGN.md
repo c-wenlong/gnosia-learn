@@ -55,8 +55,12 @@ for it. Where a decision changes the API it is marked, and expanded under
 ## Information architecture
 
 Five top-level destinations in the top bar, plus Settings behind the
-avatar and Studio behind its flag. The bar also carries the streak and the
-target so they are visible everywhere without owning a screen.
+avatar. Studio is a sixth destination after them, from 768px up and only
+when `STUDIO_ENABLED` is set; on a phone it stays in the avatar menu (revised
+2026-09-30: the owner asked for it in the bar "so its easier to access", and
+the phone tab bar keeps five because its grid is five columns and the studio
+is desktop first). The bar also carries the streak and the target so they are
+visible everywhere without owning a screen.
 
 ```mermaid
 flowchart LR
@@ -180,8 +184,8 @@ implementation should keep the same vocabulary.
 
 | Component | Used on | Notes |
 | --- | --- | --- |
-| Top bar | every desktop screen | wordmark, five destinations, streak pill, target pill, avatar |
-| Phone tab bar | phone screens | the same five destinations |
+| Top bar | every desktop screen | wordmark, five destinations (a sixth, Studio, when the studio is enabled), streak pill, target pill, avatar |
+| Phone tab bar | phone screens | the same five destinations, never Studio |
 | Card | everywhere | title, optional action link at the right |
 | Mastery dot | path, lists, workspace | three buckets: mastered, learning, untouched |
 | Progress bar | courses, path rail, close screen | fill proportional to a fraction |
