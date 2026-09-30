@@ -152,8 +152,8 @@ export function inputClasses({
 }: { pill?: boolean; size?: "md" | "sm"; className?: string } = {}): string {
   return cx(
     size === "md" ? "h-11 px-3.5" : "h-9 px-3",
-    // 16px below 768px: iOS Safari zooms the page when it focuses a field under that.
-    "w-full min-w-0 border-2 border-border bg-surface text-base text-text md:text-[14px]",
+    "w-full min-w-0 border-2 border-border bg-surface text-text",
+    FIELD_TEXT.px14,
     "placeholder:text-text3 outline-none transition-colors duration-100 focus:border-accent",
     "aria-invalid:border-danger",
     DISABLED,
@@ -161,6 +161,23 @@ export function inputClasses({
     className,
   );
 }
+
+/**
+ * The text size of a form field: 16px on anything touched, and the desktop
+ * size only where there is a fine pointer and at least 768px. iOS Safari zooms
+ * the page when it focuses a field under 16px and leaves it zoomed, and a
+ * phone held in landscape is wider than 768px, so the width alone cannot say
+ * "phone": the pointer does. The pixel size goes in the name, written out so
+ * Tailwind finds each class. Every field takes its size from here; a bare
+ * `text-sm` on an `<input>` brings the zoom back (`composer-keys.test.ts`).
+ */
+export const FIELD_TEXT = {
+  xs: "text-base md:pointer-fine:text-xs",
+  sm: "text-base md:pointer-fine:text-sm",
+  px13: "text-base md:pointer-fine:text-[13px]",
+  px14: "text-base md:pointer-fine:text-[14px]",
+  px15: "text-base md:pointer-fine:text-[15px]",
+} as const;
 
 /** Kit `Card`: 2px border, radius 20, padding 20 (14 when `tight`). */
 export function cardClasses({ tight = false, className }: { tight?: boolean; className?: string } = {}): string {
