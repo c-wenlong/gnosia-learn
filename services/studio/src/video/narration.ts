@@ -51,9 +51,32 @@ export function narrationFacts(): NarrationFacts | null {
   return current;
 }
 
-/** Keep an answer (the toolchain's discovery does), or forget it (tests). */
+/** Keep an answer, or forget it (tests, and `settleNarrationRead`). */
 export function keepNarrationFacts(facts: NarrationFacts | null): void {
   current = facts;
+}
+
+let reads = 0;
+let settled = 0;
+
+/**
+ * Number a read of gnosia-audio as it starts. Discoveries overlap (the
+ * doctor's periodic check and a job's start), and an older one can finish
+ * after a newer one, a timeout after a success; so what a read found is kept
+ * only when no read that started after it has already been kept (Greptile on
+ * #257).
+ */
+export function startNarrationRead(): number {
+  reads += 1;
+  return reads;
+}
+
+/** Keep what read `ticket` found, unless a later-started read's answer is already kept. Whether it was kept. */
+export function settleNarrationRead(ticket: number, facts: NarrationFacts | null): boolean {
+  if (ticket <= settled) return false;
+  settled = ticket;
+  keepNarrationFacts(facts);
+  return true;
 }
 
 /** The speech rate the validator and the card use. */

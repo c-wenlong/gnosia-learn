@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { REPO_ROOT } from "../paths";
 import { run } from "../proc";
-import { readNarrationFacts, keepNarrationFacts, type NarrationFacts } from "./narration";
+import { readNarrationFacts, settleNarrationRead, startNarrationRead, type NarrationFacts } from "./narration";
 
 /**
  * Where the programs a render runs actually live on this machine.
@@ -188,9 +188,11 @@ export async function discoverToolchain(): Promise<Toolchain> {
   // Kept for the brief's validator and the card as well, which read it
   // synchronously. A failed read clears it, so health says `fallback` rather
   // than reporting an installation that no longer answers as current, and
-  // the card makes its own check (Greptile on #257).
+  // the card makes its own check; an older read that finishes late changes
+  // nothing (Greptile on #257).
+  const ticket = startNarrationRead();
   const [narration, sharedAudioCache] = await Promise.all([readNarrationFacts(root, venvPython?.link ?? null), sharedCache(root, python3?.real ?? null)]);
-  keepNarrationFacts(narration);
+  settleNarrationRead(ticket, narration);
   const hub = hubCache();
   const model = path.join(hub, "models--hexgrad--Kokoro-82M");
   const kokoroModel = existsSync(model) ? realpathSync(model) : null;

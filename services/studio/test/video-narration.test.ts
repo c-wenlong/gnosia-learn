@@ -14,7 +14,9 @@ import {
   narrationHealth,
   parseHome,
   readNarrationFacts,
+  settleNarrationRead,
   spokenForms,
+  startNarrationRead,
   keepNarrationFacts,
   videoAbbreviations,
   type NarrationFacts,
@@ -183,6 +185,18 @@ describe("the toolchain without gnosia-audio", () => {
 });
 
 describe("discovering the toolchain", () => {
+  it("keeps the answer of the read that started last, whichever finishes first", () => {
+    const older = startNarrationRead();
+    const newer = startNarrationRead();
+    expect(settleNarrationRead(newer, FACTS)).toBe(true);
+    // The older read timed out after the newer one succeeded: it changes nothing.
+    expect(settleNarrationRead(older, null)).toBe(false);
+    expect(narrationFacts()).toBe(FACTS);
+    // A read started after both still replaces it, a failure included.
+    expect(settleNarrationRead(startNarrationRead(), null)).toBe(true);
+    expect(narrationFacts()).toBeNull();
+  });
+
   it("forgets gnosia-audio's last answer when it stops answering, so health says fallback", async () => {
     keepNarrationFacts(FACTS);
     const saved = process.env.MANIMKC_ROOT;
