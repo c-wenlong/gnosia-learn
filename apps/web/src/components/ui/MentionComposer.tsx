@@ -46,7 +46,7 @@ import {
 
 import { Button } from "./Button";
 import { cx } from "./classes";
-import { COMPOSER_FRAME, COMPOSER_LINE_PX, COMPOSER_MAX_ROWS, COMPOSER_REASON, COMPOSER_TEXT, composerKey } from "./composer-keys";
+import { COMPOSER_FRAME, COMPOSER_LINE_PX, COMPOSER_MAX_ROWS, COMPOSER_PLACEHOLDER, COMPOSER_REASON, COMPOSER_TEXT, composerKey } from "./composer-keys";
 import { Glyph, type GlyphName } from "./Glyph";
 import { MentionChip } from "./MentionChip";
 import {
@@ -773,7 +773,7 @@ function Field<K extends string>({
                   )}
                   aria-placeholder={placeholder ?? ""}
                   placeholder={
-                    <div aria-hidden className="pointer-events-none absolute left-1 right-4 top-3 truncate text-[15px] leading-6 text-text3">
+                    <div aria-hidden className={cx("pointer-events-none absolute left-1 right-4 top-3 truncate", COMPOSER_PLACEHOLDER)}>
                       {placeholder}
                     </div>
                   }

@@ -318,7 +318,7 @@ function Strip({ diagram, path, uncommitted }: { diagram: Diagram; path: string;
           required
           placeholder="Why this change"
           aria-label="Why this change"
-          className="h-8 w-44 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+          className="h-8 w-44 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none md:text-xs"
         />
         <Button type="submit">Commit</Button>
       </form>

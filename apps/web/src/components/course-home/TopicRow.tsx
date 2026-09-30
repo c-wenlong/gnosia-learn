@@ -221,7 +221,7 @@ function TopicPanel({
           onBlur={flush}
           placeholder="Personal notes for this topic"
           rows={3}
-          className="mt-1.5 block w-full resize-y rounded-lg border-2 border-border bg-surface px-3.5 py-2.5 text-[14px] text-text outline-none transition-colors duration-100 placeholder:text-text3 focus:border-accent"
+          className="mt-1.5 block w-full resize-y rounded-lg border-2 border-border bg-surface px-3.5 py-2.5 text-base text-text outline-none transition-colors duration-100 placeholder:text-text3 focus:border-accent md:text-[14px]"
         />
       </div>
     </div>
