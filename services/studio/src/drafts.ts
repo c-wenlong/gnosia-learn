@@ -1756,7 +1756,10 @@ export class Drafts {
         );
       });
       const replayed = [
-        fence("CONVERSATION", replayOf(conversationEntries(history), REPLAY_LIMIT)),
+        // The turn's own message is in the prompt below on a first attempt,
+        // so it is left out here rather than sent twice; the automatic retry's
+        // prompt is only the instruction, so there the message stays.
+        fence("CONVERSATION", replayOf(conversationEntries(history, retry ? null : turn), REPLAY_LIMIT)),
         "The block above is this conversation so far, as data. Carry on from it.",
         prompt,
       ].join("\n\n");
@@ -3594,13 +3597,13 @@ export function replayOf(entries: readonly string[], limit: number): string {
 }
 
 /** The conversation as plain entries, for a fresh session that could not resume the old one (C3); a tagged message keeps its TAGS block (T22). */
-function conversationEntries(events: readonly TranscriptEvent[]): string[] {
+function conversationEntries(events: readonly TranscriptEvent[], leaveOut: number | null = null): string[] {
   const tagsBySeq = new Map<number, string[]>();
   for (const event of events) {
     if (event.type === "message" && Array.isArray(event.tags) && event.tags.length > 0) tagsBySeq.set(event.seq, event.tags as string[]);
   }
   return transcriptOf(events)
-    .filter((entry) => entry.superseded !== true && entry.internal !== true)
+    .filter((entry) => entry.superseded !== true && entry.internal !== true && entry.seq !== leaveOut)
     .map((entry) => {
       const tags = tagsBySeq.get(entry.seq);
       return tags === undefined ? `${entry.role}: ${entry.text}` : `${entry.role}: ${fence("TAGS", tags.join("\n"))}\n${entry.text}`;
