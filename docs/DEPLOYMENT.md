@@ -155,7 +155,9 @@ saved key.
 
 **When NVIDIA retires the model.** The default is `google/gemma-4-31b-it`
 (`DEFAULT_NVIDIA_MODEL` in `apps/web/src/lib/agent/providers.ts`), and
-`NVIDIA_MODEL` overrides it without a deploy of new code. A retired NVIDIA
+`NVIDIA_MODEL` overrides it without a deploy of new code. The owner can also
+skip the defaults altogether: Settings, Models, lists each provider's live
+models and keeps the owner's own order ([TUTOR-MODELS.md](TUTOR-MODELS.md)). A retired NVIDIA
 model answers 410 Gone, and the cascade then quietly falls through to Gemini,
 so the server logs one `agent: nvidia answered 410 for model ...` line per
 retired model per server instance. To pick a replacement without a key,

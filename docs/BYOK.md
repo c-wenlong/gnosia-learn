@@ -61,7 +61,10 @@ of the key taken out. Keys never go into logs, error messages,
 `catalog export`, the nightly export, `learn vault pull`, the learner export
 or any client bundle.
 
-**D4. Resolved per request, for the signed-in owner.** `currentOwner()`,
+**D4. Resolved per request, for the signed-in owner.** (Since the model
+chain, this is the order for an owner with no chain; an owner with one gets
+the chain's order, each entry with the key D9 names:
+[TUTOR-MODELS.md](TUTOR-MODELS.md), T1 and T3.) `currentOwner()`,
 never a default `local`. The owner's saved keys come first, in the cascade's
 order (NVIDIA, Gemini, OpenRouter); then the server's keys, in the same order,
 for the providers the owner saved none for. The `providers` field of a tutor
@@ -185,9 +188,11 @@ each moves to version 2 when its key is next saved. No migration.
   (`key_version`) is where one would go.
 - Re-encrypting stored keys when `AUTH_SECRET` rotates.
 - A log of which key paid for which turn, and per-owner spend caps.
-- Choosing the model per owner. The model and base URL still come from the
-  environment (`<PROVIDER>_MODEL`, `<PROVIDER>_BASE_URL`), so an owner's key
-  cannot point the server at a host of their choosing. The other side of that
-  is the environment-write row of the threat model: whoever sets the base URL
+- Choosing the base URL per owner. The base URL still comes from the
+  environment (`<PROVIDER>_BASE_URL`), so an owner's key cannot point the
+  server at a host of their choosing. The other side of that is the
+  environment-write row of the threat model: whoever sets the base URL
   receives the saved keys, which must be closed before a second account
-  exists.
+  exists. The model is the owner's to choose since the model chain
+  ([TUTOR-MODELS.md](TUTOR-MODELS.md)), which chooses among these same
+  providers and their configured base URLs.

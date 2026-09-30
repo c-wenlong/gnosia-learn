@@ -106,7 +106,9 @@ function writeTurns(key: string, turns: ThreadItem[]): void {
 
 function errorFor(status: number, data: ChatReply): string {
   if (data.code === "MISSING_API_KEY") {
-    return "The tutor has no model provider key yet. Add one in Settings, under Provider keys.";
+    // The server says which case it is: no key anywhere, or a model list
+    // whose providers have none (docs/TUTOR-MODELS.md, T4).
+    return data.error ?? "The tutor has no model provider key yet. Add one in Settings, under Provider keys.";
   }
   if (data.code === "CONCEPT_UNAVAILABLE") return "The knowledge base is unreachable, so the tutor has no note to read.";
   if (status === 429) return "That was a lot of questions in a minute. Wait a moment and try again.";

@@ -85,11 +85,18 @@ function usePreference<T>(key: string, initial: T, afterSave?: () => void) {
 export function SettingsForm({
   settings,
   providers,
+  chain,
   topicIds,
 }: {
   settings: SettingsSnapshot;
-  /** The providers the tutor has a key for, in the order they are tried, and whose key each is. */
+  /**
+   * What the tutor tries, in order, and whose key each uses: the providers
+   * with a key, or with a model chain the chain's entries with a key, by
+   * model id (docs/TUTOR-MODELS.md).
+   */
   providers: { id: string; label: string; source: "saved" | "server" }[];
+  /** Whether `providers` is the owner's model chain rather than the built-in defaults. */
+  chain: boolean;
   /** Every curriculum item id, for Reset progress. */
   topicIds: string[];
 }) {
@@ -176,11 +183,20 @@ export function SettingsForm({
             </ReadOnly>
           )}
         </Field>
-        <Field label="Model providers" note="Tried in this order: your own keys first, then the server's. Add yours under Provider keys.">
+        <Field
+          label="Model providers"
+          note={
+            chain
+              ? "Your models, tried in this order. Change them under Models."
+              : "The built-in defaults, tried in this order: your own keys first, then the server's. Choose your own under Models."
+          }
+        >
           {(id) => (
             <ReadOnly id={id} title={providers.map((p) => `${p.label}, ${p.source === "saved" ? "your key" : "server key"}`).join(" → ")}>
               {providers.length === 0
-                ? "None yet: add a key under Provider keys"
+                ? chain
+                  ? "None: no model in your list has a key"
+                  : "None yet: add a key under Provider keys"
                 : providers.map((p) => `${p.id} (${p.source === "saved" ? "yours" : "server"})`).join(" → ")}
             </ReadOnly>
           )}

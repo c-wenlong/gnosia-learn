@@ -247,9 +247,11 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
   });
 
   describe("export", () => {
-    it("hands back the snapshot and the event log as a download", async () => {
+    it("hands back the snapshot, the model chain and the event log as a download", async () => {
       await call("progress", { curriculumItemId: ITEMS[0], completed: true });
       await call("preference", { key: "dailyLeeway", value: 2 });
+      const { addTutorModel } = await import("../../../../../../services/catalog/src/state");
+      await addTutorModel(scratch.db, "local", "gemini", "gemini-2.5-flash");
       const { GET } = await import("./export/route");
       const response = await GET(new Request(`${ORIGIN}/api/learner/export`, { headers: { host: "localhost:3000" } }));
       expect(response.status).toBe(200);
@@ -258,9 +260,12 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
         format: string;
         learner: { completed: Record<string, true> };
         preferences: Record<string, unknown>;
+        tutorModels: unknown;
         events: unknown[];
       };
       expect(body.format).toBe("self-learn-export");
+      // Owner configuration, no secret (docs/TUTOR-MODELS.md, T6).
+      expect(body.tutorModels).toEqual([{ provider: "gemini", model: "gemini-2.5-flash" }]);
       // Every preference row, not only the ones the snapshot folds in.
       expect(body.preferences).toMatchObject({ dailyLeeway: 2 });
       expect(body.learner.completed).toEqual({ [ITEMS[0]]: true });
