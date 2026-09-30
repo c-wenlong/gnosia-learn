@@ -9,6 +9,7 @@ import { useLearner } from "@/lib/learner-context";
 import type { Resource } from "@/lib/types";
 
 import { Glyph, RESOURCE_GLYPH } from "./icons";
+import { resourceLink } from "./resource-link";
 import { FOCUS_RING, ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 
 const TYPE_LABEL: Record<Resource["type"], string> = {
@@ -19,20 +20,17 @@ const TYPE_LABEL: Record<Resource["type"], string> = {
   other: "Link",
 };
 
-/** `arxiv.org` for a meta line; the raw text when it does not parse. */
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
+/** An outside link opens a new tab; a link into this app stays in the one the learner is in. */
+function newTab(internal: boolean) {
+  return internal ? {} : { target: "_blank", rel: "noopener noreferrer" };
 }
 
 /**
  * A module's reading list as item rows: the curated resources from the course
  * file, then the learner's own (each with Remove), then a row that opens the
- * form to add one. Each resource opens in a new tab; the meta line says what
- * kind it is and where it lives, the way Coursera's says "Reading".
+ * form to add one. An outside resource opens in a new tab and a link into this
+ * app in the same one; the meta line says what kind it is and where it lives
+ * (a host, "Library" or "This site"), the way Coursera's says "Reading".
  */
 export function ModuleResources({ moduleId, curated }: { moduleId: string; curated: Resource[] }) {
   const { state, addResource, removeResource } = useLearner();
@@ -69,44 +67,49 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
 
   return (
     <ul className={ROW_LIST}>
-      {curated.map((r) => (
-        <li key={r.id}>
-          <a href={r.url} target="_blank" rel="noopener noreferrer" className={cx(ROW, ROW_HOVER, FOCUS_RING)}>
-            <Glyph name={RESOURCE_GLYPH[r.type] ?? "link"} className="text-text2" />
-            <span className="min-w-0 flex-1 pl-1">
-              <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
-              <span className={ROW_META}>
-                {TYPE_LABEL[r.type] ?? "Link"} · {hostOf(r.url)}
-              </span>
-            </span>
-          </a>
-        </li>
-      ))}
-      {yours.map((r) => (
-        <li key={r.id}>
-          <div className={cx(ROW, ROW_HOVER)}>
-            <a
-              href={r.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cx("flex min-w-0 flex-1 items-center gap-2", STRETCHED)}
-            >
-              <Glyph name="link" className="text-text2" />
+      {curated.map((r) => {
+        const link = resourceLink(r.url);
+        return (
+          <li key={r.id}>
+            <a href={r.url} {...newTab(link.internal)} className={cx(ROW, ROW_HOVER, FOCUS_RING)}>
+              <Glyph name={RESOURCE_GLYPH[r.type] ?? "link"} className="text-text2" />
               <span className="min-w-0 flex-1 pl-1">
                 <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
-                <span className={ROW_META}>Yours · {hostOf(r.url)}</span>
+                <span className={ROW_META}>
+                  {TYPE_LABEL[r.type] ?? "Link"} · {link.where}
+                </span>
               </span>
             </a>
-            <button
-              type="button"
-              onClick={() => removeResource(moduleId, r.id)}
-              className={cx("relative z-10 rounded-sm px-1 text-[13px] text-text2 hover:text-danger", FOCUS_RING)}
-            >
-              Remove
-            </button>
-          </div>
-        </li>
-      ))}
+          </li>
+        );
+      })}
+      {yours.map((r) => {
+        const link = resourceLink(r.url);
+        return (
+          <li key={r.id}>
+            <div className={cx(ROW, ROW_HOVER)}>
+              <a
+                href={r.url}
+                {...newTab(link.internal)}
+                className={cx("flex min-w-0 flex-1 items-center gap-2", STRETCHED)}
+              >
+                <Glyph name="link" className="text-text2" />
+                <span className="min-w-0 flex-1 pl-1">
+                  <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
+                  <span className={ROW_META}>Yours · {link.where}</span>
+                </span>
+              </a>
+              <button
+                type="button"
+                onClick={() => removeResource(moduleId, r.id)}
+                className={cx("relative z-10 rounded-sm px-1 text-[13px] text-text2 hover:text-danger", FOCUS_RING)}
+              >
+                Remove
+              </button>
+            </div>
+          </li>
+        );
+      })}
       <li>
         <button
           type="button"

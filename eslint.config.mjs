@@ -30,6 +30,12 @@ const eslintConfig = defineConfig([
     // its own flat ESLint config and its own TypeScript projects. Linting it
     // from here would use the wrong config and walk its build output.
     "tools/tldrawkc/**",
+    // The desktop app makes a git worktree per session under
+    // .claude/worktrees/<name>/, each a full checkout with its own
+    // node_modules and tools/tldrawkc/dist. Linting from the repo root walks
+    // every one of them (9,400 findings in one run) for code that is not this
+    // checkout's; each worktree lints itself.
+    ".claude/worktrees/**",
     // apps/**, packages/** and services/** are deliberately NOT here. They are
     // npm workspaces in this repo, written in the same TypeScript by the same
     // people, so this config lints them correctly and should. (Their tsconfigs
