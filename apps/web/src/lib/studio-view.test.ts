@@ -13,8 +13,10 @@ import {
   freshness,
   groupDiagrams,
   panelHref,
+  panelSignature,
   parsePanel,
   parseView,
+  rawParamsOf,
   relativeTime,
   sortDiagrams,
   studioHref,
@@ -385,5 +387,23 @@ describe("the full-width picture's title (review of #217)", () => {
     expect(shotTitle(jobs, "j1")).toBe("Dot product, part by part");
     expect(shotTitle(jobs, "j2")).toBe("the diagram");
     expect(shotTitle(jobs, "gone")).toBe("the diagram");
+  });
+});
+
+describe("the panel a URL names", () => {
+  it("ignores the filters and tells each panel apart", () => {
+    expect(panelSignature({ draft: "d1", topic: "a", q: "x" })).toBe(panelSignature({ draft: "d1" }));
+    const panels = [{}, { draft: "d1" }, { draft: "d2" }, { job: "j1" }, { extend: "e" }, { extend: "e", talk: "1" }, { sel: "s" }, { settings: "1" }, { job: "j1", shot: "after" }];
+    expect(new Set(panels.map((params) => panelSignature(params))).size).toBe(panels.length);
+  });
+
+  it("reads what the page's parser reads: a picture needs its job, Talk needs its Extend", () => {
+    expect(panelSignature({ shot: "after" })).toBe(panelSignature({}));
+    expect(panelSignature({ talk: "1" })).toBe(panelSignature({}));
+  });
+
+  it("turns the address bar into the page's search params, a repeated name as a list", () => {
+    expect(rawParamsOf(new URLSearchParams("draft=d1&topic=a&topic=b"))).toEqual({ draft: "d1", topic: ["a", "b"] });
+    expect(panelSignature(rawParamsOf(new URLSearchParams("sel=s&view=list")))).toBe(panelSignature({ sel: "s" }));
   });
 });
