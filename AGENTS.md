@@ -1174,6 +1174,14 @@ not have to be worked out again.
   verdicts. Neutering `Runner.settled` fails `queue.test.ts` eight runs in
   eight under load, on a state read too early and on `ENOTEMPTY` from the
   teardown deleting a workspace mid-write, so those waits are a real gate.
+  `Drafts.drain` is the other way round: it stops the planner turns and then
+  waits on `Drafts.settledAll`, every read, write and mirror the service
+  started, including the corpus read a create refused on the vocabulary
+  leaves running. That read writes the listing's cache under `STUDIO_HOME`,
+  and before the wait it failed `drafts.test.ts`'s teardown with `ENOTEMPTY`
+  12 runs in 100 under load (0 in 100 after). Something new that `Drafts`
+  starts without awaiting goes through `inBackground`, or `drain` stops
+  covering it.
 - **A studio test that runs planner turns must set `STUDIO_CLAUDE_BIN`
   before anything imports `services/studio/src/config.ts`.** `CLAUDE_BIN` is
   read once, at import, and a static import that reaches it (the video

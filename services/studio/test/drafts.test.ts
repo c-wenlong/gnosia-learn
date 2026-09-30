@@ -47,6 +47,7 @@ const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
 const { spendWindow } = await import("../src/cost");
 const { draftDir, draftJsonPath, draftSessionLogPath, draftTranscriptPath } = await import("../src/paths");
+const { cachePath } = await import("../src/content-cache");
 
 type DraftsT = InstanceType<typeof Drafts>;
 
@@ -227,6 +228,24 @@ describe("making a conversation", () => {
     catalogMock.topicList.mockResolvedValue(topicListDown());
     await expect(drafts.create({ idempotencyKey: "down" })).rejects.toMatchObject({ status: 503 });
     expect(catalogMock.diagramList).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not drained until the corpus read a refused create left running has written its cache", async () => {
+    // The read outlives the refusal and writes the listing's cache under
+    // STUDIO_HOME, so a teardown that deleted the home once `drain` returned
+    // raced it and failed with ENOTEMPTY about one run in eight under load.
+    let listed!: () => void;
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    catalogMock.diagramList.mockImplementationOnce(() => new Promise((resolve) => (listed = () => resolve(ok({ diagrams: [] })))));
+    await expect(drafts.create({ idempotencyKey: "down" })).rejects.toMatchObject({ status: 503 });
+    let drained = false;
+    const draining = drafts.drain().then(() => (drained = true));
+    // Nothing can resolve `drain` but the read, so however long this yields it is still waiting.
+    for (let tick = 0; tick < 20; tick++) await Promise.resolve();
+    expect(drained).toBe(false);
+    listed();
+    await draining;
+    expect(JSON.parse(await readFile(cachePath("diagrams.local"), "utf8")).value).toEqual([]);
   });
 });
 

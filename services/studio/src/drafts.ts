@@ -660,6 +660,12 @@ export class Drafts {
   /** Mirrors in flight, and whether another write arrived while one ran. */
   private readonly mirroring = new Map<string, { again: boolean; done: Promise<void> }>();
   /**
+   * Reads started without anyone awaiting them to the end: the corpus and the
+   * videos a create reads beside the vocabulary, which go on (and write the
+   * listing's cache) after a refused vocabulary has already failed the create.
+   */
+  private readonly background = new Set<Promise<unknown>>();
+  /**
    * The Draw press in progress on each draft, with its key. Held from the
    * press to the job being recorded, so neither a planner turn nor a second
    * press can run beside it: a turn could otherwise move the draft while the
@@ -1266,8 +1272,8 @@ export class Drafts {
     // after it: each is a catalog subprocess, and one after another they
     // were most of the wait between New and a conversation to type into.
     // Neither can reject, so a refusal below leaves nothing unhandled.
-    const listingRead = listDiagrams().catch(() => null);
-    const videosRead = kinds.includes("video") ? readVideoCorpus() : Promise.resolve(null);
+    const listingRead = this.inBackground(listDiagrams().catch(() => null));
+    const videosRead = kinds.includes("video") ? this.inBackground(readVideoCorpus()) : Promise.resolve(null);
 
     let vocabulary: Vocabulary;
     try {
@@ -3046,11 +3052,46 @@ export class Drafts {
     return this.require(id);
   }
 
-  /** Stop every planner turn. Their replies are written as cut off. */
+  /** Hold `read` until it ends, so `settledAll` can wait for it. */
+  private inBackground<T>(read: Promise<T>): Promise<T> {
+    this.background.add(read);
+    void read.catch(() => undefined).finally(() => this.background.delete(read));
+    return read;
+  }
+
+  /**
+   * Resolves once every read, write and mirror this service started has
+   * landed, for every draft and for a create that was refused. A landed write
+   * can queue another (a failed mirror notes its error, a turn's end closes a
+   * capped draft), so this looks again until a pass finds nothing new.
+   */
+  async settledAll(): Promise<void> {
+    for (;;) {
+      const chains = [...this.chains.values()];
+      const pending = [...this.background, ...chains, ...[...this.mirroring.values()].map((mirror) => mirror.done)];
+      await Promise.all(pending.map((work) => work.catch(() => undefined)));
+      const now = [...this.chains.values()];
+      const quiet =
+        this.background.size === 0 &&
+        this.mirroring.size === 0 &&
+        now.length === chains.length &&
+        now.every((chain, index) => chain === chains[index]);
+      if (quiet) return;
+    }
+  }
+
+  /**
+   * Stop every planner turn, then wait for everything they and anything else
+   * here started to be written. Their replies are written as cut off. Deleting
+   * `STUDIO_HOME` before this resolves pulls the directory out from under a
+   * live write, which is how a refused create's corpus read failed a test
+   * teardown with `ENOTEMPTY`.
+   */
   async drain(): Promise<void> {
     this.draining = true;
     for (const run of this.running.values()) await run.stop("shutdown");
     await Promise.all([...this.turnsInFlight.values()].map((turn) => turn.catch(() => undefined)));
+    await this.settledAll();
   }
 }
 
