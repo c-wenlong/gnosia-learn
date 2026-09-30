@@ -70,7 +70,7 @@ function randomToken(): string {
 }
 
 function modelProblem(code: string | undefined, fallback: string): string {
-  if (code === "MISSING_API_KEY") return "No tutor model is configured on this server.";
+  if (code === "MISSING_API_KEY") return "The tutor has no model provider key yet. Add one in Settings, under Provider keys.";
   if (code === "UNSTRUCTURED_REPLY") return "The tutor answered, but not with a question it could be graded on.";
   if (code === "RATE_LIMITED") return "Too many questions in a minute; the tutor is resting.";
   return fallback;

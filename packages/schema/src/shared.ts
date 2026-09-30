@@ -125,6 +125,28 @@ export const RECAP_SOURCES = ["agent", "manual"] as const;
 export type RecapSource = (typeof RECAP_SOURCES)[number];
 
 /**
+ * The tutor's model providers, in the order the cascade tries them
+ * (`apps/web/src/lib/agent/providers.ts`), and the vocabulary of
+ * `provider_key.provider` (docs/BYOK.md).
+ */
+export const PROVIDER_IDS = ["nvidia", "gemini", "openrouter"] as const;
+export type ProviderId = (typeof PROVIDER_IDS)[number];
+
+/**
+ * The bounds on a stored provider key (docs/BYOK.md, decision 5). Saving
+ * checks the shape only; the Test button is the real check. The floor keeps
+ * the four characters Settings shows from being a large part of the key: every
+ * real key is well past it (NVIDIA's and OpenRouter's are about 70, Gemini's
+ * 39). The ceiling bounds the ciphertext, which a CHECK repeats.
+ */
+export const PROVIDER_KEY_LIMITS = { minChars: 16, maxChars: 512 } as const;
+
+/** Whether `value` names a provider the tutor knows. */
+export function isProviderId(value: unknown): value is ProviderId {
+  return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
+}
+
+/**
  * Preference keys the web app and the CLI both know by name.
  *
  * `preference` is a key/value table precisely so a new one costs no migration,

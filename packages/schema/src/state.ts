@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   doublePrecision,
   index,
   integer,
@@ -25,6 +26,8 @@ import {
   EVENT_TYPES,
   KNOWLEDGE_LIMITS,
   LOCAL_LEARNER_ID,
+  PROVIDER_IDS,
+  PROVIDER_KEY_LIMITS,
   RECAP_SOURCES,
   SCHEDULE_LIMITS,
 } from "./shared";
@@ -298,4 +301,57 @@ export const preference = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [primaryKey({ columns: [t.learnerId, t.key] })],
+);
+
+/** `bytea`, which drizzle's pg-core has no builder for. The driver hands it back as a Buffer. */
+const bytes = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
+/**
+ * An owner's own model provider API key, encrypted (docs/BYOK.md).
+ *
+ * AES-256-GCM under a key derived from `AUTH_SECRET` with HKDF-SHA256, so a
+ * dump of this table alone reads as noise. `key_version` names the
+ * derivation, so a dedicated secret can come later without a migration; the
+ * GCM additional data binds each row to its owner, provider and version, so a
+ * ciphertext moved to another owner's row fails to decrypt rather than
+ * spending their quota.
+ *
+ * `last4` is the only part of the key stored in the clear, for Settings to
+ * show which key is saved. No `owner_id` default, unlike the content tables:
+ * a secret is never filed under `local` by omission. `cascade` on delete,
+ * unlike them too: deleting an owner must take their keys with them.
+ *
+ * Read and written only by `services/catalog/src/state/provider-keys.ts`, and
+ * `services/catalog/test/provider-keys.test.ts` fails a reference anywhere
+ * else, which is what keeps it out of every export.
+ */
+export const providerKey = pgTable(
+  "provider_key",
+  {
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    provider: text("provider").notNull(),
+    ciphertext: bytes("ciphertext").notNull(),
+    iv: bytes("iv").notNull(),
+    authTag: bytes("auth_tag").notNull(),
+    keyVersion: integer("key_version").notNull(),
+    last4: text("last4").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ownerId, t.provider] }),
+    check("provider_key_provider_check", inList("provider", PROVIDER_IDS)),
+    // GCM's 96-bit nonce and 128-bit tag, the only sizes the code writes.
+    check("provider_key_iv_check", sql`octet_length(iv) = 12`),
+    check("provider_key_auth_tag_check", sql`octet_length(auth_tag) = 16`),
+    // GCM adds no padding, so the ciphertext is as long as the key's UTF-8 bytes.
+    check(
+      "provider_key_ciphertext_check",
+      sql.raw(`octet_length(ciphertext) between 1 and ${PROVIDER_KEY_LIMITS.maxChars * 4}`),
+    ),
+    check("provider_key_key_version_check", sql`key_version >= 1`),
+    check("provider_key_last4_check", sql`char_length(last4) = 4`),
+  ],
 );

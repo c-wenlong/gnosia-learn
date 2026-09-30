@@ -11,11 +11,13 @@ import { buildAgentSessionContext, buildConceptSessionContext, type CitationSour
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { readTutorStyle } from "@/lib/settings";
+import { tutorCredentials } from "@/lib/agent/credentials";
 import {
   availableProviderSummary,
   completeWithFallback,
   type ChatMessage,
 } from "@/lib/agent/providers";
+import { requestOwner } from "@/lib/learner-api";
 import { KNOWLEDGE_LIMITS } from "@/lib/storage";
 import type { TopicKnowledge } from "@/lib/types";
 
@@ -95,6 +97,10 @@ export async function POST(req: Request) {
   // origin check needs no body at all.
   const crossOrigin = enforceSameOrigin(req);
   if (crossOrigin) return crossOrigin;
+  // Whose provider keys the turn is paid with (docs/BYOK.md). The proxy has
+  // already turned away a request with no session; this is the 401 if not.
+  const owner = await requestOwner();
+  if (owner instanceof NextResponse) return owner;
 
   let body: ChatBody;
   try {
@@ -106,7 +112,7 @@ export async function POST(req: Request) {
   if (body === null || typeof body !== "object") {
     return NextResponse.json({ error: "The body must be a JSON object" }, { status: 400 });
   }
-  if (body.conceptSlug !== undefined) return conceptTurn(req, body);
+  if (body.conceptSlug !== undefined) return conceptTurn(req, body, owner);
 
   const { courseSlug, moduleSlug, topicId, messages, learnerNote, priorKnowledge } =
     body;
@@ -142,7 +148,7 @@ export async function POST(req: Request) {
     },
   );
 
-  return completeTurn(session.systemPrompt, messages);
+  return completeTurn(owner, session.systemPrompt, messages);
 }
 
 /**
@@ -152,7 +158,7 @@ export async function POST(req: Request) {
  * the concept is taken from the browser. The response adds `concept` and the numbered `sources` the reply
  * may cite as `[n]`.
  */
-async function conceptTurn(req: Request, body: ChatBody) {
+async function conceptTurn(req: Request, body: ChatBody, owner: string) {
   const { conceptSlug, messages, learnerNote } = body;
   // Every turn checked here, so a malformed one is a 400 before anything is
   // read rather than a throw inside the provider call.
@@ -206,7 +212,7 @@ async function conceptTurn(req: Request, body: ChatBody) {
     typeof learnerNote === "string" && learnerNote.trim()
       ? `\n## Learner notes (from their study hub)\n${learnerNote.trim()}\n`
       : "";
-  return completeTurn(session.systemPrompt + note, messages, {
+  return completeTurn(owner, session.systemPrompt + note, messages, {
     concept: { slug: read.workspace.slug, title: read.workspace.title },
     sources: session.sources,
   });
@@ -214,6 +220,7 @@ async function conceptTurn(req: Request, body: ChatBody) {
 
 /** Send the turn to the provider cascade and shape the answer both tutors share. */
 async function completeTurn(
+  owner: string,
   systemPrompt: string,
   messages: ChatMessage[],
   extra: { concept?: { slug: string; title: string }; sources?: CitationSource[] } = {},
@@ -224,16 +231,16 @@ async function completeTurn(
     ...messages.filter((m) => m.role !== "system"),
   ];
 
-  const outcome = await completeWithFallback(payloadMessages);
+  const credentials = await tutorCredentials(owner);
+  const outcome = await completeWithFallback(payloadMessages, credentials);
 
   if (!outcome.ok) {
     if (outcome.code === "MISSING_API_KEY") {
       return NextResponse.json(
         {
-          error:
-            "No free provider API keys configured. Set NVIDIA_API_KEY (primary), GEMINI_API_KEY (backup), and/or OPENROUTER_API_KEY (final free backup). Or use Copy prompt / Terminal launch.",
+          error: "No model provider key is set. Add one in Settings, under Provider keys.",
           code: "MISSING_API_KEY",
-          providers: availableProviderSummary(),
+          providers: availableProviderSummary(credentials),
         },
         { status: 503 },
       );
@@ -244,7 +251,7 @@ async function completeTurn(
         error: "All free providers failed",
         code: "ALL_PROVIDERS_FAILED",
         attempts: outcome.attempts,
-        providers: availableProviderSummary(),
+        providers: availableProviderSummary(credentials),
       },
       { status: 502 },
     );
