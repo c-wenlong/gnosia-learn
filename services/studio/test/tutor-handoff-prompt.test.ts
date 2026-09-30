@@ -61,12 +61,12 @@ describe("a draft without a concept", () => {
     // STUDIO-VIDEO-TOOLS.md added the tool to the video section and the
     // TOOLS block; the diagram-only one never changed.
     const hash = (input: CombinedPromptInput): string => createHash("sha256").update(buildCombinedSystemPrompt(input)).digest("hex");
-    expect(hash(base)).toBe("6e460c53fda053a6c7477120c7f67727555f1f8a986c0d8798e450cd950f3fe7");
+    expect(hash(base)).toBe("a94641c0cf099182f65d4382c459546bc7fc63c4d5bb810ef2cfc8b0e633ed0e");
     expect(hash({ kinds: ["diagram"], vocabulary: vocabulary.entries, corpus: [], extending: "slug: a" })).toBe(
       "d0fc1b3aec58fadb15a05657f8a92213843ead3d2c50db4a17e25da4cf2fc1f9",
     );
     expect(hash({ kinds: ["diagram", "video"], vocabulary: vocabulary.entries, corpus: [], videos: null, changing: "slug: b" })).toBe(
-      "af4567e35eb2ce5f6b41724309122995b064c09cce329d3dc943a0c859371971",
+      "34ff09889ef65698140539801d85e5d6bbff039bf0d12e821e3537980d0d6e2b",
     );
     expect(buildCombinedSystemPrompt({ ...base, concept: null, tutor: null })).toBe(buildCombinedSystemPrompt(base));
     expect(combinedPrompt(["diagram", "video"])).not.toContain(CONCEPT_PARAGRAPH);

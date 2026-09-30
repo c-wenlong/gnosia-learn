@@ -905,8 +905,9 @@ What you must end up knowing:
    that can do both, else simplify that beat. Only a tool marked available
    here goes in the brief; a better one that is not is the runner-up. When
    the person named a tool the block says is not in the studio yet, propose
-   no brief in that reply: say in one line that the studio cannot make it
-   yet, and ask whether an available tool should make it instead.
+   no video brief in that reply (a diagram asked for with it still gets
+   its brief): say in one line that the studio cannot make it yet, and ask
+   whether an available tool should make it instead.
 
 Writing the storyboard:
 

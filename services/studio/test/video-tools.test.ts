@@ -102,7 +102,7 @@ describe("the TOOLS block", () => {
 describe("the prompt's routing steps", () => {
   it("ask before proposing when the person named a tool the studio cannot make yet", () => {
     const video = combinedPrompt(["diagram", "video"]);
-    expect(video).toContain("propose\n   no brief in that reply");
+    expect(video).toContain("propose\n   no video brief in that reply (a diagram asked for with it still gets\n   its brief)");
     expect(video).toContain("the tool its video was made with (the CHANGING block)");
   });
 });
