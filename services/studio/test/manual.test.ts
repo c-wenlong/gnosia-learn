@@ -51,9 +51,9 @@ function result(stdout: string, code = 0): RunResult {
 }
 
 describe("the lint rule names", () => {
-  it("are read out of the getLints summary, all nine, and agree with the static table", async () => {
+  it("are read out of the getLints summary, all ten, and agree with the static table", async () => {
     const names = lintNamesFromApi(await entries());
-    expect(names).toHaveLength(9);
+    expect(names).toHaveLength(10);
     expect(new Set(names)).toEqual(new Set(STATIC_LINT_NAMES));
     expect(compareLintNames(names ?? [], STATIC_LINT_NAMES)).toEqual({ unknown: [], missing: [] });
   });
