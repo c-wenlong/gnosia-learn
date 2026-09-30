@@ -322,15 +322,19 @@ function AddModel({
   const list = chosen === undefined ? undefined : lists[chosen.id];
 
   /**
-   * Ask the server for a provider's list. Every time the form opens or the
-   * provider changes, not once per page: a key replaced in Settings since the
-   * last ask is a different account, and the server's cache already misses
-   * under a new key, so asking again costs a provider request only when the
-   * list could have changed. The latest ask per provider wins.
+   * Ask the server for a provider's list, at most once per provider each
+   * time the form opens. Asking again on the next open, not once per page:
+   * a key replaced in Settings since the last ask is a different account,
+   * and the server's cache misses under a new key while answering from
+   * memory otherwise. Switching provider back and forth inside one open
+   * reuses what was asked, so it cannot spend the route's rate limit. A
+   * reply from an earlier open is dropped.
    */
+  const opened = useRef(0);
   const asked = useRef<Partial<Record<ProviderId, number>>>({});
   const load = async (id: ProviderId) => {
-    const token = (asked.current[id] ?? 0) + 1;
+    const token = opened.current;
+    if (asked.current[id] === token) return;
     asked.current[id] = token;
     setLists((l) => ({ ...l, [id]: { state: "loading" } }));
     const reply = await send("POST", "/api/learner/tutor-model/models", { provider: id });
@@ -351,6 +355,7 @@ function AddModel({
   };
 
   const openForm = () => {
+    opened.current += 1;
     focusAfter.current = `${base}-model`;
     setOpen(true);
     setError(null);
@@ -447,7 +452,7 @@ function AddModel({
             ? `Loading ${chosen?.label ?? "the provider"}'s models…`
             : list.state === "ready"
               ? list.models.length > 0
-                ? `${list.models.length} models from ${chosen?.label}. Start typing to pick one, or type any model id.`
+                ? `${list.models.length} ${list.models.length === 1 ? "model" : "models"} from ${chosen?.label}. Start typing to pick one, or type any model id.`
                 : `${chosen?.label} listed no models. Type a model id.`
               : `The list could not be loaded (${list.message}). Type a model id.`}
         </p>
