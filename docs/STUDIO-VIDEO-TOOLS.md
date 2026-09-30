@@ -73,16 +73,29 @@ every layer, and abstracted at none but the catalog's importer.
 
 The planner writes `tool` and `toolReason` in every video brief. It reads the
 choice from a TOOLS data block in its system prompt, the same way it reads
-VOICES: one line per tool (its name, what it is best at, whether this machine
-can make it now and why not) and then the "Pick by what the video needs" rows
-of [VIDEO-TOOLS.md](VIDEO-TOOLS.md), top row first.
+VOICES: one line per tool (its name, what it is best at, whether the studio
+can make it), the "Pick by what the video needs" rows of
+[VIDEO-TOOLS.md](VIDEO-TOOLS.md), top row first, and that page's capability
+matrix.
 
-The planner has no tools and never reads a file, so the block is built from a
-TypeScript constant, `VIDEO_TOOL_ROUTES` in `services/studio/src/video/tools.ts`.
-A test reads the table in VIDEO-TOOLS.md and fails when the constant and the
-doc disagree, the way `planner-prompt.test.ts` already pins the prompt to
-STUDIO-MENTIONS.md. So VIDEO-TOOLS.md stays the one source of truth for
-routing, for the terminal skill and the studio alike.
+The rows alone are not the routing: VIDEO-TOOLS.md's procedure also puts a
+tool the person named first, keeps a series' tool, and checks a second visual
+against the matrix. So the video section of the planner's prompt restates
+the procedure's steps in the studio's terms, in order: the tool the person
+named, when the studio can make it; a change keeps its video's tool; a week
+of a series keeps the series' tool; the main visual's row; a second beat the
+matrix says that tool cannot do moves the choice to a tool that can do both,
+else the beat is simplified; and `toolReason` names the step or row and the
+runner-up. Step 1 of the page's procedure (unattended or not) is the TOOLS
+block's "available here" column, since every studio video is unattended.
+
+The planner has no tools and never reads a file, so the block is built from
+TypeScript constants in `services/studio/src/video/tools.ts`. A test reads
+the table and the matrix in VIDEO-TOOLS.md and fails when a constant and the
+doc disagree, and the prompt's procedure is quoted in STUDIO-MENTIONS.md and
+pinned there as the rest of the prompt is. A change to the procedure's steps
+in VIDEO-TOOLS.md still needs the prompt's paragraph changed by hand; the
+test holds the rows and the matrix, which are the parts that change most.
 
 `toolReason` is one sentence of at most 160 characters naming the row that
 chose the tool and the runner-up, the procedure's step 6. The planner is told
@@ -208,8 +221,10 @@ parses Python to find them. revideokc keeps the script in `narration.json`
 each chapter's name and lines with the brief's scenes and `say` lines, allowing
 the respellings D47 allows, and looks for each beat's labels as string
 literals in `scene.tsx`. That file is parsed with the TypeScript compiler's
-parser in the runner (parsing runs no code, where manimkc's check runs a
-Python interpreter and so stays in the sandbox). Step 2's lint is
+parser by a small Node script run inside the gate profile, the way manimkc's
+scan runs Python's `ast` inside the render profile: parsing runs no code, but
+every process that reads an agent-written file stays inside a job profile,
+and the runner only reads the script's JSON answer. Step 2's lint is
 `tsc --noEmit` in the render profile. Steps 4 to 6, 8 and 9 (the topic, the
 copy, the probe, the length, the poster) are the same code for every tool.
 Step 7 (narration in sync) reads the transcript sidecar, which revideokc
@@ -289,14 +304,14 @@ lands before the earlier one is merged.
 ### Phase 1. The tool in the brief
 
 - `services/studio/src/video/tools.ts`: the three tools, their strengths,
-  `VIDEO_TOOL_ROUTES` from VIDEO-TOOLS.md, and which the runner can drive now
-  (manimkc only, and only when its doctor passes).
+  `VIDEO_TOOL_ROUTES` and the capability matrix from VIDEO-TOOLS.md, and
+  which the runner has a backend for (manimkc only).
 - `brief.ts`: `tool` (optional, default manimkc) and `toolReason` (at most 160
   characters); refuse a tool this machine cannot drive (D72) and a change
   whose tool differs from its parent's (D74).
 - `planner.ts`: both fields in `PLANNER_VIDEO_FIELDS`. `planner-prompt.ts`: the
-  TOOLS block after VOICES, one paragraph and the JSON example's two lines in
-  VIDEO, and the tool in `changingSummary`. STUDIO-MENTIONS.md's quoted prompt
+  TOOLS block after VOICES, the routing steps and the JSON example's two
+  lines in VIDEO, and the tool in `changingSummary`. STUDIO-MENTIONS.md's quoted prompt
   updated in the same change, since a test compares them.
 - `drafts.ts`: the edit note for a tool switch.
 - Health's `video` block gains `tools`, each `{ok, reason}`.
