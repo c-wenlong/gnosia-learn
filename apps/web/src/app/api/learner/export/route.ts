@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readEvents, readLearnerSnapshot, readPreferences } from "@self-learn/catalog/state";
+import { readEvents, readLearnerSnapshot, readPreferences, readTutorModels } from "@self-learn/catalog/state";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
@@ -12,7 +12,9 @@ import { withLearnerStore } from "@/lib/learner-store";
  * handful the old document had, so the daily target, the leeway and the
  * tutor style would otherwise be missing), and the whole event log, which is
  * the evidence mastery and the review schedule are replayed from. Settings
- * links here.
+ * links here. The tutor's model chain comes too (docs/TUTOR-MODELS.md, T6):
+ * owner configuration like the tutor style, and no secret. The provider keys
+ * never do (docs/BYOK.md, D11).
  *
  * Unlike the page reads this does not degrade: an export that quietly came
  * back empty because the database was down would be a backup of nothing, so
@@ -31,15 +33,21 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (owner instanceof NextResponse) return owner;
 
   const exportedAt = new Date();
-  let body: { learner: unknown; preferences: Record<string, unknown>; events: unknown[] };
+  let body: {
+    learner: unknown;
+    preferences: Record<string, unknown>;
+    tutorModels: { provider: string; model: string }[];
+    events: unknown[];
+  };
   try {
     body = await withLearnerStore(async (db) => {
-      const [learner, preferences, events] = await Promise.all([
+      const [learner, preferences, chain, events] = await Promise.all([
         readLearnerSnapshot(db, owner),
         readPreferences(db, owner),
+        readTutorModels(db, owner),
         readEvents(db, owner),
       ]);
-      return { learner, preferences, events };
+      return { learner, preferences, tutorModels: chain.map(({ provider, model }) => ({ provider, model })), events };
     });
   } catch (error) {
     // The driver's message is logged, not returned: it is the failed SQL.

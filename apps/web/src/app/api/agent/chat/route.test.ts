@@ -16,7 +16,9 @@ const getCourses = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
 vi.mock("@/lib/settings", () => ({ readTutorStyle }));
 vi.mock("@/data/courses", () => ({ getCourses }));
-vi.mock("@/lib/agent/providers", () => ({
+vi.mock("@/lib/agent/providers", async (importOriginal) => ({
+  // The pure helpers (the missing-key message, the skipped entries) are real.
+  ...(await importOriginal<typeof import("@/lib/agent/providers")>()),
   completeWithFallback,
   availableProviderSummary: () => [],
 }));
