@@ -675,10 +675,12 @@ export class Drafts {
   /** Workspaces of pruned drafts that did not all go, removed by the next pass. */
   private readonly leftovers = new Set<string>();
   /**
-   * The corpus and video reads each create starts, until they finish. A
-   * create refused before it awaits them (the vocabulary down, a concept the
-   * catalog does not know) leaves them running, and the diagram list writes
-   * its cache under `STUDIO_HOME` when it returns, so `drain` waits for them.
+   * Each create, and the corpus and video reads it starts, until they finish.
+   * A create refused before it awaits its reads (the vocabulary down, a
+   * concept the catalog does not know) leaves them running, and the diagram
+   * list writes its cache under `STUDIO_HOME` when it returns; a create still
+   * waiting on a checkout or an inspect writes the draft once it is past
+   * them. `drain` waits for all of it.
    */
   private readonly readsInFlight = new Set<Promise<unknown>>();
   /** The last vocabulary this service read, reused by a turn's C4 check for a short while. */
@@ -1220,7 +1222,7 @@ export class Drafts {
    */
   async create(input: CreateInput): Promise<{ record: DraftRecord; created: boolean }> {
     const key = input.idempotencyKey?.trim() || null;
-    if (key === null) return this.createNew(input, null);
+    if (key === null) return this.tracked(this.createNew(input, null));
     if (key.length > 200) throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
     const existing = [...this.records.values()].find((record) => record.idempotencyKey === key && !this.pruning.has(record.id));
     if (existing !== undefined) return { record: existing, created: false };
@@ -1228,7 +1230,7 @@ export class Drafts {
     // the vocabulary, the corpus or an inspect is being read gets this draft.
     const pending = this.creating.get(key);
     if (pending !== undefined) return { record: (await pending).record, created: false };
-    const made = this.createNew(input, key);
+    const made = this.tracked(this.createNew(input, key));
     this.creating.set(key, made);
     try {
       return await made;
@@ -1953,7 +1955,7 @@ export class Drafts {
     });
   }
 
-  /** `read`, held in `readsInFlight` until it settles. */
+  /** `work` (a create or a read), held in `readsInFlight` until it settles. */
   private tracked<T>(read: Promise<T>): Promise<T> {
     this.readsInFlight.add(read);
     void read.finally(() => this.readsInFlight.delete(read)).catch(() => undefined);
@@ -3064,16 +3066,38 @@ export class Drafts {
   }
 
   /**
-   * Stop every planner turn, and wait for the reads a refused create left
-   * running. Their replies are written as cut off.
+   * Resolves once every create, read, write and mirror this service started
+   * has landed, for every draft and for a create that was refused. A landed
+   * write can queue another (a failed mirror notes its error, a turn's end
+   * closes a capped draft), so this looks again until a pass finds nothing new.
+   */
+  async settledAll(): Promise<void> {
+    for (;;) {
+      const chains = [...this.chains.values()];
+      const pending = [...this.readsInFlight, ...chains, ...[...this.mirroring.values()].map((mirror) => mirror.done)];
+      await Promise.all(pending.map((work) => work.catch(() => undefined)));
+      const now = [...this.chains.values()];
+      const quiet =
+        this.readsInFlight.size === 0 &&
+        this.mirroring.size === 0 &&
+        now.length === chains.length &&
+        now.every((chain, index) => chain === chains[index]);
+      if (quiet) return;
+    }
+  }
+
+  /**
+   * Stop every planner turn, then wait for everything they and anything else
+   * here started to be written (`settledAll`). Their replies are written as
+   * cut off, and a create after this begins is refused. A catalog read can
+   * hold this for as long as its own timeout, so the process's shutdown
+   * bounds it rather than awaiting it bare.
    */
   async drain(): Promise<void> {
     this.draining = true;
     for (const run of this.running.values()) await run.stop("shutdown");
     await Promise.all([...this.turnsInFlight.values()].map((turn) => turn.catch(() => undefined)));
-    while (this.readsInFlight.size > 0) {
-      await Promise.all([...this.readsInFlight].map((read) => read.catch(() => undefined)));
-    }
+    await this.settledAll();
   }
 }
 
