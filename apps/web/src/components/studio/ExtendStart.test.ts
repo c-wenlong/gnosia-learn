@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, useEffect, useImperativeHandle, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,6 +20,10 @@ const mocks = vi.hoisted(() => ({
   createDraft: vi.fn(),
   replace: vi.fn(),
   focus: vi.fn(),
+  /** The lazy chunk: held until `release`, or (eager) already loaded when the panel mounts. */
+  hold: false,
+  eager: false,
+  release: () => {},
   isClosing: vi.fn(() => false),
   composer: null as null | {
     value: Value;
@@ -29,6 +33,7 @@ const mocks = vi.hoisted(() => ({
     mentions: Array<{ id: string; disabledReason?: string | null }>;
     onChange: (value: Value) => void;
     onSubmit: (value: Value) => void;
+    fallbackNote?: string;
   },
 }));
 
@@ -41,13 +46,39 @@ vi.mock("next/navigation", () => {
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => createElement("a", { href, ...rest }, children),
 }));
+// The composer is lazy: nothing of it exists until its chunk lands, and then
+// it mounts with its handle and asks for focus, as the real one does.
+type StubProps = NonNullable<typeof mocks.composer> & {
+  handleRef?: { current: unknown };
+  autoFocus?: boolean | ((active: Element | null) => boolean);
+};
 vi.mock("next/dynamic", () => ({
-  default: () =>
-    function StubComposer(props: NonNullable<typeof mocks.composer> & { handleRef?: { current: unknown } }) {
+  default: () => {
+    function Loaded(props: StubProps) {
       mocks.composer = props;
-      if (props.handleRef) props.handleRef.current = { focus: mocks.focus, insertMention: vi.fn() };
+      useImperativeHandle(props.handleRef as never, () => ({ focus: mocks.focus, insertMention: vi.fn() }), []);
+      const { autoFocus } = props;
+      useEffect(() => {
+        if (!autoFocus) return;
+        if (autoFocus === true || autoFocus(document.activeElement)) mocks.focus();
+        // Mount only, as the real one.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
       return createElement("div", { "data-composer": JSON.stringify(props.value) });
-    },
+    }
+    return function StubComposer(props: StubProps) {
+      const [ready, setReady] = useState(mocks.eager);
+      useEffect(() => {
+        if (mocks.hold) {
+          mocks.release = () => setReady(true);
+          return;
+        }
+        const timer = setTimeout(() => setReady(true), 0);
+        return () => clearTimeout(timer);
+      }, []);
+      return ready ? createElement(Loaded, props) : createElement("div", { "data-loading": true });
+    };
+  },
 }));
 vi.mock("@/components/studio/StudioDialog", () => ({
   DialogHeader: ({ title }: { title: ReactNode }) => createElement("h2", null, title),
@@ -72,6 +103,9 @@ const draftMade = { ok: true, status: 201, data: { draftId: "d9", state: "open",
 beforeEach(() => {
   mocks.composer = null;
   mocks.focus.mockClear();
+  mocks.hold = false;
+  mocks.eager = false;
+  mocks.release = () => {};
   mocks.replace.mockClear();
   mocks.isClosing.mockReturnValue(false);
   sessionStorage.clear();
@@ -86,7 +120,18 @@ beforeEach(() => {
 const mounted: Array<() => void> = [];
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
+  document.querySelectorAll("[data-test-focus]").forEach((element) => element.remove());
 });
+
+/** An element already holding focus when the panel mounts: the dialog's Close, or something the person chose. */
+function focused(kind: "close" | "input") {
+  const element = document.createElement(kind === "close" ? "button" : "input");
+  element.setAttribute("data-test-focus", "");
+  if (kind === "close") element.setAttribute("data-dialog-close", "");
+  document.body.append(element);
+  element.focus();
+  return element;
+}
 
 async function settle() {
   for (let at = 0; at < 5; at += 1) {
@@ -133,6 +178,11 @@ describe("the composer", () => {
     expect(mocks.focus).toHaveBeenCalled();
   });
 
+  it("says a reload would not help, where one would lose what was typed", async () => {
+    await mount();
+    expect(mocks.composer!.fallbackNote).toBe("Tags could not load, so none can be added here.");
+  });
+
   it("blocks a bare tag, as an empty conversation does, and an over-long message", async () => {
     await mount();
     await type({ text: "@video", mentions: [{ kind: "video", start: 0, end: 6 }] });
@@ -144,6 +194,57 @@ describe("the composer", () => {
     expect(mocks.composer!.disabled).toBe(false);
     expect(mocks.composer!.sendDisabled).toBe(true);
     expect(mocks.composer!.disabledReason).toBe("8,500 of 8,000 characters. Cut it down to send.");
+  });
+});
+
+describe("focus, with a composer that loads late", () => {
+  it("is taken when the chunk lands, from the dialog's Close, however long that takes", async () => {
+    mocks.hold = true;
+    focused("close");
+    await mount();
+    // Nothing of the composer exists yet, so nothing can have been focused.
+    expect(mocks.composer).toBeNull();
+    expect(mocks.focus).not.toHaveBeenCalled();
+    // A long wait: no poll gives up on it, which is why there is none.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    expect(mocks.focus).not.toHaveBeenCalled();
+    await act(async () => mocks.release());
+    await settle();
+    expect(mocks.composer).not.toBeNull();
+    expect(mocks.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("is taken from the page body too", async () => {
+    mocks.hold = true;
+    (document.activeElement as HTMLElement | null)?.blur();
+    await mount();
+    await act(async () => mocks.release());
+    expect(mocks.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("is left where the person put it when the chunk lands", async () => {
+    mocks.hold = true;
+    const input = focused("input");
+    await mount();
+    await act(async () => mocks.release());
+    await settle();
+    expect(mocks.composer).not.toBeNull();
+    expect(mocks.focus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("is taken from Close when the chunk was already loaded, after the dialog's own focus", async () => {
+    mocks.eager = true;
+    focused("close");
+    await mount();
+    expect(mocks.focus).toHaveBeenCalled();
+  });
+
+  it("is left alone when the chunk was already loaded and the person is elsewhere", async () => {
+    mocks.eager = true;
+    focused("input");
+    await mount();
+    expect(mocks.focus).not.toHaveBeenCalled();
   });
 });
 
@@ -176,6 +277,24 @@ describe("a chip typed while the diagram is read", () => {
     const opener = handedOver()!;
     expect(openerSend(opener)).toEqual(VIDEO_OF_IT);
     expect(openerValue(opener)).toEqual(DIAGRAM_OF_IT);
+  });
+
+  it("shifts a chip's range with the trim, so a message sent with spaces around it still carries it where it was", async () => {
+    const host = await mount();
+    await send({ text: "  A @video of the close  ", mentions: [{ kind: "video", start: 4, end: 10 }] });
+    expect(host.textContent).toContain("of the close");
+    await resolve(draftMade);
+    const opener = handedOver()!;
+    expect(opener.send).toBe("A @video of the close");
+    expect(opener.sendMentions).toEqual([{ kind: "video", start: 2, end: 8 }]);
+    expect(openerSend(opener)).toEqual(VIDEO_OF_IT);
+  });
+
+  it("hands unsent words over as typed, spaces and all, with the chip at the same place", async () => {
+    await mount();
+    await type({ text: "  then a @diagram of it", mentions: [{ kind: "diagram", start: 9, end: 17 }] });
+    await resolve(draftMade);
+    expect(openerValue(handedOver()!)).toEqual({ text: "  then a @diagram of it", mentions: [{ kind: "diagram", start: 9, end: 17 }] });
   });
 
   it("ignores a second message while one is waiting", async () => {
@@ -224,8 +343,13 @@ describe("a chip typed while the diagram is read", () => {
     const retry = [...document.querySelectorAll("button")].find((button) => button.textContent === "Try again")!;
     await act(async () => retry.click());
     await settle();
-    // prependValue's rule: the second chip of a kind reads as text.
-    expect(mocks.composer!.value.mentions.map((mention) => mention.kind)).toEqual(["video"]);
+    // prependValue's rule: the queued message's chip becomes words, and the
+    // one in what was typed since survives, where it sat (after the queued
+    // text and its newline).
+    expect(mocks.composer!.value).toEqual({
+      text: "A @video of the close\n@video again",
+      mentions: [{ kind: "video", start: 22, end: 28 }],
+    });
   });
 });
 

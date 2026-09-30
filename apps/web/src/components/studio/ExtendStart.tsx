@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PinnedDiagram } from "@/components/studio/PinnedDiagram";
 import { Sentence } from "@/components/studio/Sentence";
 import { MentionComposer } from "@/components/studio/StudioComposer";
+import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { DialogHeader, useStudioDialog } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses } from "@/components/ui/classes";
@@ -171,31 +172,18 @@ export function ExtendStart({
     // After the dialog's own effect, which runs after this one and focuses
     // its first control (Close) when it opens: typing straight away should
     // land in the composer, and an Enter there should not close the panel.
-    let frame = 0;
-    let stopped = false;
+    // This is for a composer that is already here (its chunk was loaded by
+    // an earlier press, or by Extend's hover). One that arrives later asks
+    // for focus itself when it mounts (`autoFocus` below), which is why
+    // nothing polls: the wait is as long as the chunk takes.
     const later = setTimeout(() => {
       // Only a Talk it through press reads a prefill, so a stale one left by
       // a press that never arrived cannot land in an ordinary Extend.
       const prefill = talk ? takePrefill(sessionStore(), name) : null;
       if (prefill !== null) setValue({ text: prefill, mentions: [] });
-      // The composer loads lazily and is not on screen yet, so this tries for
-      // a couple of seconds' worth of frames rather than once.
-      let frames = 0;
-      const attempt = () => {
-        if (stopped) return;
-        if (composer.current !== null) {
-          composer.current.focus();
-          return;
-        }
-        if ((frames += 1) < 120) frame = requestAnimationFrame(attempt);
-      };
-      attempt();
+      if (focusIsUnclaimed(document.activeElement)) composer.current?.focus();
     }, 0);
-    return () => {
-      stopped = true;
-      clearTimeout(later);
-      cancelAnimationFrame(frame);
-    };
+    return () => clearTimeout(later);
   }, [name, talk, setValue]);
 
   // The draft is new, so it will have the current runner's kinds: both. The
@@ -288,6 +276,10 @@ export function ExtendStart({
             placeholder="What should it gain?"
             mentions={options}
             mentionHint={MENTION_HINT}
+            // Focus once it has loaded, unless the person has gone elsewhere.
+            autoFocus={focusIsUnclaimed}
+            // A reload here would lose what was typed and queued.
+            fallbackNote="Tags could not load, so none can be added here."
             disabled={opening}
             sendDisabled={queued !== null || valueBlock !== null || tooLong !== null}
             disabledReason={

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useImperativeHandle, useRef, type ReactNode } from "react";
+import { useEffect, useImperativeHandle, useRef, type ReactNode } from "react";
 
 import { Composer } from "@/components/ui/Composer";
 import { cx } from "@/components/ui/classes";
@@ -43,12 +43,20 @@ export const MentionComposer = dynamic(
  * The kit's plain `Composer` in `MentionComposer`'s place, when Lexical will
  * not load. It cannot draw chips, so it carries the ones a value already has
  * through each edit (`carryMentions`) and says so under the field. Its handle
- * focuses the field, so a panel that focuses its composer on open still can;
- * `insertMention` has nothing to put a chip in.
+ * focuses the field, so a panel that focuses its composer on open still can,
+ * and it honours `autoFocus` when it mounts; `insertMention` has nothing to
+ * put a chip in.
  */
 function PlainFallback(props: MentionComposerProps<DraftKind>) {
   const field = useRef<HTMLTextAreaElement | null>(null);
   useImperativeHandle(props.handleRef, () => ({ focus: () => field.current?.focus(), insertMention: () => {} }), []);
+  const { autoFocus, disabled } = props;
+  useEffect(() => {
+    if (!autoFocus || disabled) return;
+    if (autoFocus === true || autoFocus(document.activeElement)) field.current?.focus();
+    // Mount only: a later render must not pull focus back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <div className="flex flex-col gap-1">
       <Composer
@@ -63,7 +71,7 @@ function PlainFallback(props: MentionComposerProps<DraftKind>) {
         onModEnter={props.onModEnter}
         inputRef={field}
       />
-      <p className="px-1 text-[12px] leading-4 text-text3">{fallbackTagLine(props.value, props.mentions)}</p>
+      <p className="px-1 text-[12px] leading-4 text-text3">{fallbackTagLine(props.value, props.mentions, props.fallbackNote)}</p>
     </div>
   );
 }

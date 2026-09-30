@@ -33,7 +33,11 @@ const OPTIONS = [
   { id: "video" as const, name: "Video", description: "" },
 ];
 
-async function mount(value: MentionValue<DraftKind>, handleRef = createRef<MentionComposerHandle>()) {
+async function mount(
+  value: MentionValue<DraftKind>,
+  handleRef = createRef<MentionComposerHandle>(),
+  extra: Record<string, unknown> = {},
+) {
   const onChange = vi.fn();
   const onSubmit = vi.fn();
   const host = document.createElement("div");
@@ -41,7 +45,7 @@ async function mount(value: MentionValue<DraftKind>, handleRef = createRef<Menti
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      createElement(MentionComposer, { value, onChange, onSubmit, label: "Tell", mentions: OPTIONS, handleRef }),
+      createElement(MentionComposer, { value, onChange, onSubmit, label: "Tell", mentions: OPTIONS, handleRef, ...extra }),
     );
   });
   for (let at = 0; at < 5; at += 1) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -81,3 +85,34 @@ describe("the plain fallback", () => {
     expect(onChange).toHaveBeenLastCalledWith({ text: "A @vid of it", mentions: [] });
   });
 });
+
+describe("the plain fallback's note and focus", () => {
+  it("says the panel's own sentence in place of the reload line", async () => {
+    const empty = { text: "", mentions: [] };
+    const { host } = await mount(empty);
+    expect(host.textContent).toContain("reload the page to add one");
+    const other = await mount(empty, createRef<MentionComposerHandle>(), { fallbackNote: "Tags could not load, so none can be added here." });
+    expect(other.host.textContent).toContain("Tags could not load, so none can be added here.");
+    expect(other.host.textContent).not.toContain("reload");
+  });
+
+  it("takes focus when it mounts if asked, and asks a function first", async () => {
+    const empty = { text: "", mentions: [] };
+    const on = await mount(empty, createRef<MentionComposerHandle>(), { autoFocus: true });
+    expect(document.activeElement).toBe(on.host.querySelector("textarea"));
+    (document.activeElement as HTMLElement).blur();
+    const asked = vi.fn(() => false);
+    const no = await mount(empty, createRef<MentionComposerHandle>(), { autoFocus: asked });
+    expect(asked).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).not.toBe(no.host.querySelector("textarea"));
+    const yes = await mount(empty, createRef<MentionComposerHandle>(), { autoFocus: () => true });
+    expect(document.activeElement).toBe(yes.host.querySelector("textarea"));
+  });
+
+  it("does not take focus while disabled", async () => {
+    const empty = { text: "", mentions: [] };
+    const off = await mount(empty, createRef<MentionComposerHandle>(), { autoFocus: true, disabled: true });
+    expect(document.activeElement).not.toBe(off.host.querySelector("textarea"));
+  });
+});
+

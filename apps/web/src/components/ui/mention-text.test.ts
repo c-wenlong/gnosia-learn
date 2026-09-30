@@ -244,5 +244,10 @@ describe("fallbackTagLine", () => {
       "Sends tagged: Video. Tags could not load; reload the page to add one.",
     );
     expect(fallbackTagLine({ text: "@video the loop", mentions: [] }, options)).toBe("Tags could not load; reload the page to add one.");
+    // A panel where a reload would lose the typing says its own closing sentence.
+    expect(fallbackTagLine({ text: "hello", mentions: [] }, options, "None can be added here.")).toBe("None can be added here.");
+    expect(
+      fallbackTagLine({ text: "@video the loop", mentions: [{ kind: "video", start: 0, end: 6 }] }, options, "None can be added here."),
+    ).toBe("Sends tagged: Video. None can be added here.");
   });
 });
