@@ -6,7 +6,7 @@ seeded with the concept and the tag, where the planner proposes a brief and
 the person approves it with the usual press. Nothing is made from the tutor
 itself.
 
-**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, and phase 2, the web app, are built ("As built" under each says where they differ); phase 2's paid hand-offs, the drawn and accepted diagram, the "of that" hand-off and the iOS Safari touch check were measured on 2026-09-30 ("Measured, 2026-09-30" under phase 2). On iOS the hand-off itself works by touch, but the check found two layout defects that are still open (the page zooms when the field is focused, and a long message slides under the tab bar), so iOS is run, not passed. Android Chrome and VoiceOver are still to run, by the owner.** Numbers marked
+**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, and phase 2, the web app, are built ("As built" under each says where they differ); phase 2's paid hand-offs, the drawn and accepted diagram, the "of that" hand-off and the iOS Safari touch check were measured on 2026-09-30 ("Measured, 2026-09-30" under phase 2). On iOS the hand-off itself works by touch, but the check found two layout defects (the page zoomed when the field was focused, and a long message slid under the tab bar), both fixed afterwards and re-checked in the simulator and in Chromium at 375 points. Android Chrome and VoiceOver are still to run, by the owner.** Numbers marked
 *measured* come from the PR or document named beside them; every other number
 is a guess and says so.
 
@@ -475,8 +475,8 @@ stand-in).
 
 | What | Where | Repro |
 | --- | --- | --- |
-| Focusing the @ field zooms the page on iOS Safari, and the zoom carries into the studio | `MentionComposer`'s editable is 15px; Safari zooms any focused field under 16px | On an iPhone, open a concept's Tutor tab and tap the field: the page zooms and clips at the right. Send a tagged message: the studio opens still zoomed, the card and Send cut off at the right edge |
-| At phone width the growing field slides under the fixed tab bar | The concept page's tutor at 402 points | Type a message that wraps to four lines: the field's last line and the top half of Send sit behind the bottom tab bar |
+| Focusing the @ field zooms the page on iOS Safari, and the zoom carries into the studio | `MentionComposer`'s editable is 15px; Safari zooms any focused field under 16px | On an iPhone, open a concept's Tutor tab and tap the field: the page zooms and clips at the right. Send a tagged message: the studio opens still zoomed, the card and Send cut off at the right edge. **Fixed:** below 768px every field's text is 16px (`text-base md:text-[15px]` on the composer, the same on `inputClasses` and the other fields), so Safari does not zoom, and pinch zoom is untouched |
+| At phone width the growing field slides under the fixed tab bar | The concept page's tutor at 402 points | Type a message that wraps to four lines: the field's last line and the top half of Send sit behind the bottom tab bar. **Fixed:** the field stops at six lines and scrolls inside, and the composer sticks above the tab bar and the home-indicator inset below 768px (`TutorChat`) |
 | A card whose job is waiting for review says "The diagram is still being drawn" | `KIND_BUSY` in `apps/web/src/lib/studio-cards.ts`, used for a job in review too | Draw a brief, wait for `awaiting_review`, reopen the conversation: the card says the diagram is still being drawn, though it is ready to accept |
 | The job panel shows the raw state "awaiting_review" as a badge | The studio's job view | Open a finished job from "Open that job": the first badge reads `awaiting_review`, against the sentence-case rule |
 

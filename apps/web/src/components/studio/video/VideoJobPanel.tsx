@@ -1016,7 +1016,7 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
             void revise();
           }
         }}
-        className="min-h-20 w-full resize-y rounded-lg border-2 border-border bg-surface px-3 py-2 text-[14px] leading-5 text-text outline-none placeholder:text-text3 focus:border-accent aria-invalid:border-danger"
+        className="min-h-20 w-full resize-y rounded-lg border-2 border-border bg-surface px-3 py-2 text-base leading-5 text-text outline-none placeholder:text-text3 focus:border-accent aria-invalid:border-danger md:text-[14px]"
       />
       <p id={hintId} className="text-[12px] leading-4 text-text3">
         {changeHint(reviewing, canTalk)}
