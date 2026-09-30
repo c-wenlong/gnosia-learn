@@ -44,11 +44,22 @@ export function DraftsList({
   const version = signature(initial);
   const drafts = fresh !== null && fresh.base === version ? fresh.drafts : initial;
 
+  // Reads can overlap (a focus and a close), and an older answer landing
+  // after a newer one would put the list back a step. Each read takes a
+  // number, and an answer older than the last one shown is dropped.
+  const issued = useRef(0);
+  const landed = useRef(0);
   const reread = useCallback(async () => {
+    issued.current += 1;
+    const ticket = issued.current;
     const result = await listDrafts({ state: LISTED_STATES, nonEmpty: true, limit: LIST_LIMIT });
+    if (ticket < landed.current) return;
     // A failed read keeps what is shown: a runner that stopped answering is
     // the page's to say, and an empty list here would read as "no drafts".
-    if (result.ok && Array.isArray(result.data.drafts)) setFresh({ base: version, drafts: result.data.drafts });
+    if (result.ok && Array.isArray(result.data.drafts)) {
+      landed.current = ticket;
+      setFresh({ base: version, drafts: result.data.drafts });
+    }
   }, [version]);
 
   useEffect(() => {

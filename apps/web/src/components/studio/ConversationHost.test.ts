@@ -46,9 +46,15 @@ beforeAll(() => {
   };
 });
 
+/** The address bar: what `useSearchParams` answers and what `window.location` says. */
+function setUrl(search: string) {
+  mocks.search = search;
+  window.history.replaceState(null, "", search === "" ? "/studio" : `/studio?${search}`);
+}
+
 let pushState: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
-  mocks.search = "";
+  setUrl("");
   mocks.push.mockReset();
   pushState = vi.spyOn(window.history, "pushState").mockImplementation(() => undefined);
 });
@@ -96,7 +102,7 @@ function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
   });
   /** The address bar moved (Next syncs `useSearchParams` with pushState): draw again. */
   const go = (search: string) => {
-    mocks.search = search;
+    setUrl(search);
     draw();
   };
   return { container, go };
@@ -107,7 +113,7 @@ const close = (container: HTMLElement) =>
 
 describe("the conversation panel", () => {
   it("opens from the URL, and Close moves the address bar without a router push", () => {
-    mocks.search = "topic=graphs&draft=d1";
+    setUrl("topic=graphs&draft=d1");
     const { container } = mount();
     const panel = container.querySelector("[data-draft]");
     expect(panel?.getAttribute("data-draft")).toBe("d1");
@@ -119,7 +125,7 @@ describe("the conversation panel", () => {
   });
 
   it("is not open under a picture or the settings, as the server's order has it", () => {
-    mocks.search = "draft=d1&job=j1&shot=after";
+    setUrl("draft=d1&job=j1&shot=after");
     const first = mount();
     expect(first.container.querySelector("[data-draft]")).toBeNull();
     first.go("draft=d1&settings=1");
@@ -173,11 +179,39 @@ describe("the conversation panel", () => {
   });
 });
 
+describe("Start over in a conversation", () => {
+  it("does not open the new draft when the person closed the conversation meanwhile", () => {
+    setUrl("draft=d1");
+    const { container, go } = mount();
+    let token = 0;
+    act(() => {
+      token = grabbed.controls!.begin();
+    });
+    close(container);
+    expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio");
+    go("");
+    act(() => grabbed.controls!.settle(token, "/studio?draft=d2"));
+    expect(pushState).not.toHaveBeenCalledWith(null, "", "/studio?draft=d2");
+    expect(container.querySelector("dialog")).toBeNull();
+  });
+
+  it("opens it when the person is still there", () => {
+    setUrl("draft=d1");
+    mount();
+    let token = 0;
+    act(() => {
+      token = grabbed.controls!.begin();
+    });
+    act(() => grabbed.controls!.settle(token, "/studio?draft=d2"));
+    expect(pushState).toHaveBeenCalledWith(null, "", "/studio?draft=d2");
+  });
+});
+
 describe("a panel the server drew", () => {
   const drawn = createElement("div", { "data-server-panel": true });
 
   it("shows while the URL names the panel it was drawn for, whatever the filters", () => {
-    mocks.search = "sel=graph&topic=a";
+    setUrl("sel=graph&topic=a");
     const { container, go } = mount({ panel: drawn, panelKey: panelSignature({ sel: "graph" }) });
     expect(container.querySelector("[data-server-panel]")).not.toBeNull();
     go("sel=graph&topic=b");
@@ -185,7 +219,7 @@ describe("a panel the server drew", () => {
   });
 
   it("gives way to a conversation opened over it, and does not come back when that closes", () => {
-    mocks.search = "job=j1";
+    setUrl("job=j1");
     const { container, go } = mount({ panel: drawn, panelKey: panelSignature({ job: "j1" }) });
     go("draft=d2");
     expect(container.querySelector("[data-server-panel]")).toBeNull();

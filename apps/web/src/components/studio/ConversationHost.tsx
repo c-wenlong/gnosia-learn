@@ -69,19 +69,28 @@ export function ConversationHost({
    */
   const [opening, setOpening] = useState<{ token: number; from: string | null } | null>(null);
   const attempts = useRef(0);
-  const current = useRef<number | null>(null);
+  /** The attempt still wanted, and the draft the address bar named at its press. */
+  const current = useRef<{ token: number; from: string | null } | null>(null);
 
   const begin = useCallback(() => {
     attempts.current += 1;
-    current.current = attempts.current;
-    setOpening({ token: attempts.current, from: view.draft });
-    return attempts.current;
+    const attempt = { token: attempts.current, from: view.draft };
+    current.current = attempt;
+    setOpening(attempt);
+    return attempt.token;
   }, [view.draft]);
 
   const settle = useCallback((token: number, href: string | null) => {
-    // Closed while the draft was being made: the person has moved on, and the
-    // draft is an empty one the list does not show.
-    if (current.current !== token) return;
+    // The person moved on while the draft was being made: they closed the
+    // wait, or closed the conversation Start over was pressed in, or went
+    // Back. The draft is an empty one the list does not show.
+    const attempt = current.current;
+    if (attempt === null || attempt.token !== token) return;
+    if (new URLSearchParams(window.location.search).get("draft") !== attempt.from) {
+      current.current = null;
+      setOpening(null);
+      return;
+    }
     if (href === null) {
       current.current = null;
       setOpening(null);

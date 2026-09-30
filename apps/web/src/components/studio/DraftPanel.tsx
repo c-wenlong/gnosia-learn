@@ -355,6 +355,13 @@ export function DraftPanel({
     setVideo(videoAvailability(health.video));
     setDiagramAgent(diagramAvailability(health.diagramAgent));
   }, []);
+  // Once on opening too: the page that drew the grid read health, and a
+  // conversation opened in the browser (`ConversationHost`) can be minutes
+  // younger than that read.
+  useEffect(() => {
+    const timer = setTimeout(() => void readHealth(), 0);
+    return () => clearTimeout(timer);
+  }, [readHealth]);
   useEffect(() => {
     const wake = () => {
       void refreshJobs();
