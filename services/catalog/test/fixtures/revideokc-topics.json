@@ -1,0 +1,114 @@
+{
+ "outRoot": "<outRoot>",
+ "topics": [
+  {
+   "path": "algorithms/cs3230/week-03a-insertion-sort-proof",
+   "title": "CS3230 week 3: insertion sort, proved correct",
+   "topic": "proof-of-correctness",
+   "concepts": [],
+   "tags": [
+    "cs3230",
+    "nus",
+    "algorithms",
+    "proof-of-correctness",
+    "loop-invariant",
+    "code"
+   ],
+   "prerequisites": [],
+   "materials": [],
+   "prefix": "IS",
+   "out_dir": "out/algorithms/cs3230/week-03a-insertion-sort-proof",
+   "sections": [
+    {
+     "section": "narrated",
+     "files": [
+      {
+       "file": "scene.tsx",
+       "scenes": [
+        "IS1_InsertionSort"
+       ]
+      }
+     ],
+     "output": "week_03a_insertion_sort_proof.mp4",
+     "deliverable": {
+      "path": "out/algorithms/cs3230/week-03a-insertion-sort-proof/week_03a_insertion_sort_proof.mp4",
+      "exists": true,
+      "duration": 76.67,
+      "sidecars": {
+       "transcript": {
+        "path": "out/algorithms/cs3230/week-03a-insertion-sort-proof/week_03a_insertion_sort_proof.transcript.json",
+        "exists": true
+       },
+       "chapters": {
+        "path": "out/algorithms/cs3230/week-03a-insertion-sort-proof/week_03a_insertion_sort_proof.chapters.json",
+        "exists": true
+       },
+       "vtt": {
+        "path": "out/algorithms/cs3230/week-03a-insertion-sort-proof/week_03a_insertion_sort_proof.vtt",
+        "exists": true
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "path": "computer-architecture/cache-basics/memory-hierarchy-in-depth",
+   "title": "The memory hierarchy, in depth",
+   "topic": "cache-basics",
+   "concepts": [],
+   "tags": [
+    "computer-architecture",
+    "caches",
+    "memory-hierarchy",
+    "locality",
+    "amat",
+    "three-js",
+    "showcase"
+   ],
+   "prerequisites": [],
+   "materials": [],
+   "prefix": "MH",
+   "out_dir": "out/computer-architecture/cache-basics/memory-hierarchy-in-depth",
+   "sections": [
+    {
+     "section": "narrated",
+     "files": [
+      {
+       "file": "scene.tsx",
+       "scenes": [
+        "MH1_Stack",
+        "MH2_Locality",
+        "MH3_Amat"
+       ]
+      }
+     ],
+     "output": "memory_hierarchy_in_depth.mp4",
+     "deliverable": {
+      "path": "out/computer-architecture/cache-basics/memory-hierarchy-in-depth/memory_hierarchy_in_depth.mp4",
+      "exists": true,
+      "duration": 62.13,
+      "sidecars": {
+       "transcript": {
+        "path": "out/computer-architecture/cache-basics/memory-hierarchy-in-depth/memory_hierarchy_in_depth.transcript.json",
+        "exists": true
+       },
+       "chapters": {
+        "path": "out/computer-architecture/cache-basics/memory-hierarchy-in-depth/memory_hierarchy_in_depth.chapters.json",
+        "exists": true
+       },
+       "vtt": {
+        "path": "out/computer-architecture/cache-basics/memory-hierarchy-in-depth/memory_hierarchy_in_depth.vtt",
+        "exists": true
+       }
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "drift": {
+  "orphans": [],
+  "unrendered": []
+ }
+}

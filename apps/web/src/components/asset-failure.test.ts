@@ -99,6 +99,20 @@ describe("the video player", () => {
     expect(host.textContent).not.toContain("--source manimkc");
   });
 
+  it("names revideokc's upload for a video revideokc made", async () => {
+    statusAnswers({ ok: false, code: "not-uploaded" }, 404);
+    const host = mount(
+      createElement(VideoPlayer, {
+        src: "/api/assets/v/file",
+        statusHref: "/api/assets/v/status",
+        sourceRepo: "revideokc",
+      }),
+    );
+    await failAndSettle(host.querySelector("video")!);
+    expect(host.textContent).toContain("npm run catalog -- asset upload --source revideokc");
+    expect(host.textContent).not.toContain("--source manimkc");
+  });
+
   it("offers Try again when the server can serve the file, and puts the player back", async () => {
     statusAnswers({ ok: true }, 200);
     const host = mount(

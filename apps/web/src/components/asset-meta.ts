@@ -120,6 +120,7 @@ export function formatBytes(bytes: number | null): string | null {
 const SOURCE_LABEL: Record<string, string> = {
   manimkc: "manim",
   remotionkc: "remotion",
+  revideokc: "revideo",
   tldrawkc: "tldraw",
 };
 

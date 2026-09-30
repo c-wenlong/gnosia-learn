@@ -125,7 +125,9 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
     const result = await runImportCommand({ dir: SEED });
     expect(result.remotionkcRoot).toBe(checkout);
     expect(result.sources.map((s) => s.source)).toContain("remotionkc");
-    expect(result.skipped.map((s) => s.source)).toEqual(["manimkc", "mirrors"]);
+    // revideokc's root is nothing in the suites (vitest.setup.ts), so it is
+    // skipped beside manimkc's two.
+    expect(result.skipped.map((s) => s.source)).toEqual(["manimkc", "revideokc", "mirrors"]);
 
     const rows = await remotionkcRows();
     expect(rows.map((r) => [r.id, r.kind, r.sourceRepo])).toEqual([
