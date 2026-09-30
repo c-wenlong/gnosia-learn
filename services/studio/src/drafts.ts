@@ -20,7 +20,6 @@ import {
   PLANNER_TURNS,
   plannerModel,
   studioOwner,
-  TEXT_LIMIT,
   VERB_TIMEOUT_MS,
 } from "./config";
 import { costFromLog, JobCostMeter, type CostSource, type SpendEntry } from "./cost";
@@ -1252,12 +1251,6 @@ export class Drafts {
     const lead = raw.length - raw.trimStart().length;
     const text = raw.trim();
     if (text === "") throw new JobRefused(400, `"text" is required: a message with nothing in it`, { field: "text" });
-    if (text.length > TEXT_LIMIT) {
-      throw new JobRefused(400, `the message is ${text.length} characters and the cap is ${TEXT_LIMIT}`, {
-        field: "text",
-        limit: TEXT_LIMIT,
-      });
-    }
     // Positions against the text as stored: the leading whitespace trimmed off.
     const mentions: Mention[] = parsed.map((mention) => ({ ...mention, start: mention.start - lead, end: mention.end - lead }));
     const kinds = plannerKindsOf(record);

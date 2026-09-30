@@ -183,7 +183,7 @@ describe("the composer", () => {
     expect(mocks.composer!.fallbackNote).toBe("Tags could not load, so none can be added here.");
   });
 
-  it("blocks a bare tag, as an empty conversation does, and an over-long message", async () => {
+  it("blocks a bare tag, as an empty conversation does, and not a long message", async () => {
     await mount();
     await type({ text: "@video", mentions: [{ kind: "video", start: 0, end: 6 }] });
     expect(mocks.composer!.sendDisabled).toBe(true);
@@ -192,8 +192,8 @@ describe("the composer", () => {
     expect(mocks.composer!.value.text).toBe("@video");
     await type({ text: "x".repeat(8_500), mentions: [] });
     expect(mocks.composer!.disabled).toBe(false);
-    expect(mocks.composer!.sendDisabled).toBe(true);
-    expect(mocks.composer!.disabledReason).toBe("8,500 of 8,000 characters. Cut it down to send.");
+    expect(mocks.composer!.sendDisabled).toBe(false);
+    expect(mocks.composer!.disabledReason).toBeUndefined();
   });
 });
 
