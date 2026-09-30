@@ -674,6 +674,13 @@ export class Drafts {
   private readonly pruning = new Set<string>();
   /** Workspaces of pruned drafts that did not all go, removed by the next pass. */
   private readonly leftovers = new Set<string>();
+  /**
+   * The corpus and video reads each create starts, until they finish. A
+   * create refused before it awaits them (the vocabulary down, a concept the
+   * catalog does not know) leaves them running, and the diagram list writes
+   * its cache under `STUDIO_HOME` when it returns, so `drain` waits for them.
+   */
+  private readonly readsInFlight = new Set<Promise<unknown>>();
   /** The last vocabulary this service read, reused by a turn's C4 check for a short while. */
   private lastVocabulary: { at: number; value: Vocabulary } | null = null;
 
@@ -1265,9 +1272,10 @@ export class Drafts {
     // The corpus and the videos are read beside the vocabulary rather than
     // after it: each is a catalog subprocess, and one after another they
     // were most of the wait between New and a conversation to type into.
-    // Neither can reject, so a refusal below leaves nothing unhandled.
-    const listingRead = listDiagrams().catch(() => null);
-    const videosRead = kinds.includes("video") ? readVideoCorpus() : Promise.resolve(null);
+    // Neither can reject, so a refusal below leaves nothing unhandled, and
+    // `drain` waits for both, since a refusal returns without them.
+    const listingRead = this.tracked(listDiagrams().catch(() => null));
+    const videosRead = kinds.includes("video") ? this.tracked(readVideoCorpus()) : Promise.resolve(null);
 
     let vocabulary: Vocabulary;
     try {
@@ -1941,6 +1949,13 @@ export class Drafts {
       // cannot match and the next turn tells the rest.
       await this.save(id, { vocabularyHash: complete ? hash : `partial:${hash}` });
     });
+  }
+
+  /** `read`, held in `readsInFlight` until it settles. */
+  private tracked<T>(read: Promise<T>): Promise<T> {
+    this.readsInFlight.add(read);
+    void read.finally(() => this.readsInFlight.delete(read)).catch(() => undefined);
+    return read;
   }
 
   /** The vocabulary, read at most `maxAgeMs` ago by this service, or read now. */
@@ -3046,11 +3061,15 @@ export class Drafts {
     return this.require(id);
   }
 
-  /** Stop every planner turn. Their replies are written as cut off. */
+  /**
+   * Stop every planner turn, and wait for the reads a refused create left
+   * running. Their replies are written as cut off.
+   */
   async drain(): Promise<void> {
     this.draining = true;
     for (const run of this.running.values()) await run.stop("shutdown");
     await Promise.all([...this.turnsInFlight.values()].map((turn) => turn.catch(() => undefined)));
+    await Promise.all([...this.readsInFlight].map((read) => read.catch(() => undefined)));
   }
 }
 
