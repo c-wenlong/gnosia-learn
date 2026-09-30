@@ -28,7 +28,7 @@ import { testVocabulary } from "./vocabulary";
 
 const argvOf = (resume = false) =>
   plannerArgv({
-    systemPrompt: "SYSTEM",
+    systemPromptFile: "/abs/drafts/d/planner-system.md",
     settingsFile: "/abs/drafts/d/planner-settings.json",
     sessionId: "11111111-2222-4333-8444-555555555555",
     resume,
@@ -57,8 +57,10 @@ describe("the planner's argv", () => {
     expect(after(argv, "--output-format")).toBe("stream-json");
     expect(argv).toContain("--verbose");
     expect(argv).toContain("--include-partial-messages");
-    // The system prompt is replaced, never appended to Claude Code's own.
-    expect(after(argv, "--system-prompt")).toBe("SYSTEM");
+    // The system prompt is replaced, never appended to Claude Code's own, and
+    // passed as the draft's file: none of its text is ever an argv element.
+    expect(after(argv, "--system-prompt-file")).toBe("/abs/drafts/d/planner-system.md");
+    expect(argv).not.toContain("--system-prompt");
     expect(argv).not.toContain("--append-system-prompt");
   });
 
@@ -67,8 +69,8 @@ describe("the planner's argv", () => {
     for (const flag of ["--allowedTools", "--allowed-tools", "--add-dir", "--dangerously-skip-permissions"]) {
       expect(argv).not.toContain(flag);
     }
-    // No argument but the system prompt is a tool's name.
-    const values = argv.filter((_, i) => argv[i - 1] !== "--system-prompt");
+    // No argument is a tool's name.
+    const values = argv;
     for (const tool of ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"]) expect(values).not.toContain(tool);
     const settings = plannerSettings();
     expect(settings.permissions.allow).toEqual([]);
@@ -79,7 +81,7 @@ describe("the planner's argv", () => {
     const argv = argvOf();
     expect(argv[0]).toBe("-p");
     // Every other element is a flag or the value of the flag before it.
-    const valued = new Set(["--system-prompt", "--tools", "--mcp-config", "--setting-sources", "--settings", "--permission-prompts", "--max-turns", "--output-format", "--model", "--session-id", "--resume"]);
+    const valued = new Set(["--system-prompt-file", "--tools", "--mcp-config", "--setting-sources", "--settings", "--permission-prompts", "--max-turns", "--output-format", "--model", "--session-id", "--resume"]);
     for (let i = 1; i < argv.length; i += 1) {
       expect(argv[i]!.startsWith("--"), `argv[${i}] ${argv[i]}`).toBe(true);
       if (valued.has(argv[i]!)) i += 1;

@@ -32,6 +32,7 @@ const catalogMock = vi.hoisted(() => ({
   sessionStart: vi.fn(),
   sessionEnd: vi.fn(),
   status: vi.fn(),
+  conceptShow: vi.fn(),
 }));
 vi.mock("../src/catalog", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/catalog")>()),
@@ -84,6 +85,7 @@ beforeEach(async () => {
   catalogMock.topicList.mockReset().mockResolvedValue(topicListAnswer());
   catalogMock.diagramList.mockReset().mockResolvedValue(ok({ diagrams: [] }));
   catalogMock.diagramShow.mockReset().mockResolvedValue(ok({ diagram: null }));
+  catalogMock.conceptShow.mockReset().mockResolvedValue(ok({ id: "dot-product", title: "The dot product" }));
   for (const fn of [catalogMock.jobEnqueue, catalogMock.jobClaim, catalogMock.jobFinish, catalogMock.sessionStart, catalogMock.sessionEnd, catalogMock.status]) {
     fn.mockReset().mockResolvedValue(ok());
   }
@@ -128,6 +130,33 @@ async function readEvents(route: string, done: (text: string) => boolean): Promi
 const tagged = (text: string) => ({ text: `@diagram ${text}`, mentions: [{ kind: "diagram", start: 0, end: 8 }] });
 
 describe("the draft routes", () => {
+  it("open a conversation on a concept from the tutor, in the shapes of docs/STUDIO-TUTOR-HANDOFF.md", async () => {
+    const concept = { slug: "dot-product", title: "The dot product", summary: "Parts multiplied and added.", body: "# The dot product\n\nA note." };
+    const tutor = [
+      { role: "user", content: "What is it for?" },
+      { role: "assistant", content: "Measuring how far two vectors agree." },
+    ];
+    const created = await post("/api/drafts", { concept, tutor, idempotencyKey: "tutor-k" });
+    expect(created.status).toBe(201);
+    const answer = (await created.json()) as { draftId: string; note: string };
+    expect(answer.note).toBe("a conversation about the concept dot-product");
+    const read = (await (await fetch(`${base}/api/drafts/${answer.draftId}`)).json()) as Record<string, unknown>;
+    expect(read.concept).toEqual({ slug: "dot-product", title: "The dot product", topic: "vector-and-linear-algebra-basics", tutorTurns: 2 });
+    expect(read.source).toBeNull();
+    const list = (await (await fetch(`${base}/api/drafts`)).json()) as { drafts: Record<string, unknown>[] };
+    expect(list.drafts.find((row) => row.draftId === answer.draftId)?.concept).toEqual({ slug: "dot-product", title: "The dot product" });
+
+    const refused = async (body: unknown): Promise<{ status: number; field: unknown }> => {
+      const response = await post("/api/drafts", body);
+      const json = (await response.json()) as { detail?: { field?: unknown } };
+      return { status: response.status, field: json.detail?.field };
+    };
+    expect(await refused({ concept, source: "some-diagram" })).toEqual({ status: 400, field: "concept" });
+    expect(await refused({ concept, tutor: Array.from({ length: 7 }, () => tutor[0]) })).toEqual({ status: 400, field: "tutor" });
+    expect(await refused({ concept: { ...concept, slug: "a/../b" } })).toEqual({ status: 400, field: "concept.slug" });
+    expect(await refused({ tutor })).toEqual({ status: 400, field: "tutor" });
+  });
+
   it("create, talk, read, follow and draw, in the shapes of the API table", async () => {
     await fake.script([{ text: proposing(good), cost: 0.02 }]);
     const created = await post("/api/drafts", { idempotencyKey: "k" });
@@ -163,7 +192,7 @@ describe("the draft routes", () => {
 
     const list = (await (await fetch(`${base}/api/drafts?state=briefed`)).json()) as { drafts: Record<string, unknown>[] };
     expect(list.drafts).toEqual([
-      { draftId, kind: "diagram", kinds: ["diagram"], state: "briefed", title: "TCP congestion window", firstMessage: expect.any(String), source: null, turns: 1, costUsd: 0.02, updated: expect.any(String), jobId: null },
+      { draftId, kind: "diagram", kinds: ["diagram"], state: "briefed", title: "TCP congestion window", firstMessage: expect.any(String), source: null, concept: null, turns: 1, costUsd: 0.02, updated: expect.any(String), jobId: null },
     ]);
 
     // Replay from the start carries ids; ?after skips what the client has.
