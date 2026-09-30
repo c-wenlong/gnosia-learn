@@ -340,6 +340,41 @@ interface. No behaviour changes: the written profiles, wrapper and settings
 are byte-identical to today's for the same job, checked by a test; the video
 suites pass unchanged.
 
+**As built.** `services/studio/src/video/backend.ts` holds `VideoBackend` and
+`backendFor(tool)`, which throws for a tool with no backend.
+`backends/manimkc.ts` is a facade: each method calls the module that always
+did that part, with the arguments the runner used to pass, so `checkout.ts`,
+`sandbox.ts`, `seed.ts` and the rest did not move. The runner and the gate
+reach manimkc only through it. `test/video-backend.test.ts` compares its
+profiles, wrapper, settings and prompts with the old calls, byte for byte.
+
+| Method | What it is |
+| --- | --- |
+| `tool`, `sourcePattern` | The tool, and which files of a topic folder are its source (what a change starts from) |
+| `toolchain()`, `problems(tools)` | Discovery, and why a job cannot run |
+| `paths(jobId, slug)` | Every path of the job, resolved |
+| `profiles(job)`, `prepare(job)` | The profiles' text; the checkout, profiles and caches written |
+| `scaffold(job, brief, startFrom)` | The topic, new or copied from a start; returns the scene classes |
+| `wrapper(job, input)` | Writes `bin/video` and returns the library listing for the manual |
+| `seed(job, lines, parent)`, `keepClips(job)` | The narration cache before the agent, and the clips kept after a verdict |
+| `manual(wrapper, listing)`, `prompt(request)` | The system prompt, and the four user messages as one discriminated request |
+| `settings(job, input)` | The permission file around the runner's guard |
+| `gateTools(job)`, `checkSource(input, report)`, `sheet(paths, scene)` | The gate's sandboxed tools, its steps 1 to 3, and the sheet step 10 wants Read |
+
+The runner keeps the Bash guard and writes the settings file; the gate keeps
+steps 4 to 10 and calls `checkSource` and `sheet` (`VideoGateChecks` in
+`gate.ts`, manimkc's in `backends/manimkc-gate.ts`). `compareLines` moved to
+`lines.ts` so a backend's checks can use it without importing the gate.
+
+Still manimkc-shaped, for phase 2c: the doctor (one per machine, built in
+`index.ts` and read by health and the press; a doctor per backend changes
+both); the wrapper's verbs (`VERBS` in `calls.ts`, `steps.ts`,
+`narrateCall`, and step 10's `preview`); `GateTools.scan` and `lint`; the
+`Toolchain` and `VideoPaths` shapes; the source step 5 copies and
+`saveSource` keeps (the scene file and `topic.yml`); the `.sheet.png` suffix
+the runner watches Reads for; and `routes.ts` and `review.ts`, which still
+call `resolvedPaths` and `sheetPath` directly.
+
 ### Phase 2b. revideokc, ready to be sandboxed (in c-wenlong/revideokc)
 
 - puppeteer `pipe: true` always; `DISABLE_TELEMETRY=true` always.
