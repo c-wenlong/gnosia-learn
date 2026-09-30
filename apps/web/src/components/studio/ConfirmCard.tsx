@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { chipClasses, cx, LABEL } from "@/components/ui/classes";
+import { chipClasses, cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Input } from "@/components/ui/Input";
 import type { TopicOption } from "@/data/topics";
@@ -701,7 +701,8 @@ function RemoveIcon() {
 
 /** A chip's box, as a field: the same 28px pill, so nothing moves when editing starts. */
 const CHIP_FIELD = cx(
-  "h-7 min-w-[5ch] max-w-full rounded-full border border-border bg-surface text-base text-text outline-none md:text-[13px]",
+  "h-7 min-w-[5ch] max-w-full rounded-full border border-border bg-surface text-text outline-none",
+  FIELD_TEXT.px13,
   "transition-colors duration-100 placeholder:text-text3 focus:border-accent aria-invalid:border-danger",
   "[field-sizing:content]",
 );
