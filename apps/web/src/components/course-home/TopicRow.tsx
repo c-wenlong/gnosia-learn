@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { TopicRecap } from "@/components/TopicRecap";
 import { Button } from "@/components/ui/Button";
-import { cx, LABEL } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { conceptHref, topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
@@ -221,7 +221,7 @@ function TopicPanel({
           onBlur={flush}
           placeholder="Personal notes for this topic"
           rows={3}
-          className="mt-1.5 block w-full resize-y rounded-lg border-2 border-border bg-surface px-3.5 py-2.5 text-base text-text outline-none transition-colors duration-100 placeholder:text-text3 focus:border-accent md:text-[14px]"
+          className={cx("mt-1.5 block w-full resize-y rounded-lg border-2 border-border bg-surface px-3.5 py-2.5 text-text outline-none transition-colors duration-100 placeholder:text-text3 focus:border-accent", FIELD_TEXT.px14)}
         />
       </div>
     </div>

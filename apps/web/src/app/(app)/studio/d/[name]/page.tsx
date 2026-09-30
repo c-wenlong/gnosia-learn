@@ -9,6 +9,7 @@ import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
 import { ShotView } from "@/components/studio/ShotView";
+import { FIELD_TEXT } from "@/components/ui/classes";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
   Button,
@@ -318,7 +319,7 @@ function Strip({ diagram, path, uncommitted }: { diagram: Diagram; path: string;
           required
           placeholder="Why this change"
           aria-label="Why this change"
-          className="h-8 w-44 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-base placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none md:text-xs"
+          className={`h-8 w-44 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none ${FIELD_TEXT.xs}`}
         />
         <Button type="submit">Commit</Button>
       </form>
