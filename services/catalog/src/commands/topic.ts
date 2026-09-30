@@ -1,4 +1,4 @@
-import { LOCAL_LEARNER_ID } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, readableOwners } from "@self-learn/schema";
 
 import { addTag, checkTagInput, editTag, TagError, type TagWriteResult } from "../content/tags";
 import {
@@ -38,6 +38,15 @@ import { databaseUrl, redactUrl } from "../env";
  * Every write is authored by the local learner as a person unless `--author`
  * says otherwise: a person ran the command, or pressed the studio button that
  * ran it (D16).
+ *
+ * `--owner` goes with `topic add` and `topic ls` only, the two verbs the
+ * studio runner spawns for the owner it serves (phase 4 of
+ * docs/CONTENT-MIGRATION.md). `add` then writes the topic as that owner and
+ * checks it against what that owner may read; `ls` lists that owner's topics
+ * and the commons'. Without it `add` writes as `CLI_OWNER` and `ls` stays the
+ * operator's whole-database listing (SCHEMA.md, "Owners"). Every other verb,
+ * and `tag`, writes as `CLI_OWNER` and refuses the flag rather than ignore it
+ * and write as somebody else.
  */
 
 /** A verb that was called wrong. The CLI turns it into exit code 2. */
@@ -63,6 +72,7 @@ export interface TopicFlags {
   label?: string;
   description?: string;
   author?: string;
+  owner?: string;
 }
 
 export type TopicCommandResult =
@@ -101,6 +111,18 @@ function shape<T>(check: () => T): T {
   }
 }
 
+/**
+ * `--owner`, for the verbs that take it: undefined when it was not given, and
+ * a usage error when it was given empty or to a verb that would ignore it.
+ */
+function ownerFlag(flags: TopicFlags, verb: string | undefined, takes: boolean): string | undefined {
+  if (flags.owner === undefined) return undefined;
+  if (!takes) throw new TopicUsage(`--owner goes with topic add and topic ls only, not ${verb ?? "this verb"}`);
+  const owner = flags.owner.trim();
+  if (owner === "") throw new TopicUsage("--owner cannot be empty");
+  return owner;
+}
+
 function positional(positionals: string[], at: number, what: string): string {
   const value = positionals[at];
   if (value === undefined) throw new TopicUsage(what);
@@ -119,6 +141,7 @@ export async function runTopic(
 ): Promise<TopicCommandResult> {
   const verb = positionals[1];
   const database = redactUrl(databaseUrl());
+  const owner = ownerFlag(flags, `topic ${verb ?? ""}`.trim(), verb === "add" || verb === "ls");
   const withDatabase = async <T>(fn: Parameters<typeof connected<T>>[0]) => {
     await ready();
     return connected(fn);
@@ -145,7 +168,7 @@ export async function runTopic(
       return withDatabase(async ({ db }) => ({
         database,
         verb: "add" as const,
-        ...(await addTopic(db, input, author, { dryRun })),
+        ...(await addTopic(db, input, author, { dryRun, ...(owner === undefined ? {} : { owner }) })),
       }));
     }
     case "edit": {
@@ -207,7 +230,8 @@ export async function runTopic(
       return withDatabase(async ({ db }) => ({
         database,
         verb: "ls" as const,
-        ...(await listTopics(db, { domain: flags.domain })),
+        // With --owner, that owner's topics and the commons'; without, every owner's.
+        ...(await listTopics(db, { domain: flags.domain, ...(owner === undefined ? {} : { owners: readableOwners(owner) }) })),
       }));
     default:
       throw new TopicUsage("usage: topic add|edit|rename|relate|map|archive|restore|ls");
@@ -221,6 +245,7 @@ export async function runTag(
 ): Promise<TagCommandResult> {
   const verb = positionals[1];
   const database = redactUrl(databaseUrl());
+  ownerFlag(flags, `tag ${verb ?? ""}`.trim(), false);
   const withDatabase = async <T>(fn: Parameters<typeof connected<T>>[0]) => {
     await ready();
     return connected(fn);

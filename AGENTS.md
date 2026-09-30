@@ -235,11 +235,12 @@ Rules of engagement:
   tile still draws with Postgres down. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
 - The runner serves one owner, `STUDIO_OWNER` (default `local`). Every
-  `catalog diagram`, `job` and `session` verb it spawns passes `--owner` with
-  it, so the grid, the inspector, the SVG route and a checkout see that
-  owner's diagrams and the commons' and nothing else, and its jobs and
-  sessions are that owner's; `services/studio/test/owner.test.ts` fails a
-  verb that leaves it out. The web app names the signed-in owner in
+  `catalog diagram`, `draft`, `job`, `session` and `topic` verb it spawns
+  passes `--owner` with it, so the grid, the inspector, the SVG route and a
+  checkout see that owner's diagrams and the commons' and nothing else, the
+  vocabulary is that owner's topics and the commons', a topic the planner
+  proposed is filed as theirs, and its jobs and sessions are that owner's;
+  `services/studio/test/owner.test.ts` fails a verb that leaves it out. The web app names the signed-in owner in
   `x-self-learn-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
   session after dropping any value a page sent, and the runner refuses a
   request naming anyone else: its queue, checkouts, cached list and agent
@@ -276,9 +277,12 @@ Rules of engagement:
   `services/catalog/src/env.ts` finds its own), because the studio needs a
   root for code, not content; `STUDIO_REPO_ROOT` overrides it for the tests.
 - The studio reads the topic vocabulary only through
-  `npm run --silent catalog -- topic ls --json`, and opens no database
-  connection of its own. Every good read is cached in
-  `$STUDIO_HOME/cache/topics.json`; with the catalog down a brief is checked
+  `npm run --silent catalog -- topic ls --owner <STUDIO_OWNER> --json`, and
+  opens no database connection of its own. `topic ls` without `--owner` is
+  the operator's listing of every owner's topics, which is why it is never
+  called bare. Every good read is cached in
+  `$STUDIO_HOME/cache/topics.<owner>.json` (the old `topics.json` was
+  unscoped and is never read); with the catalog down a brief is checked
   against that copy, `/api/health` reports `vocabulary.stale` with its
   `readAt`, and `/api/vocabulary` serves it, which is where the web studio
   screens take their topics from so they still work with Postgres down.

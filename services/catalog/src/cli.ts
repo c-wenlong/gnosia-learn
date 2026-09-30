@@ -220,8 +220,11 @@ Commands:
                            from the rows only while a type is still on files):
                              add --slug S --title T --domain D [--summary X]
                                [--alias A]... [--relate kind:slug]...
-                               [--dry-run]: --dry-run validates and lists
-                               near matches (pg_trgm) without writing
+                               [--dry-run] [--owner ID]: --dry-run validates
+                               and lists near matches (pg_trgm) without
+                               writing. --owner writes the topic as that
+                               owner (default: local), checked against their
+                               topics and the commons'
                              edit <slug> [--title] [--summary] [--domain]
                                [--alias A]... [--add-alias A]...
                                [--drop-alias A]...
@@ -233,7 +236,9 @@ Commands:
                                manimkc topic folders (maps.manimkc) whose
                                videos file under the topic
                              archive <slug>, restore <slug>
-                             ls [--domain D]
+                             ls [--domain D] [--owner ID]: every owner's
+                               topics, or with --owner that owner's and the
+                               commons'. Only add and ls take --owner
   tag <verb>               The cross-course themes, the same way:
                              add --id ID --label L --description D
                              edit <id> [--label] [--description]

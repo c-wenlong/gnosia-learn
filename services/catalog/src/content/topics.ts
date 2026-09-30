@@ -22,7 +22,7 @@ import { diagramPaths } from "./diagram-document";
 import { restampVideoSource, sourceHash } from "./videos";
 import { type ExportType, sha256 } from "./layout";
 import { POSITION_STEP } from "./positions";
-import { andOwnedBy, type Owners, CLI_OWNER, cliScope } from "./scope";
+import { andOwnedBy, type Owners, CLI_OWNER, cliScope, ownedBy, readableFor, scopedRead } from "./scope";
 import {
   type LatestRevision,
   latestRevisions,
@@ -228,9 +228,17 @@ async function liveRow(db: CatalogDatabase, slug: string, role = "topic"): Promi
  * gets (phase 4). A relation, a concept's topic or a module's topic naming it
  * would be a link its own reader could not follow.
  */
-async function readableRow(db: CatalogDatabase, slug: string, role = "topic"): Promise<TopicRow> {
+async function readableRow(
+  db: CatalogDatabase,
+  slug: string,
+  role = "topic",
+  // An object, so an explicit `readable: undefined` (a database from before
+  // 0010, every owner) is not swallowed by the default the way a bare
+  // defaulted parameter would swallow it.
+  scope: { readable: Owners } = { readable: cliScope().readable },
+): Promise<TopicRow> {
   const row = await liveRow(db, slug, role);
-  if (!cliScope().readable.includes(row.ownerId)) throw missingTopic(slug, role);
+  if (scope.readable !== undefined && !scope.readable.includes(row.ownerId)) throw missingTopic(slug, role);
   return row;
 }
 
@@ -367,9 +375,17 @@ export interface TopicList {
   counts: { topics: number; domains: number; aliases: number; relations: number };
 }
 
-/** `catalog topic ls [--domain]`: every live topic with what the planner needs to place a new one. */
-export async function listTopics(db: CatalogDatabase, options: { domain?: string } = {}): Promise<TopicList> {
-  const entries = await readTopicEntries(db);
+/**
+ * `catalog topic ls [--domain] [--owner]`: every live topic with what the
+ * planner needs to place a new one.
+ *
+ * `owners` scopes it the way `readTopicEntries` does: the studio asks for its
+ * owner's topics and the commons' (`--owner`), so another owner's topics,
+ * their concepts and the edges into them never reach the planner or the
+ * studio's cache. Omitted, every owner is read: the operator's listing.
+ */
+export async function listTopics(db: CatalogDatabase, options: { domain?: string; owners?: Owners } = {}): Promise<TopicList> {
+  const entries = await scopedRead(db, options.owners, (owners) => readTopicEntries(db, owners));
   const incoming = new Map<string, TopicListing["incoming"]>();
   for (const entry of entries) {
     for (const relation of entry.relations) {
@@ -403,7 +419,7 @@ export async function listTopics(db: CatalogDatabase, options: { domain?: string
 export async function nearMatches(
   db: CatalogDatabase,
   candidates: readonly string[],
-  options: { exclude?: string; threshold?: number } = {},
+  options: { exclude?: string; threshold?: number; owners?: Owners } = {},
 ): Promise<NearMatch[]> {
   const wanted = [...new Set(candidates.map((c) => c.trim()).filter((c) => c !== ""))];
   if (wanted.length === 0) return [];
@@ -425,7 +441,7 @@ export async function nearMatches(
       union all select 'alias', a from jsonb_array_elements_text(t.aliases) as a
     ) m
     cross join unnest(${sql.param(wanted)}::text[]) as c(against)
-    where t.archived_at is null and t.slug <> ${options.exclude ?? ""}
+    where t.archived_at is null and t.slug <> ${options.exclude ?? ""}${andOwnedBy(sql`t.owner_id`, options.owners)}
       and similarity(m.value, c.against) >= ${threshold}
     order by t.slug, score desc, m.field, m.value
   `);
@@ -457,18 +473,20 @@ function between(low: number | null, high: number | null, slug: string, after: s
 /**
  * Where a topic goes in `topics.yaml`'s order: after the last live topic of
  * its domain, since the file is written in domain groups, or at the end when
- * the domain is new.
+ * the domain is new. Among the topics `owners` may read, so whether a domain
+ * is new says nothing about another owner's vocabulary.
  */
 async function placeInDomain(
   db: CatalogDatabase,
   slug: string,
   domain: string,
+  owners?: Owners,
 ): Promise<{ position: number; newDomain: boolean }> {
   const rows = (
     await db
       .select({ slug: topic.slug, domain: topic.domain, position: topic.position })
       .from(topic)
-      .where(isNull(topic.archivedAt))
+      .where(and(isNull(topic.archivedAt), ownedBy(topic.ownerId, owners)))
       .orderBy(asc(topic.position), asc(topic.slug))
   ).filter((row) => row.slug !== slug);
   let last = -1;
@@ -488,11 +506,16 @@ async function placeInDomain(
  * Checks shared by the writers
  * ------------------------------------------------------------------ */
 
-/** Refuse a title another live topic already has, ignoring case and spacing. */
-async function assertTitleFree(db: CatalogDatabase, title: string, except?: string): Promise<void> {
+/**
+ * Refuse a title another live topic already has, ignoring case and spacing.
+ * `owners` narrows "another topic" to the ones the writer may read: a title
+ * is unique within a vocabulary, and a clash with a topic the writer cannot
+ * see would tell them its slug.
+ */
+async function assertTitleFree(db: CatalogDatabase, title: string, except?: string, owners?: Owners): Promise<void> {
   const { rows } = await db.execute<{ slug: string }>(sql`
     select slug from topic
-    where archived_at is null and slug <> ${except ?? ""}
+    where archived_at is null and slug <> ${except ?? ""}${andOwnedBy(sql`owner_id`, owners)}
       and lower(regexp_replace(trim(title), '[[:space:]]+', ' ', 'g')) = ${title.trim().replace(/\s+/g, " ").toLowerCase()}
     limit 1
   `);
@@ -627,10 +650,22 @@ export function checkSlugs(...slugs: [string | undefined, string][]): void {
   for (const [value, field] of slugs) slugOf(value, field);
 }
 
-async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promise<AddPlan> {
+async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By, writer: string): Promise<AddPlan> {
   const { slug, title, domain, summary, aliases, relations } = checkAddInput(input);
+  // What this owner may read, or undefined on a database from before 0010,
+  // which has one owner. Every check below is against this, so an add names
+  // nothing of another owner's vocabulary.
+  const readable = await readableFor(db, writer);
 
   const existing = await rowOf(db, slug);
+  if (existing !== undefined && readable !== undefined && !readable.includes(existing.ownerId)) {
+    // Slugs are global (D23): the add cannot take it, and says no more than that.
+    throw new TopicError(
+      "exists",
+      `the slug "${slug}" is taken by a topic you cannot read. Ids are shared across owners ` +
+        `(D23 of docs/CONTENT-MIGRATION.md); choose another slug.`,
+    );
+  }
   if (existing !== undefined) {
     throw new TopicError(
       "exists",
@@ -639,22 +674,22 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promi
         : `topic "${slug}" exists and is archived. Restore it with \`catalog topic restore ${slug}\`.`,
     );
   }
-  await assertTitleFree(db, title);
+  await assertTitleFree(db, title, undefined, readable);
 
   const own: RelationInput[] = [];
   const others = new Map<string, RelationInput[]>();
   for (const { kind, to } of relations) {
-    await readableRow(db, to, "related topic");
+    await readableRow(db, to, "related topic", { readable });
     await assertNoCycle(db, slug, kind, to, own);
     const { owner, other } = storedAs(slug, kind, to);
     if (owner === slug) own.push({ kind, to: other });
     else others.set(owner, [...(others.get(owner) ?? []), { kind, to: slug }]);
   }
 
-  const { position, newDomain } = await placeInDomain(db, slug, domain);
+  const { position, newDomain } = await placeInDomain(db, slug, domain, readable);
   const inputs: WriteContentInput[] = [
     {
-      owner: CLI_OWNER,
+      owner: writer,
       type: "topic",
       id: slug,
       op: "create",
@@ -671,7 +706,9 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promi
     const row = await liveRow(db, owner);
     const current = await relationsOf(db, owner);
     inputs.push({
-      owner: CLI_OWNER,
+      // The writer's, like the new topic: the seam refuses it as `foreign-owner`
+      // when the related topic is the commons', as it always has for `local`.
+      owner: writer,
       type: "topic",
       id: owner,
       next: {
@@ -708,32 +745,37 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promi
  * `catalog topic add`. With `dryRun` it validates, places and looks for near
  * matches, and checks the files are in step, writing nothing: what the
  * studio's runner calls to put a proposed topic on the confirm card (D16).
+ *
+ * `owner` is whose topic it is (`--owner`, default `CLI_OWNER`): the row is
+ * written as them, and the slug, title, relations, placement and near matches
+ * are checked against what they may read, their topics and the commons'.
  */
 export async function addTopic(
   db: CatalogDatabase,
   input: AddTopicInput,
   by: By,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; owner?: string } = {},
 ): Promise<AddTopicResult> {
+  const owner = options.owner ?? CLI_OWNER;
   const candidates = [input.title, ...(input.aliases ?? []), input.slug.replaceAll("-", " ")];
   if (options.dryRun === true) {
-    const plan = await planAdd(db, input, by);
+    const plan = await planAdd(db, input, by, owner);
     await assertInStep(db, ["topics"]);
     return {
       dryRun: true,
       entry: plan.entry,
       position: plan.position,
       newDomain: plan.newDomain,
-      nearMatches: await nearMatches(db, candidates),
+      nearMatches: await nearMatches(db, candidates, { owners: await readableFor(db, owner) }),
       threshold: NEAR_MATCH_THRESHOLD,
       revisions: [],
       exported: [],
     };
   }
   const done = await writeThrough(db, ["topics"], async (tx) => {
-    const plan = await planAdd(tx, input, by);
+    const plan = await planAdd(tx, input, by, owner);
     // Before the write, or the new topic would match itself.
-    const near = await nearMatches(tx, candidates);
+    const near = await nearMatches(tx, candidates, { owners: await readableFor(tx, owner) });
     const results = await writeContents(tx, plan.inputs);
     return { plan, near, results };
   });
