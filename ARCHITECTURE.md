@@ -35,6 +35,7 @@ Three layers plus two submodules. One layer is not in this repo at all.
 | Data | Postgres, through `services/catalog/` | Courses, topics, tags, concept notes, session logs and diagrams, the event log and its projections. The repository holds only `seed/`, a small slice in the export format |
 | Assets | `tools/manimkc/` | A separate repo, wired in as a submodule, that renders narrated animation videos |
 | Assets | `tools/remotionkc/` | A separate repo, wired in as a submodule, that renders narrated explainer videos with Remotion; its `topics --json` is manimkc's report shape |
+| Assets | `tools/revideokc/` | A separate repo, wired in as a submodule, that renders narrated explainer videos with Revideo; its `topics --json` is manimkc's report shape too |
 | Assets | `tools/tldrawkc/` | A separate repo, wired in as a submodule, that draws teaching diagrams on a tldraw canvas and exports the SVG that `catalog diagram commit` stores |
 
 The instruction layer lives at `~/.quiver/plugins/learning/learning` so the
@@ -58,7 +59,7 @@ another repo.
 | `services/catalog/` | The connection, the migrations, the indexers, the `catalog` and `learn` CLIs | yes |
 | `scripts/learn/` | The pipeline's pure maths, and the `npm run learn` entry point | no |
 | `seed/` | A small slice of the content in the export format ([README](seed/README.md)): a fresh clone's database and the tests' fixture. Files, not code. | no |
-| `tools/manimkc/`, `tools/remotionkc/`, `tools/tldrawkc/` | Git submodules with their own repos, lockfiles and toolchains | no, deliberately |
+| `tools/manimkc/`, `tools/remotionkc/`, `tools/revideokc/`, `tools/tldrawkc/` | Git submodules with their own repos, lockfiles and toolchains | no, deliberately |
 
 `tools/` is outside the workspaces list on purpose: listing it would make
 `npm ci` at the root try to install two trees this repo does not own.
@@ -717,6 +718,7 @@ content and the learner state, in Postgres 17. Full reasoning in
    catalog import <dir> (export, seed/) ─┘     per change)     ├──► Postgres ──► catalog ls / show / path / search
    manimkc topics --json ────────────────┬──► the indexers ────┘                  (agents read here)
    remotionkc topics --json ─────────────┤
+   revideokc topics --json ──────────────┤
    manimkc mirrors --json ───────────────┘
 ```
 
@@ -727,8 +729,8 @@ reason, and `catalog history` shows every revision. `catalog export --out
 <dir>` writes them out as files, and the nightly export
 (`npm run export:nightly`) keeps a dated copy under
 `$SELF_LEARN_HOME/archive/`; importing one into an empty database restores it.
-The rows an indexer still owns are the ones read from outside, manimkc's and
-remotionkc's renders and the mirror ledger, and there the indexer may delete: a row the
+The rows an indexer still owns are the ones read from outside, manimkc's,
+remotionkc's and revideokc's renders and the mirror ledger, and there the indexer may delete: a row the
 source no longer produces is a stale row, and the whole point of the catalog is
 that a rendered video cannot outlive its source without anything saying so.
 
@@ -764,7 +766,7 @@ over on first mount.
 | The learner store | `services/catalog/src/state/` | The only writer of the state tables, plus the read-only content queries the web app needs (`knowledge-base.ts`, `assets.ts`). Imported by the `learn` CLI, the backfill and the web app. |
 
 Each indexer owns an asset id namespace (`note:`, `link:`, `manimkc:`,
-`remotionkc:`, `diagram:`, `session:`) and a set of tables. `mirrors` is the one that owns
+`remotionkc:`, `revideokc:`, `diagram:`, `session:`) and a set of tables. `mirrors` is the one that owns
 neither: it writes `mirror` rows against ids `manimkc` produced, and is scoped
 by the destinations it declares it audited instead.
 
@@ -791,11 +793,13 @@ answers `topics --json` with manimkc's report shape, relative to its own
 turns either report into rows. What differs is a descriptor: the name, the
 checkout and how its CLI runs, and where a folder's topic comes from, which
 for remotionkc is its topic.yml's required `topic:` rather than a vocabulary
-map.
+map. The `revideokc:` ids are the third video tool's, with remotionkc's rules
+exactly: the same report relative to `$REVIDEOKC_HOME`, and a required
+`topic:` in each topic.yml.
 
 ### Where the tools are
 
-Three of the indexers shell out to a submodule, and none hard-codes where the
+Four of the indexers shell out to a submodule, and none hard-codes where the
 submodule is. `services/catalog/src/env.ts` resolves every root the way it
 resolves `DATABASE_URL`: the shell environment, then `services/catalog/.env`,
 then a default that needs no configuration.
@@ -804,13 +808,14 @@ then a default that needs no configuration.
 | --- | --- | --- |
 | `MANIMKC_ROOT` | The manimkc checkout: where the pinned CLI runs from, and the default for `--manimkc-root`. manimkc's own CLI reads the same variable for the same thing. Not `MANIMKC_HOME`, which is where its renders land and which only ever arrives as a report's `outRoot`. | `tools/manimkc` |
 | `REMOTIONKC_ROOT` | The remotionkc checkout, the same way: where `tools/cli/remotionkc.mjs` runs from with plain node, and the default for `--remotionkc-root`. Not `REMOTIONKC_HOME`, which arrives as the report's `outRoot`. | `tools/remotionkc` |
+| `REVIDEOKC_ROOT` | The revideokc checkout, the same way: where `tools/cli/revideokc.mjs` runs from with plain node, and the default for `--revideokc-root`. Not `REVIDEOKC_HOME`, which arrives as the report's `outRoot`. | `tools/revideokc` |
 | `TLDRAWKC_ROOT` | The tldrawkc checkout, whose `dist/` build reads the `.tldr` files. `npm run canvas` reads it too, so the tool and the indexer cannot end up on different builds. | `tools/tldrawkc` |
 | `LEARN_ROOT` | A tree of files for the `learn` CLI's file half, for tests and scratch copies. Unset, the CLI works on rows only, refuses a type the database does not own, and never creates `learn/` in the repository. | unset |
 
 A relative value resolves against the repo root rather than the working
 directory, because a variable is set once and read by commands run from
-anywhere; `--manimkc-root` and `--remotionkc-root` are typed at a prompt and
-still resolve against the cwd. All four are in
+anywhere; `--manimkc-root`, `--remotionkc-root` and `--revideokc-root` are
+typed at a prompt and still resolve against the cwd. All five are in
 [services/catalog/.env.example](services/catalog/.env.example).
 
 ### How agents read it

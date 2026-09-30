@@ -327,7 +327,7 @@ export function combinedPrompt(kinds: readonly BriefKind[], options: { concept?:
 
 /** What the VIDEOS block needs of one video: `catalog video list`'s summary. */
 export interface VideoCorpusEntry {
-  origin: "studio" | "manimkc" | "remotionkc";
+  origin: "studio" | "manimkc" | "remotionkc" | "revideokc";
   slug: string | null;
   assetId: string;
   title: string | null;
@@ -346,9 +346,10 @@ export function lengthOf(seconds: number | null | undefined): string {
 
 /**
  * The VIDEOS block (STUDIO-VIDEOS.md's CORPUS, renamed so the two corpora do
- * not share a name): `slug | title | topic | length | studio, manimkc or
- * remotionkc`. A tool's render has no slug, so it is named by its asset id:
- * it tells the planner one already exists, never a slug a change could name.
+ * not share a name): `slug | title | topic | length | studio, manimkc,
+ * remotionkc or revideokc`. A tool's render has no slug, so it is named by
+ * its asset id: it tells the planner one already exists, never a slug a
+ * change could name.
  */
 export function videosBlock(videos: readonly VideoCorpusEntry[] | null): string {
   if (videos === null) return fence("VIDEOS", "(the video list could not be read)");

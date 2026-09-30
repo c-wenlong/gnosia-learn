@@ -9,7 +9,14 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { fileFacts } from "../index/files";
-import { readToolReport, VIDEO_TOOL_MIME, videoTool, type TopicsReport } from "../index/video-tool";
+import {
+  readToolReport,
+  VIDEO_TOOL_MIME,
+  VIDEO_TOOL_NAMES,
+  videoTool,
+  type TopicsReport,
+  type VideoToolName,
+} from "../index/video-tool";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
 import {
@@ -25,17 +32,18 @@ import { ContentWriteError, writeContents, type WriteContentInput } from "./writ
 import { CLI_OWNER } from "./scope";
 
 /**
- * `catalog asset upload --source manimkc|remotionkc`: a video tool's rendered
- * videos and their sidecars into the blob store, a poster made for each video on the way, and
+ * `catalog asset upload --source manimkc|remotionkc|revideokc`: a video
+ * tool's rendered videos and their sidecars into the blob store, a poster made for each video on the way, and
  * every `asset` row pointed at its blob (docs/CONTENT-MIGRATION.md, Track E;
  * D5, D7, D8, D11; edge cases 5 and 9).
  *
  * **Which files.** The same report the tool's indexer reads,
  * `<tool> topics --json`, with its `outRoot`: nothing here re-derives the
- * tool's layout. manimkc is described below; remotionkc's report has the same
- * shape and its rows the `remotionkc:` namespace, and everything holds for it
- * with that name in place of manimkc's. A deliverable is only uploaded onto
- * an asset row the indexer already wrote (`manimkc:<out/...>`), because the
+ * tool's layout. manimkc is described below; remotionkc's and revideokc's
+ * reports have the same shape and their rows the `remotionkc:` and
+ * `revideokc:` namespaces, and everything holds for them with that name in
+ * place of manimkc's. A deliverable is only uploaded onto an asset row the
+ * indexer already wrote (`manimkc:<out/...>`), because the
  * row is what the page asks for and a blob no row points at is an orphan on
  * arrival.
  *
@@ -86,8 +94,8 @@ export function posterId(videoId: string): string {
 const MIME: Readonly<Record<string, string>> = { ...VIDEO_TOOL_MIME, jpg: POSTER_CONTENT_TYPE };
 
 /** The video tools whose renders this command stores: each one an index source of the same name. */
-export type UploadSource = "manimkc" | "remotionkc";
-export const UPLOAD_SOURCES: readonly UploadSource[] = ["manimkc", "remotionkc"];
+export type UploadSource = VideoToolName;
+export const UPLOAD_SOURCES: readonly UploadSource[] = VIDEO_TOOL_NAMES;
 
 export interface AssetUploadOptions {
   store: BlobStore;
@@ -97,11 +105,13 @@ export interface AssetUploadOptions {
   repoRoot: string;
   /**
    * The checkout the source's CLI reads, as `catalog import` takes it:
-   * `manimkcRoot` for manimkc, `remotionkcRoot` for remotionkc. Absent, the
-   * tool's variable, else its submodule under `repoRoot`.
+   * `manimkcRoot` for manimkc, `remotionkcRoot` for remotionkc,
+   * `revideokcRoot` for revideokc. Absent, the tool's variable, else its
+   * submodule under `repoRoot`.
    */
   manimkcRoot?: string;
   remotionkcRoot?: string;
+  revideokcRoot?: string;
   dryRun?: boolean;
   /** Absolute path to ffmpeg, or null when there is none: posters are then skipped and said so. */
   ffmpeg: string | null;
@@ -333,8 +343,12 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
   const dryRun = options.dryRun ?? false;
   const source: UploadSource = options.source ?? "manimkc";
   const tool = videoTool(source);
-  const checkout =
-    (source === "manimkc" ? options.manimkcRoot : options.remotionkcRoot) ?? tool.resolveRoot(options.repoRoot);
+  const named: Record<UploadSource, string | undefined> = {
+    manimkc: options.manimkcRoot,
+    remotionkc: options.remotionkcRoot,
+    revideokc: options.revideokcRoot,
+  };
+  const checkout = named[source] ?? tool.resolveRoot(options.repoRoot);
   const report = options.report ?? (await readToolReport(tool, options.repoRoot, checkout));
   const outRoot = str(report.outRoot) ?? checkout;
   /** What a refusal says to run when a row is missing or stale. */

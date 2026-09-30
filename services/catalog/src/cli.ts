@@ -86,6 +86,7 @@ import { withDatabase } from "./db";
 import { databaseUrl, REPO_ROOT, redactUrl } from "./env";
 import { assertMigrated, EXIT_MIGRATIONS_OUTSTANDING, MigrationsOutstanding } from "./migrations";
 import { parseSources } from "./index/run";
+import { isVideoToolName, VIDEO_TOOL_NAMES, VIDEO_TOOLS, videoTool } from "./index/video-tool";
 
 /**
  * The catalog CLI. Run it from the repo root:
@@ -121,8 +122,8 @@ Commands:
                            were edited. <dir> defaults to the repository,
                            which has held no content since the cut-over: on a
                            database that owns every type, a bare \`import\`
-                           refreshes manimkc, remotionkc and the mirror
-                           ledger.
+                           refreshes manimkc, remotionkc, revideokc and the
+                           mirror ledger.
   index                    The old name of \`import\` with no directory. Still
                            works, and says the new name once on stderr.
   export --out <dir>       Write the database back out as content/ and learn/
@@ -200,8 +201,9 @@ Commands:
                            parent's (D24); --fix restamps those.
   asset upload             Copy rendered files into the blob store and point
                            their asset rows at them: --source manimkc reads
-                           manimkc topics --json (--source remotionkc,
-                           remotionkc topics --json), uploads every indexed video
+                           manimkc topics --json (--source remotionkc and
+                           --source revideokc, their own topics --json),
+                           uploads every indexed video
                            and sidecar whose bytes match its row, cuts a
                            poster per video with ffmpeg, and sets blob_key.
                            Resumable: a present blob is skipped.
@@ -287,16 +289,16 @@ Options:
   --json                   Machine-readable output. Supported by every command.
   --only a,b               import, index: run only these sources. Known
                            sources are topics, tags, courses, concepts,
-                           manimkc, remotionkc, diagrams, sessions, mirrors;
-                           they always
+                           manimkc, remotionkc, revideokc, diagrams,
+                           sessions, mirrors; they always
                            run in dependency order, and selecting one selects
                            everything downstream of it and everything it
                            reads. export, parity: only these types, of
                            topics, tags, courses, concepts, sessions, diagrams.
   --out DIR                export: where to write. Created if missing.
                            course export: the file to write.
-  --source NAME            asset upload: what to upload: manimkc or
-                           remotionkc.
+  --source NAME            asset upload: what to upload: manimkc,
+                           remotionkc or revideokc.
   --dry-run                asset upload: hash and report, write nothing.
                            topic add: validate, place and list near
                            matches, write nothing. course import: plan the
@@ -329,6 +331,9 @@ Options:
   --remotionkc-root PATH   import, asset upload: the remotionkc checkout to
                            read. Relative to the working directory. Default:
                            $REMOTIONKC_ROOT, else <repo>/tools/remotionkc.
+  --revideokc-root PATH    import, asset upload: the revideokc checkout to
+                           read. Relative to the working directory. Default:
+                           $REVIDEOKC_ROOT, else <repo>/tools/revideokc.
   --from PATH              backfill: the directory holding events.jsonl,
                            model.json and reviews.json.
                            Default: <repo>/${DEFAULT_STATE_DIR}.
@@ -389,6 +394,8 @@ Environment:
   REMOTIONKC_ROOT
                  The remotionkc checkout. Defaults to <repo>/tools/remotionkc.
                  Same variable and same meaning as remotionkc's own CLI.
+  REVIDEOKC_ROOT The revideokc checkout. Defaults to <repo>/tools/revideokc.
+                 Same variable and same meaning as revideokc's own CLI.
   TLDRAWKC_ROOT  The tldrawkc checkout, whose dist/ build reads the .tldr
                  files. Defaults to <repo>/tools/tldrawkc.
   LEARN_ROOT     The knowledge base's repo root, for tests. Defaults to
@@ -397,7 +404,7 @@ Environment:
                  1 lets this process write to a database marked copy. For
                  tests and scripts/e2e.mjs only; migrate sets it itself.
 
-  All six are documented in services/catalog/.env.example, all six take a
+  All seven are documented in services/catalog/.env.example, all seven take a
   default that needs no configuration, and the shell always wins over
   services/catalog/.env.
 `;
@@ -523,6 +530,7 @@ export async function main(argv: string[]): Promise<number> {
         only: { type: "string" },
         "manimkc-root": { type: "string" },
         "remotionkc-root": { type: "string" },
+        "revideokc-root": { type: "string" },
         from: { type: "string" },
         kind: { type: "string" },
         job: { type: "string" },
@@ -637,6 +645,7 @@ export async function main(argv: string[]): Promise<number> {
         }
         const root = values["manimkc-root"];
         const remotionkcRoot = values["remotionkc-root"];
+        const revideokcRoot = values["revideokc-root"];
         const only = values.only === undefined ? undefined : parseSources(values.only);
         await schemaCurrent();
         const result = await runImportCommand({
@@ -644,6 +653,7 @@ export async function main(argv: string[]): Promise<number> {
           only,
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
           remotionkcRoot: remotionkcRoot === undefined ? undefined : path.resolve(remotionkcRoot),
+          revideokcRoot: revideokcRoot === undefined ? undefined : path.resolve(revideokcRoot),
         });
         emit(result, formatIndex(result));
         break;
@@ -696,22 +706,27 @@ export async function main(argv: string[]): Promise<number> {
         }
         const reasons = values.reason ?? [];
         if (reasons.length > 1) throw new Usage("asset upload takes at most one --reason");
-        const root = values["manimkc-root"];
-        const remotionkcRoot = values["remotionkc-root"];
-        // Each root flag names one tool's checkout; the other tool's is a
+        const roots: Record<UploadSource, string | undefined> = {
+          manimkc: values["manimkc-root"],
+          remotionkc: values["remotionkc-root"],
+          revideokc: values["revideokc-root"],
+        };
+        // Each root flag names one tool's checkout; another tool's is a
         // mistake that would otherwise be ignored without a word.
-        if (source === "manimkc" && remotionkcRoot !== undefined) {
-          throw new Usage("asset upload --source manimkc reads --manimkc-root, not --remotionkc-root");
+        const own = videoTool(source as UploadSource);
+        for (const other of VIDEO_TOOLS) {
+          if (other.name !== own.name && roots[other.name] !== undefined) {
+            throw new Usage(`asset upload --source ${own.name} reads ${own.rootFlag}, not ${other.rootFlag}`);
+          }
         }
-        if (source === "remotionkc" && root !== undefined) {
-          throw new Usage("asset upload --source remotionkc reads --remotionkc-root, not --manimkc-root");
-        }
+        const resolved = (root: string | undefined) => (root === undefined ? undefined : path.resolve(root));
         await schemaCurrent();
         const result = await runAssetUpload({
           source: source as UploadSource,
           dryRun: values["dry-run"],
-          manimkcRoot: root === undefined ? undefined : path.resolve(root),
-          remotionkcRoot: remotionkcRoot === undefined ? undefined : path.resolve(remotionkcRoot),
+          manimkcRoot: resolved(roots.manimkc),
+          remotionkcRoot: resolved(roots.remotionkc),
+          revideokcRoot: resolved(roots.revideokc),
           reason: reasons[0],
         });
         emit(result, formatAssetUpload(result));
@@ -1051,8 +1066,8 @@ function exportTypes(raw: string | undefined): ExportType[] | undefined {
   if (unknown.length > 0) {
     throw new Usage(
       `unknown type(s): ${unknown.join(", ")}. Known: ${EXPORT_TYPES.join(", ")}` +
-        (unknown.includes("manimkc") || unknown.includes("remotionkc")
-          ? ". Rendered videos (manimkc, remotionkc) never enter the export (D7)."
+        (unknown.some(isVideoToolName)
+          ? `. Rendered videos (${VIDEO_TOOL_NAMES.join(", ")}) never enter the export (D7).`
           : ""),
     );
   }

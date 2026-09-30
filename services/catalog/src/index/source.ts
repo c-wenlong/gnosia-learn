@@ -57,6 +57,8 @@ export interface IndexContext {
    * `toolsRoot`, which is what `runIndex` passes anyway.
    */
   remotionkcRoot?: string;
+  /** The revideokc checkout, the same way: only the revideokc source uses it. */
+  revideokcRoot?: string;
   /**
    * Whether this database is under phase 2's contract (migration 0013): a
    * stored-kind asset row must name its blob, so the manimkc source hands
@@ -217,6 +219,7 @@ export const ASSET_PREFIX = {
   courses: "link:",
   manimkc: "manimkc:",
   remotionkc: "remotionkc:",
+  revideokc: "revideokc:",
   diagrams: "diagram:",
   sessions: "session:",
 } as const satisfies Partial<Record<IndexSource, string>>;

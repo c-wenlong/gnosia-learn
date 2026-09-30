@@ -1,5 +1,5 @@
 import type { Indexer } from "./source";
-import { buildToolRows, readToolReport, REMOTIONKC, type TopicsReport } from "./video-tool";
+import { buildToolRows, declaredToolIndexer, readToolReport, REMOTIONKC, type TopicsReport } from "./video-tool";
 
 /**
  * remotionkc's videos and their sidecars, via `remotionkc topics --json`.
@@ -33,26 +33,8 @@ export async function readRemotionkcReport(repoRoot: string, remotionkcRoot: str
   return readToolReport(REMOTIONKC, repoRoot, remotionkcRoot);
 }
 
-/** The checkout this run reads: the one the run named, else the variable or the submodule. */
-function checkoutOf(context: { remotionkcRoot?: string; toolsRoot?: string; repoRoot: string }): string {
-  return context.remotionkcRoot ?? REMOTIONKC.resolveRoot(context.toolsRoot ?? context.repoRoot);
-}
-
-export const remotionkcIndexer: Indexer = {
-  source: "remotionkc",
-  owns: [],
-  assetPrefix: REMOTIONKC.prefix,
-  root: (context) => checkoutOf(context),
-
-  read: async (context) => {
-    const root = checkoutOf(context);
-    const report = await readRemotionkcReport(context.toolsRoot ?? context.repoRoot, root);
-    return buildRemotionkcRows(report, root, context.vocabulary.bySlug, {
-      store: context.blobsRequired === true,
-      ...(context.owner === undefined ? {} : { owner: context.owner }),
-    });
-  },
-};
+/** The source, reading the checkout the run named (`--remotionkc-root`), else the variable or the submodule. */
+export const remotionkcIndexer: Indexer = declaredToolIndexer(REMOTIONKC, (context) => context.remotionkcRoot);
 
 /**
  * The pure half: a report plus the slugs the owner can read become rows. Each

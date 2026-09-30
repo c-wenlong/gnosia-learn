@@ -29,9 +29,14 @@ export const TLDRAWKC_DIR = path.join("tools", "tldrawkc");
 /** The remotionkc submodule, relative to the repo root. The second video tool. */
 export const REMOTIONKC_DIR = path.join("tools", "remotionkc");
 
+/** The revideokc submodule, relative to the repo root. The third video tool. */
+export const REVIDEOKC_DIR = path.join("tools", "revideokc");
+
 export const MANIMKC_ROOT_ENV = "MANIMKC_ROOT";
 
 export const REMOTIONKC_ROOT_ENV = "REMOTIONKC_ROOT";
+
+export const REVIDEOKC_ROOT_ENV = "REVIDEOKC_ROOT";
 
 /**
  * Set to `1` to write to a database whose `catalog_instance` row says `copy`
@@ -142,6 +147,16 @@ export function resolveManimkcRoot(repoRoot: string = REPO_ROOT): string {
  */
 export function resolveRemotionkcRoot(repoRoot: string = REPO_ROOT): string {
   return checkoutRoot(REMOTIONKC_ROOT_ENV, REMOTIONKC_DIR, repoRoot);
+}
+
+/**
+ * The revideokc checkout, the same way: `--revideokc-root`, else this
+ * variable (revideokc's own, with the same meaning), else the submodule. Its
+ * renders land under `$REVIDEOKC_HOME`, which arrives as the report's
+ * `outRoot` and is never read here.
+ */
+export function resolveRevideokcRoot(repoRoot: string = REPO_ROOT): string {
+  return checkoutRoot(REVIDEOKC_ROOT_ENV, REVIDEOKC_DIR, repoRoot);
 }
 
 /**
