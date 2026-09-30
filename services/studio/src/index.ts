@@ -28,6 +28,29 @@ import type { VideoJobRecord } from "./video/types";
  * that nothing is running any more.
  */
 
+/** How long shutdown waits for the drafts' in-flight writes before it moves on. */
+const DRAFTS_DRAIN_MS = 10_000;
+
+/**
+ * `work`, or a note on stderr once `ms` has passed without it. The timer is
+ * unref'd and cleared, so it neither holds the process open nor fires late.
+ */
+async function within(work: Promise<void>, ms: number, what: string): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      process.stderr.write(`shutdown: stopped waiting for ${what} after ${ms / 1_000}s\n`);
+      resolve();
+    }, ms);
+    timer.unref();
+  });
+  try {
+    await Promise.race([work.catch(() => undefined), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function main(): Promise<void> {
   await mkdir(path.join(studioHome(), "jobs"), { recursive: true });
 
@@ -140,7 +163,10 @@ async function main(): Promise<void> {
       .stopAll()
       .then(() => manual.drain())
       .then(() => pruner.drain())
-      .then(() => drafts.drain())
+      // Bounded: it waits for any catalog read a create started, which has a
+      // two-minute timeout of its own, and the exit timer below is only set
+      // once every drain has returned.
+      .then(() => within(drafts.drain(), DRAFTS_DRAIN_MS, "the drafts' last writes"))
       .then(() => runner.drain())
       .then(() => {
         videoDoctor.stop();
