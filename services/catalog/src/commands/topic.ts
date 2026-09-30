@@ -303,7 +303,7 @@ export function formatTopic(result: TopicCommandResult): string {
     case "add":
       lines.push(
         `${result.dryRun ? "would add" : "added"}  ${result.entry.slug}  "${result.entry.title}"  in ${result.entry.domain}` +
-          `${result.newDomain ? " (a new domain)" : ""} at position ${result.position}`,
+          `${result.newDomain ? " (a new domain)" : ""}${result.position === null ? "" : ` at position ${result.position}`}`,
       );
       for (const r of result.entry.relations) lines.push(`relation  ${result.entry.slug} ${r.kind} ${r.to}`);
       lines.push(...nearLines(result.nearMatches, result.threshold));

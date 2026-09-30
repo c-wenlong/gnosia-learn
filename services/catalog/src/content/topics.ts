@@ -590,8 +590,14 @@ export interface AddTopicResult {
   dryRun: boolean;
   /** The entry as the vocabulary will hold it. `maps` are empty: nothing is filed under a new topic yet. */
   entry: TopicEntry;
-  position: number;
-  /** True when no live topic has this domain yet, so the topic opens a new group. */
+  /**
+   * Where the topic sits in the whole vocabulary's order, or null for an add
+   * run for a named owner (`--owner`): the number is placed among every
+   * owner's topics, so handing it back would let a dry run tell whether
+   * another owner has topics in a domain.
+   */
+  position: number | null;
+  /** True when no live topic the writer may read has this domain yet, so the topic opens a new group. */
   newDomain: boolean;
   /** Existing topics that look like this one (edge case 17). A warning; the add still goes ahead. */
   nearMatches: NearMatch[];
@@ -776,6 +782,8 @@ export async function addTopic(
   options: { dryRun?: boolean; owner?: string } = {},
 ): Promise<AddTopicResult> {
   const owner = options.owner ?? CLI_OWNER;
+  // An add for a named owner is told only what that owner may read (`position`'s doc).
+  const shown = (position: number): number | null => (options.owner === undefined ? position : null);
   const candidates = [input.title, ...(input.aliases ?? []), input.slug.replaceAll("-", " ")];
   if (options.dryRun === true) {
     const plan = await planAdd(db, input, by, owner);
@@ -783,7 +791,7 @@ export async function addTopic(
     return {
       dryRun: true,
       entry: plan.entry,
-      position: plan.position,
+      position: shown(plan.position),
       newDomain: plan.newDomain,
       nearMatches: await nearMatches(db, candidates, { owners: await readableFor(db, owner) }),
       threshold: NEAR_MATCH_THRESHOLD,
@@ -802,7 +810,7 @@ export async function addTopic(
   return {
     dryRun: false,
     entry: plan.entry,
-    position: plan.position,
+    position: shown(plan.position),
     newDomain: plan.newDomain,
     nearMatches: near,
     threshold: NEAR_MATCH_THRESHOLD,

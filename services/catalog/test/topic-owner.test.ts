@@ -218,9 +218,13 @@ describe.skipIf(!reachable.ok)("catalog topic ls and add --owner", () => {
       const mine = await json([
         "topic", "add", "--slug", "studio-zeta", "--title", "Studio zeta", "--domain", "zeta", "--dry-run", "--owner", STUDIO,
       ]);
-      // New to the studio, which cannot read the rival's zeta topic, yet placed after it.
+      // New to the studio, which cannot read the rival's zeta topic, and the
+      // position, placed among every owner's topics, is not handed back to say
+      // otherwise. The operator's add, with no --owner, still gets it.
       expect(mine.newDomain).toBe(true);
-      expect(mine.position as number).toBeGreaterThan(theirs.position as number);
+      expect([theirs.position, mine.position]).toEqual([null, null]);
+      const operator = await json(["topic", "add", "--slug", "op-zeta", "--title", "Op zeta", "--domain", "zeta", "--dry-run"]);
+      expect(typeof operator.position).toBe("number");
       // A studio topic in a domain it shares with the export goes after that
       // domain's last topic of any owner, not after its own last topic, which
       // could sit past the rival's zeta group and split it.
