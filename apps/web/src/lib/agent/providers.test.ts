@@ -2,12 +2,15 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   availableProviderSummary,
   completeWithFallback,
+  DEFAULT_NVIDIA_MODEL,
   openRouterReferer,
+  resetGoneModelReports,
   resolveProviders,
 } from "@/lib/agent/providers";
 import { resolveSiteUrl } from "@/lib/site-url";
 
 afterEach(() => {
+  resetGoneModelReports();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -24,9 +27,24 @@ describe("resolveProviders", () => {
       "gemini",
       "openrouter",
     ]);
-    expect(providers[0].model).toBe("meta/llama-3.1-8b-instruct");
+    expect(providers[0].model).toBe("google/gemma-4-31b-it");
     expect(providers[1].model).toBe("gemini-2.5-flash");
     expect(providers[2].model).toBe("openrouter/free");
+  });
+
+  it("never defaults to the retired Llama 3.1 8B", () => {
+    expect(DEFAULT_NVIDIA_MODEL).not.toBe("meta/llama-3.1-8b-instruct");
+    expect(resolveProviders({ NVIDIA_API_KEY: "nv" })[0].model).toBe(
+      DEFAULT_NVIDIA_MODEL,
+    );
+  });
+
+  it("falls back to the default when NVIDIA_MODEL is blank", () => {
+    const providers = resolveProviders({
+      NVIDIA_API_KEY: "nv",
+      NVIDIA_MODEL: "   ",
+    });
+    expect(providers[0].model).toBe(DEFAULT_NVIDIA_MODEL);
   });
 
   it("skips providers without keys", () => {
@@ -161,7 +179,7 @@ describe("completeWithFallback", () => {
       ok: true,
       json: async () => ({
         choices: [{ message: { content: "hello from nvidia" } }],
-        model: "meta/llama-3.1-8b-instruct",
+        model: "google/gemma-4-31b-it",
       }),
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -216,5 +234,63 @@ describe("completeWithFallback", () => {
       expect(outcome.attempts[0].provider).toBe("nvidia");
     }
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+  it("logs a 410 once with the model name, and keeps falling back", async () => {
+    const gone = {
+      ok: false,
+      status: 410,
+      statusText: "Gone",
+      text: async () => "end of life",
+    };
+    const fetchMock = vi.fn().mockImplementation(async (url: string) =>
+      String(url).includes("nvidia.com")
+        ? gone
+        : {
+            ok: true,
+            json: async () => ({
+              choices: [{ message: { content: "from gemini" } }],
+              model: "gemini-2.5-flash",
+            }),
+          },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = { NVIDIA_API_KEY: "nv", GEMINI_API_KEY: "gm" };
+
+    for (let i = 0; i < 3; i++) {
+      const outcome = await completeWithFallback(
+        [{ role: "user", content: "hi" }],
+        env,
+      );
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.attempts[0]).toMatchObject({
+          provider: "nvidia",
+          model: DEFAULT_NVIDIA_MODEL,
+          status: 410,
+        });
+      }
+    }
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][0]).toContain(DEFAULT_NVIDIA_MODEL);
+    expect(errorSpy.mock.calls[0][0]).toContain("410");
+  });
+
+  it("does not log a rate limit as a retired model", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+        text: async () => "slow down",
+      }),
+    );
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await completeWithFallback([{ role: "user", content: "hi" }], {
+      NVIDIA_API_KEY: "nv",
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

@@ -87,6 +87,14 @@ export function openRouterReferer(env: EnvMap): string {
   return resolveSiteUrl(env).toString();
 }
 
+/**
+ * NVIDIA's default chat model. `meta/llama-3.1-8b-instruct`, the previous
+ * default, reached end of life on 2026-08-26 and answers 410 Gone; see the
+ * note in docs/DEPLOYMENT.md on how this one was picked and how to swap it.
+ * `NVIDIA_MODEL` overrides it.
+ */
+export const DEFAULT_NVIDIA_MODEL = "google/gemma-4-31b-it";
+
 export function resolveProviders(
   env: EnvMap = process.env,
 ): ProviderConfig[] {
@@ -95,8 +103,7 @@ export function resolveProviders(
       id: "nvidia",
       label: "NVIDIA NIM",
       baseUrl: baseUrl(env, "nvidia", "NVIDIA_BASE_URL"),
-      model:
-        env.NVIDIA_MODEL?.trim() || "meta/llama-3.1-8b-instruct",
+      model: env.NVIDIA_MODEL?.trim() || DEFAULT_NVIDIA_MODEL,
       apiKeyEnv: "NVIDIA_API_KEY",
     },
     {
@@ -184,6 +191,30 @@ async function callOpenAiCompatible(
   };
 }
 
+/** Models already reported as gone, so a busy route logs each once. */
+const reportedGone = new Set<string>();
+
+/**
+ * A 404 or 410 from a provider means the model is gone, not that the provider
+ * is having a bad minute. The cascade then falls through to the next provider
+ * and the user sees a slower tutor with no error, which is how the retired
+ * NVIDIA default went unnoticed. Say it once, with the model's name.
+ */
+function reportIfModelGone(attempt: ProviderAttemptError): void {
+  if (attempt.status !== 404 && attempt.status !== 410) return;
+  const key = `${attempt.provider}/${attempt.model}`;
+  if (reportedGone.has(key)) return;
+  reportedGone.add(key);
+  console.error(
+    `agent: ${attempt.provider} answered ${attempt.status} for model ${attempt.model}; it is probably retired, set ${attempt.provider.toUpperCase()}_MODEL`,
+  );
+}
+
+/** Test hook: forget which gone models were already reported. */
+export function resetGoneModelReports(): void {
+  reportedGone.clear();
+}
+
 /**
  * Try free providers in order. Continues on rate-limits / 5xx / empty replies.
  */
@@ -218,7 +249,9 @@ export async function completeWithFallback(
         "provider" in err &&
         "message" in err
       ) {
-        attempts.push(err as ProviderAttemptError);
+        const attempt = err as ProviderAttemptError;
+        attempts.push(attempt);
+        reportIfModelGone(attempt);
       } else {
         attempts.push({
           provider: provider.id,

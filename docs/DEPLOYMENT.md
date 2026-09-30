@@ -139,6 +139,17 @@ because the serverless routes read them at request time. CI does not need
 them: `npm run build` runs without keys, and the tutoring chat degrades to the
 copy-the-prompt fallbacks when none are set.
 
+**When NVIDIA retires the model.** The default is `google/gemma-4-31b-it`
+(`DEFAULT_NVIDIA_MODEL` in `apps/web/src/lib/agent/providers.ts`), and
+`NVIDIA_MODEL` overrides it without a deploy of new code. A retired NVIDIA
+model answers 410 Gone, and the cascade then quietly falls through to Gemini,
+so the server logs one `agent: nvidia answered 410 for model ...` line per
+retired model per server instance. To pick a replacement without a key,
+`curl https://integrate.api.nvidia.com/v1/models` lists what is served today
+(retired models are absent), and a chat request for a retired model answers 410
+even with no `Authorization` header, where a live one answers 401. That shows a
+model is not retired; only a real key shows it answers.
+
 `CODECOV_TOKEN` is the only GitHub Actions secret the repo uses, and CI skips
 the coverage upload when it is absent:
 

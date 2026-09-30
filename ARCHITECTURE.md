@@ -458,7 +458,7 @@ tried in a fixed order, and a provider is only in the list when its key is set:
 
 | Order | Provider | Default model | Key |
 | --- | --- | --- | --- |
-| 1 | NVIDIA NIM | `meta/llama-3.1-8b-instruct` | `NVIDIA_API_KEY` |
+| 1 | NVIDIA NIM | `google/gemma-4-31b-it` | `NVIDIA_API_KEY` |
 | 2 | Google Gemini | `gemini-2.5-flash` | `GEMINI_API_KEY` |
 | 3 | OpenRouter | `openrouter/free` | `OPENROUTER_API_KEY` |
 
