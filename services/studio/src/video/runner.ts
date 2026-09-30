@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,7 +8,6 @@ import { agentEnv, spawnClaude, type AgentOutcome, type AgentRun } from "../agen
 import { jobClaim, jobEnqueue, jobFinish, jobShow, sessionEnd, sessionStart, videoCheckout, videoShow } from "../catalog";
 import { agentAuth, dailyCapUsd, DAILY_WINDOW_MS, type AgentAuth } from "../config";
 import { costFromLog, JobCostMeter, spendWindow, type CostReading, type SpendEntry } from "../cost";
-import { cacheDir } from "../content-cache";
 import { jobDir } from "../paths";
 import { sweepByMarker } from "../proc";
 import { credentialNote, credentialRecord, JobRefused } from "../runner";
@@ -17,25 +16,18 @@ import type { RecordStore } from "../store";
 import { readClaudeDefaults, readPreference, resolveAgentSettings } from "./agent-model";
 import { isNarrated, type ValidVideoBrief } from "./brief";
 import { briefTool, notInStudio, type VideoToolName } from "./tools";
+import { backendFor, type BackendJob, type VideoBackend } from "./backend";
 import { appendRead, editsOn, readCalls, readReads, ReadTracker, isToolResult, LineQueue } from "./calls";
-import { buildCheckout, resolvedPaths, scaffold } from "./checkout";
 import { BASH_TIMEOUT_MS, VIDEO_CONCURRENCY, VIDEO_MAX_ATTEMPTS, VIDEO_RUNNER_NAME, videoHangMs, videoMaxTurns } from "./config";
 import { safeCopy, safeHash, safeRead } from "./copy";
 import type { VideoDoctor } from "./doctor";
 import { runVideoGate, type GateTools } from "./gate";
-import { sandboxedGateTools } from "./gate-tools";
-import { apiListing, manualFile, manualText, writeManual } from "./manual";
-import { sheetPath, videoCandidateRef, videoTarget, type VideoPaths } from "./paths";
-import { buildVideoPrompt, buildVideoResumePrompt, buildVideoRetryPrompt, buildVideoRevisePrompt } from "./prompt";
+import { manualFile, writeManual } from "./manual";
+import { videoCandidateRef, videoTarget, type VideoPaths } from "./paths";
 import { writeGuard } from "./bash-guard";
-import { buildProfile, resolvedStudioHome } from "./sandbox";
-import { scanSource, voicedLines } from "./scan";
-import { clipKeys, keepClips, seedClips } from "./seed";
-import { buildVideoSettings } from "./settings";
 import { deriveSteps } from "./steps";
-import { discoverToolchain, toolchainProblems, type Toolchain } from "./toolchain";
+import type { Toolchain } from "./toolchain";
 import type { VideoGateResult, VideoJobRecord } from "./types";
-import { wrapperConfig, writeWrapper } from "./wrapper";
 
 /**
  * The video runner (D43 of docs/STUDIO-VIDEOS.md): a second runner in the
@@ -47,6 +39,11 @@ import { wrapperConfig, writeWrapper } from "./wrapper";
  * when it has truly hung, gates the finished video, and runs Accept and
  * Discard. Writing code, compiling, voicing and stitching are the agent's to
  * get right inside its own loop, as they are the owner's by hand.
+ *
+ * Nothing here is about one video tool: the checkout, the profiles, the
+ * wrapper, the clips, the manual, the prompts and the gate's source steps
+ * come from the brief's tool's backend (`backend.ts`, D75 of
+ * docs/STUDIO-VIDEO-TOOLS.md). The doctor is still manimkc's.
  */
 
 export type VideoStore = RecordStore<VideoJobRecord>;
@@ -86,10 +83,10 @@ export interface VideoRunnerDeps {
   doctor: VideoDoctor;
   /** Every other entry the daily cap counts: diagram jobs and planner turns. */
   otherSpend?: () => readonly SpendEntry[];
-  /** The toolchain, discovered per job. A test passes its own. */
+  /** The toolchain, discovered per job by its backend. A test passes its own. */
   toolchain?: () => Promise<Toolchain>;
-  /** The gate's sandboxed operations. A test passes recorded answers. */
-  gateTools?: (input: { tools: Toolchain; paths: VideoPaths; home: string; voice: string }) => GateTools;
+  /** The gate's sandboxed operations, the backend's by default. A test passes recorded answers. */
+  gateTools?: (input: BackendJob) => GateTools;
 }
 
 /** The owner's home, resolved: the profiles deny reads under it. */
@@ -171,8 +168,8 @@ export class VideoRunner {
     return this.running.size;
   }
 
-  private async tools(): Promise<Toolchain> {
-    return (this.deps.toolchain ?? discoverToolchain)();
+  private async tools(backend: VideoBackend): Promise<Toolchain> {
+    return this.deps.toolchain !== undefined ? this.deps.toolchain() : backend.toolchain();
   }
 
   /* ------------------------------------------------------------------ */
@@ -502,18 +499,22 @@ export class VideoRunner {
   /* One job                                                            */
   /* ------------------------------------------------------------------ */
 
-  /** The files a job starts from: its parent's saved source, else the catalog's stored source; null for a new video. */
-  private async startFrom(record: VideoJobRecord): Promise<Map<string, Buffer> | null> {
+  /**
+   * The files a job starts from: its parent's saved source, else the
+   * catalog's stored source; null for a new video. Which files are source is
+   * the backend's to say, and a change keeps its parent's tool (D74).
+   */
+  private async startFrom(record: VideoJobRecord, backend: VideoBackend): Promise<Map<string, Buffer> | null> {
     const files = new Map<string, Buffer>();
     if (record.parentJobId !== null) {
       const parent = this.store.get(record.parentJobId);
       if (parent !== undefined) {
-        const parentPaths = await resolvedPaths(parent.id, parent.slug);
+        const parentPaths = await backend.paths(parent.id, parent.slug);
         // A parent's saved source, or, for an interrupted one, the file it was editing.
         for (const dir of [parentPaths.source, parentPaths.topicDir]) {
           const names = await readdir(dir).catch(() => [] as string[]);
           for (const name of names) {
-            if (!/^[a-z0-9_]+\.py$|^topic\.yml$/.test(name)) continue;
+            if (!backend.sourcePattern.test(name)) continue;
             const body = await safeRead(path.join(dir, name), 4 * 2 ** 20).catch(() => null);
             if (body !== null) files.set(name, body);
           }
@@ -528,7 +529,7 @@ export class VideoRunner {
       const checkout = await videoCheckout(record.slug, scratch);
       if (!checkout.ok) throw new Error(`the stored source of ${record.slug} could not be checked out: ${checkout.error ?? ""}`);
       for (const name of await readdir(scratch)) {
-        if (!/^[a-z0-9_]+\.py$|^topic\.yml$/.test(name)) continue;
+        if (!backend.sourcePattern.test(name)) continue;
         files.set(name, await readFile(path.join(scratch, name)));
       }
     } finally {
@@ -579,23 +580,20 @@ export class VideoRunner {
     if (!report.ok) {
       throw new Error(`the video doctor fails, so nothing was rendered: ${report.checks.filter((check) => !check.ok).map((check) => check.detail).join("; ")}`);
     }
-    const tools = await this.tools();
-    const problems = toolchainProblems(tools);
+    // The tool's backend (D75): everything below that is about the tool goes through it.
+    const backend = backendFor(briefTool(record.brief));
+    const tools = await this.tools(backend);
+    const problems = backend.problems(tools);
     if (problems.length > 0) throw new Error(problems.join("; "));
-    const paths = await resolvedPaths(id, record.slug);
+    const paths = await backend.paths(id, record.slug);
     entry.paths = paths;
     const home = ownerHome();
     const brief = record.brief;
     const voice = isNarrated(brief) ? brief.voice : "none";
-    await buildCheckout(tools, paths, voice);
-    for (const [kind, file] of [["render", paths.renderProfile], ["narrate", paths.narrateProfile], ["gate", paths.gateProfile]] as const) {
-      await writeFile(file, buildProfile(kind, { tools, paths, home, studioHome: resolvedStudioHome() }), "utf8");
-    }
-    // matplotlib's font cache, built once by the doctor, so no job pays the
-    // ten seconds a fresh MPLCONFIGDIR costs (measured).
-    await cp(path.join(cacheDir(), "video-mpl"), paths.mpl, { recursive: true, verbatimSymlinks: true, force: false, errorOnExist: false }).catch(() => undefined);
-    const startFiles = await this.startFrom(record);
-    const scaffolded = await scaffold(tools, paths, brief, startFiles === null ? null : { files: startFiles });
+    const job: BackendJob = { tools, paths, home, voice };
+    await backend.prepare(job);
+    const startFiles = await this.startFrom(record, backend);
+    const scaffolded = await backend.scaffold(job, brief, startFiles);
     // A resume continues work that may already be finished, so its source is
     // not required to change; a revise or a change is.
     const isResume = record.parentJobId !== null && record.changes === null && this.store.get(record.parentJobId)?.state === "interrupted";
@@ -603,19 +601,14 @@ export class VideoRunner {
     record = await this.store.update(id, { classes: scaffolded.classes, sourceHashBefore });
     await this.store.emit(id, { type: "step", state: "running", note: `the topic is ready: ${scaffolded.classes.join(", ")}` });
 
-    const listing = await apiListing(tools);
-    const config = wrapperConfig({ tools, paths, home, voice, scenes: scaffolded.classes, apiNames: listing?.names ?? [], narrated: isNarrated(brief) });
-    await writeWrapper(tools.node, paths, config);
+    const listing = await backend.wrapper(job, { scenes: scaffolded.classes, narrated: isNarrated(brief) });
     const guard = await writeGuard(tools.node, paths);
 
     /* The clips it can have for free (D47). */
-    const keyInput = { tools, paths, home, voice };
     let seededNote: string | undefined;
     if (isNarrated(brief)) {
       const says = brief.scenes.flatMap((scene) => scene.beats.map((beat) => beat.say));
-      const keys = await clipKeys(keyInput, says).catch(() => [] as string[]);
-      const parentClips = record.parentJobId === null ? null : (await resolvedPaths(record.parentJobId, record.slug)).clips;
-      const seeded = await seedClips(paths, keys, { shared: tools.sharedAudioCache, parentClips });
+      const seeded = await backend.seed(job, says, record.parentJobId === null ? null : { jobId: record.parentJobId, slug: record.slug });
       record = await this.store.update(id, { seeded: { wanted: seeded.wanted, seeded: seeded.seeded } });
       seededNote = `${seeded.seeded} of ${seeded.wanted} of the brief's lines are already voiced in this job's cache.`;
       await this.store.emit(id, { type: "step", state: "running", note: `narration: ${seeded.seeded} of ${seeded.wanted} lines already voiced` });
@@ -630,17 +623,12 @@ export class VideoRunner {
     /* The manual and the settings. */
     let manualHash = this.inheritedManual(record, inherited !== null);
     if (manualHash === null || (await manualFile(manualHash)) === null) {
-      const written = await writeManual(manualText(paths.wrapper, listing?.text ?? "(the listing could not be read; run the api command)"));
+      const written = await writeManual(backend.manual(paths.wrapper, listing ?? "(the listing could not be read; run the api command)"));
       manualHash = written.hash;
     }
-    const manualHome = tools.sharedAudioCache === null ? null : path.dirname(path.dirname(tools.sharedAudioCache));
     await writeFile(
       paths.settings,
-      `${JSON.stringify(
-        buildVideoSettings({ jobId: id, paths, manimkcRoot: tools.manimkcRoot, manimkcHome: manualHome, guard, ...(sourceNote === undefined ? {} : { source: sourceNote }) }),
-        null,
-        1,
-      )}\n`,
+      `${JSON.stringify(backend.settings(job, { jobId: id, guard, ...(sourceNote === undefined ? {} : { source: sourceNote }) }), null, 1)}\n`,
       "utf8",
     );
 
@@ -676,21 +664,23 @@ export class VideoRunner {
         state: "running",
       });
       const resuming = resumeFromParent || startedSession;
-      const prompt =
+      const prompt = backend.prompt(
         findings.length > 0
-          ? buildVideoRetryPrompt(findings, paths)
+          ? { kind: "retry", findings, paths }
           : resumeFromParent
             ? record.changes !== null
-              ? buildVideoRevisePrompt(record.changes, paths)
-              : buildVideoResumePrompt(paths)
-            : buildVideoPrompt({
+              ? { kind: "revise", changes: record.changes, paths }
+              : { kind: "resume", paths }
+            : {
+                kind: "first",
                 brief,
                 paths,
                 classes: scaffolded.classes,
                 ...(sourceNote === undefined ? {} : { source: sourceNote }),
                 ...(seededNote === undefined ? {} : { seededNote }),
                 change: startFiles !== null,
-              });
+              },
+      );
       startedSession = true;
       const sceneBefore = await safeHash(paths.sceneFile);
       let initNoted: Promise<void> = Promise.resolve();
@@ -735,7 +725,7 @@ export class VideoRunner {
         agentSessionId = randomUUID();
         resumeFromParent = false;
         startedSession = false;
-        const written = await writeManual(manualText(paths.wrapper, listing?.text ?? ""));
+        const written = await writeManual(backend.manual(paths.wrapper, listing ?? ""));
         manualHash = written.hash;
         record = await this.store.update(id, { agentSessionId, manualHash });
         await this.store.emit(id, {
@@ -774,7 +764,8 @@ export class VideoRunner {
         sourceHashBefore,
         calls: await readCalls(paths.calls),
         reads: await readReads(paths.reads),
-        tools: (this.deps.gateTools ?? sandboxedGateTools)({ tools, paths, home, voice }),
+        tools: this.deps.gateTools !== undefined ? this.deps.gateTools(job) : backend.gateTools(job),
+        backend,
         onStep: (step) => void this.store.emit(id, { type: "step", state: "running", note: `check: ${step.name}: ${step.ok ? "passed" : "failed"}, ${step.detail}` }),
       });
       entry.gateRunning = false;
@@ -897,6 +888,7 @@ export class VideoRunner {
     const paths = entry.paths;
     const record = this.store.get(entry.record.id);
     if (paths === null || record === undefined) return;
+    const backend = backendFor(briefTool(record.brief));
     const calls = await readCalls(paths.calls);
     const steps = deriveSteps({
       narrated: isNarrated(record.brief),
@@ -905,7 +897,7 @@ export class VideoRunner {
       edits: entry.edits,
       calls,
       reads: await readReads(paths.reads),
-      sheets: Object.fromEntries(record.classes.map((scene) => [scene, sheetPath(paths, scene)])),
+      sheets: Object.fromEntries(record.classes.map((scene) => [scene, backend.sheet(paths, scene)])),
       gate: record.gate,
       gateRunning: entry.gateRunning,
       ready: record.state === "awaiting_review",
@@ -1047,22 +1039,17 @@ export class VideoRunner {
    * `render/`. On a discard, `candidate/` goes too.
    */
   async cleanup(record: VideoJobRecord, options: { candidate: boolean }): Promise<void> {
-    const paths = await resolvedPaths(record.id, record.slug);
+    const backend = backendFor(briefTool(record.brief));
+    const paths = await backend.paths(record.id, record.slug);
     await saveSource(paths);
     const sheets = path.join(paths.job, "sheets");
     await mkdir(sheets, { recursive: true });
     for (const scene of record.classes) {
-      await safeCopy(sheetPath(paths, scene), path.join(sheets, `${scene}.sheet.png`)).catch(() => undefined);
+      await safeCopy(backend.sheet(paths, scene), path.join(sheets, `${scene}.sheet.png`)).catch(() => undefined);
     }
     if (isNarrated(record.brief) && (await lstat(paths.renderProfile).catch(() => null)) !== null) {
-      const tools = await this.tools().catch(() => null);
-      const source = await safeRead(paths.sceneFile, 2 * 2 ** 20).then((body) => body.toString("utf8")).catch(() => null);
-      if (tools !== null && source !== null) {
-        const input = { tools, paths, home: ownerHome(), voice: record.brief.voice };
-        const scan = await scanSource(input, source).catch(() => null);
-        const keys = scan === null || !scan.ok ? [] : await clipKeys(input, voicedLines(scan)).catch(() => [] as string[]);
-        await keepClips(paths, keys);
-      }
+      const tools = await this.tools(backend).catch(() => null);
+      if (tools !== null) await backend.keepClips({ tools, paths, home: ownerHome(), voice: record.brief.voice });
     }
     await rm(paths.render, { recursive: true, force: true });
     if (options.candidate) await rm(paths.candidate, { recursive: true, force: true });
