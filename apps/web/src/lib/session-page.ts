@@ -35,9 +35,9 @@ import {
 export type TeachAsset =
   | { kind: "diagram"; id: string; title: string; src: string; statusHref: string }
   /** `poster` only when the upload stored one: nothing cuts a frame at request time. */
-  | { kind: "video"; id: string; title: string; src: string; statusHref: string; poster: string | null }
+  | { kind: "video"; id: string; title: string; src: string; statusHref: string; poster: string | null; sourceRepo: string }
   /** There is an asset, and the server already knows its file will not load. */
-  | { kind: "failed"; title: string; code: RouteProblemCode }
+  | { kind: "failed"; title: string; code: RouteProblemCode; sourceRepo: string }
   | { kind: "none" };
 
 export interface SessionPageData {
@@ -72,7 +72,7 @@ async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
   // Per row, through the route's own resolver: a blob in the store plays, and
   // a row with no stored copy is `not-uploaded`.
   const problem = (await readFileProblems([pick.id])).get(pick.id) ?? null;
-  if (problem !== null) return { kind: "failed", title, code: problem };
+  if (problem !== null) return { kind: "failed", title, code: problem, sourceRepo: pick.sourceRepo };
 
   if (pick.kind === "video") {
     const { posters } = await readAssetAccess([pick]);
@@ -83,6 +83,7 @@ async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
       src: assetFileHref(pick.id),
       statusHref: assetStatusHref(pick.id),
       poster: posters.has(pick.id) ? assetPosterHref(pick.id) : null,
+      sourceRepo: pick.sourceRepo,
     };
   }
   return { kind: "diagram", id: pick.id, title, src: assetFileHref(pick.id), statusHref: assetStatusHref(pick.id) };

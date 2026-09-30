@@ -47,6 +47,10 @@ export const INDEX_SOURCES = [
   "courses",
   "concepts",
   "manimkc",
+  // The second video tool: Remotion renders, read through `remotionkc topics
+  // --json`, the same report shape as manimkc's. Its folders name their topic
+  // themselves, so it needs no vocabulary map, and it has no mirror ledger.
+  "remotionkc",
   "diagrams",
   "sessions",
   "mirrors",
@@ -92,11 +96,12 @@ export const indexRun = pgTable(
      * could not reach keeps its old rows, so without this the table would
      * claim an audit that never happened.
      *
-     * `manimkc` records `outRoot`, the absolute base its `out/…` asset paths
-     * are relative to. That is the one thing about the run nothing downstream
-     * can recompute (`source_root` is the checkout it read, which is a
-     * different directory whenever manimkc's data root is set), so a reader
-     * that wants to open one of those files has to be told it here.
+     * `manimkc` and `remotionkc` record `outRoot`, the absolute base their
+     * `out/…` asset paths are relative to. That is the one thing about the
+     * run nothing downstream can recompute (`source_root` is the checkout it
+     * read, which is a different directory whenever the tool's data root is
+     * set), so a reader that wants to open one of those files has to be told
+     * it here.
      */
     metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
     createdAt: createdAt(),

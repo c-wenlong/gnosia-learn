@@ -32,18 +32,20 @@ import { readTopicEntries } from "../content/topics";
 import { CLI_OWNER } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
-import { MANIMKC_DIR, MANIMKC_ROOT_ENV, REPO_ROOT, resolveManimkcRoot } from "../env";
+import { REPO_ROOT, resolveManimkcRoot, resolveRemotionkcRoot } from "../env";
 import { conceptsIndexer } from "./concepts";
 import { asIndexError } from "./content-errors";
 import { coursesIndexer } from "./courses";
 import { diagramsIndexer } from "./diagrams";
 import { IndexError } from "./errors";
-import { hasManimkcCli, manimkcIndexer } from "./manimkc";
+import { manimkcIndexer } from "./manimkc";
 import { mirrorsIndexer } from "./mirrors";
+import { remotionkcIndexer } from "./remotionkc";
 import { sessionsIndexer } from "./sessions";
 import { tagsIndexer } from "./tags";
 import type { IndexContext, Indexer } from "./source";
 import { topicsIndexer } from "./topics";
+import { hasToolCli, MANIMKC, REMOTIONKC, type VideoTool } from "./video-tool";
 import { loadVocabulary, vocabularyOf } from "./vocabulary";
 import { pruneHeldTopics, writeSource, type SourceWrite } from "./writer";
 
@@ -73,7 +75,7 @@ import { pruneHeldTopics, writeSource, type SourceWrite } from "./writer";
  */
 const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   // Every other source resolves a slug from the vocabulary.
-  topics: ["courses", "concepts", "manimkc", "diagrams", "sessions"],
+  topics: ["courses", "concepts", "manimkc", "remotionkc", "diagrams", "sessions"],
   // A course's `collection_tag` rows point at tags, and pruning a tag clears
   // them (`pruneEntity`), so the courses source has to write them back.
   tags: ["courses"],
@@ -88,6 +90,8 @@ const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   // pruned, so re-reading manimkc alone would silently empty the ledger for a
   // renamed video. `topics` reaches mirrors through here, transitively.
   manimkc: ["mirrors"],
+  // Nothing points at remotionkc's rows: it has no mirror ledger.
+  remotionkc: [],
   diagrams: [],
   sessions: [],
   mirrors: [],
@@ -118,12 +122,17 @@ const REQUIRES: Record<IndexSource, readonly IndexSource[]> = {
   courses: ["concepts", "tags"],
   concepts: [],
   manimkc: [],
+  remotionkc: [],
   diagrams: [],
   sessions: [],
   mirrors: ["manimkc"],
 };
 
-/** The content type each source reads, for its `content_source` row. `mirrors` reads none. */
+/**
+ * The content type each source reads, for its `content_source` row. `mirrors`
+ * reads none, and neither does `remotionkc`: its renders are always read from
+ * its CLI, as manimkc's are today, and a type nobody can flip needs no row.
+ */
 const CONTENT_TYPE: Partial<Record<IndexSource, ContentType>> = {
   topics: "topics",
   tags: "tags",
@@ -146,6 +155,7 @@ export const INDEXERS: readonly Indexer[] = [
   conceptsIndexer,
   coursesIndexer,
   manimkcIndexer,
+  remotionkcIndexer,
   diagramsIndexer,
   sessionsIndexer,
   // Last: it reads no content tree, only the ledger and the asset rows manimkc
@@ -154,18 +164,22 @@ export const INDEXERS: readonly Indexer[] = [
 ];
 
 /**
- * Sources whose reader is the manimkc CLI, and the command each one runs. Both
- * are unrunnable without the submodule, and both are optional for the same
- * reason: a clone that never fetched it should still index everything else.
+ * Sources whose reader is a video tool's CLI, the tool, and the command each
+ * one runs. All are unrunnable without their submodule, and all are optional
+ * for the same reason: a clone that never fetched it should still index
+ * everything else.
  */
-const MANIMKC_COMMAND = {
-  manimkc: "manimkc topics --json",
-  mirrors: "manimkc mirrors --json",
-} as const satisfies Partial<Record<IndexSource, string>>;
+const TOOL_COMMAND = {
+  manimkc: { tool: MANIMKC, command: "manimkc topics --json" },
+  remotionkc: { tool: REMOTIONKC, command: "remotionkc topics --json" },
+  mirrors: { tool: MANIMKC, command: "manimkc mirrors --json" },
+} as const satisfies Partial<Record<IndexSource, { tool: VideoTool; command: string }>>;
 
-const NEEDS_MANIMKC_CLI = new Set<IndexSource>(
-  Object.keys(MANIMKC_COMMAND) as (keyof typeof MANIMKC_COMMAND)[],
-);
+type ToolSource = keyof typeof TOOL_COMMAND;
+
+function isToolSource(source: IndexSource): source is ToolSource {
+  return Object.hasOwn(TOOL_COMMAND, source);
+}
 
 export interface RunOptions {
   /** The root the content is read from. Defaults to the repository. */
@@ -176,6 +190,8 @@ export interface RunOptions {
    */
   toolsRoot?: string;
   manimkcRoot?: string;
+  /** The remotionkc checkout to read. Defaults to `$REMOTIONKC_ROOT`, else the submodule. */
+  remotionkcRoot?: string;
   /** Sources to run. Defaults to all of them; always reordered to dependency order. */
   only?: readonly IndexSource[];
   /** The author the run's `import` revisions carry. Defaults to `import:<git sha>` of the tree. */
@@ -245,6 +261,7 @@ export function displayPath(target: string): string {
 export interface RunResult {
   repoRoot: string;
   manimkcRoot: string;
+  remotionkcRoot: string;
   sources: SourceWrite[];
   /**
    * Sources `--only` did not name but that had to run anyway, and which of the
@@ -255,7 +272,7 @@ export interface RunResult {
   addedForSafety: IndexSource[];
   addedAsPrerequisite: IndexSource[];
   /**
-   * Sources left out, and why: the manimkc CLI is absent and they were safe
+   * Sources left out, and why: a video tool's CLI is absent and they were safe
    * to leave out, or the database owns the type and its files match the last
    * export.
    */
@@ -337,6 +354,7 @@ export async function runIndex(
   // The flag, else $MANIMKC_ROOT, else the submodule. The middle step is the
   // resolver's, so this line is the whole precedence rule.
   const manimkcRoot = options.manimkcRoot ?? resolveManimkcRoot(toolsRoot);
+  const remotionkcRoot = options.remotionkcRoot ?? resolveRemotionkcRoot(toolsRoot);
   const requested = options.only ?? INDEX_SOURCES;
   const wanted = selection(requested);
   const prerequisites = new Set([...wanted].flatMap((source) => REQUIRES[source]));
@@ -394,6 +412,7 @@ export async function runIndex(
     repoRoot,
     toolsRoot,
     manimkcRoot,
+    remotionkcRoot,
     vocabulary,
     owner,
     blobsRequired: await blobContractInForce(db),
@@ -456,26 +475,27 @@ export async function runIndex(
     },
   };
 
-  // The two optional sources: their reader is the manimkc CLI at
-  // `tools/manimkc/tools/cli/manimkc`, which lives in a submodule that a fresh
-  // clone and CI deliberately do not fetch. Leaving one out is safe only when it has never been indexed, because
+  // The optional sources: their reader is a video tool's CLI (manimkc's at
+  // `tools/manimkc/tools/cli/manimkc`, remotionkc's at
+  // `tools/remotionkc/tools/cli/remotionkc.mjs`), which lives in a submodule
+  // that a fresh clone and CI deliberately do not fetch. Leaving one out is safe only when it has never been indexed, because
   // otherwise pruning a topic cascades through its asset_topic and mirror rows
   // and nothing puts them back. So: refuse when it was asked for, refuse when
   // it has rows to lose, and otherwise drop it with a note rather than making a
   // submodule a hard dependency of indexing anything at all.
   const skipped: { source: IndexSource; reason: string }[] = [...owned.values()];
   const runnable: Indexer[] = [];
-  const haveCli = hasManimkcCli(toolsRoot);
   for (const indexer of selected) {
     if (owned.has(indexer.source)) continue;
-    if (!NEEDS_MANIMKC_CLI.has(indexer.source) || haveCli) {
+    if (!isToolSource(indexer.source) || hasToolCli(TOOL_COMMAND[indexer.source].tool, toolsRoot)) {
       runnable.push(indexer);
       continue;
     }
     // `--only manimkc` is asking for it; a default full run is not. Without
     // that distinction `catalog import` on a clone with no submodule fails
     // outright instead of indexing the sources it can.
-    const source = indexer.source as keyof typeof MANIMKC_COMMAND;
+    const source = indexer.source;
+    const { tool, command } = TOOL_COMMAND[source];
     const asked = options.only?.includes(source) ?? false;
     const indexed = await db
       .select({ source: indexRun.source })
@@ -484,17 +504,17 @@ export async function runIndex(
       .limit(1);
     if (asked || indexed.length > 0) {
       throw new IndexError(
-        `the manimkc submodule is not initialised, so \`${MANIMKC_COMMAND[source]}\` cannot run` +
+        `the ${tool.name} submodule is not initialised, so \`${command}\` cannot run` +
           (asked
             ? ""
             : `, and ${source} has rows in this database that pruning would orphan`) +
-          `. Run \`git submodule update --init ${MANIMKC_DIR}\`, or set ${MANIMKC_ROOT_ENV} ` +
+          `. Run \`git submodule update --init ${tool.dir}\`, or set ${tool.rootEnv} ` +
           `to a checkout.`,
       );
     }
     skipped.push({
       source,
-      reason: "the manimkc submodule is not initialised, and it has never been indexed here",
+      reason: `the ${tool.name} submodule is not initialised, and it has never been indexed here`,
     });
   }
 
@@ -545,9 +565,9 @@ export async function runIndex(
       // The absolute root the repo-relative paths in these rows resolve
       // against: what `catalog flip` runs parity against, and where a seam
       // write rewrites the type's files (D17), with the database that read
-      // it. The manimkc sources resolve against their report's `outRoot`
-      // instead.
-      metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot, database },
+      // it. The video tools' sources resolve against their report's
+      // `outRoot` instead.
+      metadata: isToolSource(indexer.source) ? metadata : { ...metadata, root: repoRoot, database },
       author,
       owner,
       coversRead,
@@ -559,7 +579,7 @@ export async function runIndex(
     // poster cut from a video's earlier bytes is unhooked here, for the next
     // upload to recut. Every video in the run is asked, not only the ones this
     // write changed, so a run that failed between the two is repaired.
-    if (indexer.source === "manimkc" && context.blobsRequired === true) {
+    if ((indexer.source === "manimkc" || indexer.source === "remotionkc") && context.blobsRequired === true) {
       const videos = (rows.asset ?? []).filter((row) => row.kind === "video").map((row) => row.id);
       const { unhooked, moved } = await unhookPosters(db, videos, {
         owner,
@@ -610,6 +630,7 @@ export async function runIndex(
   return {
     repoRoot,
     manimkcRoot,
+    remotionkcRoot,
     sources,
     // Sorted into run order, so the reported lists read the way they ran.
     addedForSafety: INDEXERS.map((i) => i.source).filter(

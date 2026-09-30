@@ -4,3 +4,6 @@
 [submodule "tldrawkc"]
 	path = tools/tldrawkc
 	url = https://github.com/c-wenlong/tldrawkc.git
+[submodule "remotionkc"]
+	path = tools/remotionkc
+	url = https://github.com/c-wenlong/remotionkc.git

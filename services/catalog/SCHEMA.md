@@ -37,9 +37,10 @@ checkout looks exactly like a fresh one.
 It carries one thing that is not a report on the run, and the distinction is
 worth stating because the column names invite confusion. `source_root` is what
 the run *read*: the imported directory's `learn/concepts` for the notes, and for manimkc the checkout the
-CLI was pointed at. `metadata.outRoot`, written by the manimkc source only, is
-what that source's `asset.path` strings are *relative to*, which is manimkc's
-own data root and is a different directory whenever `$MANIMKC_HOME` is set.
+CLI was pointed at. `metadata.outRoot`, written by the two video tools'
+sources (`manimkc`, `remotionkc`) only, is what that source's `asset.path`
+strings are *relative to*, which is the tool's own data root and is a
+different directory whenever `$MANIMKC_HOME` (or `$REMOTIONKC_HOME`) is set.
 Nothing outside the catalog may re-derive it, since this repo does not read
 that variable ([AGENTS.md](../../AGENTS.md)), so a consumer that wants to open one
 of those files, such as `apps/web/src/app/api/assets/[id]/file/route.ts`, joins
@@ -57,7 +58,8 @@ reason.
 Losing the content half used to cost an index run. Since the cut-over it
 loses what was authored after the last export (the nightly one keeps thirty
 under `$SELF_LEARN_HOME/archive/`) and the revision history, which only a
-database backup holds; the manimkc rows alone come back from an import.
+database backup holds; the manimkc and remotionkc rows alone come back from
+an import.
 Losing the state half loses the study record, which is why `event` is
 append-only and why the derived state tables can always be recomputed rather
 than restored. Losing the studio half loses the provenance: the diagrams stay,
@@ -74,7 +76,7 @@ which brief produced them.
 | `concept` | One authored note (`learn/concepts/<domain>/<slug>.md` in the export layout). Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
 | `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. A course may name its cover photo's blob in `cover_blob_key` (0016), with its credit in `metadata.coverCredit`. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
-| `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. |
+| `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. `source_repo` says which repository or tool made it: `self-learn`, `manimkc`, `tldrawkc`, or `remotionkc` (0017, the second video tool). |
 | `asset_topic` | This asset is about this topic. |
 | `asset_concept` | This asset is about this concept. |
 | `concept_prerequisite` | This concept `requires` or `assumes` that one. |
@@ -490,12 +492,12 @@ computed from `event` and can be thrown away and rebuilt.
 reads the repository, which has held no content since the phase 3 cut-over.
 A type the database owns is skipped when its files are its own last export,
 and, once the database owns every type, when the directory holds none of
-them, so on a database that owns all six a bare `import` runs only manimkc
-and the mirror ledger. Once topics are
+them, so on a database that owns all six a bare `import` runs only manimkc,
+remotionkc and the mirror ledger. Once topics are
 flipped the vocabulary every source resolves a slug against comes from the
 topic rows (`vocabularyOf` in `src/index/vocabulary.ts`), not from the
 directory's `content/topics.yaml`. `catalog index` is the old name, kept as an
-alias that says so once on stderr. Eight sources, run in the order the
+alias that says so once on stderr. Nine sources, run in the order the
 foreign keys require regardless of how `--only` names them, each path
 relative to the directory:
 
@@ -506,6 +508,7 @@ relative to the directory:
 | `concepts` | `learn/concepts/<domain>/*.md` | `concept`, `concept_prerequisite`, `note` assets |
 | `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `collection_tag`, `curriculum_item_topic`, `concept_curriculum_item`, `link` assets with their `resource_type` |
 | `manimkc` | `manimkc topics --json` | `video`, `transcript`, `chapters`, `captions` assets and their derivations |
+| `remotionkc` | `remotionkc topics --json` | the same four kinds, under `remotionkc:` |
 | `diagrams` | `tldrawkc list <dir>/learn/assets --json`, or the `.tldr` JSON | `diagram_svg`, `diagram_source` assets |
 | `sessions` | `learn/sessions/*.md` | `session` assets, linked by the body's wikilinks |
 | `mirrors` | `manimkc mirrors --json` | `mirror` |
@@ -537,9 +540,10 @@ a tag clears the links to it that only the courses source writes back. The two
 closures are applied until neither adds anything: `--only concepts` pulls in
 `courses` as a dependent, and `courses` then pulls in `tags`.
 
-`manimkc` and `mirrors` are the optional sources. Both read
-`tools/manimkc/tools/cli/manimkc`, which lives in a submodule that a fresh clone and
-CI deliberately do not fetch. A default run drops one with a note when the
+`manimkc`, `remotionkc` and `mirrors` are the optional sources. `manimkc` and
+`mirrors` read `tools/manimkc/tools/cli/manimkc`, and `remotionkc` reads
+`tools/remotionkc/tools/cli/remotionkc.mjs`, each in a submodule that a fresh
+clone and CI deliberately do not fetch. A default run drops one with a note when the
 submodule is absent *and* that source has never been indexed here, because then
 there is nothing to leave stale. It refuses when `--only` asked for it, and
 refuses when it does have rows to lose.
@@ -721,6 +725,11 @@ resolved by precedence: a module's `topic:` against the vocabulary's
 `maps.courses`, and a manimkc `topic.yml`'s optional `topic:` against
 `maps.manimkc`. When they disagree, neither is knowably right, so the run stops.
 
+remotionkc has no vocabulary map, so there is nothing to check its folders
+against: a remotionkc `topic.yml`'s `topic:` is required, and is the topic
+its video is filed under. A folder with none, or one naming a topic the
+importing owner cannot read, is refused by its file and its slug.
+
 The one exception is `sessions`. A session log is prose, and its wikilinks point
 at other sessions and at notes nobody has written; a link that names no concept
 is counted, not refused.
@@ -740,7 +749,7 @@ field deleted from a file becomes null instead of living on as the last value
 anyone wrote.
 
 **Each source owns a namespace.** Every asset id begins with its source's prefix
-(`note:`, `link:`, `manimkc:`, `diagram:`, `session:`) and the writer refuses an
+(`note:`, `link:`, `manimkc:`, `remotionkc:`, `diagram:`, `session:`) and the writer refuses an
 id outside it. That prefix is how a prune knows which rows it may delete, so one
 indexer can never remove another's. `mirrors` mints no asset ids at all: it
 writes `mirror` rows against ids the `manimkc` source already wrote, and the
@@ -1147,7 +1156,7 @@ expression cannot unnest an array. Near-duplicate search is `title % $1` and
 createdb self_learn                    # once, against the Homebrew Postgres 17
 npm run catalog -- migrate             # apply every outstanding migration
 npm run catalog -- status --json       # row counts, migration head, source freshness, course coverage
-MANIMKC_ROOT=/nonexistent npm run catalog -- import seed   # fill it from the seed (or: import <an export>)
+MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent npm run catalog -- import seed   # fill it from the seed (or: import <an export>)
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
 ```
 
@@ -1162,7 +1171,7 @@ npm run catalog -- search "common data bus"    # titles and aliases, top 20
 npm run catalog -- doctor                      # completeness rules, guards, primary or copy
 npm run catalog -- export --out /tmp/export    # the database as files in the export layout
 npm run catalog -- parity /tmp/export          # entity by entity against a directory; exit 1 on a mismatch
-npm run catalog -- import /tmp/export          # a directory back in; a bare `import` refreshes manimkc
+npm run catalog -- import /tmp/export          # a directory back in; a bare `import` refreshes manimkc and remotionkc
 npm run catalog -- flip tags                   # the database owns tags (needs a clean parity first)
 npm run catalog -- history topic tomasulo-algorithm   # every revision, oldest first
 npm run catalog -- diff 42                     # what revision 42 changed; or diff 41 42

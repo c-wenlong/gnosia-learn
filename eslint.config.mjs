@@ -30,6 +30,9 @@ const eslintConfig = defineConfig([
     // its own flat ESLint config and its own TypeScript projects. Linting it
     // from here would use the wrong config and walk its build output.
     "tools/tldrawkc/**",
+    // The third submodule, remotionkc: its own repo, its own Remotion and
+    // TypeScript setup, and a node_modules once installed.
+    "tools/remotionkc/**",
     // The desktop app makes a git worktree per session under
     // .claude/worktrees/<name>/, each a full checkout with its own
     // node_modules and tools/tldrawkc/dist. Linting from the repo root walks

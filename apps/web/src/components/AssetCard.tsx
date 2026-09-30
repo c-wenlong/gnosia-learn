@@ -130,6 +130,7 @@ export function AssetCard({
             compact
             headline="Preview unavailable"
             code={failure.code}
+            sourceRepo={asset.sourceRepo}
             className="h-full w-full"
           />
         ) : (

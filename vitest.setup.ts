@@ -135,6 +135,17 @@ if (!process.env.SELF_LEARN_HOME?.trim()) {
   process.env.SELF_LEARN_HOME = blobHome;
 }
 
+// The remotionkc checkout, pointed at a directory that does not exist. A bare
+// `catalog import` runs every video tool whose CLI it finds, and the ones the
+// suites spawn resolve tools against the repository, so with the submodule
+// initialised every import of the seed would run the real remotionkc, whose
+// topic.yml files name topics the seed does not hold, and be refused.
+// manimkc's suites each point MANIMKC_ROOT away for themselves; this does it
+// once for remotionkc, unconditionally, since a value from the developer's
+// shell is exactly the real checkout. A suite that wants a stand-in sets its
+// own, and a child it spawns inherits whichever is set.
+process.env.REMOTIONKC_ROOT = path.join(temp, "self-learn-test-no-remotionkc");
+
 const removedBefore = REMOVED.map((folder) => [existsSync(folder), deepListing(folder)] as const);
 const seedBefore = deepListing(SEED);
 

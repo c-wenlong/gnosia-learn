@@ -32,6 +32,7 @@ import {
   type LibraryCourse,
   type LibraryFilters,
 } from "@/lib/library";
+import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { ownValue } from "@/lib/own-key";
 
@@ -118,11 +119,14 @@ export default async function LibraryPage({
   // Said once for the view rather than on every card: how many rows here name
   // bytes nothing has stored yet, and the one command that stores them.
   const unserved = unservedRows(matching, access);
-  // The upload command fills the store for manimkc's renders only; a diagram
-  // or a note with nothing behind it gets there another way, so the notice
-  // names the command only for the rows it would fix.
-  const unservedRenders = unserved.filter((row) => row.sourceRepo === "manimkc").length;
+  // The upload command fills the store for the video tools' renders only; a
+  // diagram or a note with nothing behind it gets there another way, so the
+  // notice names the command only for the rows it would fix, once per tool
+  // that has any.
+  const renderTools = RENDER_SOURCES.filter((source) => unserved.some((row) => row.sourceRepo === source));
+  const unservedRenders = unserved.filter((row) => isRenderSource(row.sourceRepo)).length;
   const unservedOther = unserved.length - unservedRenders;
+  const renderCommand = renderTools.length === 0 ? undefined : renderTools.map(uploadCommand).join(" && ");
   const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
   const filtered = kind !== null || topic !== null || course !== null || q !== null;
   const kindLabel = (k: string) =>
@@ -201,7 +205,7 @@ export default async function LibraryPage({
         <Notice title="Nothing indexed yet" command="npm run catalog -- import">
           The catalog is reachable and holds no assets. The rows here are written by the catalog
           itself: an import of an export tree or the seed, the note, log and diagram writers, and
-          the manimkc indexer for the videos. None of those has run against this database yet.
+          the manimkc and remotionkc indexers for the videos. None of those has run against this database yet.
         </Notice>
       ) : (
         <>
@@ -231,7 +235,7 @@ export default async function LibraryPage({
             <Notice
               role="status"
               title={`${unserved.length} ${plural(unserved.length)} here ${unserved.length === 1 ? "has" : "have"} no stored copy yet.`}
-              command={unservedRenders > 0 ? "npm run catalog -- asset upload --source manimkc" : undefined}
+              command={renderCommand}
             >
               <p>
                 Every title, topic and size below is real. What is missing is the bytes: the app serves a file only
@@ -239,7 +243,9 @@ export default async function LibraryPage({
               </p>
               {unservedOther > 0 && (
                 <p className="mt-2">
-                  {unservedRenders > 0 ? `The command below stores the ${unservedRenders} rendered by manimkc. ` : ""}
+                  {unservedRenders > 0
+                    ? `The command below stores the ${unservedRenders} rendered by ${renderTools.join(" and ")}. `
+                    : ""}
                   {unservedOther === 1 ? "One is" : `${unservedOther} are`} not a render: a diagram is stored by{" "}
                   <code className="font-mono text-[12px]">catalog diagram put</code>, and a note or a session log by
                   flipping its type.
