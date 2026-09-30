@@ -530,18 +530,6 @@ export function suggestionName(kind: DraftKind): string {
 /* The composer                                                               */
 /* -------------------------------------------------------------------------- */
 
-/** The same limit the runner takes, `STUDIO_TEXT_LIMIT`'s default. */
-export const TEXT_LIMIT = 8_000;
-
-/**
- * Why Send waits on the length of what is in the field, or null. Only Send:
- * the field stays editable, so the person can cut it back down.
- */
-export function lengthSendBlock(value: MentionValue, limit: number): string | null {
-  if (value.text.length <= limit) return null;
-  return `${value.text.length.toLocaleString("en")} of ${limit.toLocaleString("en")} characters. Cut it down to send.`;
-}
-
 /**
  * Why Send waits for what is in the field, or null (T15): a bare tag in an
  * empty conversation gives the planner nothing to go on. After a turn, a bare

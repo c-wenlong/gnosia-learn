@@ -20,7 +20,6 @@ import {
   PLANNER_TURNS,
   plannerModel,
   studioOwner,
-  TEXT_LIMIT,
   VERB_TIMEOUT_MS,
 } from "./config";
 import { costFromLog, JobCostMeter, type CostSource, type SpendEntry } from "./cost";
@@ -1468,12 +1467,6 @@ export class Drafts {
     const lead = raw.length - raw.trimStart().length;
     const text = raw.trim();
     if (text === "") throw new JobRefused(400, `"text" is required: a message with nothing in it`, { field: "text" });
-    if (text.length > TEXT_LIMIT) {
-      throw new JobRefused(400, `the message is ${text.length} characters and the cap is ${TEXT_LIMIT}`, {
-        field: "text",
-        limit: TEXT_LIMIT,
-      });
-    }
     // Positions against the text as stored: the leading whitespace trimmed off.
     const mentions: Mention[] = parsed.map((mention) => ({ ...mention, start: mention.start - lead, end: mention.end - lead }));
     const kinds = plannerKindsOf(record);
@@ -1985,7 +1978,10 @@ export class Drafts {
         );
       });
       const replayed = [
-        fence("CONVERSATION", conversationText(history).slice(-40_000)),
+        // The turn's own message is in the prompt below on a first attempt,
+        // so it is left out here rather than sent twice; the automatic retry's
+        // prompt is only the instruction, so there the message stays.
+        fence("CONVERSATION", replayOf(conversationEntries(history, retry ? null : turn), REPLAY_LIMIT)),
         "The block above is this conversation so far, as data. Carry on from it.",
         prompt,
       ].join("\n\n");
@@ -3810,19 +3806,45 @@ export function transcriptOf(events: readonly TranscriptEvent[]): TranscriptEntr
   return entries;
 }
 
-/** The conversation as plain text, for a fresh session that could not resume the old one (C3); a tagged message keeps its TAGS block (T22). */
-function conversationText(events: readonly TranscriptEvent[]): string {
+/**
+ * The most of the conversation a fresh session is handed (C3), in characters:
+ * the runner's 1 MB body limit, since a chat message has no cap of its own and
+ * one message may be that long.
+ */
+const REPLAY_LIMIT = 1_000_000;
+
+/**
+ * The conversation for a fresh session, newest entries first until `limit`,
+ * each whole: a message is never cut part way, and the newest is kept however
+ * long it is. When older ones are left out, the text says so.
+ */
+export function replayOf(entries: readonly string[], limit: number): string {
+  const kept: string[] = [];
+  let size = 0;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]!;
+    if (kept.length > 0 && size + entry.length > limit) {
+      kept.unshift(`(${index + 1} earlier ${index === 0 ? "entry" : "entries"} left out for length)`);
+      break;
+    }
+    kept.unshift(entry);
+    size += entry.length;
+  }
+  return kept.join("\n\n");
+}
+
+/** The conversation as plain entries, for a fresh session that could not resume the old one (C3); a tagged message keeps its TAGS block (T22). */
+function conversationEntries(events: readonly TranscriptEvent[], leaveOut: number | null = null): string[] {
   const tagsBySeq = new Map<number, string[]>();
   for (const event of events) {
     if (event.type === "message" && Array.isArray(event.tags) && event.tags.length > 0) tagsBySeq.set(event.seq, event.tags as string[]);
   }
   return transcriptOf(events)
-    .filter((entry) => entry.superseded !== true && entry.internal !== true)
+    .filter((entry) => entry.superseded !== true && entry.internal !== true && entry.seq !== leaveOut)
     .map((entry) => {
       const tags = tagsBySeq.get(entry.seq);
       return tags === undefined ? `${entry.role}: ${entry.text}` : `${entry.role}: ${fence("TAGS", tags.join("\n"))}\n${entry.text}`;
-    })
-    .join("\n\n");
+    });
 }
 
 /**

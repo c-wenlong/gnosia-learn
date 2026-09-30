@@ -277,6 +277,18 @@ describe("the draft routes", () => {
     await drafts.settled(draftId);
   });
 
+  it("takes a message of any length the body limit allows, and answers a larger body with 413", async () => {
+    await fake.script([{ text: "read it all", cost: 0.01 }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    const long = await post(`/api/drafts/${draftId}/messages`, { text: "a pasted spec. ".repeat(2_000) });
+    expect(long.status).toBe(202);
+    await drafts.settled(draftId);
+
+    const huge = await post(`/api/drafts/${draftId}/messages`, { text: "x".repeat(1_100_000) });
+    expect(huge.status).toBe(413);
+    expect(((await huge.json()) as { error: string }).error).toMatch(/over 1 MB/);
+  });
+
   it("counts the planner's turns in health", async () => {
     await fake.script([{ text: "which one?", cost: 0.03 }]);
     const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
