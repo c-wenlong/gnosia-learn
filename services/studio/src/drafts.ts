@@ -660,13 +660,6 @@ export class Drafts {
   /** Mirrors in flight, and whether another write arrived while one ran. */
   private readonly mirroring = new Map<string, { again: boolean; done: Promise<void> }>();
   /**
-   * Work that writes under `STUDIO_HOME` with nobody bound to await it to the
-   * end: every create, and the corpus and the videos a create reads beside the
-   * vocabulary, which go on (and write the listing's cache) after a refused
-   * vocabulary has already failed the create.
-   */
-  private readonly background = new Set<Promise<unknown>>();
-  /**
    * The Draw press in progress on each draft, with its key. Held from the
    * press to the job being recorded, so neither a planner turn nor a second
    * press can run beside it: a turn could otherwise move the draft while the
@@ -681,6 +674,15 @@ export class Drafts {
   private readonly pruning = new Set<string>();
   /** Workspaces of pruned drafts that did not all go, removed by the next pass. */
   private readonly leftovers = new Set<string>();
+  /**
+   * Each create, and the corpus and video reads it starts, until they finish.
+   * A create refused before it awaits its reads (the vocabulary down, a
+   * concept the catalog does not know) leaves them running, and the diagram
+   * list writes its cache under `STUDIO_HOME` when it returns; a create still
+   * waiting on a checkout or an inspect writes the draft once it is past
+   * them. `drain` waits for all of it.
+   */
+  private readonly readsInFlight = new Set<Promise<unknown>>();
   /** The last vocabulary this service read, reused by a turn's C4 check for a short while. */
   private lastVocabulary: { at: number; value: Vocabulary } | null = null;
 
@@ -1220,7 +1222,7 @@ export class Drafts {
    */
   async create(input: CreateInput): Promise<{ record: DraftRecord; created: boolean }> {
     const key = input.idempotencyKey?.trim() || null;
-    if (key === null) return this.inBackground(this.createNew(input, null));
+    if (key === null) return this.tracked(this.createNew(input, null));
     if (key.length > 200) throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
     const existing = [...this.records.values()].find((record) => record.idempotencyKey === key && !this.pruning.has(record.id));
     if (existing !== undefined) return { record: existing, created: false };
@@ -1228,7 +1230,7 @@ export class Drafts {
     // the vocabulary, the corpus or an inspect is being read gets this draft.
     const pending = this.creating.get(key);
     if (pending !== undefined) return { record: (await pending).record, created: false };
-    const made = this.inBackground(this.createNew(input, key));
+    const made = this.tracked(this.createNew(input, key));
     this.creating.set(key, made);
     try {
       return await made;
@@ -1238,6 +1240,7 @@ export class Drafts {
   }
 
   private async createNew(input: CreateInput, key: string | null): Promise<{ record: DraftRecord; created: boolean }> {
+    // Before any read starts, so a read `drain` has not seen cannot begin.
     if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
     const source = input.source?.trim() || null;
     const sourceKind: BriefKind = input.sourceKind === undefined || input.sourceKind === null ? "diagram" : (input.sourceKind as BriefKind);
@@ -1273,9 +1276,10 @@ export class Drafts {
     // The corpus and the videos are read beside the vocabulary rather than
     // after it: each is a catalog subprocess, and one after another they
     // were most of the wait between New and a conversation to type into.
-    // Neither can reject, so a refusal below leaves nothing unhandled.
-    const listingRead = this.inBackground(listDiagrams().catch(() => null));
-    const videosRead = kinds.includes("video") ? this.inBackground(readVideoCorpus()) : Promise.resolve(null);
+    // Neither can reject, so a refusal below leaves nothing unhandled, and
+    // `drain` waits for both, since a refusal returns without them.
+    const listingRead = this.tracked(listDiagrams().catch(() => null));
+    const videosRead = kinds.includes("video") ? this.tracked(readVideoCorpus()) : Promise.resolve(null);
 
     let vocabulary: Vocabulary;
     try {
@@ -1949,6 +1953,13 @@ export class Drafts {
       // cannot match and the next turn tells the rest.
       await this.save(id, { vocabularyHash: complete ? hash : `partial:${hash}` });
     });
+  }
+
+  /** `work` (a create or a read), held in `readsInFlight` until it settles. */
+  private tracked<T>(read: Promise<T>): Promise<T> {
+    this.readsInFlight.add(read);
+    void read.finally(() => this.readsInFlight.delete(read)).catch(() => undefined);
+    return read;
   }
 
   /** The vocabulary, read at most `maxAgeMs` ago by this service, or read now. */
@@ -3054,27 +3065,20 @@ export class Drafts {
     return this.require(id);
   }
 
-  /** Hold `work` until it ends, so `settledAll` can wait for it. */
-  private inBackground<T>(work: Promise<T>): Promise<T> {
-    this.background.add(work);
-    void work.catch(() => undefined).finally(() => this.background.delete(work));
-    return work;
-  }
-
   /**
    * Resolves once every create, read, write and mirror this service started
-   * has landed, for every draft and for a create that was refused. A landed write
-   * can queue another (a failed mirror notes its error, a turn's end closes a
-   * capped draft), so this looks again until a pass finds nothing new.
+   * has landed, for every draft and for a create that was refused. A landed
+   * write can queue another (a failed mirror notes its error, a turn's end
+   * closes a capped draft), so this looks again until a pass finds nothing new.
    */
   async settledAll(): Promise<void> {
     for (;;) {
       const chains = [...this.chains.values()];
-      const pending = [...this.background, ...chains, ...[...this.mirroring.values()].map((mirror) => mirror.done)];
+      const pending = [...this.readsInFlight, ...chains, ...[...this.mirroring.values()].map((mirror) => mirror.done)];
       await Promise.all(pending.map((work) => work.catch(() => undefined)));
       const now = [...this.chains.values()];
       const quiet =
-        this.background.size === 0 &&
+        this.readsInFlight.size === 0 &&
         this.mirroring.size === 0 &&
         now.length === chains.length &&
         now.every((chain, index) => chain === chains[index]);
@@ -3083,14 +3087,11 @@ export class Drafts {
   }
 
   /**
-   * Stop every planner turn and refuse new creates, then wait for everything
-   * they and anything else here started to be written. Their replies are
-   * written as cut off. A catalog read can hold this for as long as its own
-   * timeout, so the process's shutdown bounds it rather than awaiting it
-   * bare. Deleting
-   * `STUDIO_HOME` before this resolves pulls the directory out from under a
-   * live write, which is how a refused create's corpus read failed a test
-   * teardown with `ENOTEMPTY`.
+   * Stop every planner turn, then wait for everything they and anything else
+   * here started to be written (`settledAll`). Their replies are written as
+   * cut off, and a create after this begins is refused. A catalog read can
+   * hold this for as long as its own timeout, so the process's shutdown
+   * bounds it rather than awaiting it bare.
    */
   async drain(): Promise<void> {
     this.draining = true;

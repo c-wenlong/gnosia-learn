@@ -1,4 +1,5 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -46,8 +47,8 @@ const { Drafts, emptySlot } = await import("../src/drafts");
 const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
 const { spendWindow } = await import("../src/cost");
+const { cacheDir } = await import("../src/content-cache");
 const { draftDir, draftJsonPath, draftSessionLogPath, draftTranscriptPath } = await import("../src/paths");
-const { cachePath } = await import("../src/content-cache");
 
 type DraftsT = InstanceType<typeof Drafts>;
 
@@ -230,32 +231,39 @@ describe("making a conversation", () => {
     expect(catalogMock.diagramList).toHaveBeenCalledTimes(1);
   });
 
-  it("is not drained until the corpus read a refused create left running has written its cache", async () => {
-    // The read outlives the refusal and writes the listing's cache under
-    // STUDIO_HOME, so a teardown that deleted the home once `drain` returned
-    // raced it and failed with ENOTEMPTY about one run in eight under load.
+  it("leaves the corpus read it refused before to drain, which waits for its cache write", async () => {
+    // The refusal returns while the diagram list is still out; the list then
+    // writes its cache under STUDIO_HOME, which a teardown deleting that
+    // directory used to race (ENOTEMPTY about one run in three).
     let listed!: () => void;
-    catalogMock.topicList.mockResolvedValue(topicListDown());
     catalogMock.diagramList.mockImplementationOnce(() => new Promise((resolve) => (listed = () => resolve(ok({ diagrams: [] })))));
-    await expect(drafts.create({ idempotencyKey: "down" })).rejects.toMatchObject({ status: 503 });
-    let drained = false;
-    const draining = drafts.drain().then(() => (drained = true));
-    // Nothing can resolve `drain` but the read, so however long this yields it is still waiting.
-    for (let tick = 0; tick < 20; tick++) await Promise.resolve();
-    expect(drained).toBe(false);
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    await expect(drafts.create({ idempotencyKey: "down-late" })).rejects.toMatchObject({ status: 503 });
+    const drained = drafts.drain();
     listed();
-    await draining;
-    expect(JSON.parse(await readFile(cachePath("diagrams.local"), "utf8")).value).toEqual([]);
+    await drained;
+    expect(await readdir(cacheDir())).toEqual([expect.stringMatching(/^diagrams\..+\.json$/)]);
+  });
+
+  it("refuses a conversation once draining has begun, before starting a read drain would not see", async () => {
+    await drafts.drain();
+    await expect(drafts.create({ idempotencyKey: "late" })).rejects.toMatchObject({ status: 503, detail: { reason: "shutdown" } });
+    expect(catalogMock.diagramList).not.toHaveBeenCalled();
+    expect(catalogMock.topicList).not.toHaveBeenCalled();
   });
 
   it("is not drained while a create is still under way, and refuses one that starts after", async () => {
+    // A create past its reads (waiting on the vocabulary here, a checkout or an
+    // inspect in life) still writes the draft, so drain waits for the create.
     let topics!: () => void;
     catalogMock.topicList.mockImplementationOnce(() => new Promise((resolve) => (topics = () => resolve(topicListAnswer()))));
     const made = drafts.create({ idempotencyKey: "late" });
-    await until(() => catalogMock.topicList.mock.calls.length === 1, "the create never read the vocabulary");
+    // Its corpus read is done and cached, so only the create itself is left.
+    await until(() => existsSync(path.join(cacheDir(), "diagrams.local.json")), "the corpus read never landed");
     let drained = false;
     const draining = drafts.drain().then(() => (drained = true));
-    for (let tick = 0; tick < 20; tick++) await Promise.resolve();
+    // Nothing can resolve `drain` but the create, so however long this yields it is still waiting.
+    for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setImmediate(resolve));
     expect(drained).toBe(false);
     await expect(drafts.create({ idempotencyKey: "after" })).rejects.toMatchObject({ status: 503 });
     topics();

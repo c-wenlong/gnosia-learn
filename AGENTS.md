@@ -1183,7 +1183,7 @@ not have to be worked out again.
   two-minute timeout. That read writes the listing's cache under `STUDIO_HOME`,
   and before the wait it failed `drafts.test.ts`'s teardown with `ENOTEMPTY`
   12 runs in 100 under load (0 in 100 after). Something new that `Drafts`
-  starts without awaiting goes through `inBackground`, or `drain` stops
+  starts without awaiting goes through `tracked`, or `drain` stops
   covering it.
 - **A studio test that runs planner turns must set `STUDIO_CLAUDE_BIN`
   before anything imports `services/studio/src/config.ts`.** `CLAUDE_BIN` is
