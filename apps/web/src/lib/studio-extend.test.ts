@@ -7,7 +7,9 @@ import {
   extendRefusal,
   firstTurn,
   forgetExtendKey,
+  carryOpener,
   leaveOpener,
+  readOpener,
   readingWords,
   leavePrefill,
   takeOpener,
@@ -293,5 +295,38 @@ describe("the picture across the hand-off", () => {
     expect(arrivingSource("fresh")).toBeNull();
     noteArrival("d9", "dot-product");
     expect(arrivingSource("d9")).toBe("dot-product");
+  });
+});
+
+describe("an Extend press run twice for the same draft", () => {
+  const queued = { send: "Add the projection", sendMentions: [], compose: "and label it", composeMentions: [], source: "dot-product" };
+  const rerun = { send: EXTEND_OPENER, sendMentions: [], compose: "", composeMentions: [], source: "dot-product" };
+
+  it("is left alone the first time", () => {
+    expect(carryOpener(null, rerun, false)).toEqual(rerun);
+  });
+
+  it("keeps the earlier message and words when nothing was typed since", () => {
+    expect(carryOpener(queued, rerun, false)).toEqual(queued);
+  });
+
+  it("sends a message queued since, and composes words typed since", () => {
+    const since = { ...rerun, send: "Show it on a graph", compose: "slowly" };
+    expect(carryOpener(queued, since, true)).toEqual(since);
+  });
+
+  it("keeps the earlier words when only a message was queued since", () => {
+    const since = { ...rerun, send: "Show it on a graph" };
+    expect(carryOpener(queued, since, true)).toMatchObject({ send: "Show it on a graph", compose: "and label it" });
+  });
+});
+
+describe("reading an opener without taking it", () => {
+  it("leaves it for the conversation to take", () => {
+    const store = memory();
+    leaveOpener(store, "d1", { send: "Add the projection", compose: "", source: null });
+    expect(readOpener(store, "d1")?.send).toBe("Add the projection");
+    expect(takeOpener(store, "d1")?.send).toBe("Add the projection");
+    expect(readOpener(store, "d1")).toBeNull();
   });
 });
