@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { tutorCredentials } from "@/lib/agent/credentials";
+import { keyTestCredential } from "@/lib/agent/credentials";
 import { testProviderKey } from "@/lib/agent/providers";
 import { KEY_TEST_RATE_LIMIT, answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 
@@ -9,7 +9,9 @@ export const runtime = "nodejs";
 /**
  * `POST { provider }`: one minimal call to that provider with the key the
  * tutor would use for it (the owner's saved key, else the server's), and what
- * came back (docs/BYOK.md, decision 3).
+ * came back (docs/BYOK.md, decision 3). The model is the one the tutor would
+ * call that key with first: the owner's first chain entry for the provider,
+ * else its default (docs/TUTOR-MODELS.md).
  *
  * 200 `{ ok: true, provider, source, model }` when the provider accepted the
  * key, 200 `{ ok: false, provider, source, status, message }` when it did not,
@@ -26,8 +28,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   const provider = readProvider(body);
   if (provider instanceof NextResponse) return provider;
 
-  const credential = (await tutorCredentials(owner)).find((c) => c.config.id === provider);
-  if (credential === undefined) return refuse("There is no key for this provider to test.", "NO_KEY");
+  const credential = await keyTestCredential(owner, provider);
+  if (credential === null) return refuse("There is no key for this provider to test.", "NO_KEY");
 
   const result = await testProviderKey(credential);
   return answer(

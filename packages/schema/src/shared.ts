@@ -147,6 +147,36 @@ export function isProviderId(value: unknown): value is ProviderId {
 }
 
 /**
+ * The bounds on the tutor's model chain (docs/TUTOR-MODELS.md): how many
+ * entries an owner may keep, and how long a model id may be. Every tutor turn
+ * walks the chain until one answers, so the entry cap also caps how many
+ * provider requests one failing turn can spend. The id cap is well past any
+ * real id (OpenRouter's longest are about 60 characters). A CHECK repeats both.
+ */
+export const TUTOR_MODEL_LIMITS = { maxEntries: 10, maxModelChars: 200 } as const;
+
+/** Printable ASCII with no space: what a model id is made of, and all a request header or JSON body needs. */
+export const MODEL_ID_PATTERN = /^[\x21-\x7e]+$/;
+
+/**
+ * A model id as sent by a person or a provider, checked (docs/TUTOR-MODELS.md,
+ * T5): surrounding whitespace dropped, then 1 to `maxModelChars` characters of
+ * printable ASCII with no whitespace. The reason never repeats the value.
+ */
+export function checkModelId(value: unknown): { ok: true; model: string } | { ok: false; reason: string } {
+  if (typeof value !== "string") return { ok: false, reason: `"model" must be a string.` };
+  const model = value.trim();
+  if (model.length === 0) return { ok: false, reason: "The model id is empty." };
+  if (model.length > TUTOR_MODEL_LIMITS.maxModelChars) {
+    return { ok: false, reason: `A model id is at most ${TUTOR_MODEL_LIMITS.maxModelChars} characters.` };
+  }
+  if (!MODEL_ID_PATTERN.test(model)) {
+    return { ok: false, reason: "A model id is printable ASCII with no spaces." };
+  }
+  return { ok: true, model };
+}
+
+/**
  * Preference keys the web app and the CLI both know by name.
  *
  * `preference` is a key/value table precisely so a new one costs no migration,

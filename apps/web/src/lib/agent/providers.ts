@@ -1,4 +1,4 @@
-import { PROVIDER_IDS, type ProviderId } from "@self-learn/schema/shared";
+import { MODEL_ID_PATTERN, PROVIDER_IDS, TUTOR_MODEL_LIMITS, type ProviderId } from "@self-learn/schema/shared";
 
 import { redactSecrets } from "@/lib/agent/redact";
 import { resolveSiteUrl } from "@/lib/site-url";
@@ -32,6 +32,12 @@ export interface ProviderAttemptError {
   model: string;
   status?: number;
   message: string;
+  /**
+   * A chain entry the tutor did not call, because nothing holds a key for its
+   * provider (docs/TUTOR-MODELS.md, T4). Recorded so the owner can see it was
+   * passed over; it is not a failure and does not end the chain.
+   */
+  skipped?: true;
 }
 
 /** Preferred free production cascade: NVIDIA → Gemini Flash → OpenRouter free. */
@@ -48,6 +54,33 @@ export interface ProviderCredential {
   config: ProviderConfig;
   apiKey: string;
   source: KeySource;
+  /**
+   * Where `config.model` came from: the owner's model chain in Settings, or
+   * the built-in default and its `<PROVIDER>_MODEL` override
+   * (docs/TUTOR-MODELS.md). Only the advice in a log line reads it.
+   */
+  modelFrom?: "chain" | "default";
+}
+
+/** A chain entry whose provider has no key, saved or server: passed over, and said so (T4). */
+export interface SkippedEntry {
+  skipped: true;
+  provider: ProviderId;
+  model: string;
+  reason: string;
+}
+
+/** One place in the order the tutor tries: a call it can make, or an entry it must pass over. */
+export type ChainStep = ProviderCredential | SkippedEntry;
+
+export function isCallable(step: ChainStep): step is ProviderCredential {
+  return !("skipped" in step);
+}
+
+/** One entry of an owner's model chain, as stored (`tutor_model`). */
+export interface ChainEntry {
+  provider: ProviderId;
+  model: string;
 }
 
 type EnvMap = Record<string, string | undefined>;
@@ -175,6 +208,52 @@ export function orderCredentials(
   return [...own, ...server];
 }
 
+/**
+ * The key the tutor calls one provider with (docs/BYOK.md, decision 9): the
+ * owner's saved key if it decrypted, else the server's, else none.
+ */
+export function keyFor(
+  provider: ProviderId,
+  saved: Partial<Record<ProviderId, string>>,
+  env: EnvMap = process.env,
+): { apiKey: string; source: KeySource } | null {
+  const own = saved[provider];
+  if (own) return { apiKey: own, source: "saved" };
+  const config = providerConfigs(env).find((c) => c.id === provider);
+  const server = config === undefined ? undefined : env[config.apiKeyEnv]?.trim();
+  return server ? { apiKey: server, source: "server" } : null;
+}
+
+/**
+ * The order the tutor tries for an owner (docs/TUTOR-MODELS.md).
+ *
+ * With a model chain, the chain alone, top to bottom: each entry calls its
+ * provider's endpoint with its own model id and the key `keyFor` finds, and
+ * an entry with no key is kept in place as a `SkippedEntry` rather than
+ * dropped, so the attempts say why it was passed over (T4). With no chain, the
+ * built-in defaults in the provider order, `orderCredentials` exactly as
+ * before the chain existed (T3). A chain never falls back to the defaults
+ * once it runs out: the owner chose it, and a default answering behind it
+ * would hide an entry that stopped working, the reason D9 gives for keys.
+ */
+export function tutorSteps(
+  chain: readonly ChainEntry[],
+  saved: Partial<Record<ProviderId, string>>,
+  env: EnvMap = process.env,
+): ChainStep[] {
+  if (chain.length === 0) return orderCredentials(saved, env).map((c) => ({ ...c, modelFrom: "default" as const }));
+  const configs = new Map(providerConfigs(env).map((c) => [c.id, c]));
+  return chain.flatMap((entry): ChainStep[] => {
+    const config = configs.get(entry.provider);
+    if (config === undefined) return [];
+    const key = keyFor(entry.provider, saved, env);
+    if (key === null) {
+      return [{ skipped: true, provider: entry.provider, model: entry.model, reason: `no key for ${entry.provider}` }];
+    }
+    return [{ config: { ...config, model: entry.model }, ...key, modelFrom: "chain" }];
+  });
+}
+
 /** The server's keys alone, for a caller with no owner (the tests, a script). */
 export function serverCredentials(env: EnvMap = process.env): ProviderCredential[] {
   return orderCredentials({}, env);
@@ -185,11 +264,15 @@ export function serverCredentials(env: EnvMap = process.env): ProviderCredential
  * and where its key came from, never any of the key.
  */
 export function availableProviderSummary(
-  credentials: readonly ProviderCredential[],
+  steps: readonly ChainStep[],
 ): string {
-  if (credentials.length === 0) return "none (add a provider key in Settings)";
-  return credentials
-    .map((c) => `${c.config.id} (${c.source === "saved" ? "your key" : "server key"})`)
+  if (steps.length === 0) return "none (add a provider key in Settings)";
+  return steps
+    .map((step) => {
+      if (!isCallable(step)) return `${step.provider} ${step.model} (no key)`;
+      const name = step.modelFrom === "chain" ? `${step.config.id} ${step.config.model}` : step.config.id;
+      return `${name} (${step.source === "saved" ? "your key" : "server key"})`;
+    })
     .join(" → ");
 }
 
@@ -276,16 +359,17 @@ function originOf(baseUrl: string): string {
   }
 }
 
-function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string): void {
+function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string, modelFrom: "chain" | "default"): void {
   if (attempt.status !== 404 && attempt.status !== 410) return;
   const key = `${attempt.provider}/${attempt.model}`;
   if (reportedGone.has(key)) return;
   reportedGone.add(key);
-  const variable = `${attempt.provider.toUpperCase()}_MODEL`;
+  // A chain entry is the owner's to change in Settings; a default is the operator's, in the environment.
+  const fix = modelFrom === "chain" ? "replace it under Models in Settings" : `set ${attempt.provider.toUpperCase()}_MODEL`;
   console.error(
     attempt.status === 410
-      ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, set ${variable}`
-      : `agent: ${attempt.provider} answered 404 for model ${attempt.model} at ${originOf(baseUrl)}; the model may be retired (set ${variable}) or the base URL may not serve /chat/completions`,
+      ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, ${fix}`
+      : `agent: ${attempt.provider} answered 404 for model ${attempt.model} at ${originOf(baseUrl)}; the model may be retired (${fix}) or the base URL may not serve /chat/completions`,
   );
 }
 
@@ -296,12 +380,14 @@ export function resetGoneModelReports(): void {
 
 /**
  * Try the providers in order. Continues on rate-limits / 5xx / empty replies.
- * `credentials` is `orderCredentials`' list (the routes get it from
- * `tutorCredentials`); an empty list is `MISSING_API_KEY`.
+ * `steps` is `tutorSteps`' list (the routes get it from `tutorCredentials`):
+ * a chain entry with no key is recorded as a skipped attempt and the walk
+ * goes on. Nothing to call at all is `MISSING_API_KEY`, with the skips as its
+ * attempts.
  */
 export async function completeWithFallback(
   messages: ChatMessage[],
-  credentials: readonly ProviderCredential[],
+  steps: readonly ChainStep[],
 ): Promise<
   | { ok: true; result: ChatCompletionResult; attempts: ProviderAttemptError[] }
   | {
@@ -310,15 +396,27 @@ export async function completeWithFallback(
       code: "MISSING_API_KEY" | "ALL_PROVIDERS_FAILED";
     }
 > {
+  const skipped = (step: SkippedEntry): ProviderAttemptError => ({
+    provider: step.provider,
+    model: step.model,
+    message: step.reason,
+    skipped: true,
+  });
+  const credentials = steps.filter(isCallable);
   if (credentials.length === 0) {
-    return { ok: false, attempts: [], code: "MISSING_API_KEY" };
+    return { ok: false, attempts: steps.flatMap((s) => (isCallable(s) ? [] : [skipped(s)])), code: "MISSING_API_KEY" };
   }
 
   // Every key in play, so one provider's error cannot quote another's.
   const secrets = credentials.map((c) => c.apiKey);
   const attempts: ProviderAttemptError[] = [];
 
-  for (const { config: provider, apiKey } of credentials) {
+  for (const step of steps) {
+    if (!isCallable(step)) {
+      attempts.push(skipped(step));
+      continue;
+    }
+    const { config: provider, apiKey } = step;
     try {
       const result = await callOpenAiCompatible(provider, apiKey, messages, secrets);
       return { ok: true, result, attempts };
@@ -331,7 +429,7 @@ export async function completeWithFallback(
       ) {
         const attempt = err as ProviderAttemptError;
         attempts.push(attempt);
-        reportIfModelGone(attempt, provider.baseUrl);
+        reportIfModelGone(attempt, provider.baseUrl, step.modelFrom ?? "default");
       } else {
         attempts.push({
           provider: provider.id,
@@ -380,9 +478,11 @@ export type KeyTestResult =
 export const KEY_TEST_TIMEOUT_MS = 15_000;
 
 /**
- * One minimal call with one key: a one-token completion, which every provider
- * authenticates, where a `/models` listing is public on some of them and so
- * proves nothing. Any 2xx is a working key, whatever the model wrote.
+ * One minimal call with one key and one model (`config.model`): the key Test
+ * sends the model the tutor would call that key with first, and a chain
+ * entry's Test sends the entry's own (docs/TUTOR-MODELS.md). A one-token
+ * completion, which every provider authenticates, where a `/models` listing
+ * is public on some of them and so proves nothing. Any 2xx is a working key, whatever the model wrote.
  * Never throws; a network failure or a timeout is a failed test.
  */
 export async function testProviderKey(
@@ -420,6 +520,103 @@ export async function testProviderKey(
     // cannot hide an echo from the first pass.
     const message = providerText(providerMessage(redactSecrets(text, secrets)), secrets, 300);
     return { ok: false, status: res.status, message: message || providerText(res.statusText, secrets, 200) || `HTTP ${res.status}` };
+  } catch (err) {
+    const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+    return {
+      ok: false,
+      status: null,
+      message: timedOut
+        ? `The provider did not answer within ${Math.round(timeoutMs / 1000)} seconds.`
+        : providerText(err instanceof Error ? err.message : "The provider could not be reached.", secrets, 300),
+    };
+  }
+}
+
+/** A model a provider's `/models` lists, as Settings offers it. */
+export interface ListedModel {
+  id: string;
+  /** OpenRouter prices every model; true when both prices are zero. Absent where the list says nothing about price. */
+  free?: boolean;
+}
+
+export type ModelListResult =
+  | { ok: true; models: ListedModel[] }
+  | { ok: false; status: number | null; message: string };
+
+/** How long a model list waits for the provider. */
+export const MODEL_LIST_TIMEOUT_MS = 10_000;
+
+/** The most a list may be: OpenRouter's, the longest, is about 2 MB and 350 models. */
+const MODEL_LIST_MAX_BYTES = 8 * 1024 * 1024;
+const MODEL_LIST_MAX_MODELS = 2_000;
+
+/**
+ * A listed id as the chat endpoint takes it. Gemini's OpenAI-compatible
+ * `/models` names each model `models/<id>`, and its chat endpoint is
+ * documented with the bare `<id>`.
+ */
+function listedId(provider: ProviderId, id: string): string {
+  return provider === "gemini" && id.startsWith("models/") ? id.slice("models/".length) : id;
+}
+
+/**
+ * One provider's model list, from `<baseUrl>/models` with the key the tutor
+ * would use (docs/TUTOR-MODELS.md, T2). The URL is the provider's configured
+ * base URL and nothing a caller sends. Each id is checked as a stored id is
+ * (`checkModelId`'s rule) and one that echoes the key is dropped, so what
+ * reaches the browser is an id or nothing; an error is redacted as the
+ * key Test's is. Never throws.
+ */
+export async function listProviderModels(
+  credential: ProviderCredential,
+  timeoutMs: number = MODEL_LIST_TIMEOUT_MS,
+): Promise<ModelListResult> {
+  const { config, apiKey } = credential;
+  const secrets = [apiKey];
+  try {
+    const res = await fetch(`${config.baseUrl}/models`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}`, ...(config.extraHeaders ?? {}) },
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const message = providerText(providerMessage(redactSecrets(text, secrets)), secrets, 300);
+      return { ok: false, status: res.status, message: message || providerText(res.statusText, secrets, 200) || `HTTP ${res.status}` };
+    }
+    const declared = Number(res.headers.get("content-length") ?? "0");
+    if (Number.isFinite(declared) && declared > MODEL_LIST_MAX_BYTES) {
+      return { ok: false, status: res.status, message: "The model list is too large to read." };
+    }
+    const text = await res.text();
+    if (text.length > MODEL_LIST_MAX_BYTES) return { ok: false, status: res.status, message: "The model list is too large to read." };
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return { ok: false, status: res.status, message: "The provider's model list is not JSON." };
+    }
+    const data = (body as { data?: unknown } | null)?.data;
+    if (!Array.isArray(data)) return { ok: false, status: res.status, message: "The provider's model list has no data array." };
+    const seen = new Set<string>();
+    const models: ListedModel[] = [];
+    for (const item of data.slice(0, MODEL_LIST_MAX_MODELS)) {
+      const raw = (item as { id?: unknown } | null)?.id;
+      if (typeof raw !== "string") continue;
+      const id = listedId(config.id, raw.trim());
+      if (id.length === 0 || id.length > TUTOR_MODEL_LIMITS.maxModelChars || !MODEL_ID_PATTERN.test(id)) continue;
+      if (redactSecrets(id, secrets) !== id || seen.has(id)) continue;
+      seen.add(id);
+      const pricing = (item as { pricing?: { prompt?: unknown; completion?: unknown } }).pricing;
+      const free =
+        pricing && typeof pricing === "object"
+          ? String(pricing.prompt) === "0" && String(pricing.completion) === "0"
+          : undefined;
+      models.push(free === undefined ? { id } : { id, free });
+    }
+    models.sort((a, b) => a.id.localeCompare(b.id));
+    return { ok: true, models };
   } catch (err) {
     const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
     return {

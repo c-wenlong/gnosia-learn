@@ -20,7 +20,7 @@ export const KEY_WRITE_RATE_LIMIT: RateLimitRule = { limit: 20, windowMs: 60_000
 /** A Test spends a provider request, so fewer. */
 export const KEY_TEST_RATE_LIMIT: RateLimitRule = { limit: 10, windowMs: 60_000 };
 
-/** The largest body either route reads: a provider id and a key of at most 512 characters. */
+/** The largest body any of these routes reads: a provider id and a key of at most 512 characters, or a model id of at most 200. */
 const MAX_BODY_BYTES = 4_096;
 
 /** Every answer from these routes: nothing here may be cached anywhere. */
@@ -32,11 +32,20 @@ export function refuse(error: string, code = "BAD_REQUEST", status = 400): NextR
   return answer({ ok: false, error, code }, status);
 }
 
-/** Origin, rate limit, owner. The owner, or the response to send instead. */
-export async function guard(req: Request, bucket: string, rule: RateLimitRule): Promise<string | NextResponse> {
+/**
+ * Origin, rate limit, owner. The owner, or the response to send instead.
+ * `scope` names the family of routes the bucket belongs to; the model chain's
+ * routes (docs/TUTOR-MODELS.md) pass their own, so they count apart from these.
+ */
+export async function guard(
+  req: Request,
+  bucket: string,
+  rule: RateLimitRule,
+  scope: "provider-key" | "tutor-model" = "provider-key",
+): Promise<string | NextResponse> {
   const origin = enforceSameOrigin(req);
   if (origin !== null) return origin;
-  const limited = enforceRateLimit(req, `provider-key:${bucket}`, rule);
+  const limited = enforceRateLimit(req, `${scope}:${bucket}`, rule);
   if (limited !== null) return limited;
   return requestOwner();
 }

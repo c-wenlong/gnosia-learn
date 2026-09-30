@@ -54,8 +54,8 @@ export function ProviderKeys({ rows, reachable }: { rows: ProviderKeyView[]; rea
   return (
     <Card title="Provider keys">
       <p className="text-[14px] text-text2">
-        Your own API keys for the tutor&apos;s model providers. They are tried before the server&apos;s, stored encrypted,
-        and never shown again once saved: only the last four characters are.
+        Your own API keys for the tutor&apos;s model providers. A saved key is used instead of the server&apos;s for its
+        provider, stored encrypted, and never shown again once saved: only the last four characters are.
       </p>
       {!reachable && (
         <p role="status" className="rounded-lg border-2 border-warn bg-warn-tint px-3.5 py-2.5 text-[14px] text-text">

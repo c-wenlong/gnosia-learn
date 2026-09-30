@@ -24,7 +24,7 @@ directory being imported: an export, `seed/`, or `content-files-final`.
 | Half | Tables | Source of truth |
 | --- | --- | --- |
 | Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$SELF_LEARN_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
-| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
+| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key`, `tutor_model` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
 | Studio | `session`, `draft`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
 
@@ -107,6 +107,7 @@ which brief produced them.
 | `recap` | The durable "what I learnt" record per checklist row. |
 | `preference` | Theme, epoch, last visited, and the studio's two agent settings (`studioVideoAgent`, `studioDiagramAgent`: `{ model, effort }`, D53 of docs/STUDIO-VIDEOS.md), which the runner reads with `catalog preference get`. Key/value, because these change with the UI. |
 | `provider_key` | An owner's own model provider API keys for the tutor, one per provider, AES-256-GCM encrypted by the web app (migration `0018_provider_key`, [docs/BYOK.md](../../docs/BYOK.md)). See "Provider keys" under the state half. |
+| `tutor_model` | The tutor's model chain: an owner's ordered provider and model pairs, tried top to bottom, with `position` 0 to n-1 (migration `0020_tutor_model`, [docs/TUTOR-MODELS.md](../../docs/TUTOR-MODELS.md)). No secret. Written only by `src/state/tutor-models.ts`, which rewrites an owner's rows whole under the learner lock. |
 
 ### Operational
 
@@ -422,6 +423,7 @@ erDiagram
     learner ||--o{ recap : "keeps"
     learner ||--o{ preference : "sets"
     learner ||--o{ provider_key : "brings"
+    learner ||--o{ tutor_model : "orders"
     concept ||--o{ event : "may be about"
     concept ||--o{ mastery : "is tracked by"
     concept ||--o{ review : "is scheduled by"
@@ -491,6 +493,12 @@ erDiagram
         bytea auth_tag "16 bytes"
         int key_version ">= 1"
         text last4 "4 chars"
+    }
+    tutor_model {
+        text owner_id PK_FK "no default"
+        text provider PK "nvidia|gemini|openrouter"
+        text model PK "printable ASCII, 1..200"
+        int position "0..9, unique per owner"
     }
 ```
 

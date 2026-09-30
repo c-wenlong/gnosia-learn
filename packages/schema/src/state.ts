@@ -11,6 +11,7 @@ import {
   pgTable,
   primaryKey,
   text,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { createdAt, instant, updatedAt } from "./columns";
@@ -30,6 +31,7 @@ import {
   PROVIDER_KEY_LIMITS,
   RECAP_SOURCES,
   SCHEDULE_LIMITS,
+  TUTOR_MODEL_LIMITS,
 } from "./shared";
 
 /**
@@ -353,5 +355,48 @@ export const providerKey = pgTable(
     ),
     check("provider_key_key_version_check", sql`key_version >= 1`),
     check("provider_key_last4_check", sql`char_length(last4) = 4`),
+  ],
+);
+
+/**
+ * The tutor's model chain (docs/TUTOR-MODELS.md): an owner's ordered list of
+ * provider and model pairs, tried top to bottom on every tutor turn until one
+ * answers. An owner with no rows gets the built-in defaults, in the
+ * provider order, exactly as before the chain existed.
+ *
+ * No secret here: a provider name and a model id. The key each entry calls
+ * with is resolved per request from `provider_key` or the environment.
+ *
+ * `position` is 0 to n-1 with no gaps, which the unique index and the range
+ * CHECK hold together with the one writer,
+ * `services/catalog/src/state/tutor-models.ts`, that rewrites an owner's rows
+ * as a whole under the learner lock. No `owner_id` default and `cascade` on
+ * delete, as `provider_key`: owner configuration is never filed under `local`
+ * by omission, and goes with its owner.
+ */
+export const tutorModel = pgTable(
+  "tutor_model",
+  {
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    position: integer("position").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ownerId, t.provider, t.model] }),
+    uniqueIndex("tutor_model_owner_position_idx").on(t.ownerId, t.position),
+    check("tutor_model_provider_check", inList("provider", PROVIDER_IDS)),
+    check(
+      "tutor_model_position_check",
+      sql.raw(`position between 0 and ${TUTOR_MODEL_LIMITS.maxEntries - 1}`),
+    ),
+    // Printable ASCII with no space, as `checkModelId` says: `!` to `~`.
+    check(
+      "tutor_model_model_check",
+      sql.raw(`char_length(model) between 1 and ${TUTOR_MODEL_LIMITS.maxModelChars} and model ~ '^[!-~]+$'`),
+    ),
   ],
 );
