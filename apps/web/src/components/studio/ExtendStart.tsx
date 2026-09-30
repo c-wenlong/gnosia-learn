@@ -23,6 +23,7 @@ import { UserMessage } from "@/components/ui/Message";
 import { lengthSendBlock, MENTION_HINT, mentionOptions, TEXT_LIMIT, valueSendBlock } from "@/lib/studio-cards";
 import { createDraft, DRAFT_KINDS, idempotencyKey, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 import {
+  carryOpener,
   firstTurn,
   extendKey,
   extendRefusal,
@@ -30,6 +31,7 @@ import {
   noteArrival,
   readingWords,
   sessionStore,
+  readOpener,
   takePrefill,
   type ExtendRefusal,
 } from "@/lib/studio-extend";
@@ -143,13 +145,22 @@ export function ExtendStart({
     noteArrival(result.data.draftId, name);
     const { value: unsent, queued: waiting } = typed.current;
     const first = firstTurn(waiting, talk);
-    leaveOpener(store, result.data.draftId, {
-      send: first === null ? null : first.text,
-      sendMentions: first === null ? [] : first.mentions,
-      compose: unsent.text,
-      composeMentions: unsent.mentions,
-      source: name,
-    });
+    // A reload before the navigation below landed runs this press again with
+    // only what was typed since, and gets the same draft: the opener it left
+    // first keeps the message that was waiting unless another was queued
+    // since (`carryOpener`).
+    const draftId = result.data.draftId;
+    leaveOpener(
+      store,
+      draftId,
+      carryOpener(readOpener(store, draftId), {
+        send: first === null ? null : first.text,
+        sendMentions: first === null ? [] : first.mentions,
+        compose: unsent.text,
+        composeMentions: unsent.mentions,
+        source: name,
+      }, waiting !== null),
+    );
     router.replace(panelHref(path, { extend: null, draft: result.data.draftId }), { scroll: false });
   }, [name, title, path, talk, router, isClosing, setQueued, setValue]);
 
