@@ -8,11 +8,13 @@ import { secondsForLines } from "../src/video/brief";
 import { compareLines, moovFirst, runVideoGate } from "../src/video/gate";
 import { rebasePaths } from "../src/video/checkout";
 import { videoPaths, type VideoPaths } from "../src/video/paths";
+import { voicedLines } from "../src/video/scan";
 
 import {
   build,
   hasPython,
   layOut,
+  localScan,
   mp4Bytes,
   narratedBrief,
   narratedSource,
@@ -44,9 +46,9 @@ afterEach(async () => {
 
 const at = (offsetMs: number): string => new Date(Date.now() + offsetMs).toISOString();
 
-async function narratedJob(lines: [string, string], over: { segments?: string[]; tail?: number; chapters?: unknown[] } = {}) {
+async function narratedJob(lines: [string, string], over: { segments?: string[]; tail?: number; chapters?: unknown[]; source?: string } = {}) {
   const brief = narratedBrief();
-  const source = narratedSource(lines);
+  const source = over.source ?? narratedSource(lines);
   const texts = over.segments ?? lines;
   const laid = await layOut(paths, {
     source,
@@ -96,6 +98,34 @@ describe.skipIf(!hasPython())("the video gate", () => {
     ]);
     expect(copies.files["source/two_boxes.py"]?.sha256).toBe(laid.sourceHash);
     expect(copies.durationSeconds).toBe(duration);
+  });
+
+  it("reads a line bound with `as line` and cued on its words as the same voiceover (manimkc#38's word cues)", async () => {
+    const brief = narratedBrief();
+    const lines = brief.scenes.map((scene) => scene.beats[0]!.say) as [string, string];
+    const words = lines[0].split(/\s+/).map((word) => word.replace(/[^A-Za-z]/g, "")).filter((word) => word.length > 3);
+    const plain = `with self.voiceover("${lines[0]}"):`;
+    const source = narratedSource(lines).replace(
+      plain,
+      `with self.voiceover("${lines[0]}") as line:\n            line.wait_until("${words[0]}")\n            self.play(Write(Text("x")), run_time=line.until("${words[1]}"))`,
+    );
+    expect(source).toContain("as line:");
+    const scan = await localScan(source);
+    expect(voicedLines(scan)).toEqual(lines);
+    const { laid, duration } = await narratedJob(lines, { source });
+    const result = await runVideoGate({
+      brief,
+      paths,
+      classes: CLASSES,
+      startedAtMs: Date.now() - 60_000,
+      sourceHashBefore: null,
+      calls: [preview(at(-5_000), CLASSES), build(at(-1_000), laid.sourceHash)],
+      reads: CLASSES.map((scene) => ({ path: sceneSheet(paths, scene), at: at(-4_000) })),
+      tools: recordedTools({ duration }),
+    });
+    expect(result.findings).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.script?.changes.every((change) => change.kind === "unchanged")).toBe(true);
   });
 
   it("records a reworded line and still passes, since the agent may change the script", async () => {

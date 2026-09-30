@@ -17,7 +17,7 @@ import { prefixFor, rebasePaths } from "../src/video/checkout";
 import { CopyRefused, safeCopy } from "../src/video/copy";
 import { videoPaths, type VideoPaths } from "../src/video/paths";
 import { buildProfile, renderJobs, sandboxEnv } from "../src/video/sandbox";
-import { seedClips } from "../src/video/seed";
+import { keepClips, keysFromReply, seedClips } from "../src/video/seed";
 import { buildVideoSettings } from "../src/video/settings";
 import { deriveSteps, type StepFacts } from "../src/video/steps";
 import type { Toolchain } from "../src/video/toolchain";
@@ -204,10 +204,80 @@ describe("seeding the job's TTS cache", () => {
     await writeFile(path.join(parent, "ffffffffffffffff.wav"), "not a wav");
 
     const result = await seedClips(paths, ["aaaaaaaaaaaaaaaa.wav", "bbbbbbbbbbbbbbbb.wav", "dddddddddddddddd.wav"], { shared, parentClips: parent });
-    expect(result).toEqual({ wanted: 3, seeded: 1, fromShared: 1, fromParent: 1 });
+    expect(result).toEqual({ wanted: 3, seeded: 1, fromShared: 1, fromParent: 1, timed: 0 });
     expect((await readdir(paths.audio)).sort()).toEqual(["aaaaaaaaaaaaaaaa.wav", "eeeeeeeeeeeeeeee.wav"]);
     const after = await Promise.all((await readdir(shared)).map(async (name) => `${name}:${(await stat(path.join(shared, name)).catch(() => null))?.mtimeMs}`));
     expect(after).toEqual(before);
+  });
+
+  it("brings each seeded clip's word times with it, when they parse, and none for a clip it did not seed", async () => {
+    const shared = path.join(root, "shared");
+    const parent = path.join(root, "parent-clips");
+    await mkdir(shared, { recursive: true });
+    await mkdir(parent, { recursive: true });
+    const wav = Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WAVE"), Buffer.alloc(8)]);
+    const times = JSON.stringify({ source: "kokoro", duration: 1.2, words: [{ word: "miss", start: 0.1, end: 0.4 }] });
+    // In the shared cache: a clip with its times, a clip whose times do not parse, and times with no clip.
+    await writeFile(path.join(shared, "aaaaaaaaaaaaaaaa.wav"), wav);
+    await writeFile(path.join(shared, "aaaaaaaaaaaaaaaa.words.json"), times);
+    await writeFile(path.join(shared, "cccccccccccccccc.wav"), wav);
+    await writeFile(path.join(shared, "cccccccccccccccc.words.json"), '{"source": "kokoro", "words": "not a list"}');
+    await writeFile(path.join(shared, "bbbbbbbbbbbbbbbb.words.json"), times);
+    // A hard-linked shared clip is still seeded, as gnosia-audio lets a caller link one.
+    await link(path.join(shared, "aaaaaaaaaaaaaaaa.words.json"), path.join(root, "a-link"));
+    // A parent's kept clip, with its times, and a parent clip whose times are someone else's link.
+    await writeFile(path.join(parent, "eeeeeeeeeeeeeeee.wav"), wav);
+    await writeFile(path.join(parent, "eeeeeeeeeeeeeeee.words.json"), times);
+    await writeFile(path.join(parent, "9999999999999999.wav"), wav);
+    await symlink(path.join(shared, "aaaaaaaaaaaaaaaa.words.json"), path.join(parent, "9999999999999999.words.json"));
+
+    const result = await seedClips(paths, ["aaaaaaaaaaaaaaaa.wav", "bbbbbbbbbbbbbbbb.wav", "cccccccccccccccc.wav", "eeeeeeeeeeeeeeee.wav"], { shared, parentClips: parent });
+    expect(result).toEqual({ wanted: 4, seeded: 3, fromShared: 2, fromParent: 2, timed: 2 });
+    expect((await readdir(paths.audio)).sort()).toEqual([
+      "9999999999999999.wav",
+      "aaaaaaaaaaaaaaaa.wav",
+      "aaaaaaaaaaaaaaaa.words.json",
+      "cccccccccccccccc.wav",
+      "eeeeeeeeeeeeeeee.wav",
+      "eeeeeeeeeeeeeeee.words.json",
+    ]);
+    expect(await readFile(path.join(paths.audio, "aaaaaaaaaaaaaaaa.words.json"), "utf8")).toBe(times);
+  });
+
+  it("keeps the final source's clips with their word times, for a change job", async () => {
+    await mkdir(paths.audio, { recursive: true });
+    const wav = Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WAVE"), Buffer.alloc(8)]);
+    const times = JSON.stringify({ source: "estimate", duration: 1, words: [] });
+    await writeFile(path.join(paths.audio, "aaaaaaaaaaaaaaaa.wav"), wav);
+    await writeFile(path.join(paths.audio, "aaaaaaaaaaaaaaaa.words.json"), times);
+    await writeFile(path.join(paths.audio, "bbbbbbbbbbbbbbbb.wav"), wav);
+    await writeFile(path.join(paths.audio, "bbbbbbbbbbbbbbbb.words.json"), "{");
+    await writeFile(path.join(paths.audio, "cccccccccccccccc.wav"), wav);
+    expect(await keepClips(paths, ["aaaaaaaaaaaaaaaa.wav", "bbbbbbbbbbbbbbbb.wav"])).toBe(2);
+    expect((await readdir(paths.clips)).sort()).toEqual(["aaaaaaaaaaaaaaaa.wav", "aaaaaaaaaaaaaaaa.words.json", "bbbbbbbbbbbbbbbb.wav"]);
+  });
+});
+
+describe("naming the clips through gnosia-audio's keys reply", () => {
+  const audio = "/private/tmp/job/render/cache/audio";
+  const reply = (body: unknown, code = 0) => ({ code, stdout: JSON.stringify(body), stderr: "" });
+
+  it("takes each clip's name from its path in this job's audio cache", () => {
+    const lines = [
+      { text: "One.", spoken: "One.", key: "0123456789abcdef", clip: `${audio}/0123456789abcdef.wav`, cached: false },
+      { text: "Two.", spoken: "Two.", key: "fedcba9876543210", clip: `${audio}/fedcba9876543210.wav`, cached: true },
+    ];
+    expect(keysFromReply(reply({ schema: 1, version: "0.1.0", lines }), 2, audio)).toEqual(["0123456789abcdef.wav", "fedcba9876543210.wav"]);
+  });
+
+  it("refuses a reply it cannot trust: another schema, an error, a count or name that does not fit, or another cache", () => {
+    const one = [{ clip: `${audio}/0123456789abcdef.wav` }];
+    expect(() => keysFromReply(reply({ schema: 2, lines: one }), 1, audio)).toThrow(/schema 2/);
+    expect(() => keysFromReply(reply({ schema: 1, error: { kind: "request", message: "lines must be non-empty strings" } }, 2), 1, audio)).toThrow(/non-empty strings/);
+    expect(() => keysFromReply(reply({ schema: 1, lines: one }), 2, audio)).toThrow(/shape/);
+    expect(() => keysFromReply(reply({ schema: 1, lines: [{ clip: `${audio}/../x.wav` }] }), 1, audio)).toThrow(/shape/);
+    expect(() => keysFromReply(reply({ schema: 1, lines: [{ clip: "/Users/me/.self-learn/manimkc/cache/audio/0123456789abcdef.wav" }] }), 1, audio)).toThrow(/not this job's audio cache/);
+    expect(() => keysFromReply({ code: 1, stdout: "Traceback", stderr: "ModuleNotFoundError: No module named 'gnosia_audio'" }, 1, audio)).toThrow(/gnosia_audio/);
   });
 });
 
@@ -294,6 +364,7 @@ describe("the sandbox profiles", () => {
     kokoroModel: "/Users/me/.cache/huggingface/hub/models--hexgrad--Kokoro-82M",
     voicesInstalled: ["af_heart"],
     sharedAudioCache: null,
+    narration: null,
   };
 
   it("denies by default, opens no network, and writes only where each profile may", () => {

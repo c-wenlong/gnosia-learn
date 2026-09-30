@@ -495,6 +495,20 @@ Rules of engagement:
   running clean, makes `/api/health` report `manual: stale`, and
   `services/studio/test/manual-snippets.test.ts` fails on either. Editing a
   snippet means running that test with tldrawkc built.
+- **The video kind's narration is gnosia-audio, asked through its JSON
+  contract, never through manimkc's `lib/`.** `services/studio/src/video/narration.ts`
+  runs `gnosia-audio home --json` in manimkc's `.venv` at each toolchain
+  discovery for the speech rate (`charsPerSecond` in its `timing.json`, the
+  one figure the brief's validator and the card use; the card gets it from
+  `/api/health`'s `video.narration`, never from a copy in `apps/web`) and the
+  pronunciation table's written forms (its `spoken.json`), from which each
+  video brief in the transcript carries `abbreviations`. `seed.ts` names clips
+  with `gnosia-audio keys --json` inside the job's render profile and seeds
+  each clip's `.words.json` with it. Without gnosia-audio in `.venv`,
+  `toolchainProblems` names `make narration-deps` and the doctor turns videos
+  off. It must stay a non-editable install: the sandbox reads the venvs and
+  nothing beside them, which `services/studio/test/video-sandbox.test.ts`
+  proves by voicing, timing and keying lines inside the profiles.
 - Read [`docs/TLDRAWKC-INTEGRATION.md`](docs/TLDRAWKC-INTEGRATION.md) for the
   design this section is shortened from: the schema, the runner's full
   constraints, the gate, and the edge cases behind each rule above.
