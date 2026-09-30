@@ -31,7 +31,7 @@ import {
   noteArrival,
   readingWords,
   sessionStore,
-  takeOpener,
+  readOpener,
   takePrefill,
   type ExtendRefusal,
 } from "@/lib/studio-extend";
@@ -153,7 +153,7 @@ export function ExtendStart({
     leaveOpener(
       store,
       draftId,
-      carryOpener(takeOpener(store, draftId), {
+      carryOpener(readOpener(store, draftId), {
         send: first === null ? null : first.text,
         sendMentions: first === null ? [] : first.mentions,
         compose: unsent.text,

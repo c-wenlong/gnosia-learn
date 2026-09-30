@@ -279,10 +279,20 @@ export function announceOpener(draftId: string): void {
  * sends it a second time. Anything malformed is no opener.
  */
 export function takeOpener(storage: Storage | null, draftId: string): ExtendOpener | null {
+  const opener = readOpener(storage, draftId);
+  if (opener !== null) safely(() => storage!.removeItem(OPENER_PREFIX + draftId), undefined);
+  return opener;
+}
+
+/**
+ * The opener left for a draft, left in place: what an Extend press that runs
+ * again merges with, so a write of the merge that fails leaves the earlier
+ * one standing rather than nothing.
+ */
+export function readOpener(storage: Storage | null, draftId: string): ExtendOpener | null {
   if (storage === null) return null;
   const held = safely(() => storage.getItem(OPENER_PREFIX + draftId), null);
   if (held === null) return null;
-  safely(() => storage.removeItem(OPENER_PREFIX + draftId), undefined);
   const parsed = safely(
     () =>
       JSON.parse(held) as {

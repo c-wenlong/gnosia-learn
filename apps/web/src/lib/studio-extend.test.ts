@@ -9,6 +9,7 @@ import {
   forgetExtendKey,
   carryOpener,
   leaveOpener,
+  readOpener,
   readingWords,
   leavePrefill,
   takeOpener,
@@ -317,5 +318,15 @@ describe("an Extend press run twice for the same draft", () => {
   it("keeps the earlier words when only a message was queued since", () => {
     const since = { ...rerun, send: "Show it on a graph" };
     expect(carryOpener(queued, since, true)).toMatchObject({ send: "Show it on a graph", compose: "and label it" });
+  });
+});
+
+describe("reading an opener without taking it", () => {
+  it("leaves it for the conversation to take", () => {
+    const store = memory();
+    leaveOpener(store, "d1", { send: "Add the projection", compose: "", source: null });
+    expect(readOpener(store, "d1")?.send).toBe("Add the projection");
+    expect(takeOpener(store, "d1")?.send).toBe("Add the projection");
+    expect(readOpener(store, "d1")).toBeNull();
   });
 });
