@@ -1402,6 +1402,11 @@ async function draftRoutes(
         source: typeof input.source === "string" ? input.source : null,
         sourceKind: input.sourceKind === undefined || input.sourceKind === null ? null : (input.sourceKind as string),
         idempotencyKey: typeof input.idempotencyKey === "string" ? input.idempotencyKey : null,
+        // A hand-off from the concept tutor (docs/STUDIO-TUTOR-HANDOFF.md):
+        // checked in `drafts.ts`, and only ever placed in the planner's prompt
+        // as fenced data.
+        concept: input.concept,
+        tutor: input.tutor,
       });
       return send(response, created ? 201 : 200, {
         draftId: record.id,
@@ -1409,11 +1414,13 @@ async function draftRoutes(
         plannerKinds: record.plannerKinds ?? ["diagram"],
         sourceKind: record.sourceKind ?? "diagram",
         note: created
-          ? record.source === null
-            ? "a new conversation: ask about an idea, or tag @diagram or @video to make one"
-            : record.sourceKind === "video"
-              ? `a conversation about changing the video ${record.source}`
-              : `a conversation about extending ${record.source}`
+          ? record.concept != null
+            ? `a conversation about the concept ${record.concept.slug}`
+            : record.source === null
+              ? "a new conversation: ask about an idea, or tag @diagram or @video to make one"
+              : record.sourceKind === "video"
+                ? `a conversation about changing the video ${record.source}`
+                : `a conversation about extending ${record.source}`
           : `this idempotency key already belongs to draft ${record.id}`,
       });
     } catch (error) {

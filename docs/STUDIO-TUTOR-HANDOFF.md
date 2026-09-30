@@ -6,7 +6,7 @@ seeded with the concept and the tag, where the planner proposes a brief and
 the person approves it with the usual press. Nothing is made from the tutor
 itself.
 
-**Status: accepted, 2026-09-30, with every open question resolved (below). Nothing here is built.** Numbers marked
+**Status: accepted, 2026-09-30, with every open question resolved (below). Phase 1, the runner, is built ("As built" below says where it differs); phase 2, the web app, is not.** Numbers marked
 *measured* come from the PR or document named beside them; every other number
 is a guess and says so.
 
@@ -179,6 +179,19 @@ No migration: the concept lives in `draft.json` and on the `created` event,
 and the `draft` row does not need it. No new route. The web app's
 `/studio/api/*` route handler forwards everything already.
 
+**As built (phase 1).** Where the runner PR differs from the table above,
+or says more than it:
+
+| What | As built |
+| --- | --- |
+| `GET /api/drafts/{id}` | `concept: { slug, title, topic, tutorTurns } \| null`. `tutorTurns` is how many turns the TUTOR block carries at least in part, after the 6,000-character cap: the number the studio's pinned line reports. List rows carry `concept: { slug, title } \| null` as planned |
+| Refusals of `concept` | `400` with `field` naming the part: `concept` (not an object, or sent with `source`), `concept.slug`, `concept.title`, `concept.summary` (not a string), `concept.body` (not a string, or over 256 KiB). `tutor` without `concept` is `400 { field: "tutor" }` |
+| The slug resolved | Before the draft is made, the runner reads the concept with `learn concept show --owner <STUDIO_OWNER>` (`conceptShow`), only to check that this owner can read it; the note it uses is still the page's. `404 { reason: "no-concept", field: "concept" }` when it cannot, `503 { reason: "catalog-unreachable" }` when the catalog does not answer, `502 { reason: "catalog" }` otherwise. The slug has passed the slug pattern first, so it is never a flag or a path |
+| Untrusted text in the blocks | The title, summary, note and turns are indented under their labels, and any run of five or more hyphens in them becomes equals signs, so no line of theirs can read as a fence. Control characters other than tab and newline are dropped. The summary is one line, cut at 1,000 characters rather than refused |
+| The CONCEPT block | Gains `also filed under: <slugs>` when more than one topic files the concept |
+| The planner's system prompt | Passed as `--system-prompt-file <draft>/planner-system.md` for every draft, where it was `--system-prompt <text>`, so no note or tutor turn is ever an argv element and a long prompt cannot meet Linux's 128 KiB limit on one argument. The file is the one the runner already wrote at creation |
+| The section heading | The paragraph goes in as its own section, `# A conversation opened on a concept`, after the refused-brief section and before the never-list |
+
 ## Availability (D67)
 
 The tutor shows @ only when a tag can work, and loads Lexical only then.
@@ -318,16 +331,16 @@ holds them builds phase 1. The opener change in `studio-extend.ts` and
 
 ### Phase 1: the runner
 
-- [ ] `learn concept show --owner`, and `conceptShow` passing the studio's
+- [x] `learn concept show --owner`, and `conceptShow` passing the studio's
       owner, so a job's `source` read is owner-scoped
-- [ ] `concept` and `tutor` on `POST /api/drafts`, checked as above
-- [ ] The CONCEPT and TUTOR blocks, and the paragraph only with a CONCEPT block
-- [ ] `concept` on the record, the `created` event, `GET /api/drafts/{id}` and
+- [x] `concept` and `tutor` on `POST /api/drafts`, checked as above
+- [x] The CONCEPT and TUTOR blocks, and the paragraph only with a CONCEPT block
+- [x] `concept` on the record, the `created` event, `GET /api/drafts/{id}` and
       the list rows
-- [ ] The bare-tag refusal skipped on a concept draft
-- [ ] `withConcept` setting `source` (replacing any other) and adding the
+- [x] The bare-tag refusal skipped on a concept draft
+- [x] `withConcept` setting `source` (replacing any other) and adding the
       concept to `concepts` on a reply's brief and on `PUT .../brief`
-- [ ] The crash fallback writing a CONCEPT block from the record
+- [x] The crash fallback writing a CONCEPT block from the record
 
 Done when: tests with `test/fake-claude.ts` and no API call cover each check
 and refusal, the blocks and their caps, the stamping (including a brief whose

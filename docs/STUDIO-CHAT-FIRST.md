@@ -107,7 +107,7 @@ whether to extend it. Its brief passed `validateBrief` unchanged.
 | What it does | Talks to the person; ends by emitting a brief | Draws the brief on a canvas; unchanged |
 | Lifetime | One `claude -p` process per person turn, resumed with `--resume` | One process per attempt, as today |
 | Tools | None (`--tools ""`) | Today's: Read, Write, Edit, Glob, and `Bash(npm run --silent canvas:*)` |
-| System prompt | Replaced (`--system-prompt`): the planner prompt plus three data blocks | Claude Code's default, with the tldraw manual appended (`--append-system-prompt`) |
+| System prompt | Replaced (`--system-prompt-file`, the draft's `planner-system.md`, so none of it is ever an argv element): the planner prompt plus its data blocks | Claude Code's default, with the tldraw manual appended (`--append-system-prompt`) |
 | Working directory | The draft's workspace | The repository root, as today |
 | Queue | None: a turn never waits behind a drawing (D36) | The job queue, concurrency 1 |
 | Metered | Per turn, into the same daily cap (D36) | Per job, as today |
