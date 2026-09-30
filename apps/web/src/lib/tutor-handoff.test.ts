@@ -6,6 +6,7 @@ import {
   CAP_SPENT,
   checkHandoffInput,
   handoffKeyName,
+  handoffPrint,
   handoffRefusal,
   handoffTurns,
   STUDIO_NOT_ANSWERING,
@@ -120,9 +121,15 @@ describe("the words for a refused hand-off", () => {
   });
 
   it("uses Extend's words for a runner that is down (H3)", () => {
-    expect(handoffRefusal(refused({ reason: "down" }), "TCP")).toBe(
+    expect(handoffRefusal(refused({ reason: "down", undelivered: true }), "TCP")).toBe(
       "The studio runner is not answering. Start it with npm run studio from the repository root, then try again.",
     );
+  });
+
+  it("says a timeout is a timeout, with no hint to start a runner that may be busy", () => {
+    const words = handoffRefusal(refused({ reason: "down", undelivered: false }), "TCP");
+    expect(words).toBe("The studio did not answer in time. Try again in a moment.");
+    expect(words).not.toContain("npm run studio");
   });
 
   it("names the concept when the runner cannot read it for this owner", () => {
@@ -206,5 +213,17 @@ describe("the turns a hand-off carries (D69)", () => {
     expect(handoffTurns([{ role: "user", content: "   " }, { role: "assistant", content: " ok " }])).toEqual([
       { role: "assistant", content: "ok" },
     ]);
+  });
+});
+
+describe("a press's print (Greptile on #234)", () => {
+  const turns: TutorTurn[] = [{ role: "user", content: "What is a SYN?" }];
+  const value = { text: "@video of it", mentions: [{ kind: "video" as const, start: 0, end: 6 }] };
+  it("is the same for the same press, and differs when the words, the chips or the turns do", () => {
+    const print = handoffPrint(value, turns);
+    expect(handoffPrint({ ...value }, [...turns])).toBe(print);
+    expect(handoffPrint({ ...value, text: "@video of the ACK" }, turns)).not.toBe(print);
+    expect(handoffPrint({ text: "@video of it", mentions: [] }, turns)).not.toBe(print);
+    expect(handoffPrint(value, [...turns, { role: "assistant", content: "The opener." }])).not.toBe(print);
   });
 });

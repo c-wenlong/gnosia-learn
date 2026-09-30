@@ -193,6 +193,12 @@ export type ConceptConversation =
       status: number | null;
       /** The runner's `error`, quoted in the words when nothing better fits. */
       said: string | null;
+      /**
+       * On `down`: true only when the request certainly never reached the
+       * runner (nothing listening). False is a timeout or a broken
+       * connection, after which the runner may still make the draft.
+       */
+      undelivered?: boolean;
     };
 
 /**
@@ -207,6 +213,10 @@ export function handoffRefusal(answer: Extract<ConceptConversation, { ok: false 
     return answer.reason === "not-found"
       ? `${title} is not among your concepts any more, so the studio has nothing to open.`
       : "The knowledge base did not answer, so the note could not be read. Try again in a moment.";
+  }
+  if (answer.reason === "down" && answer.undelivered === false) {
+    // It may be busy rather than stopped, so starting it is not the advice.
+    return "The studio did not answer in time. Try again in a moment.";
   }
   if (answer.reason === "down" || answer.status === 0) {
     const down = extendRefusal(0, { error: RUNNER_DOWN, detail: null }, title);
@@ -225,6 +235,29 @@ export function handoffRefusal(answer: Extract<ConceptConversation, { ok: false 
   if (answer.status === 403) return `The studio runner here serves another account, so it cannot open a conversation for you.${said}`;
   if (answer.status === 400) return `The studio refused the message.${said}`;
   return `The studio answered ${answer.status ?? "with an error"}.${said}`;
+}
+
+/**
+ * What a press would send, as a short print kept beside its idempotency key
+ * (`extendKey`'s `print`): the message, its chips and the tutor turns. A
+ * press that timed out keeps its key, since the runner may have made the
+ * draft; a retry of the same press finds that draft, and a retry after the
+ * message or the thread changed gets a new key and so a new draft, rather
+ * than one whose CONCEPT and TUTOR blocks were built from what was sent
+ * before. cyrb53, a 53-bit string hash: enough to tell two presses apart.
+ */
+export function handoffPrint(value: Value, turns: readonly TutorTurn[]): string {
+  const text = JSON.stringify([value.text, value.mentions, turns]);
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
 /** The storage name a tutor press's idempotency key lives under: `extendKey`'s store, apart from any diagram's. */

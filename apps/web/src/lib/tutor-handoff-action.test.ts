@@ -141,13 +141,34 @@ describe("openConceptConversation", () => {
       status: 404,
       said: "no concept tcp-handshake that this studio's owner can read",
     });
-    mocks.studioApi.mockResolvedValue({ ok: false, reason: "down", status: null, headline: "The studio runner is not answering.", detail: "ECONNREFUSED" });
+    mocks.studioApi.mockResolvedValue({
+      ok: false,
+      reason: "down",
+      status: null,
+      undelivered: true,
+      headline: "The studio runner is not answering.",
+      detail: "ECONNREFUSED",
+    });
     expect(await openConceptConversation({ slug: "tcp-handshake", tutor: [], idempotencyKey: "k" })).toEqual({
       ok: false,
       where: "runner",
       reason: "down",
       status: null,
       said: null,
+      undelivered: true,
+    });
+    // A timeout: the runner may have the request, and may make the draft yet.
+    mocks.studioApi.mockResolvedValue({
+      ok: false,
+      reason: "down",
+      status: null,
+      undelivered: false,
+      headline: "The studio runner is not answering.",
+      detail: "The operation was aborted due to timeout",
+    });
+    expect(await openConceptConversation({ slug: "tcp-handshake", tutor: [], idempotencyKey: "k" })).toMatchObject({
+      reason: "down",
+      undelivered: false,
     });
   });
 });

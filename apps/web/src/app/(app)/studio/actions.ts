@@ -284,6 +284,8 @@ export async function openConceptConversation(raw: unknown): Promise<ConceptConv
     reason: result.reason === "down" ? "down" : detailReason(result.detail),
     status: result.status,
     said: result.reason === "down" ? null : result.headline,
+    // A timeout is not a runner that is off: the words differ (H3).
+    ...(result.reason === "down" ? { undelivered: result.undelivered === true } : {}),
   };
 }
 

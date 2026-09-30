@@ -145,7 +145,13 @@ export function TutorChat({
   const turns = useMemo(() => parseThread(raw), [raw]);
   const setTurns = (next: ThreadItem[]) => writeTurns(key, next);
   const [sources, setSources] = useState(initialSources);
-  const [value, setValueState] = useState<Value>(() => ({ text: initialDraft ?? "", mentions: [] }));
+  // `?ask=` fills the field once. Its first send takes it off the URL
+  // (`dropAsk`), so Back to this page, whose cached render still carries the
+  // prefill, finds a URL without it and leaves the field empty.
+  const [value, setValueState] = useState<Value>(() => ({
+    text: initialDraft !== undefined && askInUrl() ? initialDraft : "",
+    mentions: [],
+  }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -225,6 +231,9 @@ export function TutorChat({
   const onFieldBlur = (event: FocusEvent<HTMLDivElement>) => {
     // Focus moving to Send, or into the menu, is still the field's.
     if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    // The window lost focus (another app, another tab): the field keeps it
+    // and its caret, and gets it back with the window, so nothing is swapped.
+    if (!document.hasFocus()) return;
     focused.current = false;
     swapIfIdle();
   };
@@ -243,6 +252,7 @@ export function TutorChat({
     setTurns(next);
     setValue(EMPTY);
     setRefusal(null);
+    dropAsk();
     swapIfIdle(true);
     setBusy(true);
     setError(null);
@@ -268,12 +278,17 @@ export function TutorChat({
 
   /** Ask the last question again after a failure, without a second copy of it. */
   function retry() {
-    const last = turns[turns.length - 1];
-    if (last?.role !== "user") return;
-    void ask(last.content, turns.slice(0, -1));
+    // The unanswered question, past any hand-off marker after it: asked
+    // again from where it was, so the thread never holds it twice.
+    const at = turns.findLastIndex((item) => item.role !== "studio");
+    const unanswered = turns[at];
+    if (unanswered?.role !== "user") return;
+    void ask(unanswered.content, [...turns.slice(0, at), ...turns.slice(at + 1)]);
   }
 
   function prefill(question: string) {
+    // The field is locked with the message going to the studio in it.
+    if (opening) return;
     setValue({ text: question, mentions: [] });
     if (swapped) richRef.current?.focus();
     else inputRef.current?.focus();
@@ -302,13 +317,16 @@ export function TutorChat({
     // The field stays locked until the page has gone, so nothing typed now is lost.
     writeTurns(key, [...parseThread(readRaw(key)), outcome.marker]);
     setValue(EMPTY);
+    dropAsk();
     router.push(outcome.href);
   }
 
   const known = sources.map((s) => s.n);
   const byNumber = new Map(sources.map((s) => [s.n, s]));
   const lastTutor = turns.map((t) => t.role).lastIndexOf("assistant");
-  const last = turns[turns.length - 1];
+  // The tutor's last turn, markers left out: a hand-off after an unanswered
+  // question must not hide its Try again.
+  const last = chatTurns(turns).at(-1);
   const note = byNumber.get(1);
 
   return (
@@ -437,6 +455,20 @@ export function TutorChat({
       </div>
     </div>
   );
+}
+
+/** Whether the page's URL still carries `?ask=`. Server-side, where there is no URL, it is taken to. */
+function askInUrl(): boolean {
+  return typeof window === "undefined" || new URLSearchParams(window.location.search).has("ask");
+}
+
+/** Take `?ask=` off the URL in place, once the question it prefilled has been sent. */
+function dropAsk(): void {
+  if (!askInUrl() || typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("ask");
+  // Next folds a native replaceState into its router (the docs' "Native History API").
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 const KIND_NAMES: Record<string, string> = { diagram: "Diagram", video: "Video" };

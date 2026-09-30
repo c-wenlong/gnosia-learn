@@ -11,6 +11,7 @@ import { extendKey, forgetExtendKey, leaveOpener, sessionStore } from "@/lib/stu
 import { conversationHref } from "@/lib/studio-view";
 import {
   handoffKeyName,
+  handoffPrint,
   handoffRefusal,
   handoffTurns,
   tagSendBlock,
@@ -90,31 +91,38 @@ export type Handoff = { ok: true; href: string; marker: HandoffMarker } | { ok: 
  * message goes as the conversation's opener, sent when it opens. One
  * idempotency key per press, kept five minutes as Extend's is (H6), and
  * forgotten once the draft exists, so the next tagged message makes a new
- * conversation (D70).
+ * conversation (D70). A kept key is reused only for the same message and
+ * turns (`handoffPrint`), so a retry after a timeout finds the draft it may
+ * have made, and an edited retry makes its own.
  */
 export async function openInStudio({
   slug,
   title,
   items,
   value,
+  store = sessionStore(),
 }: {
   slug: string;
   title: string;
   items: readonly ThreadItem[];
   value: Value;
+  /** The tab's `sessionStorage`; a test's own store. */
+  store?: Storage | null;
 }): Promise<Handoff> {
-  const store = sessionStore();
   const name = handoffKeyName(slug);
-  const key = extendKey(store, name, () => idempotencyKey("tutor"));
+  const tutor = handoffTurns(items);
+  const key = extendKey(store, name, () => idempotencyKey("tutor"), Date.now(), handoffPrint(value, tutor));
   let answer: ConceptConversation;
   try {
-    answer = await openConceptConversation({ slug, tutor: handoffTurns(items), idempotencyKey: key });
+    answer = await openConceptConversation({ slug, tutor, idempotencyKey: key });
   } catch {
     // The action itself did not come back: this app's own server, not the runner.
     return { ok: false, text: "The page could not reach its server, so nothing was sent. Try again." };
   }
   if (!answer.ok) return { ok: false, text: handoffRefusal(answer, title) };
   forgetExtendKey(store, name);
+  // Read back by `leaveOpener`, and kept in this page's memory when the store
+  // refuses it, so the conversation always has the message to send (Greptile on #234).
   leaveOpener(store, answer.draftId, { send: value.text, sendMentions: value.mentions, compose: "", source: null });
   return {
     ok: true,
