@@ -1249,7 +1249,9 @@ export class Drafts {
     }
     const concept = parseConcept(input.concept);
     const tutor = parseTutor(input.tutor);
-    if (concept === null && tutor.length > 0) {
+    // Any `tutor` at all, an empty list included, names a hand-off: without
+    // its concept it is a malformed one, never an ordinary draft.
+    if (concept === null && input.tutor !== undefined && input.tutor !== null) {
       throw new JobRefused(400, "tutor turns come with the concept they were about", { field: "tutor" });
     }
 

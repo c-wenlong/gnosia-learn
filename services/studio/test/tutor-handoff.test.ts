@@ -210,6 +210,7 @@ describe("what a concept create refuses", () => {
   it("a concept with a source, tutor turns without a concept, and a bad slug before any read", async () => {
     await expect(drafts.create({ concept, source: "some-diagram" })).rejects.toMatchObject({ status: 400, detail: { field: "concept" } });
     await expect(drafts.create({ tutor })).rejects.toMatchObject({ status: 400, detail: { field: "tutor" } });
+    await expect(drafts.create({ tutor: [] })).rejects.toMatchObject({ status: 400, detail: { field: "tutor" } });
     await expect(drafts.create({ concept: { ...concept, slug: "../../etc/passwd" } })).rejects.toMatchObject({
       status: 400,
       detail: { field: "concept.slug" },
