@@ -94,13 +94,17 @@ for its pick in prose.
 the person should see and be able to change the choice before anything is
 spent, and the planner is the one reading the request.
 
-### D72. `tool` is optional, defaults to manimkc, and must be one this machine can make
+### D72. `tool` is optional, defaults to manimkc, and must be one the studio has a backend for
 
 A brief without `tool` is a manimkc brief, so every draft, job and video from
 before this change keeps its meaning with no rewrite. The validator refuses a
-tool the runner cannot drive on this machine, naming why ("revideokc: not in
-the studio yet", or the doctor's failing check), the same `BriefError` path a
-bad voice takes, so the planner hears it as a STUDIO note and picks again.
+tool the runner has no backend for ("revideokc is not in the studio yet"),
+the same `BriefError` path a bad voice takes, so the planner hears it as a
+STUDIO note and picks again. Whether this machine can run a tool it has a
+backend for is the video doctor's answer, checked at the press as today, and
+shown on the card as the press's reason; the validator stays a pure function
+of the brief, so the planner's brief never changes meaning with the doctor's
+mood.
 
 The alternative was letting the planner propose a tool the studio cannot make,
 with a "make it at a terminal" hint. Refused: a card whose button cannot work
@@ -109,15 +113,18 @@ revideokc, not in the studio yet").
 
 ### D73. The card shows the tool as a chip, and switching it is a brief edit
 
-The video card gains one row under the summary line: a `Chip`-styled
-`FilterMenu` trigger naming the tool, with `toolReason` beside it in
-`--text2`. Its options are the three tools, each with its strength as the
-option's `detail` line; one this machine cannot make is disabled with its
-reason. There is no label: the chip's content says what it is (DESIGN.md,
-"Sentence case").
+The video card gains one row under the summary line: the tool as a chip,
+with `toolReason` beside it in `--text2` (or, once a person has switched,
+what the new tool is best at). When the studio can make two or more tools,
+the chip is a `FilterMenu` trigger whose options are those tools, each with
+its strength as the option's `detail` line; a tool the studio cannot make is
+not offered, and the planner's reason names it as the runner-up instead. A
+menu of one is just the chip, which is all phase 1 shows. There is no label:
+the chip's content says what it is (DESIGN.md, "Sentence case").
 
-Picking one is `PUT /api/drafts/{id}/brief` with the new `tool`, through the
-existing base check, so a switch that races a new brief is refused like any
+Picking one is `PUT /api/drafts/{id}/brief` with the new `tool` and no
+`toolReason` (the planner's was for the old tool), through the existing base
+check, so a switch that races a new brief is refused like any
 edit. `describeVideoBriefEdit` tells the planner "The person switched the tool
 to revideokc", so its next brief keeps the choice. The card is otherwise still
 read-only; in-place editing of the script is a separate change.
@@ -300,8 +307,8 @@ lands before the earlier one is merged.
 - Docs: STUDIO-VIDEOS.md's brief table, VIDEO-TOOLS.md's "Not built yet".
 
 Done when: a studio conversation asking for a video shows a manimkc brief with
-a reason naming a runner-up, the menu lists revideokc and remotionkc greyed
-with "not in the studio yet", and a brief the planner writes with an
+the tool chip and a reason naming a runner-up, health lists revideokc and
+remotionkc as not in the studio yet, and a brief the planner writes with an
 unavailable tool is refused and rewritten.
 
 ### Phase 2a. The backend interface, manimkc only
