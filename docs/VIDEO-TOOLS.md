@@ -45,7 +45,7 @@ higher up wins.
 | Hand-choreographed diagram motion: things that spring into place, masks and reveals, light that adds over a diagram | revideokc | Springs, `compositeOperation`, `cache` masks, radial gradients, flexbox layout, signals binding one node to another | the showcase topic |
 | Boxes, tables and arrows with nothing above | manimkc | It is the house style of every series so far, and the studio can already make it | every manimkc topic |
 
-When nothing in the video needs more than the last row, use manimkc: the
+When nothing in the video needs more than the last row, use manimkc: on macOS the
 studio can make it without a person at the terminal, and it matches every
 video made so far.
 
