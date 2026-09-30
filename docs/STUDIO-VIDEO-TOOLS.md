@@ -25,10 +25,11 @@ second and third tool. Decisions continue the studio's numbering at D71.
 
 A video brief card gains one row: the tool, as a chip ("revideokc"), with the
 planner's reason beside it ("real depth and light for the cache levels;
-runner-up manimkc"). Pressing the chip opens a menu of the three tools, each
-with the line that says what it is best at, and a tool this machine cannot
-drive yet shown greyed with the reason. Picking another tool is an edit of the
-brief, like any other edit, and the planner is told. Make video works exactly
+runner-up manimkc"). Once the studio can make more than one tool, pressing
+the chip opens a menu of those tools, each with the line that says what it is
+best at; a tool the studio cannot make yet is not offered, and the planner's
+reason names it as the runner-up instead (D73). Picking another tool is an
+edit of the brief, like any other edit, and the planner is told. Make video works exactly
 as it does today. After the press the job carries the tool, and a later
 change to that video keeps it.
 
