@@ -510,7 +510,9 @@ Rules of engagement:
   one figure the brief's validator and the card use; the card gets it from
   `/api/health`'s `video.narration`, never from a copy in `apps/web`) and the
   pronunciation table's written forms (its `spoken.json`), from which each
-  video brief in the transcript carries `abbreviations`. `seed.ts` names clips
+  video brief in the transcript carries `abbreviations`, and the planner is
+  told of them in a STUDIO note on the next turn, once per new word
+  (`abbreviationCheck` in `drafts.ts`; a note, never a refusal). `seed.ts` names clips
   with `gnosia-audio keys --json` inside the job's render profile and seeds
   each clip's `.words.json` with it. Without gnosia-audio in `.venv`,
   `toolchainProblems` names `make narration-deps` and the doctor turns videos

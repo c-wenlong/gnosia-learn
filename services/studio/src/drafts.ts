@@ -155,6 +155,12 @@ export interface KindSlot {
   requestSeq: number | null;
   /** Set by a planner `hold` block until Use this brief, an edit, or a new brief. */
   held: { reason: string; at: string; replySeq: number } | null;
+  /**
+   * V11, a video slot only: the abbreviations of the brief in force as of the
+   * last turn that answered. A turn whose brief holds a word missing from it
+   * tells the planner (`abbreviationCheck`). Absent on a draft from before.
+   */
+  abbreviationsTold?: string[] | null;
   state: SlotState;
 }
 
@@ -1640,7 +1646,10 @@ export class Drafts {
           .sort((a, b) => slotOf(record, a).waiting!.requestSeq - slotOf(record, b).waiting!.requestSeq)
       : [];
     const edits = kinds.map((kind) => slotOf(record, kind).pendingEdit?.text ?? null).filter((note): note is string => note !== null);
-    const notes = [...record.undelivered, ...edits];
+    // V11: the video brief in force, weighed for abbreviations as it stands
+    // now, so a brief replaced since it was proposed is never described.
+    const abbreviations = kinds.includes("video") ? abbreviationCheck(slotOf(record, "video")) : null;
+    const notes = [...record.undelivered, ...edits, ...(abbreviations?.note == null ? [] : [abbreviations.note])];
     const blocks = [
       ...(waiting.length > 0 ? [fence("WAITING", waiting.join("\n"))] : []),
       ...(conversational && tagged.length > 0 ? [fence("TAGS", tagged.join("\n"))] : []),
@@ -1649,14 +1658,25 @@ export class Drafts {
     const delivered = {
       undelivered: [...record.undelivered],
       edits: Object.fromEntries(kinds.map((kind) => [kind, slotOf(record, kind).pendingEdit?.text ?? null])) as Partial<Record<BriefKind, string | null>>,
+      abbreviations: abbreviations?.words ?? null,
     };
+    const abbreviationNote = abbreviations?.note ?? null;
+    if (abbreviationNote !== null) {
+      // On the record, hidden from the person, whose card already carries the
+      // warning, and from a replay (C3), as the retry instruction is.
+      await this.write(id, () =>
+        this.append(id, { type: "studio", text: abbreviationNote, internal: true, kind: "video", abbreviations: abbreviations!.words }),
+      );
+    }
 
     const first = await this.speak(id, turn, prompt, false);
     // Only a turn that answered has heard its notes. A refused, timed-out or
     // cut-off turn leaves them queued for the next one: told twice is better
     // than never told.
     if (first === null) return;
-    if (notes.length > 0) await this.write(id, () => this.clearDelivered(id, delivered));
+    const toldMoved =
+      abbreviations !== null && JSON.stringify(abbreviations.words) !== JSON.stringify(slotOf(record, "video").abbreviationsTold ?? []);
+    if (notes.length > 0 || toldMoved) await this.write(id, () => this.clearDelivered(id, delivered));
     const asked = kinds.filter((kind) => tagged.includes(kind) || waiting.includes(kind));
     const judged = await this.judgeReply(first.text, asked, conversational, record.concept);
     const refused = await this.write(id, () =>
@@ -1741,11 +1761,13 @@ export class Drafts {
   /**
    * Take the notes a turn carried off the queue, and only those: a note
    * queued while the turn ran (a job's verdict, a later edit) stays for the
-   * next one.
+   * next one. The video brief's abbreviations as the turn weighed them become
+   * what the planner was told; a brief that changed while it ran is weighed
+   * again at the next turn.
    */
   private async clearDelivered(
     id: string,
-    delivered: { undelivered: string[]; edits: Partial<Record<BriefKind, string | null>> },
+    delivered: { undelivered: string[]; edits: Partial<Record<BriefKind, string | null>>; abbreviations?: string[] | null },
   ): Promise<void> {
     const current = this.require(id);
     const left = [...current.undelivered];
@@ -1759,6 +1781,9 @@ export class Drafts {
       if (edit !== null && edit.text === delivered.edits[kind]) {
         patch = { ...patch, ...withSlot({ ...current, ...patch }, kind, { pendingEdit: null }) };
       }
+    }
+    if (delivered.abbreviations != null) {
+      patch = { ...patch, ...withSlot({ ...current, ...patch }, "video", { abbreviationsTold: delivered.abbreviations }) };
     }
     await this.save(id, patch);
   }
@@ -3402,6 +3427,48 @@ export function describeVideoBriefEdit(
   }
   if (options.pendingCleared === true) lines.push("The proposed new topic is dropped: the brief now names a topic that exists.");
   return lines.slice(0, EXTENDING_LINE_CAP).join("\n");
+}
+
+/** The most words one abbreviation note lists. */
+export const ABBREVIATION_NOTE_CAP = 30;
+
+/**
+ * V11's planner half: the abbreviations of the video brief in force, and the
+ * STUDIO note a turn carries about them, or null for no note. The note is due
+ * when the brief holds a word the planner was not told of at the last turn
+ * that answered, so it follows a brief proposed or edited with new ones and
+ * is never repeated for the same set. Null altogether, and nothing counted as
+ * told, when there is nothing to weigh: no video brief in force, one already
+ * pressed (the video agent may still respell a line while voicing, D47), or
+ * gnosia-audio has not answered, when the runner cannot tell.
+ */
+export function abbreviationCheck(slot: KindSlot): { words: string[]; note: string | null } | null {
+  const brief = slot.brief;
+  if (brief === null || !isVideoBrief(brief)) return null;
+  if (slot.drawnSeq !== null && slot.briefSeq === slot.drawnSeq) return null;
+  const words = videoAbbreviations(brief);
+  if (words === null) return null;
+  const told = new Set(slot.abbreviationsTold ?? []);
+  if (words.every((word) => told.has(word))) return { words, note: null };
+  return { words, note: abbreviationNote(words, slot.briefBy === "person") };
+}
+
+/**
+ * The note itself: the words, and what the planner may do about them. A note,
+ * never a refusal: the brief stands, and some abbreviations are meant to be
+ * said as words. It names no free text, so nothing in it can close its fence:
+ * every word is letters and digits (`abbreviationsIn`).
+ */
+export function abbreviationNote(words: readonly string[], byPerson: boolean): string {
+  const shown = words.slice(0, ABBREVIATION_NOTE_CAP).join(", ");
+  const more = words.length > ABBREVIATION_NOTE_CAP ? ` and ${words.length - ABBREVIATION_NOTE_CAP} more` : "";
+  return [
+    `Video brief. The voice will read these words in its lines as words, not letter by letter: ${shown}${more}.`,
+    "This is not a refusal: the brief stands as it is, and the person sees the same warning on its card. Answer the person's words as usual.",
+    byPerson
+      ? "The person wrote this brief by hand: keep their spelling in your next video brief unless they ask you to change it."
+      : 'The next time you write a video brief, spell each one in `say` the way it is spoken ("A C L"), or keep it where it is meant to be said as a word.',
+  ].join("\n");
 }
 
 /** The STUDIO note after a video is accepted: where it landed, so a change is a change brief on its slug. */
