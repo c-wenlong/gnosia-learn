@@ -12,7 +12,9 @@ import { DraftPruner } from "./prune";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
 import { JobStore, RecordStore } from "./store";
+import { backendFor, backendTools } from "./video/backend";
 import { VideoDoctor } from "./video/doctor";
+import { DEFAULT_VIDEO_TOOL, type VideoToolName } from "./video/tools";
 import { VideoRunner } from "./video/runner";
 import type { VideoJobRecord } from "./video/types";
 
@@ -94,9 +96,17 @@ async function main(): Promise<void> {
   // video brief is refused with 503, and nothing renders unsandboxed ever.
   const videoStore = new RecordStore<VideoJobRecord>("video");
   await videoStore.load();
-  const videoDoctor = new VideoDoctor();
+  // One doctor per backend (D75 of docs/STUDIO-VIDEO-TOOLS.md): a tool is
+  // offered and pressed only on its own doctor's verdict.
+  const videoDoctor = new VideoDoctor(() => backendFor(DEFAULT_VIDEO_TOOL).doctor());
+  const otherDoctors = Object.fromEntries(
+    backendTools()
+      .filter((tool) => tool !== DEFAULT_VIDEO_TOOL)
+      .map((tool) => [tool, new VideoDoctor(() => backendFor(tool).doctor())]),
+  ) as Partial<Record<VideoToolName, VideoDoctor>>;
   const videoRunner: VideoRunner = new VideoRunner(videoStore, {
     doctor: videoDoctor,
+    doctors: otherDoctors,
     // Read at each cap check, by which time `drafts` below exists.
     otherSpend: (): SpendEntry[] => [...store.list(), ...drafts.spendEntries()],
   });
@@ -119,11 +129,17 @@ async function main(): Promise<void> {
   // draft is brought up to its newest jobs here, an interrupted one included.
   await drafts.syncFromJobs();
   runner.extraSpend = () => drafts.spendEntries();
-  void videoDoctor.report(true).then((report) => {
-    process.stdout.write(report.ok ? "video doctor: every check passed\n" : `video doctor: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
-    void videoRunner.kick();
-  });
+  // One after the other, so two fixture renders never compete for the cores.
+  void (async () => {
+    for (const [tool, doctor] of [[DEFAULT_VIDEO_TOOL, videoDoctor] as const, ...(Object.entries(otherDoctors) as [VideoToolName, VideoDoctor][])]) {
+      const report = await doctor.report(true);
+      const name = tool === DEFAULT_VIDEO_TOOL ? "video doctor" : `${tool} video doctor`;
+      process.stdout.write(report.ok ? `${name}: every check passed\n` : `${name}: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
+      void videoRunner.kick();
+    }
+  })();
   videoDoctor.start();
+  for (const doctor of Object.values(otherDoctors)) doctor?.start();
 
   // D40: a draft untouched for seven days goes, row and workspace, unless a
   // job names it. After the job records are loaded and every draft follows
@@ -170,6 +186,7 @@ async function main(): Promise<void> {
       .then(() => runner.drain())
       .then(() => {
         videoDoctor.stop();
+        for (const doctor of Object.values(otherDoctors)) doctor?.stop();
         return videoRunner.drain();
       })
       .finally(() => {

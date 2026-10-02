@@ -8,7 +8,7 @@ import { ffmpegArgs, POSTER_OFFSETS_SECONDS } from "../../../catalog/src/poster/
 import type { GateStep } from "../store";
 import { MANIMKC_GATE } from "./backends/manimkc-gate";
 import { isNarrated, predictedSeconds, secondsForLines, type ValidVideoBrief } from "./brief";
-import type { WrapperCall, SheetRead } from "./calls";
+import { isLook, type WrapperCall, type SheetRead } from "./calls";
 import { topicOf } from "./checkout";
 import { CopyRefused, safeCopy, safeRead } from "./copy";
 import { candidateNames, type VideoPaths } from "./paths";
@@ -33,16 +33,32 @@ export { compareLines } from "./lines";
  * `VideoGateChecks`; the other steps are the same code for every tool.
  */
 
+/** A TypeScript source read by the TypeScript compiler's parser, without running it (revideokc's step 1, D77). */
+export interface SceneParse {
+  ok: boolean;
+  /** The first syntax error, with its line, when `ok` is false. */
+  error: string | null;
+  /** Every string in the file: literals, template pieces and JSX text, in source order. */
+  strings: string[];
+  /** Whether the file has an `export default`, which `src/project.ts` loads. */
+  defaultExport: boolean;
+  /** The relative module specifiers it imports (`./parts`), so the gate counts only files the scene reaches. Absent from an older parse. */
+  imports?: string[];
+}
+
 /**
  * The sandboxed operations the gate needs, injectable so a test can supply
- * recorded answers. `scan` and `lint` are manimkc's, read only by its source
- * steps; the probe and the poster serve every tool.
+ * recorded answers. `scan` is manimkc's and `parseScene` revideokc's, each
+ * read only by its own tool's source steps; `lint` is the job's tool's own
+ * check; the probe and the poster serve every tool.
  */
 export interface GateTools {
   /** Python's `ast` over the scene file, in the render profile. */
   scan(source: string): Promise<Scan>;
-  /** `manimkc lint --json` on the scene file, in the render profile; null when it did not answer. */
+  /** The tool's lint on the source, in the render profile (`manimkc lint --json`, revideokc's `tsc --noEmit`); null when it did not answer. */
   lint(): Promise<{ errors: { line?: number; msg: string }[]; warnings: { line?: number; msg: string }[] } | null>;
+  /** revideokc: the TypeScript parser over one source file, in the gate profile. Absent for a tool whose source is not TypeScript. */
+  parseScene?(source: string): Promise<SceneParse>;
   /** `ffprobe -f mov` on a copy, in the gate profile; null when it could not read it. */
   probe(file: string): Promise<{ streams: string[]; duration: number | null } | null>;
   /** Cut the poster from the copy into `out`, in the gate profile, at one offset. True when a file was written. */
@@ -84,7 +100,20 @@ export interface GateReport {
  */
 export type SourceCheck =
   | { ok: false; script: VideoGateResult["script"] }
-  | { ok: true; script: NonNullable<VideoGateResult["script"]>; sourceHash: string; voiced: string[] };
+  | {
+      ok: true;
+      script: NonNullable<VideoGateResult["script"]>;
+      sourceHash: string;
+      voiced: string[];
+      /**
+       * The source files step 5 copies beside the video, each with the
+       * sha256 it was read with, when the source is more than one file
+       * (revideokc's scene, its narration and the files beside them, whose
+       * combined hash is `sourceHash`). Absent, step 5 copies the scene file
+       * alone and holds it to `sourceHash`. `topic.yml` is copied either way.
+       */
+      files?: { path: string; sha256: string }[];
+    };
 
 /** What the gate asks of a video tool's backend. */
 export interface VideoGateChecks {
@@ -92,6 +121,30 @@ export interface VideoGateChecks {
   checkSource(input: SourceCheckInput, report: GateReport): Promise<SourceCheck>;
   /** A scene's contact sheet: what step 10 wants Read after the scene's last render. */
   sheet(paths: VideoPaths, scene: string): string;
+  /**
+   * Step 10 in the tool's own terms, when its sheets are not one per scene
+   * per look call (revideokc's, D77: one stills sheet for every scene, which
+   * a still of chosen moments rewrites, and the build's sheet). Absent, the
+   * gate's own per-scene check runs, which is manimkc's.
+   */
+  looked?(input: LookInput): LookResult;
+}
+
+/** What a tool's own step 10 is given: the job, its logs, the checked source and the build the gate copied. */
+export interface LookInput {
+  paths: VideoPaths;
+  classes: readonly string[];
+  calls: readonly WrapperCall[];
+  reads: readonly SheetRead[];
+  /** The source the gate checked, as the wrapper records it (`sceneSha256`). */
+  sourceHash: string;
+  build: WrapperCall;
+}
+
+export interface LookResult {
+  looked: NonNullable<VideoGateResult["looked"]>;
+  /** One sentence each, without the "Looked: " the gate puts in front. */
+  problems: string[];
 }
 
 /** A held frame: seconds of picture a scene may run after its last line ends (the skill's rule). */
@@ -185,12 +238,15 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
     // The source travels with the video: what Accept stores as the row, each
     // file hashed here so `video put` can check it is the source the build
     // came from (a `source/<name>` record for each).
-    const sceneName = path.basename(paths.sceneFile);
-    const sceneCopy = await safeCopy(paths.sceneFile, path.join(paths.candidateSource, sceneName));
-    if (sceneCopy.sha256 !== sourceHash) {
-      throw new CopyRefused("not-regular", `${sceneName} changed while it was being copied`);
+    const sources = checked.files ?? [{ path: paths.sceneFile, sha256: sourceHash }];
+    for (const source of sources) {
+      const name = path.basename(source.path);
+      const copied = await safeCopy(source.path, path.join(paths.candidateSource, name));
+      if (copied.sha256 !== source.sha256) {
+        throw new CopyRefused("not-regular", `${name} changed while it was being copied`);
+      }
+      copies[`source/${name}`] = copied;
     }
-    copies[`source/${sceneName}`] = sceneCopy;
     copies["source/topic.yml"] = await safeCopy(paths.topicYml, path.join(paths.candidateSource, "topic.yml"));
   } catch (error) {
     const detail = error instanceof CopyRefused ? error.message : `the copy failed: ${(error as Error).message}`;
@@ -320,10 +376,21 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
   await writeFile(paths.copies, `${JSON.stringify({ files: copies, durationSeconds }, null, 1)}\n`, "utf8");
 
   /* 10. Looked: every scene's latest sheet was Read after the render that made it. */
+  if (checks.looked !== undefined) {
+    const own = checks.looked({ paths, classes: input.classes, calls: input.calls, reads: input.reads, sourceHash, build });
+    looked = own.looked;
+    if (own.problems.length > 0) {
+      record("looked", false, own.problems.join("; "));
+      findings.push(...own.problems.map((problem) => `Looked: ${problem}.`));
+      return finish();
+    }
+    record("looked", true, "every sheet read after its last render");
+    return finish();
+  }
   looked = {};
   const lookProblems: string[] = [];
   for (const scene of input.classes) {
-    const render = [...input.calls].reverse().find((call) => call.verb === "preview" && (call.rendered ?? []).includes(scene));
+    const render = [...input.calls].reverse().find((call) => isLook(call) && (call.rendered ?? []).includes(scene));
     const sheet = checks.sheet(paths, scene);
     const renderedAt = render?.endedAt ?? null;
     const read =

@@ -34,11 +34,17 @@ export interface SandboxCall {
   timeoutMs?: number;
   /** Kept to this many bytes, the tail. */
   maxOutput?: number;
+  /**
+   * The child's environment, when the job's tool builds its own (revideokc's,
+   * `revideokc/sandbox.ts`); manimkc's `sandboxEnv` for this profile when left
+   * out. Either way it is built from nothing, never the runner's own.
+   */
+  env?: Record<string, string>;
 }
 
 export function runSandboxed(call: SandboxCall): Promise<SandboxRun> {
   const argv = sandboxed(call.tools, call.profile, call.argv);
-  const env = sandboxEnv(call.kind, { tools: call.tools, paths: call.paths, home: call.home, voice: call.voice });
+  const env = call.env ?? sandboxEnv(call.kind, { tools: call.tools, paths: call.paths, home: call.home, voice: call.voice });
   const limit = call.maxOutput ?? 16 * 2 ** 20;
   return new Promise((resolve, reject) => {
     const child = spawn(argv[0]!, argv.slice(1), {
