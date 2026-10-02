@@ -31,6 +31,8 @@ import type { RevideokcToolchain } from "./toolchain";
 const COPIED_DIRS = ["lib", "src", "tools"] as const;
 const COPIED_FILES = ["package.json", "tsconfig.json", "requirements-narration.txt"] as const;
 const COPIED_DOCS = ["CAPABILITIES.md", "REVIDEO-API.md"] as const;
+/** The empty Puppeteer config each checkout gets, so its config search stops inside the job. */
+export const PUPPETEER_CONFIG = ".puppeteerrc.json";
 
 /** Copy a directory of regular files and directories, dropping links, caches and tests. */
 async function copyTree(from: string, to: string): Promise<void> {
@@ -91,6 +93,12 @@ export async function buildRevideokcCheckout(tools: RevideokcToolchain, paths: V
     if ((await lstat(link).catch(() => null)) !== null) continue;
     await symlink(target, link);
   }
+  // Puppeteer looks for its config from the working directory up to the home
+  // directory (lilconfig), reading every package.json on the way. A job under
+  // the default STUDIO_HOME sits inside this repository, whose package.json
+  // the profile denies, so the read fails EPERM and the render dies before
+  // Chrome starts. An empty config here ends the search inside the job.
+  await writeFile(path.join(paths.checkout, PUPPETEER_CONFIG), "{}\n", "utf8");
   for (const dir of [paths.renderTmp, paths.audio, paths.out, job.publicDir, job.stillsRoot, job.vite, job.buildWork, job.state, paths.bin, paths.tmp]) {
     await mkdir(dir, { recursive: true });
   }
