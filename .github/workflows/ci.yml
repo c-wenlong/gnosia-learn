@@ -33,9 +33,13 @@ jobs:
   quality:
     name: Lint, test, and build
     runs-on: ubuntu-latest
-    # A full run is a couple of minutes. Fifteen is generous enough for a cold
-    # npm cache and tight enough that a hung step does not sit there for hours.
-    timeout-minutes: 15
+    # Measured 2026-10-02: the test step alone took 8 to 11 minutes while the
+    # flip-rehearsal suite failed fast, and about 13 once it ran (its 18 tests
+    # copy, dump and restore databases for over two minutes). With the setup
+    # and the build around it, fifteen minutes cut a passing run off before
+    # its last files. Thirty leaves room for a cold npm cache and a slow
+    # runner, and still stops a hung step long before GitHub's six hours.
+    timeout-minutes: 30
 
     # The catalog schema is mostly constraints, and no fake enforces a foreign
     # key, so its tests run against a real Postgres. Without this service they

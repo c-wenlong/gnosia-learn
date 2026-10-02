@@ -11,8 +11,15 @@ import { type AnyColumn, type SQL, sql } from "drizzle-orm";
  * `fx:Beta` before `fx:alpha`; the postgres:17 image CI runs defaults to
  * en_US.utf8 and sorts them the other way round, and ignores a slug's hyphens
  * on a first pass. A page boundary, an export's bytes and every golden test
- * would then depend on which machine answered. The column keeps its own
- * collation, and with it its indexes; only the sort is pinned.
+ * would then depend on which machine answered.
+ *
+ * Only the sort is pinned; the column keeps its own collation, so equality
+ * and the foreign keys are untouched. The cost: on a database whose default
+ * collation is not C, an index over the column cannot hand rows back in this
+ * order, and Postgres sorts them instead. On a C database (Homebrew's) the
+ * index still serves. The catalog's tables hold hundreds to low thousands of
+ * rows, where that sort is noise; a table that grows past that and pages
+ * through it wants an index declared `collate "C"` rather than dropping this.
  */
 export function bytewise(column: AnyColumn | SQL): SQL {
   return sql`${column} collate "C"`;
