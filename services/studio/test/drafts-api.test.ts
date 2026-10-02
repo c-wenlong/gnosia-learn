@@ -33,11 +33,32 @@ const catalogMock = vi.hoisted(() => ({
   sessionEnd: vi.fn(),
   status: vi.fn(),
   conceptShow: vi.fn(),
+  // A job resolves its model and effort through `catalog preference get`
+  // before it reaches its agent (`resolveDiagramAgent`). Left to the real
+  // module, that was an npm, tsx and Postgres start against the owner's own
+  // database on every job, 0.7 s on a quiet machine and over 5 s under a
+  // loaded `npm test`, which is what "the job never reached its agent" timed.
+  preferenceGet: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
-  ...catalogMock,
-}));
+/** Catalog verbs this file reached without mocking them, by name. See the `afterEach`. */
+const unmocked = vi.hoisted(() => [] as string[]);
+vi.mock("../src/catalog", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/catalog")>();
+  // Every verb is a CLI spawn, so one this file did not mock is a stand-in
+  // that records its name and answers "offline", never the real catalog.
+  const standIns = Object.fromEntries(
+    Object.entries(real)
+      .filter(([, value]) => typeof value === "function")
+      .map(([name]) => [
+        name,
+        async () => {
+          unmocked.push(name);
+          return { ok: false, json: null, error: `catalog ${name} is not mocked in drafts-api.test.ts`, offline: true };
+        },
+      ]),
+  );
+  return { ...real, ...standIns, ...catalogMock };
+});
 const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
 vi.mock("../src/canvas", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/canvas")>()),
@@ -74,6 +95,9 @@ let drafts: InstanceType<typeof Drafts>;
 let runner: InstanceType<typeof Runner>;
 let store: InstanceType<typeof JobStore>;
 
+/** The variable as the run found it, put back after each test. */
+const savedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+
 const post = (route: string, body: unknown) =>
   fetch(`${base}${route}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
@@ -86,6 +110,11 @@ beforeEach(async () => {
   catalogMock.diagramList.mockReset().mockResolvedValue(ok({ diagrams: [] }));
   catalogMock.diagramShow.mockReset().mockResolvedValue(ok({ diagram: null }));
   catalogMock.conceptShow.mockReset().mockResolvedValue(ok({ id: "dot-product", title: "The dot product" }));
+  catalogMock.preferenceGet.mockReset().mockResolvedValue(ok({ value: null }));
+  // The other half of the same resolution: the owner's Claude Code defaults,
+  // read from a settings file that does not exist rather than theirs.
+  process.env.CLAUDE_CONFIG_DIR = path.join(process.env.STUDIO_HOME, "claude-config");
+  unmocked.length = 0;
   for (const fn of [catalogMock.jobEnqueue, catalogMock.jobClaim, catalogMock.jobFinish, catalogMock.sessionStart, catalogMock.sessionEnd, catalogMock.status]) {
     fn.mockReset().mockResolvedValue(ok());
   }
@@ -104,6 +133,11 @@ afterEach(async () => {
   await runner.drain();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await rm(process.env.STUDIO_HOME!, { recursive: true, force: true });
+  if (savedConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = savedConfigDir;
+  // A verb nobody mocked is a test timing a real CLI and reading the owner's
+  // database: mock it in `catalogMock` above.
+  expect(unmocked).toEqual([]);
 });
 
 afterAll(async () => {
