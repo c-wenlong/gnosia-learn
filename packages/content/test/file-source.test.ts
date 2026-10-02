@@ -149,23 +149,31 @@ describe("fileSource over a fixture", () => {
     const files = fileSource(f.root);
     const file = path.join(f.root, "content/courses/xx1000.yaml");
     f.write("content/courses/xx1000.yaml", courseYaml({ title: "Course AAAA" }));
+    // A whole second, which every filesystem and `utimes` keep exactly. A time
+    // read back from `stat` does not round-trip: `utimes` keeps whole
+    // microseconds of a double, so on Linux a millisecond time set back came
+    // out a thousandth of a millisecond short, and the file differed by its
+    // mtime after all, which is not the edit this test is about.
+    const second = Math.floor(Date.now() / 1000) - 60;
+    utimesSync(file, second, second);
     const first = await files.courses();
-    const { atime, mtime, size } = statSync(file);
+    const { size } = statSync(file);
+    expect(statSync(file).mtimeMs).toBe(second * 1000);
 
     // Same length, then the modification time set back, as `cp -p`,
     // `touch -r` and an archive extraction do.
     f.write("content/courses/xx1000.yaml", courseYaml({ title: "Course BBBB" }));
-    utimesSync(file, atime, mtime);
+    utimesSync(file, second, second);
     expect(statSync(file).size).toBe(size);
-    expect(statSync(file).mtimeMs).toBe(mtime.getTime());
-    const second = await files.courses();
-    expect(second[0]?.title).toBe("Course BBBB");
-    expect(second).not.toBe(first);
+    expect(statSync(file).mtimeMs).toBe(second * 1000);
+    const reread = await files.courses();
+    expect(reread[0]?.title).toBe("Course BBBB");
+    expect(reread).not.toBe(first);
 
     // Replaced by a rename, the way editors and git save, same size and time again.
     const staged = `${file}.tmp`;
     writeFileSync(staged, courseYaml({ title: "Course CCCC" }));
-    utimesSync(staged, atime, mtime);
+    utimesSync(staged, second, second);
     renameSync(staged, file);
     expect((await files.courses())[0]?.title).toBe("Course CCCC");
   });

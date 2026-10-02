@@ -1105,12 +1105,27 @@ not have to be worked out again.
   `SIGKILL` after `STUDIO_KILL_GRACE_MS` (5 seconds by default) before waiting
   again. "Told it to stop" and "it has stopped" are different facts, and only
   the second is safe to rename a file behind.
-- **A GitHub Actions run that fails in single-digit seconds with zero steps
-  run, on `main` as well as on a PR, is the billing limit, not the code.** The
-  annotation reads "recent account payments have failed or your spending
-  limit needs to be increased." Every PR since 2026-09-14 has merged on the
+- **CI is a gate again, and it is Linux where the local gate is macOS.**
+  "Lint, test, and build" runs on Ubuntu against a `postgres:17` service; the
   local gate (`npm run lint && npm run typecheck && npm test && npm run
-  build`, with Postgres up). Greptile is a separate service and still runs.
+  build`, with Postgres up) runs on Homebrew's Postgres. Wait for both before
+  merging. What differs between the two, each of which once failed only on
+  CI: the database's default collation (C on Homebrew, en_US.utf8 in the
+  image), so every `ORDER BY` over text goes through `bytewise` in
+  `services/catalog/src/sql-order.ts` or spells `collate "C"`, and the scratch
+  databases sort linguistically on purpose so a missing one fails locally too
+  (`services/catalog/test/scratch-database.ts`); the home directory
+  (`/home/runner`, so never test for a `/home/` prefix); file times
+  (`utimes` keeps whole microseconds of a double, so a time read back from
+  `stat` and set again can come out a microsecond short on Linux); the
+  Postgres client tools (found through `PG_BIN`, `PATH`, `pg_config --bindir`
+  or Homebrew, in `scripts/lib/pg.mjs`, and installed at version 17 by the
+  workflow); and `self_learn`, which on CI is the service's empty database.
+  History: from 2026-09-14 to about 2026-10-01 Actions was blocked by billing
+  and every PR merged on the local gate alone. That failure looks like a run
+  that fails in single-digit seconds with zero steps run, on `main` as well
+  as on a PR, annotated "recent account payments have failed or your spending
+  limit needs to be increased"; it is the account, not the code.
 - **A `next.config.ts` rewrite does not strip the browser's `Origin` header;
   only a route handler can.** Measured in phase 2 (PR #60): proxying
   `/studio/api/*` to the runner through `rewrites()` forwards `Origin`

@@ -103,8 +103,31 @@ async function aloneOn(database: string): Promise<void> {
   }
 }
 
-const PG_BIN = process.env["PG_BIN"] ?? "/opt/homebrew/opt/postgresql@17/bin";
 const execFileAsync = promisify(execFile);
+
+/**
+ * The JSON report a run printed. A run that refused or crashed prints none,
+ * only a sentence on stderr (a missing client tool, say), so that is what
+ * the failure shows rather than JSON.parse's "Unexpected end of JSON input".
+ */
+function reportOf<T = Report>(ran: Ran): T {
+  try {
+    return JSON.parse(ran.stdout) as T;
+  } catch {
+    throw new Error(`flip-rehearsal printed no report (exit ${ran.code}): ${ran.stderr.trim() || "nothing on stderr"}`);
+  }
+}
+
+/** Drop a database the script made, whichever client tools this machine has. */
+async function dropDatabase(name: string): Promise<void> {
+  const admin = new pg.Client({ connectionString: url("postgres") });
+  await admin.connect();
+  try {
+    await admin.query(`drop database if exists "${name.replace(/"/g, '""')}" with (force)`);
+  } finally {
+    await admin.end();
+  }
+}
 
 /** The connection details the client tools read, from the DATABASE_URL the scratch databases use. */
 function pgToolEnv(): NodeJS.ProcessEnv {
@@ -276,7 +299,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       MANIMKC_ROOT: manimkc,
       FFMPEG_PATH: "none",
     });
-    const report = JSON.parse(ran.stdout) as Report;
+    const report = reportOf(ran);
     try {
       const failed = report.steps.find((s) => !s.ok);
       expect(failed?.gist ?? null, `${failed?.name}: ${ran.stderr}`).toBeNull();
@@ -383,8 +406,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       const applied = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
       expect(applied.rows[0]?.n).toBe((await journalTags()).length);
     } finally {
-      const env = pgToolEnv();
-      await execFileAsync(path.join(PG_BIN, "dropdb"), ["--if-exists", "--force", name], { env });
+      await dropDatabase(name);
       await rm(path.dirname(report.tree), { recursive: true, force: true });
     }
   }, 240_000);
@@ -427,7 +449,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
       MANIMKC_ROOT: manimkc,
       FFMPEG_PATH: "none",
     });
-    const report = JSON.parse(ran.stdout) as Report;
+    const report = reportOf(ran);
     expect(ran.code).toBe(1);
     expect(report.ok).toBe(false);
     expect(report.steps.map((s) => [s.name, s.ok])).toEqual([
@@ -475,13 +497,15 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
       ["--cutover", "--from", template.name, "--name", name, "--tree-from", tree, "--keep", "--waive-reason", reason, "--json"],
       { MANIMKC_ROOT: manimkc, FFMPEG_PATH: "none" },
     );
-    const report = JSON.parse(ran.stdout) as Report & {
-      cutover: {
-        parityReport: string;
-        waivers: { rule: string; reason: string }[];
-        tag: { name: string; commit: string; repo: string } | null;
-      };
-    };
+    const report = reportOf<
+      Report & {
+        cutover: {
+          parityReport: string;
+          waivers: { rule: string; reason: string }[];
+          tag: { name: string; commit: string; repo: string } | null;
+        };
+      }
+    >(ran);
     try {
       const failed = report.steps.find((s) => !s.ok);
       expect(failed?.gist ?? null, `${failed?.name}: ${ran.stderr}`).toBeNull();
@@ -565,8 +589,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
       const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
     } finally {
-      const env = pgToolEnv();
-      await execFileAsync(path.join(PG_BIN, "dropdb"), ["--if-exists", "--force", name], { env });
+      await dropDatabase(name);
       await rm(path.dirname(report.tree), { recursive: true, force: true });
     }
   }, 300_000);
@@ -589,8 +612,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
   }, 60_000);
 
   afterAll(async () => {
-    const env = pgToolEnv();
-    for (const name of copies) await execFileAsync(path.join(PG_BIN, "dropdb"), ["--if-exists", "--force", name], { env });
+    for (const name of copies) await dropDatabase(name);
     for (const dir of kept) await rm(dir, { recursive: true, force: true });
     await template?.drop();
     if (work !== undefined) await rm(work, { recursive: true, force: true });
@@ -634,7 +656,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
     const flipDay = `${template.name}_flipday`;
     copies.push(flipDay);
     const first = await rehearse(["--from", template.name, "--name", flipDay, "--tree-from", files, "--keep", "--json"], env, script);
-    const day = JSON.parse(first.stdout) as Report;
+    const day = reportOf(first);
     kept.push(path.dirname(day.tree));
     expect(day.steps.find((s) => !s.ok)?.gist ?? null, first.stderr).toBeNull();
     expect(day.steps.find((s) => s.name === "flip diagrams")?.result).toMatchObject({ export: { rewrites: [tldr] } });
@@ -653,7 +675,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
         env,
         script,
       );
-      return { ran, report: JSON.parse(ran.stdout) as Report & { next: string[]; cutover: { tag: { commit: string; made: boolean } | null; rewrites: string[]; exported: string[] } } };
+      return { ran, report: reportOf<Report & { next: string[]; cutover: { tag: { commit: string; made: boolean } | null; rewrites: string[]; exported: string[] } }>(ran) };
     };
     const { ran, report } = await cutover(`${template.name}_cut`);
     const failed = report.steps.find((s) => !s.ok);

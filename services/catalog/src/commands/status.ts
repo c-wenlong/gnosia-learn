@@ -21,6 +21,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { type HeldMigration, heldMigrations, isContractMigration, migrationStatus } from "../migrations";
+import { bytewise } from "../sql-order";
 
 /** One row per source, whether or not it has ever been indexed. */
 export interface SourceStatus {
@@ -192,7 +193,7 @@ export async function runStatus(): Promise<StatusResult> {
       totals[half(key)] += count;
     }
 
-    const runs = await db.select().from(indexRun).orderBy(asc(indexRun.source));
+    const runs = await db.select().from(indexRun).orderBy(asc(bytewise(indexRun.source)));
 
     return {
       database: redactUrl(url),
@@ -235,7 +236,7 @@ async function courseCoverage(db: Db): Promise<CourseCoverage[]> {
     .leftJoin(conceptCurriculumItem, eq(conceptCurriculumItem.curriculumItemId, curriculumItem.id))
     .where(and(eq(course.kind, "course"), isNull(course.archivedAt)))
     .groupBy(course.id, course.position)
-    .orderBy(asc(course.position), asc(course.id));
+    .orderBy(asc(course.position), asc(bytewise(course.id)));
   return rows;
 }
 
@@ -300,7 +301,7 @@ async function mirrorCoverage(db: Db): Promise<Record<string, MirrorCoverage>> {
     })
     .from(mirror)
     .groupBy(mirror.destination, mirror.status)
-    .orderBy(asc(mirror.destination));
+    .orderBy(asc(bytewise(mirror.destination)));
 
   for (const row of counted) {
     const entry = (out[row.destination] ??= empty());

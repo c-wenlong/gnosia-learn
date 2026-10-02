@@ -223,8 +223,10 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
   }, 60_000);
 
   it("applies to a copy of the local self_learn database", async (ctx) => {
-    // The owner's real data, read only as a template. Absent on CI, and busy
-    // whenever a dev server holds it open; both skip with the reason.
+    // The owner's real data, read only as a template. Absent, empty (CI's
+    // service creates a bare self_learn), or busy whenever a dev server holds
+    // it open: each skips with the reason. Nothing here connects to
+    // self_learn itself; every check and write is on the copy.
     const admin = new pg.Client({ connectionString: maintenanceUrl() });
     await admin.connect();
     const name = `self_learn_test_copy_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
@@ -242,6 +244,13 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
       // is the flag that says writing to a throwaway copy is intended.
       const copy = connect({ url: url.toString(), copyOk: true });
       try {
+        // A database with no catalog in it is not a local self_learn to
+        // migrate a copy of: there is nothing for the expand migration to
+        // carry over, and the counts below would have no table to read.
+        const catalog = await copy.db.execute<{ topic: string | null }>(sql`select to_regclass('public.topic')::text as topic`);
+        if (catalog.rows[0]?.topic == null) {
+          ctx.skip("self_learn holds no catalog (no topic table): it was never migrated, as on CI");
+        }
         const before = await copy.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
         // Holding the contract migration (0013) back while the owner's
         // videos are not uploaded: its guard would otherwise roll the whole

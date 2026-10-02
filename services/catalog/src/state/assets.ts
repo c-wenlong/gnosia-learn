@@ -14,6 +14,7 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { andOwnedBy, ownedBy, type Owners, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
+import { bytewise } from "../sql-order";
 
 /**
  * Asset lookups: which video, diagram, note or link is about this subject.
@@ -108,7 +109,7 @@ export async function assetsForTopic(db: CatalogDatabase, slug: string, scope: O
       // the one a missing topic gets, not the reader's own assets filed there.
       .innerJoin(topic, eq(topic.slug, assetTopic.topicSlug))
       .where(and(eq(assetTopic.topicSlug, slug), ownedBy(asset.ownerId, owners), ownedBy(topic.ownerId, owners)))
-      .orderBy(asc(asset.kind), asc(asset.id)),
+      .orderBy(asc(bytewise(asset.kind)), asc(bytewise(asset.id))),
   );
 }
 
@@ -126,7 +127,7 @@ export async function assetsForConcept(db: CatalogDatabase, slug: string, scope:
       // As `assetsForTopic`: an unreadable concept answers as a missing one.
       .innerJoin(concept, eq(concept.slug, assetConcept.conceptSlug))
       .where(and(eq(assetConcept.conceptSlug, slug), ownedBy(asset.ownerId, owners), ownedBy(concept.ownerId, owners)))
-      .orderBy(asc(asset.kind), asc(asset.id)),
+      .orderBy(asc(bytewise(asset.kind)), asc(bytewise(asset.id))),
   );
 }
 
@@ -161,7 +162,7 @@ export async function conceptsForAssets(
       .where(
         and(inArray(assetConcept.assetId, wanted), ownedBy(asset.ownerId, owners), ownedBy(concept.ownerId, owners)),
       )
-      .orderBy(asc(assetConcept.assetId), asc(assetConcept.conceptSlug)),
+      .orderBy(asc(bytewise(assetConcept.assetId)), asc(bytewise(assetConcept.conceptSlug))),
   );
   const out: Record<string, string[]> = {};
   for (const row of rows) (out[row.assetId] ??= []).push(row.conceptSlug);
@@ -277,7 +278,7 @@ export async function assetsByIds(db: CatalogDatabase, ids: string[], scope: Own
       .select(ASSET_COLUMNS)
       .from(asset)
       .where(and(inArray(asset.id, ids), ownedBy(asset.ownerId, owners)))
-      .orderBy(asc(asset.id)),
+      .orderBy(asc(bytewise(asset.id))),
   );
 }
 
@@ -386,7 +387,7 @@ export async function derivationSources(
           ownedBy(derivedAsset.ownerId, owners),
         ),
       )
-      .orderBy(asc(assetDerivation.assetId), asc(assetDerivation.sourceAssetId)),
+      .orderBy(asc(bytewise(assetDerivation.assetId)), asc(bytewise(assetDerivation.sourceAssetId))),
   );
   const out: Record<string, string[]> = {};
   for (const row of rows) (out[row.assetId] ??= []).push(row.sourceId);
@@ -506,7 +507,7 @@ async function listScoped(db: CatalogDatabase, options: ListAssetsOptions, owner
       createdAt: asset.createdAt,
       // Only chips for topics the reader may read (phase 4).
       topics: sql<string[]>`(
-        select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug}), '{}')
+        select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug} collate "C"), '{}')
         from ${assetTopic}
         where ${assetTopic.assetId} = ${asset.id}${
           owners === undefined
@@ -517,7 +518,7 @@ async function listScoped(db: CatalogDatabase, options: ListAssetsOptions, owner
     })
     .from(asset)
     .where(conditions.length === 0 ? undefined : and(...conditions))
-    .orderBy(asc(asset.kind), asc(asset.id));
+    .orderBy(asc(bytewise(asset.kind)), asc(bytewise(asset.id)));
   const limited = limit === undefined ? base : base.limit(limit);
   const paged = offset === undefined ? limited : limited.offset(offset);
   const rows = await paged;
@@ -558,6 +559,6 @@ export async function assetCounts(db: CatalogDatabase, scope: OwnerScope): Promi
       .from(asset)
       .where(ownedBy(asset.ownerId, owners))
       .groupBy(asset.kind)
-      .orderBy(asc(asset.kind)),
+      .orderBy(asc(bytewise(asset.kind))),
   );
 }

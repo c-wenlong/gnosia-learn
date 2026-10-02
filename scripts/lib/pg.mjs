@@ -3,11 +3,94 @@
 // scripts/e2e.mjs and scripts/flip-rehearsal.mjs both copy `self_learn`, and
 // the fallback for a template with sessions open is easy to get subtly wrong
 // (a shell pipeline reports only psql's exit code), so it lives here once.
-import { spawn } from 'node:child_process';
-import { join } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { accessSync, constants } from 'node:fs';
+import { delimiter, join } from 'node:path';
 
-/** The Postgres 17 client tools. */
-export const PG_BIN = process.env.PG_BIN ?? '/opt/homebrew/opt/postgresql@17/bin';
+/** Homebrew's keg-only Postgres 17, which is not on PATH unless linked. */
+const HOMEBREW_BINS = ['/opt/homebrew/opt/postgresql@17/bin', '/usr/local/opt/postgresql@17/bin'];
+
+const runnable = (file) => {
+  try {
+    accessSync(file, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** The major version the catalog's server runs (compose.yaml, CI, Homebrew), and the oldest client it takes. */
+export const PG_MAJOR = 17;
+
+/** `pg_dump --version`'s major version for the tools in `dir`, or null when it does not answer. */
+function majorIn(dir, env) {
+  const ran = spawnSync(join(dir, 'pg_dump'), ['--version'], { env, encoding: 'utf8' });
+  const match = ran.status === 0 ? /\b(\d+)(?:\.\d+)+/.exec(ran.stdout) : null;
+  return match === null ? null : Number(match[1]);
+}
+
+/**
+ * Where the Postgres client tools are, and how that was decided. PG_BIN when
+ * it is set, and then only there, so a wrong PG_BIN is reported rather than
+ * quietly bypassed. Otherwise the candidates in order: each directory on PATH
+ * that holds `pg_dump`, `pg_config --bindir`, and Homebrew's postgresql@17;
+ * the first whose `pg_dump` is at least PG_MAJOR wins, since an older pg_dump
+ * refuses a newer server and an older client early on PATH must not hide a
+ * current one installed beside it. With none that new, the first found is
+ * used and `missingPgTools` says which version it is. `dir` is null when no
+ * candidate has the tools, and `tried` lists every place looked.
+ */
+export function findPgBin(env = process.env) {
+  if (env.PG_BIN !== undefined && env.PG_BIN !== '') {
+    return { dir: env.PG_BIN, from: 'PG_BIN', major: majorIn(env.PG_BIN, env), tried: [`PG_BIN=${env.PG_BIN}`] };
+  }
+  const candidates = (env.PATH ?? '')
+    .split(delimiter)
+    .filter(Boolean)
+    .map((dir) => ({ dir, from: 'PATH' }));
+  const config = spawnSync('pg_config', ['--bindir'], { env, encoding: 'utf8' });
+  const bindir = config.status === 0 ? config.stdout.trim() : '';
+  if (bindir !== '') candidates.push({ dir: bindir, from: 'pg_config --bindir' });
+  for (const dir of HOMEBREW_BINS) candidates.push({ dir, from: 'Homebrew' });
+
+  const found = [];
+  for (const candidate of candidates) {
+    if (!runnable(join(candidate.dir, 'pg_dump')) || found.some((f) => f.dir === candidate.dir)) continue;
+    const major = majorIn(candidate.dir, env);
+    if (major !== null && major >= PG_MAJOR) return { ...candidate, major, tried: [] };
+    found.push({ ...candidate, major });
+  }
+  const tried = ['PATH', bindir === '' ? 'pg_config --bindir (no pg_config)' : `pg_config --bindir (${bindir})`, ...HOMEBREW_BINS];
+  return found.length > 0 ? { ...found[0], tried } : { dir: null, from: null, major: null, tried };
+}
+
+const found = findPgBin();
+
+/**
+ * The Postgres 17 client tools' directory, as `findPgBin` resolved it. The
+ * empty string when nothing was found, so a path joined onto it names the bare
+ * tool and fails the existence check `missingPgTools` makes.
+ */
+export const PG_BIN = found.dir ?? '';
+
+/**
+ * Null when every one of `tools` is in PG_BIN and its pg_dump is not older
+ * than PG_MAJOR, else a sentence saying what is missing or too old and where it
+ * looked, for a script to refuse with.
+ */
+export function missingPgTools(tools) {
+  const absent = tools.filter((tool) => found.dir === null || !runnable(join(found.dir, tool)));
+  // A pg_dump that does not say its version is let through; it fails, if it
+  // does, with its own message when it runs.
+  if (absent.length === 0 && (found.major === null || found.major >= PG_MAJOR)) return null;
+  const problem =
+    found.dir === null
+      ? `no Postgres client tools found (looked in ${found.tried.join(', ')})`
+      : absent.length > 0
+        ? `${absent.join(', ')} not found in ${found.dir} (from ${found.from})`
+        : `the client tools in ${found.dir} (from ${found.from}) are version ${found.major}, older than the server's ${PG_MAJOR}, and pg_dump refuses a newer server`;
+  return `${problem}. Install the Postgres ${PG_MAJOR} client tools (brew install postgresql@${PG_MAJOR}, or postgresql-client-${PG_MAJOR}), or set PG_BIN to their bin directory.`;
+}
 
 /**
  * Run a command and collect its output. `detached` puts it in a process group

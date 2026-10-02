@@ -5,6 +5,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { ownedBy } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "./errors";
+import { bytewise } from "../sql-order";
 
 /**
  * Where an asset's bytes are in the blob store, for the web app's asset routes
@@ -161,7 +162,7 @@ export async function posterBlob(db: CatalogDatabase, videoId: string, scope: Ow
             ownedBy(video.ownerId, scope.readable),
           ),
         )
-        .orderBy(asset.id)
+        .orderBy(bytewise(asset.id))
         .limit(1),
     [],
   );
@@ -212,7 +213,7 @@ async function covers(db: CatalogDatabase, scope: OwnerScope, slug?: string): Pr
             slug === undefined ? undefined : eq(collection.slug, slug),
           ),
         )
-        .orderBy(collection.slug),
+        .orderBy(bytewise(collection.slug)),
     [],
   );
 }

@@ -29,10 +29,10 @@ export async function blobContractDistance(db: CatalogDatabase): Promise<BlobCon
     sql`, `,
   );
   const unstored = await db.execute<{ id: string; kind: string }>(
-    sql`select id, kind from asset where kind in (${kinds}) and blob_key is null order by id`,
+    sql`select id, kind from asset where kind in (${kinds}) and blob_key is null order by id collate "C"`,
   );
   const unkeyed = await db.execute<{ key: string }>(
-    sql`select key from blob_object where key !~ ${BLOB_KEY_PATTERN} order by key`,
+    sql`select key from blob_object where key !~ ${BLOB_KEY_PATTERN} order by key collate "C"`,
   );
   return { unstored: unstored.rows, unkeyed: unkeyed.rows.map((row) => row.key) };
 }

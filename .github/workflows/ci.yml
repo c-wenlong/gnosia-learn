@@ -33,9 +33,13 @@ jobs:
   quality:
     name: Lint, test, and build
     runs-on: ubuntu-latest
-    # A full run is a couple of minutes. Fifteen is generous enough for a cold
-    # npm cache and tight enough that a hung step does not sit there for hours.
-    timeout-minutes: 15
+    # Measured 2026-10-02: the test step alone took 8 to 11 minutes while the
+    # flip-rehearsal suite failed fast, and about 13 once it ran (its 18 tests
+    # copy, dump and restore databases for over two minutes). With the setup
+    # and the build around it, fifteen minutes cut a passing run off before
+    # its last files. Thirty leaves room for a cold npm cache and a slow
+    # runner, and still stops a hung step long before GitHub's six hours.
+    timeout-minutes: 30
 
     # The catalog schema is mostly constraints, and no fake enforces a foreign
     # key, so its tests run against a real Postgres. Without this service they
@@ -93,6 +97,18 @@ jobs:
         # outright if package.json and package-lock.json have drifted apart,
         # instead of quietly resolving something newer.
         run: npm ci
+
+      - name: Postgres 17 client tools
+        # scripts/flip-rehearsal.mjs (and its tests) run createdb, pg_dump and
+        # pg_restore against the service above. The runner image ships an
+        # older client, and pg_dump refuses a server newer than itself, so the
+        # client is installed at the server's major version from the
+        # PostgreSQL apt repository. PG_BIN names it outright, rather than
+        # leaving the choice to the version wrapper Debian puts on PATH.
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo "PG_BIN=/usr/lib/postgresql/17/bin" >> "$GITHUB_ENV"
 
       # The four steps below are kept separate on purpose. Each one fails with
       # a different signal, so a red run says what kind of thing broke without

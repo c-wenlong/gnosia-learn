@@ -1599,12 +1599,22 @@ export class Runner {
   }
 }
 
-/** `copyFile`, then the source's times onto the copy. See `adoptParentWork`. */
+/**
+ * `copyFile`, then the source's times onto the copy. See `adoptParentWork`.
+ *
+ * The copy's time is the source's to within a few microseconds, not exactly:
+ * `utimes` takes seconds as a double and libuv keeps whole microseconds of it,
+ * and Node has no call that sets nanoseconds. The times go over as numbers
+ * from `atimeMs` and `mtimeMs`, not as the `Date`s `stat` also returns, since
+ * a `Date` holds whole milliseconds and would make the copy up to a
+ * millisecond older than its source. The gate compares that age with an
+ * attempt's start, so a few microseconds either way change nothing.
+ */
 async function copyKeepingTime(from: string, to: string): Promise<void> {
   await mkdir(path.dirname(to), { recursive: true });
   await copyFile(from, to);
   const facts = await stat(from);
-  await utimes(to, facts.atime, facts.mtime);
+  await utimes(to, facts.atimeMs / 1000, facts.mtimeMs / 1000);
 }
 
 async function sha256(file: string): Promise<string | null> {
