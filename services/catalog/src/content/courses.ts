@@ -31,6 +31,7 @@ import {
 } from "./write";
 import { assertInStep, type ExportedType, writeThrough } from "./write-through";
 import { CLI_OWNER } from "./scope";
+import { bytewise } from "../sql-order";
 
 /**
  * `catalog course import <file.yaml>` and `catalog course export <id>`: one
@@ -736,7 +737,7 @@ async function placeModuleTopics(
       .where(
         and(eq(collectionItem.topicSlug, slug), eq(collection.kind, "module"), isNull(collection.archivedAt)),
       )
-      .orderBy(collectionItem.topicPosition, collectionItem.collectionId);
+      .orderBy(collectionItem.topicPosition, bytewise(collectionItem.collectionId));
     // The list as the export renders it now, without this course's modules
     // the file drops, then this course's modules that are new to the topic.
     const kept = current.filter((row) => !existing.modules.some((m) => m.id === row.id) || listed.has(row.id));

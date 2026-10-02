@@ -16,6 +16,7 @@ import { masteryLabel } from "../../../../scripts/learn/lib/bkt.mjs";
 import { buildGraph, frontier, masteryOf, summarize } from "../../../../scripts/learn/lib/graph.mjs";
 import { readModel } from "./mastery";
 import { readReviews } from "./review";
+import { bytewise } from "../sql-order";
 
 /**
  * The read model `learn/state/index.json` used to be: every concept with its
@@ -179,7 +180,7 @@ export async function readKnowledgeBase(
   const readable = readableOwners(learnerId);
   const [concepts, allPrerequisites, curriculumLinks, model, reviews, runs] = await Promise.all([
     scopedRead(db, readable, (owners) =>
-      db.select().from(concept).where(ownedBy(concept.ownerId, owners)).orderBy(asc(concept.slug)),
+      db.select().from(concept).where(ownedBy(concept.ownerId, owners)).orderBy(asc(bytewise(concept.slug))),
     ),
     db.select().from(conceptPrerequisite),
     // Links to items the reader may read, so `topics` names no other owner's item.
@@ -193,7 +194,7 @@ export async function readKnowledgeBase(
         .from(conceptCurriculumItem)
         .innerJoin(curriculumItem, eq(curriculumItem.id, conceptCurriculumItem.curriculumItemId))
         .where(ownedBy(curriculumItem.ownerId, owners))
-        .orderBy(asc(conceptCurriculumItem.curriculumItemId)),
+        .orderBy(asc(bytewise(conceptCurriculumItem.curriculumItemId))),
     ),
     readModel(db, learnerId),
     readReviews(db, learnerId),

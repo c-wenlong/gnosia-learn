@@ -32,6 +32,7 @@ import { REPO_ROOT } from "../env";
 import { ASSETS_DIR } from "../index/diagrams";
 import { fileFacts } from "../index/files";
 import { constraintName, SQLSTATE, sqlstate } from "../state/errors";
+import { bytewise } from "../sql-order";
 
 /**
  * `catalog job`: the job lifecycle, driven by hand.
@@ -1262,7 +1263,7 @@ async function jobOutputs(db: CatalogDatabase, jobId: string): Promise<JobOutput
     .from(assetJob)
     .leftJoin(asset, eq(asset.id, assetJob.assetId))
     .where(eq(assetJob.jobId, jobId))
-    .orderBy(asc(assetJob.assetId));
+    .orderBy(asc(bytewise(assetJob.assetId)));
   return rows.map((row) => ({
     assetId: row.assetId,
     path: row.path,

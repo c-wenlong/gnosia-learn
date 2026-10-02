@@ -15,6 +15,7 @@ import { renumbered } from "./positions";
 import { latestRevisions } from "./revisions";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
 import { CLI_OWNER } from "./scope";
+import { bytewise } from "../sql-order";
 
 /**
  * `catalog renumber <list>`: spread one sparse list back out to
@@ -140,11 +141,11 @@ async function listEntries(
         .select()
         .from(topic)
         .where(isNull(topic.archivedAt))
-        .orderBy(asc(topic.position), asc(topic.slug));
+        .orderBy(asc(topic.position), asc(bytewise(topic.slug)));
       return { entries: rows.map(whole("topic", "slug", "position")), scope: null };
     }
     case "tags": {
-      const rows = await db.select().from(tag).orderBy(asc(tag.position), asc(tag.id));
+      const rows = await db.select().from(tag).orderBy(asc(tag.position), asc(bytewise(tag.id)));
       return { entries: rows.map(whole("tag", "id", "position")), scope: null };
     }
     case "concepts": {
@@ -154,7 +155,7 @@ async function listEntries(
         .select()
         .from(concept)
         .where(and(eq(concept.topicSlug, slug), isNull(concept.archivedAt)))
-        .orderBy(asc(concept.topicPosition), asc(concept.slug));
+        .orderBy(asc(concept.topicPosition), asc(bytewise(concept.slug)));
       return { entries: rows.map(whole("concept", "slug", "topicPosition")), scope: slug };
     }
     case "items": {
@@ -164,7 +165,7 @@ async function listEntries(
         .select()
         .from(curriculumItem)
         .where(and(eq(curriculumItem.collectionId, id), isNull(curriculumItem.archivedAt)))
-        .orderBy(asc(curriculumItem.position), asc(curriculumItem.id));
+        .orderBy(asc(curriculumItem.position), asc(bytewise(curriculumItem.id)));
       return { entries: rows.map(whole("curriculum_item", "id", "position")), scope: id };
     }
     case "modules": {
@@ -185,7 +186,7 @@ async function listEntries(
             isNull(collection.archivedAt),
           ),
         )
-        .orderBy(asc(collectionItem.topicPosition), asc(collectionItem.collectionId));
+        .orderBy(asc(collectionItem.topicPosition), asc(bytewise(collectionItem.collectionId)));
       const ids = topicRows.map((row) => row.moduleId);
       if (ids.length === 0) return { entries: [], scope: slug };
       const modules = new Map(

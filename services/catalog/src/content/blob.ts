@@ -160,7 +160,7 @@ export async function ownerUsage(
     from ${blobObject}
     where true
       ${options.owner === undefined ? sql`` : sql`and ${blobObject.ownerId} = ${options.owner}`}
-    group by 1 order by 1
+    group by 1 order by ${blobObject.ownerId} collate "C"
   `);
   return rows.map((row) => ({
     owner: row.owner,

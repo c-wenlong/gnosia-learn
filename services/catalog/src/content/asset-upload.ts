@@ -298,7 +298,7 @@ export async function unhookPosters(
             order by r.id desc
             limit 1
           ) is distinct from v.blob_key
-        order by d.asset_id
+        order by d.asset_id collate "C"
       `);
       if (derived.length === 0) return { posters: [], bases: new Map<string, number | null>() };
       const stale = derived.map((d) => d.poster);

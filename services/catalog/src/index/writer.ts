@@ -50,6 +50,7 @@ import { importLogs, type ImportedLog } from "../content/session-logs";
 import { keepBlobKeys } from "./blob-keys";
 import { IndexError, IndexErrors } from "./errors";
 import type { CoverRead, Indexer, ReplaceScope, SourceRows } from "./source";
+import { bytewise } from "../sql-order";
 
 /** Postgres SQLSTATE for a foreign key violation. */
 const FOREIGN_KEY_VIOLATION = "23503";
@@ -1393,7 +1394,7 @@ async function filedTopics(tx: CatalogDatabase, topics: string[]): Promise<{ top
     .select({ topic: concept.topicSlug, slug: concept.slug })
     .from(concept)
     .where(inArray(concept.topicSlug, topics))
-    .orderBy(concept.topicSlug, concept.slug);
+    .orderBy(bytewise(concept.topicSlug), bytewise(concept.slug));
 }
 
 /**
@@ -1464,7 +1465,7 @@ async function assertTagsUnworn(tx: CatalogDatabase, tags: string[]): Promise<vo
     .select({ tag: collectionTag.tagId, course: collectionTag.collectionId })
     .from(collectionTag)
     .where(inArray(collectionTag.tagId, tags))
-    .orderBy(collectionTag.tagId, collectionTag.collectionId);
+    .orderBy(bytewise(collectionTag.tagId), bytewise(collectionTag.collectionId));
   if (worn.length === 0) return;
   throw new IndexError(
     `content/tags.yaml no longer lists tags that courses still wear: ` +

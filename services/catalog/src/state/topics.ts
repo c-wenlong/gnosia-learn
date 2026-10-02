@@ -3,6 +3,7 @@ import { and, asc, inArray } from "drizzle-orm";
 
 import { ownedBy, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
+import { bytewise } from "../sql-order";
 
 /**
  * Topic lookups: the shared vocabulary's titles, for a caller that already
@@ -63,7 +64,7 @@ export async function topicTitles(db: CatalogDatabase, slugs: string[], scope: O
       .select({ slug: topic.slug, title: topic.title })
       .from(topic)
       .where(and(inArray(topic.slug, slugs), ownedBy(topic.ownerId, owners)))
-      .orderBy(asc(topic.slug)),
+      .orderBy(asc(bytewise(topic.slug))),
   );
 
   const titles: TopicTitles = {};

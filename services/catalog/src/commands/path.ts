@@ -2,6 +2,7 @@ import { concept, conceptPrerequisite } from "@self-learn/schema";
 import { asc } from "drizzle-orm";
 
 import { withDatabase } from "../db";
+import { bytewise } from "../sql-order";
 
 /**
  * `catalog path <from> <to>` — the prerequisite chain between two concepts.
@@ -56,7 +57,7 @@ export async function runPath(from: string, to: string): Promise<PathResult> {
     const concepts = await db
       .select({ slug: concept.slug, title: concept.title })
       .from(concept)
-      .orderBy(asc(concept.slug));
+      .orderBy(asc(bytewise(concept.slug)));
     const titles = new Map(concepts.map((c) => [c.slug, c.title]));
     if (!titles.has(from)) throw new UnknownConcept(from);
     if (!titles.has(to)) throw new UnknownConcept(to);

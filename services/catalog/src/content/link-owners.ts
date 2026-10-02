@@ -54,7 +54,8 @@ const ident = (name: string): SQL => sql.raw(`"${name.replaceAll('"', '""')}"`);
 
 export async function linkOwners(db: CatalogDatabase): Promise<LinkOwnerReport> {
   const { rows: mixed } = await db.execute<{ link: string; parent: string; far: string; owner: string; parent_owner: string }>(sql`
-    select 'topic_relation' as link, r.from_slug as parent, r.to_slug as far, r.owner_id as owner, t.owner_id as parent_owner
+    select 'topic_relation' collate "C" as link, r.from_slug collate "C" as parent, r.to_slug collate "C" as far,
+      r.owner_id as owner, t.owner_id as parent_owner
     from topic_relation r join topic t on t.slug = r.from_slug
     where r.owner_id <> t.owner_id
     union all

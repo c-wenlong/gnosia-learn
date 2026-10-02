@@ -12,6 +12,7 @@ import {
 import { and, asc, count, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import { withDatabase } from "../db";
+import { bytewise } from "../sql-order";
 
 /**
  * `catalog ls` — what exists, one layer at a time.
@@ -120,7 +121,7 @@ export async function runLs(target: string | undefined, options: LsOptions = {})
         .from(topic)
         .where(isNull(topic.archivedAt))
         .groupBy(topic.domain)
-        .orderBy(asc(topic.domain));
+        .orderBy(asc(bytewise(topic.domain)));
 
       // Top-level collections only. A course's modules are its children and
       // belong under `ls <course>`, not on the front page of the catalog.
@@ -128,7 +129,7 @@ export async function runLs(target: string | undefined, options: LsOptions = {})
         .select({ id: collection.id, kind: collection.kind, title: collection.title })
         .from(collection)
         .where(and(isNull(collection.parentId), isNull(collection.archivedAt)))
-        .orderBy(asc(collection.id));
+        .orderBy(asc(bytewise(collection.id)));
 
       // Counted with a second grouped query rather than a correlated subquery
       // in the select list. drizzle renders an interpolated column there as a
@@ -170,7 +171,7 @@ async function topicsInDomain(
     .select({ slug: topic.slug, title: topic.title })
     .from(topic)
     .where(and(eq(topic.domain, domain), isNull(topic.archivedAt)))
-    .orderBy(asc(topic.slug));
+    .orderBy(asc(bytewise(topic.slug)));
   if (rows.length === 0) return null;
 
   const slugs = rows.map((r) => r.slug);
@@ -228,7 +229,7 @@ async function collectionTree(db: Db, id: string): Promise<LsCollection | null> 
     .select()
     .from(collection)
     .where(and(eq(collection.parentId, id), isNull(collection.archivedAt)))
-    .orderBy(asc(collection.position), asc(collection.id));
+    .orderBy(asc(collection.position), asc(bytewise(collection.id)));
 
   const ids = [id, ...children.map((c) => c.id)];
   const items = await db
@@ -241,7 +242,7 @@ async function collectionTree(db: Db, id: string): Promise<LsCollection | null> 
     })
     .from(curriculumItem)
     .where(and(inArray(curriculumItem.collectionId, ids), isNull(curriculumItem.archivedAt)))
-    .orderBy(asc(curriculumItem.position), asc(curriculumItem.id));
+    .orderBy(asc(curriculumItem.position), asc(bytewise(curriculumItem.id)));
 
   const topics = await db
     .select({ collectionId: collectionItem.collectionId, topicSlug: collectionItem.topicSlug })

@@ -141,8 +141,13 @@ describe("every path rule is absolute and derived at runtime", () => {
     // which is the bug manimkc shipped and fixed: a literal path denies nothing
     // on any machine but the one it was written on.
     expect(deny.some((rule) => rule.includes(path.join(home, ".claude")))).toBe(true);
-    expect(JSON.stringify(settings)).not.toContain("/Users/you");
-    expect(JSON.stringify(settings)).not.toContain("/home/");
+    // Every home directory the settings name is this process's own. A literal
+    // `/Users/you` or `/home/someone` is a home that is not, on any OS: CI's
+    // home is itself under `/home/`, so looking for that prefix alone would
+    // flag the runtime-derived path the first assertion wants.
+    const homes = [...JSON.stringify(settings).matchAll(/\/(?:Users|home)\/[^/"]+/g)].map((match) => match[0]);
+    expect(homes.length).toBeGreaterThan(0);
+    expect(homes.filter((named) => named !== home)).toEqual([]);
   });
 
   it("blocks reads outside the working directories", () => {

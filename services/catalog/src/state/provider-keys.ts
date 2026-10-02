@@ -4,6 +4,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { StateError } from "./errors";
 import { ensureLearner } from "./learner";
+import { bytewise } from "../sql-order";
 
 /**
  * An owner's own model provider keys (docs/BYOK.md), as sealed bytes.
@@ -51,7 +52,7 @@ export async function readProviderKeys(db: CatalogDatabase, owner: string): Prom
     .select()
     .from(providerKey)
     .where(eq(providerKey.ownerId, owner))
-    .orderBy(asc(providerKey.provider));
+    .orderBy(asc(bytewise(providerKey.provider)));
   return rows.flatMap((row) =>
     isProviderId(row.provider)
       ? [

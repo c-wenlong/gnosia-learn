@@ -112,7 +112,7 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
     db,
     sql`select c.id, c.slug, c.title, c.position, c.metadata, to_jsonb(c) ->> 'cover_blob_key' as cover_blob_key
         from collection c
-        where c.kind = 'course' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)} order by c.position, c.id`,
+        where c.kind = 'course' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)} order by c.position, c.id collate "C"`,
   );
   const tags = groupBy(
     await rows<{ collection_id: string; tag_id: string }>(
@@ -121,7 +121,7 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
           join collection c on c.id = t.collection_id
           join tag g on g.id = t.tag_id
           where c.kind = 'course' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}${andOwnedBy(sql`g.owner_id`, owners)}
-          order by t.collection_id, t.position, t.tag_id`,
+          order by t.collection_id collate "C", t.position, t.tag_id collate "C"`,
     ),
     (r) => r.collection_id,
   );
@@ -138,7 +138,7 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
                   order by m.position limit 1) as topic
           from collection c
           where c.kind = 'module' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}
-          order by c.parent_id, c.position, c.id`,
+          order by c.parent_id collate "C", c.position, c.id collate "C"`,
     ),
     (r) => r.parent_id,
   );
@@ -146,7 +146,7 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
     await rows<{ id: string; collection_id: string; title: string; subtopics: unknown }>(
       db,
       sql`select id, collection_id, title, subtopics from curriculum_item
-          where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by collection_id, position, id`,
+          where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by collection_id collate "C", position, id collate "C"`,
     ),
     (r) => r.collection_id,
   );
@@ -157,7 +157,7 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
           join curriculum_item i on i.id = l.curriculum_item_id
           join concept k on k.slug = l.concept_slug
           where i.archived_at is null${andOwnedBy(sql`i.owner_id`, owners)}${andOwnedBy(sql`k.owner_id`, owners)}
-          order by l.curriculum_item_id, l.position, l.concept_slug`,
+          order by l.curriculum_item_id collate "C", l.position, l.concept_slug collate "C"`,
     ),
     (r) => r.curriculum_item_id,
   );
@@ -167,7 +167,7 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
       sql`select m.collection_id, a.id, a.title, a.url, a.resource_type
           from collection_item m join asset a on a.id = m.asset_id
           where a.kind = 'link' and starts_with(a.id, ${ASSET_PREFIX.courses})${andOwnedBy(sql`a.owner_id`, owners)}
-          order by m.collection_id, m.position, a.id`,
+          order by m.collection_id collate "C", m.position, a.id collate "C"`,
     ),
     (r) => r.collection_id,
   );
