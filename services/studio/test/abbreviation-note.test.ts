@@ -273,9 +273,23 @@ describe("abbreviationCheck and abbreviationNote", () => {
   it("weighs only a video brief in force and not yet pressed", () => {
     expect(abbreviationCheck(emptySlot())).toBeNull();
     expect(abbreviationCheck(slot({ drawnSeq: 4, state: "drawing" }))).toBeNull();
-    expect(abbreviationCheck(slot({ drawnSeq: 2 }))).toMatchObject({ words: ["ACL", "TCP"] });
-    expect(abbreviationCheck(slot({ abbreviationsTold: ["TCP", "ACL", "NAT"] }))).toEqual({ words: ["ACL", "TCP"], note: null });
-    expect(abbreviationCheck(slot({ brief: { ...ACL_TCP, voice: "none" } }))).toEqual({ words: [], note: null });
+    expect(abbreviationCheck(slot({ drawnSeq: 2 }))).toMatchObject({ told: ["ACL", "TCP"], listed: ["ACL", "TCP"] });
+    expect(abbreviationCheck(slot({ abbreviationsTold: ["TCP", "ACL", "NAT"] }))).toEqual({ told: ["ACL", "TCP"], listed: [], note: null });
+    expect(abbreviationCheck(slot({ brief: { ...ACL_TCP, voice: "none" } }))).toEqual({ told: [], listed: [], note: null });
+  });
+
+  it("names new words first, and counts as told only the words a note named (Greptile on #266)", () => {
+    const many = Array.from({ length: ABBREVIATION_NOTE_CAP + 4 }, (_, i) => `AB${i}`);
+    const brief = videoBrief(`The ${many.slice(0, 17).join(" ")} go first.`, `Then ${many.slice(17).join(" ")} follow.`);
+    const first = abbreviationCheck(slot({ brief }))!;
+    expect(first.listed).toEqual(many.slice(0, ABBREVIATION_NOTE_CAP));
+    expect(first.told).toEqual(many.slice(0, ABBREVIATION_NOTE_CAP));
+    expect(first.note).toContain("and 4 more.");
+    // The next turn names the four left over, ahead of those told before.
+    const second = abbreviationCheck(slot({ brief, abbreviationsTold: first.told }))!;
+    expect(second.listed.slice(0, 4)).toEqual(many.slice(ABBREVIATION_NOTE_CAP));
+    expect(second.told).toEqual(many);
+    expect(abbreviationCheck(slot({ brief, abbreviationsTold: second.told }))!.note).toBeNull();
   });
 
   it("caps the list, and holds nothing that could close its fence", () => {

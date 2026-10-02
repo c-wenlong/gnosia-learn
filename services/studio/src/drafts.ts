@@ -1658,14 +1658,14 @@ export class Drafts {
     const delivered = {
       undelivered: [...record.undelivered],
       edits: Object.fromEntries(kinds.map((kind) => [kind, slotOf(record, kind).pendingEdit?.text ?? null])) as Partial<Record<BriefKind, string | null>>,
-      abbreviations: abbreviations?.words ?? null,
+      abbreviations: abbreviations?.told ?? null,
     };
     const abbreviationNote = abbreviations?.note ?? null;
     if (abbreviationNote !== null) {
       // On the record, hidden from the person, whose card already carries the
       // warning, and from a replay (C3), as the retry instruction is.
       await this.write(id, () =>
-        this.append(id, { type: "studio", text: abbreviationNote, internal: true, kind: "video", abbreviations: abbreviations!.words }),
+        this.append(id, { type: "studio", text: abbreviationNote, internal: true, kind: "video", abbreviations: abbreviations!.listed }),
       );
     }
 
@@ -1675,7 +1675,7 @@ export class Drafts {
     // than never told.
     if (first === null) return;
     const toldMoved =
-      abbreviations !== null && JSON.stringify(abbreviations.words) !== JSON.stringify(slotOf(record, "video").abbreviationsTold ?? []);
+      abbreviations !== null && JSON.stringify(abbreviations.told) !== JSON.stringify(slotOf(record, "video").abbreviationsTold ?? []);
     if (notes.length > 0 || toldMoved) await this.write(id, () => this.clearDelivered(id, delivered));
     const asked = kinds.filter((kind) => tagged.includes(kind) || waiting.includes(kind));
     const judged = await this.judgeReply(first.text, asked, conversational, record.concept);
@@ -3433,24 +3433,34 @@ export function describeVideoBriefEdit(
 export const ABBREVIATION_NOTE_CAP = 30;
 
 /**
- * V11's planner half: the abbreviations of the video brief in force, and the
- * STUDIO note a turn carries about them, or null for no note. The note is due
- * when the brief holds a word the planner was not told of at the last turn
- * that answered, so it follows a brief proposed or edited with new ones and
- * is never repeated for the same set. Null altogether, and nothing counted as
- * told, when there is nothing to weigh: no video brief in force, one already
- * pressed (the video agent may still respell a line while voicing, D47), or
- * gnosia-audio has not answered, when the runner cannot tell.
+ * V11's planner half: the STUDIO note a turn carries about the abbreviations
+ * of the video brief in force, or null for no note, and `told`, the words to
+ * count as told once the turn answers. The note is due when the brief holds a
+ * word the planner was not told of at the last turn that answered, so it
+ * follows a brief proposed or edited with new ones and is never repeated for
+ * the same set. It names the new words first, then those told before, and
+ * `told` keeps only words a note has named, so a word past the cap is told by
+ * a later note rather than counted as told unnamed. Null altogether, and
+ * nothing counted, when there is nothing to weigh: no video brief in force,
+ * one already pressed (the video agent may still respell a line while
+ * voicing, D47), or gnosia-audio has not answered, when the runner cannot tell.
  */
-export function abbreviationCheck(slot: KindSlot): { words: string[]; note: string | null } | null {
+export function abbreviationCheck(slot: KindSlot): { told: string[]; listed: string[]; note: string | null } | null {
   const brief = slot.brief;
   if (brief === null || !isVideoBrief(brief)) return null;
   if (slot.drawnSeq !== null && slot.briefSeq === slot.drawnSeq) return null;
   const words = videoAbbreviations(brief);
   if (words === null) return null;
-  const told = new Set(slot.abbreviationsTold ?? []);
-  if (words.every((word) => told.has(word))) return { words, note: null };
-  return { words, note: abbreviationNote(words, slot.briefBy === "person") };
+  const before = new Set(slot.abbreviationsTold ?? []);
+  const fresh = words.filter((word) => !before.has(word));
+  if (fresh.length === 0) return { told: words, listed: [], note: null };
+  const ordered = [...fresh, ...words.filter((word) => before.has(word))];
+  const listed = ordered.slice(0, ABBREVIATION_NOTE_CAP);
+  return {
+    told: words.filter((word) => before.has(word) || listed.includes(word)),
+    listed,
+    note: abbreviationNote(ordered, slot.briefBy === "person"),
+  };
 }
 
 /**

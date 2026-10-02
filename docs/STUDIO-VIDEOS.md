@@ -517,7 +517,9 @@ their spelling unless they ask. It is weighed against the brief in force when
 the turn starts, so a brief replaced since it was proposed is never described,
 and against the words the planner was told at the last turn that answered
 (`abbreviationsTold` on the video slot), so the same words are never told
-twice and a new word in a later brief is. A brief already pressed is not
+twice and a new word in a later brief is. A note names at most 30 words, new
+ones first, and only the words it named count as told, so one past the cap is
+named at a later turn. A brief already pressed is not
 weighed, nor is anything before gnosia-audio has answered. In the transcript
 the note is an `internal` studio entry, which the person's thread leaves out,
 since the card already carries the warning. The agent may also respell a word
