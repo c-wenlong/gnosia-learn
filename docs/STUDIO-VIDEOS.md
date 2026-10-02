@@ -507,10 +507,24 @@ attaches the words it finds to each video brief in the transcript as
 `abbreviations`, which the card shows as its warning. So `CPU` or `API`, which
 the table already spells out, is not flagged, where the card's own fallback
 check (a runner that has not read the table) flags every capitalised word.
-Still to build: a STUDIO note listing them to the planner, so it can spell
-them out ("A C L") in the next brief. The agent may also respell one while
-voicing it (D47), which the job view shows as a changed line; it cannot edit
-the table, which lives in the venv.
+The planner hears of them too, as a STUDIO note at the head of the turn
+after a video brief carrying them is proposed or edited
+(`abbreviationCheck` in `services/studio/src/drafts.ts`). The note lists the
+words, says the brief stands as it is and is not refused, and says the planner
+may spell each one out ("A C L") in its next video brief or keep it where it
+is meant to be said as a word; after a person's own edit it says to keep
+their spelling unless they ask. It is weighed against the brief in force when
+the turn starts, so a brief replaced since it was proposed is never described,
+and against the words the planner was told at the last turn that answered
+(`abbreviationsTold` on the video slot), so the same words are never told
+twice and a new word in a later brief is. A note names at most 30 words, new
+ones first, and only the words it named count as told, so one past the cap is
+named at a later turn. A brief already pressed is not
+weighed, nor is anything before gnosia-audio has answered. In the transcript
+the note is an `internal` studio entry, which the person's thread leaves out,
+since the card already carries the warning. The agent may also respell a word
+while voicing it (D47), which the job view shows as a changed line; it cannot
+edit the table, which lives in the venv.
 
 ## The planner's prompt
 
@@ -1316,7 +1330,7 @@ V for video, so they do not collide with C, M, E or U.
 | V8 | Two drafts make the same slug | The target lease on `videos/<slug>.mp4` refuses the second with 409, named |
 | V9 | The kokoro model is not downloaded | The video doctor fails. The narration step runs with `HF_HUB_OFFLINE=1` and cannot reach the network anyway, so it never downloads during a job |
 | V10 | The agent rewords a line | Allowed (D47). The narration step voices the new line into the job's cache, the job view logs it beside the brief's, the gate records it, and the review lists it. The person who wants the brief's wording back says so under Change |
-| V11 | An abbreviation the voice will read as a word | Found at validation, sent to the planner as a STUDIO note, shown on the card as a warning; the agent may also respell it while voicing, shown as a changed line. Never a refusal: some abbreviations are meant to be said as words |
+| V11 | An abbreviation the voice will read as a word | Found at validation, sent to the planner as a STUDIO note on the next turn (once per new word, "Acronyms" above), shown on the card as a warning; the agent may also respell it while voicing, shown as a changed line. Never a refusal: some abbreviations are meant to be said as words |
 | V25 | A message arrives on a video draft while its job runs | Accepted (owner's decision 9): the planner answers and may propose the next brief, which waits; Make video stays disabled with "The video is still being made" until the job reaches a verdict |
 | V12 | The person closes the panel during a 15-minute job | Nothing changes; the job strip shows it, and reopening the draft lands in the job view |
 | V13 | A change job's parent session cannot be resumed | As C3: a fresh session, the source copied in, and a STUDIO note saying the agent starts without the earlier conversation |
