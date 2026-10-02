@@ -229,7 +229,8 @@ export function reachable(parses: ReadonlyMap<string, SceneParse>): string[] {
  *   moments named), and it must be of the source the gate checked, so a look
  *   before the last edit of any source file does not count;
  * - its sheet must have been Read after it ended and before any later still
- *   started, since that still replaced the sheet;
+ *   that ran started, since that still replaced the sheet (one refused before
+ *   any step, for a held port, wrote nothing);
  * - the build's sheet must have been Read after the build the gate copied.
  */
 function looked(input: LookInput): LookResult {
@@ -244,7 +245,10 @@ function looked(input: LookInput): LookResult {
     problems.push(`the source changed after the last still of every scene, at ${full.endedAt}: run still with no moments again, and Read its sheet, ${own.stillsSheet}`);
   } else {
     const ended = Date.parse(full.endedAt);
-    const next = stills.find((call) => Date.parse(call.startedAt) >= ended && call !== full);
+    // A still the wrapper refused before any step ran (a held port: `steps`
+    // empty) wrote nothing, so it did not replace the sheet. A record with no
+    // `steps` at all is counted as a replacement, the safe reading.
+    const next = stills.find((call) => Date.parse(call.startedAt) >= ended && call !== full && (call.steps === undefined || call.steps.length > 0));
     const until = next === undefined ? Infinity : Date.parse(next.startedAt);
     const read = [...input.reads].reverse().find((entry) => entry.path === own.stillsSheet && Date.parse(entry.at) >= ended && Date.parse(entry.at) < until);
     readAt = read?.at ?? null;

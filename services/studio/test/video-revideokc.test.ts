@@ -643,6 +643,22 @@ describe("the gate, for a revideokc job", () => {
       reads: [{ path: own.stillsSheet, at: at(-5_000) }, buildRead],
     });
     expect(read.findings).toEqual([]);
+    // A still refused for a held port ran no step and wrote no sheet: a Read after it still counts.
+    const refused: WrapperCall = { verb: "still", startedAt: at(-5_000), endedAt: at(-5_000), exitCode: 3, steps: [], sceneSha256: hash, rendered: [] };
+    const afterRefusal = await runVideoGate({
+      ...base,
+      calls: [still(at(-6_000), hash), refused, built(at(-2_000), hash)],
+      reads: [{ path: own.stillsSheet, at: at(-4_000) }, buildRead],
+    });
+    expect(afterRefusal.findings).toEqual([]);
+    // One that ran and failed did replace it: revideokc clears the sheet before it renders.
+    const failed: WrapperCall = { ...refused, exitCode: 1, steps: [{ step: "render", exitCode: 1, ms: 900 }] };
+    const afterFailure = await runVideoGate({
+      ...base,
+      calls: [still(at(-6_000), hash), failed, built(at(-2_000), hash)],
+      reads: [{ path: own.stillsSheet, at: at(-4_000) }, buildRead],
+    });
+    expect(afterFailure.findings.join(" ")).toContain("was replaced by a later still before it was Read");
   });
 
   it("refuses a source bigger than Accept stores, and counts labels only in files the scene reaches", async () => {
