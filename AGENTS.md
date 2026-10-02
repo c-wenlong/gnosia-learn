@@ -529,6 +529,17 @@ Rules of engagement:
   off. It must stay a non-editable install: the sandbox reads the venvs and
   nothing beside them, which `services/studio/test/video-sandbox.test.ts`
   proves by voicing, timing and keying lines inside the profiles.
+- **A video job runs on its brief's tool's backend** (`services/studio/src/video/backend.ts`,
+  D75 of [`docs/STUDIO-VIDEO-TOOLS.md`](docs/STUDIO-VIDEO-TOOLS.md)): manimkc's
+  or revideokc's (`video/revideokc/`), each with its own profiles, wrapper,
+  gate steps and doctor, and a tool is offered and pressed only on its own
+  doctor's verdict. A revideokc job's Chrome runs with its own sandbox off
+  inside the job profile, which opens exactly the job's two loopback ports
+  (`video/revideokc/ports.ts`); it needs `tools/revideokc` with
+  `node_modules` and `.venv` installed. `vitest.setup.ts` points
+  `REVIDEOKC_ROOT` at nothing, so the real-sandbox suite
+  (`test/video-revideokc-sandbox.test.ts`) takes the submodule, or
+  `STUDIO_TEST_REVIDEOKC_ROOT` from a worktree whose submodule has none.
 - Read [`docs/TLDRAWKC-INTEGRATION.md`](docs/TLDRAWKC-INTEGRATION.md) for the
   design this section is shortened from: the schema, the runner's full
   constraints, the gate, and the edge cases behind each rule above.

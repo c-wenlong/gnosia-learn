@@ -81,8 +81,8 @@ describe("backendFor", () => {
     expect(backendFor(briefTool({ ...untooled, tool: "manimkc" }))).toBe(manimkc);
   });
 
-  it("throws naming the tool for revideokc and remotionkc, which the studio cannot make yet", () => {
-    expect(() => backendFor("revideokc")).toThrow(/no video backend for revideokc/);
+  it("throws naming the tool for remotionkc, which the studio cannot make yet, and has revideokc's (phase 2c)", () => {
+    expect(backendFor("revideokc").tool).toBe("revideokc");
     expect(() => backendFor("remotionkc")).toThrow(/no video backend for remotionkc/);
   });
 

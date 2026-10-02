@@ -1,4 +1,4 @@
-import type { WrapperCall, SheetRead } from "./calls";
+import { isLook, type WrapperCall, type SheetRead } from "./calls";
 import type { VideoGateResult, VideoStep } from "./types";
 
 /**
@@ -71,7 +71,7 @@ export function deriveSteps(facts: StepFacts): VideoStep[] {
   const lints = rounds(facts.calls, "lint");
   steps.push(step("lint", stateOf(lints), lints.length));
 
-  const previews = rounds(facts.calls, "preview");
+  const previews = facts.calls.filter(isLook);
   const lastScenes = previews.at(-1)?.rendered ?? [];
   steps.push(step("preview", stateOf(previews), previews.length, previews.length === 0 ? null : `round ${previews.length}: ${lastScenes.length} scene(s) rendered`));
 

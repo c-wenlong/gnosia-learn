@@ -265,6 +265,19 @@ describe("pressing", () => {
     ).toMatch(/daily cap is spent/);
   });
 
+  it("presses a video on its own tool's doctor: revideokc's verdict for a revideokc brief, manimkc's for the rest (D75)", () => {
+    const tools = (revideokc: boolean) => [
+      { name: "manimkc" as const, strength: "", available: false, reason: "this machine cannot make manimkc videos right now: render profile: no Metal" },
+      { name: "revideokc" as const, strength: "", available: revideokc, reason: revideokc ? null : "this machine cannot make revideokc videos right now: toolchain: no Chrome" },
+    ];
+    const manimkcDown = { ok: false, reason: "no Metal", tools: tools(true) };
+    expect(kindDrawBlock("video", { ...VIDEO, tool: "revideokc" }, bothAsked(), [], null, manimkcDown)).toBeNull();
+    expect(kindDrawBlock("video", VIDEO, bothAsked(), [], null, manimkcDown)?.reason).toBe("Videos are unavailable: no Metal");
+    expect(kindDrawBlock("video", { ...VIDEO, tool: "revideokc" }, bothAsked(), [], null, { ok: true, reason: null, tools: tools(false) })?.reason).toBe(
+      "This machine cannot make revideokc videos right now: toolchain: no Chrome.",
+    );
+  });
+
   it("keys each press by reply, kind and the kind's previous job", () => {
     expect(kindDrawKey("d1", 2, "video", null)).toBe("draw:d1:2:video:none");
     expect(kindDrawKey("d1", 2, "diagram", "j1")).toBe("draw:d1:2:diagram:j1");

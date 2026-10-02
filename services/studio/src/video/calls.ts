@@ -12,14 +12,16 @@ import { readFile, appendFile } from "node:fs/promises";
  */
 
 export interface CallStep {
-  step: "render" | "narrate";
+  /** The profile the step ran in, or, for revideokc's build, `sidecars`: gnosia-audio's transcript writer, in the narration profile. */
+  step: "render" | "narrate" | "sidecars";
   exitCode: number | null;
   signal?: string | null;
   ms: number;
 }
 
 export interface WrapperCall {
-  verb: "api" | "lint" | "narrate" | "preview" | "build" | "refused";
+  /** manimkc's `preview` and revideokc's `still` are the same step, a render to look at: `isLook` says so. */
+  verb: "api" | "lint" | "narrate" | "preview" | "still" | "build" | "refused";
   scenes?: string[];
   names?: string[];
   startedAt: string;
@@ -27,7 +29,7 @@ export interface WrapperCall {
   exitCode: number | null;
   steps?: CallStep[];
   sceneSha256?: string | null;
-  /** Scenes whose sheet the call wrote. */
+  /** Scenes whose sheet the call wrote (revideokc's one stills sheet shows every scene, so a still that wrote it names them all). */
   rendered?: string[];
   deliverable?: { written: boolean } | null;
 }
@@ -51,7 +53,16 @@ function lines<T>(body: string, keep: (value: unknown) => value is T): T[] {
   return out;
 }
 
-const VERBS = new Set(["api", "lint", "narrate", "preview", "build", "refused"]);
+const VERBS = new Set(["api", "lint", "narrate", "preview", "still", "build", "refused"]);
+
+/**
+ * Whether a call is a render made to be looked at: manimkc's `preview`, one
+ * sheet per scene, or revideokc's `still`, one sheet for the whole video.
+ * The job view's preview and look steps and the gate's step 10 count both.
+ */
+export function isLook(call: Pick<WrapperCall, "verb">): boolean {
+  return call.verb === "preview" || call.verb === "still";
+}
 
 function isCall(value: unknown): value is WrapperCall {
   if (typeof value !== "object" || value === null) return false;

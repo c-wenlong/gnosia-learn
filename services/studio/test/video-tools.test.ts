@@ -73,7 +73,7 @@ describe("the TOOLS block", () => {
     const block = toolsBlock();
     expect(block.startsWith("-----BEGIN TOOLS-----\n")).toBe(true);
     expect(block).toContain(`manimkc | available here | ${strength("manimkc")}`);
-    expect(block).toContain("revideokc | not in the studio yet |");
+    expect(block).toContain(`revideokc | available here | ${strength("revideokc")}`);
     expect(block).toContain("remotionkc | not in the studio yet |");
     let at = 0;
     for (const route of VIDEO_TOOL_ROUTES) {
@@ -92,10 +92,26 @@ describe("the TOOLS block", () => {
   it("is what health reports, tool for tool", () => {
     expect(toolsHealth()).toEqual([
       { name: "manimkc", strength: strength("manimkc"), available: true, reason: null },
-      { name: "revideokc", strength: strength("revideokc"), available: false, reason: "revideokc is not in the studio yet" },
+      { name: "revideokc", strength: strength("revideokc"), available: true, reason: null },
       { name: "remotionkc", strength: strength("remotionkc"), available: false, reason: "remotionkc is not in the studio yet" },
     ]);
     expect(notInStudio("manimkc")).toBeNull();
+    expect(notInStudio("revideokc")).toBeNull();
+  });
+
+  it("offers a tool only on its own doctor's verdict, once health has the verdicts (D75)", () => {
+    const passing = { ok: true, checks: [] };
+    const failing = { ok: false, checks: [{ name: "toolchain", ok: false, detail: "no Chrome or Chromium was found" }] };
+    const health = toolsHealth({ manimkc: passing, revideokc: failing });
+    expect(health.find((tool) => tool.name === "manimkc")).toMatchObject({ available: true, reason: null });
+    expect(health.find((tool) => tool.name === "revideokc")).toMatchObject({
+      available: false,
+      reason: "this machine cannot make revideokc videos right now: toolchain: no Chrome or Chromium was found",
+    });
+    // No backend outweighs any verdict.
+    expect(health.find((tool) => tool.name === "remotionkc")).toMatchObject({ available: false, reason: "remotionkc is not in the studio yet" });
+    // A doctor that has not answered yet offers nothing.
+    expect(toolsHealth({ manimkc: passing }).find((tool) => tool.name === "revideokc")).toMatchObject({ available: false, reason: "the revideokc doctor has not finished its first check" });
   });
 });
 
@@ -151,10 +167,20 @@ describe("the brief's tool", () => {
       throw new Error("expected a refusal");
     };
     expect(refusal({ ...base(), tool: "blender" })).toMatchObject({ field: "tool", message: expect.stringContaining("manimkc, remotionkc, revideokc") });
-    const later = refusal({ ...base(), tool: "revideokc", toolReason: "Depth and light" });
+    const later = refusal({ ...base(), tool: "remotionkc", toolReason: "Real data on a chart" });
     expect(later.field).toBe("tool");
-    expect(later.message).toContain("revideokc is not in the studio yet");
-    expect(later.message).toContain("name revideokc as the runner-up in toolReason");
+    expect(later.message).toContain("remotionkc is not in the studio yet");
+    expect(later.message).toContain("name remotionkc as the runner-up in toolReason");
+  });
+
+  it("takes revideokc for a narrated video, and refuses it for a silent one", () => {
+    const made = validateVideoBrief({ ...base(), tool: "revideokc", toolReason: "Depth and light on a three.js stage; runner-up manimkc" }, testVocabulary());
+    expect(made.tool).toBe("revideokc");
+    const scenes = (base().scenes as { name: string; beats: { say: string; show: string; labels: string[] }[] }[]).map((scene) => ({
+      ...scene,
+      beats: scene.beats.map((beat) => ({ ...beat, seconds: 6 })),
+    }));
+    expect(() => validateVideoBrief({ ...base(), voice: "none", scenes, tool: "revideokc" }, testVocabulary())).toThrow(/revideokc makes narrated videos only/);
   });
 
   it("refuses a reason with no tool, one too long, and one on two lines", () => {

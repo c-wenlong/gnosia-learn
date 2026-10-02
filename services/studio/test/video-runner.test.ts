@@ -167,7 +167,7 @@ describe("the video runner's refusals", () => {
 
   it("refuses a tool the studio cannot make, and a change whose tool is not its video's (D72, D74)", async () => {
     const made = await runner();
-    await expect(made.enqueue(brief({ tool: "revideokc" }))).rejects.toMatchObject({ status: 409, message: expect.stringContaining("not in the studio yet") });
+    await expect(made.enqueue(brief({ tool: "remotionkc" }))).rejects.toMatchObject({ status: 409, message: expect.stringContaining("not in the studio yet") });
     // A video made with another tool: its change must keep that tool.
     catalogMock.videoShow.mockResolvedValue(ok({ video: { slug: "two-boxes", revision: 2, brief: { tool: "revideokc" } } }));
     await expect(made.enqueue(brief({ mode: "change" }))).rejects.toMatchObject({
@@ -178,6 +178,21 @@ describe("the video runner's refusals", () => {
     catalogMock.videoShow.mockResolvedValue(ok({ video: { slug: "two-boxes", revision: 2, brief: { title: "Two boxes" } } }));
     const { created } = await made.enqueue(brief({ mode: "change", tool: "manimkc" }));
     expect(created).toBe(true);
+  });
+
+  it("admits a revideokc brief on revideokc's own doctor, never on manimkc's (D75)", async () => {
+    // No revideokc doctor at all: refused, never run on manimkc's verdict.
+    const bare = await runner();
+    await expect(bare.enqueue(brief({ tool: "revideokc" }))).rejects.toMatchObject({ status: 503, message: expect.stringContaining("revideokc video job") });
+    // revideokc's failing while manimkc's passes: refused, naming revideokc's check.
+    const failing = new VideoRunner(store, { doctor: doctor(), doctors: { revideokc: doctor({ ok: false, checks: [{ name: "toolchain", ok: false, detail: "no Chrome" }] }) } });
+    await failing.drain();
+    await expect(failing.enqueue(brief({ tool: "revideokc" }))).rejects.toMatchObject({ status: 503, detail: { tool: "revideokc", doctor: [{ detail: "no Chrome" }] } });
+    // revideokc's passing while manimkc's fails: a revideokc brief is admitted, a manimkc one is not.
+    const passing = new VideoRunner(store, { doctor: doctor({ ok: false, checks: [{ name: "render profile", ok: false, detail: "Metal" }] }), doctors: { revideokc: doctor() } });
+    await passing.drain();
+    expect((await passing.enqueue(brief({ tool: "revideokc" }))).created).toBe(true);
+    await expect(passing.enqueue(brief({ slug: "manimkc-one" }))).rejects.toMatchObject({ status: 503 });
   });
 
   it("counts video spend against the one daily cap, and refuses at it", async () => {

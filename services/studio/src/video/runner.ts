@@ -15,12 +15,12 @@ import { resolveSource } from "../source-note";
 import type { RecordStore } from "../store";
 import { readClaudeDefaults, readPreference, resolveAgentSettings } from "./agent-model";
 import { isNarrated, type ValidVideoBrief } from "./brief";
-import { briefTool, notInStudio, type VideoToolName } from "./tools";
+import { briefTool, DEFAULT_VIDEO_TOOL, notInStudio, type VideoToolName } from "./tools";
 import { backendFor, type BackendJob, type VideoBackend } from "./backend";
 import { appendRead, editsOn, readCalls, readReads, ReadTracker, isToolResult, LineQueue } from "./calls";
 import { BASH_TIMEOUT_MS, VIDEO_CONCURRENCY, VIDEO_MAX_ATTEMPTS, VIDEO_RUNNER_NAME, videoHangMs, videoMaxTurns } from "./config";
-import { safeCopy, safeHash, safeRead } from "./copy";
-import type { VideoDoctor } from "./doctor";
+import { safeCopy, safeRead } from "./copy";
+import type { VideoDoctor, VideoDoctorReport } from "./doctor";
 import { runVideoGate, type GateTools } from "./gate";
 import { manualFile, writeManual } from "./manual";
 import { videoCandidateRef, videoTarget, type VideoPaths } from "./paths";
@@ -41,9 +41,9 @@ import type { VideoGateResult, VideoJobRecord } from "./types";
  * get right inside its own loop, as they are the owner's by hand.
  *
  * Nothing here is about one video tool: the checkout, the profiles, the
- * wrapper, the clips, the manual, the prompts and the gate's source steps
- * come from the brief's tool's backend (`backend.ts`, D75 of
- * docs/STUDIO-VIDEO-TOOLS.md). The doctor is still manimkc's.
+ * wrapper, the clips, the manual, the prompts, the gate's source steps, the
+ * sheets and the doctor come from the brief's tool's backend (`backend.ts`,
+ * D75 of docs/STUDIO-VIDEO-TOOLS.md).
  */
 
 export type VideoStore = RecordStore<VideoJobRecord>;
@@ -80,7 +80,10 @@ export interface VideoParent {
 }
 
 export interface VideoRunnerDeps {
+  /** The default tool's doctor (manimkc's, D72), used for a brief with no `tool` too. */
   doctor: VideoDoctor;
+  /** Each other tool's doctor (D75): a job of a tool with none here is refused, never run on another tool's verdict. */
+  doctors?: Partial<Record<VideoToolName, VideoDoctor>>;
   /** Every other entry the daily cap counts: diagram jobs and planner turns. */
   otherSpend?: () => readonly SpendEntry[];
   /** The toolchain, discovered per job by its backend. A test passes its own. */
@@ -105,6 +108,8 @@ function ownerHome(): string {
  */
 export function videoAgentArgv(input: {
   paths: Pick<VideoPaths, "settings" | "lib" | "out">;
+  /** The backend's `--add-dir`s; manimkc's, the lib copy and the renders, when left out. */
+  addDirs?: readonly string[];
   prompt: string;
   sessionId: string;
   resume: boolean;
@@ -132,10 +137,7 @@ export function videoAgentArgv(input: {
     "--strict-mcp-config",
     "--mcp-config",
     '{"mcpServers":{}}',
-    "--add-dir",
-    paths.lib,
-    "--add-dir",
-    paths.out,
+    ...(input.addDirs ?? [paths.lib, paths.out]).flatMap((dir) => ["--add-dir", dir]),
     ...(input.source === undefined ? [] : ["--add-dir", path.dirname(input.source)]),
     ...(input.model === null ? [] : ["--model", input.model]),
     ...(input.effort === null ? [] : ["--effort", input.effort]),
@@ -170,6 +172,26 @@ export class VideoRunner {
 
   private async tools(backend: VideoBackend): Promise<Toolchain> {
     return this.deps.toolchain !== undefined ? this.deps.toolchain() : backend.toolchain();
+  }
+
+  /** The doctor that answers for a tool: the default tool's is `deps.doctor`, every other one's its own entry, or none. */
+  doctorFor(tool: VideoToolName): VideoDoctor | undefined {
+    return this.deps.doctors?.[tool] ?? (tool === DEFAULT_VIDEO_TOOL ? this.deps.doctor : undefined);
+  }
+
+  /** The doctor's answer for a tool, or a failing one naming the missing doctor. */
+  private async doctorReport(tool: VideoToolName): Promise<VideoDoctorReport> {
+    const doctor = this.doctorFor(tool);
+    if (doctor !== undefined) return doctor.report();
+    return {
+      ok: false,
+      sandbox: false,
+      metal: false,
+      kokoro: false,
+      voices: [],
+      checks: [{ name: "doctor", ok: false, detail: `this runner was started without a ${tool} doctor, so no ${tool} video can be checked or made` }],
+      checkedAt: new Date().toISOString(),
+    };
   }
 
   /* ------------------------------------------------------------------ */
@@ -258,14 +280,20 @@ export class VideoRunner {
    * the catalog's one transaction (D52).
    */
   async admit(brief: ValidVideoBrief, replacing: string | null = null): Promise<{ revision: number | null | undefined }> {
-    const report = await this.deps.doctor.report();
-    if (!report.ok) {
-      throw new JobRefused(503, "this machine cannot run a video job right now, so nothing was queued", {
-        doctor: report.checks.filter((check) => !check.ok),
-      });
-    }
     const unavailable = notInStudio(briefTool(brief));
     if (unavailable !== null) throw new JobRefused(409, `${unavailable}, so nothing was queued`, { tool: briefTool(brief) });
+    // The brief's tool's own doctor (D75): one tool's verdict says nothing
+    // about another's sandbox.
+    const report = await this.doctorReport(briefTool(brief));
+    if (!report.ok) {
+      throw new JobRefused(
+        503,
+        briefTool(brief) === DEFAULT_VIDEO_TOOL
+          ? "this machine cannot run a video job right now, so nothing was queued"
+          : `this machine cannot run a ${briefTool(brief)} video job right now, so nothing was queued`,
+        { doctor: report.checks.filter((check) => !check.ok), tool: briefTool(brief) },
+      );
+    }
     if (isNarrated(brief) && !report.voices.includes(brief.voice)) {
       throw new JobRefused(409, `the voice ${brief.voice} is not installed for kokoro, and the narration step never downloads one (V9)`, {
         installed: report.voices,
@@ -575,8 +603,8 @@ export class VideoRunner {
     }
     entry.mayFinish = true;
 
-    /* The workspace, only on a machine the doctor passes: never unsandboxed (V2, V3). */
-    const report = await this.deps.doctor.report();
+    /* The workspace, only on a machine the tool's doctor passes: never unsandboxed (V2, V3). */
+    const report = await this.doctorReport(briefTool(record.brief));
     if (!report.ok) {
       throw new Error(`the video doctor fails, so nothing was rendered: ${report.checks.filter((check) => !check.ok).map((check) => check.detail).join("; ")}`);
     }
@@ -597,7 +625,7 @@ export class VideoRunner {
     // A resume continues work that may already be finished, so its source is
     // not required to change; a revise or a change is.
     const isResume = record.parentJobId !== null && record.changes === null && this.store.get(record.parentJobId)?.state === "interrupted";
-    const sourceHashBefore = startFiles === null || isResume ? null : await safeHash(paths.sceneFile);
+    const sourceHashBefore = startFiles === null || isResume ? null : await backend.sourceHash(paths);
     record = await this.store.update(id, { classes: scaffolded.classes, sourceHashBefore });
     await this.store.emit(id, { type: "step", state: "running", note: `the topic is ready: ${scaffolded.classes.join(", ")}` });
 
@@ -623,7 +651,7 @@ export class VideoRunner {
     /* The manual and the settings. */
     let manualHash = this.inheritedManual(record, inherited !== null);
     if (manualHash === null || (await manualFile(manualHash)) === null) {
-      const written = await writeManual(backend.manual(paths.wrapper, listing ?? "(the listing could not be read; run the api command)"));
+      const written = await writeManual(backend.manual(paths.wrapper, listing ?? "(the listing could not be read; run the api command)", paths));
       manualHash = written.hash;
     }
     await writeFile(
@@ -682,11 +710,12 @@ export class VideoRunner {
               },
       );
       startedSession = true;
-      const sceneBefore = await safeHash(paths.sceneFile);
+      const sceneBefore = await backend.sourceHash(paths);
       let initNoted: Promise<void> = Promise.resolve();
       const agent = this.spawn({
         id,
         paths,
+        addDirs: backend.addDirs(paths),
         prompt,
         sessionId: agentSessionId,
         resume: resuming,
@@ -725,7 +754,7 @@ export class VideoRunner {
         agentSessionId = randomUUID();
         resumeFromParent = false;
         startedSession = false;
-        const written = await writeManual(backend.manual(paths.wrapper, listing ?? ""));
+        const written = await writeManual(backend.manual(paths.wrapper, listing ?? "", paths));
         manualHash = written.hash;
         record = await this.store.update(id, { agentSessionId, manualHash });
         await this.store.emit(id, {
@@ -736,7 +765,7 @@ export class VideoRunner {
         findings = [];
         continue;
       }
-      if (outcome.isError && outcome.stopReason === null && (outcome.turns ?? 0) <= 1 && (await safeHash(paths.sceneFile)) === sceneBefore) {
+      if (outcome.isError && outcome.stopReason === null && (outcome.turns ?? 0) <= 1 && (await backend.sourceHash(paths)) === sceneBefore) {
         // The first request itself failed: a refused credential, a model this
         // account cannot use. A retry sends the same request again.
         refused = outcome;
@@ -823,6 +852,7 @@ export class VideoRunner {
   private spawn(input: {
     id: string;
     paths: VideoPaths;
+    addDirs: readonly string[];
     prompt: string;
     sessionId: string;
     resume: boolean;
@@ -865,8 +895,9 @@ export class VideoRunner {
     await this.store.appendRaw(id, line);
     const paths = entry.paths;
     if (paths !== null) {
+      const backend = backendFor(briefTool(entry.record.brief));
       for (const file of entry.reads.observe(line)) {
-        if (!file.endsWith(".sheet.png")) continue;
+        if (!backend.isSheet(paths, file)) continue;
         await appendRead(paths.reads, { path: file, at: new Date().toISOString() });
         await this.store.emit(id, { type: "step", state: "running", note: `read the sheet ${path.basename(file, ".sheet.png")}` });
       }
@@ -932,7 +963,7 @@ export class VideoRunner {
     });
     await this.refreshSteps(entry);
     // The source is kept at every verdict: it is what a revise or a change starts from.
-    if (entry.paths !== null) await saveSource(entry.paths);
+    if (entry.paths !== null) await saveSource(backendFor(briefTool(record.brief)), entry.paths);
     await this.store.emit(id, {
       type: state === "awaiting_review" ? "done" : "error",
       state,
@@ -1041,11 +1072,11 @@ export class VideoRunner {
   async cleanup(record: VideoJobRecord, options: { candidate: boolean }): Promise<void> {
     const backend = backendFor(briefTool(record.brief));
     const paths = await backend.paths(record.id, record.slug);
-    await saveSource(paths);
+    await saveSource(backend, paths);
     const sheets = path.join(paths.job, "sheets");
     await mkdir(sheets, { recursive: true });
-    for (const scene of record.classes) {
-      await safeCopy(backend.sheet(paths, scene), path.join(sheets, `${scene}.sheet.png`)).catch(() => undefined);
+    for (const sheet of backend.sheets(paths, record.classes)) {
+      await safeCopy(sheet.file, path.join(sheets, sheet.kept)).catch(() => undefined);
     }
     if (isNarrated(record.brief) && (await lstat(paths.renderProfile).catch(() => null)) !== null) {
       const tools = await this.tools(backend).catch(() => null);
@@ -1064,12 +1095,12 @@ export class VideoRunner {
   }
 }
 
-/** The final source into `source/`, the gate's careful way. */
-async function saveSource(paths: VideoPaths): Promise<void> {
+/** The final source into `source/`, the gate's careful way: the files the job's backend names. */
+async function saveSource(backend: VideoBackend, paths: VideoPaths): Promise<void> {
+  const files = await backend.sourceFiles(paths).catch(() => [] as string[]);
   await rm(paths.source, { recursive: true, force: true });
   await mkdir(paths.source, { recursive: true });
-  await safeCopy(paths.sceneFile, path.join(paths.source, path.basename(paths.sceneFile))).catch(() => undefined);
-  await safeCopy(paths.topicYml, path.join(paths.source, "topic.yml")).catch(() => undefined);
+  for (const file of files) await safeCopy(file, path.join(paths.source, path.basename(file))).catch(() => undefined);
 }
 
 /**
@@ -1143,6 +1174,8 @@ export function narrateCall(call: { verb: string; scenes?: string[]; exitCode: n
       return ok
         ? `rendered ${call.rendered?.length ?? 0} scene${call.rendered?.length === 1 ? "" : "s"} at 480p in ${seconds} s`
         : `a preview failed after ${seconds} s; the agent has the error`;
+    case "still":
+      return ok ? `rendered the stills at half size in ${seconds} s` : `a still render failed after ${seconds} s; the agent has the error`;
     case "build":
       return ok ? `built the video at 1080p in ${seconds} s` : `a build failed after ${seconds} s; the agent has the error`;
     case "narrate":
