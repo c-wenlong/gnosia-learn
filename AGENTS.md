@@ -248,6 +248,16 @@ Rules of engagement:
   the submodule root.**
 - **Rendering needs a Chrome**: the system Chrome, or `REVIDEOKC_CHROME`.
   Install with `PUPPETEER_SKIP_DOWNLOAD=1 npm ci` in the submodule.
+- **revideokc narrates through gnosia-audio in its own `.venv`**, as
+  remotionkc does (revideokc#5). `npm run narration-deps` in
+  `tools/revideokc` installs the pinned gnosia-audio (non-editable, with uv);
+  run it after a fresh clone and after any pointer move that changes the pin,
+  or `narrate`, `still` and `build` refuse and `doctor` fails. Only
+  `topics --json`, which the catalog runs, works without it
+  (`services/catalog/test/revideokc-pinned.test.ts` holds that). It hands
+  gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling
+  `../manimkc`) for the voice settings and so the clip keys; without one,
+  gnosia-audio falls back to its own voice, which is not the series'.
 - The end-to-end process is the `revideokc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/revideokc-video`.
 
