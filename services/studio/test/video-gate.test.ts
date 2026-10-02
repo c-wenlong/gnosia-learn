@@ -515,6 +515,12 @@ describe("keeping the scene file a preview rendered", () => {
       await utimes(path.join(previewedDir(kept), `${sha(text)}.py`), when, when);
     }
     expect((await readdir(previewedDir(kept))).sort()).toEqual([`${sha("second")}.py`, `${sha("third")}.py`].sort());
+    // "second" previewed again is recent again, so a fourth source drops "third".
+    await writeFile(kept.sceneFile, "second", "utf8");
+    await keepPreviewed(kept, [call(sha("second"))], 2);
+    await writeFile(kept.sceneFile, "fourth", "utf8");
+    await keepPreviewed(kept, [call(sha("fourth"))], 2);
+    expect((await readdir(previewedDir(kept))).sort()).toEqual([`${sha("second")}.py`, `${sha("fourth")}.py`].sort());
     await rm(dir, { recursive: true, force: true });
   });
 });

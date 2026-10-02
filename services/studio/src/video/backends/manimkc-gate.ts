@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // The catalog's limit on a video's source, one constant for both sides. A
@@ -180,8 +180,14 @@ export async function keepPreviewed(paths: VideoPaths, calls: readonly WrapperCa
     const hash = call.sceneSha256;
     if (isLook(call) && typeof hash === "string" && SHA256.test(hash)) wanted.add(hash);
   }
+  // A source previewed again is already kept: mark it recent, since the
+  // limit below drops the least recently previewed first.
+  const now = new Date();
   for (const hash of [...wanted]) {
-    if ((await lstat(path.join(dir, `${hash}.py`)).catch(() => null)) !== null) wanted.delete(hash);
+    const file = path.join(dir, `${hash}.py`);
+    if ((await lstat(file).catch(() => null)) === null) continue;
+    wanted.delete(hash);
+    await utimes(file, now, now).catch(() => undefined);
   }
   if (wanted.size === 0) return;
   let body: Buffer;
@@ -193,7 +199,7 @@ export async function keepPreviewed(paths: VideoPaths, calls: readonly WrapperCa
   const hash = createHash("sha256").update(body).digest("hex");
   if (!wanted.has(hash)) return;
   await mkdir(dir, { recursive: true });
-  // At the limit, the oldest kept files go to make room: a recent preview is
+  // At the limit, the least recently previewed files go to make room: a recent preview is
   // the one a later edit is compared against. Dropping one only means a scene
   // last previewed from it is previewed again, the strict reading.
   const kept = (await readdir(dir).catch(() => [] as string[])).filter((name) => SHA256.test(name.replace(/\.py$/, "")) && name.endsWith(".py"));
