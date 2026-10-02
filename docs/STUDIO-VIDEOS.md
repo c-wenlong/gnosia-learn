@@ -929,7 +929,13 @@ source it came from. Steps marked *narrated* apply to a narrated video; a
 silent one (`voice: "none"`) takes the silent line instead.
 
 1. **Source.** The scene file exists, parses, and is newer than the job's
-   start; on a change, it differs from the source the job started from.
+   start; on a change, it differs from the source the job started from. It
+   and `topic.yml` together hold at most what Accept stores
+   (`VIDEO_SOURCE_BYTES_MAX` in
+   `services/catalog/src/content/video-source-limits.ts`, 512 KiB, the one
+   constant `catalog video put` reads), so a video ready for review is one
+   Accept can store. The gate once read a scene file of up to 2 MiB, which
+   passed sources Accept then refused.
 2. **Lint.** `video lint --json` reports no errors. Warnings are kept for the
    job view and do not fail the gate.
 3. **The script.** From the scene file's syntax tree: one class per brief
@@ -995,9 +1001,25 @@ silent one (`voice: "none"`) takes the silent line instead.
    read a copied 58 s deliverable, the poster was cut (10,824 bytes), and a
    write to any other name in `candidate/` or outside it was refused.
 10. **Looked (D50).** For every scene, the agent's stream holds a Read of that
-    scene's sheet path after the last wrapper call that rendered it. The
-    runner has both halves: which call rendered which scene is in
-    `calls.ndjson`, and every Read is a `tool_use` in `session.ndjson`.
+    scene's sheet path after the last wrapper call that rendered it, and
+    that render was of the source the gate checked. The runner has both
+    halves: which call rendered which scene, and the scene file's sha256
+    when it started, is in `calls.ndjson`, and every Read is a `tool_use` in
+    `session.ndjson`. A call rendered a scene only when the wrapper saw its
+    sheet written (`rendered`) and its render step ran: a refused call, or a
+    preview whose narration failed, wrote no sheet and replaced none.
+    The hash is of the whole file, and the manual has the agent preview
+    only the scenes it changed, so a scene whose last preview is of an
+    older file still counts when that file differs from the checked one
+    only inside other scene classes. The runner keeps the file each preview
+    rendered, under `jobs/<id>/previewed/<sha256>.py`, as the tool result
+    arrives and only when the file still has the hash the preview recorded;
+    the gate reads it back only when its bytes still have that hash, and
+    compares it with step 5's copy of the checked file, scene by scene
+    (`sceneFingerprint` in `backends/manimkc-gate.ts`). Anything it cannot
+    tell counts as changed: an edit in the scene's own class or in code
+    outside every scene class, a scene that names another scene class, a
+    file the runner did not keep. That scene is then previewed again.
 
 **What passes means.** All ten steps pass. A failure resumes the agent with
 the findings, as for diagrams, and it fixes, rebuilds and exits again; three
@@ -1534,6 +1556,17 @@ halves, so it can hold the agent to it rather than hope.
 
 **Rejected:** trusting the prompt; judging the sheets with a second model,
 which would pay for a review the person is about to do.
+
+**Amended (2026-10-03):** the look must be of the source the gate checked.
+A sheet Read after its render, of a file the agent then edited, used to
+count, so a look at an earlier draft passed for a look at the video; review
+of the revideokc backend (#271) found it there and here. The whole-file hash
+alone would fail the manual's own loop (fix a scene, preview only it), so a
+scene's older look stands when the edit since was only inside other scene
+classes; step 10 says how that is told, and why anything unclear counts as
+changed. What it does not see is a statement in another scene's class body
+that changes shared state at import, which scene code does not do and the
+person's viewing would catch.
 
 ### D51. The kind is chosen before the first paid turn, and fixed after it
 

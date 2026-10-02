@@ -903,6 +903,11 @@ export class VideoRunner {
       }
       if (editsOn(line).includes(paths.sceneFile)) entry.edits += 1;
       if (isToolResult(line) || editsOn(line).length > 0) await this.refreshSteps(entry);
+      // A wrapper call has just ended: let the backend keep the source its
+      // look rendered from, which the gate's step 10 compares scene by scene.
+      if (isToolResult(line) && backend.keepPreviewed !== undefined) {
+        await backend.keepPreviewed(paths, await readCalls(paths.calls)).catch(() => undefined);
+      }
     }
     const now = Date.now();
     if (now - entry.costWrittenAt >= 2_000) {

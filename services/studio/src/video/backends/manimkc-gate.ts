@@ -1,12 +1,16 @@
 import { createHash } from "node:crypto";
-import { stat } from "node:fs/promises";
+import { lstat, mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+// The catalog's limit on a video's source, one constant for both sides. A
+// pure module with no imports, reached by path as the poster recipe is.
+import { VIDEO_SOURCE_BYTES_MAX } from "../../../../catalog/src/content/video-source-limits";
 import { isNarrated } from "../brief";
-import { safeRead } from "../copy";
-import type { SourceCheck, SourceCheckInput, GateReport, VideoGateChecks } from "../gate";
+import { isLook, type WrapperCall } from "../calls";
+import { CopyRefused, safeRead } from "../copy";
+import type { SourceCheck, SourceCheckInput, GateReport, SceneUnchangedInput, VideoGateChecks } from "../gate";
 import { compareLines, inOrder } from "../lines";
-import { sheetPath } from "../paths";
+import { sheetPath, type VideoPaths } from "../paths";
 import { sceneClasses, voicedLines, type ScannedClass } from "../scan";
 import type { LineChange } from "../types";
 
@@ -26,15 +30,25 @@ async function checkSource(input: SourceCheckInput, report: GateReport): Promise
   const { brief, paths, tools } = input;
   const narrated = isNarrated(brief);
 
-  /* 1. Source: exists, parses, newer than the job, and on a change, changed. */
-  let source: string;
+  /* 1. Source: exists, parses, within what Accept stores, newer than the job, and on a change, changed. */
+  let body: Buffer;
   try {
-    source = (await safeRead(paths.sceneFile, 2 * 2 ** 20)).toString("utf8");
+    body = await safeRead(paths.sceneFile, VIDEO_SOURCE_BYTES_MAX);
   } catch (error) {
+    if (error instanceof CopyRefused && error.reason === "too-large") {
+      const size = (await lstat(paths.sceneFile).catch(() => null))?.size;
+      return tooLarge(report, `${size ?? "too many"} bytes in the scene file alone`);
+    }
     report.step("source", false, (error as Error).message);
     report.finding(`The scene file ${path.basename(paths.sceneFile)} could not be read: ${(error as Error).message}.`);
     return { ok: false, script: null };
   }
+  // Accept stores the scene file and topic.yml, at most this much together
+  // (`catalog video put`), so a video the gate passes is one it can store.
+  const topicBytes = (await lstat(paths.topicYml).catch(() => null))?.size ?? 0;
+  const bytes = body.length + topicBytes;
+  if (bytes > VIDEO_SOURCE_BYTES_MAX) return tooLarge(report, `${bytes} bytes of source with topic.yml`);
+  const source = body.toString("utf8");
   const facts = await stat(paths.sceneFile);
   const scan = await tools.scan(source);
   if (!scan.ok) {
@@ -116,7 +130,170 @@ async function checkSource(input: SourceCheckInput, report: GateReport): Promise
   return { ok: true, script, sourceHash, voiced: voicedLines(scan) };
 }
 
+function tooLarge(report: GateReport, detail: string): SourceCheck {
+  report.step("source", false, `${detail}, over the ${VIDEO_SOURCE_BYTES_MAX} Accept stores`);
+  report.finding(
+    `The scene file is too large: ${detail}, and a video is stored with at most ${VIDEO_SOURCE_BYTES_MAX} bytes of source, topic.yml included. Make it smaller (data belongs in fewer, shorter literals), then preview and build again.`,
+  );
+  return { ok: false, script: null };
+}
+
+/* ------------------------------------------------------------------ */
+/* Step 10: which scenes an edit after their last preview could touch  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The wrapper records the scene file's sha256 with every preview, of the
+ * whole file, and the manual tells the agent to preview only the scenes it
+ * changed. So a scene previewed before an edit to another scene has a sheet
+ * of an older file, and step 10 must tell an edit that could change that
+ * scene from one that could not. The runner keeps the file each preview
+ * rendered, by its hash (`keepPreviewed`); the gate compares that file with
+ * the one it checked, scene by scene (`sceneFingerprint`).
+ */
+
+/** Where the runner keeps each previewed scene file, named by its sha256. Outside the topic folder, so nothing it holds is source. */
+export function previewedDir(paths: VideoPaths): string {
+  return path.join(paths.job, "previewed");
+}
+
+const SHA256 = /^[0-9a-f]{64}$/;
+/** A previewed file may be larger than what Accept stores, as the final one may not: the old read limit. */
+const PREVIEWED_BYTES_MAX = 2 * 2 ** 20;
+/** Enough for every preview of a long job; past it, a scene previewed from an unkept file has to be previewed again. */
+const PREVIEWED_FILES_MAX = 64;
+
+/**
+ * Keep the scene file as it is now when it is the file a preview rendered:
+ * the runner calls this as each tool result arrives, which is when a
+ * wrapper call has just ended, so the file is almost always the one it
+ * hashed. When the agent edited it in between, the hash does not match and
+ * nothing is kept, and that scene's look counts only against the identical
+ * file, which is the safe reading. Named by its own sha256 and checked
+ * against it on every read, so a file put there by anything else is never
+ * taken for a preview's source.
+ */
+export async function keepPreviewed(paths: VideoPaths, calls: readonly WrapperCall[]): Promise<void> {
+  const dir = previewedDir(paths);
+  const wanted = new Set<string>();
+  for (const call of calls) {
+    const hash = call.sceneSha256;
+    if (isLook(call) && typeof hash === "string" && SHA256.test(hash)) wanted.add(hash);
+  }
+  for (const hash of [...wanted]) {
+    if ((await lstat(path.join(dir, `${hash}.py`)).catch(() => null)) !== null) wanted.delete(hash);
+  }
+  if (wanted.size === 0) return;
+  let body: Buffer;
+  try {
+    body = await safeRead(paths.sceneFile, PREVIEWED_BYTES_MAX);
+  } catch {
+    return;
+  }
+  const hash = createHash("sha256").update(body).digest("hex");
+  if (!wanted.has(hash)) return;
+  await mkdir(dir, { recursive: true });
+  const kept = await readdir(dir).catch(() => [] as string[]);
+  if (kept.filter((name) => name.endsWith(".py")).length >= PREVIEWED_FILES_MAX) return;
+  const pending = path.join(dir, `.${hash}.${process.pid}.tmp`);
+  await writeFile(pending, body, { mode: 0o644 });
+  await rename(pending, path.join(dir, `${hash}.py`));
+}
+
+/** A file kept by `keepPreviewed`, or a copy the gate took, read back only when its bytes still have the hash it is known by. */
+async function readByHash(file: string, hash: string, maxBytes: number): Promise<string | null> {
+  try {
+    const body = await safeRead(file, maxBytes);
+    if (createHash("sha256").update(body).digest("hex") !== hash) return null;
+    return body.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a scene's last preview, of an older scene file, still shows the
+ * scene in the file the gate checked: both files are known, and they are
+ * the same once every other scene class is set aside (`sceneFingerprint`).
+ * Unknown is no: the scene is previewed again.
+ */
+async function sceneUnchanged(input: SceneUnchangedInput): Promise<boolean> {
+  if (input.renderedFrom === null || !SHA256.test(input.renderedFrom)) return false;
+  const before = await readByHash(path.join(previewedDir(input.paths), `${input.renderedFrom}.py`), input.renderedFrom, PREVIEWED_BYTES_MAX);
+  // Step 5's copy of the checked file, held to the hash steps 1 to 3 read it with.
+  const now = await readByHash(path.join(input.paths.candidateSource, path.basename(input.paths.sceneFile)), input.sourceHash, PREVIEWED_BYTES_MAX);
+  if (before === null || now === null) return false;
+  const a = sceneFingerprint(before, input.scene, input.classes);
+  const b = sceneFingerprint(now, input.scene, input.classes);
+  return a !== null && a === b;
+}
+
+/** A line that starts a top-level statement: not blank, not indented, not a comment. */
+const TOP_LEVEL = /^[^\s#]/;
+const CLASS_LINE = /^class\s+([A-Za-z_][A-Za-z0-9_]*)\b/;
+
+/**
+ * The scene file as one scene sees it: every line but those of the other
+ * scene classes, each of which is left as one placeholder line where it
+ * stood. Two files with the same fingerprint for a scene differ only inside
+ * the other scenes' classes, so a sheet of that scene from one is a sheet of
+ * it from the other. Null when that cannot be said.
+ *
+ * A class runs from its `class` line to the next line that starts at the
+ * margin and is not a comment. That is read from the text, not a parse, and
+ * every way it can be wrong is the safe way: a line at the margin inside a
+ * class (a bracket's continuation, a triple-quoted string) ends the class
+ * early, and the rest of it then counts as code every scene shares, so an
+ * edit there makes every scene's look out of date. A decorator line above a
+ * class counts as shared code for the same reason.
+ *
+ * Null, so the scene's look counts only against the identical file, when the
+ * scene is not a class at the margin, when a scene class is defined twice,
+ * or when anything the scene sees (its own class, or code outside every
+ * scene class) names another scene class: a base, a call or a string
+ * lookup, which would make that class's code part of this scene's picture.
+ *
+ * What it does not see: statements in another scene's class body run when
+ * the module is imported, so one that changes shared state between two
+ * previews could change this scene without a line of it changing. Scene
+ * code does not do that, the agent is not the adversary here, and the
+ * person watches the whole video before Accept.
+ */
+export function sceneFingerprint(source: string, scene: string, classes: readonly string[]): string | null {
+  const lines = source.split("\n");
+  const spans = new Map<string, { start: number; end: number }>();
+  for (let i = 0; i < lines.length; i += 1) {
+    const name = CLASS_LINE.exec(lines[i]!)?.[1];
+    if (name === undefined || !classes.includes(name)) continue;
+    if (spans.has(name)) return null;
+    let end = i + 1;
+    while (end < lines.length && !TOP_LEVEL.test(lines[end]!)) end += 1;
+    spans.set(name, { start: i, end });
+  }
+  if (!spans.has(scene)) return null;
+  const starts = new Map([...spans].filter(([name]) => name !== scene).map(([, span]) => [span.start, span.end]));
+  const seen: string[] = [];
+  for (let i = 0; i < lines.length; ) {
+    const end = starts.get(i);
+    if (end !== undefined) {
+      seen.push("\u0000another scene\u0000");
+      i = end;
+    } else {
+      seen.push(lines[i]!);
+      i += 1;
+    }
+  }
+  const others = classes.filter((name) => name !== scene);
+  if (others.length > 0) {
+    const named = new RegExp(`\\b(?:${others.map((name) => name.replace(/[^A-Za-z0-9_]/g, "")).join("|")})\\b`);
+    if (seen.some((line) => named.test(line))) return null;
+  }
+  return seen.join("\n");
+}
+
 export const MANIMKC_GATE: VideoGateChecks = {
   checkSource,
   sheet: sheetPath,
+  sceneUnchanged,
+  keepPreviewed,
 };
