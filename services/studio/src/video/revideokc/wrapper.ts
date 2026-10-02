@@ -24,7 +24,10 @@ import type { RevideokcToolchain } from "./toolchain";
  * nothing (`revideokcEnv`), arguments checked against fixed patterns and
  * refused with one fixed sentence, one line per call in `calls.ndjson` with
  * the source's hash, the sheets and deliverable found by `lstat` at paths
- * computed from the brief, and a marker in `inflight/` while it runs.
+ * computed from the brief, and a marker in `inflight/` while it runs. One
+ * rule is its own: a step's output reaches the agent through the wrapper's
+ * pipes, not inherited descriptors (`sandboxed`), since node, unlike
+ * manimkc's Python, aborts when the profile refuses to fstat them.
  *
  * What differs: the source is several files, so the recorded hash is the
  * combined one (`source.ts`); revideokc's narration is a step of its own
@@ -122,13 +125,33 @@ function record(entry) {
   fs.appendFileSync(CONFIG.calls, JSON.stringify(entry) + "\n", { mode: 0o644 });
 }
 
+// Write a whole buffer to one of this process's own descriptors, waiting out
+// a full pipe rather than dropping the rest.
+function relay(fd, buffer) {
+  let offset = 0;
+  while (buffer && offset < buffer.length) {
+    try {
+      offset += fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    } catch (error) {
+      if (error.code !== "EAGAIN") throw error;
+    }
+  }
+}
+
+// A step's output comes back through pipes of the wrapper's own, never the
+// descriptors the wrapper was given: the CLI hands Bash a file under the
+// temporary directory for stdout and stderr, which the profiles refuse to
+// read, and node aborts at start when it cannot fstat its standard streams.
 function sandboxed(step, profile, argv) {
   const started = Date.now();
   const result = spawnSync(CONFIG.sandboxExec, ["-f", CONFIG.profiles[profile], ...argv], {
     cwd: CONFIG.checkout,
     env: CONFIG.env[profile],
-    stdio: ["ignore", "inherit", "inherit"],
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 64 * 1024 * 1024,
   });
+  relay(1, result.stdout);
+  relay(2, result.stderr);
   return { step, exitCode: result.status === null ? null : result.status, signal: result.signal || null, ms: Date.now() - started };
 }
 

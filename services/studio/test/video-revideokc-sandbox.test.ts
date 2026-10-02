@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
-import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { execFile, spawnSync } from "node:child_process";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -171,6 +171,28 @@ const tryPort = (port) => new Promise((resolve) => {
     const result = await render([tools.node, "-e", program]);
     expect(JSON.parse(result.stdout.trim())).toEqual({ [base]: "ok", [base + 1]: "ok", [base + 2]: "listen EPERM", [base - 1]: "listen EPERM" });
   }, 60_000);
+
+  it("answers through its wrapper when its standard streams are a file the profiles refuse to read", async (context) => {
+    if (skip !== "") return context.skip(skip);
+    // Claude Code 2.1.287 runs Bash with stdout and stderr on a file under the
+    // temporary directory, which every profile denies; node in the sandbox
+    // aborted at start on the fstat of its inherited streams.
+    const out = path.join(root, "bash-output.txt");
+    const fd = openSync(out, "w");
+    // The later case reads the job's calls from the first; this one's line is put back out of its way.
+    const callsBefore = existsSync(job.paths.calls) ? readFileSync(job.paths.calls, "utf8") : null;
+    try {
+      const result = spawnSync(job.paths.wrapper, ["api", "clock"], { env: { PATH: "/usr/bin:/bin" }, stdio: ["ignore", fd, fd], timeout: 120_000 });
+      const text = readFileSync(out, "utf8");
+      expect(result.status, text.slice(-1500)).toBe(0);
+      expect(text).toContain("lib/clock.ts");
+      expect(text).not.toContain("Native stack trace");
+    } finally {
+      closeSync(fd);
+      if (callsBefore === null) rmSync(job.paths.calls, { force: true });
+      else writeFileSync(job.paths.calls, callsBefore);
+    }
+  });
 
   it("runs the job's still and build through its wrapper, narration and sidecars in their profile, and the gate passes the result", async (context) => {
     if (skip !== "") return context.skip(skip);
