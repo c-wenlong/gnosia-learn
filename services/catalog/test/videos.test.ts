@@ -214,7 +214,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
   }
 
   /** A candidate directory as the gate leaves it: the copies, `copies.json`, and `source/`. */
-  async function candidate(slug: string, options: { narrated?: boolean; render?: string; scene?: string } = {}) {
+  async function candidate(slug: string, options: { narrated?: boolean; render?: string; scene?: string; source?: Record<string, string> } = {}) {
     serial += 1;
     const dir = path.join(work, `candidate-${serial}`);
     await mkdir(path.join(dir, "source"), { recursive: true });
@@ -227,7 +227,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       files[`${slug}.chapters.json`] = JSON.stringify([{ title: "Why", start: 0 }]);
       files[`${slug}.vtt`] = "WEBVTT\n\n00:00.000 --> 00:02.000\nA line.\n";
     }
-    const source: Record<string, string> = {
+    const source: Record<string, string> = options.source ?? {
       [`source/${slug}.py`]: options.scene ?? `class S1_Why(VoiceScene):\n    pass\n`,
       "source/topic.yml": `topic: ${TOPIC}\n`,
     };
@@ -292,6 +292,46 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     await expect(
       runEnqueue({ brief: { kind: "video", topic: TOPIC, target: "videos/lease-one.mp4", idempotencyKey: "lease-two" } }),
     ).rejects.toThrow(/already held by job/);
+  });
+
+  it("lands a revideokc video with its TypeScript and narration as the source, and checks it back out (D79)", async () => {
+    const slug = "cache-in-depth";
+    const files = {
+      "source/scene.tsx": "export default defineTopic(function* () {});\n",
+      "source/narration.json": '[{"scene":"CD1_Why","title":"Why","lines":["A line."]}]\n',
+      "source/parts.ts": "export const depth = 3;\n",
+      "source/topic.yml": `topic: ${TOPIC}\n`,
+    };
+    const { job: queued } = await jobReady(slug, briefOf(slug, { tool: "revideokc" }));
+    const result = await put({ slug, dir: await candidate(slug, { source: files }), jobId: queued.id, base: null });
+    expect(result).toMatchObject({ ok: true, slug, jobState: "accepted" });
+    const [row] = await scratch.db.select().from(video).where(eq(video.slug, slug));
+    expect(Object.keys((row?.source as { files: object }).files).sort()).toEqual(["narration.json", "parts.ts", "scene.tsx", "topic.yml"]);
+    expect((row?.source as { brief: { tool?: string } }).brief.tool).toBe("revideokc");
+    const out = path.join(work, "checkout-revideokc");
+    const checked = await checkoutVideo(scratch.db, LOCAL, slug, out);
+    expect(checked.files.map((f) => f.name).sort()).toEqual(["narration.json", "parts.ts", "scene.tsx", "topic.yml"]);
+    expect(await readFile(path.join(out, "scene.tsx"), "utf8")).toBe(files["source/scene.tsx"]);
+  });
+
+  it("holds each tool's source to its own files: a revideokc video needs its scene and narration, a manimkc one a .py", async () => {
+    const revideokc = "no-scene-tsx";
+    const { job: one } = await jobReady(revideokc, briefOf(revideokc, { tool: "revideokc" }));
+    const pythonOnly = { "source/x.py": "class S1(VoiceScene): pass\n", "source/topic.yml": `topic: ${TOPIC}\n` };
+    await expect(put({ slug: revideokc, dir: await candidate(revideokc, { source: pythonOnly }), jobId: one.id, base: null })).rejects.toMatchObject({
+      message: expect.stringMatching(/needs topic\.yml and scene\.tsx and narration\.json for a revideokc video/),
+    });
+    const manimkc = "tsx-for-manimkc";
+    const { job: two } = await jobReady(manimkc);
+    const tsxOnly = { "source/scene.tsx": "export default 1;\n", "source/topic.yml": `topic: ${TOPIC}\n` };
+    await expect(put({ slug: manimkc, dir: await candidate(manimkc, { source: tsxOnly }), jobId: two.id, base: null })).rejects.toMatchObject({
+      message: expect.stringMatching(/at least one scene file \(\.py\) for a manimkc video/),
+    });
+    const unknown = "blender-video";
+    const { job: three } = await jobReady(unknown, briefOf(unknown, { tool: "blender" }));
+    await expect(put({ slug: unknown, dir: await candidate(unknown), jobId: three.id, base: null })).rejects.toMatchObject({
+      message: expect.stringMatching(/video tool "blender"/),
+    });
   });
 
   it("lands a narrated video and accepts its job in one transaction", async () => {

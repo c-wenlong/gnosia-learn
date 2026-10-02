@@ -29,6 +29,7 @@ import { sha256 } from "./diagram-document";
 import { latestRevisions, lockEntity } from "./revisions";
 import { andOwnedBy } from "./scope";
 import { ContentWriteError, deleteContent, writeContents, type WriteContentInput, type WriteContentResult } from "./write";
+import { VIDEO_SOURCE_BYTES_MAX, VIDEO_SOURCE_FILES_MAX } from "./video-source-limits";
 
 /**
  * Studio videos in the database (docs/STUDIO-VIDEOS.md, "Accept", D49).
@@ -119,10 +120,41 @@ export function candidateFiles(slug: string) {
 /** The file the gate writes beside its copies: what each copy's hash was when it was taken, and the duration. */
 export const COPIES_FILE = "copies.json";
 
-/** A source file's name: one path segment, a scene file or the topic file. */
-const SOURCE_NAME = /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.py|topic\.yml)$/;
-const SOURCE_BYTES_MAX = 512 * 1024;
-const SOURCE_FILES_MAX = 20;
+/**
+ * A source file's name: one path segment, the topic file, or a scene file of
+ * one of the studio's video tools. manimkc's are Python modules; revideokc's
+ * are `scene.tsx`, its `narration.json` and any `.ts` or `.tsx` beside them
+ * (D79 of docs/STUDIO-VIDEO-TOOLS.md). Which of them a video may hold is the
+ * tool its brief names (`SOURCE_BY_TOOL`); this is any of them, for reading a
+ * stored source back.
+ */
+const SOURCE_NAME = /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.(?:py|ts|tsx)|topic\.yml|narration\.json)$/;
+
+/** The studio's video tools with a backend, and the brief's default (D72: absent is manimkc). */
+type SourceTool = "manimkc" | "revideokc";
+
+/** Per tool: the files its source may hold, and the ones it must, beside `topic.yml`. */
+const SOURCE_BY_TOOL: Record<SourceTool, { name: RegExp; required: (names: string[]) => string | null }> = {
+  manimkc: {
+    name: /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.py|topic\.yml)$/,
+    required: (names) => (names.some((n) => n.endsWith(".py")) ? null : "at least one scene file (.py)"),
+  },
+  revideokc: {
+    name: /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.tsx?|topic\.yml|narration\.json)$/,
+    required: (names) => (names.includes("scene.tsx") && names.includes("narration.json") ? null : "scene.tsx and narration.json"),
+  },
+};
+
+/** The tool a stored brief names; absent is manimkc, and a tool with no studio backend is refused by name. */
+function sourceTool(brief: Record<string, unknown>): SourceTool {
+  const tool = brief.tool;
+  if (tool === undefined || tool === null || tool === "" || tool === "manimkc") return "manimkc";
+  if (tool === "revideokc") return "revideokc";
+  throw new VideoError("unreadable", `the brief names the video tool ${JSON.stringify(tool)}, whose source the catalog does not know how to store.`);
+}
+// One pair of limits for the catalog and the studio's gate, which reaches the module by path.
+const SOURCE_BYTES_MAX = VIDEO_SOURCE_BYTES_MAX;
+const SOURCE_FILES_MAX = VIDEO_SOURCE_FILES_MAX;
 
 /** `video.source`: what a change job starts from. */
 export interface VideoSource {
@@ -303,7 +335,8 @@ async function checkedCopy(dir: string, name: string, copies: Copies): Promise<{
 }
 
 /** The scene files and `topic.yml` from `candidate/source/`, each held to the gate's record when it has one. */
-async function readSource(dir: string, copies: Copies): Promise<Record<string, string>> {
+async function readSource(dir: string, copies: Copies, tool: SourceTool): Promise<Record<string, string>> {
+  const rule = SOURCE_BY_TOOL[tool];
   const root = path.join(dir, "source");
   let names: string[];
   try {
@@ -313,7 +346,7 @@ async function readSource(dir: string, copies: Copies): Promise<Record<string, s
   }
   const files: Record<string, string> = {};
   let total = 0;
-  for (const name of names.filter((n) => SOURCE_NAME.test(n))) {
+  for (const name of names.filter((n) => rule.name.test(n))) {
     const file = path.join(root, name);
     const { bytes } = await regularFile(file);
     total += bytes;
@@ -338,7 +371,7 @@ async function readSource(dir: string, copies: Copies): Promise<Record<string, s
   // The other direction: a source file the gate recorded and that is gone
   // would make the stored source a different one from what it checked.
   const missing = Object.keys(copies.files)
-    .filter((key) => key.startsWith("source/") && SOURCE_NAME.test(key.slice("source/".length)))
+    .filter((key) => key.startsWith("source/") && rule.name.test(key.slice("source/".length)))
     .filter((key) => !(key.slice("source/".length) in files));
   if (missing.length > 0) {
     throw new VideoError(
@@ -346,8 +379,9 @@ async function readSource(dir: string, copies: Copies): Promise<Record<string, s
       `${COPIES_FILE} records ${missing.join(", ")}, which ${missing.length === 1 ? "is" : "are"} not in ${root}. Nothing was stored.`,
     );
   }
-  if (!("topic.yml" in files) || !Object.keys(files).some((n) => n.endsWith(".py"))) {
-    throw new VideoError("unreadable", `${root} needs topic.yml and at least one scene file (.py): it is what a change starts from.`);
+  const missingScene = rule.required(Object.keys(files));
+  if (!("topic.yml" in files) || missingScene !== null) {
+    throw new VideoError("unreadable", `${root} needs topic.yml and ${missingScene ?? "its scene files"} for a ${tool} video: it is what a change starts from.`);
   }
   if (Object.keys(files).length > SOURCE_FILES_MAX) {
     throw new VideoError("unreadable", `${root} holds more than ${SOURCE_FILES_MAX} source files.`);
@@ -439,7 +473,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
   }
 
   const copies = await readCopies(dir);
-  const files = await readSource(dir, copies);
+  const files = await readSource(dir, copies, sourceTool(brief));
   const source: VideoSource = { files, brief };
   const hash = sourceHash(source);
 

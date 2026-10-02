@@ -1,5 +1,6 @@
 import { jobDiscard, videoPut } from "../catalog";
-import { resolvedPaths } from "./checkout";
+import { backendFor } from "./backend";
+import { briefTool } from "./tools";
 import type { VideoRunner, VideoStore } from "./runner";
 import type { VideoJobRecord } from "./types";
 
@@ -44,7 +45,7 @@ export function acceptVideo(store: VideoStore, runner: VideoRunner, id: string):
     if (record.state !== "awaiting_review") {
       return { ok: false, status: 409, note: `job ${id} is ${record.state}; only a video in review can be accepted` };
     }
-    const paths = await resolvedPaths(record.id, record.slug);
+    const paths = await backendFor(briefTool(record.brief)).paths(record.id, record.slug);
     const put = await videoPut({
       jobId: record.id,
       slug: record.slug,

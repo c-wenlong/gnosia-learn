@@ -1,4 +1,5 @@
 import { manimkcBackend } from "./backends/manimkc";
+import { revideokcBackend } from "./backends/revideokc";
 import type { ValidVideoBrief } from "./brief";
 import type { Scaffold } from "./checkout";
 import type { GateTools, VideoGateChecks } from "./gate";
@@ -6,6 +7,7 @@ import type { VideoPaths } from "./paths";
 import type { ProfileKind } from "./sandbox";
 import type { SeedResult } from "./seed";
 import type { VideoAgentSettings } from "./settings";
+import type { VideoDoctorReport } from "./doctor";
 import type { Toolchain } from "./toolchain";
 import type { VideoToolName } from "./tools";
 
@@ -38,6 +40,24 @@ export interface VideoProfile {
   kind: ProfileKind;
   file: string;
   text: string;
+}
+
+/**
+ * A contact sheet the job view lists and the runner keeps after a verdict:
+ * one per scene for manimkc, the stills sheet and the build's sheet for
+ * revideokc.
+ */
+export interface SheetEntry {
+  /** What the sheet's route names it by: a scene class, or a fixed word. Pattern-safe, never from a request. */
+  id: string;
+  /** The title the job view shows, or null for the scene's own name from the brief. */
+  title: string | null;
+  /** Where the render writes it. */
+  file: string;
+  /** Its name under the job's `sheets/`, where it is kept after a verdict. */
+  kept: string;
+  /** Scenes whose render rewrites it: the job view counts a round per look call that rendered one of them. */
+  scenes: string[];
 }
 
 /** The agent's user message for one attempt: its first, a retry after the gate, or a continuation of its parent. */
@@ -80,19 +100,41 @@ export interface VideoBackend extends VideoGateChecks {
   seed(job: BackendJob, lines: readonly string[], parent: { jobId: string; slug: string } | null): Promise<SeedResult>;
   /** After a verdict: keep the clips of the lines the final source voices, so a change re-voices only what it changes. */
   keepClips(job: BackendJob): Promise<void>;
-  /** The agent's manual for a job's command and a library listing. */
-  manual(wrapper: string, listing: string): string;
+  /** The agent's manual for a job's command, a library listing and the job's paths. */
+  manual(wrapper: string, listing: string, paths: VideoPaths): string;
   /** The agent's permission file, around the runner's Bash guard. */
   settings(job: BackendJob, input: { jobId: string; guard: string; source?: string }): VideoAgentSettings;
   /** The agent's user message for this attempt. */
   prompt(request: VideoPromptRequest): string;
   /** The gate's sandboxed operations for this job. */
   gateTools(job: BackendJob): GateTools;
+  /**
+   * The hash the wrapper records on every call as `sceneSha256`, and the gate
+   * holds the build to: the scene file's sha256 for manimkc, a combined hash
+   * of the topic's source files for revideokc. Null when there is no source.
+   */
+  sourceHash(paths: VideoPaths): Promise<string | null>;
+  /** The source files that exist now, `topic.yml` included: what is kept in `source/` at every verdict. */
+  sourceFiles(paths: VideoPaths): Promise<string[]>;
+  /** The contact sheets of a job, for the job view and for keeping after a verdict. */
+  sheets(paths: VideoPaths, classes: readonly string[]): SheetEntry[];
+  /** Whether a file the agent Read is a sheet, which `reads.ndjson` records for the gate's step 10. */
+  isSheet(paths: VideoPaths, file: string): boolean;
+  /** The directories beside the topic folder the agent may Read, as the session's `--add-dir`s. */
+  addDirs(paths: VideoPaths): string[];
+  /** The fixture render and the checks that prove this backend works on this machine (D75). */
+  doctor(): Promise<VideoDoctorReport>;
 }
 
 const BACKENDS: Partial<Record<VideoToolName, VideoBackend>> = {
   manimkc: manimkcBackend,
+  revideokc: revideokcBackend,
 };
+
+/** The tools the studio has a backend for, in VIDEO_TOOLS' order. */
+export function backendTools(): VideoToolName[] {
+  return Object.keys(BACKENDS) as VideoToolName[];
+}
 
 /** The backend that makes this tool's videos. A tool the studio cannot make yet has none, and asking for it throws. */
 export function backendFor(tool: VideoToolName): VideoBackend {

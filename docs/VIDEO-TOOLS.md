@@ -72,7 +72,7 @@ missing or poor.
 | Footage, screen recordings, transitions, SFX | no | yes | partial (`Video`, few transitions) |
 | Springs, masks, additive light, filters | partial | yes (CSS) | yes |
 | Visuals cued on the spoken word | yes (`narration.word_times`) | yes | yes |
-| Studio can make it unattended | on macOS only | not yet | not yet |
+| Studio can make it unattended | on macOS only | not yet | on macOS only |
 | Render speed, 1080p, measured on the owner's Mac | about 30 s for a 79 s scene, 8 scenes in parallel | 32 to 75 s for 68 to 113 s videos, concurrency 3 | about 25 s for a 62 s video with a 3D stage, 2 workers |
 
 ## Shared ground, and what it allows
@@ -155,8 +155,9 @@ flowchart TD
 
 ## Not built yet
 
-- **The studio choosing a tool.** The studio's video runner renders manimkc
-  only. [STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md) is the design for the
-  planner putting a tool in the video brief, chosen by this table, and for a
-  runner backend (and a sandbox) per tool.
+- **remotionkc in the studio.** The studio's video runner makes manimkc and
+  revideokc videos, the planner choosing between them by this table, each
+  inside its own sandbox profile and on its own doctor's verdict
+  ([STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md), phases 1 to 2c).
+  remotionkc's backend is phase 3 there.
 - **Joining chapters from different tools** into one deliverable.

@@ -37,7 +37,7 @@ export const VIDEO_TOOLS: readonly VideoToolInfo[] = [
   {
     name: "revideokc",
     strength: "Revideo: depth and light on a three.js stage, code edited in place, springy hand-choreographed diagram motion",
-    inStudio: false,
+    inStudio: true,
   },
   {
     name: "remotionkc",
@@ -145,13 +145,37 @@ export const VIDEO_TOOL_ROUTES: readonly VideoToolRoute[] = [
   },
 ];
 
+/** What a tool's doctor last said, as health reads it: absent before its first answer. */
+export interface ToolDoctorVerdict {
+  ok: boolean;
+  checks: { name: string; ok: boolean; detail: string }[];
+}
+
 /**
  * Health's `video.tools` (D73): each tool, what it is best at, and why the
- * studio cannot make a video with it when it cannot. Whether this machine can
- * make any video is the rest of the `video` block (`ok` and its checks).
+ * studio cannot make a video with it when it cannot. Given the doctors'
+ * verdicts (D75: one per backend), a tool is available only when its own
+ * doctor passes on this machine, and its reason is the doctor's first
+ * failing check; without them, only whether the studio has a backend.
  */
-export function toolsHealth(): { name: VideoToolName; strength: string; available: boolean; reason: string | null }[] {
-  return VIDEO_TOOLS.map((tool) => ({ name: tool.name, strength: tool.strength, available: tool.inStudio, reason: notInStudio(tool.name) }));
+export function toolsHealth(
+  verdicts?: Partial<Record<VideoToolName, ToolDoctorVerdict | null>>,
+): { name: VideoToolName; strength: string; available: boolean; reason: string | null }[] {
+  return VIDEO_TOOLS.map((tool) => {
+    const missing = notInStudio(tool.name);
+    if (missing !== null || verdicts === undefined) return { name: tool.name, strength: tool.strength, available: tool.inStudio, reason: missing };
+    const verdict = verdicts[tool.name];
+    if (verdict === undefined || verdict === null) {
+      return { name: tool.name, strength: tool.strength, available: false, reason: `the ${tool.name} doctor has not finished its first check` };
+    }
+    const failing = verdict.checks.find((check) => !check.ok);
+    return {
+      name: tool.name,
+      strength: tool.strength,
+      available: verdict.ok,
+      reason: verdict.ok ? null : `this machine cannot make ${tool.name} videos right now: ${failing === undefined ? "its doctor fails" : `${failing.name}: ${failing.detail}`}`,
+    };
+  });
 }
 
 export interface VideoToolCapability {
@@ -178,6 +202,6 @@ export const VIDEO_TOOL_CAPABILITIES: readonly VideoToolCapability[] = [
   { capability: "Footage, screen recordings, transitions, SFX", manimkc: "no", remotionkc: "yes", revideokc: "partial (`Video`, few transitions)" },
   { capability: "Springs, masks, additive light, filters", manimkc: "partial", remotionkc: "yes (CSS)", revideokc: "yes" },
   { capability: "Visuals cued on the spoken word", manimkc: "yes (`narration.word_times`)", remotionkc: "yes", revideokc: "yes" },
-  { capability: "Studio can make it unattended", manimkc: "on macOS only", remotionkc: "not yet", revideokc: "not yet" },
+  { capability: "Studio can make it unattended", manimkc: "on macOS only", remotionkc: "not yet", revideokc: "on macOS only" },
   { capability: "Render speed, 1080p, measured on the owner's Mac", manimkc: "about 30 s for a 79 s scene, 8 scenes in parallel", remotionkc: "32 to 75 s for 68 to 113 s videos, concurrency 3", revideokc: "about 25 s for a 62 s video with a 3D stage, 2 workers" },
 ];

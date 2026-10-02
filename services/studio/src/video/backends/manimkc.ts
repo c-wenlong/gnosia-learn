@@ -4,10 +4,12 @@ import path from "node:path";
 import { cacheDir } from "../../content-cache";
 import type { BackendJob, VideoBackend, VideoProfile } from "../backend";
 import { buildCheckout, resolvedPaths, scaffold } from "../checkout";
-import { safeRead } from "../copy";
+import { safeHash, safeRead } from "../copy";
+import { runVideoDoctor } from "../doctor";
 import { sandboxedGateTools } from "../gate-tools";
 import { apiListing, manualText } from "../manual";
 import { buildVideoPrompt, buildVideoResumePrompt, buildVideoRetryPrompt, buildVideoRevisePrompt } from "../prompt";
+import { sheetPath } from "../paths";
 import { buildProfile, resolvedStudioHome, type ProfileKind } from "../sandbox";
 import { scanSource, voicedLines } from "../scan";
 import { clipKeys, keepClips as keepClipFiles, seedClips } from "../seed";
@@ -122,6 +124,14 @@ export const manimkcBackend: VideoBackend = {
   },
 
   gateTools: (job) => sandboxedGateTools(job),
+
+  sourceHash: (paths) => safeHash(paths.sceneFile),
+  // The scene file and the topic's own, as `saveSource` always kept them.
+  sourceFiles: async (paths) => [paths.sceneFile, paths.topicYml],
+  sheets: (paths, classes) => classes.map((scene) => ({ id: scene, title: null, file: sheetPath(paths, scene), kept: `${scene}.sheet.png`, scenes: [scene] })),
+  isSheet: (_paths, file) => file.endsWith(".sheet.png"),
+  addDirs: (paths) => [paths.lib, paths.out],
+  doctor: () => runVideoDoctor(),
 
   ...MANIMKC_GATE,
 };

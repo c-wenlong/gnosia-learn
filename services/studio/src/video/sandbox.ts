@@ -119,15 +119,15 @@ const ALLOWED_SERVICES: Record<ProfileKind, readonly string[]> = {
 export class ProfileError extends Error {}
 
 /** A path as a Seatbelt string literal. Refused, never escaped, when it holds a quote, a backslash or a line break. */
-function quoted(value: string): string {
+export function quoted(value: string): string {
   if (!path.isAbsolute(value) || /["\\\n\r\u0000]/.test(value)) {
     throw new ProfileError(`${JSON.stringify(value)} cannot go in a sandbox profile: it must be absolute and hold no quote, backslash or line break`);
   }
   return `"${value}"`;
 }
 
-const subpath = (value: string): string => `(subpath ${quoted(value)})`;
-const literal = (value: string): string => `(literal ${quoted(value)})`;
+export const subpath = (value: string): string => `(subpath ${quoted(value)})`;
+export const literal = (value: string): string => `(literal ${quoted(value)})`;
 
 export interface ProfileInput {
   tools: Toolchain;
@@ -143,14 +143,14 @@ export interface ProfileInput {
 }
 
 /** A path rule before it is written out: a whole tree, or one file. */
-interface Rule {
+export interface Rule {
   kind: "subpath" | "literal";
   path: string;
 }
 
-const tree = (value: string): Rule => ({ kind: "subpath", path: value });
-const file = (value: string): Rule => ({ kind: "literal", path: value });
-const written = (rule: Rule): string => (rule.kind === "subpath" ? subpath(rule.path) : literal(rule.path));
+export const tree = (value: string): Rule => ({ kind: "subpath", path: value });
+export const file = (value: string): Rule => ({ kind: "literal", path: value });
+export const written = (rule: Rule): string => (rule.kind === "subpath" ? subpath(rule.path) : literal(rule.path));
 
 /** The programs each profile may start. */
 function execRules(kind: ProfileKind, { tools }: ProfileInput): Rule[] {
@@ -181,7 +181,7 @@ function writeRules(kind: ProfileKind, { paths }: ProfileInput): Rule[] {
 }
 
 /** Each rule written once, in first-seen order. */
-function unique(rules: Rule[]): string[] {
+export function unique(rules: Rule[]): string[] {
   return [...new Set(rules.map(written))];
 }
 
@@ -193,7 +193,7 @@ function unique(rules: Rule[]): string[] {
  * `stat` `~/Desktop` on the way to the venv, and cannot `stat` `~/.ssh/id_ed25519`
  * to learn whether it exists, how big it is or when it last changed.
  */
-function ancestorRules(allowed: Rule[], denied: readonly string[]): string[] {
+export function ancestorRules(allowed: Rule[], denied: readonly string[]): string[] {
   const out = new Set<string>();
   for (const rule of allowed) {
     for (let dir = path.dirname(rule.path); ; dir = path.dirname(dir)) {
@@ -215,12 +215,18 @@ export function resolvedStudioHome(): string {
 }
 
 /** One profile's text. Deterministic, so a test can read it and a person can diff two jobs'. */
-export function buildProfile(kind: ProfileKind, input: ProfileInput): string {
+/**
+ * The places every profile denies reads under before re-allowing the job's
+ * own: the owner's home, the shared temporary directories, Homebrew's data,
+ * mounted volumes, and the studio's home and jobs root. Every video tool's
+ * profiles start from this list.
+ */
+export function deniedReadsFor(input: { home: string; paths: { job: string }; studioHome?: string }): string[] {
   // The jobs root and the studio home go in by name even when the owner's
   // home already covers them: a `STUDIO_HOME` set outside it would otherwise
   // leave every other job's workspace readable.
   const jobsRoot = path.dirname(input.paths.job);
-  const deniedReads = [
+  return [
     ...new Set([
       input.home,
       "/opt/homebrew/var",
@@ -233,6 +239,10 @@ export function buildProfile(kind: ProfileKind, input: ProfileInput): string {
       jobsRoot,
     ]),
   ];
+}
+
+export function buildProfile(kind: ProfileKind, input: ProfileInput): string {
+  const deniedReads = deniedReadsFor(input);
   const exec = execRules(kind, input);
   const reads = readRules(kind, input);
   const writes = writeRules(kind, input);
