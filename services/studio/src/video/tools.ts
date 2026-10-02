@@ -37,7 +37,7 @@ export const VIDEO_TOOLS: readonly VideoToolInfo[] = [
   {
     name: "revideokc",
     strength: "Revideo: depth and light on a three.js stage, code edited in place, springy hand-choreographed diagram motion",
-    inStudio: false,
+    inStudio: true,
   },
   {
     name: "remotionkc",
@@ -202,6 +202,6 @@ export const VIDEO_TOOL_CAPABILITIES: readonly VideoToolCapability[] = [
   { capability: "Footage, screen recordings, transitions, SFX", manimkc: "no", remotionkc: "yes", revideokc: "partial (`Video`, few transitions)" },
   { capability: "Springs, masks, additive light, filters", manimkc: "partial", remotionkc: "yes (CSS)", revideokc: "yes" },
   { capability: "Visuals cued on the spoken word", manimkc: "yes (`narration.word_times`)", remotionkc: "yes", revideokc: "yes" },
-  { capability: "Studio can make it unattended", manimkc: "on macOS only", remotionkc: "not yet", revideokc: "not yet" },
+  { capability: "Studio can make it unattended", manimkc: "on macOS only", remotionkc: "not yet", revideokc: "on macOS only" },
   { capability: "Render speed, 1080p, measured on the owner's Mac", manimkc: "about 30 s for a 79 s scene, 8 scenes in parallel", remotionkc: "32 to 75 s for 68 to 113 s videos, concurrency 3", revideokc: "about 25 s for a 62 s video with a 3D stage, 2 workers" },
 ];

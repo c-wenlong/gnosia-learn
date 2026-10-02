@@ -1,4 +1,5 @@
 import { manimkcBackend } from "./backends/manimkc";
+import { revideokcBackend } from "./backends/revideokc";
 import type { ValidVideoBrief } from "./brief";
 import type { Scaffold } from "./checkout";
 import type { GateTools, VideoGateChecks } from "./gate";
@@ -127,6 +128,7 @@ export interface VideoBackend extends VideoGateChecks {
 
 const BACKENDS: Partial<Record<VideoToolName, VideoBackend>> = {
   manimkc: manimkcBackend,
+  revideokc: revideokcBackend,
 };
 
 /** The tools the studio has a backend for, in VIDEO_TOOLS' order. */

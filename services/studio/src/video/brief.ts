@@ -235,6 +235,10 @@ export function validateVideoBrief(input: unknown, vocabulary: Vocabulary): Vali
     if (unavailable !== null) {
       throw new BriefError("tool", `${unavailable}, so the studio cannot make this video with it; choose a tool the TOOLS block marks as available here, and name ${raw.tool} as the runner-up in toolReason`);
     }
+    // revideokc's build refuses a video with no sound, and its scenes are timed by their narration.
+    if (raw.tool === "revideokc" && silent) {
+      throw new BriefError("tool", `revideokc makes narrated videos only; a silent video is manimkc's, so choose manimkc or give the video a voice`);
+    }
     tool = raw.tool;
   }
   const toolReason =
