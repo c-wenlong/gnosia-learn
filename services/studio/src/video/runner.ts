@@ -60,6 +60,9 @@ interface Running {
   gateRunning: boolean;
   /** How many wrapper calls the narration log has said something about. */
   callsNarrated: number;
+  /** The calls log's size when the backend last kept previewed sources, and how many calls it had seen. */
+  callsKeptSize: number;
+  callsKept: number;
   /** The stream's lines, handled in order; the gate waits for it. */
   lines: LineQueue;
   /**
@@ -494,6 +497,8 @@ export class VideoRunner {
         edits: 0,
         gateRunning: false,
         callsNarrated: 0,
+        callsKeptSize: -1,
+        callsKept: 0,
         lines: new LineQueue(),
         mayFinish: false,
       };
@@ -905,8 +910,17 @@ export class VideoRunner {
       if (isToolResult(line) || editsOn(line).length > 0) await this.refreshSteps(entry);
       // A wrapper call has just ended: let the backend keep the source its
       // look rendered from, which the gate's step 10 compares scene by scene.
+      // Only when the log has grown, so a result that ran no wrapper call
+      // costs one stat, and only the calls it has not shown the backend yet.
       if (isToolResult(line) && backend.keepPreviewed !== undefined) {
-        await backend.keepPreviewed(paths, await readCalls(paths.calls)).catch(() => undefined);
+        const size = (await lstat(paths.calls).catch(() => null))?.size ?? 0;
+        if (size !== entry.callsKeptSize) {
+          entry.callsKeptSize = size;
+          const calls = await readCalls(paths.calls);
+          const fresh = calls.slice(entry.callsKept);
+          entry.callsKept = calls.length;
+          await backend.keepPreviewed(paths, fresh).catch(() => undefined);
+        }
       }
     }
     const now = Date.now();

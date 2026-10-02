@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // The catalog's limit on a video's source, one constant for both sides. A
@@ -160,7 +160,7 @@ export function previewedDir(paths: VideoPaths): string {
 const SHA256 = /^[0-9a-f]{64}$/;
 /** A previewed file may be larger than what Accept stores, as the final one may not: the old read limit. */
 const PREVIEWED_BYTES_MAX = 2 * 2 ** 20;
-/** Enough for every preview of a long job; past it, a scene previewed from an unkept file has to be previewed again. */
+/** Enough for every preview of a long job; past it the oldest go, and a scene last previewed from one has to be previewed again. */
 const PREVIEWED_FILES_MAX = 64;
 
 /**
@@ -173,7 +173,7 @@ const PREVIEWED_FILES_MAX = 64;
  * against it on every read, so a file put there by anything else is never
  * taken for a preview's source.
  */
-export async function keepPreviewed(paths: VideoPaths, calls: readonly WrapperCall[]): Promise<void> {
+export async function keepPreviewed(paths: VideoPaths, calls: readonly WrapperCall[], limit = PREVIEWED_FILES_MAX): Promise<void> {
   const dir = previewedDir(paths);
   const wanted = new Set<string>();
   for (const call of calls) {
@@ -193,8 +193,15 @@ export async function keepPreviewed(paths: VideoPaths, calls: readonly WrapperCa
   const hash = createHash("sha256").update(body).digest("hex");
   if (!wanted.has(hash)) return;
   await mkdir(dir, { recursive: true });
-  const kept = await readdir(dir).catch(() => [] as string[]);
-  if (kept.filter((name) => name.endsWith(".py")).length >= PREVIEWED_FILES_MAX) return;
+  // At the limit, the oldest kept files go to make room: a recent preview is
+  // the one a later edit is compared against. Dropping one only means a scene
+  // last previewed from it is previewed again, the strict reading.
+  const kept = (await readdir(dir).catch(() => [] as string[])).filter((name) => SHA256.test(name.replace(/\.py$/, "")) && name.endsWith(".py"));
+  if (kept.length >= limit) {
+    const aged = await Promise.all(kept.map(async (name) => ({ name, at: (await lstat(path.join(dir, name)).catch(() => null))?.mtimeMs ?? 0 })));
+    aged.sort((a, b) => a.at - b.at || a.name.localeCompare(b.name));
+    for (const { name } of aged.slice(0, kept.length - limit + 1)) await rm(path.join(dir, name), { force: true });
+  }
   const pending = path.join(dir, `.${hash}.${process.pid}.tmp`);
   await writeFile(pending, body, { mode: 0o644 });
   await rename(pending, path.join(dir, `${hash}.py`));

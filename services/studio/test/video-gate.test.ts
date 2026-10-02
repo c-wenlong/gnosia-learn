@@ -499,6 +499,24 @@ describe("keeping the scene file a preview rendered", () => {
     expect(backendFor("manimkc").keepPreviewed).toBe(keepPreviewed);
     expect(backendFor("revideokc").keepPreviewed).toBeUndefined();
   });
+
+  it("at its limit, drops the oldest kept file to keep the newest", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "studio-previewed-"));
+    const kept = rebasePaths(videoPaths("job", "two-boxes"), dir);
+    const { mkdir, utimes } = await import("node:fs/promises");
+    await mkdir(path.dirname(kept.sceneFile), { recursive: true });
+    const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
+    const call = (hash: string): WrapperCall => ({ verb: "preview", scenes: CLASSES, startedAt: at(0), endedAt: at(0), exitCode: 0, sceneSha256: hash, rendered: CLASSES });
+    for (const [i, text] of ["first", "second", "third"].entries()) {
+      await writeFile(kept.sceneFile, text, "utf8");
+      await keepPreviewed(kept, [call(sha(text))], 2);
+      // Whole seconds apart, so the order is the files' own on every filesystem.
+      const when = new Date(Date.UTC(2026, 0, 1, 0, 0, i));
+      await utimes(path.join(previewedDir(kept), `${sha(text)}.py`), when, when);
+    }
+    expect((await readdir(previewedDir(kept))).sort()).toEqual([`${sha("second")}.py`, `${sha("third")}.py`].sort());
+    await rm(dir, { recursive: true, force: true });
+  });
 });
 
 describe("comparing the voiced lines with the brief's", () => {
