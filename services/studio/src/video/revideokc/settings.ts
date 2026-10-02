@@ -8,6 +8,7 @@ import { guardHooks } from "../bash-guard";
 import type { VideoPaths } from "../paths";
 import type { VideoAgentSettings } from "../settings";
 import { revideokcPaths } from "./paths";
+import { PUPPETEER_CONFIG } from "./checkout";
 import { portsFile } from "./sandbox";
 
 /**
@@ -105,6 +106,7 @@ export function buildRevideokcSettings(input: RevideokcSettingsInput): VideoAgen
     rule("Edit", path.join(paths.checkout, "tools"), "/**"),
     rule("Edit", path.join(paths.checkout, "tsconfig.json")),
     rule("Edit", path.join(paths.checkout, "package.json")),
+    rule("Edit", path.join(paths.checkout, PUPPETEER_CONFIG)),
     rule("Edit", paths.render, "/**"),
     // This job's records, profiles and wrapper.
     ...[paths.bin, paths.inflight, paths.candidate, paths.source, paths.clips, paths.rejected].flatMap((dir) => [rule("Read", dir, "/**"), rule("Edit", dir, "/**")]),

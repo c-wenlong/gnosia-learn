@@ -92,6 +92,11 @@ beforeAll(async () => {
     return;
   }
   root = realpathSync(await mkdtemp(path.join(tmpdir(), "studio-revideokc-sandbox-")));
+  // A manifest above the studio home that the profile denies, as this
+  // repository's is when STUDIO_HOME is the default, <checkout>/.studio:
+  // Puppeteer's config search reads every package.json up to the home
+  // directory, and a refused one ended the render before Chrome started.
+  await writeFile(path.join(root, "package.json"), "{}\n", "utf8");
   process.env.STUDIO_HOME = path.join(root, "home");
   const backend = backendFor("revideokc");
   const paths = await backend.paths("1e1e1e1e-aaaa-4bbb-8ccc-123456789abc", brief.slug);
