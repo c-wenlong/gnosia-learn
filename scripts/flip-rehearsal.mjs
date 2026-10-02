@@ -69,7 +69,8 @@
 //
 // Environment: the per-owner blob caps are off for every step (see `env`
 // below). DATABASE_URL (its host and credentials are kept; its database
-// name is replaced), PG_BIN (default /opt/homebrew/opt/postgresql@17/bin),
+// name is replaced), PG_BIN (default: the pg_dump on PATH, then
+// `pg_config --bindir`, then Homebrew's postgresql@17),
 // MANIMKC_ROOT and TLDRAWKC_ROOT as the catalog reads them (a worktree with no
 // submodules points them at a checkout that has them).
 //
@@ -162,7 +163,7 @@ import {
   writeHeadTree,
 } from './lib/cutover.mjs';
 import { FLIP_GROUPS, FLIP_ORDER } from './lib/flip-order.mjs';
-import { copyDatabase, exec, PG_BIN, pgEnv, pgTool } from './lib/pg.mjs';
+import { copyDatabase, exec, missingPgTools, PG_BIN, pgEnv, pgTool } from './lib/pg.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'services/catalog/src/cli.ts');
@@ -680,7 +681,7 @@ async function flippedTypes(database, env) {
   const present = await query(database, env, "select to_regclass('public.content_source') is not null");
   if (present === null) throw new Refusal(`could not read ${database}: is it there, and is Postgres up?`);
   if (present[0]?.[0] !== 't') return [];
-  const rows = await query(database, env, "select type from content_source where source = 'db' order by type");
+  const rows = await query(database, env, "select type from content_source where source = 'db' order by type collate \"C\"");
   if (rows === null) throw new Refusal(`could not read content_source in ${database}`);
   return rows.map(([type]) => type);
 }
@@ -712,9 +713,8 @@ async function main(argv) {
         'Run it yourself, in a terminal; nothing else may confirm it.',
     );
   }
-  for (const tool of ['createdb', 'dropdb', 'pg_dump', 'pg_restore', 'psql']) {
-    if (!existsSync(join(PG_BIN, tool))) throw new Refusal(`${tool} not found in ${PG_BIN}; set PG_BIN.`);
-  }
+  const missingTools = missingPgTools(['createdb', 'dropdb', 'pg_dump', 'pg_restore', 'psql']);
+  if (missingTools !== null) throw new Refusal(missingTools);
 
   const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'self-learn-flip-rehearsal-')));
   const tree = checkout ?? join(scratch, 'tree');

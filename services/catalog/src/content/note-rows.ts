@@ -10,6 +10,7 @@ import { POSITION_STEP } from "./positions";
 import { ownedBy, type Owners, CLI_OWNER, cliScope } from "./scope";
 import { latestRevisions } from "./revisions";
 import { writeContents } from "./write";
+import { bytewise } from "../sql-order";
 
 /**
  * Concept notes read from their rows: the columns, and `requires:` and
@@ -66,7 +67,7 @@ export async function readNoteRows(
     .select()
     .from(conceptPrerequisite)
     .where(and(inArray(conceptPrerequisite.conceptSlug, rows.map((row) => row.slug)), readableFarEnd))
-    .orderBy(asc(conceptPrerequisite.position), asc(conceptPrerequisite.prerequisiteSlug));
+    .orderBy(asc(conceptPrerequisite.position), asc(bytewise(conceptPrerequisite.prerequisiteSlug)));
   const lists = new Map<string, { requires: string[]; assumes: string[] }>();
   for (const edge of edges) {
     const entry = lists.get(edge.conceptSlug) ?? { requires: [], assumes: [] };

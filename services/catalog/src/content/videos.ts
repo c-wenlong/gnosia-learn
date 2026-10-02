@@ -813,7 +813,7 @@ async function studioRows(db: CatalogDatabase, scope: OwnerScope, only?: string,
   const { rows } = await db.execute<StudioRow>(sql`
     select v.slug, v.title, v.topic_slug, v.source_hash, v.rendered_source_hash, v.mp4_blob_key,
       v.duration_seconds, v.updated_at, b.bytes as mp4_bytes, b.sha256 as mp4_sha256,
-      (select array_agg(c.concept_slug order by c.concept_slug) from asset_concept c
+      (select array_agg(c.concept_slug order by c.concept_slug collate "C") from asset_concept c
         join concept k on k.slug = c.concept_slug
         where c.asset_id = ${VIDEO_PREFIX} || v.slug${andOwnedBy(sql`k.owner_id`, scope.readable)}) as concepts,
       p.id as poster_id, p.blob_key as poster_key,
@@ -831,7 +831,7 @@ async function studioRows(db: CatalogDatabase, scope: OwnerScope, only?: string,
       order by seq desc limit 1
     ) rev on true
     where v.archived_at is null ${only === undefined ? sql`` : sql`and v.slug = ${only}`}${andOwnedBy(sql`v.owner_id`, scope.readable)}
-    order by v.slug
+    order by v.slug collate "C"
   `);
   return rows;
 }
@@ -883,9 +883,9 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
   const studio = (await studioRows(db, scope)).map(studioSummary);
   const { rows } = await db.execute<RenderRow>(sql`
     select a.id, a.title, a.blob_key, a.bytes, a.content_hash, a.updated_at,
-      (select min(t.topic_slug) from asset_topic t join topic o on o.slug = t.topic_slug
+      (select min(t.topic_slug collate "C") from asset_topic t join topic o on o.slug = t.topic_slug
         where t.asset_id = a.id${andOwnedBy(sql`o.owner_id`, scope.readable)}) as topic,
-      (select array_agg(c.concept_slug order by c.concept_slug) from asset_concept c join concept k on k.slug = c.concept_slug
+      (select array_agg(c.concept_slug order by c.concept_slug collate "C") from asset_concept c join concept k on k.slug = c.concept_slug
         where c.asset_id = a.id${andOwnedBy(sql`k.owner_id`, scope.readable)}) as concepts,
       p.id as poster_id, p.blob_key as poster_key,
       exists (
@@ -902,7 +902,7 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
         VIDEO_TOOLS.map((tool) => sql`starts_with(a.id, ${tool.prefix})`),
         sql` or `,
       )})${andOwnedBy(sql`a.owner_id`, scope.readable)}
-    order by a.id
+    order by a.id collate "C"
   `);
   const renders = rows.map(
     (row): VideoSummary => ({

@@ -1040,6 +1040,7 @@ describe("where a job draws", () => {
     const parentFile = await writeCandidate(parent, partial);
     const old = new Date(Date.now() - 600_000);
     await utimes(parentFile, old, old);
+    const drawn = (await stat(parentFile)).mtimeMs;
     await store.create(parent);
 
     const { record } = await runner.enqueue(await brief(), {
@@ -1050,8 +1051,11 @@ describe("where a job draws", () => {
     const input = await gateInput<{ startedAtMs: number }>();
     expect(await readFile(record.candidatePath, "utf8")).toContain("half-drawn");
     // The copy is as old as the drawing, and the gate still wants this job to
-    // have drawn: a revision is not resumed work.
-    expect((await stat(record.candidatePath)).mtimeMs).toBe(old.getTime());
+    // have drawn: a revision is not resumed work. As old to the microsecond,
+    // which is what `utimes` can promise (`copyKeepingTime`): exact equality
+    // held on macOS and failed on Linux by a thousandth of a millisecond.
+    expect(Math.abs(drawn - old.getTime())).toBeLessThan(0.01);
+    expect(Math.abs((await stat(record.candidatePath)).mtimeMs - drawn)).toBeLessThan(0.01);
     expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
     expect(String(started[0]?.options.prompt)).toContain(record.candidatePath);
     expect(String(started[0]?.options.prompt)).toContain("the files have moved");

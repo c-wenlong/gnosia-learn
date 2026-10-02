@@ -67,7 +67,7 @@ export async function subsetFilter(db: CatalogDatabase, subset: ExportSubset): P
     db,
     sql`select from_slug, kind, to_slug from topic_relation
         where from_slug in (${list(topics)}) or to_slug in (${list(topics)})
-        order by from_slug, kind, to_slug`,
+        order by from_slug collate "C", kind collate "C", to_slug collate "C"`,
   );
   for (const relation of relations) {
     if (topics.has(relation.from_slug) && topics.has(relation.to_slug)) continue;
@@ -92,7 +92,7 @@ export async function subsetFilter(db: CatalogDatabase, subset: ExportSubset): P
                 order by m.position limit 1) as topic
         from collection c
         where c.parent_id = ${subset.course} and c.kind = 'module' and c.archived_at is null
-        order by c.position, c.id`,
+        order by c.position, c.id collate "C"`,
   );
   const keptModules = modules.filter((m) => m.topic !== null && topics.has(m.topic)).map((m) => m.id);
   if (course !== undefined && keptModules.length === 0) {
@@ -104,7 +104,7 @@ export async function subsetFilter(db: CatalogDatabase, subset: ExportSubset): P
 
   const tags = await rows<{ tag_id: string }>(
     db,
-    sql`select tag_id from collection_tag where collection_id = ${subset.course} order by position, tag_id`,
+    sql`select tag_id from collection_tag where collection_id = ${subset.course} order by position, tag_id collate "C"`,
   );
 
   const concepts = new Set(
@@ -122,7 +122,7 @@ export async function subsetFilter(db: CatalogDatabase, subset: ExportSubset): P
       sql`select p.concept_slug, p.kind, p.prerequisite_slug, c.topic_slug as topic
           from concept_prerequisite p join concept c on c.slug = p.prerequisite_slug
           where p.concept_slug in (${list(concepts)})
-          order by p.concept_slug, p.kind, p.prerequisite_slug`,
+          order by p.concept_slug collate "C", p.kind collate "C", p.prerequisite_slug collate "C"`,
     );
     for (const edge of outside) {
       if (concepts.has(edge.prerequisite_slug)) continue;
@@ -139,7 +139,7 @@ export async function subsetFilter(db: CatalogDatabase, subset: ExportSubset): P
       sql`select l.curriculum_item_id as item, l.concept_slug
           from concept_curriculum_item l join curriculum_item i on i.id = l.curriculum_item_id
           where i.archived_at is null and i.collection_id in (${list(keptModules)})
-          order by l.curriculum_item_id, l.concept_slug`,
+          order by l.curriculum_item_id collate "C", l.concept_slug collate "C"`,
     );
     for (const link of links) {
       if (!concepts.has(link.concept_slug)) {
@@ -166,7 +166,7 @@ export async function subsetFilter(db: CatalogDatabase, subset: ExportSubset): P
   const paths = diagramPaths(subset.diagram);
   const stamped = await rows<{ concept_slug: string }>(
     db,
-    sql`select distinct concept_slug from asset_concept
+    sql`select distinct concept_slug collate "C" as concept_slug from asset_concept
         where asset_id in (${`${ASSET_PREFIX.diagrams}${paths.tldr}`}, ${`${ASSET_PREFIX.diagrams}${paths.svg}`})
         order by concept_slug`,
   );

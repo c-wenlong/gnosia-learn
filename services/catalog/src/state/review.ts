@@ -18,6 +18,7 @@ import { appendEvent } from "./events";
 import { domainOf } from "./knowledge-base";
 import { ensureLearner, withLearnerLock } from "./learner";
 import { assertReadableConcepts, ensureEntry, readModel, writeModel } from "./mastery";
+import { bytewise } from "../sql-order";
 
 /**
  * `learn/state/reviews.json` as the `review` table.
@@ -519,7 +520,7 @@ export async function conceptSummaries(db: CatalogDatabase, scope: OwnerScope): 
       .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
       .from(concept)
       .where(ownedBy(concept.ownerId, owners))
-      .orderBy(asc(concept.slug)),
+      .orderBy(asc(bytewise(concept.slug))),
   );
   return rows.map((row) => ({
     conceptId: row.slug,

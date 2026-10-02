@@ -177,9 +177,10 @@ Prerequisites:
 
 - A current production build: `npm run build`. The script never builds, and
   runs whatever `apps/web/.next` holds, so rebuild after changing the app.
-- Homebrew Postgres 17 running. Set `PG_BIN` if the binaries are not in
-  `/opt/homebrew/opt/postgresql@17/bin`. A `self_learn` database is needed only
-  with `--copy`.
+- Homebrew Postgres 17 running. The client tools are found on `PATH`, then
+  through `pg_config --bindir`, then in Homebrew's
+  `/opt/homebrew/opt/postgresql@17/bin`; set `PG_BIN` to name another
+  directory. A `self_learn` database is needed only with `--copy`.
 - playwright-core from the tldrawkc submodule (`npm ci` inside
   `tools/tldrawkc`), or `PLAYWRIGHT_CORE` pointing at its `index.mjs`, and a
   Playwright Chromium in the cache or `CHROMIUM` pointing at one. This is the

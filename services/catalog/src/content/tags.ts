@@ -9,6 +9,7 @@ import { ownedBy, type Owners, CLI_OWNER } from "./scope";
 import { type By, KEBAB, type WrittenRevision } from "./topics";
 import { writeContent } from "./write";
 import { type ExportedType, writeThrough } from "./write-through";
+import { bytewise } from "../sql-order";
 
 /**
  * The tag writer: `catalog tag add|edit` (docs/CONTENT-MIGRATION.md, Track
@@ -52,7 +53,7 @@ export async function readTags(db: CatalogDatabase, owners?: Owners): Promise<Ta
     .select({ id: tag.id, label: tag.label, description: tag.description })
     .from(tag)
     .where(ownedBy(tag.ownerId, owners))
-    .orderBy(asc(tag.position), asc(tag.id));
+    .orderBy(asc(tag.position), asc(bytewise(tag.id)));
   return rows.map((row) => ({ id: row.id, label: row.label, description: row.description ?? "" }));
 }
 
