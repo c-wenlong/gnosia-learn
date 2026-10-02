@@ -145,13 +145,37 @@ export const VIDEO_TOOL_ROUTES: readonly VideoToolRoute[] = [
   },
 ];
 
+/** What a tool's doctor last said, as health reads it: absent before its first answer. */
+export interface ToolDoctorVerdict {
+  ok: boolean;
+  checks: { name: string; ok: boolean; detail: string }[];
+}
+
 /**
  * Health's `video.tools` (D73): each tool, what it is best at, and why the
- * studio cannot make a video with it when it cannot. Whether this machine can
- * make any video is the rest of the `video` block (`ok` and its checks).
+ * studio cannot make a video with it when it cannot. Given the doctors'
+ * verdicts (D75: one per backend), a tool is available only when its own
+ * doctor passes on this machine, and its reason is the doctor's first
+ * failing check; without them, only whether the studio has a backend.
  */
-export function toolsHealth(): { name: VideoToolName; strength: string; available: boolean; reason: string | null }[] {
-  return VIDEO_TOOLS.map((tool) => ({ name: tool.name, strength: tool.strength, available: tool.inStudio, reason: notInStudio(tool.name) }));
+export function toolsHealth(
+  verdicts?: Partial<Record<VideoToolName, ToolDoctorVerdict | null>>,
+): { name: VideoToolName; strength: string; available: boolean; reason: string | null }[] {
+  return VIDEO_TOOLS.map((tool) => {
+    const missing = notInStudio(tool.name);
+    if (missing !== null || verdicts === undefined) return { name: tool.name, strength: tool.strength, available: tool.inStudio, reason: missing };
+    const verdict = verdicts[tool.name];
+    if (verdict === undefined || verdict === null) {
+      return { name: tool.name, strength: tool.strength, available: false, reason: `the ${tool.name} doctor has not finished its first check` };
+    }
+    const failing = verdict.checks.find((check) => !check.ok);
+    return {
+      name: tool.name,
+      strength: tool.strength,
+      available: verdict.ok,
+      reason: verdict.ok ? null : `this machine cannot make ${tool.name} videos right now: ${failing === undefined ? "its doctor fails" : `${failing.name}: ${failing.detail}`}`,
+    };
+  });
 }
 
 export interface VideoToolCapability {

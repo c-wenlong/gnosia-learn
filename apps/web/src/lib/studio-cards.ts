@@ -2,7 +2,7 @@ import type { MentionOption, MentionValue } from "@/components/ui/mention-text";
 import { inlinePieces, isBareTag, isEmptyValue, prependValue, validMentions, valueOf } from "@/components/ui/mention-text";
 import type { Brief, Job } from "@/lib/studio-jobs";
 import { isActive, isTerminal } from "@/lib/studio-jobs";
-import { isVideoBrief, type VideoBrief } from "@/lib/studio-brief-video";
+import { briefTool, isVideoBrief, type VideoBrief } from "@/lib/studio-brief-video";
 import {
   capSentence,
   cardStatus,
@@ -307,12 +307,13 @@ export function kindBusy(
  * In the order a person would want to hear them: a reply still arriving, the
  * card on hold, this draft's own job of the kind still open, another job
  * holding the slug (of the same kind: a diagram and a video may share a slug,
- * T10), the video doctor failing, then the daily cap. The runner checks all
- * of it again on the press; this is the courtesy.
+ * T10), the video doctor failing (the brief's tool's own, D75 of
+ * docs/STUDIO-VIDEO-TOOLS.md, when health reports it), then the daily cap.
+ * The runner checks all of it again on the press; this is the courtesy.
  */
 export function kindDrawBlock(
   kind: DraftKind,
-  brief: Pick<Brief | VideoBrief, "slug">,
+  brief: Pick<Brief | VideoBrief, "slug"> & Pick<VideoBrief, "tool">,
   view: Pick<DraftView, "inFlight" | "slots">,
   jobs: readonly Job[],
   cap: CapStatus | null,
@@ -342,8 +343,16 @@ export function kindDrawBlock(
   if (kind === "diagram" && diagram !== null && !diagram.ok) {
     return { reason: diagram.reason === null ? "Diagrams cannot be drawn on this machine right now." : sentenceOf(diagram.reason), holder: null };
   }
-  if (kind === "video" && video !== null && !video.ok) {
-    return { reason: video.reason === null ? "Videos are not available on this machine." : `Videos are unavailable: ${video.reason}`, holder: null };
+  if (kind === "video" && video !== null) {
+    // Each tool has its own doctor: a revideokc brief is pressed on revideokc's
+    // verdict, whatever manimkc's says, and the other way round.
+    const tool = briefTool(brief);
+    const option = video.tools?.find((entry) => entry.name === tool);
+    if (tool !== "manimkc" && option !== undefined) {
+      if (!option.available) return { reason: option.reason === null ? `${tool} videos are not available on this machine.` : sentenceOf(option.reason), holder: null };
+    } else if (!video.ok) {
+      return { reason: video.reason === null ? "Videos are not available on this machine." : `Videos are unavailable: ${video.reason}`, holder: null };
+    }
   }
   if (cap !== null && cap.exceeded) return { reason: capSentence(cap), holder: null };
   return null;

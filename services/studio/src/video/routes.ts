@@ -7,9 +7,10 @@ import { pipeline } from "node:stream/promises";
 import { BriefError, loadVocabulary } from "../brief";
 import { JobRefused } from "../runner";
 import { validateVideoBrief } from "./brief";
-import { readCalls } from "./calls";
-import { resolvedPaths } from "./checkout";
-import { candidateNames, sheetPath } from "./paths";
+import { backendFor, type SheetEntry } from "./backend";
+import { isLook, readCalls } from "./calls";
+import { candidateNames, type VideoPaths } from "./paths";
+import { briefTool } from "./tools";
 import { acceptVideo, discardVideo } from "./review";
 import type { Drafts } from "../drafts";
 import { videoNote, type VideoRunner, type VideoStore } from "./runner";
@@ -227,10 +228,16 @@ export async function videoJobRoutes(
   }
 }
 
-/** Where a scene's latest sheet is: the render's, or the copy kept after a verdict. */
-async function sheetFile(record: VideoJobRecord, scene: string): Promise<string | null> {
-  const paths = await resolvedPaths(record.id, record.slug);
-  for (const file of [sheetPath(paths, scene), path.join(paths.job, "sheets", `${scene}.sheet.png`)]) {
+/** A job's paths and its sheets, from the job's tool's backend: one per scene for manimkc, the stills and the build's for revideokc. */
+async function jobSheets(record: VideoJobRecord): Promise<{ paths: VideoPaths; sheets: SheetEntry[] }> {
+  const backend = backendFor(briefTool(record.brief));
+  const paths = await backend.paths(record.id, record.slug);
+  return { paths, sheets: backend.sheets(paths, record.classes) };
+}
+
+/** Where a sheet's latest copy is: the render's, or the copy kept after a verdict. */
+async function sheetFile(paths: VideoPaths, sheet: SheetEntry): Promise<string | null> {
+  for (const file of [sheet.file, path.join(paths.job, "sheets", sheet.kept)]) {
     const facts = await stat(file).catch(() => null);
     if (facts !== null) return file;
   }
@@ -244,25 +251,34 @@ function titleOf(record: VideoJobRecord, scene: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** `GET /api/jobs/{id}/sheets`: the latest sheet per scene, in play order. */
+/** `GET /api/jobs/{id}/sheets`: the latest of each sheet, in play order. */
 async function sheetList(response: ServerResponse, record: VideoJobRecord): Promise<void> {
-  const paths = await resolvedPaths(record.id, record.slug);
+  const { paths, sheets: entries } = await jobSheets(record);
   const calls = await readCalls(paths.calls);
   const sheets = [];
-  for (const scene of record.classes) {
-    const file = await sheetFile(record, scene);
+  for (const entry of entries) {
+    const file = await sheetFile(paths, entry);
     if (file === null) continue;
     const facts = await stat(file).catch(() => null);
-    const round = calls.filter((call) => call.verb === "preview" && (call.rendered ?? []).includes(scene)).length;
+    // The build's sheet is rewritten by a build, every other by a look call.
+    const round =
+      entry.scenes.length === 0
+        ? calls.filter((call) => call.verb === "build" && call.exitCode === 0).length
+        : calls.filter((call) => isLook(call) && (call.rendered ?? []).some((scene) => entry.scenes.includes(scene))).length;
     sheets.push({
-      scene,
-      title: titleOf(record, scene),
-      url: `/api/jobs/${record.id}/sheets/${scene}.png`,
+      scene: entry.id,
+      title: entry.title ?? titleOf(record, entry.id),
+      url: `/api/jobs/${record.id}/sheets/${entry.id}.png`,
       renderedAt: facts?.mtime.toISOString() ?? null,
       round,
     });
   }
-  return send(response, 200, { sheets, note: `${sheets.length} of ${record.classes.length} scenes have a sheet` });
+  return send(response, 200, {
+    sheets,
+    note: entries.every((entry) => entry.scenes.length === 1)
+      ? `${sheets.length} of ${record.classes.length} scenes have a sheet`
+      : `${sheets.length} of ${entries.length} sheets are written`,
+  });
 }
 
 /**
@@ -319,8 +335,11 @@ export function clientWentAway(error: unknown): boolean {
 
 async function sheetBytes(response: ServerResponse, record: VideoJobRecord, name: string): Promise<void> {
   const scene = name.endsWith(".png") ? name.slice(0, -4) : "";
-  if (!record.classes.includes(scene)) return fail(response, 404, "no such scene in this job's brief");
-  const file = await sheetFile(record, scene);
+  const { paths, sheets } = await jobSheets(record);
+  // Matched against the backend's own list, never used as a path.
+  const sheet = sheets.find((entry) => entry.id === scene);
+  if (sheet === undefined) return fail(response, 404, "no such scene in this job's brief");
+  const file = await sheetFile(paths, sheet);
   const opened = file === null ? null : await openServable(file);
   if (opened === null) return fail(response, 404, `${scene} has no sheet yet`);
   response.writeHead(200, {
@@ -348,7 +367,7 @@ async function media(request: IncomingMessage, response: ServerResponse, record:
   };
   const type = types[name];
   if (type === undefined) return fail(response, 404, "not one of this job's media files", { files: Object.keys(types) });
-  const paths = await resolvedPaths(record.id, record.slug);
+  const paths = await backendFor(briefTool(record.brief)).paths(record.id, record.slug);
   const opened = await openServable(path.join(paths.candidate, name));
   if (opened === null) return fail(response, 404, `${name} is not there: the gate has not passed, or the job was reviewed`);
   const { size } = opened;

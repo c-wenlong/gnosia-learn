@@ -41,7 +41,7 @@ import { EFFORTS, readClaudeDefaults } from "./video/agent-model";
 import type { VideoDoctor } from "./video/doctor";
 import { narrationHealth } from "./video/narration";
 import { postVideoJob, videoJobRoutes, videoView, type VideoDeps } from "./video/routes";
-import { toolsHealth } from "./video/tools";
+import { toolsHealth, VIDEO_TOOL_NAMES } from "./video/tools";
 
 /**
  * The HTTP surface: JSON in, JSON out, on `127.0.0.1:7250`.
@@ -1761,6 +1761,9 @@ async function health(
   // The video doctor's cached answer: it takes seconds, so health never
   // waits for a fresh one (it refreshes at start and every ten minutes).
   const videoReport = video?.doctor.current() ?? null;
+  // Each tool's own doctor (D75): a tool is available only on its verdict. A
+  // stand-in runner with no doctors (a test's) reports none.
+  const toolVerdicts = video === undefined ? undefined : Object.fromEntries(VIDEO_TOOL_NAMES.map((name) => [name, video.runner.doctorFor?.(name)?.current() ?? null]));
   const queueDepth = store.list({ state: "queued" }).length;
   // The same window and the same arithmetic the cap refuses on, rather than a
   // second implementation that agrees with it until it does not. It also moves
@@ -1834,8 +1837,8 @@ async function health(
       video === undefined
         ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "this studio was started without the video runner", tools: toolsHealth(), narration: narrationHealth() }
         : videoReport === null
-          ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "the video doctor has not finished its first check", tools: toolsHealth(), narration: narrationHealth() }
-          : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length, tools: toolsHealth(), narration: narrationHealth() },
+          ? { ok: false, sandbox: false, metal: false, kokoro: false, checks: [], note: "the video doctor has not finished its first check", tools: toolsHealth(toolVerdicts), narration: narrationHealth() }
+          : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length, tools: toolsHealth(toolVerdicts), narration: narrationHealth() },
     agent,
     diagramAgent: { ok: diagramAgentProblem === null, problem: diagramAgentProblem },
     // When each answer above was checked. `stale` means it is older than that
