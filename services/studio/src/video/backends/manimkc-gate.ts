@@ -175,19 +175,25 @@ const PREVIEWED_FILES_MAX = 64;
  */
 export async function keepPreviewed(paths: VideoPaths, calls: readonly WrapperCall[], limit = PREVIEWED_FILES_MAX): Promise<void> {
   const dir = previewedDir(paths);
-  const wanted = new Set<string>();
+  // Each source with the time its latest preview ended: that time, not the
+  // moment the runner got round to it, is what orders the kept files, so a
+  // batch of calls handled together keeps the order they were made in.
+  const wanted = new Map<string, Date>();
   for (const call of calls) {
     const hash = call.sceneSha256;
-    if (isLook(call) && typeof hash === "string" && SHA256.test(hash)) wanted.add(hash);
+    if (!isLook(call) || typeof hash !== "string" || !SHA256.test(hash)) continue;
+    const ended = new Date(Date.parse(call.endedAt) || Date.now());
+    const seen = wanted.get(hash);
+    if (seen === undefined || ended > seen) wanted.set(hash, ended);
   }
-  // A source previewed again is already kept: mark it recent, since the
-  // limit below drops the least recently previewed first.
-  const now = new Date();
-  for (const hash of [...wanted]) {
+  // A source previewed again is already kept: mark it as recent as that
+  // preview, since the limit below drops the least recently previewed first.
+  for (const [hash, ended] of [...wanted]) {
     const file = path.join(dir, `${hash}.py`);
-    if ((await lstat(file).catch(() => null)) === null) continue;
+    const st = await lstat(file).catch(() => null);
+    if (st === null) continue;
     wanted.delete(hash);
-    await utimes(file, now, now).catch(() => undefined);
+    if (ended.getTime() > st.mtimeMs) await utimes(file, ended, ended).catch(() => undefined);
   }
   if (wanted.size === 0) return;
   let body: Buffer;
@@ -210,6 +216,8 @@ export async function keepPreviewed(paths: VideoPaths, calls: readonly WrapperCa
   }
   const pending = path.join(dir, `.${hash}.${process.pid}.tmp`);
   await writeFile(pending, body, { mode: 0o644 });
+  const ended = wanted.get(hash)!;
+  await utimes(pending, ended, ended).catch(() => undefined);
   await rename(pending, path.join(dir, `${hash}.py`));
 }
 
