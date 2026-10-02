@@ -7,7 +7,8 @@ stays the one approval; and the video runner gains a backend per tool, so a
 revideokc video (and later a remotionkc one) is made unattended, inside the
 same kind of per-job sandbox manimkc runs in today.
 
-**Status: proposed, 2026-09-30, and being built in phases.** The owner asked
+**Status: proposed, 2026-09-30, and being built in phases; phases 1 to 2c
+are built (2c on 2026-10-03), the paid end-to-end job of 2c still to run.** The owner asked
 for this after [VIDEO-TOOLS.md](VIDEO-TOOLS.md) (#248) wrote down what each
 tool is for and a routing procedure for agents at a terminal. The one thing
 that could have sunk it, headless Chrome inside the job sandbox, was measured
@@ -366,7 +367,8 @@ steps 4 to 10 and calls `checkSource` and `sheet` (`VideoGateChecks` in
 `gate.ts`, manimkc's in `backends/manimkc-gate.ts`). `compareLines` moved to
 `lines.ts` so a backend's checks can use it without importing the gate.
 
-Still manimkc-shaped, for phase 2c: the doctor (one per machine, built in
+Still manimkc-shaped, for phase 2c (and done there: each is a backend method
+or an optional gate hook now): the doctor (one per machine, built in
 `index.ts` and read by health and the press; a doctor per backend changes
 both); the wrapper's verbs (`VERBS` in `calls.ts`, `steps.ts`,
 `narrateCall`, and step 10's `preview`); `GateTools.scan` and `lint`; the
@@ -393,6 +395,47 @@ CAPABILITIES.md, as manimkc's manual came from its skill), the doctor fixture
 (a small three.js topic rendered in the profile), `catalog video put` for its
 sources (D79), and revideokc enabled in `tools.ts`. Then one paid job end to
 end, measured: time, cost, gate verdict, and what the agent Read.
+
+**As built.** `backends/revideokc.ts` is a facade over `video/revideokc/`,
+one module per part, as manimkc's is over the modules that always did its
+parts. Measured on the owner's M4 Pro against revideokc 41eebf8 (#8, `build
+--no-narrate` and `sidecars`): the doctor's fixture (a glass card under a
+spotlight with shadows, a 2D title, a spring and a word cue, 8.8 s voiced)
+narrated in 7 s, built with two workers in 11.5 s and the whole doctor ran
+in 19.5 s, every step inside its profile; the suite's end-to-end job (the
+wrapper's `still` and `build`, then the gate with its sandboxed tools)
+passes in 21 s.
+
+| Part | As built |
+| --- | --- |
+| Checkout | `lib/`, `src/`, `tools/`, `package.json`, `tsconfig.json` and `requirements-narration.txt` copied; `docs/CAPABILITIES.md` and `REVIDEO-API.md` copied for the agent to Read; `node_modules` and `.venv` linked to the real checkout's, read-only (open question 2: reuse) |
+| Topic | `topic.yml`, `narration.json` from the brief's lines (one chapter per scene, named `<PREFIX><n>_<Name>` as manimkc names its classes) and `revideokc new`'s stub scene, written by the runner |
+| Ports | Each job takes an even base in 47000 to 48998, the first pair free on both loopback addresses starting from where a hash of its id points, written to `jobs/<id>/ports.json` and into its profile once; the doctor takes a pair in 46990 to 46998. Below the macOS ephemeral range (49152 up), clear of 7250, 5432 and 3000, and two jobs never run at once. The wrapper checks both ports before a render and names one that is still held |
+| render profile | D76, with node's binary alone (the spike allowed its whole store directory) and no shell (the spike allowed `/bin/sh`, `/bin/bash` and `/usr/bin/env`; none was needed), the system ffmpeg the CLI masters and tiles with, `(deny file-link)`, and no Python: `build --no-narrate` starts none |
+| narrate profile | node, gnosia-audio's console script and interpreter in revideokc's `.venv`, kokoro's in manimkc's `.venv-tts`, the model; writes the clip cache, the staged clips, the build's work folder and the deliverable's folder (for `sidecars`). gnosia-audio runs on its own environment with `MANIMKC_HOME` at the job's `render/`, so the clip keys are a manimkc job's and the shared cache seeds a revideokc job too. The clip keys run here, since the render profile has no Python |
+| gate profile | node, ffmpeg and ffprobe; reads `candidate/` and the TypeScript package; writes the poster |
+| Hard links | refused in every profile: gnosia-audio stages clips with a link when it can, and the runner keeps only single-link files, so the staging copies |
+| Wrapper | `api`, `lint` (`tsc --noEmit`), `narrate`, `still [frame or 12.5s ...]` (narrate, then `still --no-narrate`), `build` (narrate, `build --no-narrate --workers 2`, then `sidecars` in the narrate profile). The recorded `sceneSha256` is one hash over every source file (`revideokc/source.ts`, the same function compiled into the wrapper) |
+| Gate | Steps 1 to 3 as D77, the parse in the gate profile; step 5 copies every source file, each held to the hash it was read with; step 10 wants the stills sheet read after the last `still` and the build's sheet after the last build (`VideoGateChecks.buildSheet`) |
+| Manual | `revideokc-video` rewritten for one command, `revideokc api`'s listing from the real checkout, and the doctor's fixture as the worked scene |
+| Doctor | Per backend (`VideoBackend.doctor`): the toolchain, a hostile probe in JavaScript (18 attempts, every one blocked, a listen on a port that is not the job's among them), then the fixture narrated, linted, parsed, built with two workers, its sidecars written and probed. The build's verdict is kept for six hours while the toolchain is unchanged, so a ten-minute refresh does not start Chrome |
+| Health and the press | `video.tools[].available` is a tool's own doctor's verdict; the runner refuses a brief on its tool's doctor, and the card blocks the press on it |
+| Catalog | `video put` takes `scene.tsx`, `narration.json`, `.ts` and `.tsx` and `topic.yml` for a brief whose `tool` is revideokc, and requires the scene and the narration; a manimkc brief's source is still `.py` and `topic.yml` |
+
+Where this differs from the decisions above, and why:
+
+- **D77 said `narration.json` is the runner's.** The agent may edit it: it
+  is the script, the gate's step 3 compares its lines with the brief's and
+  reports every reworded or split line, as manimkc's does for its
+  `voiceover` literals, and an agent that could not fix a line the voice
+  stumbles on, or give a 3D move a `hold`, would be worse off than
+  manimkc's. Its chapter names and order are checked exactly, and `hold`
+  is at most three seconds.
+- **D78 is replaced as it said it would be**: narration is gnosia-audio,
+  in revideokc's own `.venv`, run by revideokc's `narrate` verb in the
+  narrate profile.
+- **A silent revideokc brief is refused** by the validator: revideokc's
+  build refuses a video with no sound.
 
 ### Phase 3. The remotionkc backend
 
