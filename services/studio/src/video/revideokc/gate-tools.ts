@@ -34,7 +34,7 @@ let src = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => { src += chunk; });
 process.stdin.on("end", () => {
-  const out = { ok: true, error: null, strings: [], defaultExport: false };
+  const out = { ok: true, error: null, strings: [], defaultExport: false, imports: [] };
   const result = ts.transpileModule(src, { fileName: "scene.tsx", reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.ES2022 } });
   const errors = (result.diagnostics || []).filter((d) => d.category === ts.DiagnosticCategory.Error);
   if (errors.length > 0) {
@@ -47,6 +47,12 @@ process.stdin.on("end", () => {
   }
   const file = ts.createSourceFile("scene.tsx", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const walk = (node) => {
+    // A module specifier is where code comes from, not text on screen.
+    const specifier = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node.arguments[0] : undefined;
+    if (specifier !== undefined && ts.isStringLiteral(specifier)) {
+      out.imports.push(specifier.text);
+      return;
+    }
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) out.strings.push(node.text);
     else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) out.strings.push(node.text);
     else if (ts.isJsxText(node)) { const text = node.text.trim(); if (text !== "") out.strings.push(text); }

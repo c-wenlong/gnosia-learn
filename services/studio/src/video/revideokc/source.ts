@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 
+// The catalog's pure limits module, reached by path as gate.ts reaches its poster recipe.
+import { VIDEO_SOURCE_BYTES_MAX, VIDEO_SOURCE_FILES_MAX } from "../../../../catalog/src/content/video-source-limits";
 import { safeRead } from "../copy";
 
 /**
@@ -24,11 +26,15 @@ export const SOURCE_FILE = /^(?:narration\.json|[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}
 /** Every file a change starts from: the source and `topic.yml`. The catalog's own rule for a revideokc topic is the same. */
 export const REVIDEOKC_SOURCE_PATTERN = /^(?:narration\.json|topic\.yml|[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.tsx?)$/;
 
-/** The most source files a topic folder may hold beside `topic.yml`: the catalog keeps twenty in all. */
-export const SOURCE_FILES_MAX = 19;
+/** The most source files a topic folder may hold beside `topic.yml`: the catalog's limit, less that file. */
+export const SOURCE_FILES_MAX = VIDEO_SOURCE_FILES_MAX - 1;
 
-/** The most bytes one source file may be. */
-export const SOURCE_BYTES_MAX = 512 * 1024;
+/**
+ * The most bytes the source may hold together, `topic.yml` included: the
+ * catalog's own limit (`video put` refuses more), so a source the gate passes
+ * is one Accept can store. One file can be no more than all of it.
+ */
+export const SOURCE_BYTES_MAX = VIDEO_SOURCE_BYTES_MAX;
 
 /** One hash over a set of files: each name and its sha256, sorted by name, one line each. */
 export function combinedHash(entries: readonly { name: string; sha256: string }[]): string {

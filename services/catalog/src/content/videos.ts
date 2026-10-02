@@ -29,6 +29,7 @@ import { sha256 } from "./diagram-document";
 import { latestRevisions, lockEntity } from "./revisions";
 import { andOwnedBy } from "./scope";
 import { ContentWriteError, deleteContent, writeContents, type WriteContentInput, type WriteContentResult } from "./write";
+import { VIDEO_SOURCE_BYTES_MAX, VIDEO_SOURCE_FILES_MAX } from "./video-source-limits";
 
 /**
  * Studio videos in the database (docs/STUDIO-VIDEOS.md, "Accept", D49).
@@ -151,8 +152,9 @@ function sourceTool(brief: Record<string, unknown>): SourceTool {
   if (tool === "revideokc") return "revideokc";
   throw new VideoError("unreadable", `the brief names the video tool ${JSON.stringify(tool)}, whose source the catalog does not know how to store.`);
 }
-const SOURCE_BYTES_MAX = 512 * 1024;
-const SOURCE_FILES_MAX = 20;
+// One pair of limits for the catalog and the studio's gate, which reaches the module by path.
+const SOURCE_BYTES_MAX = VIDEO_SOURCE_BYTES_MAX;
+const SOURCE_FILES_MAX = VIDEO_SOURCE_FILES_MAX;
 
 /** `video.source`: what a change job starts from. */
 export interface VideoSource {

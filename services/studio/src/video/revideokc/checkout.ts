@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -41,6 +42,30 @@ async function copyTree(from: string, to: string): Promise<void> {
     if (entry.isDirectory()) await copyTree(source, target);
     else if (entry.isFile()) await copyFile(source, target);
   }
+}
+
+/**
+ * One hash over everything a job copies from the checkout (`lib/`, `src/`,
+ * `tools/` and the files beside them), each file by its path and contents:
+ * what the doctor keys a kept fixture build on, so a change to the code a
+ * render runs makes the next doctor render again.
+ */
+export async function checkoutFingerprint(root: string): Promise<string> {
+  const hash = createHash("sha256");
+  const add = async (relative: string): Promise<void> => {
+    const full = path.join(root, relative);
+    const facts = await lstat(full).catch(() => null);
+    if (facts === null) {
+      hash.update(`${relative}\u0000missing\n`);
+    } else if (facts.isDirectory()) {
+      const names = (await readdir(full)).filter((name) => name !== "node_modules" && name !== ".DS_Store" && name !== "__pycache__").sort();
+      for (const name of names) await add(path.join(relative, name));
+    } else if (facts.isFile()) {
+      hash.update(`${relative}\u0000${createHash("sha256").update(await readFile(full)).digest("hex")}\n`);
+    }
+  };
+  for (const name of [...COPIED_DIRS, ...COPIED_FILES]) await add(name);
+  return hash.digest("hex");
 }
 
 /** The skeleton every revideokc job has before its topic is put in. */

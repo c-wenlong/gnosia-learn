@@ -10,7 +10,7 @@ import { runSandboxed } from "../exec";
 import type { VideoPaths } from "../paths";
 import { resolvedStudioHome, type ProfileKind } from "../sandbox";
 import { VOICES } from "../voices";
-import { buildRevideokcCheckout } from "./checkout";
+import { buildRevideokcCheckout, checkoutFingerprint } from "./checkout";
 import { FIXTURE_NARRATION, FIXTURE_SCENE, FIXTURE_TOPIC_YML } from "./fixture";
 import { revideokcGateTools } from "./gate-tools";
 import { revideokcPaths, revideokcVideoPaths } from "./paths";
@@ -34,16 +34,25 @@ import { discoverRevideokcToolchain, revideokcProblems, type RevideokcToolchain 
  *   the narration profile, and the build probed and its poster cut in the
  *   gate profile.
  *
- * The build takes about twenty seconds warm and a minute and a half with
- * Vite's cache cold, so it is not run on every refresh: its verdict is kept
- * while the toolchain is unchanged, for `RENDER_KEPT_MS`, and the cheap
- * checks and the probe run every time.
+ * The build takes seconds to a minute and a half, so it is not run on every
+ * refresh: a passing verdict is kept for `RENDER_KEPT_MS` while the
+ * toolchain, the voice and the code a render runs (`checkoutFingerprint`)
+ * are unchanged, and the cheap checks and the probe run every time.
  */
 
 /** How long a passing fixture build stands for an unchanged toolchain. */
 export const RENDER_KEPT_MS = 6 * 3_600_000;
 
 let lastRender: { key: string; at: number; checks: VideoDoctorCheck[] } | null = null;
+
+/**
+ * What a kept fixture build stands for: the toolchain, the voice, the code a
+ * render runs (the checkout's `lib/`, `src/`, `tools/` and the files beside
+ * them, by content) and the fixture. A change to any of them renders again.
+ */
+export async function renderKey(tools: RevideokcToolchain, voice: string): Promise<string> {
+  return JSON.stringify({ tools, voice, code: await checkoutFingerprint(tools.revideokc.root), fixture: FIXTURE_SCENE });
+}
 
 /** Forget the kept fixture build (a test, or a change the toolchain cannot see). */
 export function forgetRevideokcRender(): void {
@@ -199,7 +208,7 @@ export async function runRevideokcDoctor(): Promise<VideoDoctorReport> {
     sandbox = Object.keys(verdicts).length > 0 && allowed.length === 0;
     checks.push({ name: "hostile probe", ok: sandbox, detail: sandbox ? `${Object.keys(verdicts).length} attempts, every one blocked` : `allowed: ${allowed.join(", ") || "the probe did not run"}` });
 
-    const key = JSON.stringify({ tools, voice });
+    const key = await renderKey(tools, voice);
     if (lastRender !== null && lastRender.key === key && Date.now() - lastRender.at < RENDER_KEPT_MS) {
       checks.push(...lastRender.checks.map((check) => ({ ...check, detail: `${check.detail} (at ${new Date(lastRender!.at).toISOString()})` })));
     } else {

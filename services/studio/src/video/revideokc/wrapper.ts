@@ -227,8 +227,11 @@ function run(verb, rest, startedAt, startMs) {
     exitCode,
     steps,
     sceneSha256,
-    // The one stills sheet shows every scene, so a still that wrote it rendered them all.
-    rendered: sheetAt !== null && sheetAt >= startMs - 1000 && exitCode === 0 ? CONFIG.scenes : [],
+    // A still with no moments puts a still of every line on the one sheet, so
+    // it rendered every scene; one of chosen moments covers no scene for
+    // certain (a moment names a time, not a scene), and its sheet replaces
+    // the whole-video one, so it renders none.
+    rendered: verb === "still" && rest.length === 0 && sheetAt !== null && sheetAt >= startMs - 1000 && exitCode === 0 ? CONFIG.scenes : [],
     deliverable: verb === "build" ? { written: deliverableAt !== null && deliverableAt >= startMs - 1000 && exitCode === 0 } : null,
   });
   return exitCode === null ? 1 : exitCode;

@@ -1,11 +1,11 @@
-import { stat } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 
-import type { GateReport, SourceCheck, SourceCheckInput, VideoGateChecks } from "../gate";
+import type { GateReport, LookInput, LookResult, SceneParse, SourceCheck, SourceCheckInput, VideoGateChecks } from "../gate";
 import { compareLines } from "../lines";
 import type { VideoPaths } from "../paths";
 import type { LineChange } from "../types";
 import { revideokcPaths } from "./paths";
-import { combinedHash, readSources, SourceRefused, type SourceFile } from "./source";
+import { combinedHash, readSources, SOURCE_BYTES_MAX, SourceRefused, type SourceFile } from "./source";
 
 /**
  * revideokc's part of the gate (D77 of docs/STUDIO-VIDEO-TOOLS.md): steps 1
@@ -15,14 +15,33 @@ import { combinedHash, readSources, SourceRefused, type SourceFile } from "./sou
  * 1. **Source**: every source file read the careful way, `scene.tsx` and
  *    `narration.json` present, each TypeScript file parsed by the TypeScript
  *    compiler's parser in the gate profile, `scene.tsx` with a default
- *    export, and on a change, the source changed. The hash is the combined
- *    one the wrapper records.
+ *    export, the whole source within what Accept stores, and on a change,
+ *    the source changed. The hash is the combined one the wrapper records.
  * 2. **Lint**: `tsc --noEmit` in the render profile, no errors.
  * 3. **Script**: `narration.json` is one chapter per scene of the brief,
  *    named by its class and in its order, each line one plain line; the
  *    lines are compared with the brief's (`compareLines`, the respellings and
  *    splits D47 allows, reported to the person); `hold` is at most three
- *    seconds; and each beat's labels appear in a string of the source.
+ *    seconds; and each beat's labels appear in a string of a file the scene
+ *    reaches (`scene.tsx` and what it imports from the topic folder).
+ *
+ * Why the labels are not tied to their scene, as manimkc ties them to its
+ * scene class: every chapter of a revideokc video plays in one generator,
+ * and nothing in the source says which code runs during which chapter.
+ * Scenes are told apart at run time by cues on the clock (`t.at(...)`), and
+ * idiomatic code puts its data in constants above the generator, loops over
+ * the chapters (the stub does), and calls helpers from several of them, so
+ * the place a string is written says nothing about when it is on screen. A
+ * span of text between one chapter's first cue and the next's would fail
+ * that code while still passing a label drawn in the wrong chapter. The
+ * honest static check is the narrower one here, that the label is in code
+ * the video runs, not in an unused helper; whether it is on screen in its
+ * chapter is what the agent's look at the stills sheet and the person's
+ * review are for.
+ *
+ * Step 10 is this tool's own (`looked`): a still of every scene, of the
+ * source the gate checked, whose sheet was Read before anything rewrote it,
+ * and the build's sheet Read after the build the gate copied.
  */
 
 /** The most a chapter may hold after its last line: with the 0.4 s tail inside the four seconds step 7 allows. */
@@ -89,7 +108,18 @@ async function checkSource(input: SourceCheckInput, report: GateReport): Promise
   if (scene === undefined) return fail("source", "no scene.tsx", "There is no scene.tsx in the topic folder. Write the scene, still it, look, and build.");
   if (narration === undefined) return fail("source", "no narration.json", "There is no narration.json in the topic folder; it is the script, and the video is made from it.");
   if (tools.parseScene === undefined) return fail("source", "no TypeScript parser", "The check could not parse TypeScript on this machine.");
-  const strings: string[] = [];
+  // The catalog's limit on the whole source, topic.yml included, so a video
+  // the gate passes is one Accept can store.
+  const topicBytes = (await lstat(paths.topicYml).catch(() => null))?.size ?? 0;
+  const bytes = files.reduce((sum, file) => sum + file.body.length, 0) + topicBytes;
+  if (bytes > SOURCE_BYTES_MAX) {
+    return fail(
+      "source",
+      `${bytes} bytes of source, over the ${SOURCE_BYTES_MAX} Accept stores`,
+      `The source is ${bytes} bytes with topic.yml, and a video is stored with at most ${SOURCE_BYTES_MAX}: make it smaller (data belongs in fewer, shorter literals).`,
+    );
+  }
+  const parses = new Map<string, SceneParse>();
   for (const entry of files.filter((file) => /\.tsx?$/.test(file.name))) {
     const parsed = await tools.parseScene(entry.body.toString("utf8"));
     if (!parsed.ok) {
@@ -98,8 +128,9 @@ async function checkSource(input: SourceCheckInput, report: GateReport): Promise
     if (entry.name === "scene.tsx" && !parsed.defaultExport) {
       return fail("source", "scene.tsx has no default export", "scene.tsx must `export default defineTopic(...)`: it is what the project loads.");
     }
-    strings.push(...parsed.strings);
+    parses.set(entry.name, parsed);
   }
+  const strings = reachable(parses).flatMap((name) => parses.get(name)?.strings ?? []);
   const facts = await stat(scene.path);
   if (facts.mtimeMs + 1000 < input.startedAtMs) {
     return fail("source", "older than the job", "scene.tsx was not written during this job. Write the scene, still it, look, and build.");
@@ -145,7 +176,7 @@ async function checkSource(input: SourceCheckInput, report: GateReport): Promise
     for (const beat of briefScene.beats) {
       for (const label of beat.labels) {
         if (!lowered.some((value) => value.includes(label.toLowerCase()))) {
-          problems.push(`the source never shows the label "${label}" of ${name}: it must appear in a string in scene.tsx or a file beside it`);
+          problems.push(`the source never shows the label "${label}" of ${name}: it must appear in a string in scene.tsx or a file it imports`);
         }
       }
     }
@@ -167,9 +198,75 @@ async function checkSource(input: SourceCheckInput, report: GateReport): Promise
   };
 }
 
+/**
+ * The files `scene.tsx` reaches through relative imports of the topic folder
+ * (`./parts`, `./parts.ts`), itself first: the files whose strings can be on
+ * screen. A file nothing imports is not among them.
+ */
+export function reachable(parses: ReadonlyMap<string, SceneParse>): string[] {
+  const seen: string[] = [];
+  const queue = ["scene.tsx"];
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    if (seen.includes(name) || !parses.has(name)) continue;
+    seen.push(name);
+    for (const specifier of parses.get(name)?.imports ?? []) {
+      const match = /^\.\/([A-Za-z0-9_][A-Za-z0-9_.-]*)$/.exec(specifier);
+      if (match === null) continue;
+      const bare = match[1]!.replace(/\.(?:js|jsx|mjs)$/, "");
+      const found = [bare, `${bare}.ts`, `${bare}.tsx`].find((candidate) => parses.has(candidate));
+      if (found !== undefined) queue.push(found);
+    }
+  }
+  return seen;
+}
+
+/**
+ * Step 10 for a revideokc job (D77). Every still writes the one stills sheet,
+ * and a still of chosen moments rewrites it with those moments only, so:
+ *
+ * - the still that counts is the last successful one of every scene (no
+ *   moments named), and it must be of the source the gate checked, so a look
+ *   before the last edit of any source file does not count;
+ * - its sheet must have been Read after it ended and before any later still
+ *   started, since that still replaced the sheet;
+ * - the build's sheet must have been Read after the build the gate copied.
+ */
+function looked(input: LookInput): LookResult {
+  const own = revideokcPaths(input.paths);
+  const problems: string[] = [];
+  const stills = input.calls.filter((call) => call.verb === "still");
+  const full = [...stills].reverse().find((call) => call.exitCode === 0 && input.classes.every((scene) => (call.rendered ?? []).includes(scene)));
+  let readAt: string | null = null;
+  if (full === undefined) {
+    problems.push(`there is no still of every scene to look at: run still with no moments, and Read its sheet, ${own.stillsSheet}`);
+  } else if (full.sceneSha256 !== input.sourceHash) {
+    problems.push(`the source changed after the last still of every scene, at ${full.endedAt}: run still with no moments again, and Read its sheet, ${own.stillsSheet}`);
+  } else {
+    const ended = Date.parse(full.endedAt);
+    const next = stills.find((call) => Date.parse(call.startedAt) >= ended && call !== full);
+    const until = next === undefined ? Infinity : Date.parse(next.startedAt);
+    const read = [...input.reads].reverse().find((entry) => entry.path === own.stillsSheet && Date.parse(entry.at) >= ended && Date.parse(entry.at) < until);
+    readAt = read?.at ?? null;
+    if (read === undefined) {
+      problems.push(
+        next === undefined
+          ? `look at the stills sheet, rendered at ${full.endedAt}: ${own.stillsSheet}`
+          : `the stills sheet of every scene, rendered at ${full.endedAt}, was replaced by a later still before it was Read: run still with no moments again, and Read ${own.stillsSheet}`,
+      );
+    }
+  }
+  const out: LookResult["looked"] = {};
+  for (const scene of input.classes) out[scene] = { renderedAt: full?.endedAt ?? null, readAt };
+  const buildRead = [...input.reads].reverse().find((entry) => entry.path === own.buildSheet && Date.parse(entry.at) >= Date.parse(input.build.endedAt));
+  out.build = { renderedAt: input.build.endedAt, readAt: buildRead?.at ?? null };
+  if (buildRead === undefined) problems.push(`look at the build's sheet, written at ${input.build.endedAt}: ${own.buildSheet}`);
+  return { looked: out, problems };
+}
+
 export const REVIDEOKC_GATE: VideoGateChecks = {
   checkSource,
   // One stills sheet shows every scene, so each scene's sheet is that one.
   sheet: (paths: VideoPaths) => revideokcPaths(paths).stillsSheet,
-  buildSheet: (paths: VideoPaths) => revideokcPaths(paths).buildSheet,
+  looked,
 };

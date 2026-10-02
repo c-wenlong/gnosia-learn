@@ -14,6 +14,7 @@ import { secondsForLines } from "../src/video/brief";
 import { runVideoGate, type GateTools, type SceneParse } from "../src/video/gate";
 import type { VideoPaths } from "../src/video/paths";
 import { scaffoldRevideokc } from "../src/video/revideokc/checkout";
+import { renderKey } from "../src/video/revideokc/doctor";
 import { revideokcPaths, revideokcVideoPaths } from "../src/video/revideokc/paths";
 import { freePair, jobPortStart, JOB_PORTS, DOCTOR_PORTS } from "../src/video/revideokc/ports";
 import { buildRevideokcProfile, profilePorts, RENDER_SERVICES, revideokcEnv } from "../src/video/revideokc/sandbox";
@@ -386,6 +387,27 @@ describe("the backend's own parts", () => {
   });
 });
 
+describe("the doctor's kept build", () => {
+  it("is keyed on the code a render runs: a change to lib/, src/ or the CLI renders again, node_modules does not count", async () => {
+    const checkout = path.join(root, "revideokc-code");
+    for (const dir of ["lib", "src", "tools/cli", "node_modules/x"]) await mkdir(path.join(checkout, dir), { recursive: true });
+    await writeFile(path.join(checkout, "lib", "topic.tsx"), "export const a = 1;\n");
+    await writeFile(path.join(checkout, "src", "project.ts"), "export default 1;\n");
+    await writeFile(path.join(checkout, "tools", "cli", "revideokc.mjs"), "// the CLI\n");
+    const tools = { ...fixedTools(), revideokc: { ...fixedTools().revideokc, root: checkout } };
+    const first = await renderKey(tools, "af_heart");
+    expect(await renderKey(tools, "af_heart")).toBe(first);
+    await writeFile(path.join(checkout, "node_modules", "x", "index.js"), "changed\n");
+    expect(await renderKey(tools, "af_heart")).toBe(first);
+    for (const [file, body] of [["lib/topic.tsx", "export const a = 2;\n"], ["src/project.ts", "export default 2;\n"], ["tools/cli/revideokc.mjs", "// changed\n"]] as const) {
+      const before = await renderKey(tools, "af_heart");
+      await writeFile(path.join(checkout, file), body);
+      expect(await renderKey(tools, "af_heart"), file).not.toBe(before);
+    }
+    expect(await renderKey(tools, "am_michael")).not.toBe(await renderKey(tools, "af_heart"));
+  });
+});
+
 /* -------------------------------------------------------------------------- */
 /* The wrapper                                                                */
 /* -------------------------------------------------------------------------- */
@@ -400,7 +422,13 @@ describe("the revideokc wrapper", () => {
     paths = await jobPaths();
     recordFile = path.join(root, "sandbox-calls.ndjson");
     const fake = path.join(root, "fake-sandbox-exec");
-    await writeFile(fake, `#!${process.execPath}\nrequire("node:fs").appendFileSync(${JSON.stringify(recordFile)}, JSON.stringify({ argv: process.argv.slice(2), env: process.env }) + "\\n");\n`, "utf8");
+    // Records what it was asked to run, and stands in for a still's render by writing the stills sheet.
+    const sheet = revideokcPaths(paths).stillsSheet;
+    await writeFile(
+      fake,
+      `#!${process.execPath}\nconst fs = require("node:fs");\nfs.appendFileSync(${JSON.stringify(recordFile)}, JSON.stringify({ argv: process.argv.slice(2), env: process.env }) + "\\n");\nif (process.argv.includes("still")) { fs.mkdirSync(${JSON.stringify(path.dirname(sheet))}, { recursive: true }); fs.writeFileSync(${JSON.stringify(sheet)}, "png"); }\n`,
+      "utf8",
+    );
     await chmod(fake, 0o755);
     await mkdir(paths.topicDir, { recursive: true });
     await writeFile(paths.sceneFile, "export default 1;\n");
@@ -466,6 +494,15 @@ describe("the revideokc wrapper", () => {
     expect((await calls()).map((call) => call.verb)).toEqual(["still", "lint"]);
   });
 
+  it("records a still of every scene as rendering them all, and a still of chosen moments as rendering none", async () => {
+    await video(["still"]);
+    await video(["still", "4.5s"]);
+    expect((await calls()).map((call) => [call.verb, call.rendered])).toEqual([
+      ["still", ["TB1_A", "TB2_B"]],
+      ["still", []],
+    ]);
+  });
+
   it("refuses to render while one of the job's ports is held, and says so", async () => {
     const config = JSON.parse(/const CONFIG = ([\s\S]*?);\n/.exec(await readFile(paths.wrapper, "utf8"))![1]!) as { ports: number[] };
     const server = createServer();
@@ -492,8 +529,9 @@ describe("the gate, for a revideokc job", () => {
   const parseScene = async (source: string): Promise<SceneParse> => ({
     ok: !source.includes("SYNTAX ERROR"),
     error: source.includes("SYNTAX ERROR") ? "line 1: ';' expected." : null,
-    strings: [...source.matchAll(/'([^']*)'/g)].map((match) => match[1]!),
+    strings: [...source.matchAll(/'([^']*)'/g)].filter((match) => !source.slice(0, match.index).endsWith("from ")).map((match) => match[1]!),
     defaultExport: source.includes("export default"),
+    imports: [...source.matchAll(/from '([^']*)'/g)].map((match) => match[1]!),
   });
 
   function tools(duration: number): GateTools {
@@ -535,7 +573,7 @@ describe("the gate, for a revideokc job", () => {
   }
 
   const at = (offsetMs: number): string => new Date(Date.now() + offsetMs).toISOString();
-  const still = (when: string): WrapperCall => ({ verb: "still", scenes: classes, startedAt: when, endedAt: when, exitCode: 0, rendered: classes });
+  const still = (when: string, hash: string, rendered: string[] = classes): WrapperCall => ({ verb: "still", scenes: classes, startedAt: when, endedAt: when, exitCode: 0, sceneSha256: hash, rendered });
   const built = (when: string, hash: string): WrapperCall => ({ verb: "build", startedAt: when, endedAt: when, exitCode: 0, sceneSha256: hash, rendered: [], deliverable: { written: true } });
 
   it("passes a job whose narration is the brief's, whose labels are on screen, and whose two sheets were read, copying every source file", async () => {
@@ -548,7 +586,7 @@ describe("the gate, for a revideokc job", () => {
       classes,
       startedAtMs: Date.now() - 60_000,
       sourceHashBefore: null,
-      calls: [still(at(-5_000)), built(at(-2_000), hash)],
+      calls: [still(at(-5_000), hash), built(at(-2_000), hash)],
       reads: [
         { path: own.stillsSheet, at: at(-4_000) },
         { path: own.buildSheet, at: at(-1_000) },
@@ -568,13 +606,67 @@ describe("the gate, for a revideokc job", () => {
     const lines = brief.scenes.map((scene) => scene.beats.map((beat) => beat.say));
     const { paths, own, voiced, hash } = await layOutJob(lines);
     const base = { brief: { ...brief, tool: "revideokc" as const }, paths, classes, startedAtMs: Date.now() - 60_000, sourceHashBefore: null, tools: tools(Math.round(secondsForLines(voiced))), backend: backendFor("revideokc") };
-    const unread = await runVideoGate({ ...base, calls: [still(at(-5_000)), built(at(-2_000), hash)], reads: [{ path: own.stillsSheet, at: at(-4_000) }] });
+    const unread = await runVideoGate({ ...base, calls: [still(at(-5_000), hash), built(at(-2_000), hash)], reads: [{ path: own.stillsSheet, at: at(-4_000) }] });
     expect(unread.ok).toBe(false);
     expect(unread.findings.join(" ")).toContain("look at the build's sheet");
     // An edit to the narration after the build: the video is not the source.
     await writeFile(own.narration, JSON.stringify(classes.map((scene, i) => ({ scene, title: "x", lines: lines[i] }))));
-    const stale = await runVideoGate({ ...base, calls: [still(at(-5_000)), built(at(-2_000), hash)], reads: [] });
+    const stale = await runVideoGate({ ...base, calls: [still(at(-5_000), hash), built(at(-2_000), hash)], reads: [] });
     expect(stale.steps.find((step) => step.name === "build")).toMatchObject({ ok: false });
+  });
+
+  it("counts a look at the stills only of the source it checked, and only before a later still replaced the sheet", async () => {
+    const brief = narratedBrief();
+    const lines = brief.scenes.map((scene) => scene.beats.map((beat) => beat.say));
+    const { paths, own, voiced, hash } = await layOutJob(lines);
+    const base = { brief: { ...brief, tool: "revideokc" as const }, paths, classes, startedAtMs: Date.now() - 60_000, sourceHashBefore: null, tools: tools(Math.round(secondsForLines(voiced))), backend: backendFor("revideokc") };
+    const buildRead = { path: own.buildSheet, at: at(-500) };
+    // Looked at, then the scene was edited, then built: the stills were of another source.
+    const edited = await runVideoGate({ ...base, calls: [still(at(-6_000), "an-earlier-source"), built(at(-2_000), hash)], reads: [{ path: own.stillsSheet, at: at(-5_000) }, buildRead] });
+    expect(edited.ok).toBe(false);
+    expect(edited.findings.join(" ")).toContain("the source changed after the last still of every scene");
+    // A whole still, then one of chosen moments that replaced its sheet before it was Read.
+    const replaced = await runVideoGate({
+      ...base,
+      calls: [still(at(-6_000), hash), still(at(-5_000), hash, []), built(at(-2_000), hash)],
+      reads: [{ path: own.stillsSheet, at: at(-4_000) }, buildRead],
+    });
+    expect(replaced.ok).toBe(false);
+    expect(replaced.findings.join(" ")).toContain("was replaced by a later still before it was Read");
+    // Only stills of chosen moments: no still of every scene at all.
+    const partial = await runVideoGate({ ...base, calls: [still(at(-5_000), hash, []), built(at(-2_000), hash)], reads: [{ path: own.stillsSheet, at: at(-4_000) }, buildRead] });
+    expect(partial.findings.join(" ")).toContain("there is no still of every scene");
+    // Read before the moments still replaced it: it counts.
+    const read = await runVideoGate({
+      ...base,
+      calls: [still(at(-6_000), hash), still(at(-4_000), hash, []), built(at(-2_000), hash)],
+      reads: [{ path: own.stillsSheet, at: at(-5_000) }, buildRead],
+    });
+    expect(read.findings).toEqual([]);
+  });
+
+  it("refuses a source bigger than Accept stores, and counts labels only in files the scene reaches", async () => {
+    const brief = narratedBrief();
+    const lines = brief.scenes.map((scene) => scene.beats.map((beat) => beat.say));
+    const gate = async (job: Awaited<ReturnType<typeof layOutJob>>) =>
+      runVideoGate({ brief: { ...brief, tool: "revideokc" }, paths: job.paths, classes, startedAtMs: Date.now() - 60_000, sourceHashBefore: null, calls: [], reads: [], tools: tools(60), backend: backendFor("revideokc") });
+
+    // Two files each under the per-file cap, together over the catalog's total.
+    const big = await layOutJob(lines);
+    await writeFile(path.join(big.paths.topicDir, "data.ts"), `export const blob = '${"x".repeat(300 * 1024)}';\n`);
+    await writeFile(path.join(big.paths.topicDir, "more.ts"), `export const more = '${"y".repeat(300 * 1024)}';\n`);
+    const sized = await gate(big);
+    expect(sized.steps).toEqual([{ name: "source", ok: false, detail: expect.stringMatching(/over the 524288 Accept stores/) }]);
+
+    await rm(path.join(big.paths.topicDir, "data.ts"));
+    await rm(path.join(big.paths.topicDir, "more.ts"));
+    // The label "API" only in a helper nothing imports: not shown.
+    const unused = await layOutJob(lines, { scene: "export default defineTopic(function* () { const a = 'Client'; });\n" });
+    await writeFile(path.join(unused.paths.topicDir, "parts.ts"), "export const label = 'API';\n");
+    expect((await gate(unused)).findings.join(" ")).toContain('never shows the label "API"');
+    // The same helper, imported by the scene: shown.
+    await writeFile(unused.paths.sceneFile, "import {label} from './parts';\nexport default defineTopic(function* () { const a = 'Client'; });\n");
+    expect((await gate(unused)).findings.join(" ")).not.toContain("never shows the label");
   });
 
   it("reports reworded lines, and refuses chapters out of order, a missing label, a long hold and a scene that does not parse", async () => {

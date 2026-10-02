@@ -42,6 +42,8 @@ export interface SceneParse {
   strings: string[];
   /** Whether the file has an `export default`, which `src/project.ts` loads. */
   defaultExport: boolean;
+  /** The relative module specifiers it imports (`./parts`), so the gate counts only files the scene reaches. Absent from an older parse. */
+  imports?: string[];
 }
 
 /**
@@ -120,12 +122,29 @@ export interface VideoGateChecks {
   /** A scene's contact sheet: what step 10 wants Read after the scene's last render. */
   sheet(paths: VideoPaths, scene: string): string;
   /**
-   * The sheet `build` writes of the finished video, when the tool makes one
-   * the agent must look at too (revideokc's, D77): step 10 then wants it Read
-   * after the last successful build. Absent for manimkc, whose build sheet
-   * the gate has never asked about.
+   * Step 10 in the tool's own terms, when its sheets are not one per scene
+   * per look call (revideokc's, D77: one stills sheet for every scene, which
+   * a still of chosen moments rewrites, and the build's sheet). Absent, the
+   * gate's own per-scene check runs, which is manimkc's.
    */
-  buildSheet?(paths: VideoPaths): string;
+  looked?(input: LookInput): LookResult;
+}
+
+/** What a tool's own step 10 is given: the job, its logs, the checked source and the build the gate copied. */
+export interface LookInput {
+  paths: VideoPaths;
+  classes: readonly string[];
+  calls: readonly WrapperCall[];
+  reads: readonly SheetRead[];
+  /** The source the gate checked, as the wrapper records it (`sceneSha256`). */
+  sourceHash: string;
+  build: WrapperCall;
+}
+
+export interface LookResult {
+  looked: NonNullable<VideoGateResult["looked"]>;
+  /** One sentence each, without the "Looked: " the gate puts in front. */
+  problems: string[];
 }
 
 /** A held frame: seconds of picture a scene may run after its last line ends (the skill's rule). */
@@ -357,6 +376,17 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
   await writeFile(paths.copies, `${JSON.stringify({ files: copies, durationSeconds }, null, 1)}\n`, "utf8");
 
   /* 10. Looked: every scene's latest sheet was Read after the render that made it. */
+  if (checks.looked !== undefined) {
+    const own = checks.looked({ paths, classes: input.classes, calls: input.calls, reads: input.reads, sourceHash, build });
+    looked = own.looked;
+    if (own.problems.length > 0) {
+      record("looked", false, own.problems.join("; "));
+      findings.push(...own.problems.map((problem) => `Looked: ${problem}.`));
+      return finish();
+    }
+    record("looked", true, "every sheet read after its last render");
+    return finish();
+  }
   looked = {};
   const lookProblems: string[] = [];
   for (const scene of input.classes) {
@@ -368,14 +398,6 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
     looked[scene] = { renderedAt, readAt: read?.at ?? null };
     if (renderedAt === null) lookProblems.push(`${scene} was never previewed, so it has no sheet to look at`);
     else if (read === undefined) lookProblems.push(`look at the sheet for ${scene}, rendered at ${renderedAt}: ${sheet}`);
-  }
-  // The finished video's own sheet, for a tool that writes one (D77): Read
-  // after the build the gate copied, which is the last successful one.
-  if (checks.buildSheet !== undefined) {
-    const sheet = checks.buildSheet(paths);
-    const read = [...input.reads].reverse().find((entry) => entry.path === sheet && Date.parse(entry.at) >= Date.parse(build.endedAt));
-    looked.build = { renderedAt: build.endedAt, readAt: read?.at ?? null };
-    if (read === undefined) lookProblems.push(`look at the build's sheet, written at ${build.endedAt}: ${sheet}`);
   }
   if (lookProblems.length > 0) {
     record("looked", false, lookProblems.join("; "));

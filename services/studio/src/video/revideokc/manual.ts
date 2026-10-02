@@ -97,7 +97,7 @@ ${FIXTURE_SCENE.trim()}
 
 In this order: anything cut off at the frame edge; two things overlapping; text hidden behind a 3D card in front of it; a label on the wrong row or box; an object from an earlier beat still on screen; an empty half of the frame. Then the timing: a still at a line's end should show what that line described, and every late cue is an animation that overran its narration.
 
-The runner checks that you Read the stills sheet after the last \`still\`, which shows every scene, and the build's sheet after the last \`build\`; a sheet you looked at before your last render does not count.
+The runner checks that you Read the sheet of a \`still\` with no moments, made after your last change to any source file, before any later \`still\` replaced it, and the build's sheet after the last \`build\`. A still of chosen moments is for looking closer; it rewrites the sheet with those moments only, so finish with a \`still\` of every scene.
 
 ## Never
 
