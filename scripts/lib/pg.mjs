@@ -3,11 +3,69 @@
 // scripts/e2e.mjs and scripts/flip-rehearsal.mjs both copy `self_learn`, and
 // the fallback for a template with sessions open is easy to get subtly wrong
 // (a shell pipeline reports only psql's exit code), so it lives here once.
-import { spawn } from 'node:child_process';
-import { join } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { accessSync, constants } from 'node:fs';
+import { delimiter, join } from 'node:path';
 
-/** The Postgres 17 client tools. */
-export const PG_BIN = process.env.PG_BIN ?? '/opt/homebrew/opt/postgresql@17/bin';
+/** Homebrew's keg-only Postgres 17, which is not on PATH unless linked. */
+const HOMEBREW_BINS = ['/opt/homebrew/opt/postgresql@17/bin', '/usr/local/opt/postgresql@17/bin'];
+
+const runnable = (file) => {
+  try {
+    accessSync(file, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Where the Postgres client tools are, and how that was decided, in order:
+ * PG_BIN when it is set (and then only there, so a wrong PG_BIN is reported
+ * rather than quietly bypassed), the directory on PATH that holds `pg_dump`,
+ * `pg_config --bindir`, and Homebrew's postgresql@17. `dir` is null when none
+ * has the tools, and `tried` lists every place looked, for the message.
+ */
+export function findPgBin(env = process.env) {
+  if (env.PG_BIN !== undefined && env.PG_BIN !== '') return { dir: env.PG_BIN, from: 'PG_BIN', tried: [`PG_BIN=${env.PG_BIN}`] };
+  const tried = [];
+  for (const dir of (env.PATH ?? '').split(delimiter).filter(Boolean)) {
+    if (runnable(join(dir, 'pg_dump'))) return { dir, from: 'PATH', tried };
+  }
+  tried.push('PATH');
+  const config = spawnSync('pg_config', ['--bindir'], { env, encoding: 'utf8' });
+  const bindir = config.status === 0 ? config.stdout.trim() : '';
+  if (bindir !== '' && runnable(join(bindir, 'pg_dump'))) return { dir: bindir, from: 'pg_config --bindir', tried };
+  tried.push(bindir === '' ? 'pg_config --bindir (no pg_config)' : `pg_config --bindir (${bindir})`);
+  for (const dir of HOMEBREW_BINS) {
+    if (runnable(join(dir, 'pg_dump'))) return { dir, from: 'Homebrew', tried };
+    tried.push(dir);
+  }
+  return { dir: null, from: null, tried };
+}
+
+const found = findPgBin();
+
+/**
+ * The Postgres 17 client tools' directory, as `findPgBin` resolved it. The
+ * empty string when nothing was found, so a path joined onto it names the bare
+ * tool and fails the existence check `missingPgTools` makes.
+ */
+export const PG_BIN = found.dir ?? '';
+
+/**
+ * Null when every one of `tools` is in PG_BIN, else a sentence naming the
+ * missing tools and every place looked, for a script to refuse with.
+ */
+export function missingPgTools(tools) {
+  const absent = tools.filter((tool) => found.dir === null || !runnable(join(found.dir, tool)));
+  if (absent.length === 0) return null;
+  const problem =
+    found.dir === null
+      ? `no Postgres client tools found (looked in ${found.tried.join(', ')})`
+      : `${absent.join(', ')} not found in ${found.dir} (from ${found.from})`;
+  return `${problem}. Install the Postgres 17 client tools (brew install postgresql@17, or postgresql-client-17), or set PG_BIN to their bin directory.`;
+}
 
 /**
  * Run a command and collect its output. `detached` puts it in a process group

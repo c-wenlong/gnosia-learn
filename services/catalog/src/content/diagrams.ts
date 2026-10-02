@@ -788,7 +788,7 @@ export async function listDiagrams(db: CatalogDatabase, scope: OwnerScope, only?
       order by seq desc limit 1
     ) rev on true
     where d.archived_at is null ${only === undefined ? sql`` : sql`and d.slug = ${only}`}${andOwnedBy(sql`d.owner_id`, scope.readable)}
-    order by d.slug
+    order by d.slug collate "C"
   `);
   return rows.map((row) => {
     const meta = (typeof row.meta === "object" && row.meta !== null ? row.meta : {}) as Record<string, unknown>;

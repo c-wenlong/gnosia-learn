@@ -35,7 +35,8 @@
 //
 // Environment:
 //   E2E_TEMPLATE_DB=<name>  copy this database rather than build from seed/; every content type must be flipped
-//   PG_BIN=<dir>            the Postgres binaries (default /opt/homebrew/opt/postgresql@17/bin)
+//   PG_BIN=<dir>            the Postgres binaries (default: the pg_dump on PATH, then
+//                           `pg_config --bindir`, then Homebrew's postgresql@17)
 //   PLAYWRIGHT_CORE=<path>  playwright-core's index.mjs, when the tldrawkc submodule
 //                           in this checkout is not installed
 //   CHROMIUM=<path>         the browser binary, when not in the Playwright cache
@@ -54,7 +55,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { FLIP_ORDER } from './lib/flip-order.mjs';
-import { copyDatabase, exec as execTool, PG_BIN } from './lib/pg.mjs';
+import { copyDatabase, exec as execTool, missingPgTools, PG_BIN } from './lib/pg.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WEB = join(ROOT, 'apps/web');
@@ -99,11 +100,8 @@ if (!existsSync(join(WEB, '.next/BUILD_ID'))) {
   missing('no production build at apps/web/.next. Run `npm run build` first; this script never builds.');
 }
 
-for (const tool of ['createdb', 'dropdb', 'psql', 'pg_dump']) {
-  if (!existsSync(join(PG_BIN, tool))) {
-    missing(`${tool} not found in ${PG_BIN}. Install Postgres 17 (brew install postgresql@17) or set PG_BIN to its bin directory.`);
-  }
-}
+const missingTools = missingPgTools(['createdb', 'dropdb', 'psql', 'pg_dump']);
+if (missingTools !== null) missing(missingTools);
 
 const corePath = process.env.PLAYWRIGHT_CORE ?? join(ROOT, 'tools/tldrawkc/node_modules/playwright-core/index.mjs');
 if (!existsSync(corePath)) {

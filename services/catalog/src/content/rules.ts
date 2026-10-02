@@ -76,7 +76,7 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
           select 1 from curriculum_item i
           where i.collection_id = c.id and i.archived_at is null
         )
-      order by c.id`,
+      order by c.id collate "C"`,
   },
   {
     name: "item-has-concept",
@@ -94,7 +94,7 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
         and not exists (
           select 1 from concept_curriculum_item l where l.curriculum_item_id = i.id
         )
-      order by i.id`,
+      order by i.id collate "C"`,
   },
   {
     name: "item-concept-in-module-topic",
@@ -116,7 +116,7 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
           select 1 from collection_item m
           where m.collection_id = i.collection_id and m.topic_slug = c.topic_slug
         )
-      order by l.curriculum_item_id, l.concept_slug`,
+      order by l.curriculum_item_id collate "C", l.concept_slug collate "C"`,
   },
 ];
 

@@ -26,6 +26,7 @@ import {
   byKind,
   type AssetRef,
 } from "../state/assets";
+import { bytewise } from "../sql-order";
 
 /**
  * `catalog show <slug-or-id>` — one entity and everything that points at it.
@@ -214,7 +215,7 @@ async function showTopic(db: Db, slug: string): Promise<ShowTopic | null> {
     .select({ slug: concept.slug, title: concept.title, path: concept.path })
     .from(concept)
     .where(and(eq(concept.topicSlug, slug), isNull(concept.archivedAt)))
-    .orderBy(asc(concept.slug));
+    .orderBy(asc(bytewise(concept.slug)));
 
   const items = await db
     .select({
@@ -225,7 +226,7 @@ async function showTopic(db: Db, slug: string): Promise<ShowTopic | null> {
     .from(curriculumItemTopic)
     .innerJoin(curriculumItem, eq(curriculumItem.id, curriculumItemTopic.curriculumItemId))
     .where(and(eq(curriculumItemTopic.topicSlug, slug), isNull(curriculumItem.archivedAt)))
-    .orderBy(asc(curriculumItem.id));
+    .orderBy(asc(bytewise(curriculumItem.id)));
 
   return {
     type: "topic",
@@ -254,7 +255,7 @@ async function showConcept(db: Db, slug: string): Promise<ShowConcept | null> {
     .from(conceptPrerequisite)
     .innerJoin(concept, eq(concept.slug, conceptPrerequisite.prerequisiteSlug))
     .where(eq(conceptPrerequisite.conceptSlug, slug))
-    .orderBy(asc(conceptPrerequisite.kind), asc(concept.slug));
+    .orderBy(asc(bytewise(conceptPrerequisite.kind)), asc(bytewise(concept.slug)));
 
   const requiredBy = await db
     .select({
@@ -265,14 +266,14 @@ async function showConcept(db: Db, slug: string): Promise<ShowConcept | null> {
     .from(conceptPrerequisite)
     .innerJoin(concept, eq(concept.slug, conceptPrerequisite.conceptSlug))
     .where(eq(conceptPrerequisite.prerequisiteSlug, slug))
-    .orderBy(asc(conceptPrerequisite.kind), asc(concept.slug));
+    .orderBy(asc(bytewise(conceptPrerequisite.kind)), asc(bytewise(concept.slug)));
 
   const items = await db
     .select({ id: curriculumItem.id, title: curriculumItem.title })
     .from(conceptCurriculumItem)
     .innerJoin(curriculumItem, eq(curriculumItem.id, conceptCurriculumItem.curriculumItemId))
     .where(and(eq(conceptCurriculumItem.conceptSlug, slug), isNull(curriculumItem.archivedAt)))
-    .orderBy(asc(curriculumItem.id));
+    .orderBy(asc(bytewise(curriculumItem.id)));
 
   // Mastery is per learner and per concept, so it is selected by both. There
   // is one learner until authentication exists, but filtering on the concept
@@ -323,7 +324,7 @@ async function showCollection(db: Db, id: string): Promise<ShowCollection | null
     .select({ id: collection.id, kind: collection.kind, title: collection.title })
     .from(collection)
     .where(and(eq(collection.parentId, id), isNull(collection.archivedAt)))
-    .orderBy(asc(collection.position), asc(collection.id));
+    .orderBy(asc(collection.position), asc(bytewise(collection.id)));
 
   const items = await db
     .select({
@@ -333,7 +334,7 @@ async function showCollection(db: Db, id: string): Promise<ShowCollection | null
     })
     .from(curriculumItem)
     .where(and(eq(curriculumItem.collectionId, id), isNull(curriculumItem.archivedAt)))
-    .orderBy(asc(curriculumItem.position), asc(curriculumItem.id));
+    .orderBy(asc(curriculumItem.position), asc(bytewise(curriculumItem.id)));
 
   const topicRow = (
     await db
@@ -375,14 +376,14 @@ async function showCurriculumItem(db: Db, id: string): Promise<ShowCurriculumIte
     .select({ slug: curriculumItemTopic.topicSlug })
     .from(curriculumItemTopic)
     .where(eq(curriculumItemTopic.curriculumItemId, id))
-    .orderBy(asc(curriculumItemTopic.topicSlug));
+    .orderBy(asc(bytewise(curriculumItemTopic.topicSlug)));
 
   const concepts = await db
     .select({ slug: concept.slug, title: concept.title })
     .from(conceptCurriculumItem)
     .innerJoin(concept, eq(concept.slug, conceptCurriculumItem.conceptSlug))
     .where(eq(conceptCurriculumItem.curriculumItemId, id))
-    .orderBy(asc(concept.slug));
+    .orderBy(asc(bytewise(concept.slug)));
 
   return {
     type: "curriculumItem",
@@ -404,13 +405,13 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
     .select({ slug: assetTopic.topicSlug })
     .from(assetTopic)
     .where(eq(assetTopic.assetId, id))
-    .orderBy(asc(assetTopic.topicSlug));
+    .orderBy(asc(bytewise(assetTopic.topicSlug)));
 
   const concepts = await db
     .select({ slug: assetConcept.conceptSlug })
     .from(assetConcept)
     .where(eq(assetConcept.assetId, id))
-    .orderBy(asc(assetConcept.conceptSlug));
+    .orderBy(asc(bytewise(assetConcept.conceptSlug)));
 
   // Both directions of `asset_derivation`, from `../state/assets.ts` rather
   // than from four statements written out here: the web app may import that
@@ -430,7 +431,7 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
     })
     .from(mirror)
     .where(eq(mirror.assetId, id))
-    .orderBy(asc(mirror.destination));
+    .orderBy(asc(bytewise(mirror.destination)));
 
   return {
     type: "asset",

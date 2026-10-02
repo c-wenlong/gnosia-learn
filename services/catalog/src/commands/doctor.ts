@@ -202,7 +202,7 @@ export async function doctor(
     join collection m on m.id = i.collection_id
     where i.archived_at is null
     group by 1
-    order by 1
+    order by coalesce(m.parent_id, m.id) collate "C"
   `);
   const courseRows = courses.rows.map((row) => ({
     course: row.course,
@@ -213,7 +213,7 @@ export async function doctor(
   // Archived concepts too: the column's `NOT NULL` binds every row, and
   // migration 0012 refuses while any row, archived or not, has a null.
   const orphans = await db.execute<{ slug: string }>(
-    sql`select slug from concept where topic_slug is null order by slug`,
+    sql`select slug from concept where topic_slug is null order by slug collate "C"`,
   );
   const [topicColumn] = (
     await db.execute<{ nullable: string }>(sql`

@@ -35,6 +35,7 @@ import {
 import { canonicalJson, readSnapshots, type SnapshotRead } from "./snapshot";
 import { assertInStep, type ExportedType, exportsFiles, importRoot, writeThrough } from "./write-through";
 import { writeContent, writeContents, type WriteContentInput, type WriteContentResult } from "./write";
+import { bytewise } from "../sql-order";
 
 /**
  * The topic writer: `catalog topic add|edit|rename|relate|archive|restore`
@@ -262,7 +263,7 @@ async function relationsOf(db: CatalogDatabase, owner: string): Promise<Relation
     .select()
     .from(topicRelation)
     .where(eq(topicRelation.fromSlug, owner))
-    .orderBy(asc(topicRelation.position), asc(topicRelation.kind), asc(topicRelation.toSlug));
+    .orderBy(asc(topicRelation.position), asc(bytewise(topicRelation.kind)), asc(bytewise(topicRelation.toSlug)));
 }
 
 /**
@@ -296,7 +297,7 @@ export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Pr
   const rows = <T>(query: ReturnType<typeof sql>) => db.execute(query).then((r) => r.rows as T[]);
   const topics = await rows<{ slug: string; title: string; domain: string; summary: string | null; aliases: unknown }>(
     sql`select slug, title, domain, summary, aliases from topic
-        where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by position, slug`,
+        where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by position, slug collate "C"`,
   );
   const group = <R extends Record<string, unknown>>(list: R[], key: keyof R) => {
     const out = new Map<string, R[]>();
@@ -318,14 +319,14 @@ export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Pr
               ? sql``
               : sql` and exists (select 1 from topic t where t.slug = r.to_slug${andOwnedBy(sql`t.owner_id`, owners)})`
           }
-          order by r.from_slug, r.position, r.kind, r.to_slug`,
+          order by r.from_slug collate "C", r.position, r.kind collate "C", r.to_slug collate "C"`,
     ),
     "from_slug",
   );
   const manimkc = group(
     await rows<{ topic_slug: string; path: string }>(
       sql`select topic_slug, path from manimkc_topic
-          where true${andOwnedBy(sql`owner_id`, owners)} order by topic_slug, position, path`,
+          where true${andOwnedBy(sql`owner_id`, owners)} order by topic_slug collate "C", position, path collate "C"`,
     ),
     "topic_slug",
   );
@@ -333,7 +334,7 @@ export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Pr
     await rows<{ topic_slug: string; slug: string }>(
       sql`select topic_slug, slug from concept
           where topic_slug is not null and archived_at is null${andOwnedBy(sql`owner_id`, owners)}
-          order by topic_slug, topic_position, slug`,
+          order by topic_slug collate "C", topic_position, slug collate "C"`,
     ),
     "topic_slug",
   );
@@ -342,7 +343,7 @@ export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Pr
       sql`select m.topic_slug, m.collection_id from collection_item m
           join collection c on c.id = m.collection_id
           where m.topic_slug is not null and c.kind = 'module' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}
-          order by m.topic_slug, m.topic_position, m.collection_id`,
+          order by m.topic_slug collate "C", m.topic_position, m.collection_id collate "C"`,
     ),
     "topic_slug",
   );
@@ -443,7 +444,7 @@ export async function nearMatches(
     cross join unnest(${sql.param(wanted)}::text[]) as c(against)
     where t.archived_at is null and t.slug <> ${options.exclude ?? ""}${andOwnedBy(sql`t.owner_id`, options.owners)}
       and similarity(m.value, c.against) >= ${threshold}
-    order by t.slug, score desc, m.field, m.value
+    order by t.slug, score desc, m.field collate "C", m.value collate "C"
   `);
   return rows
     .map((row) => ({ ...row, score: Math.round(Number(row.score) * 1000) / 1000 }))
@@ -492,7 +493,7 @@ async function placeInDomain(
       .select({ slug: topic.slug, domain: topic.domain, position: topic.position, ownerId: topic.ownerId })
       .from(topic)
       .where(isNull(topic.archivedAt))
-      .orderBy(asc(topic.position), asc(topic.slug))
+      .orderBy(asc(topic.position), asc(bytewise(topic.slug)))
   ).filter((row) => row.slug !== slug);
   const readable = (row: { ownerId: string }) => owners === undefined || owners.includes(row.ownerId);
   let last = -1;
@@ -1028,7 +1029,7 @@ export async function mapTopic(db: CatalogDatabase, input: MapInput, by: By): Pr
       .select({ path: manimkcTopic.path })
       .from(manimkcTopic)
       .where(eq(manimkcTopic.topicSlug, slug))
-      .orderBy(asc(manimkcTopic.position), asc(manimkcTopic.path));
+      .orderBy(asc(manimkcTopic.position), asc(bytewise(manimkcTopic.path)));
     let list: { path: string }[];
     if (input.remove === true) {
       const missing = paths.filter((p) => !mine.some((m) => m.path === p));
@@ -1085,30 +1086,30 @@ export async function mapTopic(db: CatalogDatabase, input: MapInput, by: By): Pr
 /** What still points at a topic, each with a few ids, for the refusal to archive it. */
 async function usesOf(db: CatalogDatabase, slug: string): Promise<string[]> {
   const probes: [string, ReturnType<typeof sql>][] = [
-    ["live concepts filed under it", sql`select slug as id from concept where topic_slug = ${slug} and archived_at is null order by slug`],
+    ["live concepts filed under it", sql`select slug as id from concept where topic_slug = ${slug} and archived_at is null order by slug collate "C"`],
     [
       "live modules mapped to it",
       sql`select m.collection_id as id from collection_item m join collection c on c.id = m.collection_id
-          where m.topic_slug = ${slug} and c.kind = 'module' and c.archived_at is null order by 1`,
+          where m.topic_slug = ${slug} and c.kind = 'module' and c.archived_at is null order by m.collection_id collate "C"`,
     ],
-    ["manimkc paths mapped to it", sql`select path as id from manimkc_topic where topic_slug = ${slug} order by path`],
+    ["manimkc paths mapped to it", sql`select path as id from manimkc_topic where topic_slug = ${slug} order by path collate "C"`],
     [
       "relations to or from it",
       sql`select from_slug || ' ' || kind || ' ' || to_slug as id from topic_relation
-          where from_slug = ${slug} or to_slug = ${slug} order by 1`,
+          where from_slug = ${slug} or to_slug = ${slug} order by (from_slug || ' ' || kind || ' ' || to_slug) collate "C"`,
     ],
     [
       "live curriculum items linked to it",
       sql`select l.curriculum_item_id as id from curriculum_item_topic l
           join curriculum_item i on i.id = l.curriculum_item_id
-          where l.topic_slug = ${slug} and i.archived_at is null order by 1`,
+          where l.topic_slug = ${slug} and i.archived_at is null order by l.curriculum_item_id collate "C"`,
     ],
-    ["assets filed under it", sql`select asset_id as id from asset_topic where topic_slug = ${slug} order by asset_id`],
-    ["diagrams filed under it", sql`select slug as id from diagram where topic_slug = ${slug} and archived_at is null order by slug`],
-    ["studio videos filed under it", sql`select slug as id from video where topic_slug = ${slug} and archived_at is null order by slug`],
+    ["assets filed under it", sql`select asset_id as id from asset_topic where topic_slug = ${slug} order by asset_id collate "C"`],
+    ["diagrams filed under it", sql`select slug as id from diagram where topic_slug = ${slug} and archived_at is null order by slug collate "C"`],
+    ["studio videos filed under it", sql`select slug as id from video where topic_slug = ${slug} and archived_at is null order by slug collate "C"`],
     [
       "open studio jobs for it",
-      sql`select id from job where topic_slug = ${slug} and state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)}) order by id`,
+      sql`select id from job where topic_slug = ${slug} and state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)}) order by id collate "C"`,
     ],
   ];
   const out: string[] = [];
@@ -1323,7 +1324,7 @@ async function renameUnder(
         : (
             await tx.execute<{ path: string }>(sql`
               select a.path from asset a join asset_topic t on t.asset_id = a.id
-              where a.kind = 'diagram_source' and t.topic_slug = ${from} and a.path is not null order by a.path`)
+              where a.kind = 'diagram_source' and t.topic_slug = ${from} and a.path is not null order by a.path collate "C"`)
           ).rows.map((r) => r.path);
     if (restamp.length > 0 && input.restampDiagramsLater !== true) {
       throw new TopicError(
@@ -1362,13 +1363,13 @@ async function renameUnder(
       diagramsOwned?.source === "db"
         ? (
             await tx.execute<{ slug: string }>(
-              sql`select slug from diagram where topic_slug = ${from} and svg_blob_key is not null order by slug`,
+              sql`select slug from diagram where topic_slug = ${from} and svg_blob_key is not null order by slug collate "C"`,
             )
           ).rows.map((r) => diagramPaths(r.slug).svg)
         : (
             await tx.execute<{ path: string }>(sql`
               select a.path from asset a join asset_topic t on t.asset_id = a.id
-              where a.kind = 'diagram_svg' and t.topic_slug = ${from} and a.path is not null order by a.path`)
+              where a.kind = 'diagram_svg' and t.topic_slug = ${from} and a.path is not null order by a.path collate "C"`)
           ).rows.map((r) => r.path);
 
     const affected = await namedBy(tx, from);
@@ -1714,7 +1715,7 @@ export async function restampLinkOwners(db: CatalogDatabase, slugs: readonly str
         .select({ path: manimkcTopic.path })
         .from(manimkcTopic)
         .where(eq(manimkcTopic.topicSlug, slug))
-        .orderBy(asc(manimkcTopic.position), asc(manimkcTopic.path));
+        .orderBy(asc(manimkcTopic.position), asc(bytewise(manimkcTopic.path)));
       return writeContent(tx, {
         owner: row.ownerId,
         type: "topic",

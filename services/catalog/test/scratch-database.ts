@@ -67,6 +67,17 @@ export interface Scratch extends Connection {
   drop: () => Promise<void>;
 }
 
+/**
+ * Every scratch database sorts text linguistically (ICU's en-US), whatever
+ * the server's default. Homebrew's Postgres initialises in the C locale,
+ * where `ORDER BY` happens to be bytewise, while CI's postgres:17 image
+ * defaults to en_US.utf8, where `fx:alpha` sorts before `fx:Beta` and a
+ * hyphen in a slug barely counts. An ordering that leaves out `collate "C"`
+ * (`bytewise` in src/sql-order.ts) then passed on every laptop and failed only
+ * on CI; with this it fails on both.
+ */
+const LINGUISTIC_COLLATION = "template template0 locale_provider icu icu_locale 'en-US'";
+
 /** Creates an empty database and returns a connection to it. */
 export async function createScratchDatabase(): Promise<Scratch> {
   const name = `self_learn_test_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
@@ -76,6 +87,11 @@ export async function createScratchDatabase(): Promise<Scratch> {
     // The name is generated above, never user input, but it still goes through
     // an identifier quote rather than string concatenation: CREATE DATABASE
     // takes no parameters, so this is the only safe way to write it.
+    await admin.query(`create database ${quoteIdentifier(name)} ${LINGUISTIC_COLLATION}`);
+  } catch (error) {
+    // A server built without ICU cannot take the clause; its default is the
+    // best this machine can do.
+    if ((error as { code?: unknown }).code !== "0A000") throw error;
     await admin.query(`create database ${quoteIdentifier(name)}`);
   } finally {
     await admin.end();
