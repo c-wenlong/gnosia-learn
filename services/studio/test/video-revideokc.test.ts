@@ -414,7 +414,10 @@ describe("the doctor's kept build", () => {
 
 const execFileAsync = promisify(execFile);
 
-describe("the revideokc wrapper", () => {
+// The wrapper's shebang is `#!/usr/bin/env -i <node>`, which only macOS splits
+// into arguments (Linux hands env "-i <node>" as one, and env exits 125); the
+// video runner is macOS-only anyway (Seatbelt), as manimkc's wrapper test says.
+describe.skipIf(process.platform !== "darwin")("the revideokc wrapper", () => {
   let paths: VideoPaths;
   let recordFile: string;
 
