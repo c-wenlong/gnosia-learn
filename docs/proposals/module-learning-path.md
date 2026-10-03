@@ -104,16 +104,18 @@ For CS3230 week 1, as it would read:
    entry links to `/learn/<concept>` and does not lock anything, because the
    course's own lock already covers earlier modules and a prerequisite outside
    the course is advice, not a gate.
-2. **Module material.** Readings and videos linked to the module and to no
-   lesson come next, under "Watch" and "Read alongside". This is where the
-   weekly manimkc videos sit until they name concepts.
+2. **Module material.** Readings and videos on the module and on no lesson
+   come next, under "Watch" and "Read alongside". Readings of type `practice`
+   are not module material; they have one place, step 4. Which videos count is
+   under [Videos name their concepts](#videos-name-their-concepts).
 3. **Lessons.** One per course item, in `position` order. Inside, one step per
    concept in its teaching order: the note (the concept page), the diagrams and
    videos whose `asset_concept` names that concept, then that concept's checks.
    The readings listed on the lesson close it. A lesson's done state is
    `topicDone`, unchanged.
-4. **Practice.** Readings of type `practice` follow the last lesson, or close
-   the lesson they list.
+4. **Practice.** A `practice` reading with `lessons:` closes the last lesson
+   it lists, after that lesson's other readings. One with no `lessons:` sits
+   here, after the last lesson and before the week check, and nowhere else.
 5. **Week check.** A quiz over the checks of every concept in the module (see
    [The week check](#the-week-check)).
 
@@ -124,7 +126,8 @@ Assets section's "All N in the library" link does today.
 ### Readings attach to lessons
 
 A reading gains an optional `lessons:` list of item ids in its own module. A
-reading with none is module material.
+reading with none is module material, unless it is `practice` (step 4 of the
+path).
 
 ```yaml
 modules:
@@ -178,8 +181,28 @@ id the way the diagram indexer does
 ([diagrams.ts:335](../../services/catalog/src/index/diagrams.ts)), and write
 `asset_concept` rows for the video and its sidecars. `TopicEntry` already
 declares the field and nothing reads it
-([video-tool.ts:179](../../services/catalog/src/index/video-tool.ts)). A video
-with no `concepts:` keeps its topic link and shows as module material.
+([video-tool.ts:179](../../services/catalog/src/index/video-tool.ts)).
+
+A video reaches a path in one of three ways, and they scope differently:
+
+| Link | Shows on | Shared across courses and modules |
+| --- | --- | --- |
+| `asset_concept` | that concept's step, in every lesson that teaches it | Yes, on purpose: a video that explains one concept is part of the concept, as its note is |
+| The course file names it | the module, or the lessons its `lessons:` lists | No: the course chose it |
+| `asset_topic` only | the module, as module material | Only when two modules name the same `topic:` |
+
+The middle row is the course-local route, the same one readings take. A
+resource may give `asset: <asset id>` (a catalog video, such as
+`manimkc:out/algorithms/cs3230/week-01-asymptotic-analysis/week_01_asymptotic_analysis.mp4`)
+in place of `url:`, with the same optional `lessons:`. The reader refuses an
+id the owner cannot read or one that is not a `video`.
+
+The last row is the fallback, and it is what the Assets section does today.
+Eleven vocabulary topics are named by more than one module, so a topic-only
+video can appear on a module it was not made for. A module whose course file
+names any video by `asset:` gets no topic-only videos, so a course fixes a
+shared topic by naming its own. `catalog doctor` lists the modules that still
+fall back on a shared topic.
 
 The weekly CS3230, CS4223 and CS4225 videos cover a whole module, so they stay
 module material, and that is correct. A video's chapters sidecar could later
@@ -189,20 +212,34 @@ split it into per-lesson segments; that is out of scope here.
 
 A new session mode, `?mode=module`, at `/courses/<slug>/<module>/check`,
 reuses `SessionFocus` and its Quiz me flow. The plan takes the module's
-concepts in path order and asks one check per concept, picked from the note's
-checks (the one asked least recently for this learner, from the observation
-events), up to twelve questions; a module with more concepts than that asks
-the twelve weakest by mastery. A concept with no check gets the tutor's
-written question, as Quiz me does today.
+concepts in path order and keeps asking about each one until it is mastered,
+is answered wrong once, or has had three questions. Questions come from the
+note's checks, the one asked least recently for this learner first (from the
+observation events), and the tutor writes one when the note runs out, as Quiz
+me does today. The whole check stops at 24 questions; a module with more
+concepts than that fits starts from the weakest by mastery.
+
+Three is the number that can finish a concept. With the default parameters
+([bkt.mjs](../../scripts/learn/lib/bkt.mjs): prior 0.25, guess 0.2, slip 0.1,
+mastered at 0.95), a correct probe takes a new concept from 0.25 to 0.60, then
+0.87, then 0.97. One question per concept could never reach mastered from
+nothing. Notes average about three checks (490 across 167), so the third
+question is often the tutor's.
 
 Each answer is an ordinary observation through `/api/learner/observe` with
 `source: probe`, so it measures without counting as teaching
 (`opportunity=false`), and its payload carries `module: <module id>`. That is
-a field in the event's JSON, so no migration and no new event type. The check
-has no score of its own and no pass mark: mastery moves per concept, and the
-module is done when its lessons are, through `topicDone`. A learner who
-already knows the week takes the check first and finds the module done at the
-end.
+a field in the event's JSON, so no migration and no new event type, but it
+needs two code changes: the route's `parseObserve` accepts an optional
+`module` (an id the owner can read) and drops every key it does not name
+([route.ts:72](../../apps/web/src/app/api/learner/observe/route.ts)), and
+`recordObservation`
+([observe.ts](../../services/catalog/src/state/observe.ts)) builds the payload
+field by field, so it takes `module` and writes it. The check has no score of
+its own and no pass mark: mastery moves per concept, and the module is done
+when its lessons are, through `topicDone`. A learner who already knows the
+week takes the check first, answers three in a row on each concept, and finds
+the module done at the end.
 
 Week 1 of CS3230 has no checks at all (its six notes have none), so on day one
 this check would be all tutor-written questions. Writing checks is content
@@ -241,13 +278,14 @@ No change to `event`, `session` or `mastery`.
 
 | Part | Where | What |
 | --- | --- | --- |
-| Parser | `packages/content/src/courses.ts`, `types.ts` | `lessons:` on a resource, refused when an id is not an item of the same module; `practice` type |
+| Parser | `packages/content/src/courses.ts`, `types.ts` | `lessons:` on a resource, refused when an id is not an item of the same module; `asset:` in place of `url:`; `practice` type |
 | Import and export | `services/catalog/src/content/courses.ts`, `content/readers/courses.ts`, `content/export.ts` | write `curriculum_item_asset`, read it back into `lessons:`, so a round trip keeps it |
 | Indexer | `services/catalog/src/index/courses.ts`, `index/video-tool.ts` | the link rows; `concepts:` from `topic.yml` |
-| Doctor and status | `services/catalog/src/commands/doctor.ts`, `status` | the order guard, the two coverage lines |
+| Doctor and status | `services/catalog/src/commands/doctor.ts`, `status` | the order guard, modules falling back to a shared topic's videos, the two coverage lines |
 | Path | a new `apps/web/src/lib/module-path.ts` | a pure function from the course, the knowledge base, the module's assets and the learner's mastery to the ordered steps above |
 | Page | `ModuleMain.tsx` | renders the steps in place of Topics, Resources and Assets |
 | Week check | `[module]/check/page.tsx`, `session-core.ts` | the `module` mode |
+| Observation | `app/api/learner/observe/route.ts`, `services/catalog/src/state/observe.ts` | an optional `module` on the request, written into the event payload |
 
 The parser currently ignores keys it does not know
 ([courses.ts:52](../../packages/content/src/courses.ts)), so a `lessons:` key
@@ -276,17 +314,23 @@ Each is one PR.
 - `packages/content/test/courses.test.ts`: `lessons:` naming an item in
   another module, a duplicate, an archived item; `practice`.
 - `services/catalog/test/courses-reader.test.ts` and the export round trip:
-  `lessons:` survives export and import unchanged.
+  `lessons:` and `asset:` survive export and import unchanged.
 - `services/catalog/test/catalog.test.ts`: the courses run prunes a link the
   file dropped; the video-tool run writes `asset_concept` from `concepts:` and
   refuses an unknown slug.
 - A doctor test with a course that teaches a concept before its `requires`.
 - `apps/web/src/lib/module-path.test.ts`: step order; before-you-start leaves
   out mastered and in-module prerequisites; a reading with no lessons is
-  module material; a concept-linked video lands on its step; a module whose
-  topic is shared with another module still shows only its own lessons.
-- `session-core.test.ts`: the module plan picks one check per concept, caps at
-  twelve, falls back to the tutor for a concept with none.
+  module material; a `practice` reading appears once, after the last lesson
+  or on its lesson, never under "Read alongside"; a concept-linked video lands
+  on its step; a module that names a video by `asset:` shows no topic-only
+  video; a module whose topic is shared with another module still shows only
+  its own lessons.
+- `session-core.test.ts`: the module plan asks a concept again after a correct
+  answer until it is mastered, stops on a wrong one, stops at three per
+  concept and 24 in all, and falls back to the tutor when a note runs out.
+- The observe route and `recordObservation`: `module` lands in the event
+  payload, and an unknown or unreadable module id is refused.
 
 ## Out of scope
 
