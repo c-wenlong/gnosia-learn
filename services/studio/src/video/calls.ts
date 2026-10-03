@@ -159,6 +159,61 @@ export class ReadTracker {
   }
 }
 
+/**
+ * What the agent's last wrapper call printed, as the Bash tool handed it back:
+ * the `tool_use` whose command names the job's wrapper, matched to its
+ * `tool_result`. Kept for the job's events when its tools cannot start, since
+ * the wrapper's log records exit codes and not output. The text is whatever
+ * the call printed, an earlier step's output from the agent's own files
+ * included, so it is shown to the owner and never put into a sentence the
+ * planner reads.
+ */
+export class WrapperOutputTracker {
+  private readonly pending = new Set<string>();
+  private readonly wrapper: string;
+  private readonly limit: number;
+  last: string | null = null;
+
+  constructor(wrapper: string, limit = 1_500) {
+    this.wrapper = wrapper;
+    this.limit = limit;
+  }
+
+  observe(line: string): void {
+    if (!line.includes("tool_use") && !line.includes("tool_result")) return;
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      return;
+    }
+    const message = (event as { message?: { content?: unknown } } | null)?.message;
+    const content = Array.isArray(message?.content) ? (message.content as unknown[]) : [];
+    for (const item of content) {
+      if (typeof item !== "object" || item === null) continue;
+      const block = item as Record<string, unknown>;
+      if (block.type === "tool_use" && block.name === "Bash" && typeof block.id === "string") {
+        const command = (block.input as { command?: unknown } | undefined)?.command;
+        if (typeof command === "string" && command.includes(this.wrapper)) this.pending.add(block.id);
+      } else if (block.type === "tool_result" && typeof block.tool_use_id === "string" && this.pending.delete(block.tool_use_id)) {
+        // Every wrapper call's result replaces the last, an empty one too:
+        // an older call's text must never stand in for the call that ended.
+        const text = resultText(block.content);
+        this.last = text === "" ? null : text.length <= this.limit ? text : `…${text.slice(text.length - this.limit + 1)}`;
+      }
+    }
+  }
+}
+
+function resultText(content: unknown): string {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => (typeof part === "object" && part !== null && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : ""))
+    .join("\n")
+    .trim();
+}
+
 /** The file paths the agent Edited on this line (the scene-code step). */
 export function editsOn(line: string): string[] {
   if (!line.includes("tool_use")) return [];

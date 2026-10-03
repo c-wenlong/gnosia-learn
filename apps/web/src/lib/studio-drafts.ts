@@ -758,19 +758,29 @@ export interface VideoAvailability {
   charsPerSecond?: number;
 }
 
+/** A tool's `toolchainStop` from health (V26 of docs/STUDIO-VIDEOS.md), or null when absent or malformed. */
+function toolchainStopOf(raw: unknown): { jobId: string; at: string; detail: string } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { jobId, at, detail } = raw as Record<string, unknown>;
+  if (typeof jobId !== "string" || typeof at !== "string" || typeof detail !== "string") return null;
+  return { jobId, at, detail };
+}
+
 /** Health's `video.tools`, keeping only well-formed entries for tools the web app knows. */
 export function videoTools(raw: unknown): VideoToolOption[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((entry): VideoToolOption[] => {
     if (typeof entry !== "object" || entry === null) return [];
-    const { name, strength, available, reason } = entry as Record<string, unknown>;
+    const { name, strength, available, reason, toolchainStop } = entry as Record<string, unknown>;
     if (typeof name !== "string" || !(VIDEO_TOOL_NAMES as readonly string[]).includes(name)) return [];
+    const stop = toolchainStopOf(toolchainStop);
     return [
       {
         name: name as VideoToolName,
         strength: typeof strength === "string" ? strength : "",
         available: available === true,
         reason: typeof reason === "string" ? reason : null,
+        ...(stop === null ? {} : { toolchainStop: stop }),
       },
     ];
   });
