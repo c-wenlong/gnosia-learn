@@ -28,6 +28,12 @@ export interface HostControls {
    * and the caller navigates as it would have.
    */
   navigate: (href: string) => boolean;
+  /**
+   * The address bar's `/studio?…`, less a verb's outcome: what a link on the
+   * page patches. The server's copy goes stale once a panel or a view change
+   * has moved the URL in the browser.
+   */
+  path: string;
   /** Start reading the settings panel's rows, so it opens with them: on a hover over its button. */
   warmSettings: () => void;
 }
@@ -44,3 +50,8 @@ export function usePanelHost(): HostControls | null {
  * composer takes focus: typing straight away should land in it.
  */
 export const NEW_CHAT_EVENT = "studio:new-chat";
+
+/** The current studio path inside the host, else `fallback` (the server's). */
+export function useStudioPath(fallback: string): string {
+  return useContext(HostContext)?.path ?? fallback;
+}

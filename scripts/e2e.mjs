@@ -608,7 +608,10 @@ async function run() {
     await tutor.getByRole('button', { name: 'Send', exact: true }).click();
     const response = await answered;
     assert(response.status() === 503, `/api/agent/chat answered ${response.status()}, expected 503 with no provider key`);
-    await tutor.getByRole('alert').getByText(/no model provider key yet\. Add one in Settings/).waitFor();
+    // The server names the gap itself ("No model provider key is set", from
+    // `missingKeyMessage` in apps/web/src/lib/agent/providers.ts since #250);
+    // the client's own fallback says "no model provider key yet". Either is right.
+    await tutor.getByRole('alert').getByText(/no model provider key (is set|yet)\. Add one in Settings/i).waitFor();
     await tutor.getByRole('button', { name: 'Try again' }).waitFor();
   });
 
@@ -645,6 +648,26 @@ async function run() {
         before,
       );
     }
+  });
+
+  await step('library: a type, a sort and the list layout all land in the URL', page, async () => {
+    await go('/library');
+    await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
+    await page.getByRole('listbox', { name: 'Type' }).getByRole('option', { name: /^Note\b/ }).click();
+    await page.waitForURL(/\/library\?(.*&)?kind=note/);
+    // The sort is a menu in the same toolbar: picking Title keeps the type.
+    await clickHydrated(page, main.getByRole('button', { name: 'Sort: Newest' }));
+    await page.getByRole('listbox', { name: 'Sort' }).getByRole('option', { name: /^Title\b/ }).click();
+    await page.waitForURL((url) => url.searchParams.get('sort') === 'title' && url.searchParams.get('kind') === 'note');
+    // The layout switch keeps both, and the list is in title order.
+    await main.getByRole('navigation', { name: 'Layout' }).getByRole('link', { name: 'List' }).click();
+    await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('sort') === 'title');
+    assert(new URL(page.url()).searchParams.get('kind') === 'note', `the list lost the type: ${page.url()}`);
+    const titles = await page.getByRole('list', { name: 'Assets' }).locator('li a > span:nth-child(2) > span:first-child').allTextContents();
+    assert(titles.length > 1, `the list shows ${titles.length} rows`);
+    const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+    const sorted = [...titles].sort(collator.compare);
+    assert(titles.join('|') === sorted.join('|'), `the list is not in title order: ${titles.slice(0, 5).join(', ')}`);
   });
 
   if (SEED) skip('library: first video plays and saves its place', 'the seed has no videos (D7)');

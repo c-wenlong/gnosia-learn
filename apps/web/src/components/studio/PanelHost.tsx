@@ -32,6 +32,7 @@ import type { AgentKind } from "@/lib/studio-agent-settings";
 import type { DraftKind, DraftSummary } from "@/lib/studio-drafts";
 import {
   browserPanelMove,
+  browserViewMove,
   displayTitle,
   panelHref,
   panelSignature,
@@ -191,7 +192,8 @@ export function PanelHost({
   const navigate = useCallback((href: string) => {
     // Read from the address bar itself, which a pushState in this same event
     // may already have moved past what this render saw.
-    if (!browserPanelMove({ pathname: window.location.pathname, search: window.location.search }, href)) return false;
+    const from = { pathname: window.location.pathname, search: window.location.search };
+    if (!browserPanelMove(from, href) && !browserViewMove(from, href)) return false;
     pushUrl(href);
     return true;
   }, []);
@@ -236,10 +238,14 @@ export function PanelHost({
 
   const openSidebar = useCallback(() => setDrawer(true), []);
   const closeSidebar = useCallback(() => setDrawer(false), []);
-  const controls = useMemo(
+  const verbs = useMemo(
     () => ({ begin, settle, navigate, warmSettings, openSidebar }),
     [begin, settle, navigate, warmSettings, openSidebar],
   );
+  // The path joins the stable verbs here rather than in their memo: in it,
+  // the compiler reads the state setters behind them as dependencies and
+  // gives up on the component.
+  const controls = { ...verbs, path };
   const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
 
   // New chat is the home view: its composer is where a conversation starts.

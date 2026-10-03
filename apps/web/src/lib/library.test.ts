@@ -15,6 +15,7 @@ import {
   explainedConcepts,
   filterRows,
   libraryHref,
+  withPick,
   parseView,
   addedOn,
   matchesAll,
@@ -181,6 +182,35 @@ describe("libraryHref", () => {
       "/library?kind=video&sort=title&view=list",
     );
     expect(libraryHref({ view: "grid" })).toBe("/library");
+  });
+});
+
+describe("withPick", () => {
+  const filters = { kind: "note", course: "cs3230", q: "loop", sort: "newest" as const, view: "list" as const };
+
+  it("changes the sort and keeps every filter, the search and the layout", () => {
+    expect(libraryHref(withPick(filters, "sort", "title"))).toBe(
+      "/library?kind=note&course=cs3230&q=loop&sort=title&view=list",
+    );
+    expect(libraryHref(withPick({ ...filters, sort: "title" }, "sort", "newest"))).toBe(
+      "/library?kind=note&course=cs3230&q=loop&view=list",
+    );
+  });
+
+  it("sets a filter and keeps the sort, and All clears only that filter", () => {
+    expect(libraryHref(withPick({ ...filters, sort: "title" }, "kind", "video"))).toBe(
+      "/library?kind=video&course=cs3230&q=loop&sort=title&view=list",
+    );
+    expect(libraryHref(withPick({ ...filters, sort: "title" }, "course", ""))).toBe(
+      "/library?kind=note&q=loop&sort=title&view=list",
+    );
+  });
+
+  it("builds on picks already made, so two quick picks both land", () => {
+    const first = withPick(filters, "kind", "video");
+    expect(libraryHref(withPick(first, "sort", "title"))).toBe(
+      "/library?kind=video&course=cs3230&q=loop&sort=title&view=list",
+    );
   });
 });
 

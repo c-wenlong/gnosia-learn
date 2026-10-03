@@ -25,6 +25,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/TUTOR-MODELS.md](docs/TUTOR-MODELS.md) | The tutor's model chain: the owner's ordered provider and model list in `tutor_model`, edited in Settings' Models card, tried top to bottom, with the built-in defaults when there is none, a per-call limit and a turn deadline. Decisions T1 to T11 |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [docs/proposals/course-items-declare-concepts.md](docs/proposals/course-items-declare-concepts.md) | Proposal: the course file lists each item's concepts, and progress derives from mastery everywhere the path already does |
+| [docs/proposals/module-learning-path.md](docs/proposals/module-learning-path.md) | Proposal: the module page becomes one ordered path (before you start, module material, lessons of concept steps, practice, a week check) built from the concept order and prerequisite graph; readings attach to lessons, videos name concepts, and `catalog doctor` guards the order against `requires` |
 | [docs/proposals/home-page.md](docs/proposals/home-page.md) | Proposal: Home at `/home` replaces Today, built on the threads the owner last touched rather than a schedule; the streak and daily target are removed. Decisions H1 to H3 |
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
 | [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) | The diagram studio at `/studio`: the session and job schema, the runner, the UI, and the decisions behind them |
@@ -1045,6 +1046,13 @@ not have to be worked out again.
   `@self-learn/schema` would drag drizzle into the browser bundle, and
   `apps/web/src/lib/learner-store.ts` carries `import "server-only"` so that mistake
   fails the build rather than shipping a Postgres driver.
+- **Every page under `(app)/` has a loading boundary, and must keep one.**
+  `apps/web/src/app/(app)/loading.tsx` draws `PageLoading`, so a press on a
+  tab shows the new tab and a frame at once; without it Next has nothing to
+  prefetch for a dynamic route, and the click changed nothing on screen until
+  the next page had read all of its data (0.5 to 2.7 s per tab under load,
+  measured). A page whose shape differs a lot adds its own `loading.tsx`
+  beside it, as the studio and Review (a focus page, `PageLoading layout="focus"`) do.
 - **Every page is dynamic, and that is the point.** The root layout reads the
   theme cookie and the learner snapshot, so nothing is prerendered. Nothing
   reads the database at build time either — every read calls `connection()`
