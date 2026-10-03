@@ -58,6 +58,7 @@ describe("the calls", () => {
     await drawDraft("d1", "key");
     await abandonDraft("d1");
     await listDrafts({ state: ["open", "briefed"], nonEmpty: true, limit: 50 });
+    await listDrafts({ limit: 50, before: { updated: "2026-10-04T01:02:03.000Z", draftId: "d9" } });
     const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
     expect(calls.map(([path, init]) => `${init.method ?? "GET"} ${path} ${init.body ?? ""}`.trim())).toEqual([
       "GET /studio/api/drafts/a%20b",
@@ -67,6 +68,7 @@ describe("the calls", () => {
       'POST /studio/api/drafts/d1/draw {"idempotencyKey":"key"}',
       "POST /studio/api/drafts/d1/abandon {}",
       "GET /studio/api/drafts?state=open%2Cbriefed&nonEmpty=1&limit=50",
+      "GET /studio/api/drafts?limit=50&before=2026-10-04T01%3A02%3A03.000Z&beforeId=d9",
     ]);
   });
 

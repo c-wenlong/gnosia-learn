@@ -429,12 +429,22 @@ export function createDraft(input: { source?: string; sourceKind?: "diagram" | "
  * leaves out drafts nobody has said anything in, before the limit applies.
  */
 export function listDrafts(
-  query: { state?: DraftState | readonly DraftState[]; nonEmpty?: boolean; limit?: number } = {},
+  query: {
+    state?: DraftState | readonly DraftState[];
+    nonEmpty?: boolean;
+    limit?: number;
+    /** The last row of the page before: the next page starts after it. */
+    before?: { updated: string; draftId: string };
+  } = {},
 ) {
   const params = new URLSearchParams();
   if (query.state !== undefined) params.set("state", typeof query.state === "string" ? query.state : query.state.join(","));
   if (query.nonEmpty === true) params.set("nonEmpty", "1");
   if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.before !== undefined) {
+    params.set("before", query.before.updated);
+    params.set("beforeId", query.before.draftId);
+  }
   const search = params.toString();
   return call<{ drafts: DraftSummary[]; note: string }>(search === "" ? BASE : `${BASE}?${search}`);
 }

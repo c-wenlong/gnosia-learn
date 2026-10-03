@@ -6,11 +6,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { panelSignature, type Diagram } from "@/lib/studio-view";
 
 /**
- * The conversation panel opens and closes in the browser: the address bar
- * moves with `history.pushState` and the page is not drawn on the server
- * again, which was 2 to 3 seconds each way. These pin that, that a panel the
- * server drew only shows while the URL still names it, and that the dialog
- * opens at the press, before the runner has made the draft.
+ * The conversation opens and closes in the browser: the address bar moves
+ * with `history.pushState` and the page is not drawn on the server again,
+ * which was 2 to 3 seconds each way. These pin that, that a conversation
+ * takes the frame beside the sidebar in place of the home view, that a panel
+ * the server drew only shows while the URL still names it, and that the
+ * conversation opens at the press, with the person's words, before the
+ * runner has made the draft.
  */
 
 const mocks = vi.hoisted(() => ({ search: "", push: vi.fn(), loadSettings: vi.fn(), saveAgent: vi.fn() }));
@@ -34,6 +36,16 @@ const live = vi.hoisted(() => ({ jobs: [] as { jobId: string; state: string; tit
 vi.mock("@/components/studio/JobsProvider", () => ({ useStudioJobs: () => ({ jobs: live.jobs }) }));
 vi.mock("@/components/studio/JobPanel", () => ({
   JobPanel: ({ jobId, path }: { jobId: string; path: string }) => createElement("div", { "data-job": jobId, "data-path": path }),
+}));
+// The sidebar reads the runner; what is pinned here is what the host hands it.
+vi.mock("@/components/studio/StudioSidebar", () => ({
+  StudioSidebar: ({ active, pending, onNewChat }: { active: string | null; pending: string | null; onNewChat: () => void }) =>
+    createElement(
+      "nav",
+      { "data-sidebar": true, "data-active": active ?? "", "data-pending": pending ?? "" },
+      createElement("button", { type: "button", "data-studio-new": true, onClick: onNewChat }, "New chat"),
+    ),
+  SidebarToggle: () => null,
 }));
 vi.mock("@/components/studio/DiagramInspector", () => ({
   DiagramPanelBody: ({ diagram, jobs, extendHref }: { diagram: { name: string }; jobs: { jobId: string }[]; extendHref: string }) =>
@@ -79,7 +91,7 @@ afterEach(() => {
   pushState.mockRestore();
 });
 
-/** Hands the host's controls to the test, as the plus card would use them. */
+/** Hands the host's controls to the test, as the home composer would use them. */
 const grabbed: { controls: Controls | null } = { controls: null };
 function Grab(): ReactNode {
   const value = usePanelHost();
@@ -114,6 +126,7 @@ function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
     suggestions: [],
     cap: null,
     diagrams: [DIAGRAM],
+    drafts: [],
     jobs: [
       { jobId: "j1", state: "accepted", title: "Draw the graph", target: "learn/assets/graph.tldr", requested: "2026-09-30" },
       { jobId: "j2", state: "failed", title: "Something else", target: "learn/assets/other.tldr", requested: "2026-09-30" },
@@ -124,7 +137,7 @@ function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
       root.render(
         // Children as an argument, as the lint rule wants; the props type
         // requires them, hence the cast.
-        createElement(PanelHost, props as ComponentProps<typeof PanelHost>, createElement(Grab)),
+        createElement(PanelHost, props as ComponentProps<typeof PanelHost>, createElement(Grab), createElement("p", { "data-home": true }, "Home")),
       ),
     );
   draw();
@@ -143,17 +156,33 @@ function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
 const close = (container: HTMLElement) =>
   act(() => container.querySelector<HTMLButtonElement>("[data-dialog-close]")!.click());
 
-describe("the conversation panel", () => {
-  it("opens from the URL, and Close moves the address bar without a router push", () => {
+const newChat = (container: HTMLElement) =>
+  act(() => container.querySelector<HTMLButtonElement>("[data-studio-new]")!.click());
+/** The home view's wrapper: hidden while a conversation has the frame. */
+const home = (container: HTMLElement) => container.querySelector("[data-home]")!.parentElement!;
+const pane = (container: HTMLElement) => container.querySelector('section[aria-label="Conversation"]');
+const FIRST = { text: "how does a raft log stay in step", mentions: [] };
+
+describe("the conversation", () => {
+  it("opens from the URL in place of the home view, and New chat moves the address bar without a router push", () => {
     setUrl("topic=graphs&draft=d1");
-    const { container } = mount();
+    const { container, go } = mount();
     const panel = container.querySelector("[data-draft]");
     expect(panel?.getAttribute("data-draft")).toBe("d1");
     expect(panel?.getAttribute("data-path")).toBe("/studio?topic=graphs&draft=d1");
+    // Full screen, not a dialog, with no Close of its own: New chat is the way home.
+    expect(pane(container)?.contains(panel!)).toBe(true);
+    expect(container.querySelector("dialog")).toBeNull();
+    expect(container.querySelector("[data-dialog-close]")).toBeNull();
+    expect(home(container).hidden).toBe(true);
+    expect(container.querySelector("[data-sidebar]")?.getAttribute("data-active")).toBe("d1");
 
-    close(container);
+    newChat(container);
     expect(pushState).toHaveBeenCalledWith(null, "", "/studio?topic=graphs");
     expect(mocks.push).not.toHaveBeenCalled();
+    go("topic=graphs");
+    expect(pane(container)).toBeNull();
+    expect(home(container).hidden).toBe(false);
   });
 
   it("is not open under a picture or the settings, as the server's order has it", () => {
@@ -164,67 +193,103 @@ describe("the conversation panel", () => {
     expect(first.container.querySelector("[data-draft]")).toBeNull();
   });
 
-  it("opens at the press, and becomes the conversation once the URL names it", () => {
+  it("opens at the press with the person's words, and becomes the conversation once the URL names it", () => {
     const { container, go } = mount();
     let token = 0;
     act(() => {
-      token = grabbed.controls!.begin();
+      token = grabbed.controls!.begin(FIRST);
     });
-    expect(container.querySelector("dialog[open]")?.textContent).toContain("Opening a conversation");
+    expect(pane(container)?.textContent).toContain("Opening the conversation");
+    expect(pane(container)?.textContent).toContain(FIRST.text);
+    expect(home(container).hidden).toBe(true);
+    expect(container.querySelector("[data-sidebar]")?.getAttribute("data-pending")).toBe(FIRST.text);
 
-    act(() => grabbed.controls!.settle(token, "/studio?draft=d9"));
+    let went = false;
+    act(() => {
+      went = grabbed.controls!.settle(token, "/studio?draft=d9");
+    });
+    expect(went).toBe(true);
     expect(pushState).toHaveBeenCalledWith(null, "", "/studio?draft=d9");
-    // Still open until the address bar has the draft: no frame with neither.
-    expect(container.querySelector("dialog[open]")).not.toBeNull();
+    // Still there until the address bar has the draft: no frame with neither.
+    expect(pane(container)).not.toBeNull();
 
     go("draft=d9");
     expect(container.querySelector("[data-draft]")?.getAttribute("data-draft")).toBe("d9");
-    expect(container.textContent).not.toContain("Opening a conversation");
+    expect(container.textContent).not.toContain("Opening the conversation");
 
-    // And closing it does not bring the placeholder back.
-    close(container);
+    // And leaving it does not bring the placeholder back.
+    newChat(container);
     go("");
-    expect(container.querySelector("dialog")).toBeNull();
+    expect(pane(container)).toBeNull();
   });
 
-  it("closes again when the draft could not be made", () => {
+  it("goes home again when the draft could not be made", () => {
     const { container } = mount();
     let token = 0;
     act(() => {
-      token = grabbed.controls!.begin();
+      token = grabbed.controls!.begin(FIRST);
     });
-    act(() => grabbed.controls!.settle(token, null));
-    expect(container.querySelector("dialog")).toBeNull();
+    let went = true;
+    act(() => {
+      went = grabbed.controls!.settle(token, null);
+    });
+    expect(went).toBe(false);
+    expect(pane(container)).toBeNull();
+    expect(home(container).hidden).toBe(false);
     expect(pushState).not.toHaveBeenCalled();
   });
 
-  it("does not open a draft that arrives after the person closed the wait", () => {
+  it("does not open a draft that arrives after the person pressed New chat", () => {
     const { container } = mount();
     let token = 0;
     act(() => {
-      token = grabbed.controls!.begin();
+      token = grabbed.controls!.begin(FIRST);
     });
-    close(container);
-    expect(container.querySelector("dialog")).toBeNull();
-    act(() => grabbed.controls!.settle(token, "/studio?draft=late"));
-    expect(pushState).not.toHaveBeenCalled();
+    newChat(container);
+    expect(pane(container)).toBeNull();
+    let went = true;
+    act(() => {
+      went = grabbed.controls!.settle(token, "/studio?draft=late");
+    });
+    expect(went).toBe(false);
+    expect(pushState).not.toHaveBeenCalledWith(null, "", "/studio?draft=late");
+  });
+
+  it("does not open a draft that arrives after Back to another view with no draft", () => {
+    setUrl("sel=graph");
+    const { container, go } = mount();
+    let token = 0;
+    act(() => {
+      token = grabbed.controls!.begin(FIRST);
+    });
+    // Back from a tile's panel to the plain home view: no draft either side.
+    go("");
+    expect(pane(container)).toBeNull();
+    let went = true;
+    act(() => {
+      went = grabbed.controls!.settle(token, "/studio?draft=late");
+    });
+    expect(went).toBe(false);
+    expect(pushState).not.toHaveBeenCalledWith(null, "", "/studio?draft=late");
   });
 });
 
 describe("Start over in a conversation", () => {
-  it("does not open the new draft when the person closed the conversation meanwhile", () => {
+  it("does not open the new draft when the person left the conversation meanwhile", () => {
     setUrl("draft=d1");
     const { container, go } = mount();
     let token = 0;
     act(() => {
-      token = grabbed.controls!.begin();
+      token = grabbed.controls!.begin(null);
     });
-    close(container);
+    newChat(container);
     expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio");
     go("");
-    act(() => grabbed.controls!.settle(token, "/studio?draft=d2"));
+    act(() => {
+      grabbed.controls!.settle(token, "/studio?draft=d2");
+    });
     expect(pushState).not.toHaveBeenCalledWith(null, "", "/studio?draft=d2");
-    expect(container.querySelector("dialog")).toBeNull();
+    expect(pane(container)).toBeNull();
   });
 
   it("opens it when the person is still there", () => {
@@ -232,9 +297,11 @@ describe("Start over in a conversation", () => {
     mount();
     let token = 0;
     act(() => {
-      token = grabbed.controls!.begin();
+      token = grabbed.controls!.begin(null);
     });
-    act(() => grabbed.controls!.settle(token, "/studio?draft=d2"));
+    act(() => {
+      grabbed.controls!.settle(token, "/studio?draft=d2");
+    });
     expect(pushState).toHaveBeenCalledWith(null, "", "/studio?draft=d2");
   });
 });

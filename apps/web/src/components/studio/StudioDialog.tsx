@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
 
+import { PaneContext, usePaneLayout } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
 
 /**
@@ -114,13 +115,13 @@ export function StudioDialog({
 
     return () => {
       if (dialog.open) dialog.close();
-      // Back to whatever opened the panel. A reload with `?draft=` had no
-      // opener, so the plus card takes it: it is where the person would start
+      // Back to whatever opened the panel. A reload with a panel open had no
+      // opener, so New chat takes it: it is where the person would start
       // again.
       const back =
         opener.current !== null && opener.current.isConnected
           ? opener.current
-          : document.querySelector<HTMLElement>("[data-studio-plus]");
+          : document.querySelector<HTMLElement>("[data-studio-new]");
       back?.focus({ preventScroll: true });
     };
   }, []);
@@ -168,11 +169,85 @@ export function StudioDialog({
 }
 
 /**
+ * A conversation full screen, beside the sidebar: the dialog's controls
+ * without the dialog (docs/STUDIO-CHAT-FIRST.md, "Home and the full-screen
+ * conversation").
+ *
+ * The panels inside ask `useStudioDialog` for Close as they always have, and
+ * here it goes home, to the composer and the grid. Nothing is modal: the
+ * sidebar stays usable, so another conversation or New chat is one press
+ * away, and Escape does nothing. The header has no Close of its own for the
+ * same reason; on a phone it carries the sidebar's toggle instead
+ * (`leading`).
+ */
+export function StudioPane({
+  closeHref,
+  navigate,
+  label,
+  leading = null,
+  children,
+}: {
+  /** Where the panel's own Close goes: home, with the filters kept. */
+  closeHref: string;
+  navigate: (href: string) => void;
+  /** The region's accessible name. */
+  label: string;
+  /** Drawn before the header's title. */
+  leading?: ReactNode;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLElement | null>(null);
+  const closing = useRef(false);
+
+  const close = useCallback(() => {
+    if (closing.current) return;
+    closing.current = true;
+    navigate(closeHref);
+  }, [closeHref, navigate]);
+  const isClosing = useCallback(() => closing.current, []);
+
+  const search = useSearchParams().toString();
+  useEffect(() => {
+    closing.current = false;
+  }, [search]);
+
+  useEffect(() => {
+    // As the dialog does on open: a panel that wants its composer focused
+    // marks it, unless the person already has focus somewhere in the pane.
+    const pane = ref.current;
+    if (pane === null || pane.contains(document.activeElement)) return;
+    pane.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, []);
+
+  return (
+    <DialogContext.Provider value={{ close, isClosing }}>
+      <PaneContext.Provider value={{ inline: true, leading }}>
+        <section ref={ref} aria-label={label} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page text-text">
+          {children}
+        </section>
+      </PaneContext.Provider>
+    </DialogContext.Provider>
+  );
+}
+
+/**
  * The panel's 48px header: the title, a label-role meta (the draft's running
- * cost), and Close. Pinned: the body under it scrolls.
+ * cost), and Close. Pinned: the body under it scrolls. Full screen it has no
+ * Close and no rule under it, and starts with the pane's `leading`.
  */
 export function DialogHeader({ title, meta, children }: { title: ReactNode; meta?: ReactNode; children?: ReactNode }) {
   const { close } = useStudioDialog();
+  const { inline, leading } = usePaneLayout();
+  if (inline) {
+    return (
+      <div className="flex h-12 shrink-0 items-center gap-2 px-3 md:px-5">
+        {leading}
+        <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text">{title}</h2>
+        {meta !== undefined && meta !== null && <span className="shrink-0 text-[12px] tabular-nums text-text3">{meta}</span>}
+        {children}
+      </div>
+    );
+  }
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 border-b border-hair pl-5 pr-2 pt-[env(safe-area-inset-top)] md:pt-0">
       <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text">{title}</h2>

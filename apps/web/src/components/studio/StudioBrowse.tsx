@@ -6,7 +6,6 @@ import { useMemo, type ReactNode } from "react";
 import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
 import { NewDiagramJobs } from "@/components/studio/GridJob";
 import { useStudioPath } from "@/components/studio/panel-host";
-import { PlusCard } from "@/components/studio/PlusCard";
 import { EmptyDirectory } from "@/components/studio/StudioBlocked";
 import { Spacer } from "@/components/studio/StudioChrome";
 import { DisplayMenu, SearchField, SortMenu, TopicChips } from "@/components/studio/StudioControls";
@@ -113,17 +112,15 @@ export function StudioGrid({
   const extendFrom = (name: string) => panelHref(path, { extend: name, selected: null, job: null, draft: null });
   const grid = view.layout === "grid";
 
-  // The plus card and the jobs making something new lead the first section,
-  // and on an empty directory they are the whole grid: one way in (D31).
+  // The jobs making something new lead the first section. The way in is the
+  // home view's composer above the grid (D81 of docs/STUDIO-CHAT-FIRST.md).
   const lead = grid ? (
     <>
-      <PlusCard path={path} />
       <NewDiagramJobs targets={targets} path={path} layout="grid" />
       <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />
     </>
   ) : (
     <>
-      <PlusCard path={path} layout="list" />
       <NewDiagramJobs targets={targets} path={path} layout="list" />
       <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />
     </>
@@ -133,7 +130,8 @@ export function StudioGrid({
   if (sections.length === 0) {
     return (
       <>
-        <div className={frame}>{lead}</div>
+        {/* Empty, with no job making anything: no frame at all. */}
+        <div className={`${frame} empty:hidden`}>{lead}</div>
         {diagrams.length === 0 && unreadable === 0 && videos.length === 0 ? (
           <EmptyDirectory dir={dir} />
         ) : (
