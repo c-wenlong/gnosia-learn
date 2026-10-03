@@ -24,7 +24,10 @@ import type { RevideokcToolchain } from "./toolchain";
  * nothing (`revideokcEnv`), arguments checked against fixed patterns and
  * refused with one fixed sentence, one line per call in `calls.ndjson` with
  * the source's hash, the sheets and deliverable found by `lstat` at paths
- * computed from the brief, and a marker in `inflight/` while it runs.
+ * computed from the brief, and a marker in `inflight/` while it runs. One
+ * rule is its own: a step's output reaches the agent through the wrapper's
+ * pipes, not inherited descriptors (`sandboxed`), since node, unlike
+ * manimkc's Python, aborts when the profile refuses to fstat them.
  *
  * What differs: the source is several files, so the recorded hash is the
  * combined one (`source.ts`); revideokc's narration is a step of its own
@@ -93,7 +96,7 @@ export function revideokcWrapperConfig(input: {
 /** The program's body: plain CommonJS with no dependency but node itself. */
 export const REVIDEOKC_WRAPPER_BODY = String.raw`
 "use strict";
-const { spawnSync } = require("node:child_process");
+const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const net = require("node:net");
@@ -122,14 +125,44 @@ function record(entry) {
   fs.appendFileSync(CONFIG.calls, JSON.stringify(entry) + "\n", { mode: 0o644 });
 }
 
+// Write a whole buffer to one of this process's own descriptors, waiting out
+// a full pipe rather than dropping the rest.
+function relay(fd, buffer) {
+  let offset = 0;
+  while (buffer && offset < buffer.length) {
+    try {
+      offset += fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    } catch (error) {
+      if (error.code !== "EAGAIN") throw error;
+    }
+  }
+}
+
+// A step's output comes back through pipes of the wrapper's own, never the
+// descriptors the wrapper was given: the CLI hands Bash a file under the
+// temporary directory for stdout and stderr, which the profiles refuse to
+// read, and node aborts at start when it cannot fstat its standard streams.
+// The pipes are drained as the step writes, so a long or chatty render is
+// neither held in memory nor stopped for its output.
 function sandboxed(step, profile, argv) {
   const started = Date.now();
-  const result = spawnSync(CONFIG.sandboxExec, ["-f", CONFIG.profiles[profile], ...argv], {
-    cwd: CONFIG.checkout,
-    env: CONFIG.env[profile],
-    stdio: ["ignore", "inherit", "inherit"],
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(CONFIG.sandboxExec, ["-f", CONFIG.profiles[profile], ...argv], {
+        cwd: CONFIG.checkout,
+        env: CONFIG.env[profile],
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch {
+      resolve({ step, exitCode: null, signal: null, ms: Date.now() - started });
+      return;
+    }
+    child.stdout.on("data", (chunk) => relay(1, chunk));
+    child.stderr.on("data", (chunk) => relay(2, chunk));
+    child.on("error", () => resolve({ step, exitCode: null, signal: null, ms: Date.now() - started }));
+    child.on("close", (code, signal) => resolve({ step, exitCode: code === null ? null : code, signal: signal || null, ms: Date.now() - started }));
   });
-  return { step, exitCode: result.status === null ? null : result.status, signal: result.signal || null, ms: Date.now() - started };
 }
 
 function cli(args) {
@@ -187,30 +220,30 @@ async function main(argv) {
     fs.renameSync(pending, marker);
   } catch { /* the hang timer then sees silence, which is the old behaviour */ }
   try {
-    return run(verb, rest, startedAt, startMs);
+    return await run(verb, rest, startedAt, startMs);
   } finally {
     try { fs.unlinkSync(marker); } catch { /* already gone */ }
   }
 }
 
-function run(verb, rest, startedAt, startMs) {
+async function run(verb, rest, startedAt, startMs) {
   const sceneSha256 = sourceHash(CONFIG.topicDir);
   const steps = [];
-  const go = (step, profile, argv) => {
+  const go = async (step, profile, argv) => {
     const last = steps[steps.length - 1];
     if (last !== undefined && last.exitCode !== 0) return;
-    steps.push(sandboxed(step, profile, argv));
+    steps.push(await sandboxed(step, profile, argv));
   };
-  if (verb === "api") go("render", "render", cli(["api", ...rest]));
-  else if (verb === "lint") go("render", "render", [CONFIG.node, CONFIG.tsc, "--noEmit", "--pretty", "false", "-p", CONFIG.checkout + "/tsconfig.json"]);
+  if (verb === "api") await go("render", "render", cli(["api", ...rest]));
+  else if (verb === "lint") await go("render", "render", [CONFIG.node, CONFIG.tsc, "--noEmit", "--pretty", "false", "-p", CONFIG.checkout + "/tsconfig.json"]);
   else {
     process.stderr.write(">>> voicing narration.json's lines (the narration step)\n");
-    go("narrate", "narrate", cli(["narrate", CONFIG.topic]));
-    if (verb === "still") go("render", "render", cli(["still", CONFIG.topic, ...rest, "--no-narrate"]));
+    await go("narrate", "narrate", cli(["narrate", CONFIG.topic]));
+    if (verb === "still") await go("render", "render", cli(["still", CONFIG.topic, ...rest, "--no-narrate"]));
     if (verb === "build") {
-      go("render", "render", cli(["build", CONFIG.topic, "--no-narrate", "--workers", "2"]));
+      await go("render", "render", cli(["build", CONFIG.topic, "--no-narrate", "--workers", "2"]));
       process.stderr.write(">>> writing the transcript, chapters and captions (the sidecars step)\n");
-      go("sidecars", "narrate", cli(["sidecars", CONFIG.topic]));
+      await go("sidecars", "narrate", cli(["sidecars", CONFIG.topic]));
     }
   }
   const last = steps[steps.length - 1];
