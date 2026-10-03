@@ -152,6 +152,7 @@ says which pages are on the new design and which phase replaces the rest.
 | --- | --- | --- |
 | `/home` | `home/page.tsx` | Home: the threads to pick up (module pages, unfinished videos, studio drafts, concepts answered on), what they open up (Next from here), at most three due cards worth a quick recall, the courses in progress. `/today` is a permanent redirect here (`next.config.ts`) |
 | `/courses` | `courses/page.tsx` | Every course as a card: search, filter chips by theme, progress, the next topic |
+| `/ask` | `ask/page.tsx` | The open tutor on `?q=`, the subject typed into Home's Ask box when nothing matched; a chat that is not saved and records no mastery (H4 of the Home proposal) |
 | `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first; `?only=a,b,c` (Home's Recall these) asks just those due cards |
 | `/settings` | `settings/page.tsx` | The theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
 | `/learn` | `learn/page.tsx` | The Learn index: every concept in a table with search and mastery filters, and the neighbourhood (or course) graph of the selected row |
@@ -163,7 +164,7 @@ says which pages are on the new design and which phase replaces the rest.
 | `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | A 307 to `/courses/[slug]#<module-slug>`: the module page folded into the path as a unit |
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
 | not found | `not-found.tsx` | The 404 |
-| `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn, for a course topic or, with `conceptSlug`, for one concept note |
+| `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn, for a course topic, with `conceptSlug` for one concept note, or with `subject` for the open tutor (`/ask`), which reads no note and records nothing |
 | `POST /api/agent/session` | `api/agent/session/route.ts` | One multiple-choice question for a session step, written by the tutor model as JSON and refused if it is not; writes nothing |
 | `GET /api/concepts/[slug]` | `api/concepts/[slug]/route.ts` | Everything the concept workspace shows about one concept, as JSON |
 | `POST /api/agent/summarize` | `api/agent/summarize/route.ts` | A transcript condensed into a recap |
@@ -173,6 +174,7 @@ says which pages are on the new design and which phase replaces the rest.
 | `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | The still frame `catalog asset upload` stored for a video, as a JPEG |
 | `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
 | `GET /api/learner/home` | `api/learner/home/route.ts` | Home as JSON, the same `HomeModel` the page renders; degrades to `reachable: false` |
+| `GET /api/learner/ask` | `api/learner/ask/route.ts` | Home's Ask box: concepts, courses, modules and videos whose titles match `?q=`, best first (`rankAsk` in `lib/ask-core.ts`); a source that cannot be read adds nothing |
 | `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot, every preference row and the whole event log as a JSON download; a 503 when the database is down |
 | `POST /api/learner/watched` | `api/learner/watched/route.ts` | Append a `watched` event for one asset: study, never evidence |
 | `POST /api/learner/playback` | `api/learner/playback/route.ts` | Save a video's position and the stretches that played (a `playback:<asset id>` preference), and append the `watched` event once 90% has played |
