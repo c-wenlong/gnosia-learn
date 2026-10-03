@@ -723,8 +723,13 @@ async function run() {
     await matches.getByRole('option').first().click();
     await page.waitForURL(`${base}/learn/${state.concept}`);
 
+    // One letter is too short to search titles but not to ask about ("R").
     await go('/home');
     await hydrated(page, box);
+    await box.fill('R');
+    await matches.getByRole('option', { name: /^Ask the tutor about/ }).waitFor();
+    assert((await matches.getByRole('option').count()) === 1, 'one letter searched the titles');
+
     await box.fill('qzx nothing in the seed is called this');
     await matches.getByRole('option', { name: /^Ask the tutor about/ }).waitFor();
     await box.press('Enter');

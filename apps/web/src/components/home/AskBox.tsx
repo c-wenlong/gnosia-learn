@@ -43,8 +43,10 @@ export function AskBox() {
   const latest = useRef(0);
 
   const trimmed = query.trim();
+  // The tutor is offered for any subject ("R" is a language); the title
+  // search waits for two characters, since one would list half the catalog.
   const options: Option[] =
-    trimmed.length < 2
+    trimmed.length === 0
       ? []
       : [
           ...(found.query === trimmed ? found.results : []).map((entry) => ({ key: entry.key, href: entry.href, entry })),
@@ -88,6 +90,13 @@ export function AskBox() {
 
   const showList = open && options.length > 0;
   const activeOption = showList ? options[Math.min(active, options.length - 1)] : undefined;
+  const activeId = activeOption ? `${id}-${activeOption.key}` : undefined;
+
+  // The highlighted option stays in view as the arrows move it or new
+  // matches reset it, so Enter never opens one the list has scrolled past.
+  useEffect(() => {
+    if (activeId !== undefined) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+  }, [activeId]);
 
   return (
     <div className="relative">
@@ -101,7 +110,7 @@ export function AskBox() {
         aria-expanded={showList}
         aria-controls={listId}
         aria-autocomplete="list"
-        aria-activedescendant={activeOption ? `${id}-${activeOption.key}` : undefined}
+        aria-activedescendant={activeId}
         value={query}
         inputClassName="h-12 text-[15px]"
         onChange={(e) => {

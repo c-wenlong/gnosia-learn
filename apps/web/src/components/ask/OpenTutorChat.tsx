@@ -99,9 +99,10 @@ export function OpenTutorChat({ subject }: { subject: string }) {
     }
     if (asked) start();
     // What session storage said is only known here, after hydration, so the
-    // first render draws neither the chat nor Start.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    else setWaiting(true);
+    // first render draws neither the chat nor Start. A second run (React's
+    // development double effect) finds the mark gone, and must not put a chat
+    // that already started back behind Start.
+    else if (!started.current) setWaiting(true);
   }, [start, subject]);
 
   if (waiting) {
