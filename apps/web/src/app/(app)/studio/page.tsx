@@ -252,6 +252,8 @@ export default async function StudioPage({
   // Extend patches this view, so the filters are there when the panel closes.
   const extendFrom = (name: string) => panelHref(path, { extend: name, selected: null, job: null, draft: null });
   const dialog = view.shot !== null ? null : panelFor();
+  // A job's picture, full width, in place of the home view (the strip stays).
+  const shot = view.shot !== null && view.job !== null ? { jobId: view.job, which: view.shot } : null;
   // What Sort compares on a diagram, so its tiles and the videos share one order.
   const sortKey = (diagram: Diagram) => ({
     title: displayTitle(diagram),
@@ -311,161 +313,164 @@ export default async function StudioPage({
         drafts={drafts}
       >
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {view.shot !== null && view.job !== null ? (
+          {/* The composer is the home view's; a picture takes its place. */}
+          {shot === null && (
+            <section aria-labelledby="studio-home" className="relative px-4 pb-10 pt-[max(2.5rem,12vh)]">
+              <SidebarToggle className="absolute left-2 top-2" />
+              <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-6">
+                <h1 id="studio-home" className="text-center font-display text-[28px] font-semibold leading-tight text-text md:text-[32px]">
+                  What shall we make?
+                </h1>
+                <HomeComposer path={path} video={videoState} />
+              </div>
+            </section>
+          )}
+
+          <StudioStrip>
+            {/* The picture has no home view above it, so the phone's toggle is here. */}
+            {shot !== null && <SidebarToggle />}
+            <SearchField view={view} />
+            <TopicChips chips={chips} view={view} />
+            <Spacer />
+            <DisplayMenu view={view} />
+            <SortMenu view={view} />
+            <SettingsLink href={studioHref(view, { settings: true, draft: null, job: null, extend: null, selected: null, shot: null })} />
+          </StudioStrip>
+
+          <JobStrip path={path} stream={view.stream} />
+
+          {outcome !== null && view.selected === null && <VerbNotice report={outcome} clearHref={path} />}
+
+          {/* U5 and U3: both mean everything still works, so both are banners. */}
+          {/* D13: the topic list is the saved copy, or there is none. */}
+          {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
+          {health.data.stale && (
+            <Notice>
+              The tldrawkc page bundle is older than its source. Everything still runs; rebuild with{" "}
+              <span className="font-mono">(cd tools/tldrawkc &amp;&amp; npm run build)</span> when
+              convenient.
+            </Notice>
+          )}
+          {!health.data.postgres && (
+            <Notice>
+              Not connected to the catalog: browsing and drawing still work, and Accept waits for it,
+              since a diagram lands in the database.
+              {listing.stale === true && listing.readAt !== undefined && (
+                <> This list is the copy read at {new Date(listing.readAt).toLocaleString()}.</>
+              )}
+            </Notice>
+          )}
+          {/* U6: a document that will not parse has no tile, so this is the only
+              place it is visible. It used to be the empty inspector's content. */}
+          {listing.errors.length > 0 && (
+            <Notice tone="danger">
+              <details>
+                <summary className="cursor-pointer">
+                  {listing.errors.length} diagram{listing.errors.length === 1 ? "" : "s"} could not be read and{" "}
+                  {listing.errors.length === 1 ? "is" : "are"} not in the grid.
+                </summary>
+                <ul className="mt-1 space-y-1">
+                  {listing.errors.map((problem) => (
+                    <li key={problem.path}>
+                      <span className="font-mono">{problem.path}</span>: {problem.message}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </Notice>
+          )}
+
+          {shot !== null ? (
             /* A thumbnail was clicked. The panel closes behind it and one Close
                brings it back, because a picture of a diagram is worth the whole
                width. */
             <ShotView
-              jobId={view.job}
-              which={view.shot}
+              jobId={shot.jobId}
+              which={shot.which}
               path={path}
-              title={shotTitle(allJobs, view.job)}
+              title={shotTitle(allJobs, shot.jobId)}
               comparison={shown?.comparison ?? null}
               mode={shown?.brief?.mode}
             />
           ) : (
-            <>
-              <section aria-labelledby="studio-home" className="relative px-4 pb-10 pt-[max(2.5rem,12vh)]">
-                <SidebarToggle className="absolute left-2 top-2" />
-                <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-6">
-                  <h1 id="studio-home" className="text-center font-display text-[28px] font-semibold leading-tight text-text md:text-[32px]">
-                    What shall we make?
-                  </h1>
-                  <HomeComposer path={path} video={videoState} />
-                </div>
-              </section>
-
-              <StudioStrip>
-                <SearchField view={view} />
-                <TopicChips chips={chips} view={view} />
-                <Spacer />
-                <DisplayMenu view={view} />
-                <SortMenu view={view} />
-                <SettingsLink href={studioHref(view, { settings: true, draft: null, job: null, extend: null, selected: null, shot: null })} />
-              </StudioStrip>
-
-              <JobStrip path={path} stream={view.stream} />
-
-              {outcome !== null && view.selected === null && <VerbNotice report={outcome} clearHref={path} />}
-
-              {/* U5 and U3: both mean everything still works, so both are banners. */}
-              {/* D13: the topic list is the saved copy, or there is none. */}
-              {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
-              {health.data.stale && (
-                <Notice>
-                  The tldrawkc page bundle is older than its source. Everything still runs; rebuild with{" "}
-                  <span className="font-mono">(cd tools/tldrawkc &amp;&amp; npm run build)</span> when
-                  convenient.
-                </Notice>
-              )}
-              {!health.data.postgres && (
-                <Notice>
-                  Not connected to the catalog: browsing and drawing still work, and Accept waits for it,
-                  since a diagram lands in the database.
-                  {listing.stale === true && listing.readAt !== undefined && (
-                    <> This list is the copy read at {new Date(listing.readAt).toLocaleString()}.</>
-                  )}
-                </Notice>
-              )}
-              {/* U6: a document that will not parse has no tile, so this is the only
-                  place it is visible. It used to be the empty inspector's content. */}
-              {listing.errors.length > 0 && (
-                <Notice tone="danger">
-                  <details>
-                    <summary className="cursor-pointer">
-                      {listing.errors.length} diagram{listing.errors.length === 1 ? "" : "s"} could not be read and{" "}
-                      {listing.errors.length === 1 ? "is" : "are"} not in the grid.
-                    </summary>
-                    <ul className="mt-1 space-y-1">
-                      {listing.errors.map((problem) => (
-                        <li key={problem.path}>
-                          <span className="font-mono">{problem.path}</span>: {problem.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                </Notice>
-              )}
-
-              <div className="space-y-6 p-4">
-                {/* A new diagram or video being made is first, under any filter. */}
-                {sections.length === 0 &&
-                  (view.layout === "grid" ? (
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 empty:hidden">
-                      <NewDiagramJobs targets={targets} path={path} layout="grid" />
-                      <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />
-                    </div>
-                  ) : (
-                    <div className="space-y-0.5 empty:hidden">
-                      <NewDiagramJobs targets={targets} path={path} layout="list" />
-                      <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />
-                    </div>
-                  ))}
-                {sections.length === 0 ? (
-                  listing.diagrams.length === 0 && listing.errors.length === 0 && allVideos.length === 0 ? (
-                    <EmptyDirectory dir={listing.dir} />
-                  ) : (
-                    <p className="text-sm text-[var(--muted)]">
-                      {allVideos.length === 0 ? "No diagram matches this filter." : "No diagram or video matches this filter."}{" "}
-                      <a className="underline underline-offset-2" href="/studio">
-                        Clear it
-                      </a>
-                      .
-                    </p>
-                  )
+            <div className="space-y-6 p-4">
+              {/* A new diagram or video being made is first, under any filter. */}
+              {sections.length === 0 &&
+                (view.layout === "grid" ? (
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 empty:hidden">
+                    <NewDiagramJobs targets={targets} path={path} layout="grid" />
+                    <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />
+                  </div>
                 ) : (
-                  // Diagrams and studio videos share the groups, in one order:
-                  // a topic with only videos sits among the rest, not above them.
-                  sections.map((section, at) => (
-                    <section key={section.key}>
-                      {section.label !== "" && (
-                        <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
-                          {section.label} · {section.diagrams.length + section.videos.length}
-                        </h2>
-                      )}
-                      {view.layout === "grid" ? (
-                        <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
-                          {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="grid" />}
-                          {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />}
-                          {sectionItems(section, view, sortKey).map((entry) =>
-                            entry.kind === "video" ? (
-                              <VideoTile key={`video:${entry.item.slug}`} video={entry.item} path={path} />
-                            ) : (
-                              <DiagramTile
-                                key={`diagram:${entry.item.name}`}
-                                diagram={entry.item}
-                                path={path}
-                                selectHref={studioHref(view, { selected: entry.item.name })}
-                                extendHref={extendFrom(entry.item.name)}
-                                showConcepts={view.chips}
-                              />
-                            ),
-                          )}
-                        </div>
-                      ) : (
-                        <div className="space-y-0.5">
-                          {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="list" />}
-                          {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />}
-                          {sectionItems(section, view, sortKey).map((entry) =>
-                            entry.kind === "video" ? (
-                              <VideoRow key={`video:${entry.item.slug}`} video={entry.item} path={path} />
-                            ) : (
-                              <DiagramRow
-                                key={`diagram:${entry.item.name}`}
-                                diagram={entry.item}
-                                path={path}
-                                selectHref={studioHref(view, { selected: entry.item.name })}
-                                showConcepts={view.chips}
-                              />
-                            ),
-                          )}
-                        </div>
-                      )}
-                    </section>
-                  ))
-                )}
-              </div>
-            </>
+                  <div className="space-y-0.5 empty:hidden">
+                    <NewDiagramJobs targets={targets} path={path} layout="list" />
+                    <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />
+                  </div>
+                ))}
+              {sections.length === 0 ? (
+                listing.diagrams.length === 0 && listing.errors.length === 0 && allVideos.length === 0 ? (
+                  <EmptyDirectory dir={listing.dir} />
+                ) : (
+                  <p className="text-sm text-[var(--muted)]">
+                    {allVideos.length === 0 ? "No diagram matches this filter." : "No diagram or video matches this filter."}{" "}
+                    <a className="underline underline-offset-2" href="/studio">
+                      Clear it
+                    </a>
+                    .
+                  </p>
+                )
+              ) : (
+                // Diagrams and studio videos share the groups, in one order:
+                // a topic with only videos sits among the rest, not above them.
+                sections.map((section, at) => (
+                  <section key={section.key}>
+                    {section.label !== "" && (
+                      <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
+                        {section.label} · {section.diagrams.length + section.videos.length}
+                      </h2>
+                    )}
+                    {view.layout === "grid" ? (
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+                        {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="grid" />}
+                        {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />}
+                        {sectionItems(section, view, sortKey).map((entry) =>
+                          entry.kind === "video" ? (
+                            <VideoTile key={`video:${entry.item.slug}`} video={entry.item} path={path} />
+                          ) : (
+                            <DiagramTile
+                              key={`diagram:${entry.item.name}`}
+                              diagram={entry.item}
+                              path={path}
+                              selectHref={studioHref(view, { selected: entry.item.name })}
+                              extendHref={extendFrom(entry.item.name)}
+                              showConcepts={view.chips}
+                            />
+                          ),
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="list" />}
+                        {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />}
+                        {sectionItems(section, view, sortKey).map((entry) =>
+                          entry.kind === "video" ? (
+                            <VideoRow key={`video:${entry.item.slug}`} video={entry.item} path={path} />
+                          ) : (
+                            <DiagramRow
+                              key={`diagram:${entry.item.name}`}
+                              diagram={entry.item}
+                              path={path}
+                              selectHref={studioHref(view, { selected: entry.item.name })}
+                              showConcepts={view.chips}
+                            />
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </section>
+                ))
+              )}
+            </div>
           )}
         </div>
       </PanelHost>

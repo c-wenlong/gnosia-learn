@@ -89,6 +89,14 @@ export function historyOf(rows: readonly JobRow[], live: readonly Pick<JobRow, "
   return [...byId.values()].sort((a, b) => b.requested.localeCompare(a.requested));
 }
 
+/**
+ * A location as one comparable string: the path and the parameters,
+ * normalised, so the address bar and a render's `useSearchParams` agree.
+ */
+function locationOf(pathname: string, search: string): string {
+  return `${pathname}?${new URLSearchParams(search).toString()}`;
+}
+
 /** Move the address bar without a server render. */
 function pushUrl(href: string): void {
   window.history.pushState(null, "", href);
@@ -126,25 +134,27 @@ export function PanelHost({
   const path = withoutOutcome(query === "" ? pathname : `${pathname}?${query}`);
 
   /**
-   * The attempt the dialog is open for before its draft exists, and the
-   * draft the address bar named at the press, or null.
+   * The attempt the conversation is open for before its draft exists, with
+   * the whole location the address bar had at the press (`locationOf`), or
+   * null. The whole of it, not only `draft`: Back from one view with no
+   * draft to another with none must still count as the person leaving.
    */
-  const [opening, setOpening] = useState<{ token: number; from: string | null; first: Value | null } | null>(null);
+  const [opening, setOpening] = useState<{ token: number; from: string; first: Value | null } | null>(null);
   const attempts = useRef(0);
-  /** The attempt still wanted, and the draft the address bar named at its press. */
-  const current = useRef<{ token: number; from: string | null } | null>(null);
+  /** The attempt still wanted, and the location the address bar had at its press. */
+  const current = useRef<{ token: number; from: string } | null>(null);
   /** The sidebar's drawer, below 768px. */
   const [drawer, setDrawer] = useState(false);
 
   const begin = useCallback(
     (first: Value | null) => {
       attempts.current += 1;
-      const attempt = { token: attempts.current, from: view.draft };
+      const attempt = { token: attempts.current, from: locationOf(window.location.pathname, window.location.search) };
       current.current = attempt;
       setOpening({ ...attempt, first });
       return attempt.token;
     },
-    [view.draft],
+    [],
   );
 
   const settle = useCallback((token: number, href: string | null) => {
@@ -153,7 +163,7 @@ export function PanelHost({
     // in, or went Back. The draft is an empty one the list does not show.
     const attempt = current.current;
     if (attempt === null || attempt.token !== token) return false;
-    if (new URLSearchParams(window.location.search).get("draft") !== attempt.from) {
+    if (locationOf(window.location.pathname, window.location.search) !== attempt.from) {
       current.current = null;
       setOpening(null);
       return false;
@@ -183,9 +193,9 @@ export function PanelHost({
     setOpening(null);
   }, []);
 
-  // The address bar moved on from the draft it named at the press: the new
+  // The address bar moved on from where it was at the press: the new
   // conversation is here, or Back took the person somewhere else.
-  if (opening !== null && view.draft !== opening.from) setOpening(null);
+  if (opening !== null && locationOf(pathname, query) !== opening.from) setOpening(null);
 
   const openSidebar = useCallback(() => setDrawer(true), []);
   const closeSidebar = useCallback(() => setDrawer(false), []);
@@ -291,7 +301,8 @@ export function PanelHost({
           onClose={closeSidebar}
           onNewChat={newChat}
         />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Inert behind the phone's drawer, which holds focus meanwhile. */}
+        <div inert={drawer} className="flex min-h-0 min-w-0 flex-1 flex-col">
           {chat}
           <div hidden={chat !== null} className="flex min-h-0 min-w-0 flex-1 flex-col">
             {children}

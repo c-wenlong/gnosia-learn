@@ -31,8 +31,15 @@ import { conversationHref, relativeTime } from "@/lib/studio-view";
  * listed yet (it is being made, or nothing in it has reached the runner) is
  * drawn at the top anyway, so the one on screen is always marked here.
  *
+ * The runner answers a page at a time (`LIST_LIMIT`), so a full page ends in
+ * "Show older conversations", which asks for the page after the last row
+ * shown. A re-read refreshes the newest page only; the older pages are kept.
+ *
  * From 768px up it is a column; below that a drawer the header's toggle
  * opens (`SidebarToggle`), closed again by a pick, the backdrop or Escape.
+ * While it is open, focus starts on New chat and Tab stays inside it (the
+ * rest of the studio is inert, `PanelHost`), and closing it hands focus back
+ * to whatever opened it.
  */
 export function StudioSidebar({
   initial,
@@ -62,7 +69,14 @@ export function StudioSidebar({
   const [fresh, setFresh] = useState<{ base: string; drafts: DraftSummary[] } | null>(null);
   // A read from here stands until the page reads something different.
   const version = signature(initial);
-  const drafts = fresh !== null && fresh.base === version ? fresh.drafts : initial;
+  const newest = fresh !== null && fresh.base === version ? fresh.drafts : initial;
+  /** The pages after the first, oldest last, and whether the runner may have more. */
+  const [older, setOlder] = useState<{ drafts: DraftSummary[]; more: boolean } | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
+  const drafts = newest === null ? null : merged(newest, older?.drafts ?? []);
+  const more = older === null ? (newest?.length ?? 0) >= LIST_LIMIT : older.more;
+  const panel = useRef<HTMLElement | null>(null);
 
   // Reads can overlap, and an older answer landing after a newer one would
   // put the list back a step. Each read takes a number, and an answer older
@@ -106,13 +120,64 @@ export function StudioSidebar({
     void reread();
   }, [active, reread]);
 
+  async function showOlder() {
+    const last = drafts === null ? undefined : [...drafts].sort(newestFirst).at(-1);
+    if (last === undefined || loadingOlder) return;
+    setLoadingOlder(true);
+    setOlderError(null);
+    const result = await listDrafts({
+      state: LISTED_STATES,
+      nonEmpty: true,
+      limit: LIST_LIMIT,
+      before: { updated: last.updated, draftId: last.draftId },
+    });
+    setLoadingOlder(false);
+    if (!result.ok || !Array.isArray(result.data.drafts)) {
+      setOlderError(result.ok ? "The runner sent no list." : result.refusal.error);
+      return;
+    }
+    const page = result.data.drafts;
+    setOlder((held) => ({ drafts: [...(held?.drafts ?? []), ...page], more: page.length >= LIST_LIMIT }));
+  }
+
   useEffect(() => {
     if (!open) return;
+    // Back to whatever opened the drawer when it closes, if it is still there.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panel.current?.querySelector<HTMLElement>("[data-studio-new]")?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      // Tab stays inside the drawer: the page behind it is covered.
+      if (event.key !== "Tab" || panel.current === null) return;
+      const stops = [...panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")];
+      const first = stops[0];
+      const last = stops.at(-1);
+      if (first === undefined || last === undefined) return;
+      const inside = panel.current.contains(document.activeElement);
+      if (event.shiftKey && (document.activeElement === first || !inside)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !inside)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Widened past the drawer's range: the sidebar is a column again, and a
+    // drawer left open would leave the studio inert behind nothing.
+    const wide = window.matchMedia("(min-width: 768px)");
+    const onWide = () => {
+      if (wide.matches) onClose();
+    };
+    wide.addEventListener("change", onWide);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      wide.removeEventListener("change", onWide);
+      if (opener !== null && opener.isConnected) opener.focus({ preventScroll: true });
+    };
   }, [open, onClose]);
 
   const rows = drafts === null ? [] : draftRows(drafts, titles);
@@ -130,7 +195,10 @@ export function StudioSidebar({
         />
       )}
       <nav
+        ref={panel}
         aria-label="Conversations"
+        aria-modal={open ? true : undefined}
+        role={open ? "dialog" : undefined}
         className={cx(
           "w-[260px] shrink-0 flex-col border-r border-hair bg-surface",
           "md:static md:flex md:h-auto",
@@ -175,6 +243,23 @@ export function StudioSidebar({
               </ul>
             </section>
           ))}
+          {more && rows.length > 0 && (
+            <div className="px-1 pt-1">
+              <button
+                type="button"
+                onClick={() => void showOlder()}
+                disabled={loadingOlder}
+                className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                {loadingOlder ? "Reading older conversations…" : "Show older conversations"}
+              </button>
+              {olderError !== null && (
+                <p role="alert" className="px-1.5 text-[12px] text-danger">
+                  {olderError}
+                </p>
+              )}
+            </div>
+          )}
           {rows.length === 0 && !unlisted && (
             <p className="px-2.5 pt-2 text-[13px] leading-5 text-text3">Conversations you start show here.</p>
           )}
@@ -228,6 +313,16 @@ export function SidebarToggle({ onOpen, className }: { onOpen?: () => void; clas
       </svg>
     </button>
   );
+}
+
+function newestFirst(a: DraftSummary, b: DraftSummary): number {
+  return b.updated.localeCompare(a.updated) || b.draftId.localeCompare(a.draftId);
+}
+
+/** The newest page and the older ones as one list, a row in both kept as the newest page has it. */
+function merged(newest: readonly DraftSummary[], older: readonly DraftSummary[]): DraftSummary[] {
+  const seen = new Set(newest.map((draft) => draft.draftId));
+  return [...newest, ...older.filter((draft) => !seen.has(draft.draftId))];
 }
 
 function signature(drafts: readonly DraftSummary[] | null): string {

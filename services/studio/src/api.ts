@@ -1409,7 +1409,16 @@ async function draftRoutes(
       const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25;
       const state = url.searchParams.get("state") ?? undefined;
       const nonEmpty = ["1", "true"].includes(url.searchParams.get("nonEmpty") ?? "");
-      const list = drafts.list({ limit, nonEmpty, ...(state === undefined || state === "" ? {} : { state }) });
+      // The next page: rows after the one named, newest first. Both or neither.
+      const beforeUpdated = url.searchParams.get("before");
+      const beforeId = url.searchParams.get("beforeId");
+      const before = beforeUpdated !== null && beforeId !== null ? { updated: beforeUpdated, id: beforeId } : undefined;
+      const list = drafts.list({
+        limit,
+        nonEmpty,
+        ...(state === undefined || state === "" ? {} : { state }),
+        ...(before === undefined ? {} : { before }),
+      });
       return send(response, 200, { drafts: list, note: `${list.length} draft${list.length === 1 ? "" : "s"}, newest first` });
     }
     if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/drafts does`);

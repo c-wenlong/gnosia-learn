@@ -677,6 +677,9 @@ pick up; a history is where a finished diagram's conversation is found
 again to ask for a change. A briefed one carries an accent dot. It reads the
 runner again when the open conversation changes, when that conversation
 says its title, turns or state moved (`DRAFT_CHANGED_EVENT`), and on focus.
+The runner sends 50 at a time; a full page ends in "Show older
+conversations", which asks for the page after the last row
+(`?before=<updated>&beforeId=<id>`, newest first, ties broken by id).
 
 **The conversation** is `StudioPane`: `StudioDialog`'s controls without the
 dialog. Nothing is modal, so the sidebar stays usable, and there is no Close:
@@ -688,7 +691,8 @@ its draft exists.
 
 Below 768px the sidebar is a drawer, opened by a toggle at the top left of
 the home view and before the conversation's title, and closed by a pick, the
-backdrop or Escape.
+backdrop or Escape. While it is open the rest of the studio is inert, Tab
+stays inside it, and closing it hands focus back to the toggle.
 
 ### The plus card and the panel
 

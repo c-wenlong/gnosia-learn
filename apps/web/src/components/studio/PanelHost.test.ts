@@ -251,6 +251,24 @@ describe("the conversation", () => {
     expect(went).toBe(false);
     expect(pushState).not.toHaveBeenCalledWith(null, "", "/studio?draft=late");
   });
+
+  it("does not open a draft that arrives after Back to another view with no draft", () => {
+    setUrl("sel=graph");
+    const { container, go } = mount();
+    let token = 0;
+    act(() => {
+      token = grabbed.controls!.begin(FIRST);
+    });
+    // Back from a tile's panel to the plain home view: no draft either side.
+    go("");
+    expect(pane(container)).toBeNull();
+    let went = true;
+    act(() => {
+      went = grabbed.controls!.settle(token, "/studio?draft=late");
+    });
+    expect(went).toBe(false);
+    expect(pushState).not.toHaveBeenCalledWith(null, "", "/studio?draft=late");
+  });
 });
 
 describe("Start over in a conversation", () => {
