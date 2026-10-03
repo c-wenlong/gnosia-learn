@@ -678,8 +678,11 @@ again to ask for a change. A briefed one carries an accent dot. It reads the
 runner again when the open conversation changes, when that conversation
 says its title, turns or state moved (`DRAFT_CHANGED_EVENT`), and on focus.
 The runner sends 50 at a time; a full page ends in "Show older
-conversations", which asks for the page after the last row
-(`?before=<updated>&beforeId=<id>`, newest first, ties broken by id).
+conversations", which shows one page more. Each page asks for the rows after
+the last of the one before (`?before=<updated>&beforeId=<id>`, newest first,
+ties broken by id), and every refresh reads all the pages shown again from
+the top (`readHistory`), so a row pushed onto the next page, or closed with
+Start over, ends up where the runner now has it.
 
 **The conversation** is `StudioPane`: `StudioDialog`'s controls without the
 dialog. Nothing is modal, so the sidebar stays usable, and there is no Close:

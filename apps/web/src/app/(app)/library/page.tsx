@@ -3,8 +3,10 @@ import Form from "next/form";
 import Link from "next/link";
 
 import { AssetCard, type CardConcept } from "@/components/AssetCard";
+import { AssetRow } from "@/components/library/AssetRow";
 import { LibraryFilterMenus, type LibraryMenu } from "@/components/library/LibraryFilterMenus";
 import { Notice } from "@/components/library/Notice";
+import { Glyph } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
 import { getCourses } from "@/data/courses";
@@ -17,6 +19,7 @@ import {
   unservedRows,
 } from "@/lib/asset-library";
 import {
+  addedOn,
   assetHref,
   courseFacets,
   explainedConcepts,
@@ -26,11 +29,13 @@ import {
   kindFacets,
   libraryHref,
   parseSort,
+  parseView,
   searchHits,
   searchTerms,
   sortRows,
   type LibraryCourse,
   type LibraryFilters,
+  type LibraryView,
 } from "@/lib/library";
 import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
 import { loadKnowledgeBase } from "@/lib/learner-store";
@@ -43,10 +48,10 @@ export const metadata: Metadata = {
 
 /**
  * `/library` (hi-fi screen 10): every asset the catalog knows about, as a grid
- * to search and filter.
+ * to search and filter, or as a list of rows (`?view=list`) for scanning many.
  *
- * **The filters are the URL.** `?kind=`, `?course=`, `?topic=`, `?q=` and
- * `?sort=` are the whole state, so a view is linkable and the back button
+ * **The filters are the URL.** `?kind=`, `?course=`, `?topic=`, `?q=`,
+ * `?sort=` and `?view=` are the whole state, so a view is linkable and the back button
  * undoes a filter. Each filter group is a `FilterMenu` (Type, Course, and
  * Topic when one is set); the page reads the filters and the options here, and
  * the small client `LibraryFilterMenus` pushes the `libraryHref` of a pick, so
@@ -89,7 +94,8 @@ export default async function LibraryPage({
   const course = firstParam(params.course);
   const q = firstParam(params.q)?.trim() || null;
   const sort = parseSort(firstParam(params.sort));
-  const filters: LibraryFilters = { kind, topic, course, q, sort };
+  const view = parseView(firstParam(params.view));
+  const filters: LibraryFilters = { kind, topic, course, q, sort, view };
 
   const [library, { kb }, courses] = await Promise.all([loadLibrary(), loadKnowledgeBase(), getCourses()]);
   const { rows, counts, reachable, truncated, titles, concepts } = library;
@@ -156,6 +162,19 @@ export default async function LibraryPage({
     // Said out loud, since the companion rows are only listed inside the Type menu.
     (hidden > 0 && kind === null ? ` · ${hidden} companion ${hidden === 1 ? "file" : "files"} not in All kinds` : "");
 
+  const listLabel = q === null ? "Assets" : `Assets matching ${q}`;
+  // What a card or a row names beside the title: the first concept the asset
+  // explains, with how many more, or its topic when it explains none.
+  const describe = (row: (typeof matching)[number]): { concept?: CardConcept; topic?: string } => {
+    const explained = explainedConcepts(ownValue(concepts, row.id) ?? [], kbById);
+    const first = explained[0];
+    const topicSlug = row.topics[0];
+    return {
+      concept: first === undefined ? undefined : { title: first.title, bucket: first.bucket, more: explained.length - 1 },
+      topic: topicSlug === undefined ? undefined : (ownValue(titles, topicSlug) ?? topicSlug),
+    };
+  };
+
   const typeOptions: LibraryMenu["options"] = [
     { value: "", label: "All kinds", short: "All", count: facets.standalone },
     ...facets.primary.map((f) => ({ value: f.kind, label: f.label, count: f.count })),
@@ -217,6 +236,7 @@ export default async function LibraryPage({
           <section aria-label="Filters" className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <LibraryFilterMenus filters={filters} menus={menus} />
             <SortToggle filters={filters} sort={sort} />
+            <ViewToggle filters={filters} view={view} />
             <Form action="/library" role="search" className="w-full md:ml-auto md:w-[340px]">
               {/* The other filters ride along, so a search narrows the view the
                   reader is in rather than resetting it. Only the ones that are set,
@@ -225,6 +245,7 @@ export default async function LibraryPage({
               {topic !== null && <input type="hidden" name="topic" value={topic} />}
               {course !== null && <input type="hidden" name="course" value={course} />}
               {sort !== "newest" && <input type="hidden" name="sort" value={sort} />}
+              {view !== "grid" && <input type="hidden" name="view" value={view} />}
               <SearchField
                 label="Search the library"
                 placeholder="Search titles, transcripts, notes"
@@ -279,25 +300,39 @@ export default async function LibraryPage({
                 </Link>
               </p>
             </Notice>
+          ) : view === "list" ? (
+            <ul
+              aria-label={listLabel}
+              className="flex flex-col divide-y-2 divide-border overflow-hidden rounded-[20px] border-2 border-border bg-surface"
+            >
+              {matching.map((row) => {
+                const { concept, topic: topicLabel } = describe(row);
+                return (
+                  <li key={row.id}>
+                    <AssetRow
+                      asset={row}
+                      concept={concept}
+                      topic={topicLabel}
+                      added={addedOn(row.createdAt)}
+                      href={assetHref(row.id)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
             <ul
-              aria-label={q === null ? "Assets" : `Assets matching ${q}`}
+              aria-label={listLabel}
               className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]"
             >
               {matching.map((row) => {
-                const explained = explainedConcepts(ownValue(concepts, row.id) ?? [], kbById);
-                const first = explained[0];
-                const concept: CardConcept | undefined =
-                  first === undefined
-                    ? undefined
-                    : { title: first.title, bucket: first.bucket, more: explained.length - 1 };
-                const topicSlug = row.topics[0];
+                const { concept, topic: topicLabel } = describe(row);
                 return (
                   <li key={row.id} className="flex">
                     <AssetCard
                       asset={row}
                       concept={concept}
-                      topic={topicSlug === undefined ? undefined : (ownValue(titles, topicSlug) ?? topicSlug)}
+                      topic={topicLabel}
                       href={assetHref(row.id)}
                       // A diagram is its own thumbnail; a video gets a frame
                       // cut out of it on demand; everything else gets the
@@ -340,5 +375,39 @@ function SortToggle({ filters, sort }: { filters: LibraryFilters; sort: "newest"
     >
       Sort: {sort}
     </Link>
+  );
+}
+
+/**
+ * The grid and the list, as two links: each is a URL, like every other choice
+ * on this page, and the one in use is marked `aria-current`.
+ */
+function ViewToggle({ filters, view }: { filters: LibraryFilters; view: LibraryView }) {
+  const options: { value: LibraryView; label: string; glyph: "assets" | "topics" }[] = [
+    { value: "grid", label: "Grid", glyph: "assets" },
+    { value: "list", label: "List", glyph: "topics" },
+  ];
+  return (
+    <nav aria-label="Layout" className="flex shrink-0 items-center rounded-full border-2 border-border bg-surface p-0.5">
+      {options.map((option) => {
+        const current = option.value === view;
+        return (
+          <Link
+            key={option.value}
+            href={libraryHref({ ...filters, view: option.value })}
+            aria-current={current ? "page" : undefined}
+            scroll={false}
+            className={cx(
+              "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors duration-100",
+              current ? "bg-surface2 text-text" : "text-text2 hover:text-text",
+              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            )}
+          >
+            <Glyph name={option.glyph} size={16} />
+            {option.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

@@ -147,3 +147,29 @@ export function historyGroups(rows: readonly DraftRow[], now: Date): HistoryGrou
     return grouped === undefined ? [] : [{ label, rows: grouped }];
   });
 }
+
+/** One page of the runner's list, after `before` (or the newest), or null when it did not answer. */
+export type HistoryPage = (before: { updated: string; draftId: string } | undefined) => Promise<DraftSummary[] | null>;
+
+/**
+ * The newest `pages` pages of the history, read again from the top, each
+ * page starting after the last row of the one before. Read whole on every
+ * refresh rather than refreshing the first page and keeping the rest: a
+ * conversation that moved up pushes the old last row of a page onto the
+ * next, and one closed with Start over has to leave whichever page held it.
+ * `more` is whether the last page read was full, so the runner may have
+ * older rows still. Null when any page fails: what is shown stays.
+ */
+export async function readHistory(pages: number, page: HistoryPage, limit = LIST_LIMIT): Promise<{ drafts: DraftSummary[]; more: boolean } | null> {
+  const drafts: DraftSummary[] = [];
+  let before: { updated: string; draftId: string } | undefined;
+  for (let at = 0; at < Math.max(pages, 1); at += 1) {
+    const rows = await page(before);
+    if (rows === null) return null;
+    drafts.push(...rows);
+    const last = rows.at(-1);
+    if (rows.length < limit || last === undefined) return { drafts, more: false };
+    before = { updated: last.updated, draftId: last.draftId };
+  }
+  return { drafts, more: true };
+}

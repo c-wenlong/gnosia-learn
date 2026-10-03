@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assetBackLink,
   assetFileHref,
   assetHref,
   compareByKindThenId,
@@ -14,6 +15,8 @@ import {
   explainedConcepts,
   filterRows,
   libraryHref,
+  parseView,
+  addedOn,
   matchesAll,
   parseSort,
   searchHits,
@@ -170,6 +173,37 @@ describe("libraryHref", () => {
     expect(libraryHref({ q: "   ", sort: "newest" })).toBe("/library");
     // A literal plus survives as %2B, distinct from the + that spells a space.
     expect(libraryHref({ q: "c++ templates" })).toBe("/library?q=c%2B%2B+templates");
+  });
+
+  it("writes the list layout and never the grid, which is the default", () => {
+    expect(libraryHref({ view: "list" })).toBe("/library?view=list");
+    expect(libraryHref({ kind: "video", sort: "title", view: "list" })).toBe(
+      "/library?kind=video&sort=title&view=list",
+    );
+    expect(libraryHref({ view: "grid" })).toBe("/library");
+  });
+});
+
+describe("parseView", () => {
+  it("reads list and treats anything else as the grid", () => {
+    expect(parseView("list")).toBe("list");
+    expect(parseView("grid")).toBe("grid");
+    expect(parseView("table")).toBe("grid");
+    expect(parseView(null)).toBe("grid");
+    expect(parseView(undefined)).toBe("grid");
+  });
+});
+
+describe("addedOn", () => {
+  it("prints the UTC day a row entered the catalog", () => {
+    expect(addedOn("2026-10-04T09:30:00Z")).toBe("4 Oct 2026");
+    // Late in the day UTC is still that day, whatever the server's zone.
+    expect(addedOn("2026-09-30T23:59:59Z")).toBe("30 Sept 2026");
+  });
+
+  it("returns null for a timestamp that does not parse", () => {
+    expect(addedOn("not a date")).toBeNull();
+    expect(addedOn("")).toBeNull();
   });
 });
 
@@ -437,5 +471,27 @@ describe("firstParam", () => {
 
   it("passes a single value through", () => {
     expect(firstParam("video")).toBe("video");
+  });
+});
+
+describe("assetBackLink", () => {
+  it("returns to the studio view an asset was opened from, filters and all", () => {
+    expect(assetBackLink("/studio?topic=x&q=y")).toEqual({ href: "/studio?topic=x&q=y", label: "Studio" });
+    expect(assetBackLink("/studio")).toEqual({ href: "/studio", label: "Studio" });
+    expect(assetBackLink(["/studio?job=j1", "/elsewhere"])).toEqual({ href: "/studio?job=j1", label: "Studio" });
+  });
+
+  it("goes up to the library otherwise, and never off the site", () => {
+    const library = { href: "/library", label: "Library" };
+    expect(assetBackLink(undefined)).toEqual(library);
+    expect(assetBackLink("")).toEqual(library);
+    expect(assetBackLink("/courses/cs3230")).toEqual(library);
+    expect(assetBackLink("/studios")).toEqual(library);
+    expect(assetBackLink("//evil.example/studio")).toEqual(library);
+    expect(assetBackLink("https://evil.example/studio")).toEqual(library);
+    expect(assetBackLink("/studio/../settings")).toEqual(library);
+    expect(assetBackLink("/studio/%2e%2e/settings")).toEqual(library);
+    expect(assetBackLink("/studio/./d/x")).toEqual({ href: "/studio/d/x", label: "Studio" });
+    expect(assetBackLink("/studio\n")).toEqual(library);
   });
 });

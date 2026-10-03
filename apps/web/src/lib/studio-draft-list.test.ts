@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DraftSummary } from "@/lib/studio-drafts";
 
-import { draftRows, historyGroups, listPath, stateWords, type DraftRow } from "./studio-draft-list";
+import { draftRows, historyGroups, listPath, readHistory, stateWords, type DraftRow } from "./studio-draft-list";
 
 /** The drafts list above the studio grid (phase 3): which rows, called what. */
 
@@ -161,5 +161,44 @@ describe("historyGroups", () => {
       ["Today", ["ahead"]],
       ["Older", ["bad"]],
     ]);
+  });
+});
+
+describe("readHistory", () => {
+  // The runner's list, newest first, a page of `limit` after `before`.
+  const runner = (ids: string[]) => {
+    const rows = ids.map((draftId, at) => draft({ draftId, updated: new Date(Date.UTC(2026, 9, 4) - at * 60_000).toISOString() }));
+    const asked: (string | undefined)[] = [];
+    const page = async (before: { updated: string; draftId: string } | undefined) => {
+      asked.push(before?.draftId);
+      const from = before === undefined ? 0 : rows.findIndex((row) => row.draftId === before.draftId) + 1;
+      return rows.slice(from, from + 2);
+    };
+    return { page, asked };
+  };
+
+  it("reads each page after the last row of the one before, and says whether there may be more", async () => {
+    const { page, asked } = runner(["a", "b", "c", "d", "e"]);
+    const two = await readHistory(2, page, 2);
+    expect(two?.drafts.map((row) => row.draftId)).toEqual(["a", "b", "c", "d"]);
+    expect(two?.more).toBe(true);
+    expect(asked).toEqual([undefined, "b"]);
+    const all = await readHistory(5, page, 2);
+    expect(all?.drafts.map((row) => row.draftId)).toEqual(["a", "b", "c", "d", "e"]);
+    expect(all?.more).toBe(false);
+  });
+
+  it("reads from the top again, so a row pushed onto the next page is still there", async () => {
+    // "c" was the first row of page two; a new conversation "z" pushed "b" down.
+    const before = await readHistory(2, runner(["a", "b", "c", "d"]).page, 2);
+    const after = await readHistory(2, runner(["z", "a", "b", "c"]).page, 2);
+    expect(before?.drafts.map((row) => row.draftId)).toEqual(["a", "b", "c", "d"]);
+    expect(after?.drafts.map((row) => row.draftId)).toEqual(["z", "a", "b", "c"]);
+  });
+
+  it("is null when a page fails, so what is shown stays", async () => {
+    let calls = 0;
+    const failing = async () => (calls++ === 0 ? [draft({ draftId: "a" }), draft({ draftId: "b" })] : null);
+    expect(await readHistory(2, failing, 2)).toBeNull();
   });
 });

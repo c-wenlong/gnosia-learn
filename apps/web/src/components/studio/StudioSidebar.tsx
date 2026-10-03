@@ -11,6 +11,7 @@ import {
   historyGroups,
   LIST_LIMIT,
   LISTED_STATES,
+  readHistory,
   type DraftRow,
 } from "@/lib/studio-draft-list";
 import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
@@ -32,8 +33,8 @@ import { conversationHref, relativeTime } from "@/lib/studio-view";
  * drawn at the top anyway, so the one on screen is always marked here.
  *
  * The runner answers a page at a time (`LIST_LIMIT`), so a full page ends in
- * "Show older conversations", which asks for the page after the last row
- * shown. A re-read refreshes the newest page only; the older pages are kept.
+ * "Show older conversations", which shows one more. Every read is every page
+ * shown, read again from the top (`readHistory`).
  *
  * From 768px up it is a column; below that a drawer the header's toggle
  * opens (`SidebarToggle`), closed again by a pick, the backdrop or Escape.
@@ -66,35 +67,45 @@ export function StudioSidebar({
   onClose: () => void;
   onNewChat: () => void;
 }) {
-  const [fresh, setFresh] = useState<{ base: string; drafts: DraftSummary[] } | null>(null);
+  /** A read from here: every loaded page, and whether the runner may have more. */
+  const [fresh, setFresh] = useState<{ base: string; drafts: DraftSummary[]; more: boolean } | null>(null);
   // A read from here stands until the page reads something different.
   const version = signature(initial);
-  const newest = fresh !== null && fresh.base === version ? fresh.drafts : initial;
-  /** The pages after the first, oldest last, and whether the runner may have more. */
-  const [older, setOlder] = useState<{ drafts: DraftSummary[]; more: boolean } | null>(null);
+  const held = fresh !== null && fresh.base === version ? fresh : null;
+  const drafts = held?.drafts ?? initial;
+  const more = held?.more ?? (initial?.length ?? 0) >= LIST_LIMIT;
+  /** How many pages are shown: one, and one more for each "Show older conversations". */
+  const pages = useRef(1);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
-  const drafts = newest === null ? null : merged(newest, older?.drafts ?? []);
-  const more = older === null ? (newest?.length ?? 0) >= LIST_LIMIT : older.more;
   const panel = useRef<HTMLElement | null>(null);
 
   // Reads can overlap, and an older answer landing after a newer one would
   // put the list back a step. Each read takes a number, and an answer older
-  // than the last one shown is dropped.
+  // than the last one shown is dropped. Every read is every page shown, from
+  // the top (`readHistory`), so a row pushed from one page onto the next, or
+  // closed with Start over, is where the runner now says.
   const issued = useRef(0);
   const landed = useRef(0);
-  const reread = useCallback(async () => {
-    issued.current += 1;
-    const ticket = issued.current;
-    const result = await listDrafts({ state: LISTED_STATES, nonEmpty: true, limit: LIST_LIMIT });
-    if (ticket < landed.current) return;
-    // A failed read keeps what is shown: a runner that stopped answering is
-    // the page's to say, and an empty list here would read as "no drafts".
-    if (result.ok && Array.isArray(result.data.drafts)) {
+  const read = useCallback(
+    async (count: number) => {
+      issued.current += 1;
+      const ticket = issued.current;
+      const result = await readHistory(count, async (before) => {
+        const answer = await listDrafts({ state: LISTED_STATES, nonEmpty: true, limit: LIST_LIMIT, ...(before === undefined ? {} : { before }) });
+        return answer.ok && Array.isArray(answer.data.drafts) ? answer.data.drafts : null;
+      });
+      if (ticket < landed.current) return result !== null;
+      // A failed read keeps what is shown: a runner that stopped answering is
+      // the page's to say, and an empty list here would read as "no drafts".
+      if (result === null) return false;
       landed.current = ticket;
-      setFresh({ base: version, drafts: result.data.drafts });
-    }
-  }, [version]);
+      setFresh({ base: version, ...result });
+      return true;
+    },
+    [version],
+  );
+  const reread = useCallback(() => read(pages.current), [read]);
 
   useEffect(() => {
     const wake = () => void reread();
@@ -121,23 +132,14 @@ export function StudioSidebar({
   }, [active, reread]);
 
   async function showOlder() {
-    const last = drafts === null ? undefined : [...drafts].sort(newestFirst).at(-1);
-    if (last === undefined || loadingOlder) return;
+    if (loadingOlder) return;
     setLoadingOlder(true);
     setOlderError(null);
-    const result = await listDrafts({
-      state: LISTED_STATES,
-      nonEmpty: true,
-      limit: LIST_LIMIT,
-      before: { updated: last.updated, draftId: last.draftId },
-    });
+    const next = pages.current + 1;
+    const ok = await read(next);
     setLoadingOlder(false);
-    if (!result.ok || !Array.isArray(result.data.drafts)) {
-      setOlderError(result.ok ? "The runner sent no list." : result.refusal.error);
-      return;
-    }
-    const page = result.data.drafts;
-    setOlder((held) => ({ drafts: [...(held?.drafts ?? []), ...page], more: page.length >= LIST_LIMIT }));
+    if (ok) pages.current = next;
+    else setOlderError("Older conversations could not be read: the studio did not answer.");
   }
 
   useEffect(() => {
@@ -176,7 +178,10 @@ export function StudioSidebar({
     return () => {
       window.removeEventListener("keydown", onKey);
       wide.removeEventListener("change", onWide);
-      if (opener !== null && opener.isConnected) opener.focus({ preventScroll: true });
+      // Only to an opener still on screen: a pick that opened a conversation
+      // hid the home view and its toggle, and the conversation focuses its
+      // own composer.
+      if (opener !== null && opener.isConnected && opener.getClientRects().length > 0) opener.focus({ preventScroll: true });
     };
   }, [open, onClose]);
 
@@ -313,16 +318,6 @@ export function SidebarToggle({ onOpen, className }: { onOpen?: () => void; clas
       </svg>
     </button>
   );
-}
-
-function newestFirst(a: DraftSummary, b: DraftSummary): number {
-  return b.updated.localeCompare(a.updated) || b.draftId.localeCompare(a.draftId);
-}
-
-/** The newest page and the older ones as one list, a row in both kept as the newest page has it. */
-function merged(newest: readonly DraftSummary[], older: readonly DraftSummary[]): DraftSummary[] {
-  const seen = new Set(newest.map((draft) => draft.draftId));
-  return [...newest, ...older.filter((draft) => !seen.has(draft.draftId))];
 }
 
 function signature(drafts: readonly DraftSummary[] | null): string {

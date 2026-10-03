@@ -28,6 +28,8 @@ export interface HostControls {
    * and the caller navigates as it would have.
    */
   navigate: (href: string) => boolean;
+  /** Start reading the settings panel's rows, so it opens with them: on a hover over its button. */
+  warmSettings: () => void;
 }
 
 export const HostContext = createContext<HostControls | null>(null);

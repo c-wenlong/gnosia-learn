@@ -3,7 +3,7 @@ import { pipeline } from "node:stream";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief } from "./brief";
+import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief, type Vocabulary } from "./brief";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { preferenceSet, videoList } from "./catalog";
 import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@self-learn/schema/shared";
@@ -20,6 +20,7 @@ import {
   readDiagram,
   svgKeyOf,
   type CheckoutView,
+  type DiagramListing,
 } from "./diagrams";
 import { studioBlobStore } from "./blobs";
 import type { Drafts, DraftStreamEvent } from "./drafts";
@@ -27,6 +28,7 @@ import { MirrorRefused, type Mirrors } from "./mirrors";
 import { matchesTag, openNewestShot } from "./live-shot";
 import { diagramPathProblem } from "./diagram-guard";
 import { HealthProbes } from "./health-probes";
+import { readListing, type ListingCache, type Listings } from "./listings";
 import type { ProbeReading } from "./probe";
 import { scratchDir, shotPath, studioHome, targetPath, workDir, workSvgPath } from "./paths";
 import { accept, discard, reindex } from "./review";
@@ -315,11 +317,17 @@ export interface ApiDeps {
    * that passes none gets its own, cold, so its first health call checks.
    */
   probes?: HealthProbes;
+  /**
+   * The grid's three lists, kept so a page load waits on none of them
+   * (`listings.ts`). `npm run studio` makes one and warms it; a test that
+   * passes none reads the catalog on every call, as the routes always did.
+   */
+  listings?: Listings;
 }
 
-export function createApi({ store, runner, mirrors, drafts, video, probes = new HealthProbes() }: ApiDeps): Server {
+export function createApi({ store, runner, mirrors, drafts, video, probes = new HealthProbes(), listings }: ApiDeps): Server {
   return createServer((request, response) => {
-    void handle(request, response, store, runner, mirrors, drafts, video, probes).catch((error: unknown) => {
+    void handle(request, response, store, runner, mirrors, drafts, video, probes, listings).catch((error: unknown) => {
       if (!response.headersSent) {
         fail(response, 500, "the studio threw handling this request", (error as Error).message);
       } else {
@@ -338,6 +346,7 @@ async function handle(
   drafts: Drafts | undefined,
   video: (VideoDeps & { doctor: VideoDoctor }) | undefined = undefined,
   probes: HealthProbes = new HealthProbes(),
+  listings?: Listings,
 ): Promise<void> {
   const refused = guard(request);
   if (refused !== null) return fail(response, 403, refused);
@@ -366,7 +375,7 @@ async function handle(
   /* /api/videos: the owner's landed studio videos, for the grid's poster tiles. */
   if (segments[1] === "videos" && segments.length === 2) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/videos does`);
-    return videosRoute(response);
+    return videosRoute(response, listings);
   }
 
   /* /api/settings/agent: the two agents' model and effort (D53). */
@@ -377,12 +386,12 @@ async function handle(
   /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
   if (segments[1] === "vocabulary" && segments.length === 2) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/vocabulary does`);
-    return vocabularyRoute(response);
+    return vocabularyRoute(response, listings);
   }
 
   /* /api/diagrams — the corpus the browser screen lists. */
   if (segments[1] === "diagrams") {
-    return diagrams(request, response, segments, method, mirrors);
+    return diagrams(request, response, segments, method, mirrors, listings);
   }
 
   /* /api/mirrors — one `canvas serve` per document, held open while looked at. */
@@ -912,12 +921,23 @@ async function diagrams(
   segments: string[],
   method: string,
   mirrors: Mirrors,
+  listings?: Listings,
 ): Promise<void> {
   if (segments.length === 2) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/diagrams does`);
-    const listing = await listDiagrams();
+    let listing: DiagramListing;
+    let cache: ListingCache | undefined;
+    if (listings === undefined) {
+      listing = await listDiagrams();
+    } else {
+      const read = await readListing(listings.diagrams, (outcome) => !outcome.ok || outcome.value.stale === true);
+      if (!read.value.ok) throw read.value.error;
+      listing = read.value.value;
+      cache = read.cache;
+    }
     return send(response, 200, {
       ...listing,
+      ...(cache === undefined ? {} : { cache }),
       note:
         `${listing.counts.total} diagram${listing.counts.total === 1 ? "" : "s"}, ` +
         `${listing.counts.withTopic} with a topic` +
@@ -1349,14 +1369,24 @@ function events(
  * copy at all it answers 503 with the reason, and the screen falls back to
  * slugs.
  */
-async function vocabularyRoute(response: ServerResponse): Promise<void> {
+async function vocabularyRoute(response: ServerResponse, listings?: Listings): Promise<void> {
   try {
-    const read = await loadVocabulary();
+    let read: Vocabulary;
+    let cache: ListingCache | undefined;
+    if (listings === undefined) {
+      read = await loadVocabulary();
+    } else {
+      const kept = await readListing(listings.vocabulary, (outcome) => !outcome.ok || outcome.value.stale);
+      if (!kept.value.ok) throw kept.value.error;
+      read = kept.value.value;
+      cache = kept.cache;
+    }
     return send(response, 200, {
       topics: read.entries,
       readAt: read.readAt,
       stale: read.stale,
       ...(read.staleReason === undefined ? {} : { error: read.staleReason }),
+      ...(cache === undefined ? {} : { cache }),
     });
   } catch (error) {
     return fail(
@@ -1657,6 +1687,18 @@ async function agentSettingView(kind: "video" | "diagram"): Promise<Record<strin
   };
 }
 
+/** What `GET /api/settings/agent` answers, read fresh: `HealthProbes.settingsView` keeps it. */
+export async function agentSettingsView(): Promise<Record<string, unknown>> {
+  const [video, diagram, claude] = await Promise.all([agentSettingView("video"), agentSettingView("diagram"), readClaudeDefaults()]);
+  return {
+    video,
+    diagram,
+    defaults: claude,
+    models: OFFERED_MODELS.filter((model) => ratesFor(model.id) !== null),
+    efforts: EFFORTS,
+  };
+}
+
 /**
  * `GET /api/settings/agent`: both rows, what a job started now would get, and
  * what "Claude Code default" resolves to. `PUT` with `{ kind, model, effort }`
@@ -1670,17 +1712,10 @@ async function agentSettingsRoute(
   method: string,
   probes: HealthProbes,
 ): Promise<void> {
-  const view = async (): Promise<Record<string, unknown>> => {
-    const [video, diagram, claude] = await Promise.all([agentSettingView("video"), agentSettingView("diagram"), readClaudeDefaults()]);
-    return {
-      video,
-      diagram,
-      defaults: claude,
-      models: OFFERED_MODELS.filter((model) => ratesFor(model.id) !== null),
-      efforts: EFFORTS,
-    };
-  };
-  if (method === "GET") return send(response, 200, await view());
+  // The last answer at once, renewed behind it once old; a PUT below forgets
+  // it, so a save is never answered with the row it replaced.
+  const kept = probes.settingsView(agentSettingsView);
+  if (method === "GET") return send(response, 200, (await kept.read()).value);
   if (method !== "PUT") return fail(response, 405, `${method} is not a thing /api/settings/agent does`);
   let body: Record<string, unknown>;
   try {
@@ -1699,12 +1734,13 @@ async function agentSettingsRoute(
   // Health's copy of the settings is now wrong, whether or not the write took:
   // its next read asks again rather than reporting the row this replaced.
   probes.agent.forget();
+  kept.forget();
   if (!written.ok) {
     return fail(response, written.offline ? 503 : 502, `the setting could not be stored: ${written.error ?? "no reason given"}`, {
       reason: written.offline ? "catalog-unreachable" : "catalog",
     });
   }
-  return send(response, 200, await view());
+  return send(response, 200, await kept.fresh());
 }
 
 /**
@@ -1713,8 +1749,9 @@ async function agentSettingsRoute(
  * which the web app's `/api/assets/{id}/poster` takes, or null when no poster
  * was stored. manimkc renders are the library's, not the studio grid's.
  */
-async function videosRoute(response: ServerResponse): Promise<void> {
-  const listed = await videoList();
+async function videosRoute(response: ServerResponse, listings?: Listings): Promise<void> {
+  const kept = listings === undefined ? null : await readListing(listings.videos, (result) => !result.ok);
+  const listed = kept?.value ?? (await videoList());
   if (!listed.ok) {
     return fail(response, listed.offline ? 503 : 502, `the video list could not be read: ${listed.error ?? "no reason given"}`, {
       reason: listed.offline ? "catalog-unreachable" : "catalog",
@@ -1735,7 +1772,11 @@ async function videosRoute(response: ServerResponse): Promise<void> {
       revision: typeof video.revision === "number" ? video.revision : null,
       updated: typeof video.updatedAt === "string" ? video.updatedAt : null,
     }));
-  return send(response, 200, { videos, note: `${videos.length} studio video${videos.length === 1 ? "" : "s"}` });
+  return send(response, 200, {
+    videos,
+    note: `${videos.length} studio video${videos.length === 1 ? "" : "s"}`,
+    ...(kept === null ? {} : { cache: kept.cache }),
+  });
 }
 
 /** One probe's age, as health reports it. */

@@ -146,7 +146,7 @@ function viewOf(summary: Summary): DiagramView {
  * How long one read of the list answers the thumbnails. A grid asks for every
  * tile's SVG key at once; without this, each tile would start its own
  * `catalog diagram list` subprocess and database query for the same rows.
- * The screen's own list is read fresh every time.
+ * The screen's own list is kept apart, by `listings.ts`.
  */
 const THUMBNAIL_REUSE_MS = 2_000;
 let recent: { at: number; read: ReturnType<typeof summaries> } | null = null;
