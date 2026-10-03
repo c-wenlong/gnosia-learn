@@ -3,6 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,6 +11,9 @@ import {
   type ReactNode,
 } from "react";
 
+import type { StudioAgentPreference } from "@self-learn/schema/shared";
+
+import { loadStudioSettings, type StudioSettingsData } from "@/app/(app)/studio/actions";
 import { DiagramPanelBody, type JobRow } from "@/components/studio/DiagramInspector";
 import { DraftPanel } from "@/components/studio/DraftPanel";
 import { JobPanel } from "@/components/studio/JobPanel";
@@ -17,6 +21,8 @@ import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { HostContext } from "@/components/studio/panel-host";
 import { VerbNotice } from "@/components/studio/StudioChrome";
 import { DialogHeader, StudioDialog } from "@/components/studio/StudioDialog";
+import { StudioSettings } from "@/components/studio/StudioSettings";
+import type { AgentKind } from "@/lib/studio-agent-settings";
 import {
   browserPanelMove,
   browserViewMove,
@@ -44,10 +50,12 @@ import {
  * or `?sel=` comes straight back here, and Back and Forward move between them.
  * A link that opens one goes through `PanelLink`, which asks `navigate` first.
  *
- * The settings and an Extend press are still drawn by the server and handed
- * in as `panel`, shown only while the address bar names the panel it was
- * drawn for (`panelKey`), so a panel opened over one, or closed over the URL
- * it was drawn for, cannot leave it behind.
+ * The settings are drawn here too: the dialog opens at once and asks for its
+ * two rows through `loadStudioSettings`, once per visit, and keeps them, with
+ * each save folded in, for the next time it opens. An Extend press is still
+ * drawn by the server and handed in as `panel`, shown only while the address
+ * bar names the panel it was drawn for (`panelKey`), so a panel opened over
+ * one, or closed over the URL it was drawn for, cannot leave it behind.
  *
  * The plus card opens the dialog at once, before the runner has made the
  * draft, so the press answers in a frame rather than when the post returns.
@@ -162,7 +170,36 @@ export function PanelHost({
   // conversation is here, or Back took the person somewhere else.
   if (opening !== null && view.draft !== opening.from) setOpening(null);
 
-  const controls = useMemo(() => ({ begin, settle, navigate, path }), [begin, settle, navigate, path]);
+  /** The settings rows once read, and whether the last read failed. */
+  const [settings, setSettings] = useState<StudioSettingsData | null>(null);
+  const [settingsFailed, setSettingsFailed] = useState(false);
+  const settingsRead = useRef<Promise<void> | null>(null);
+  const warmSettings = useCallback(() => {
+    if (settingsRead.current !== null) return;
+    setSettingsFailed(false);
+    settingsRead.current = loadStudioSettings()
+      .then(
+        // Rows read with the catalog down are the defaults: a later read replaces them.
+        (data) => setSettings((held) => (held?.reachable ? held : data)),
+        () => setSettingsFailed(true),
+      )
+      .finally(() => {
+        settingsRead.current = null;
+      });
+  }, []);
+  const settingsSaved = useCallback((kind: AgentKind, value: StudioAgentPreference) => {
+    setSettings((held) => held && { ...held, rows: held.rows.map((row) => (row.kind === kind ? { ...row, value } : row)) });
+  }, []);
+  const settingsOpen = view.settings && view.shot === null;
+  useEffect(() => {
+    // Read once a visit, and again on each opening while the last read had
+    // no catalog behind it, so the panel does not keep offering the defaults.
+    if (settingsOpen && (settings === null || !settings.reachable)) warmSettings();
+    // Only an opening asks: `settings` changing while open must not read again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen, warmSettings]);
+
+  const controls = useMemo(() => ({ begin, settle, navigate, warmSettings, path }), [begin, settle, navigate, warmSettings, path]);
   const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
 
   // The page's order: a picture closes every panel, then the settings, a
@@ -171,7 +208,25 @@ export function PanelHost({
   if (view.shot !== null) {
     dialog = null;
   } else if (view.settings) {
-    dialog = panelSignature(raw) === panelKey ? panel : null;
+    dialog = (
+      <StudioDialog key="settings" closeHref={closeHref} navigate={pushUrl} label="Settings" compact>
+        <DialogHeader title="Settings" />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {settings !== null ? (
+            <StudioSettings key={settings.reachable ? "read" : "defaults"} reachable={settings.reachable} rows={settings.rows} onSaved={settingsSaved} />
+          ) : settingsFailed ? (
+            <div role="alert" className="flex flex-col items-start gap-3 p-5 text-[14px] text-text2">
+              <p>The settings could not be read: the studio did not answer.</p>
+              <button type="button" onClick={warmSettings} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+                Try again
+              </button>
+            </div>
+          ) : (
+            <SettingsLoading />
+          )}
+        </div>
+      </StudioDialog>
+    );
   } else if (view.draft !== null) {
     dialog = (
       // The key a server-drawn Extend press uses too, so the dialog stays
@@ -236,5 +291,29 @@ export function PanelHost({
       {children}
       {dialog}
     </HostContext.Provider>
+  );
+}
+
+/** The two rows' shape while they are read, so the dialog does not jump when they land. */
+function SettingsLoading() {
+  return (
+    <div className="flex flex-col gap-5 p-5" aria-busy="true">
+      <p role="status" className="sr-only">
+        Reading the settings
+      </p>
+      {[0, 1].map((at) => (
+        <div key={at} className="flex flex-col gap-2.5">
+          <div className="mb-2.5 h-4 w-20 rounded bg-surface2" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[0, 1].map((menu) => (
+              <div key={menu} className="flex flex-col gap-1.5">
+                <div className="h-3 w-12 rounded bg-surface2" />
+                <div className="h-10 rounded-lg bg-surface2 animate-pulse motion-reduce:animate-none" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

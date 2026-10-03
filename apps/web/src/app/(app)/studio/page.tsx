@@ -5,25 +5,14 @@ import { PanelHost } from "@/components/studio/PanelHost";
 import { DraftsList } from "@/components/studio/DraftsList";
 import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobStrip } from "@/components/studio/JobStrip";
-import { DialogHeader, StudioDialog } from "@/components/studio/StudioDialog";
+import { RenewLists } from "@/components/studio/RenewLists";
+import { StudioDialog } from "@/components/studio/StudioDialog";
 import { ShotView } from "@/components/studio/ShotView";
-import { StudioSettings } from "@/components/studio/StudioSettings";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import { Notice, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
 import { StudioGrid, StudioToolbar, WhileOutcome } from "@/components/studio/StudioBrowse";
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
-import {
-  AGENT_ROWS,
-  agentDefaults,
-  effortOptions,
-  modelOptions,
-  rowPriced,
-  rowWarning,
-  runnerSettings,
-  storedAgent,
-} from "@/lib/studio-agent-settings";
-import { readStudioAgents } from "@/lib/studio-agents";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
 import { diagramAvailability, videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
@@ -78,8 +67,6 @@ interface Health {
   dailyCap?: unknown;
   /** The video doctor (docs/STUDIO-VIDEOS.md, "API"): whether Video can be tagged and made. */
   video?: unknown;
-  /** The model and effort a job started now would get, per kind (D53). */
-  agent?: unknown;
   /** Whether a diagram job can be queued at all (#206). */
   diagramAgent?: unknown;
 }
@@ -186,6 +173,9 @@ export default async function StudioPage({
   }
 
   const listing = listed.data;
+  // A list the runner served from memory while it reads a newer one: the page
+  // asks again once that has landed (`RenewLists`).
+  const renewing = [listed.data, vocabulary.ok ? vocabulary.data : null, videoList.ok ? videoList.data : null].some(renewingList);
   const allVideos = videoList.ok ? readVideos(videoList.data) : [];
   // Chips count both kinds, so a topic with only videos can be picked too.
   const chips = topicChips([...listing.diagrams, ...allVideos], topicTitles, topicDomains);
@@ -197,15 +187,6 @@ export default async function StudioPage({
   // route carrying the brief and the comparison, and the full-width view needs
   // both to say why the other side is not there rather than linking to a 404.
   const shown = view.shot !== null && view.job !== null ? await openShot(view.job) : null;
-  // The settings panel's two rows, read only when it is open.
-  const [agents, runnerAgents] = view.settings
-    ? await Promise.all([readStudioAgents(), studioApi<unknown>("/api/settings/agent")])
-    : [null, null];
-  // The runner's menu (the models it can price) and its defaults when it
-  // answers (#207), else health's defaults and the built-in list.
-  const agentRows = runnerAgents?.ok ? runnerAgents.data : null;
-  const fromRunner = runnerSettings(agentRows);
-  const defaults = fromRunner.defaults ?? agentDefaults(health.data.agent);
   const videoState = videoAvailability(health.data.video);
   const diagramState = diagramAvailability(health.data.diagramAgent);
 
@@ -224,29 +205,9 @@ export default async function StudioPage({
   const dialog = view.shot !== null ? null : panelFor();
 
   function panelFor() {
-    if (view.settings && agents !== null) {
-      return (
-        <StudioDialog key="settings" closeHref={closeHref} label="Settings" compact>
-          <DialogHeader title="Settings" />
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <StudioSettings
-              reachable={agents.reachable}
-              rows={AGENT_ROWS.map((row) => ({
-                ...row,
-                value: agents.values[row.kind],
-                fallback: storedAgent(row.kind, null),
-                models: modelOptions(agents.values[row.kind].model, defaults, fromRunner.models ?? undefined, rowPriced(agentRows, row.kind)),
-                efforts: effortOptions(defaults),
-                warning: rowWarning(agentRows, row.kind),
-              }))}
-            />
-          </div>
-        </StudioDialog>
-      );
-    }
-    // A conversation, a job and a tile are `PanelHost`'s, which opens and
-    // closes them in the browser without coming back here.
-    if (view.draft !== null || view.job !== null) return null;
+    // The settings, a conversation, a job and a tile are `PanelHost`'s, which
+    // opens and closes them in the browser without coming back here.
+    if (view.settings || view.draft !== null || view.job !== null) return null;
     if (view.extend !== null) {
       const title = titleOf(titles, view.extend) ?? view.extend;
       return (
@@ -279,6 +240,7 @@ export default async function StudioPage({
         </StudioStrip>
 
         <JobStrip path={path} stream={view.stream} />
+        {renewing && <RenewLists />}
 
         {/* Said once: a view change in the browser drops the outcome from the URL. */}
         {outcome !== null && view.selected === null && (
@@ -361,4 +323,11 @@ export default async function StudioPage({
       </PanelHost>
     </div>
   );
+}
+
+/** Whether a runner list answer says a newer read of it is running (`cache.renewing`). */
+function renewingList(answer: unknown): boolean {
+  if (typeof answer !== "object" || answer === null) return false;
+  const cache = (answer as { cache?: unknown }).cache;
+  return typeof cache === "object" && cache !== null && (cache as { renewing?: unknown }).renewing === true;
 }

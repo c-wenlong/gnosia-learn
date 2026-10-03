@@ -23,6 +23,8 @@ export interface HostControls {
    * has moved the URL in the browser.
    */
   path: string;
+  /** Start reading the settings panel's rows, so it opens with them: on a hover over its button. */
+  warmSettings: () => void;
 }
 
 export const HostContext = createContext<HostControls | null>(null);

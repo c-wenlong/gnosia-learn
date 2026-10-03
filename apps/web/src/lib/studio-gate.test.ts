@@ -118,6 +118,7 @@ describe("every exported server action", () => {
       "commitDiagram",
       "exportSvg",
       "inspectDiagram",
+      "loadStudioSettings",
       "openConceptConversation",
       "restartMirror",
       "saveStudioAgent",
