@@ -255,7 +255,7 @@ export default async function LibraryPage({
             sort={sortMenu}
             layout={<ViewToggle filters={filters} view={view} />}
             search={
-              <Form action="/library" role="search" className="min-w-0 flex-1 md:w-[260px] md:flex-none">
+              <Form action="/library" role="search" className="min-w-[140px] flex-1 md:max-w-[260px]">
                 {/* The other filters ride along, so a search narrows the view the
                     reader is in rather than resetting it. Only the ones that are set,
                     so an unfiltered search is a clean `?q=`. */}

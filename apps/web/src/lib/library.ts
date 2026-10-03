@@ -233,6 +233,20 @@ export function libraryHref(filters: LibraryFilters): string {
   return query === "" ? "/library" : `/library?${query}`;
 }
 
+/** A URL parameter a library menu sets. */
+export type LibraryParam = "kind" | "course" | "topic" | "sort";
+
+/**
+ * The filters after one menu pick, every other parameter kept: what the
+ * Library's toolbar pushes the `libraryHref` of. `""` is a menu's "All" and
+ * clears that filter; the sort takes `parseSort`, so its default is dropped
+ * from the URL like any other.
+ */
+export function withPick(filters: LibraryFilters, param: LibraryParam, value: string): LibraryFilters {
+  if (param === "sort") return { ...filters, sort: parseSort(value) };
+  return { ...filters, [param]: value === "" ? null : value };
+}
+
 /** `/library/<id>`, with the id percent-encoded so its colons and slashes survive. */
 export function assetHref(id: string): string {
   return `/library/${encodeURIComponent(id)}`;
