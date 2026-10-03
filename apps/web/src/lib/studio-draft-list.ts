@@ -1,15 +1,21 @@
 import { isDraftKind, type DraftKind, type DraftState, type DraftSummary } from "@/lib/studio-drafts";
 
 /**
- * The drafts list above the studio's grid (phase 3 of
- * docs/STUDIO-CHAT-FIRST.md): the conversations a person can pick up again.
+ * The studio's conversation history, down its sidebar (phase 3 of
+ * docs/STUDIO-CHAT-FIRST.md, and "Home and the full-screen conversation"
+ * there): every conversation a person can open again.
  *
  * Pure, so the judgements (which drafts are worth a row, what a row is
- * called, how its state reads) are tests rather than view code.
+ * called, how its state reads, which day it falls under) are tests rather
+ * than view code.
  */
 
-/** The states the list asks for: a conversation still talking, or holding a brief nobody drew. */
-export const LISTED_STATES: readonly DraftState[] = ["open", "briefed"];
+/**
+ * The states the list asks for: every conversation but one closed for good
+ * with Start over. A conversation whose diagram or video was made stays,
+ * since it is where a change to it is asked for.
+ */
+export const LISTED_STATES: readonly DraftState[] = ["open", "briefed", "drawing", "done"];
 
 /** How many drafts the list asks for. */
 export const LIST_LIMIT = 50;
@@ -22,8 +28,16 @@ export function listPath(): string {
   return `/api/drafts?state=${LISTED_STATES.join(",")}&nonEmpty=1&limit=${LIST_LIMIT}`;
 }
 
-/** How many rows show before "Show more". */
-export const LIST_ROWS = 4;
+/**
+ * Said on `window` when an open conversation's title, turns or state moved,
+ * so the sidebar reads the list again. `detail` is `{ draftId }`.
+ */
+export const DRAFT_CHANGED_EVENT = "studio:draft-changed";
+
+export function announceDraftChange(draftId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(DRAFT_CHANGED_EVENT, { detail: { draftId } }));
+}
 
 export interface DraftRow {
   draftId: string;
@@ -59,12 +73,11 @@ export function stateWords(state: DraftState, kinds: readonly DraftKind[] = []):
 /**
  * The rows, newest first.
  *
- * A draft in any other state is left out, whatever the runner sent, since
- * the list is for conversations that can still go somewhere. A draft nobody
- * has said anything in is left out by the runner (`nonEmpty=1`), not here:
- * pressing the plus card and closing the panel makes one, and filtering them
- * after the runner's limit would let a run of them push real rows off the
- * list.
+ * A draft in any other state is left out, whatever the runner sent: one
+ * closed with Start over is gone on purpose. A draft nobody has said anything
+ * in is left out by the runner (`nonEmpty=1`), not here: Start over and New
+ * conversation make one, and filtering them after the runner's limit would
+ * let a run of them push real rows off the list.
  */
 export function draftRows(
   drafts: readonly DraftSummary[],
@@ -101,4 +114,36 @@ export function draftRows(
         kinds,
       };
     });
+}
+
+/** A run of rows under one heading: the day they were last touched. */
+export interface HistoryGroup {
+  label: string;
+  rows: DraftRow[];
+}
+
+const GROUPS = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"] as const;
+
+/**
+ * The rows under day headings, as a chat app's history reads: Today,
+ * Yesterday, the previous 7 days, the previous 30, and Older, by the local
+ * calendar day of `updated` against `now`. Keeps the rows' order, so the
+ * groups come newest first; an empty group is left out.
+ */
+export function historyGroups(rows: readonly DraftRow[], now: Date): HistoryGroup[] {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const DAY = 86_400_000;
+  const groups = new Map<string, DraftRow[]>();
+  for (const row of rows) {
+    const at = new Date(row.updated);
+    const day = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+    // Calendar days, rounded: a day across a clock change is 23 or 25 hours.
+    const ago = Number.isNaN(day) ? Infinity : Math.round((today - day) / DAY);
+    const label = ago <= 0 ? GROUPS[0] : ago === 1 ? GROUPS[1] : ago <= 7 ? GROUPS[2] : ago <= 30 ? GROUPS[3] : GROUPS[4];
+    groups.set(label, [...(groups.get(label) ?? []), row]);
+  }
+  return GROUPS.flatMap((label) => {
+    const grouped = groups.get(label);
+    return grouped === undefined ? [] : [{ label, rows: grouped }];
+  });
 }

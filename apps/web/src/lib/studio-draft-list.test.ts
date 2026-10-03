@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DraftSummary } from "@/lib/studio-drafts";
 
-import { draftRows, listPath, stateWords } from "./studio-draft-list";
+import { draftRows, historyGroups, listPath, stateWords, type DraftRow } from "./studio-draft-list";
 
 /** The drafts list above the studio grid (phase 3): which rows, called what. */
 
@@ -23,17 +23,19 @@ function draft(patch: Partial<DraftSummary>): DraftSummary {
 }
 
 describe("draftRows", () => {
-  it("lists talking and briefed drafts, newest first", () => {
+  it("lists every conversation but a closed one, newest first", () => {
     const rows = draftRows([
       draft({ draftId: "old", updated: "2026-09-28T10:00:00.000Z", title: "Old" }),
       draft({ draftId: "new", updated: "2026-09-29T11:00:00.000Z", state: "briefed", title: "New" }),
-      draft({ draftId: "done", state: "done", title: "Done" }),
+      draft({ draftId: "done", updated: "2026-09-27T10:00:00.000Z", state: "done", title: "Done" }),
       draft({ draftId: "gone", state: "abandoned", title: "Gone" }),
-      draft({ draftId: "drawing", state: "drawing", title: "Drawing" }),
+      draft({ draftId: "drawing", updated: "2026-09-29T10:30:00.000Z", state: "drawing", title: "Drawing" }),
     ]);
-    expect(rows.map((row) => row.draftId)).toEqual(["new", "old"]);
+    expect(rows.map((row) => row.draftId)).toEqual(["new", "drawing", "old", "done"]);
     expect(rows[0]).toMatchObject({ state: "Ready to draw", briefed: true });
-    expect(rows[1]).toMatchObject({ state: "In conversation", briefed: false });
+    expect(rows[1]).toMatchObject({ state: "Drawing", briefed: false });
+    expect(rows[2]).toMatchObject({ state: "In conversation", briefed: false });
+    expect(rows[3]).toMatchObject({ state: "Done", briefed: false });
   });
 
   it("names a row by its title, else the first message, else what it extends", () => {
@@ -80,8 +82,8 @@ describe("a conversation opened from the concept tutor (docs/STUDIO-TUTOR-HANDOF
 });
 
 describe("listPath", () => {
-  it("asks the runner for talking and briefed drafts somebody said something in, filtered before the limit", () => {
-    expect(listPath()).toBe("/api/drafts?state=open,briefed&nonEmpty=1&limit=50");
+  it("asks the runner for every unclosed draft somebody said something in, filtered before the limit", () => {
+    expect(listPath()).toBe("/api/drafts?state=open,briefed,drawing,done&nonEmpty=1&limit=50");
   });
 });
 
@@ -118,3 +120,46 @@ describe("kinds (docs/STUDIO-MENTIONS.md)", () => {
   });
 });
 
+
+describe("historyGroups", () => {
+  const row = (draftId: string, updated: string): DraftRow => ({
+    draftId,
+    heading: draftId,
+    quoted: false,
+    state: "In conversation",
+    briefed: false,
+    updated,
+    kinds: [],
+  });
+  // Local times, so the test holds in any time zone.
+  const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h).toISOString();
+  const now = new Date(2026, 9, 4, 9);
+
+  it("files rows under the day they were last touched, in order, leaving out empty groups", () => {
+    const groups = historyGroups(
+      [
+        row("early-today", at(2026, 10, 4, 0)),
+        row("yesterday-late", at(2026, 10, 3, 23)),
+        row("week", at(2026, 9, 27)),
+        row("month", at(2026, 9, 10)),
+        row("old", at(2026, 8, 1)),
+      ],
+      now,
+    );
+    expect(groups.map((group) => [group.label, group.rows.map((entry) => entry.draftId)])).toEqual([
+      ["Today", ["early-today"]],
+      ["Yesterday", ["yesterday-late"]],
+      ["Previous 7 days", ["week"]],
+      ["Previous 30 days", ["month"]],
+      ["Older", ["old"]],
+    ]);
+  });
+
+  it("counts a row from a clock running ahead as today, and an unreadable time as older", () => {
+    const groups = historyGroups([row("ahead", at(2026, 10, 5)), row("bad", "not a time")], now);
+    expect(groups.map((group) => [group.label, group.rows.map((entry) => entry.draftId)])).toEqual([
+      ["Today", ["ahead"]],
+      ["Older", ["bad"]],
+    ]);
+  });
+});

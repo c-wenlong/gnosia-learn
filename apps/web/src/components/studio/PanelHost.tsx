@@ -14,9 +14,16 @@ import { DiagramPanelBody, type JobRow } from "@/components/studio/DiagramInspec
 import { DraftPanel } from "@/components/studio/DraftPanel";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { HostContext } from "@/components/studio/panel-host";
+import { HostContext, NEW_CHAT_EVENT } from "@/components/studio/panel-host";
+import { Sentence } from "@/components/studio/Sentence";
 import { VerbNotice } from "@/components/studio/StudioChrome";
-import { DialogHeader, StudioDialog } from "@/components/studio/StudioDialog";
+import { DialogHeader, StudioDialog, StudioPane } from "@/components/studio/StudioDialog";
+import { SidebarToggle, StudioSidebar } from "@/components/studio/StudioSidebar";
+import { PANE_GUTTER } from "@/components/studio/pane-context";
+import { cx } from "@/components/ui/classes";
+import type { MentionValue } from "@/components/ui/mention-text";
+import { UserMessage } from "@/components/ui/Message";
+import type { DraftKind, DraftSummary } from "@/lib/studio-drafts";
 import {
   browserPanelMove,
   displayTitle,
@@ -30,8 +37,17 @@ import {
 } from "@/lib/studio-view";
 
 /**
- * The panels on `/studio` that open and close in the browser: a
- * conversation, a job, and a tile's panel.
+ * The studio's frame, and the panels on `/studio` that open and close in
+ * the browser: a conversation, a job, and a tile's panel.
+ *
+ * The frame is the sidebar of conversations beside one of two things
+ * (docs/STUDIO-CHAT-FIRST.md, "Home and the full-screen conversation"):
+ * the home view the page drew (`children`: the composer, then the diagrams
+ * and videos), or, with `?draft=`, that conversation full screen
+ * (`StudioPane`). The home view stays mounted under a conversation, hidden,
+ * so going back to it keeps its scroll and whatever was typed in it. A job
+ * on its own, a tile, the settings and an Extend press are still dialogs
+ * over the home view.
  *
  * Each of them used to be a router push, and so was closing it: every one
  * rendered the whole page on the server again, which reads the diagrams, the
@@ -48,11 +64,13 @@ import {
  * drawn for (`panelKey`), so a panel opened over one, or closed over the URL
  * it was drawn for, cannot leave it behind.
  *
- * The plus card opens the dialog at once, before the runner has made the
- * draft, so the press answers in a frame rather than when the post returns.
+ * The home composer opens the conversation at once, with the person's words
+ * in it, before the runner has made the draft, so Send answers in a frame
+ * rather than when the post returns.
  */
 
 type ConversationProps = Omit<ComponentProps<typeof DraftPanel>, "draftId" | "jobId" | "path">;
+type Value = MentionValue<DraftKind>;
 
 /**
  * A diagram's job history: the rows the page read, brought up to date with
@@ -81,9 +99,12 @@ export function PanelHost({
   panelKey,
   diagrams,
   jobs,
+  drafts,
   children,
   ...conversation
 }: ConversationProps & {
+  /** The conversations the page read for the sidebar, or null when the runner did not answer. */
+  drafts: DraftSummary[] | null;
   /** The dialog the server drew for its URL, or null. */
   panel: ReactNode;
   /** `panelSignature` of the URL the server drew `panel` for. */
@@ -108,39 +129,45 @@ export function PanelHost({
    * The attempt the dialog is open for before its draft exists, and the
    * draft the address bar named at the press, or null.
    */
-  const [opening, setOpening] = useState<{ token: number; from: string | null } | null>(null);
+  const [opening, setOpening] = useState<{ token: number; from: string | null; first: Value | null } | null>(null);
   const attempts = useRef(0);
   /** The attempt still wanted, and the draft the address bar named at its press. */
   const current = useRef<{ token: number; from: string | null } | null>(null);
+  /** The sidebar's drawer, below 768px. */
+  const [drawer, setDrawer] = useState(false);
 
-  const begin = useCallback(() => {
-    attempts.current += 1;
-    const attempt = { token: attempts.current, from: view.draft };
-    current.current = attempt;
-    setOpening(attempt);
-    return attempt.token;
-  }, [view.draft]);
+  const begin = useCallback(
+    (first: Value | null) => {
+      attempts.current += 1;
+      const attempt = { token: attempts.current, from: view.draft };
+      current.current = attempt;
+      setOpening({ ...attempt, first });
+      return attempt.token;
+    },
+    [view.draft],
+  );
 
   const settle = useCallback((token: number, href: string | null) => {
-    // The person moved on while the draft was being made: they closed the
-    // wait, or closed the conversation Start over was pressed in, or went
-    // Back. The draft is an empty one the list does not show.
+    // The person moved on while the draft was being made: they pressed New
+    // chat or another conversation, or closed the one Start over was pressed
+    // in, or went Back. The draft is an empty one the list does not show.
     const attempt = current.current;
-    if (attempt === null || attempt.token !== token) return;
+    if (attempt === null || attempt.token !== token) return false;
     if (new URLSearchParams(window.location.search).get("draft") !== attempt.from) {
       current.current = null;
       setOpening(null);
-      return;
+      return false;
     }
     if (href === null) {
       current.current = null;
       setOpening(null);
-      return;
+      return false;
     }
-    // The dialog stays open until the address bar has the draft, below, so
+    // The placeholder stays until the address bar has the draft, below, so
     // there is no frame with neither the placeholder nor the conversation.
     current.current = null;
     pushUrl(href);
+    return true;
   }, []);
 
   const navigate = useCallback((href: string) => {
@@ -160,32 +187,54 @@ export function PanelHost({
   // conversation is here, or Back took the person somewhere else.
   if (opening !== null && view.draft !== opening.from) setOpening(null);
 
-  const controls = useMemo(() => ({ begin, settle, navigate }), [begin, settle, navigate]);
+  const openSidebar = useCallback(() => setDrawer(true), []);
+  const closeSidebar = useCallback(() => setDrawer(false), []);
+  const controls = useMemo(() => ({ begin, settle, navigate, openSidebar }), [begin, settle, navigate, openSidebar]);
   const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
 
+  // New chat is the home view: its composer is where a conversation starts.
+  // Nothing is made until something is sent, so pressing it twice, or
+  // pressing it and leaving, costs nothing.
+  const newChat = useCallback(() => {
+    cancel();
+    closeSidebar();
+    if (path !== closeHref) pushUrl(closeHref);
+    // After the home view is shown again, which this render does.
+    requestAnimationFrame(() => window.dispatchEvent(new Event(NEW_CHAT_EVENT)));
+  }, [cancel, closeSidebar, path, closeHref]);
+
+  const toggle = <SidebarToggle onOpen={openSidebar} />;
+
   // The page's order: a picture closes every panel, then the settings, a
-  // conversation, a job, an Extend press, and a tile last.
+  // conversation, a job, an Extend press, and a tile last. A conversation is
+  // the frame's main view rather than a dialog.
   let dialog: ReactNode = null;
+  let chat: ReactNode = null;
   if (view.shot !== null) {
     dialog = null;
   } else if (view.settings) {
     dialog = panelSignature(raw) === panelKey ? panel : null;
   } else if (view.draft !== null) {
-    dialog = (
-      // The key a server-drawn Extend press uses too, so the dialog stays
-      // open while one becomes the other.
-      <StudioDialog key="conversation" closeHref={closeHref} navigate={pushUrl} label="Conversation" tall>
+    chat = (
+      <StudioPane key="conversation" closeHref={closeHref} navigate={pushUrl} label="Conversation" leading={toggle}>
         <DraftPanel key={view.draft} draftId={view.draft} jobId={view.job} path={path} {...conversation} />
-      </StudioDialog>
+      </StudioPane>
     );
   } else if (opening !== null) {
-    dialog = (
-      <StudioDialog key="conversation" closeHref={closeHref} navigate={cancel} label="Conversation" tall>
+    chat = (
+      <StudioPane key="conversation" closeHref={closeHref} navigate={cancel} label="Conversation" leading={toggle}>
         <DialogHeader title="New conversation" />
-        <p role="status" className="p-5 text-[14px] text-text3">
-          Opening a conversation…
-        </p>
-      </StudioDialog>
+        <div role="log" aria-busy aria-label="Conversation" className={cx("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto py-5", PANE_GUTTER)}>
+          {opening.first !== null && (
+            <UserMessage>
+              <Sentence value={opening.first} />
+            </UserMessage>
+          )}
+          <p role="status" className="text-center text-[13px] text-text3">
+            Opening the conversation…
+          </p>
+        </div>
+      </StudioPane>
     );
   } else if (view.job !== null) {
     const jobId = view.job;
@@ -231,7 +280,24 @@ export function PanelHost({
 
   return (
     <HostContext.Provider value={controls}>
-      {children}
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <StudioSidebar
+          initial={drafts}
+          path={path}
+          titles={conversation.titles}
+          active={chat === null ? null : view.draft}
+          pending={view.draft === null && opening !== null ? (opening.first?.text.trim() || "New conversation") : null}
+          open={drawer}
+          onClose={closeSidebar}
+          onNewChat={newChat}
+        />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {chat}
+          <div hidden={chat !== null} className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {children}
+          </div>
+        </div>
+      </div>
       {dialog}
     </HostContext.Provider>
   );
