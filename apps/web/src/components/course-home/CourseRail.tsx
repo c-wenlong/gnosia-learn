@@ -82,16 +82,15 @@ export function CourseRail({
       )}
 
       <RailCard title="About this course">
-        <p className="text-[14px] leading-5 text-text2">
-          {[`${course.credits} MC`, course.track].filter(Boolean).join(" · ")}
-        </p>
+        {/* The course file's `notes` is its summary: what the course covers. */}
+        {course.notes && <p className="text-[14px] leading-5 text-text">{course.notes}</p>}
+        {course.track && <p className="text-[14px] leading-5 text-text2">{course.track}</p>}
         {course.prereq && (
           <div>
             <p className={LABEL}>Prerequisites</p>
             <p className="mt-1 text-[14px] leading-5 text-text">{course.prereq}</p>
           </div>
         )}
-        {course.notes && <p className="text-[14px] leading-5 text-text">{course.notes}</p>}
         {course.capstone && (
           <div>
             <p className={LABEL}>Capstone</p>
