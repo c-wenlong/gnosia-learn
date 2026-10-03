@@ -128,6 +128,26 @@ export interface VideoGateChecks {
    * gate's own per-scene check runs, which is manimkc's.
    */
   looked?(input: LookInput): LookResult;
+  /**
+   * For the gate's own step 10: whether a scene's last look, of an older
+   * source, still shows that scene in the source the gate checked (manimkc's,
+   * whose manual has the agent preview only the scenes it changed). Absent,
+   * or false, a look counts only when it was of the checked source.
+   */
+  sceneUnchanged?(input: SceneUnchangedInput): Promise<boolean>;
+  /** Called by the runner as each tool result arrives, so the backend can keep what its look calls rendered from (manimkc's previewed files). */
+  keepPreviewed?(paths: VideoPaths, calls: readonly WrapperCall[]): Promise<void>;
+}
+
+/** What `sceneUnchanged` is asked about one scene. */
+export interface SceneUnchangedInput {
+  paths: VideoPaths;
+  scene: string;
+  classes: readonly string[];
+  /** The source the scene's last look rendered from, as the wrapper recorded it (`sceneSha256`); null when it recorded none. */
+  renderedFrom: string | null;
+  /** The source the gate checked. Its copy is in `candidate/source/` by step 10. */
+  sourceHash: string;
 }
 
 /** What a tool's own step 10 is given: the job, its logs, the checked source and the build the gate copied. */
@@ -375,7 +395,7 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
   record("poster", true, `${copies["poster.jpg"]!.bytes} bytes`);
   await writeFile(paths.copies, `${JSON.stringify({ files: copies, durationSeconds }, null, 1)}\n`, "utf8");
 
-  /* 10. Looked: every scene's latest sheet was Read after the render that made it. */
+  /* 10. Looked: every scene's latest sheet, of the checked source, was Read after the render that made it. */
   if (checks.looked !== undefined) {
     const own = checks.looked({ paths, classes: input.classes, calls: input.calls, reads: input.reads, sourceHash, build });
     looked = own.looked;
@@ -387,16 +407,31 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
     record("looked", true, "every sheet read after its last render");
     return finish();
   }
+  // The sheet on disk is the one the scene's last render wrote, so that is
+  // the look that counts, read after it ended. A later call wrote no sheet
+  // unless the wrapper saw it written (`rendered`), and one whose render step
+  // never ran (a refused call, a narration that failed) wrote none whatever
+  // `rendered` says: it is not the scene's render, and replaced nothing. The
+  // render must also be of the source the gate checked, or of one that
+  // differs from it only where it cannot change this scene.
   looked = {};
   const lookProblems: string[] = [];
   for (const scene of input.classes) {
-    const render = [...input.calls].reverse().find((call) => isLook(call) && (call.rendered ?? []).includes(scene));
+    const render = [...input.calls].reverse().find((call) => isLook(call) && (call.rendered ?? []).includes(scene) && renderRan(call));
     const sheet = checks.sheet(paths, scene);
     const renderedAt = render?.endedAt ?? null;
+    const current =
+      render !== undefined &&
+      (render.sceneSha256 === sourceHash ||
+        (checks.sceneUnchanged !== undefined &&
+          (await checks.sceneUnchanged({ paths, scene, classes: input.classes, renderedFrom: render.sceneSha256 ?? null, sourceHash }))));
     const read =
-      renderedAt === null ? undefined : [...input.reads].reverse().find((entry) => entry.path === sheet && Date.parse(entry.at) >= Date.parse(renderedAt));
+      renderedAt === null || !current
+        ? undefined
+        : [...input.reads].reverse().find((entry) => entry.path === sheet && Date.parse(entry.at) >= Date.parse(renderedAt));
     looked[scene] = { renderedAt, readAt: read?.at ?? null };
     if (renderedAt === null) lookProblems.push(`${scene} was never previewed, so it has no sheet to look at`);
+    else if (!current) lookProblems.push(`the scene file changed after ${scene}'s last preview, at ${renderedAt}, in a way that can change ${scene}: preview it again and Read its sheet, ${sheet}`);
     else if (read === undefined) lookProblems.push(`look at the sheet for ${scene}, rendered at ${renderedAt}: ${sheet}`);
   }
   if (lookProblems.length > 0) {
@@ -406,6 +441,11 @@ export async function runVideoGate(input: VideoGateInput): Promise<VideoGateResu
   }
   record("looked", true, `every sheet read after its last render`);
   return finish();
+}
+
+/** Whether a look call's render step ran. A record with no `steps` (an older wrapper's) is taken at its word. */
+function renderRan(call: WrapperCall): boolean {
+  return call.steps === undefined || call.steps.some((step) => step.step === "render");
 }
 
 async function readJson(file: string): Promise<unknown> {
