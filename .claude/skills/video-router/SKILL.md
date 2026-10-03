@@ -17,12 +17,10 @@ The same order as the page: hard constraints first, so a later step never
 undoes an earlier one.
 
 1. **Unattended?** If the video has to come out of the studio with no one at
-   a terminal, only manimkc can make it, and only on macOS (the studio's
-   video kind is off on Linux). If the user also named another tool, or the
-   video belongs to a series made with another tool, say the two requests
-   conflict and ask which gives; do not pick silently. On Linux, say it
-   cannot be made unattended there. Otherwise the answer is **manimkc**:
-   skip to step 6, and let no later step change it.
+   a terminal, any of the three can make it, and only on macOS (the studio's
+   video kind is off on Linux). On Linux, say it cannot be made unattended
+   there, and stop. Otherwise carry on: the steps below choose among the
+   three as they would at a terminal.
 2. **The user named a tool** ("use Revideo", "make it in Remotion")? Use it.
    Skip to step 6.
 3. **Series first.** If the video is a week or a part of a series that

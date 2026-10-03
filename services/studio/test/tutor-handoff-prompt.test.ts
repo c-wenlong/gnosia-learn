@@ -59,16 +59,17 @@ describe("a draft without a concept", () => {
     // Hashed on main at 0d9cc1e, before any of this: new, extend, change.
     // The two with the video kind were re-hashed when D71 of
     // STUDIO-VIDEO-TOOLS.md added the tool to the video section and the
-    // TOOLS block, and again when phase 2c put revideokc in the studio (its
-    // TOOLS line and the matrix's "Studio can make it unattended" row); the
-    // diagram-only one never changed.
+    // TOOLS block, again when phase 2c put revideokc in the studio (its
+    // TOOLS line and the matrix's "Studio can make it unattended" row), and
+    // again when phase 3 did the same for remotionkc; the diagram-only one
+    // never changed.
     const hash = (input: CombinedPromptInput): string => createHash("sha256").update(buildCombinedSystemPrompt(input)).digest("hex");
-    expect(hash(base)).toBe("1930cd03379e5f8505eebb14cbe1267b8260816e1ef9ba1b4c59b9678c29cabe");
+    expect(hash(base)).toBe("4f7400f0e73345b56c8fb49c3a4db88ea38bef98bad3041d684563a96684db9c");
     expect(hash({ kinds: ["diagram"], vocabulary: vocabulary.entries, corpus: [], extending: "slug: a" })).toBe(
       "d0fc1b3aec58fadb15a05657f8a92213843ead3d2c50db4a17e25da4cf2fc1f9",
     );
     expect(hash({ kinds: ["diagram", "video"], vocabulary: vocabulary.entries, corpus: [], videos: null, changing: "slug: b" })).toBe(
-      "46d30662b97a2be3e16e60a48b07a40c005274567cfad5b993d5520563584528",
+      "f7ed9c29fff6a68d69ab8c695ec78a2ed6610e14136d3d5b6e6ff9fe0170c495",
     );
     expect(buildCombinedSystemPrompt({ ...base, concept: null, tutor: null })).toBe(buildCombinedSystemPrompt(base));
     expect(combinedPrompt(["diagram", "video"])).not.toContain(CONCEPT_PARAGRAPH);
