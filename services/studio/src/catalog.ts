@@ -121,6 +121,26 @@ async function npmCli(script: "catalog" | "learn", args: string[], timeoutMs: nu
   }
 }
 
+/**
+ * Told after every write that changes what the grid lists: a diagram, a
+ * video or a topic landing. The runner keeps its lists (`listings.ts`) and
+ * drops them here, so the next page after a write this studio made reads the
+ * catalog again rather than the list from before it. A listener is told
+ * whether the write took or not: a refused write costs one fresh read.
+ */
+const writeListeners = new Set<() => void>();
+
+export function onCatalogWrite(listener: () => void): () => void {
+  writeListeners.add(listener);
+  return () => writeListeners.delete(listener);
+}
+
+function wrote(result: Promise<CatalogResult>): Promise<CatalogResult> {
+  return result.finally(() => {
+    for (const listener of writeListeners) listener();
+  });
+}
+
 export interface SessionStartInput {
   id: string;
   title: string;
@@ -228,7 +248,7 @@ export function jobFinish(input: JobFinishInput): Promise<CatalogResult> {
  * the job answering Reindex, which runs this again.
  */
 export function jobAccept(jobId: string): Promise<CatalogResult> {
-  return catalog(["job", "accept", "--job", jobId, ...owned()]);
+  return wrote(catalog(["job", "accept", "--job", jobId, ...owned()]));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -265,7 +285,7 @@ export function diagramCheckout(slug: string, dir: string): Promise<CatalogResul
 
 /** `catalog diagram commit <slug>`: the checkout into the database, refused when its base moved. */
 export function diagramCommit(slug: string, dir: string, reason: string): Promise<CatalogResult> {
-  return catalog(["diagram", "commit", slug, "--dir", dir, "--reason", reason, ...owned()]);
+  return wrote(catalog(["diagram", "commit", slug, "--dir", dir, "--reason", reason, ...owned()]));
 }
 
 export interface DiagramPutInput {
@@ -284,7 +304,7 @@ export interface DiagramPutInput {
  * the catalog owns, after the SVG is safely in the blob store.
  */
 export function diagramPut(input: DiagramPutInput): Promise<CatalogResult> {
-  return catalog([
+  return wrote(catalog([
     "diagram",
     "put",
     "--slug",
@@ -298,7 +318,7 @@ export function diagramPut(input: DiagramPutInput): Promise<CatalogResult> {
     "--reason",
     input.reason,
     ...owned(),
-  ]);
+  ]));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -367,10 +387,10 @@ export function topicAddDryRun(entry: TopicProposal): Promise<CatalogResult> {
  * then could not name.
  */
 export function topicAdd(entry: TopicProposal, reason: string): Promise<CatalogResult> {
-  return catalog(
+  return wrote(catalog(
     ["topic", "add", ...topicFlags(entry), `--reason=${reason}`, `--author=${studioOwner()}`, ...owned()],
     60_000,
-  );
+  ));
 }
 
 export function jobDiscard(jobId: string): Promise<CatalogResult> {
@@ -446,7 +466,7 @@ export interface VideoPutInput {
  * same bytes is an idempotent own retry.
  */
 export function videoPut(input: VideoPutInput): Promise<CatalogResult> {
-  return catalog([
+  return wrote(catalog([
     "video",
     "put",
     "--job",
@@ -459,7 +479,7 @@ export function videoPut(input: VideoPutInput): Promise<CatalogResult> {
     "--reason",
     input.reason,
     ...owned(),
-  ], 600_000);
+  ], 600_000));
 }
 
 /** `catalog video list`: this owner's studio videos and manimkc videos. */

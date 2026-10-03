@@ -30,7 +30,7 @@ import {
   type StudioVideo,
   type VideoTileStage,
 } from "@/lib/studio-video";
-import { conversationHref, panelHref, relativeTime } from "@/lib/studio-view";
+import { conversationHref, gridHref, panelHref, relativeTime } from "@/lib/studio-view";
 
 /**
  * Studio videos in the grid, and a video job where its video is (docs/
@@ -57,7 +57,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
   const title = video.title ?? slug;
   return (
     <div className="group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] transition-colors hover:bg-[var(--surface-hover)]">
-      <Link href={libraryHref(slug)} aria-label={`Play ${title} in the library`} className="flex min-w-0 flex-col">
+      <Link href={libraryHref(slug, gridHref(path))} aria-label={`Play ${title} in the library`} className="flex min-w-0 flex-col">
         <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-black">
           {video.posterAssetId !== null ? (
             // eslint-disable-next-line @next/next/no-img-element -- a blob behind the asset route, which the optimiser cannot resize.
@@ -103,7 +103,7 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
         )}
       </span>
       <Link
-        href={libraryHref(slug)}
+        href={libraryHref(slug, gridHref(path))}
         className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
       >
         {title}
