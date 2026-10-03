@@ -628,3 +628,9 @@ export function coursesInProgress(
     .sort((a, b) => b.row.percent - a.row.percent || a.order - b.order)
     .map(({ row }) => row);
 }
+
+/** Whether a read made at `asOf` is older than `maxAgeMs` at `now`; an unreadable time is stale. */
+export function readIsStale(asOf: string, now: Date, maxAgeMs: number): boolean {
+  const then = new Date(asOf).getTime();
+  return Number.isNaN(then) || now.getTime() - then > maxAgeMs;
+}

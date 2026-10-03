@@ -13,6 +13,7 @@ import {
   nextUpEyebrows,
   pastDayLabel,
   recallHref,
+  readIsStale,
   recallPicks,
   type GraphConcept,
   type ModulePlace,
@@ -330,5 +331,13 @@ describe("courses in progress", () => {
       { slug: "b", code: "B2", title: "Second", completed: 1, total: 2, percent: 50 },
       { slug: "a", code: "A1", title: "First", completed: 1, total: 4, percent: 25 },
     ]);
+  });
+});
+
+describe("readIsStale", () => {
+  it("is stale past the age, fresh within it, and stale when the time cannot be read", () => {
+    expect(readIsStale("2026-09-26T09:58:00Z", NOW, 60_000)).toBe(true);
+    expect(readIsStale("2026-09-26T09:59:30Z", NOW, 60_000)).toBe(false);
+    expect(readIsStale("not a time", NOW, 60_000)).toBe(true);
   });
 });
