@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getCourses = vi.hoisted(() => vi.fn());
 const catalogDatabase = vi.hoisted(() => vi.fn());
 const readLearnerSnapshot = vi.hoisted(() => vi.fn());
+const recentDrafts = vi.hoisted(() => vi.fn());
 
 vi.mock("@/data/courses", () => ({ getCourses }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase }));
@@ -27,7 +28,7 @@ vi.mock("@self-learn/catalog/state", () => ({
   readKnowledgeBase: vi.fn(async () => ({ concepts: [], frontier: [] })),
   readLearnerSnapshot,
   readPreferences: vi.fn(async () => ({})),
-  recentDrafts: vi.fn(async () => []),
+  recentDrafts,
 }));
 
 describe("readHome", () => {
@@ -37,6 +38,8 @@ describe("readHome", () => {
     catalogDatabase.mockResolvedValue({});
     readLearnerSnapshot.mockReset();
     readLearnerSnapshot.mockResolvedValue({ completed: {}, inactiveCourses: [] });
+    recentDrafts.mockReset();
+    recentDrafts.mockResolvedValue([]);
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
@@ -77,5 +80,17 @@ describe("readHome", () => {
     expect(home.reachable).toBe(true);
     expect(home.courses.rows.map((r) => r.slug)).toEqual(["cs3230"]);
     expect(home.courses.total).toBe(1);
+  });
+
+  it("loses only the draft threads when the studio's drafts cannot be read", async () => {
+    vi.stubEnv("STUDIO_ENABLED", "1");
+    getCourses.mockResolvedValueOnce([]);
+    recentDrafts.mockRejectedValueOnce(new Error('relation "draft" does not exist'));
+    const { readHome } = await import("./home");
+    const home = await readHome();
+    expect(recentDrafts).toHaveBeenCalled();
+    expect(home.reachable).toBe(true);
+    expect(home.threads).toEqual([]);
+    vi.unstubAllEnvs();
   });
 });

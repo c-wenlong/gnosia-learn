@@ -1,5 +1,5 @@
 import { draft } from "@self-learn/schema";
-import { and, desc, eq, isNotNull, ne } from "drizzle-orm";
+import { and, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 
@@ -25,10 +25,23 @@ export async function recentDrafts(db: CatalogDatabase, ownerId: string, limit =
   const rows = await db
     .select({ id: draft.id, kind: draft.kind, state: draft.state, title: draft.title, updatedAt: draft.updatedAt })
     .from(draft)
-    .where(and(eq(draft.ownerId, ownerId), isNotNull(draft.title), ne(draft.state, "abandoned")))
+    // Blank titles are refused here, before the limit, so one cannot take a
+    // slot and then be dropped, hiding an older draft that has a title.
+    .where(
+      and(
+        eq(draft.ownerId, ownerId),
+        isNotNull(draft.title),
+        sql`btrim(${draft.title}) <> ''`,
+        ne(draft.state, "abandoned"),
+      ),
+    )
     .orderBy(desc(draft.updatedAt))
     .limit(limit);
-  return rows
-    .filter((r) => r.title !== null && r.title.trim() !== "")
-    .map((r) => ({ id: r.id, kind: r.kind, state: r.state, title: r.title as string, updatedAt: r.updatedAt.toISOString() }));
+  return rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    state: r.state,
+    title: r.title as string,
+    updatedAt: r.updatedAt.toISOString(),
+  }));
 }

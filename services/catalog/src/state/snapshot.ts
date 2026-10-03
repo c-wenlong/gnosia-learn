@@ -64,17 +64,27 @@ export function asRecentModules(value: unknown): LastVisited[] | undefined {
 }
 
 /**
- * The list with `visit` in front: a module already on it moves up rather than
- * appearing twice (a course visited without a module is its own entry), and
- * the oldest drop off past `max`.
+ * The list with `visit` on it: a module already there is replaced rather than
+ * listed twice (a course visited without a module is its own entry), newest
+ * visit first by its `at`, the oldest dropped past `max`.
+ *
+ * Ordered by the visit's own time, not by when the request arrived: two tabs
+ * can post out of order, and the later visit must still lead. A repeat visit
+ * keeps the later of its two times for the same reason.
  */
 export function withRecentModule(
   list: readonly LastVisited[],
   visit: LastVisited,
   max: number = RECENT_MODULES_MAX,
 ): LastVisited[] {
+  const time = (v: LastVisited) => {
+    const ms = new Date(v.at).getTime();
+    return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+  };
   const same = (v: LastVisited) => v.courseSlug === visit.courseSlug && (v.moduleSlug ?? null) === (visit.moduleSlug ?? null);
-  return [visit, ...list.filter((v) => !same(v))].slice(0, max);
+  const earlier = list.find(same);
+  const kept = earlier !== undefined && time(earlier) > time(visit) ? earlier : visit;
+  return [kept, ...list.filter((v) => !same(v))].sort((a, b) => time(b) - time(a)).slice(0, max);
 }
 
 /**

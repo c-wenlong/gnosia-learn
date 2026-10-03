@@ -29,7 +29,7 @@ export function ThreadsCard({ threads, reachable }: { threads: Thread[]; reachab
         <div className="flex flex-col items-start gap-3">
           <p className="text-[14px] text-text2">
             {reachable
-              ? "Nothing to go back to yet. Course modules, videos and concepts you open show here."
+              ? "Nothing to go back to yet. Course modules, videos and concepts you answer questions on show here."
               : "What you were doing could not be read."}
           </p>
           {reachable && (

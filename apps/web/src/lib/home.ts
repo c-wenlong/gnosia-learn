@@ -13,6 +13,7 @@ import {
   readPreferences,
   recentDrafts,
   type CatalogDatabase,
+  type RecentDraft,
   type KbConcept,
 } from "@self-learn/catalog/state";
 
@@ -172,9 +173,24 @@ async function readAll(db: CatalogDatabase, now: Date, owner: string) {
     dueReviews(db, { now, learnerId: owner }),
     readLearnerSnapshot(db, owner),
     getCourses(),
-    studioEnabled() ? recentDrafts(db, owner, THREAD_ROWS) : Promise.resolve([]),
+    studioEnabled() ? draftsOrNone(db, owner) : Promise.resolve([]),
   ]);
   return { kb, events, preferences, due, snapshot, courses, drafts };
+}
+
+/**
+ * The studio's drafts, or none when they cannot be read. They are the one
+ * read here that a database can lack while answering every other (a studio
+ * turned on before its migrations ran), and a missing thread kind is no
+ * reason to empty the page.
+ */
+async function draftsOrNone(db: CatalogDatabase, owner: string): Promise<RecentDraft[]> {
+  try {
+    return await recentDrafts(db, owner, THREAD_ROWS);
+  } catch (error) {
+    console.warn(`home: studio drafts unavailable, ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
 }
 
 export function emptyHome(now: Date, timeZone?: string): HomeModel {
