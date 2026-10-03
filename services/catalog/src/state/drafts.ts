@@ -21,6 +21,15 @@ export interface RecentDraft {
   updatedAt: string;
 }
 
+/**
+ * A title with something in it besides whitespace. The set is JavaScript's
+ * `trim()`'s (the ASCII spaces, then U+00A0, U+1680, U+2000 to U+200A, the
+ * two separators, U+202F, U+205F, U+3000 and U+FEFF): Postgres's `btrim`
+ * strips only the space character, so a title of tabs or of U+3000 would
+ * read as a title there and as nothing on the page.
+ */
+const HAS_VISIBLE = String.raw`[^[:space:]\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]`;
+
 export async function recentDrafts(db: CatalogDatabase, ownerId: string, limit = 5): Promise<RecentDraft[]> {
   const rows = await db
     .select({ id: draft.id, kind: draft.kind, state: draft.state, title: draft.title, updatedAt: draft.updatedAt })
@@ -31,7 +40,7 @@ export async function recentDrafts(db: CatalogDatabase, ownerId: string, limit =
       and(
         eq(draft.ownerId, ownerId),
         isNotNull(draft.title),
-        sql`btrim(${draft.title}) <> ''`,
+        sql`${draft.title} ~ ${HAS_VISIBLE}`,
         ne(draft.state, "abandoned"),
       ),
     )

@@ -73,11 +73,14 @@ describe.skipIf(!reachable.ok)("recentDrafts", () => {
       row("titled", 2, { kind: "video", state: "done" }),
       row("untitled", 3, { title: null }),
       row("blank", 4, { title: "   " }),
+      row("tabs", 4, { title: "\t\n\r" }),
+      row("wide", 4, { title: "\u00a0\u3000\u2009\ufeff" }),
       row("abandoned", 5, { state: "abandoned" }),
       row("theirs", 6, { ownerId: "owner-b" }),
     ]);
     const drafts = await recentDrafts(scratch.db, LOCAL_LEARNER_ID, 2);
-    // With a limit of two, the blank and untitled ones must not take a slot.
+    // With a limit of two, the blank and untitled ones must not take a slot,
+    // whichever whitespace a blank one is made of.
     expect(drafts.map((d) => [d.id, d.kind, d.state])).toEqual([
       ["titled", "video", "done"],
       ["oldest", "diagram", "open"],
