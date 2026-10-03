@@ -7,6 +7,7 @@ import {
   recordKnowledge,
   removeUserResource,
   resetCourseProgress,
+  setCourseActive,
   setLastVisited,
   setNote,
   setTheme,
@@ -96,6 +97,16 @@ describe("learner state reducers", () => {
     expect(visited.lastVisited?.courseSlug).toBe("cs2111");
     expect(visited.lastVisited?.moduleSlug).toBe("m1");
     expect(visited.lastVisited?.at).toBeTruthy();
+  });
+
+  it("sets a course aside and brings it back", () => {
+    const start = defaultState();
+    const aside = setCourseActive(setCourseActive(start, "cs2111", false), "cs3230", false);
+    expect(aside.inactiveCourses).toEqual(["cs2111", "cs3230"]);
+    expect(setCourseActive(aside, "cs2111", true).inactiveCourses).toEqual(["cs3230"]);
+    // Asking for what is already so changes nothing, not even the reference.
+    expect(setCourseActive(aside, "cs2111", false)).toBe(aside);
+    expect(setCourseActive(start, "cs2111", true)).toBe(start);
   });
 });
 

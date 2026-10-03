@@ -162,6 +162,7 @@ export interface CourseEntry {
 /**
  * The Continue learning block: every course in progress, with its status.
  *
+ * A course the learner set aside (`inactive`) is left out, however far along.
  * The course the learner last opened (`lastVisited`, written by the course
  * page) comes first, since it is the one they are most likely back for; the
  * rest go furthest along first, the order Today's card uses, then in the
@@ -172,13 +173,37 @@ export function continueLearning(
   completed: Readonly<Record<string, true>>,
   standing: ItemStanding = EMPTY_STANDING,
   lastVisitedSlug?: string | null,
+  inactive: readonly string[] = [],
 ): CourseEntry[] {
   const visited = (e: CourseEntry) => Number(e.summary.slug === lastVisitedSlug);
-  return summaries
+  return activeOnly(summaries, inactive)
     .map((summary, at) => ({ summary, status: courseStatus(summary, completed, standing), at }))
     .filter(({ status }) => started(status))
     .sort((a, b) => visited(b) - visited(a) || b.status.percent - a.status.percent || a.at - b.at)
     .map(({ summary, status }) => ({ summary, status }));
+}
+
+/** The courses not set aside, in the order given. */
+export function activeOnly<T extends { slug: string }>(courses: readonly T[], inactive: readonly string[]): T[] {
+  if (inactive.length === 0) return [...courses];
+  const aside = new Set(inactive);
+  return courses.filter((c) => !aside.has(c.slug));
+}
+
+/**
+ * The courses split for the Courses page: the active ones for the grid, the
+ * ones set aside for the folded "Inactive courses" section. Each keeps the
+ * order given, which is the catalog's.
+ */
+export function splitByActive<T extends { slug: string }>(
+  courses: readonly T[],
+  inactive: readonly string[],
+): { active: T[]; inactive: T[] } {
+  const aside = new Set(inactive);
+  return {
+    active: courses.filter((c) => !aside.has(c.slug)),
+    inactive: courses.filter((c) => aside.has(c.slug)),
+  };
 }
 
 /** "7 modules · 20 topics", the counts every card prints. */

@@ -80,6 +80,12 @@ export function asUserResources(value: unknown): Record<string, UserResource[]> 
   return out;
 }
 
+/** A stored `inactiveCourses`, as distinct non-empty slugs; anything else reads as none. */
+export function asCourseSlugs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((slug): slug is string => typeof slug === "string" && slug !== ""))];
+}
+
 export async function readLearnerSnapshot(
   db: CatalogDatabase,
   learnerId: string = LOCAL_LEARNER_ID,
@@ -102,6 +108,7 @@ export async function readLearnerSnapshot(
   state.userResources = asUserResources(preferences[PREFERENCE_KEYS.userResources]);
   const lastVisited = asLastVisited(preferences[PREFERENCE_KEYS.lastVisited]);
   if (lastVisited !== undefined) state.lastVisited = lastVisited;
+  state.inactiveCourses = asCourseSlugs(preferences[PREFERENCE_KEYS.inactiveCourses]);
 
   return state;
 }
