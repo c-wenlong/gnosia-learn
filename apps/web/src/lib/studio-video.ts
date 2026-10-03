@@ -870,6 +870,10 @@ export function videoFailure(job: VideoJob): VideoFailure {
       };
     case "spawn":
       return { headline: "The agent never started", detail, actions: [] };
+    case "toolchain":
+      // The machine's tools died as they started (V26): a change to the brief
+      // cannot help, so there is nothing to revise until the machine is fixed.
+      return { headline: "The video tools could not start on this machine", detail, actions: ["talk"] };
     case "cancelled":
       return { headline: "Stopped on request", detail, actions: ["talk"] };
     case "interrupted":
