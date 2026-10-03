@@ -14,9 +14,12 @@ export function SearchField({
   className,
   inputClassName,
   name = "q",
+  size = "md",
   ...rest
-}: Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "type"> & {
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "type" | "size"> & {
   label: string;
+  /** `chip` sits in a row of filter menus at their height; see `inputClasses`. */
+  size?: "md" | "chip";
   /** Classes for the wrapper, e.g. a width. */
   className?: string;
   inputClassName?: string;
@@ -27,7 +30,10 @@ export function SearchField({
       <svg
         aria-hidden
         viewBox="0 0 20 20"
-        className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-text3"
+        className={cx(
+          "pointer-events-none absolute top-1/2 -translate-y-1/2 text-text3",
+          size === "chip" ? "left-3 size-3.5" : "left-4 size-4",
+        )}
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
@@ -39,7 +45,11 @@ export function SearchField({
       <input
         type="search"
         name={name}
-        className={inputClasses({ pill: true, className: cx("pl-10", inputClassName) })}
+        className={inputClasses({
+          pill: true,
+          size,
+          className: cx(size === "chip" ? "pl-8" : "pl-10", inputClassName),
+        })}
         {...rest}
       />
     </label>
