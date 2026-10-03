@@ -573,6 +573,12 @@ async function run() {
     await done.or(show).or(options).first().waitFor();
   });
 
+  await step('review: a Recall these whose cards are no longer due says so', page, async () => {
+    await go('/review?only=not-a-due-card');
+    await main.getByRole('heading', { name: 'Already reviewed' }).waitFor();
+    await main.getByRole('link', { name: 'All reviews' }).waitFor();
+  });
+
   await step('learn: /learn renders the concept table', page, async () => {
     await go('/learn');
     const table = main.getByRole('table');

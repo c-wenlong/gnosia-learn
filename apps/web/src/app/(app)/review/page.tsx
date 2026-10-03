@@ -25,11 +25,12 @@ export default async function ReviewPage({
   const raw = Array.isArray(params.concept) ? params.concept[0] : params.concept;
   const focus = typeof raw === "string" && raw !== "" && raw.length <= 128 ? raw : null;
   // `?only=a,b,c`, Home's "Recall these": just those cards.
-  const session = await loadReviewSession(focus, parseOnly(params.only));
+  const only = parseOnly(params.only);
+  const session = await loadReviewSession(focus, only);
   const asOf = new Date().toISOString();
   return (
     <div data-layout="focus">
-      <ReviewSession initial={session} focus={focus} asOf={asOf} />
+      <ReviewSession initial={session} focus={focus} selected={only !== null} asOf={asOf} />
     </div>
   );
 }
