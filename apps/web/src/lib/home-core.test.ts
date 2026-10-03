@@ -13,8 +13,8 @@ import {
   nextUpEyebrows,
   pastDayLabel,
   recallHref,
-  readIsStale,
   recallPicks,
+  shouldRefresh,
   type GraphConcept,
   type ModulePlace,
   type ModuleVisit,
@@ -334,10 +334,22 @@ describe("courses in progress", () => {
   });
 });
 
-describe("readIsStale", () => {
-  it("is stale past the age, fresh within it, and stale when the time cannot be read", () => {
-    expect(readIsStale("2026-09-26T09:58:00Z", NOW, 60_000)).toBe(true);
-    expect(readIsStale("2026-09-26T09:59:30Z", NOW, 60_000)).toBe(false);
-    expect(readIsStale("not a time", NOW, 60_000)).toBe(true);
+describe("shouldRefresh", () => {
+  const base = { visible: true, pending: false, drawnAt: 1_000, now: 62_001, maxAgeMs: 60_000 };
+
+  it("refreshes a visible page past the age, and not one within it or hidden", () => {
+    expect(shouldRefresh(base)).toBe(true);
+    expect(shouldRefresh({ ...base, now: 60_999 })).toBe(false);
+    expect(shouldRefresh({ ...base, visible: false })).toBe(false);
+  });
+
+  it("asks once when a return fires focus and visibilitychange together", () => {
+    let pending = false;
+    const fire = () => {
+      const go = shouldRefresh({ ...base, pending });
+      if (go) pending = true;
+      return go;
+    };
+    expect([fire(), fire()]).toEqual([true, false]);
   });
 });

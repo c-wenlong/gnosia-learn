@@ -629,8 +629,19 @@ export function coursesInProgress(
     .map(({ row }) => row);
 }
 
-/** Whether a read made at `asOf` is older than `maxAgeMs` at `now`; an unreadable time is stale. */
-export function readIsStale(asOf: string, now: Date, maxAgeMs: number): boolean {
-  const then = new Date(asOf).getTime();
-  return Number.isNaN(then) || now.getTime() - then > maxAgeMs;
+/**
+ * Whether a returning tab should read Home again: it is visible, no refresh is
+ * already on its way (a return can fire both `focus` and `visibilitychange`),
+ * and more than `maxAgeMs` has passed since this page drew its read. Both
+ * times are the browser's own, so a server clock that disagrees with it
+ * cannot shift the limit.
+ */
+export function shouldRefresh(state: {
+  visible: boolean;
+  pending: boolean;
+  drawnAt: number;
+  now: number;
+  maxAgeMs: number;
+}): boolean {
+  return state.visible && !state.pending && state.now - state.drawnAt > state.maxAgeMs;
 }
