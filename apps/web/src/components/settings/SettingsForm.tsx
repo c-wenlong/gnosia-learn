@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
 
@@ -8,13 +7,9 @@ import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
-import type { DailyTarget } from "@/lib/habit-core";
 import { useLearner } from "@/lib/learner-context";
 import {
-  leewayChoices,
   MOTION_MODES,
-  targetChoices,
-  targetKey,
   TUTOR_STYLES,
   type MotionMode,
   type TutorStyle,
@@ -22,14 +17,11 @@ import {
 import type { SettingsSnapshot } from "@/lib/settings";
 
 /**
- * The Settings page's three cards (hi-fi 12). Each select saves on change
- * through `POST /api/learner/preference` and says what happened beside it.
- *
- * Saving the target or the leeway calls `router.refresh()`: the top bar's
- * pills are computed by the root layout, which Next keeps mounted, so without
- * it the pill would still show the old target. The theme is `ThemeSwitch`,
- * which goes through the provider's `setThemeMode` and so also writes the
- * cookie the layout reads.
+ * The Settings page's two cards (hi-fi 12, less the Habit card, which went
+ * with the streak and the daily target: H1 of docs/proposals/home-page.md).
+ * Each select saves on change through `POST /api/learner/preference` and says
+ * what happened beside it. The theme is `ThemeSwitch`, which goes through the
+ * provider's `setThemeMode` and so also writes the cookie the layout reads.
  */
 
 type Status = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string };
@@ -54,11 +46,10 @@ async function savePreference(key: string, value: unknown): Promise<string | nul
  *
  * Saves to one key run one after another: two quick changes are two requests,
  * and if they ran side by side the first could land last and leave the row
- * (and the refreshed top bar) on the older choice while the select shows the
- * newer one. Only the newest save reports, so an earlier one finishing late
+ * on the older choice while the select shows the newer one. Only the newest save reports, so an earlier one finishing late
  * cannot print "Saved" over a later one still in flight.
  */
-function usePreference<T>(key: string, initial: T, afterSave?: () => void) {
+function usePreference<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(initial);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const chain = useRef<Promise<unknown>>(Promise.resolve());
@@ -73,7 +64,6 @@ function usePreference<T>(key: string, initial: T, afterSave?: () => void) {
       if (mine !== latest.current) return;
       if (error === null) {
         setStatus({ kind: "saved" });
-        afterSave?.();
       } else {
         setStatus({ kind: "error", message: error });
       }
@@ -100,51 +90,13 @@ export function SettingsForm({
   /** Every curriculum item id, for Reset progress. */
   topicIds: string[];
 }) {
-  const router = useRouter();
-  const refresh = () => router.refresh();
-
-  const target = usePreference<DailyTarget>(PREFERENCE_KEYS.dailyTarget, settings.target, refresh);
-  const leeway = usePreference<number>(PREFERENCE_KEYS.dailyLeeway, settings.leeway, refresh);
   const tutor = usePreference<TutorStyle>(PREFERENCE_KEYS.tutorStyle, settings.tutorStyle);
   const motion = usePreference<MotionMode>(PREFERENCE_KEYS.reducedMotion, settings.motion);
 
-  const choices = targetChoices(target.value);
   const bkt = settings.bkt;
 
   return (
     <>
-      <Card title="Habit">
-        <Field label="Daily target" note="You set it. The app never raises it." status={target.status}>
-          {(id) => (
-            <Select
-              id={id}
-              value={targetKey(target.value)}
-              onChange={(key) => {
-                const choice = choices.find((c) => c.value === key);
-                if (choice !== undefined) target.save(choice.target);
-              }}
-            >
-              {choices.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-        <Field label="Streak leeway" status={leeway.status}>
-          {(id) => (
-            <Select id={id} value={String(leeway.value)} onChange={(v) => leeway.save(Number(v))}>
-              {leewayChoices().map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-      </Card>
-
       <Card title="Appearance and tutor">
         <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
           {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}

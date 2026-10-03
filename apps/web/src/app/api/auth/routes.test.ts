@@ -53,7 +53,7 @@ describe("POST /api/auth/sign-in", () => {
     });
     const response = await signIn(request);
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("/today");
+    expect(response.headers.get("location")).toBe("/home");
     expect(cookieOf(response)).toContain("Secure");
   });
 
@@ -80,7 +80,7 @@ describe("POST /api/auth/sign-in", () => {
 
   it("refuses an off-origin next and lands on home instead", async () => {
     const response = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple", next: "//evil.example" }));
-    expect(response.headers.get("location")).toBe("/today");
+    expect(response.headers.get("location")).toBe("/home");
   });
 
   it("bounces a wrong password back to the form with no cookie, keeping next", async () => {

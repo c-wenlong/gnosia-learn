@@ -11,7 +11,7 @@
  */
 
 /** The five destinations the phone tab bar draws, each with an icon. */
-export type DestinationKey = "today" | "courses" | "learn" | "library" | "review";
+export type DestinationKey = "home" | "courses" | "learn" | "library" | "review";
 
 /** Every key `activeDestination` can answer with: the five, and Studio. */
 export type NavKey = DestinationKey | "studio";
@@ -24,7 +24,7 @@ export interface Destination<K extends string = DestinationKey> {
 
 /** The phone tab bar's list. Studio is deliberately not in it. */
 export const DESTINATIONS: readonly Destination[] = [
-  { key: "today", label: "Today", href: "/today" },
+  { key: "home", label: "Home", href: "/home" },
   { key: "courses", label: "Courses", href: "/courses" },
   { key: "learn", label: "Learn", href: "/learn" },
   { key: "library", label: "Library", href: "/library" },

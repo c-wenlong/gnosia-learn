@@ -135,11 +135,11 @@ Import from `@/components/ui` or from the file.
 | `MentionComposer` | `Composer`'s props with three changes: `value` and `onChange(value)` / `onSubmit(value)` take `{ text, mentions }` (each chip written into `text` as `@<kind>`, `mentions` its positions), `mentions` is the @ menu's entries (`{ id, name, description, icon?, aliases?, disabledReason? }`), and `handleRef` exposes `insertMention(kind)` and `focus()`; plus `mentionHint?`, the menu's foot line. No `maxLength`, `autoFocus` or `inputRef`. The studio's chat input (docs/STUDIO-MENTIONS.md, D56): `Composer`'s frame, keys and six-line growth on a Lexical plain-text field whose only rich content is an inline chip per tag. `@` at the start or after a space, or the plus at the field's left, opens the menu above the field; arrows, Enter or Tab pick, Esc closes the menu and not the dialog, a pick replaces the `@query` in place, one chip per kind, Backspace takes a chip whole, undo puts the typed query back, paste is plain text, an IME's Enter is left alone. A polite live region says what `aria-activedescendant` alone would not. A value the parent sets that differs from the last one reported rebuilds the field. Its rules are the React-free `mention-text.ts` | ChatGPT's composer |
 | `MentionChip` | `name`, `icon?: GlyphName`, `waiting?` (a quiet "waiting" while the tag's brief is owed), `className?`. A tag's chip, 14/600 `--accent-text` on `--tint` at radius 6, on the text's baseline, with a visually hidden " tag"; drawn in the field and in the sent message | none |
 | `Glyph` | `name: GlyphName`, `size?` (default 20), `className?`. The kit's 20px outline marks (`diagram`, `video`, `add`, the course page's own), moved out of `course-home/icons.tsx`, which re-exports them | the course page's marks |
-| `Pill` | `dot?: string` (a CSS colour, e.g. `"var(--streak)"`), `title?`, `className?` | `Pill` |
+| `Pill` | Removed 2026-10-04 with the streak and target pills, its last users (H1 of [the Home proposal](../proposals/home-page.md)) | `Pill` |
 | `Eyebrow` | `as?: "p" \| "span" \| "h2" \| "h3" \| "h4" \| "div"`, `className?`. 12/600 sentence case in `--text2` since 2026-09-29; only for a label the heading under it does not already say | `Eyebrow` |
 | `MasteryDot` | `bucket: MasteryBucket`, `size?: number` (px, default 14), `showLabel?: boolean`, `pL?: number \| null` (printed with the label), `className?` | `Mastery`, `MasteryLabel` |
 | `ProgressBar` | `percent?: number` (0 to 100) or `progress?: ProgressCounts`, `showLabel?` (defaults on only with `progress`), `size?: "md" \| "sm"` (8px or 6px), `tone?: "accent" \| "ok" \| "hi" \| "mid"` (`hi` and `mid` are the mastered and learning colours), `label?` (accessible name), `className?`. Full width of its container: size it with a wrapper, not `className` (see Gotchas) | `Bar` |
-| `TargetBar` | `done: number`, `total: number`, `label?`, `className?`: a 20px track with "x / y" beside it | `TargetBar` |
+| `TargetBar` | Removed 2026-10-04 with Today's target card, its only user | `TargetBar` |
 | `StreakDay` | Removed 2026-09-29 with Today's Streak card, its only user (see the Streak card rows under Deviations). The habit data still carries `streak.week` | `StreakDay` |
 | `Input` | `pill?: boolean`, `className?`, every `<input>` attribute | `Input` |
 | `SearchField` | `label: string` (screen-reader label, required), `name?` (default `q`), `className?` (the wrapper, e.g. a width), `inputClassName?`, every `<input>` attribute but `type` | `Input` with `pill` |
@@ -161,9 +161,9 @@ The pure helpers beside them:
 | [`@/lib/mastery-bucket`](../../apps/web/src/lib/mastery-bucket.ts) | `type MasteryBucket = "mastered" \| "learning" \| "untouched"`, `bucketOf({ mastery, observations? })`, `MASTERY_BUCKETS`, `MASTERY_BUCKET_LABEL`, `masteryCaption(bucket, pL?)` |
 | [`@/lib/nav`](../../apps/web/src/lib/nav.ts) | `DESTINATIONS`, `type DestinationKey`, `activeDestination(pathname)` |
 | [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags, coverSha256?)`, `coverUrl(slug, sha256)` (the cover route, versioned by the image's hash), `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `courseCounts(...)`, `usedTags(...)`, `tagFilterOptions(tags, summaries)` (the Tag menu's options with their counts) |
-| [`@/lib/habit-core`](../../apps/web/src/lib/habit-core.ts) | the `Habit` types, `computeHabit`, `computeStreak`, `computeTarget`, `habitLabels`, `dayKey`, `weekStart`, `addDays`, `parseDailyTarget`, `parseLeeway` |
-| [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), the validators the preference route runs (`validateDailyTarget`, `validateLeeway`, `validateTutorStyle`, `validateMotionMode`), and the words (`describeTarget`, `describeLeeway`, `targetChoices`) |
-| [`@/lib/today-core`](../../apps/web/src/lib/today-core.ts) | the Today model (`TodayModel`) and its pure parts: `activityRows`, `dueLabel`, `countCheckBlocks`, `targetRows`, `coursesInProgress`, `pastDayLabel`, `futureDayLabel` |
+| [`@/lib/days`](../../apps/web/src/lib/days.ts) | `dayKey`, `type LogEvent`: what outlived the habit layer's `habit-core` |
+| [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), and the validators the preference route runs (`validateTutorStyle`, `validateMotionMode`) |
+| [`@/lib/home-core`](../../apps/web/src/lib/home-core.ts) | the Home model (`HomeModel`) and its pure parts: `homeThreads`, `conceptTouches`, `countCheckBlocks`, `coursesInProgress`, `pastDayLabel`, `lastSeenLabel`, `clock` |
 
 Maths is typeset by KaTeX, through two files. [`@/lib/math`](../../apps/web/src/lib/math.ts)
 is React-free: `renderMath(source, display)` and `splitMath(text)`, which finds
@@ -201,21 +201,18 @@ layout holds only the document, the fonts and the theme class. Its client parts 
 `TabBar`, `AvatarMenu`, `StoreBanner`, `NavIcon`.
 
 - **Top bar**, 64px on `--surface` with a hairline under it: the Gnosia
-  wordmark linking to `/today`, the five destinations (Today `/today`, Courses, Learn, Library,
+  wordmark linking to `/home`, the five destinations (Home `/home`, Courses, Learn, Library,
   Review; the selected one in `--text` over a 2px underline), then Studio as
   a sixth destination when `STUDIO_ENABLED` is set (2026-09-30: the owner
   asked to move it out of the avatar menu "so its easier to access"; it is
-  active for `/studio` and everything under it), the streak pill, the target
-  pill, and the avatar menu (theme, Settings, and on a phone only, Studio).
-  `topBarDestinations(studio)` in `lib/nav.ts` is the list. Between 768 and
-  1024px both pills show their number only ("0" and "0 / 2"), the labels are
-  14px and the gaps tighten (24px side padding, 20px after the wordmark,
-  14px between destinations, 12px between pills), so six destinations fit at
-  768 even with a 4-digit streak and a "21 / 21" target (the widest the
-  pills get); the pills sit 24px apart up to 1280. With five destinations the
-  avatar was already cut off at 768, by 54px.
-- **Phone**, below 768px: a 56px header with the wordmark, the number-only
-  streak pill and the avatar; the five destinations (`DESTINATIONS`, without
+  active for `/studio` and everything under it), and the avatar menu (theme,
+  Settings, and on a phone only, Studio). `topBarDestinations(studio)` in
+  `lib/nav.ts` is the list. Between 768 and 1024px the labels are 14px and
+  the gaps tighten (24px side padding, 20px after the wordmark, 14px between
+  destinations), so six destinations fit at 768. The streak and target pills
+  that sat before the avatar were removed 2026-10-04 (H1 of
+  [the Home proposal](../proposals/home-page.md)).
+- **Phone**, below 768px: a 56px header with the wordmark and the avatar; the five destinations (`DESTINATIONS`, without
   Studio) move to a 68px tab bar fixed to the bottom, whose grid is five
   columns. Studio stays in the avatar menu there.
 - **Store banner** under the bar when the database is unreachable or a
@@ -262,57 +259,15 @@ values go.
 
 ## Habit data
 
-[`@/lib/habit`](../../apps/web/src/lib/habit.ts) (server only) reads the
-event log, the preferences and the due queue through `learner-store`'s pool
-and hands them to the pure `computeHabit`. The root layout calls
-`loadHabit()` on every request and passes the result to the shell; a page
-that needs the same numbers (Today) calls `loadHabit()` itself.
-
-```ts
-interface Habit {
-  streak: {
-    days: number;          // active days in the current run; forgiven days do not add
-    leeway: number;        // free misses per Monday-to-Sunday week
-    leewayLeft: number;    // left this week
-    activeToday: boolean;
-    week: { date: string; state: "done" | "forgiven" | "missed" | "today" | "future" }[]; // Mon..Sun
-  };
-  target: {
-    target: { concepts: number; reviews: boolean };
-    conceptsDone: number;  // distinct concepts with a teach or probe observation today
-    dueReviews: number;
-    reviewsCleared: boolean;
-    done: number;          // units met; the review queue is one unit
-    total: number;
-  };
-  reachable: boolean;      // false: every number is zero and nothing claims to be done
-  asOf: string;            // ISO instant the numbers were computed
-}
-```
-
-- A day counts when it has a study event: an `observation` or a `review`
-  (`STUDY_EVENT_TYPES`), outside a voided session. `session-start` and
-  `session-close` are bookkeeping and do not count, so opening a session and
-  leaving does not make a streak day. A new kind of study (1f's `watched`)
-  joins that list. Today with nothing done is not a miss; the streak carries
-  through yesterday.
-- **A page that writes a study event calls `router.refresh()` after the
-  write.** The root layout computes the numbers and Next keeps a layout
-  mounted across client-side navigation, so without it the pills show the
-  old values. `useHabitRefresh` in the top bar is only the backstop: it
-  refreshes when a tab comes back or every few minutes, once the numbers are
-  older than 30 minutes or the day has turned.
-- The preference keys are `dailyTarget` (`{ concepts, reviews }`, default
-  `{ concepts: 1, reviews: true }`, concepts clamped to 0 to 20) and
-  `dailyLeeway` (0 to 7, default 1), both in `PREFERENCE_KEYS`. Settings
-  writes them through `POST /api/learner/preference`, whose validators
-  (`@/lib/preferences`) refuse a value out of those ranges rather than
-  clamping it. Phase 1a added `tutorStyle` and `reducedMotion` beside them.
-  `tutorStyle` is read by the concept tutor and the session's question writer
-  (see [Sweep after phase 1](#sweep-after-phase-1)); `reducedMotion` is stored
-  and nothing reads it yet.
-- Days are counted in `HABIT_TIME_ZONE` (an IANA name) when it is set,
-  otherwise in the server's zone. On a host that runs in UTC, set it.
+Removed 2026-10-04 (H1 of [the Home proposal](../proposals/home-page.md)):
+the streak, the daily target, `@/lib/habit`, the top bar's pills and
+Settings' Habit card. The `dailyTarget` and `dailyLeeway` preference rows are
+left in the database, unread, and the preference route no longer accepts
+them. What outlived it is the day key (`@/lib/days`) and the time zone
+(`appTimeZone()` in `@/lib/time-zone`), which still reads `HABIT_TIME_ZONE`
+so a deployment that sets it needs no change. Before then this section held
+the `Habit` shape and the streak's rules; they are in the history of this
+file.
 
 ## The screenshot tool
 

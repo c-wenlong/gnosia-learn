@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
-import type { NextUp } from "@/lib/today-core";
+import type { NextUp } from "@/lib/home-core";
 
 /**
  * Next up (hi-fi 01, top left; 13, first card): the first concept on the

@@ -671,7 +671,7 @@ not have to be worked out again.
   pages live in two route groups: `apps/web/src/app/(site)/` (the landing page
   and `/sign-in`, no shell, no database) and `apps/web/src/app/(app)/` (every
   other page, whose layout calls `requireSignedIn()` and then draws the
-  shell). The Today dashboard is `/today`, not `/`. A new page goes in
+  shell). Home is `/home`, not `/`, and `/today` redirects to it. A new page goes in
   `(app)/`; a new public page goes in `(site)/` *and* in `isPublicPath` in
   `apps/web/src/lib/auth/core.ts`, or the proxy redirects it to sign-in.
   `OWNER_PASSWORD` and `AUTH_SECRET` must both be set or nobody can sign in,

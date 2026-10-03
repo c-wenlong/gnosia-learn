@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * How `readToday` degrades. An unreachable database is the empty dashboard
+ * How `readHome` degrades. An unreachable database is the empty page
  * with `reachable: false`, which the shell's banner explains. Courses that are
  * not flipped are not an outage: the database answered, so no banner shows,
- * and an empty dashboard would read as a learner with no courses. That one is
+ * and an empty page would read as a learner with no courses. That one is
  * rethrown for the page's error boundary.
  */
 const getCourses = vi.hoisted(() => vi.fn());
 const catalogDatabase = vi.hoisted(() => vi.fn());
 const readLearnerSnapshot = vi.hoisted(() => vi.fn());
+const recentDrafts = vi.hoisted(() => vi.fn());
 
 vi.mock("@/data/courses", () => ({ getCourses }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase }));
@@ -19,21 +20,26 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   isSignedIn: async () => true,
 }));
 vi.mock("@self-learn/catalog/state", () => ({
-  assetsByIds: vi.fn(async () => ({})),
+  asLastVisited: vi.fn(() => undefined),
+  asRecentModules: vi.fn(() => undefined),
+  assetsByIds: vi.fn(async () => []),
   dueReviews: vi.fn(async () => []),
   readEvents: vi.fn(async () => []),
   readKnowledgeBase: vi.fn(async () => ({ concepts: [], frontier: [] })),
   readLearnerSnapshot,
   readPreferences: vi.fn(async () => ({})),
+  recentDrafts,
 }));
 
-describe("readToday", () => {
+describe("readHome", () => {
   beforeEach(() => {
     getCourses.mockReset();
     catalogDatabase.mockReset();
     catalogDatabase.mockResolvedValue({});
     readLearnerSnapshot.mockReset();
     readLearnerSnapshot.mockResolvedValue({ completed: {}, inactiveCourses: [] });
+    recentDrafts.mockReset();
+    recentDrafts.mockResolvedValue([]);
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
@@ -41,17 +47,18 @@ describe("readToday", () => {
     const { ContentUnavailableError } = await import("@/data/source");
     const refused = new ContentUnavailableError("not-flipped", "courses", "run `npm run catalog -- flip courses`");
     getCourses.mockRejectedValueOnce(refused);
-    const { readToday } = await import("./today");
-    await expect(readToday()).rejects.toBe(refused);
+    const { readHome } = await import("./home");
+    await expect(readHome()).rejects.toBe(refused);
   });
 
-  it("is the empty dashboard when the database cannot be read", async () => {
+  it("is the empty page when the database cannot be read", async () => {
     const { ContentUnavailableError } = await import("@/data/source");
     getCourses.mockRejectedValueOnce(new ContentUnavailableError("unreachable", null, "connect ECONNREFUSED"));
-    const { readToday } = await import("./today");
-    const today = await readToday();
-    expect(today.reachable).toBe(false);
-    expect(today.courses.total).toBe(0);
+    const { readHome } = await import("./home");
+    const home = await readHome();
+    expect(home.reachable).toBe(false);
+    expect(home.courses.total).toBe(0);
+    expect(home.threads).toEqual([]);
   });
 
   it("leaves a course set aside off the courses card, however far along", async () => {
@@ -68,10 +75,22 @@ describe("readToday", () => {
       completed: { "cs3230-m1-t1": true, "cs2111-m1-t1": true, "cs2111-m1-t2": true },
       inactiveCourses: ["cs2111"],
     });
-    const { readToday } = await import("./today");
-    const today = await readToday();
-    expect(today.reachable).toBe(true);
-    expect(today.courses.rows.map((r) => r.slug)).toEqual(["cs3230"]);
-    expect(today.courses.total).toBe(1);
+    const { readHome } = await import("./home");
+    const home = await readHome();
+    expect(home.reachable).toBe(true);
+    expect(home.courses.rows.map((r) => r.slug)).toEqual(["cs3230"]);
+    expect(home.courses.total).toBe(1);
+  });
+
+  it("loses only the draft threads when the studio's drafts cannot be read", async () => {
+    vi.stubEnv("STUDIO_ENABLED", "1");
+    getCourses.mockResolvedValueOnce([]);
+    recentDrafts.mockRejectedValueOnce(new Error('relation "draft" does not exist'));
+    const { readHome } = await import("./home");
+    const home = await readHome();
+    expect(recentDrafts).toHaveBeenCalled();
+    expect(home.reachable).toBe(true);
+    expect(home.threads).toEqual([]);
+    vi.unstubAllEnvs();
   });
 });

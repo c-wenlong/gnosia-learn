@@ -3,15 +3,13 @@ import type { ReactNode } from "react";
 import { StoreBanner } from "@/components/shell/StoreBanner";
 import { TabBar } from "@/components/shell/TabBar";
 import { TopBar } from "@/components/shell/TopBar";
-import type { Habit } from "@/lib/habit-core";
 
 /**
  * The frame every page renders inside: the top bar, the store banner, the
  * page, and on a phone the tab bar.
  *
  * A server component; the parts that need the browser (the active tab, the
- * avatar menu, the banner) are client components one level down. `habit`
- * comes from the root layout, which is the only thing that can read it.
+ * avatar menu, the banner) are client components one level down.
  *
  * **The page chooses its width with `data-layout` on its root element**, which
  * `has-*` reads here without a prop, a context or a client boundary between
@@ -49,11 +47,9 @@ import type { Habit } from "@/lib/habit-core";
  * moved, `app` becomes the default and the other two old values go.
  */
 export function AppShell({
-  habit,
   studio = false,
   children,
 }: {
-  habit: Habit;
   /** Whether this deployment has a studio. Only the server can know (D11). */
   studio?: boolean;
   children: ReactNode;
@@ -66,7 +62,7 @@ export function AppShell({
         "min-[900px]:has-[[data-layout=workspace]]:h-dvh min-[900px]:has-[[data-layout=workspace]]:overflow-hidden",
       ].join(" ")}
     >
-      <TopBar habit={habit} studio={studio} />
+      <TopBar studio={studio} />
       <StoreBanner />
       <main
         className={[

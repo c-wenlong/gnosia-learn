@@ -21,8 +21,8 @@ const literata = Literata({
 /**
  * The public pages' frame: the landing page at `/` and the sign-in page.
  *
- * No top bar, no habit numbers, no database. A signed-in visitor never gets
- * here for `/` (proxy.ts sends them to `/today`), so nothing in this layout
+ * No top bar, no learner state, no database. A signed-in visitor never gets
+ * here for `/` (proxy.ts sends them to `/home`), so nothing in this layout
  * asks who is looking. The ground is cream in light and deep navy in dark
  * (`.gnosia-ground` in globals.css); the theme class on <html> still comes
  * from the root layout's cookie, so a reader's choice carries over.
