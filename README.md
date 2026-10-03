@@ -68,7 +68,7 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 | --- | --- |
 | `/` | The public landing page; a signed-in owner is sent to `/home` |
 | `/sign-in` | The owner password (docs/DEPLOYMENT.md, "Signing in"); everything below needs the session |
-| `/home` | Home: pick up where you left off (course modules, unfinished videos, studio drafts, concepts), what that opens up next, and a few cards worth a quick recall. `/today` redirects here |
+| `/home` | Home: pick up where you left off (course modules, unfinished videos, studio drafts, concepts), what that opens up next, a few cards worth a quick recall, and an Ask box that finds a concept, course or video by title or opens a tutor chat on anything else. `/today` redirects here |
 | `/courses` | The course catalog and overall progress |
 | `/courses/[slug]` | The course path: units of topic nodes coloured by mastery, with each topic's checklist, notes, recaps and resources in its panel |
 | `/learn` | Knowledge base: mastery per concept, the frontier, the dependency graph |
