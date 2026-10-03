@@ -333,6 +333,38 @@ export function browserPanelMove(from: { pathname: string; search: string }, hre
   return next.extend === null || next.draft !== null || next.job !== null;
 }
 
+/** The parameters Search, the topic chips, Display and Sort write. */
+const VIEW_KEYS = new Set(["topic", "q", "group", "sort", "dir", "chips", "view"]);
+const OUTCOME_KEYS = new Set(["v", "ok", "m"]);
+
+/**
+ * Whether going from `from` to `href` only changes what the grid shows of
+ * what the page already has (the search, the topics, Display and Sort), so
+ * `PanelHost` can move the URL itself and the grid redraw in the browser.
+ *
+ * Each of these used to be a server render, which reads the diagrams, the
+ * vocabulary and the videos through the runner, a catalog subprocess of about
+ * two seconds apiece, for a change that needs none of them. Closing a tile's
+ * panel on the way (a chip drops `sel`) and dropping a verb's outcome are
+ * allowed; any other panel parameter has to stay as it is, and a picture,
+ * the settings and an Extend press are the server's, as they are for a panel.
+ */
+export function browserViewMove(from: { pathname: string; search: string }, href: string): boolean {
+  const query = from.search.replace(/^\?/, "");
+  const target = new URL(href, `http://studio${from.pathname}${query === "" ? "" : `?${query}`}`);
+  if (target.pathname !== from.pathname) return false;
+  const rest = (search: URLSearchParams, skip: ReadonlySet<string>) =>
+    [...search]
+      .filter(([name]) => !VIEW_KEYS.has(name) && !OUTCOME_KEYS.has(name) && !skip.has(name))
+      .map(([name, value]) => `${name}=${value}`)
+      .sort()
+      .join("&");
+  const closesTile = target.searchParams.has("sel") ? new Set<string>() : new Set(["sel"]);
+  if (rest(new URLSearchParams(query), closesTile) !== rest(target.searchParams, closesTile)) return false;
+  const next = parseView(rawParamsOf(target.searchParams));
+  return next.shot === null && !next.settings && next.extend === null;
+}
+
 /**
  * The panel's parameters, patched onto any path.
  *

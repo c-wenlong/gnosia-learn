@@ -19,6 +19,7 @@ import { VerbNotice } from "@/components/studio/StudioChrome";
 import { DialogHeader, StudioDialog } from "@/components/studio/StudioDialog";
 import {
   browserPanelMove,
+  browserViewMove,
   displayTitle,
   panelHref,
   panelSignature,
@@ -146,7 +147,8 @@ export function PanelHost({
   const navigate = useCallback((href: string) => {
     // Read from the address bar itself, which a pushState in this same event
     // may already have moved past what this render saw.
-    if (!browserPanelMove({ pathname: window.location.pathname, search: window.location.search }, href)) return false;
+    const from = { pathname: window.location.pathname, search: window.location.search };
+    if (!browserPanelMove(from, href) && !browserViewMove(from, href)) return false;
     pushUrl(href);
     return true;
   }, []);
@@ -160,7 +162,7 @@ export function PanelHost({
   // conversation is here, or Back took the person somewhere else.
   if (opening !== null && view.draft !== opening.from) setOpening(null);
 
-  const controls = useMemo(() => ({ begin, settle, navigate }), [begin, settle, navigate]);
+  const controls = useMemo(() => ({ begin, settle, navigate, path }), [begin, settle, navigate, path]);
   const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
 
   // The page's order: a picture closes every panel, then the settings, a

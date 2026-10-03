@@ -289,14 +289,18 @@ describe("a job and a tile", () => {
     expect(container.textContent).toContain("There is no diagram named missing");
   });
 
-  it("moves between panels in the browser, and hands anything else back", () => {
+  it("moves between panels and views in the browser, and hands anything else back", () => {
     setUrl("sel=graph");
     mount();
     expect(grabbed.controls!.navigate("/studio?job=j1")).toBe(true);
     expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio?job=j1");
     pushState.mockClear();
-    // Other filters, a picture, the settings, an Extend press, another page.
-    for (const href of ["/studio?topic=b", "/studio?job=j1&shot=after", "/studio?settings=1", "/studio?extend=graph", "/library"]) {
+    // Another filter is a view change, which the grid redraws in the browser.
+    expect(grabbed.controls!.navigate("/studio?topic=b")).toBe(true);
+    expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio?topic=b");
+    pushState.mockClear();
+    // Another filter with another panel, a picture, the settings, an Extend press, another page.
+    for (const href of ["/studio?topic=b&job=j1", "/studio?job=j1&shot=after", "/studio?settings=1", "/studio?extend=graph", "/library"]) {
       expect(grabbed.controls!.navigate(href)).toBe(false);
     }
     expect(pushState).not.toHaveBeenCalled();

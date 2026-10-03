@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { PanelLink } from "@/components/studio/PanelLink";
+
 /**
  * The small, shared pieces of the studio's own chrome.
  *
@@ -78,9 +80,8 @@ export function ChipLink({
   title?: string;
 }) {
   return (
-    <Link
+    <PanelLink
       href={href}
-      scroll={false}
       title={title}
       className={`inline-flex h-7 max-w-full shrink-0 items-center gap-1 truncate rounded-md border px-2 text-xs transition-colors ${
         active
@@ -89,7 +90,7 @@ export function ChipLink({
       }`}
     >
       {children}
-    </Link>
+    </PanelLink>
   );
 }
 
