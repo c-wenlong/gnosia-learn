@@ -17,9 +17,10 @@ import { readClaudeDefaults, readPreference, resolveAgentSettings } from "./agen
 import { isNarrated, type ValidVideoBrief } from "./brief";
 import { briefTool, DEFAULT_VIDEO_TOOL, notInStudio, type VideoToolName } from "./tools";
 import { backendFor, type BackendJob, type VideoBackend } from "./backend";
-import { appendRead, editsOn, readCalls, readReads, ReadTracker, isToolResult, LineQueue } from "./calls";
+import { appendRead, editsOn, readCalls, readReads, ReadTracker, isToolResult, LineQueue, WrapperOutputTracker } from "./calls";
 import { BASH_TIMEOUT_MS, VIDEO_CONCURRENCY, VIDEO_MAX_ATTEMPTS, VIDEO_RUNNER_NAME, videoHangMs, videoMaxTurns } from "./config";
 import { safeCopy, safeRead } from "./copy";
+import { deadTools, deadToolsMessage, type DeadTools } from "./dead-tools";
 import type { VideoDoctor, VideoDoctorReport } from "./doctor";
 import { runVideoGate, type GateTools } from "./gate";
 import { manualFile, writeManual } from "./manual";
@@ -65,6 +66,10 @@ interface Running {
   callsKept: number;
   /** The stream's lines, handled in order; the gate waits for it. */
   lines: LineQueue;
+  /** Set once the wrapper's log shows tools that cannot start (V26): the job ends as `toolchain`, with no gate and no retry. */
+  deadTools: DeadTools | null;
+  /** What the last wrapper call printed, for the job's events when that happens. */
+  output: WrapperOutputTracker | null;
   /**
    * Whether this runner may write the catalog row's terminal state: once the
    * catalog handed the job over, or answered nothing (the degraded mode, D16).
@@ -500,6 +505,8 @@ export class VideoRunner {
         callsKeptSize: -1,
         callsKept: 0,
         lines: new LineQueue(),
+        deadTools: null,
+        output: null,
         mayFinish: false,
       };
       this.running.set(next.id, entry);
@@ -620,6 +627,7 @@ export class VideoRunner {
     if (problems.length > 0) throw new Error(problems.join("; "));
     const paths = await backend.paths(id, record.slug);
     entry.paths = paths;
+    entry.output = new WrapperOutputTracker(paths.wrapper);
     const home = ownerHome();
     const brief = record.brief;
     const voice = isNarrated(brief) ? brief.voice : "none";
@@ -748,6 +756,14 @@ export class VideoRunner {
       await initNoted;
       await this.refreshSteps(entry);
       if (entry.cancelled || outcome.stopReason === "cancelled") break;
+      // Before every other reading of the outcome: a session this runner
+      // stopped has no result and a signal for an exit, which the checks
+      // below would take for a lost parent session or a refused request.
+      entry.deadTools ??= deadTools(await readCalls(paths.calls));
+      if (entry.deadTools !== null) {
+        await this.stopForDeadTools(entry, entry.deadTools, outcome);
+        return;
+      }
 
       if (outcome.spawnFailed) {
         await this.finish(entry, "failed", { errorKind: "spawn", error: `the agent never started: ${outcome.stderr}`, outcome, cost: entry.meter.read() });
@@ -835,6 +851,23 @@ export class VideoRunner {
     });
   }
 
+  /**
+   * The end of a job whose tools cannot start (V26, `dead-tools.ts`): failed
+   * as `toolchain`, with no gate (there is nothing it could judge) and no
+   * retry (the next attempt would meet the same tools), its cost what the
+   * meter read, and the tool's doctor told so health shows it.
+   */
+  private async stopForDeadTools(entry: Running, verdict: DeadTools, outcome: AgentOutcome): Promise<void> {
+    const id = entry.record.id;
+    if (entry.paths !== null) await sweepByMarker(`${entry.paths.job}/`);
+    const output = entry.output?.last ?? null;
+    await this.store.update(id, { deadTools: { ...verdict, output } });
+    if (output !== null) await this.store.emit(id, { type: "step", state: "running", note: `the last wrapper call printed:\n${output}` });
+    const error = deadToolsMessage(verdict);
+    await this.finish(entry, "failed", { errorKind: "toolchain", error, outcome, cost: entry.meter.read() });
+    this.doctorFor(briefTool(entry.record.brief))?.noteToolchainStop({ jobId: id, at: new Date().toISOString(), detail: error });
+  }
+
   /** A resume's source is its parent's work, so its age is measured from the parent's start. */
   private freshnessFrom(record: VideoJobRecord): number {
     const own = Date.parse(record.startedAt ?? record.requestedAt);
@@ -907,7 +940,18 @@ export class VideoRunner {
         await this.store.emit(id, { type: "step", state: "running", note: `read the sheet ${path.basename(file, ".sheet.png")}` });
       }
       if (editsOn(line).includes(paths.sceneFile)) entry.edits += 1;
+      entry.output?.observe(line);
       if (isToolResult(line) || editsOn(line).length > 0) await this.refreshSteps(entry);
+      // A wrapper call has just ended: if the log now shows tools that cannot
+      // start (V26), stop the session now rather than let it retry them.
+      if (isToolResult(line) && entry.deadTools === null && !entry.cancelled) {
+        const verdict = deadTools(await readCalls(paths.calls));
+        if (verdict !== null) {
+          entry.deadTools = verdict;
+          await this.store.emit(id, { type: "phase", note: "stopping: the video tools die as they start on this machine, which no change to the scenes can fix", state: "running" });
+          await entry.agent?.stop("dead-tools");
+        }
+      }
       // A wrapper call has just ended: let the backend keep the source its
       // look rendered from, which the gate's step 10 compares scene by scene.
       // Only when the log has grown, so a result that ran no wrapper call
