@@ -1,3 +1,4 @@
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,9 +22,13 @@ vi.mock("@/lib/asset-library", async (importOriginal) => ({
 }));
 vi.mock("@/lib/learner-store", () => ({ loadKnowledgeBase }));
 vi.mock("@/data/courses", () => ({ getCourses: async () => [] }));
-// The menus push through the app router, which static markup has none of;
-// they are covered by their own suite, and this one is about the layouts.
-vi.mock("@/components/library/LibraryFilterMenus", () => ({ LibraryFilterMenus: () => null }));
+// The menus push through the app router, which static markup has none of, so
+// the toolbar is stood in for by its two server-built halves: the search form
+// and the layout switch. This suite is about the layouts.
+vi.mock("@/components/library/LibraryToolbar", () => ({
+  LibraryToolbar: ({ search, layout }: { search: ReactNode; layout: ReactNode }) =>
+    createElement("section", null, search, layout),
+}));
 
 const ROWS = [
   {
@@ -73,7 +78,7 @@ function currentLayout(html: string): { href: string; label: string } | null {
   const nav = html.match(/<nav aria-label="Layout".*?<\/nav>/)?.[0] ?? "";
   const link = [...nav.matchAll(/<a ([^>]*)>(.*?)<\/a>/g)].find(([, attrs]) => attrs.includes('aria-current="page"'));
   if (link === undefined) return null;
-  return { href: link[1].match(/href="([^"]*)"/)?.[1] ?? "", label: link[2].replace(/<[^>]*>/g, "") };
+  return { href: link[1].match(/href="([^"]*)"/)?.[1] ?? "", label: link[1].match(/aria-label="([^"]*)"/)?.[1] ?? "" };
 }
 
 describe("/library", () => {
@@ -141,10 +146,12 @@ describe("/library", () => {
     expect(html).toContain("Link · pages.cs.wisc.edu");
   });
 
-  it("keeps the list when the sort flips or a search is submitted", async () => {
-    const html = await render({ view: "list" });
+  it("keeps the list when a search is submitted, and the sort when the layout flips", async () => {
+    const html = await render({ view: "list", sort: "title" });
 
-    expect(html).toContain('href="/library?sort=title&amp;view=list"');
+    expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="sort"[^>]*value="title"/);
+    expect(currentLayout(html)).toEqual({ href: "/library?sort=title&amp;view=list", label: "List" });
+    expect(html).toContain('href="/library?sort=title"');
     expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="view"[^>]*value="list"/);
   });
 });

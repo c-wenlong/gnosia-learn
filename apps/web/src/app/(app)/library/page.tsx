@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { AssetCard, type CardConcept } from "@/components/AssetCard";
 import { AssetRow } from "@/components/library/AssetRow";
-import { LibraryFilterMenus, type LibraryMenu } from "@/components/library/LibraryFilterMenus";
+import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryToolbar";
 import { Notice } from "@/components/library/Notice";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
@@ -54,8 +54,11 @@ export const metadata: Metadata = {
  * `?sort=` and `?view=` are the whole state, so a view is linkable and the back button
  * undoes a filter. Each filter group is a `FilterMenu` (Type, Course, and
  * Topic when one is set); the page reads the filters and the options here, and
- * the small client `LibraryFilterMenus` pushes the `libraryHref` of a pick, so
- * the page itself stays a server component. The search box is a GET form (`next/form`, so
+ * the small client `LibraryToolbar` pushes the `libraryHref` of a pick, so
+ * the page itself stays a server component. The toolbar puts the filters on
+ * the left and how to show them on the right: the search, the sort (a bare
+ * menu reading "Newest" or "Title") and an icon-only grid or list switch, all
+ * at a chip's height. The search box is a GET form (`next/form`, so
  * submitting it is a client-side navigation) that carries the other filters
  * along as hidden fields.
  *
@@ -210,6 +213,21 @@ export default async function LibraryPage({
     });
   }
 
+  // Bare, so the trigger reads "Newest" rather than "Sort: Newest"; the
+  // options name an order on their own. Newest is when the row entered the
+  // catalog; title is A to Z by the name on the card.
+  const sortMenu: LibraryMenu = {
+    label: "Sort",
+    param: "sort",
+    value: sort,
+    defaultValue: "newest",
+    bare: true,
+    options: [
+      { value: "newest", label: "Newest first", short: "Newest" },
+      { value: "title", label: "Title, A to Z", short: "Title" },
+    ],
+  };
+
   return (
     <div data-layout="app" className="flex flex-col gap-4">
       <header className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
@@ -231,29 +249,31 @@ export default async function LibraryPage({
         </Notice>
       ) : (
         <>
-          {/* Type, Course (and Topic when set), the sort, then the search at
-              the right from 768px; below that the search takes its own line. */}
-          <section aria-label="Filters" className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <LibraryFilterMenus filters={filters} menus={menus} />
-            <SortToggle filters={filters} sort={sort} />
-            <ViewToggle filters={filters} view={view} />
-            <Form action="/library" role="search" className="w-full md:ml-auto md:w-[340px]">
-              {/* The other filters ride along, so a search narrows the view the
-                  reader is in rather than resetting it. Only the ones that are set,
-                  so an unfiltered search is a clean `?q=`. */}
-              {kind !== null && <input type="hidden" name="kind" value={kind} />}
-              {topic !== null && <input type="hidden" name="topic" value={topic} />}
-              {course !== null && <input type="hidden" name="course" value={course} />}
-              {sort !== "newest" && <input type="hidden" name="sort" value={sort} />}
-              {view !== "grid" && <input type="hidden" name="view" value={view} />}
-              <SearchField
-                label="Search the library"
-                placeholder="Search titles, transcripts, notes"
-                defaultValue={q ?? ""}
-                maxLength={200}
-              />
-            </Form>
-          </section>
+          <LibraryToolbar
+            filters={filters}
+            menus={menus}
+            sort={sortMenu}
+            layout={<ViewToggle filters={filters} view={view} />}
+            search={
+              <Form action="/library" role="search" className="min-w-0 flex-1 md:w-[260px] md:flex-none">
+                {/* The other filters ride along, so a search narrows the view the
+                    reader is in rather than resetting it. Only the ones that are set,
+                    so an unfiltered search is a clean `?q=`. */}
+                {kind !== null && <input type="hidden" name="kind" value={kind} />}
+                {topic !== null && <input type="hidden" name="topic" value={topic} />}
+                {course !== null && <input type="hidden" name="course" value={course} />}
+                {sort !== "newest" && <input type="hidden" name="sort" value={sort} />}
+                {view !== "grid" && <input type="hidden" name="view" value={view} />}
+                <SearchField
+                  label="Search the library"
+                  placeholder="Search"
+                  defaultValue={q ?? ""}
+                  maxLength={200}
+                  size="chip"
+                />
+              </Form>
+            }
+          />
 
           {unserved.length > 0 && (
             <Notice
@@ -358,29 +378,10 @@ export default async function LibraryPage({
 }
 
 /**
- * "Sort: newest" from the hi-fi, as a link that flips to the other order.
- * Newest is when the row entered the catalog; title is A to Z by the name on
- * the card.
- */
-function SortToggle({ filters, sort }: { filters: LibraryFilters; sort: "newest" | "title" }) {
-  const other = sort === "newest" ? "title" : "newest";
-  return (
-    <Link
-      href={libraryHref({ ...filters, sort: other })}
-      aria-label={`Sorted by ${sort}. Sort by ${other} instead.`}
-      className={cx(
-        "shrink-0 rounded-sm text-[12px] whitespace-nowrap text-text2 underline-offset-4 hover:text-text hover:underline",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-      )}
-    >
-      Sort: {sort}
-    </Link>
-  );
-}
-
-/**
- * The grid and the list, as two links: each is a URL, like every other choice
- * on this page, and the one in use is marked `aria-current`.
+ * The grid and the list, as two icon links in one chip-high pill: each is a
+ * URL, like every other choice on this page, and the one in use is marked
+ * `aria-current`. Icons only, since the tiles and the lines say which is
+ * which; each link is named for a screen reader and titled for a hover.
  */
 function ViewToggle({ filters, view }: { filters: LibraryFilters; view: LibraryView }) {
   const options: { value: LibraryView; label: string; glyph: "assets" | "topics" }[] = [
@@ -388,7 +389,7 @@ function ViewToggle({ filters, view }: { filters: LibraryFilters; view: LibraryV
     { value: "list", label: "List", glyph: "topics" },
   ];
   return (
-    <nav aria-label="Layout" className="flex shrink-0 items-center rounded-full border-2 border-border bg-surface p-0.5">
+    <nav aria-label="Layout" className="flex h-[34px] shrink-0 items-center rounded-full border border-border bg-surface p-[3px]">
       {options.map((option) => {
         const current = option.value === view;
         return (
@@ -396,15 +397,16 @@ function ViewToggle({ filters, view }: { filters: LibraryFilters; view: LibraryV
             key={option.value}
             href={libraryHref({ ...filters, view: option.value })}
             aria-current={current ? "page" : undefined}
+            aria-label={option.label}
+            title={option.label}
             scroll={false}
             className={cx(
-              "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition-colors duration-100",
+              "inline-flex h-full w-[34px] items-center justify-center rounded-full transition-colors duration-100",
               current ? "bg-surface2 text-text" : "text-text2 hover:text-text",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
             )}
           >
             <Glyph name={option.glyph} size={16} />
-            {option.label}
           </Link>
         );
       })}

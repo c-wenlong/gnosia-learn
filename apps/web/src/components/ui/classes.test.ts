@@ -80,6 +80,14 @@ describe("inputClasses and cardClasses", () => {
     expect(inputClasses({ pill: true })).toContain("rounded-full");
   });
 
+  it("gives the chip size a chip's height, border and text", () => {
+    const chip = inputClasses({ pill: true, size: "chip" }).split(" ");
+    expect(chip).toEqual(expect.arrayContaining(["h-[34px]", "border", "rounded-full"]));
+    expect(chip).not.toContain("border-2");
+    expect(chip).not.toContain("h-11");
+    expect(inputClasses().split(" ")).toContain("border-2");
+  });
+
   it("pads a card 20px, or 14 when tight", () => {
     expect(cardClasses()).toContain("p-5");
     expect(cardClasses({ tight: true })).toContain("p-3.5");
