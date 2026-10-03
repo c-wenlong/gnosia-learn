@@ -92,7 +92,12 @@ export function CourseList({
     );
     return tags.filter((t) => used.has(t.id) || t.id === filter.tag);
   }, [tags, summaries, state.inactiveCourses, inactiveTotal, filter.tag]);
-  const tagOptions = useMemo(() => tagFilterOptions(shownTags, summaries), [shownTags, summaries]);
+  // Counted over the active grid: an inactive course that matches shows in the
+  // fold, which prints its own count.
+  const tagOptions = useMemo(
+    () => tagFilterOptions(shownTags, splitByActive(summaries, state.inactiveCourses).active),
+    [shownTags, summaries, state.inactiveCourses],
+  );
   const filtering = query.trim() !== "" || filter.tag !== null;
   const noMatch = shown.active.length === 0 && shown.inactive.length === 0;
   const showInactive = inactiveOpen ?? (filtering && shown.inactive.length > 0);
