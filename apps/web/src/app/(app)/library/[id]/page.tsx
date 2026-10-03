@@ -27,8 +27,8 @@ import {
 } from "@/lib/asset-library";
 import { storedPosters } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
-import { habitTimeZone } from "@/lib/habit";
-import { dayKey } from "@/lib/habit-core";
+import { appTimeZone } from "@/lib/time-zone";
+import { dayKey } from "@/lib/days";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import {
   assetBackLink,
@@ -188,7 +188,7 @@ export default async function AssetPage({
   const label = assetKindLabel(asset.kind);
   const fileHref = assetFileHref(asset.id);
   const statusHref = assetStatusHref(asset.id);
-  const zone = habitTimeZone();
+  const zone = appTimeZone();
 
   const explained = explainedConcepts(concepts, new Map(kb.concepts.map((c) => [c.id, c])));
   const firstConcept = explained[0];

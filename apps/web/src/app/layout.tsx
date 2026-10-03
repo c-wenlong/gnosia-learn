@@ -48,7 +48,7 @@ export const metadata: Metadata = {
  * Two route groups sit under it. `(site)` is the public face: the landing
  * page and the sign-in page, which anyone can load and which must therefore
  * cost no query. `(app)` is the owner's: its layout checks the session, reads
- * the learner snapshot and the habit numbers, and draws the shell. Splitting
+ * the learner snapshot, and draws the shell. Splitting
  * them here rather than in the shell keeps `loadLearnerSnapshot` off the
  * landing page's request path entirely, not merely unused.
  *

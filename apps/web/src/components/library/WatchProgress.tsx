@@ -14,7 +14,7 @@ export type WatchStatus = {
   position: number;
   /**
    * The day it was first watched through (`2026-09-29`), made on the server in
-   * the habit's time zone (by the page, then by each save's answer), or null.
+   * the app's time zone (by the page, then by each save's answer), or null.
    */
   watchedDay: string | null;
 };

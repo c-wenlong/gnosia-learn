@@ -163,7 +163,7 @@ export interface CourseEntry {
  * A course the learner set aside (`inactive`) is left out, however far along.
  * The course the learner last opened (`lastVisited`, written by the course
  * page) comes first, since it is the one they are most likely back for; the
- * rest go furthest along first, the order Today's card uses, then in the
+ * rest go furthest along first, the order Home's card uses, then in the
  * order they were given, which is the catalog's authored order.
  */
 export function continueLearning(

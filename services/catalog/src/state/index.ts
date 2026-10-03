@@ -163,6 +163,7 @@ export {
   setProgress,
   type ProgressRow,
 } from "./progress";
+export { recentDrafts, type RecentDraft } from "./drafts";
 export { clearRecap, isEmptyRecap, readRecaps, upsertRecap } from "./recap";
 export {
   importLegacyState,
@@ -195,8 +196,11 @@ export {
 } from "./tutor-models";
 export {
   asLastVisited,
+  asRecentModules,
   asUserResources,
+  RECENT_MODULES_MAX,
   readLearnerSnapshot,
+  withRecentModule,
 } from "./snapshot";
 export {
   assetCounts,

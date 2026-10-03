@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import type { CourseInProgress } from "@/lib/today-core";
+import type { CourseInProgress } from "@/lib/home-core";
 
 /**
  * Courses in progress (hi-fi 01, bottom right): the courses with at least one

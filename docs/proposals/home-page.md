@@ -1,7 +1,7 @@
 # Proposal: Home replaces Today
 
-Status: proposed, 2026-10-04. Decisions H1 to H3 are the owner's and
-settled. Nothing here is implemented.
+Status: accepted, 2026-10-04, and being built in phases. Decisions H1 to H3
+are the owner's and settled. Phase 1 is built; phases 2 and 3 are not.
 
 ## The problem
 
@@ -79,7 +79,9 @@ Two limits of the stored data shape this list:
   anything but a single object. Phase 1 leaves that key and both paths alone,
   since the course list resumes from it, and adds a new key,
   `recentModules`: a list of the same objects, newest first, at most five,
-  with its own validator and reader. The course page writes both on a visit.
+  with its own reader. The browser never writes it: the preference route
+  keeps it, in the same transaction as every `lastVisited` write, so the
+  course page's one post covers both and two tabs cannot race each other.
   While `recentModules` is absent (every owner before phase 1), Home reads
   `lastVisited` as a list of one, so no visit recorded before the change is
   lost.
