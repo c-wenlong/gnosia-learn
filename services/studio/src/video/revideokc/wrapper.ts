@@ -125,17 +125,42 @@ function record(entry) {
   fs.appendFileSync(CONFIG.calls, JSON.stringify(entry) + "\n", { mode: 0o644 });
 }
 
-// Write a whole buffer to one of this process's own descriptors, waiting out
-// a full pipe rather than dropping the rest.
-function relay(fd, buffer) {
-  let offset = 0;
-  while (buffer && offset < buffer.length) {
+// Where a step's output goes: this process's own stdout and stderr, written
+// through their streams, so a full pipe is waited on (the step is paused
+// until it drains) rather than spun on. If one fails (its reader went away,
+// its file filled), the rest of that stream's output is dropped, the other
+// keeps going, and the step runs on, so the call is still recorded and the
+// marker removed.
+const lost = new Set();
+const paused = new Map();
+function loseOutput(sink) {
+  lost.add(sink);
+  for (const source of paused.get(sink) || []) source.resume();
+  paused.delete(sink);
+}
+process.stdout.on("error", () => loseOutput(process.stdout));
+process.stderr.on("error", () => loseOutput(process.stderr));
+
+function forward(source, sink) {
+  source.on("data", (chunk) => {
+    if (lost.has(sink)) return;
+    let flowing;
     try {
-      offset += fs.writeSync(fd, buffer, offset, buffer.length - offset);
-    } catch (error) {
-      if (error.code !== "EAGAIN") throw error;
+      flowing = sink.write(chunk);
+    } catch {
+      loseOutput(sink);
+      return;
     }
-  }
+    if (!flowing && !lost.has(sink)) {
+      source.pause();
+      if (!paused.has(sink)) paused.set(sink, new Set());
+      paused.get(sink).add(source);
+      sink.once("drain", () => {
+        paused.get(sink)?.delete(source);
+        source.resume();
+      });
+    }
+  });
 }
 
 // A step's output comes back through pipes of the wrapper's own, never the
@@ -158,8 +183,8 @@ function sandboxed(step, profile, argv) {
       resolve({ step, exitCode: null, signal: null, ms: Date.now() - started });
       return;
     }
-    child.stdout.on("data", (chunk) => relay(1, chunk));
-    child.stderr.on("data", (chunk) => relay(2, chunk));
+    forward(child.stdout, process.stdout);
+    forward(child.stderr, process.stderr);
     child.on("error", () => resolve({ step, exitCode: null, signal: null, ms: Date.now() - started }));
     child.on("close", (code, signal) => resolve({ step, exitCode: code === null ? null : code, signal: signal || null, ms: Date.now() - started }));
   });
