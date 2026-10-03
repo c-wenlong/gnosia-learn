@@ -361,6 +361,7 @@ profiles, wrapper, settings and prompts with the old calls, byte for byte.
 | `manual(wrapper, listing)`, `prompt(request)` | The system prompt, and the four user messages as one discriminated request |
 | `settings(job, input)` | The permission file around the runner's guard |
 | `gateTools(job)`, `checkSource(input, report)`, `sheet(paths, scene)` | The gate's sandboxed tools, its steps 1 to 3, and the sheet step 10 wants Read |
+| `sceneUnchanged(input)`, `keepPreviewed(paths, calls)` (optional) | For the gate's own step 10: whether a scene's last look, of an older source, still shows it in the checked one, and the runner's hook to keep each look's source. manimkc's; a backend without them has every look held to the checked source |
 
 The runner keeps the Bash guard and writes the settings file; the gate keeps
 steps 4 to 10 and calls `checkSource` and `sheet` (`VideoGateChecks` in

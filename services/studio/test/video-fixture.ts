@@ -160,8 +160,9 @@ export function build(at: string, sceneSha256: string): WrapperCall {
   return { verb: "build", startedAt: at, endedAt: at, exitCode: 0, sceneSha256, rendered: [], deliverable: { written: true } };
 }
 
-export function preview(at: string, scenes: string[]): WrapperCall {
-  return { verb: "preview", scenes, startedAt: at, endedAt: at, exitCode: 0, rendered: scenes };
+/** A preview that rendered these scenes from the scene file with this sha256, as the wrapper records one. */
+export function preview(at: string, scenes: string[], sceneSha256: string): WrapperCall {
+  return { verb: "preview", scenes, startedAt: at, endedAt: at, exitCode: 0, sceneSha256, rendered: scenes };
 }
 
 /** Recorded answers for the sandboxed steps. */
