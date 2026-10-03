@@ -477,6 +477,18 @@ Rules of engagement:
   family by name, else at the dearest rate in the table (`priceableAs` in
   `cost.ts`), and the reading's `pricedAs` says which: an estimate, never
   none, so the cap still counts a killed attempt.
+- **The grid's three lists are kept in the runner's memory.**
+  `GET /api/diagrams`, `/api/vocabulary` and `/api/videos` answer through
+  `services/studio/src/listings.ts`: the last read at once, and a read older
+  than 30 seconds is served while a fresh one runs, with `cache.renewing`
+  set so the page refreshes itself once (`RenewLists`). Each read is a
+  `catalog` subprocess, and the three together took 2 to 4 seconds on every
+  visit before this. A write through `catalog.ts` (`diagram put` and
+  `commit`, `video put`, `topic add`, `job accept`) drops all three, so a
+  page after the studio's own write waits for fresh lists. A write from
+  outside the runner shows a few seconds after the next visit. Gates (a
+  brief checked against the vocabulary, one diagram's panel) still read the
+  catalog each time.
 - The mirror iframe at `/studio/d/<name>` is cross-origin, so the studio has
   no channel to ask the live canvas anything; it derives the SVG-freshness
   pill by comparing file modification times instead. An open canvas sends a

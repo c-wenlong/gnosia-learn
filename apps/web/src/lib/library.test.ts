@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assetBackLink,
   assetFileHref,
   assetHref,
   compareByKindThenId,
@@ -437,5 +438,24 @@ describe("firstParam", () => {
 
   it("passes a single value through", () => {
     expect(firstParam("video")).toBe("video");
+  });
+});
+
+describe("assetBackLink", () => {
+  it("returns to the studio view an asset was opened from, filters and all", () => {
+    expect(assetBackLink("/studio?topic=x&q=y")).toEqual({ href: "/studio?topic=x&q=y", label: "Studio" });
+    expect(assetBackLink("/studio")).toEqual({ href: "/studio", label: "Studio" });
+    expect(assetBackLink(["/studio?job=j1", "/elsewhere"])).toEqual({ href: "/studio?job=j1", label: "Studio" });
+  });
+
+  it("goes up to the library otherwise, and never off the site", () => {
+    const library = { href: "/library", label: "Library" };
+    expect(assetBackLink(undefined)).toEqual(library);
+    expect(assetBackLink("")).toEqual(library);
+    expect(assetBackLink("/courses/cs3230")).toEqual(library);
+    expect(assetBackLink("/studios")).toEqual(library);
+    expect(assetBackLink("//evil.example/studio")).toEqual(library);
+    expect(assetBackLink("https://evil.example/studio")).toEqual(library);
+    expect(assetBackLink("/studio\n")).toEqual(library);
   });
 });

@@ -603,6 +603,8 @@ describe("the grid", () => {
   it("links the poster, the library page and the gate's copies through the right routes", () => {
     expect(posterHref("video:a b")).toBe("/api/assets/video%3Aa%20b/poster");
     expect(libraryHref("attention-weights")).toBe("/library/video%3Aattention-weights");
+    // The studio view it was opened from rides along, for the page's back link.
+    expect(libraryHref("a", "/studio?topic=x&q=y")).toBe("/library/video%3Aa?from=%2Fstudio%3Ftopic%3Dx%26q%3Dy");
     expect(mediaHref("j/1", "a.mp4")).toBe("/studio/api/jobs/j%2F1/media/a.mp4");
   });
 });

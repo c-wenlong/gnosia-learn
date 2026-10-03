@@ -671,7 +671,7 @@ function Review({
           ]}
         />
       ) : (
-        <Landed job={job} />
+        <Landed job={job} path={path} />
       )}
 
       {changes.length > 0 && <ChangedLines lines={changes} />}
@@ -822,7 +822,7 @@ function Checks({ job }: { job: VideoJob }) {
 }
 
 /** After an accept: where it landed. */
-function Landed({ job }: { job: VideoJob }) {
+function Landed({ job, path }: { job: VideoJob; path: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-ok-tint px-4 py-3">
       <p className="text-[14px] font-semibold text-ok-text">In the catalog as {job.title ?? job.slug}</p>
@@ -830,7 +830,7 @@ function Landed({ job }: { job: VideoJob }) {
         The library plays it with its chapters and transcript.
       </p>
       <div>
-        <Button size="sm" href={libraryHref(job.slug)}>
+        <Button size="sm" href={libraryHref(job.slug, path)}>
           Open in the library
         </Button>
       </div>

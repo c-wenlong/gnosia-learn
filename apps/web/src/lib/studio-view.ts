@@ -313,12 +313,13 @@ export function withoutOutcome(path: string): string {
 
 /**
  * Whether going from the address bar `from` to `href` only opens, closes or
- * swaps a panel the browser draws (a conversation, a job, a tile), with the
- * grid behind it unchanged, so `PanelHost` can move the URL itself.
+ * swaps a panel the browser draws (a conversation, a job, a tile, the
+ * settings), with the grid behind it unchanged, so `PanelHost` can move the
+ * URL itself.
  *
  * Everything else is the server's: another page, other filters, a picture
- * (the main area, not a panel), and the settings and an Extend press, which
- * the server draws from reads the page does not send.
+ * (the main area, not a panel), and an Extend press, which the server draws
+ * from reads the page does not send.
  */
 export function browserPanelMove(from: { pathname: string; search: string }, href: string): boolean {
   const query = from.search.replace(/^\?/, "");
@@ -328,9 +329,19 @@ export function browserPanelMove(from: { pathname: string; search: string }, hre
   if (viewPart(now) !== viewPart(target.searchParams)) return false;
   const was = parseView(rawParamsOf(now));
   const next = parseView(rawParamsOf(target.searchParams));
-  if (was.shot !== null || next.shot !== null || next.settings) return false;
-  // Extend loses to a conversation and to a job, as it does in the page.
-  return next.extend === null || next.draft !== null || next.job !== null;
+  if (was.shot !== null || next.shot !== null) return false;
+  // Extend loses to the settings, a conversation and a job, as it does in the page.
+  return next.extend === null || next.settings || next.draft !== null || next.job !== null;
+}
+
+/**
+ * The view under any panel: the path with every panel parameter and a verb's
+ * outcome dropped, the filters kept. What a link away from the grid hands as
+ * its way back, so returning does not reopen a dialog that happened to be
+ * open when the page was last drawn on the server.
+ */
+export function gridHref(path: string): string {
+  return withoutOutcome(panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false }));
 }
 
 /**

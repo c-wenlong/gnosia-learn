@@ -13,7 +13,8 @@ import { panelSignature, type Diagram } from "@/lib/studio-view";
  * opens at the press, before the runner has made the draft.
  */
 
-const mocks = vi.hoisted(() => ({ search: "", push: vi.fn() }));
+const mocks = vi.hoisted(() => ({ search: "", push: vi.fn(), loadSettings: vi.fn(), saveAgent: vi.fn() }));
+vi.mock("@/app/(app)/studio/actions", () => ({ loadStudioSettings: mocks.loadSettings, saveStudioAgent: mocks.saveAgent }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push, replace: vi.fn(), refresh: vi.fn() }),
@@ -67,6 +68,8 @@ beforeEach(() => {
   live.jobs = [];
   setUrl("");
   mocks.push.mockReset();
+  // A read nobody answers, unless a test says otherwise.
+  mocks.loadSettings.mockReset().mockReturnValue(new Promise(() => undefined));
   pushState = vi.spyOn(window.history, "pushState").mockImplementation(() => undefined);
 });
 
@@ -295,8 +298,10 @@ describe("a job and a tile", () => {
     expect(grabbed.controls!.navigate("/studio?job=j1")).toBe(true);
     expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio?job=j1");
     pushState.mockClear();
-    // Other filters, a picture, the settings, an Extend press, another page.
-    for (const href of ["/studio?topic=b", "/studio?job=j1&shot=after", "/studio?settings=1", "/studio?extend=graph", "/library"]) {
+    expect(grabbed.controls!.navigate("/studio?settings=1")).toBe(true);
+    pushState.mockClear();
+    // Other filters, a picture, an Extend press, another page.
+    for (const href of ["/studio?topic=b", "/studio?job=j1&shot=after", "/studio?extend=graph", "/library"]) {
       expect(grabbed.controls!.navigate(href)).toBe(false);
     }
     expect(pushState).not.toHaveBeenCalled();
@@ -317,5 +322,59 @@ describe("a tile's job history", () => {
     setUrl("sel=graph");
     const { container } = mount();
     expect(container.querySelector("[data-tile]")?.getAttribute("data-jobs")).toBe("j9,j1");
+  });
+});
+
+describe("the settings", () => {
+  const rows = (model: string) => ({
+    reachable: true,
+    rows: [
+      { kind: "video", name: "Videos", value: { model, effort: "default" }, fallback: { model: "default", effort: "default" }, models: [{ value: "default", label: "Claude Code default" }, { value: "opus", label: "Opus" }], efforts: [{ value: "default", label: "Claude Code default" }] },
+      { kind: "diagram", name: "Diagrams", value: { model: "sonnet", effort: "default" }, fallback: { model: "sonnet", effort: "default" }, models: [{ value: "sonnet", label: "Sonnet" }], efforts: [{ value: "default", label: "Claude Code default" }] },
+    ],
+  });
+
+  it("open at once, read their rows once a visit, and close without a server render", async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    mocks.loadSettings.mockImplementation(() => new Promise((settle) => (answer = settle)));
+    setUrl("topic=graphs&settings=1");
+    const { container, go } = mount();
+
+    // The dialog is up before the rows are, holding their shape.
+    expect(container.querySelector("dialog[open]")?.getAttribute("aria-label")).toBe("Settings");
+    expect(container.querySelector("[aria-busy]")).not.toBeNull();
+    await act(async () => answer(rows("default")));
+    expect(container.querySelectorAll("dialog[open] select")).toHaveLength(4);
+
+    close(container);
+    expect(pushState).toHaveBeenCalledWith(null, "", "/studio?topic=graphs");
+    expect(mocks.push).not.toHaveBeenCalled();
+    go("topic=graphs");
+    expect(container.querySelector("dialog")).toBeNull();
+
+    // Opened again: the rows it read, not a second read.
+    go("topic=graphs&settings=1");
+    expect(container.querySelectorAll("dialog[open] select")).toHaveLength(4);
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("start reading on a hover, so the press finds the rows", async () => {
+    mocks.loadSettings.mockResolvedValue(rows("opus"));
+    const { container, go } = mount();
+    await act(async () => grabbed.controls!.warmSettings());
+    go("settings=1");
+    expect(container.querySelector<HTMLSelectElement>("dialog[open] select")?.value).toBe("opus");
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("say so when the studio does not answer, and try again on a press", async () => {
+    mocks.loadSettings.mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce(rows("default"));
+    setUrl("settings=1");
+    const { container } = mount();
+    await act(async () => undefined);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("could not be read");
+
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
+    expect(container.querySelectorAll("dialog[open] select")).toHaveLength(4);
   });
 });
