@@ -608,7 +608,10 @@ async function run() {
     await tutor.getByRole('button', { name: 'Send', exact: true }).click();
     const response = await answered;
     assert(response.status() === 503, `/api/agent/chat answered ${response.status()}, expected 503 with no provider key`);
-    await tutor.getByRole('alert').getByText(/no model provider key yet\. Add one in Settings/).waitFor();
+    // The server names the gap itself ("No model provider key is set", from
+    // `missingKeyMessage` in apps/web/src/lib/agent/providers.ts since #250);
+    // the client's own fallback says "no model provider key yet". Either is right.
+    await tutor.getByRole('alert').getByText(/no model provider key (is set|yet)\. Add one in Settings/i).waitFor();
     await tutor.getByRole('button', { name: 'Try again' }).waitFor();
   });
 
