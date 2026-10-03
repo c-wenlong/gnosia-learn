@@ -225,6 +225,13 @@ export const PREFERENCE_KEYS = {
   lastVisited: "lastVisited",
   /** `Record<moduleId, UserResource[]>`. Keyed by module, which joins nothing. */
   userResources: "userResources",
+  /**
+   * `string[]`: the slugs of the courses the learner has set aside. Absent or
+   * empty means every course is active, so a course added later starts
+   * active. The Courses page folds these under "Inactive courses", and
+   * Continue learning on it and on Today leaves them out.
+   */
+  inactiveCourses: "inactiveCourses",
   /** BKT parameters, overriding `DEFAULT_PARAMS`. Was `model.json`'s `params`. */
   bktParams: "bktParams",
   /**
@@ -446,6 +453,8 @@ export interface LearnerState {
   /** Bumps when progress is reset so local UI state can remount. */
   epoch: number;
   lastVisited?: LastVisited;
+  /** Course slugs the learner set aside (`PREFERENCE_KEYS.inactiveCourses`). */
+  inactiveCourses: string[];
 }
 
 /**
@@ -462,6 +471,7 @@ export const emptyLearnerState = (): LearnerState => ({
   userResources: {},
   knowledge: {},
   epoch: 0,
+  inactiveCourses: [],
 });
 
 /**

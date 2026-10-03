@@ -12,6 +12,7 @@ import {
   shortLength,
   switchedTool,
   toolRow,
+  toolStopLine,
   videoModeLine,
   videoSummaryLine,
   type VideoBrief,
@@ -105,6 +106,7 @@ describe("the card's tool row (docs/STUDIO-VIDEO-TOOLS.md, D73)", () => {
       tool: "manimkc",
       line: "Boxes and arrows",
       choices: [],
+      stop: null,
     });
     expect(toolRow({ mode: "new" }, [manimkc, revideokc]).line).toBe("ManimGL: plots");
     expect(toolRow({ mode: "new" }, []).line).toBeNull();
@@ -115,6 +117,19 @@ describe("the card's tool row (docs/STUDIO-VIDEO-TOOLS.md, D73)", () => {
     const ready = { ...revideokc, available: true, reason: null };
     expect(toolRow({ mode: "new" }, [manimkc, ready]).choices).toEqual([manimkc, ready]);
     expect(toolRow({ mode: "change" }, [manimkc, ready]).choices).toEqual([]);
+  });
+
+  it("warns under the row when a job of the brief's tool was stopped for dead tools, without taking the tool away (V26)", () => {
+    const stopped: VideoToolOption = { ...manimkc, toolchainStop: { jobId: "j1", at: "2026-10-03T18:17:00.000Z", detail: "dead" } };
+    const row = toolRow({ mode: "new" }, [stopped, revideokc]);
+    expect(row.stop).toBe(
+      "Since the studio started, a manimkc job was stopped because its tools could not start on this machine. Check the tool's install before making another.",
+    );
+    expect(row.stop).toBe(toolStopLine(stopped));
+    // Only the brief's own tool: another tool's stop says nothing about this one.
+    expect(toolRow({ tool: "revideokc", mode: "new" }, [stopped, revideokc]).stop).toBeNull();
+    expect(toolStopLine(manimkc)).toBeNull();
+    expect(toolStopLine(undefined)).toBeNull();
   });
 
   it("saves a switch with the new tool and without the old reason", () => {

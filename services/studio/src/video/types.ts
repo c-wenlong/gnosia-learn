@@ -4,6 +4,7 @@ import type { AgentAuth } from "../config";
 import type { CostSource } from "../cost";
 import type { GateStep } from "../store";
 import type { ValidVideoBrief } from "./brief";
+import type { DeadTools } from "./dead-tools";
 
 /**
  * The video runner's record of one job: `jobs/<id>/job.json`, rule 7's
@@ -130,6 +131,12 @@ export interface VideoJobRecord {
   gate: VideoGateResult | null;
   errorKind: string | null;
   error: string | null;
+  /**
+   * Set when the job was stopped because its tools could not start
+   * (`errorKind: toolchain`, V26): the wrapper calls that showed it, and what
+   * the last wrapper call printed, which `error` leaves out (`dead-tools.ts`).
+   */
+  deadTools?: (DeadTools & { output: string | null }) | null;
   /** What landed, after an accept. */
   written: string[];
   indexed: boolean;

@@ -324,6 +324,18 @@ describe("tags and cards per kind (docs/STUDIO-MENTIONS.md, API)", () => {
     expect(videoAvailability({ ok: false, checks: [], note: "n", tools: "nonsense" })).toEqual({ ok: false, reason: "n", tools: [] });
   });
 
+  it("carries a tool's toolchain stop through, beside a verdict it does not change (V26)", () => {
+    const stop = { jobId: "j1", at: "2026-10-03T18:17:00.000Z", detail: "The video tools could not start on this machine." };
+    const tools = [
+      { name: "revideokc", strength: "Revideo", available: true, reason: null, toolchainStop: stop },
+      { name: "manimkc", strength: "ManimGL", available: true, reason: null, toolchainStop: { jobId: 7 } },
+    ];
+    expect(videoAvailability({ ok: true, checks: [], tools }).tools).toEqual([
+      { name: "revideokc", strength: "Revideo", available: true, reason: null, toolchainStop: stop },
+      { name: "manimkc", strength: "ManimGL", available: true, reason: null },
+    ]);
+  });
+
   it("reads the runner's speech rate from health's video narration, and nothing that is not a positive number", () => {
     const narration = { source: "gnosia-audio", version: "0.1.0", charsPerSecond: 15.2, spokenWords: 179 };
     expect(videoAvailability({ ok: true, checks: [], narration })).toEqual({ ok: true, reason: null, charsPerSecond: 15.2 });

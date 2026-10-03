@@ -1031,6 +1031,23 @@ so, and the agent's own last messages say why.
 **A first request the API refused** ends the job after one attempt with
 `error_kind: agent`, exactly as the diagram runner does.
 
+**Tools that cannot start** end the job with `error_kind: toolchain`, no
+gate and no second attempt (V26, D54 amended). The runner reads
+`calls.ndjson` after every tool result. A step *died at start* when it
+ended with no exit code (a signal, or a spawn the OS refused) in under two
+seconds; any exit code, zero or not, or a signal after two seconds, means
+it started. Refused calls and calls that ran nothing (a held port) are
+skipped. The job is stopped when the same step died at start in three calls
+in a row with no call in between in which it started, or when three calls
+in a row died outright with no step starting in any of them. The error
+names the step, the signal and the verbs, from the wrapper's own records;
+what the last call printed goes to the job's events and its record's
+`deadTools`, never into `error`, which reaches the planner as a STUDIO
+note. The cost is what the meter read when the session was stopped, and the
+tool's doctor is told: health shows the stop beside the verdict as
+`toolchainStop`, and the checks run again at once. The rule and its reasons
+are in `services/studio/src/video/dead-tools.ts`.
+
 ## The job view
 
 **While it runs.** The panel's body is the video job view, in the same place
@@ -1331,6 +1348,7 @@ limit. What remains:
 | The daily cap | `STUDIO_DAILY_USD`, unset by default. When the owner sets it, a video job and a video planner turn count like any job and turn, in the same window, and a job already running is never stopped | One cap, as D27 and D36; no new limit for videos |
 | Hang timer | 20 minutes with no line from the agent, no wrapper call ending (a line in `calls.ndjson`) and none still running (a marker in `inflight/`, counted for at most the Bash tool's 600 s ceiling plus a minute), then the job is stopped as `timeout` | The only timer (D54, amended). A render runs inside one Bash call, which the tool ends at 600 s and then answers on the stream, so a long render is not a hang, even with `STUDIO_VIDEO_HANG_MS` set below one call's length. Files under `render/` do not count: a scene writes them, so a scene touching one kept a hung session alive forever (the review of #201). 20 minutes is a guess |
 | Attempts | three, as for diagrams: a gate failure resumes the agent with the findings | A retry policy, not a limit on work within an attempt |
+| Dead tools | three wrapper calls in a row whose steps die as they start (no exit code, under two seconds), then the job is stopped as `toolchain`, with no gate and no retry (V26) | Measured on 2026-10-03: a revideokc job whose every step aborted 20 ms in spent $5.51 over 15 minutes retrying, then failed the gate. The agent cannot fix a tool that never runs, so only this failure is the runner's to name |
 | `--max-turns` | not passed; `STUDIO_VIDEO_MAX_TURNS` exists for the owner to set | No limit by default, as a hand-run session has none |
 | Concurrency | one video job, independent of the diagram runner's one | A correctness choice, not a cost one: scenes already render in parallel inside a job, `min(cores / 3, (RAM - 2 GB) / 1.5 GB, 4)`, 4 on this machine, from manimkc's measured 930 MB and three cores per 1080p scene |
 | TTS | kokoro, local, no quota | ElevenLabs' free tier is about 10,000 characters a month (manimkc's `AGENTS.md`), which one three-minute script (2,700 characters) and two revisions would mostly spend |
@@ -1367,6 +1385,7 @@ V for video, so they do not collide with C, M, E or U.
 | V22 | The owner changes the model in the panel while a job is queued | The job uses the new setting, resolved at start; a running job keeps what it started with, and so does its revise |
 | V23 | The owner's user settings name a model the rate table does not price | A clean session records the CLI's own cost; a killed one's estimate falls back as today and says so |
 | V24 | A script change is asked for while the video is still in review | The planner's `change` brief names the video's slug; Make video discards the reviewed job and enqueues the change in one transaction (D52), so no other draft can take the slug in between |
+| V26 | The tools die as they start: every step of every wrapper call ends by a signal, or cannot be spawned, within milliseconds (a broken node, a missing interpreter, a profile the tool cannot start under) | After three such calls in a row the runner stops the session and fails the job as `toolchain`, naming the step and the signal; no gate, no retry, the cost counted. Health shows it beside the doctor's verdict, which it does not change: the doctor passed while the 2026-10-03 job's every call died, so a passing run could never clear it |
 
 ## Decisions
 
@@ -1654,6 +1673,14 @@ still running counts too: the wrapper writes `inflight/<pid>.json` when it
 starts and removes it when it ends, and a marker counts for at most the Bash
 tool's 600 s ceiling plus a minute, so a render is never a hang whatever
 `STUDIO_VIDEO_HANG_MS` is set to, and a killed wrapper's marker expires.
+
+*Amended 2026-10-04 (the $5.51 revideokc job of 2026-10-03):* the runner
+names one failure, tools that die before they run (V26). Its every wrapper
+call aborted about 20 ms in, before any step did any work, and the agent read
+each as its own bug for 15 minutes. That is not a rendering failure the agent
+can act on: a step that ran and exited non-zero, however fast, is still the
+agent's, and the line is drawn on the wrapper's records (no exit code, under
+two seconds), never on output agent code could print.
 
 **Why:** rendering is dynamic (code written, compiled, a local model started,
 scenes stitched), and a list of failures in the runner would always be a list
