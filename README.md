@@ -66,9 +66,9 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 
 | Surface | Purpose |
 | --- | --- |
-| `/` | The public landing page; a signed-in owner is sent to `/today` |
+| `/` | The public landing page; a signed-in owner is sent to `/home` |
 | `/sign-in` | The owner password (docs/DEPLOYMENT.md, "Signing in"); everything below needs the session |
-| `/today` | Today: what to study next, reviews due, recent activity, the daily target and streak |
+| `/home` | Home: pick up where you left off (course modules, unfinished videos, studio drafts, concepts), the next concept and the reviews. `/today` redirects here |
 | `/courses` | The course catalog and overall progress |
 | `/courses/[slug]` | The course path: units of topic nodes coloured by mastery, with each topic's checklist, notes, recaps and resources in its panel |
 | `/learn` | Knowledge base: mastery per concept, the frontier, the dependency graph |
@@ -76,7 +76,7 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 | `/learn/[concept]/session` | Focus-mode session: probe, teach, check, close, each graded answer recorded as evidence |
 | `/review` | Spaced-repetition review of what is due |
 | `/library`, `/library/[id]` | Every indexed asset (videos, diagrams, notes), searchable, with the concepts each explains |
-| `/settings` | Daily target, streak leeway, theme (palette Classic or Gnosia, appearance Light, Dark or System), tutor style; export and reset |
+| `/settings` | Theme (palette Classic or Gnosia, appearance Light, Dark or System), tutor style; export and reset |
 | `/courses/[slug]/[module]/session?topic=…` | The older Socratic micro-session for one topic |
 | `POST /api/agent/chat`, `POST /api/agent/summarize` | Server proxy to the free provider cascade (system prompt injected server-side), and transcript to structured topic recap |
 

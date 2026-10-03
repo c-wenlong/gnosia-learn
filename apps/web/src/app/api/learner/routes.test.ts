@@ -211,29 +211,60 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect(rows[0]?.n).toBe(0);
     });
 
-    it("writes the Settings page's keys, and refuses a value out of range", async () => {
+    it("writes the Settings page's keys, and no longer the habit's", async () => {
       for (const [key, value] of [
-        ["dailyTarget", { concepts: 2, reviews: false }],
-        ["dailyLeeway", 3],
         ["tutorStyle", "socratic"],
         ["reducedMotion", "always"],
       ] as const) {
         expect((await call("preference", { key, value })).status).toBe(200);
       }
+      // The daily target and the leeway went with the habit layer (H1 of
+      // docs/proposals/home-page.md): their rows may exist, nothing writes them.
+      expect((await call("preference", { key: "dailyTarget", value: { concepts: 2, reviews: false } })).status).toBe(400);
+      expect((await call("preference", { key: "dailyLeeway", value: 3 })).status).toBe(400);
       const { rows } = await scratch.db.execute<{ key: string; value: unknown }>(
         "select key, value from preference order by key",
       );
       expect(Object.fromEntries(rows.map((r) => [r.key, r.value]))).toEqual({
-        dailyLeeway: 3,
-        dailyTarget: { concepts: 2, reviews: false },
         reducedMotion: "always",
         tutorStyle: "socratic",
       });
+    });
 
-      const tooMany = await call("preference", { key: "dailyTarget", value: { concepts: 99, reviews: true } });
-      expect(tooMany.status).toBe(400);
-      expect(String(tooMany.body.error)).toContain("value.concepts");
-      expect((await call("preference", { key: "dailyLeeway", value: 8 })).status).toBe(400);
+    it("keeps recentModules beside every lastVisited, newest first, without repeats", async () => {
+      const visit = (courseSlug: string, moduleSlug: string, at: string) =>
+        call("preference", { key: "lastVisited", value: { courseSlug, moduleSlug, at } });
+      expect((await visit("cs3230", "m1", "2026-10-01T00:00:00.000Z")).status).toBe(200);
+      await visit("cs4225", "m2", "2026-10-02T00:00:00.000Z");
+      await visit("cs3230", "m1", "2026-10-03T00:00:00.000Z");
+      const stored = async (key: string) => {
+        const { rows } = await scratch.db.execute<{ value: unknown }>(
+          `select value from preference where key = '${key}'`,
+        );
+        return rows[0]?.value;
+      };
+      expect(await stored("recentModules")).toEqual([
+        { courseSlug: "cs3230", moduleSlug: "m1", at: "2026-10-03T00:00:00.000Z" },
+        { courseSlug: "cs4225", moduleSlug: "m2", at: "2026-10-02T00:00:00.000Z" },
+      ]);
+      // lastVisited stays one object: the course list resumes from it.
+      expect(await stored("lastVisited")).toEqual({ courseSlug: "cs3230", moduleSlug: "m1", at: "2026-10-03T00:00:00.000Z" });
+      // Written by the route only: a browser cannot set the list directly.
+      expect((await call("preference", { key: "recentModules", value: [] })).status).toBe(400);
+    });
+
+    it("starts recentModules from the visit lastVisited held before the list existed", async () => {
+      await scratch.db.execute(
+        `insert into preference (learner_id, key, value) values ('local', 'lastVisited', '{"courseSlug":"cs4223","moduleSlug":"m5","at":"2026-09-01T00:00:00.000Z"}')`,
+      );
+      await call("preference", { key: "lastVisited", value: { courseSlug: "cs3230", moduleSlug: "m6", at: "2026-10-03T00:00:00.000Z" } });
+      const { rows } = await scratch.db.execute<{ value: unknown }>(
+        "select value from preference where key = 'recentModules'",
+      );
+      expect(rows[0]?.value).toEqual([
+        { courseSlug: "cs3230", moduleSlug: "m6", at: "2026-10-03T00:00:00.000Z" },
+        { courseSlug: "cs4223", moduleSlug: "m5", at: "2026-09-01T00:00:00.000Z" },
+      ]);
     });
 
     it("stores the courses set aside, deduplicated, and refuses anything but slugs", async () => {
@@ -264,7 +295,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
   describe("export", () => {
     it("hands back the snapshot, the model chain and the event log as a download", async () => {
       await call("progress", { curriculumItemId: ITEMS[0], completed: true });
-      await call("preference", { key: "dailyLeeway", value: 2 });
+      await call("preference", { key: "tutorStyle", value: "direct" });
       const { addTutorModel } = await import("../../../../../../services/catalog/src/state");
       await addTutorModel(scratch.db, "local", "gemini", "gemini-2.5-flash");
       const { GET } = await import("./export/route");
@@ -282,7 +313,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       // Owner configuration, no secret (docs/TUTOR-MODELS.md, T6).
       expect(body.tutorModels).toEqual([{ provider: "gemini", model: "gemini-2.5-flash" }]);
       // Every preference row, not only the ones the snapshot folds in.
-      expect(body.preferences).toMatchObject({ dailyLeeway: 2 });
+      expect(body.preferences).toMatchObject({ tutorStyle: "direct" });
       expect(body.learner.completed).toEqual({ [ITEMS[0]]: true });
       expect(Array.isArray(body.events)).toBe(true);
     });

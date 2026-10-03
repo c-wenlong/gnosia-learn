@@ -7,7 +7,7 @@ import type { DestinationKey } from "@/lib/nav";
  */
 const PATHS: Record<DestinationKey, string> = {
   // A house: the dashboard.
-  today: "M3.5 9.5 10 4l6.5 5.5V16a1 1 0 0 1-1 1h-3.5v-4.5h-4V17H4.5a1 1 0 0 1-1-1z",
+  home: "M3.5 9.5 10 4l6.5 5.5V16a1 1 0 0 1-1 1h-3.5v-4.5h-4V17H4.5a1 1 0 0 1-1-1z",
   // An open book.
   courses: "M10 6.5C8.5 5 6 4.5 3 4.8v10.4c3-.3 5.5.2 7 1.8 1.5-1.6 4-2.1 7-1.8V4.8c-3-.3-5.5.2-7 1.7zm0 0V17",
   // A light bulb.

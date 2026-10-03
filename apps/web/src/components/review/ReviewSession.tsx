@@ -44,8 +44,8 @@ import { CitePill } from "./CitePill";
  * `POST /api/review/grade`, and the card advances only once it has been
  * recorded: a grade that did not save stays on screen with the error, since a
  * review silently lost is worse than one retried (layering rule 14). After each
- * write `router.refresh()` re-reads the layout, so the streak and target pills
- * in the shell move with the session.
+ * write `router.refresh()` re-reads the layout, so the learner snapshot the
+ * shell holds moves with the session.
  */
 
 type Phase = "ask" | "shown" | "answered";
@@ -101,7 +101,7 @@ export function ReviewSession({
 
   const exit = focus
     ? { href: `/learn/${encodeURIComponent(focus)}`, label: "Exit to workspace" }
-    : { href: "/today", label: "Exit to Today" };
+    : { href: "/home", label: "Exit to Home" };
 
   const suggested: Rating | null =
     item?.kind === "check" && phase === "answered"
@@ -529,7 +529,7 @@ function Closing({ title, lead, children }: { title: string; lead: string; child
         <p className="max-w-[480px] text-[14px] text-text2">{lead}</p>
       </div>
       {children}
-      <Button href="/today">Back to Today</Button>
+      <Button href="/home">Back to Home</Button>
     </div>
   );
 }

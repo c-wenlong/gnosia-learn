@@ -33,7 +33,7 @@
   --tint: #eef1ff;
   --border: #e5e5e5;
   --hair: #ebebeb;
-  /* The empty part of a bar or meter (TargetBar, ProgressBar, the session and
+  /* The empty part of a bar or meter (ProgressBar, the session and
      review strips). Its own token because in the dark palettes every fill
      needs 3:1 on it and `--border` there is too light for that. In both
      light palettes it is the border's value. */

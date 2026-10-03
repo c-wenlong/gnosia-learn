@@ -223,6 +223,14 @@ export const PREFERENCE_KEYS = {
   epoch: "epoch",
   /** `{ courseSlug, moduleSlug?, at }`. */
   lastVisited: "lastVisited",
+  /**
+   * `{ courseSlug, moduleSlug?, at }[]`, newest first, at most five: the
+   * modules Home lists under "Pick up where you left off". Never written by a
+   * browser: `POST /api/learner/preference` keeps it whenever it writes
+   * `lastVisited`, which stays a single object because the course list
+   * resumes from it (docs/proposals/home-page.md).
+   */
+  recentModules: "recentModules",
   /** `Record<moduleId, UserResource[]>`. Keyed by module, which joins nothing. */
   userResources: "userResources",
   /**
@@ -237,12 +245,13 @@ export const PREFERENCE_KEYS = {
   /**
    * `{ concepts: number; reviews: boolean }`: the learner's own daily target,
    * concepts to teach or probe plus whether clearing the due queue counts.
-   * Read by `apps/web/src/lib/habit.ts`; default `{ concepts: 1, reviews: true }`.
+   * Unread and unwritable since the habit layer was removed (H1 of
+   * docs/proposals/home-page.md); named so the stored rows keep a name.
    */
   dailyTarget: "dailyTarget",
   /**
    * A whole number of free misses per Monday-to-Sunday week before the streak
-   * breaks, 0 to 7. Read by `apps/web/src/lib/habit.ts`; default 1.
+   * breaks, 0 to 7. Unread and unwritable since H1, like `dailyTarget`.
    */
   dailyLeeway: "dailyLeeway",
   /**

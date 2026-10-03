@@ -234,7 +234,7 @@ insight. Not as a bullet or an ornament.
 
 | Piece | Where |
 | --- | --- |
-| `GnosiaWordmark` | The app's top bar (links to `/today`), the public header (links to `/`) and footer |
+| `GnosiaWordmark` | The app's top bar (links to `/home`), the public header (links to `/`) and footer |
 | `GnosiaLockup` | The sign-in card |
 | `GnosiaMascot` | Landing hero (`curious`), chapters one to three (`reading`, `excited`, `happy`), sign-in (`happy`) |
 | The brand button (`variant="brand"` in [classes.ts](../../apps/web/src/components/ui/classes.ts)) | The landing page's calls to action and the sign-in button. Teal face, navy lip and cream label in light; in dark the lip is teal sunk halfway into navy and the label turns navy |
@@ -605,7 +605,7 @@ when editing the copy.
 | A tutor that knows the concept and cites your notes | The concept-aware chat, whose source `[1]` is always the concept's note |
 | Ten computer science courses from NUS | The course files in `content/courses/` |
 | Animations, diagrams, notes, links, transcripts, with watched state | The library and the `watched` event |
-| Next up, reviews due, a forgiving streak, a self-set target; no XP, hearts or leagues | The Today dashboard and the habit data |
+| Pick up where you left off; no schedule, no streak, no leagues | Home: the module, video, draft and concept threads (docs/proposals/home-page.md) |
 | One append-only event log; notes and model derived from it | The `event` table |
 | A few questions before any teaching | The Probe phase of the tutoring loop |
 | Remembered cards wait longer; missed ones come back sooner | SM-2: a pass grows the interval, a lapse resets it |

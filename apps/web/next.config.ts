@@ -51,6 +51,16 @@ const nextConfig: NextConfig = {
    * this directory. Off, so the tree stays as committed after a dev run.
    */
   agentRules: false,
+
+  /**
+   * Today became Home (H2 of docs/proposals/home-page.md). Permanent, so a
+   * bookmark or a link in an old note lands on the page that replaced it.
+   * `redirects` run before the proxy, so a signed-out visitor is sent on to
+   * `/home` first and only then to sign-in.
+   */
+  async redirects() {
+    return [{ source: "/today", destination: "/home", permanent: true }];
+  },
 };
 
 export default nextConfig;

@@ -95,7 +95,7 @@ describe("readAuthConfig", () => {
 describe("safeNextPath", () => {
   it("keeps a same-origin path, query included", () => {
     expect(safeNextPath("/learn/bkt?tab=note#top")).toBe("/learn/bkt?tab=note#top");
-    expect(safeNextPath("/today")).toBe("/today");
+    expect(safeNextPath("/home")).toBe("/home");
   });
 
   it("falls back to home for anything that could leave the origin or loop", () => {
@@ -108,7 +108,7 @@ describe("safeNextPath", () => {
       "/\\evil.example",
       "evil",
       "/sign-in",
-      "/sign-in?next=/today",
+      "/sign-in?next=/home",
       "/",
       "/api/learner/export",
       "/a b",
@@ -153,13 +153,13 @@ describe("isPublicPath / isApiPath", () => {
     expect(isPublicPath("/sign-in")).toBe(true);
     expect(isPublicPath("/api/auth/sign-in")).toBe(true);
     expect(isPublicPath("/api/auth/sign-out")).toBe(true);
-    expect(isPublicPath("/today")).toBe(false);
+    expect(isPublicPath("/home")).toBe(false);
     expect(isPublicPath("/sign-in/other")).toBe(false);
     expect(isPublicPath("/api/authx")).toBe(false);
   });
 
   it("treats the app API and the studio proxy as API", () => {
-    expect(isApiPath("/api/learner/today")).toBe(true);
+    expect(isApiPath("/api/learner/home")).toBe(true);
     expect(isApiPath("/studio/api/jobs")).toBe(true);
     expect(isApiPath("/studio")).toBe(false);
     expect(isApiPath("/library")).toBe(false);

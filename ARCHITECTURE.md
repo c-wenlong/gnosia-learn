@@ -150,10 +150,10 @@ says which pages are on the new design and which phase replaces the rest.
 
 | Route | File | What it renders |
 | --- | --- | --- |
-| `/` | `page.tsx` | Today: the next concept on the frontier, the first reviews due, recent activity by sitting, the target, the streak week, the courses in progress |
+| `/home` | `home/page.tsx` | Home: the threads to pick up (module pages, unfinished videos, studio drafts, concepts answered on), the next concept on the frontier, the first reviews, the courses in progress. `/today` is a permanent redirect here (`next.config.ts`) |
 | `/courses` | `courses/page.tsx` | Every course as a card: search, filter chips by theme, progress, the next topic |
 | `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first |
-| `/settings` | `settings/page.tsx` | The daily target, streak leeway, theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
+| `/settings` | `settings/page.tsx` | The theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
 | `/learn` | `learn/page.tsx` | The Learn index: every concept in a table with search and mastery filters, and the neighbourhood (or course) graph of the selected row |
 | `/learn/[concept]` | `learn/[concept]/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph. `?ask=` prefills the tutor's input |
 | `/learn/[concept]/session` | `learn/[concept]/session/page.tsx` | Session focus mode: probe, teach (the note's prose and its diagram or video), check, close. Every graded answer is evidence through `POST /api/learner/observe`; the close screen shows what moved and what got scheduled. `?mode=check` asks the note's checks only |
@@ -172,9 +172,9 @@ says which pages are on the new design and which phase replaces the rest.
 | `GET /api/assets/[id]/file` | `api/assets/[id]/file/route.ts` | The bytes of one indexed asset: a video, a diagram, a transcript |
 | `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | The still frame `catalog asset upload` stored for a video, as a JPEG |
 | `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
-| `GET /api/learner/today` | `api/learner/today/route.ts` | The Today dashboard as JSON, the same `TodayModel` the page renders; degrades to `reachable: false` |
+| `GET /api/learner/home` | `api/learner/home/route.ts` | Home as JSON, the same `HomeModel` the page renders; degrades to `reachable: false` |
 | `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot, every preference row and the whole event log as a JSON download; a 503 when the database is down |
-| `POST /api/learner/watched` | `api/learner/watched/route.ts` | Append a `watched` event for one asset: study for the streak, never evidence |
+| `POST /api/learner/watched` | `api/learner/watched/route.ts` | Append a `watched` event for one asset: study, never evidence |
 | `POST /api/learner/playback` | `api/learner/playback/route.ts` | Save a video's position and the stretches that played (a `playback:<asset id>` preference), and append the `watched` event once 90% has played |
 | `POST /api/learner/observe` | `api/learner/observe/route.ts` | One graded session answer recorded as `learn observe` records it (`recordObservation`): the event, the mastery with propagation, the card. The first answer opens the session |
 | `POST /api/learner/session/close` | `api/learner/session/close/route.ts` | Close a session: one `session-close` event and the row to `closed`, once |
@@ -214,23 +214,24 @@ The session route renders on demand, like every page: it used to declare
 the course list became a per-request read (the root layout already made every
 page dynamic, so nothing was being prerendered from it).
 
-**Today** reads everything in one pass through `apps/web/src/lib/today.ts`: the
-knowledge base, the event log, the preferences, the due queue and the snapshot,
-through `learner-store`'s pool, and hands them to the pure
-`apps/web/src/lib/today-core.ts`. It runs `computeHabit` over the same rows
-rather than calling `loadHabit` again, so the page and the top bar agree. The
-check count beside each due review comes from the concept's note, read through
-the content seam from `concept.body`; a note it cannot read counts as a plain
-recall.
+**Home** ([docs/proposals/home-page.md](docs/proposals/home-page.md)) reads
+everything in one pass through `apps/web/src/lib/home.ts`: the knowledge base,
+the event log, the preferences, the due queue, the snapshot and, with a
+studio, the owner's titled drafts (`recentDrafts`), through `learner-store`'s
+pool, and hands them to the pure `apps/web/src/lib/home-core.ts`. The threads
+under "Pick up where you left off" merge the `recentModules` preference (kept
+by `POST /api/learner/preference` beside every `lastVisited` write), the
+`playback:<asset id>` preferences with somewhere to resume, the drafts and the
+latest answer per concept, newest first. The check count beside each review
+comes from the concept's note, read through the content seam from
+`concept.body`; a note it cannot read counts as a plain recall.
 
 **The shell.** `AppShell` is a server component: a 64px top bar (the
-wordmark, the five destinations Today, Courses, Learn, Library and Review,
-the streak and target pills, and an avatar menu holding the theme toggle,
-Settings and, behind `STUDIO_ENABLED`, Studio), the store banner, the page,
-and below 768px a bottom tab bar in place of the destinations. The streak
-and target come from `@/lib/habit`, which the root layout reads on every
-request next to the learner snapshot and passes down as a prop, degrading
-to zeros when the database is down. A page picks its width with
+wordmark, the five destinations Home, Courses, Learn, Library and Review,
+and an avatar menu holding the theme toggle, Settings and, behind
+`STUDIO_ENABLED`, Studio), the store banner, the page, and below 768px a
+bottom tab bar in place of the destinations. The streak and target pills went
+with the habit layer (H1 of the Home proposal). A page picks its width with
 `data-layout` on its root element (`app` for the redesigned pages, `focus`
 for focus mode, `full` for the studio canvas, none for the old reading
 measure), which the shell reads with `has-*` so nothing crosses the client
@@ -260,9 +261,8 @@ transcript finds the transcript's video through `derivationSources`. The limits
 are in [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md). The
 concept chip on a card and the asset page's Explains card come from
 `conceptsForAssets`, the reverse of `assetsForConcept`, joined to the knowledge
-base for the mastery dot. A `watched` event counts as a study day for the
-streak and is never evidence, since both replays read only `observation` and
-`review`. Mark read appends one through `POST /api/learner/watched` for
+base for the mastery dot. A `watched` event is study and never evidence,
+since both replays read only `observation` and `review`. Mark read appends one through `POST /api/learner/watched` for
 anything that is not a video. A video has no button: the player posts its
 position and the stretches that actually played to `POST
 /api/learner/playback`, which merges them into a `playback:<asset id>`

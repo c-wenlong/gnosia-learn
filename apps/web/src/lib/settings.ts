@@ -4,7 +4,6 @@ import { connection } from "next/server";
 import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
 import { readParams, readPreferences, type BktParams } from "@self-learn/catalog/state";
 
-import { parseDailyTarget, parseLeeway, type DailyTarget } from "@/lib/habit-core";
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 import { parseMotionMode, parseTutorStyle, type MotionMode, type TutorStyle } from "@/lib/preferences";
@@ -20,8 +19,6 @@ import { parseMotionMode, parseTutorStyle, type MotionMode, type TutorStyle } fr
  */
 export interface SettingsSnapshot {
   reachable: boolean;
-  target: DailyTarget;
-  leeway: number;
   tutorStyle: TutorStyle;
   motion: MotionMode;
   /** Null when they could not be read. */
@@ -35,8 +32,6 @@ export async function readSettings(): Promise<SettingsSnapshot> {
     const [preferences, bkt] = await Promise.all([readPreferences(db, owner), readParams(db, owner)]);
     return {
       reachable: true,
-      target: parseDailyTarget(preferences[PREFERENCE_KEYS.dailyTarget]),
-      leeway: parseLeeway(preferences[PREFERENCE_KEYS.dailyLeeway]),
       tutorStyle: parseTutorStyle(preferences[PREFERENCE_KEYS.tutorStyle]),
       motion: parseMotionMode(preferences[PREFERENCE_KEYS.reducedMotion]),
       bkt,
@@ -46,8 +41,6 @@ export async function readSettings(): Promise<SettingsSnapshot> {
     console.warn(`settings: preferences unavailable, ${message}`);
     return {
       reachable: false,
-      target: parseDailyTarget(undefined),
-      leeway: parseLeeway(undefined),
       tutorStyle: parseTutorStyle(undefined),
       motion: parseMotionMode(undefined),
       bkt: null,

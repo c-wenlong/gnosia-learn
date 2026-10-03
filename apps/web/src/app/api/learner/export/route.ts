@@ -21,7 +21,7 @@ import { withLearnerStore } from "@/lib/learner-store";
  * an unreachable database is a 503 with the write routes' code.
  *
  * `Content-Disposition: attachment` makes the link a download rather than a
- * page of JSON. No same-origin check, for the reason `today/route.ts` gives:
+ * page of JSON. No same-origin check, for the reason `home/route.ts` gives:
  * the browser sends no `Origin` on a plain link, and a cross-site page cannot
  * read the response without CORS headers, which this route never sends.
  */
