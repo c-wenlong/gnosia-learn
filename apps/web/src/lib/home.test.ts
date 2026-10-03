@@ -13,6 +13,7 @@ const readLearnerSnapshot = vi.hoisted(() => vi.fn());
 const recentDrafts = vi.hoisted(() => vi.fn());
 
 vi.mock("@/data/courses", () => ({ getCourses }));
+vi.mock("@/data/topics", () => ({ getTopics: async () => [] }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase }));
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
 vi.mock("@/lib/auth/session", async (importOriginal) => ({

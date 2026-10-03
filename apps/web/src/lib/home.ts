@@ -18,6 +18,7 @@ import {
 } from "@self-learn/catalog/state";
 
 import { getCourses } from "@/data/courses";
+import { getTopics } from "@/data/topics";
 import { ContentUnavailableError } from "@/data/source";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import type { Course } from "@/lib/types";
@@ -83,7 +84,7 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
     return emptyHome(now, timeZone);
   }
 
-  const { kb, events, preferences, due, snapshot, courses, drafts } = rows;
+  const { kb, events, preferences, due, snapshot, courses, drafts, topics } = rows;
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
 
   // A course set aside on the Courses page is left off the card, as it is
@@ -129,8 +130,15 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
     frontier: kb.frontier,
     courses: paths,
     done: itemDoneWith(standing, snapshot.completed),
-    topicHref: (course, moduleSlug, topicId) =>
-      continueHref(course.slug, moduleSlug, topicId, resolveTopicMastery(conceptsForTopic(kb.concepts, topicId), kb.frontier)),
+    // The course page's own rule (`course-home.ts`), with the module's
+    // authored concept order, so a topic's Continue goes to the same concept
+    // from either page.
+    topicHref: (course, moduleSlug, topicId) => {
+      const vocabulary = active.find((c) => c.slug === course.slug)?.modules.find((m) => m.slug === moduleSlug)?.topic;
+      const authored = topics.find((t) => t.slug === vocabulary)?.maps.concepts ?? [];
+      const mastery = resolveTopicMastery(conceptsForTopic(kb.concepts, topicId, authored), kb.frontier);
+      return continueHref(course.slug, moduleSlug, topicId, mastery);
+    },
   });
 
   // The old single pick, kept for a page whose threads open nothing.
@@ -166,7 +174,7 @@ async function readAll(db: CatalogDatabase, now: Date, owner: string) {
   // render. One refused because courses are not flipped is rethrown by
   // `readHome`. Drafts are the studio's, so a deployment without one does
   // not ask for them.
-  const [kb, events, preferences, due, snapshot, courses, drafts] = await Promise.all([
+  const [kb, events, preferences, due, snapshot, courses, drafts, topics] = await Promise.all([
     readKnowledgeBase(db, owner),
     readEvents(db, owner),
     readPreferences(db, owner),
@@ -174,8 +182,11 @@ async function readAll(db: CatalogDatabase, now: Date, owner: string) {
     readLearnerSnapshot(db, owner),
     getCourses(),
     studioEnabled() ? draftsOrNone(db, owner) : Promise.resolve([]),
+    // The topic vocabulary only orders a topic's concepts for its Continue
+    // link; without it the order falls back to the note positions.
+    getTopics().catch(() => []),
   ]);
-  return { kb, events, preferences, due, snapshot, courses, drafts };
+  return { kb, events, preferences, due, snapshot, courses, drafts, topics };
 }
 
 /**

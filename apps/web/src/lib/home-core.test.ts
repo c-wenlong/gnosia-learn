@@ -207,7 +207,7 @@ describe("next from here", () => {
     topicHref: (c: PathCourse, m: string, t: string) => `/courses/${c.slug}/${m}#${t}`,
   });
 
-  it("lists what a concept opens on the frontier, and a module's open topics into the next module", () => {
+  it("lists what a concept opens on the frontier, and a module's next open topic then the next module's", () => {
     const groups = nextFromHere(
       [
         thread({ title: "Dot product", conceptId: "dot" }),
@@ -217,7 +217,7 @@ describe("next from here", () => {
     );
     expect(groups.map((g) => [g.heading, g.steps.map((s) => s.title)])).toEqual([
       ["After Dot product", ["SOFTMAX", "COSINE"]],
-      ["After Module one", ["Recurrences", "Divide and conquer", "Master theorem"]],
+      ["After Module one", ["Recurrences", "Divide and conquer"]],
     ]);
     expect(groups[0].steps[0]).toMatchObject({ href: "/learn/softmax", bucket: "untouched" });
     expect(groups[1].steps[1]).toMatchObject({ detail: "CS3230 · Module 2", href: "/courses/cs3230/m2#t3" });
@@ -235,6 +235,21 @@ describe("next from here", () => {
       { groups: 3 },
     );
     expect(groups.map((g) => [g.heading, g.steps.map((s) => s.title)])).toEqual([["After Dot", ["SOFTMAX"]]]);
+  });
+
+  it("caps a group after taking out what an earlier group showed, so an overlap does not empty it", () => {
+    const groups = nextFromHere(
+      [
+        thread({ kind: "module", title: "Module one", courseSlug: "cs3230", moduleSlug: "m1" }),
+        thread({ kind: "module", title: "The course", courseSlug: "cs3230" }),
+      ],
+      graph(),
+      { perGroup: 1 },
+    );
+    expect(groups.map((g) => [g.heading, g.steps.map((s) => s.title)])).toEqual([
+      ["After Module one", ["Big-O"]],
+      ["After The course", ["Divide and conquer"]],
+    ]);
   });
 
   it("starts a page with no threads at the first course's first open topic", () => {

@@ -383,8 +383,9 @@ export interface PathCourse {
  *
  * - after a concept, the concepts on the frontier that require it: ready to
  *   learn, not yet mastered, the same readiness rule `frontier()` applies;
- * - after a module, its topics not yet done, in order, then the next module's;
- *   after a course page with no module, the first topics not yet done in it.
+ * - after a module, its first topic not yet done, then the first open topic
+ *   of each module after it; after a course page with no module, the same
+ *   walk from the course's first module.
  *
  * A thread with nothing after it makes no group, and a step already shown
  * under an earlier thread, or that is itself a thread, is not repeated. With
@@ -419,21 +420,21 @@ export function nextFromHere(
     pL: c.pL,
   });
 
+  // Every candidate, uncapped: the cap is applied after the steps an
+  // earlier thread showed are taken out, so an overlap cannot empty a group.
   const topicSteps = (course: PathCourse, fromModule: string | undefined): NextStep[] => {
     const start = fromModule === undefined ? 0 : course.modules.findIndex((m) => m.slug === fromModule);
     if (start === -1) return [];
     const steps: NextStep[] = [];
     for (const mod of course.modules.slice(start)) {
-      for (const topic of mod.topics) {
-        if (graph.done(topic.id)) continue;
-        steps.push({
-          key: `topic:${topic.id}`,
-          title: topic.title,
-          detail: `${course.code} · Module ${mod.order}`,
-          href: graph.topicHref(course, mod.slug, topic.id),
-        });
-        if (steps.length === perGroup) return steps;
-      }
+      const topic = mod.topics.find((t) => !graph.done(t.id));
+      if (topic === undefined) continue;
+      steps.push({
+        key: `topic:${topic.id}`,
+        title: topic.title,
+        detail: `${course.code} · Module ${mod.order}`,
+        href: graph.topicHref(course, mod.slug, topic.id),
+      });
     }
     return steps;
   };
