@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 
 import { CoursesCard } from "@/components/home/CoursesCard";
 import { NextUpCard } from "@/components/home/NextUpCard";
-import { ReviewsCard } from "@/components/home/ReviewsCard";
+import { NextCard } from "@/components/home/NextCard";
+import { RecallCard } from "@/components/home/RecallCard";
 import { ThreadsCard } from "@/components/home/ThreadsCard";
 import { loadHome } from "@/lib/home";
 
@@ -10,8 +11,8 @@ export const metadata: Metadata = { title: "Home" };
 
 /**
  * Home (docs/proposals/home-page.md; it replaced Today, hi-fi 01 and 13).
- * Left, what the owner was doing and can go back to, then the next concept
- * and the reviews; right, the courses under way.
+ * Left, what the owner was doing and can go back to, what that opens up, and
+ * the few cards worth a quick recall; right, the courses under way.
  *
  * A server component over one read (`loadHome`). A database that cannot be
  * reached renders every card's empty state and the shell's banner says why.
@@ -25,8 +26,12 @@ export default async function HomePage() {
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-3 md:gap-4">
           <ThreadsCard threads={home.threads} reachable={home.reachable} />
-          <NextUpCard nextUp={home.nextUp} conceptCount={home.conceptCount} reachable={home.reachable} />
-          <ReviewsCard reviews={home.reviews} reachable={home.reachable} />
+          {home.next.length > 0 ? (
+            <NextCard groups={home.next} />
+          ) : (
+            <NextUpCard nextUp={home.nextUp} conceptCount={home.conceptCount} reachable={home.reachable} />
+          )}
+          {home.recall.length > 0 && <RecallCard picks={home.recall} />}
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           <CoursesCard courses={home.courses} />

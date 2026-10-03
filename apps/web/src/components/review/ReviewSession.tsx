@@ -63,11 +63,17 @@ interface CloseData {
 export function ReviewSession({
   initial,
   focus,
+  selected = false,
   asOf,
 }: {
   initial: ReviewSessionData;
   /** The concept `?concept=` named, when the session came from its workspace. */
   focus: string | null;
+  /**
+   * The session is Home's "Recall these" (`?only=`), so an empty one means the
+   * picked cards are no longer due, not that nothing is.
+   */
+  selected?: boolean;
   /** When the server read the queue; the relative dates are computed from it. */
   asOf: string;
 }) {
@@ -222,6 +228,21 @@ export function ReviewSession({
           title="Reviews are unavailable"
           lead="The database could not be reached, so there is no queue to show and nothing could be graded. Start Postgres and reload."
         />
+      </Frame>
+    );
+  }
+
+  if (total === 0 && selected) {
+    return (
+      <Frame percent={0} label="Review" exit={exit}>
+        <Closing
+          title="Already reviewed"
+          lead="The cards picked for you are not due any more, so there is nothing to ask here. Any others that are due are under All reviews."
+        >
+          <Button href="/review" variant="secondary">
+            All reviews
+          </Button>
+        </Closing>
       </Frame>
     );
   }

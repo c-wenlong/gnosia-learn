@@ -1,7 +1,7 @@
 # Proposal: Home replaces Today
 
 Status: accepted, 2026-10-04, and being built in phases. Decisions H1 to H3
-are the owner's and settled. Phase 1 is built; phases 2 and 3 are not.
+are the owner's and settled. Phases 1 and 2 are built; phase 3 is not.
 
 ## The problem
 

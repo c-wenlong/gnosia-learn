@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { ReviewSession } from "@/components/review/ReviewSession";
-import { loadReviewSession } from "@/lib/review-queue";
+import { loadReviewSession, parseOnly } from "@/lib/review-queue";
 
 export const metadata: Metadata = { title: "Review" };
 
@@ -10,7 +10,8 @@ export const metadata: Metadata = { title: "Review" };
  * Anki's four ratings, in focus mode.
  *
  * `?concept=<slug>` puts that concept first, due or not, which is how "Review
- * now" on a concept's workspace asks for it. The queue is read here, on the
+ * now" on a concept's workspace asks for it. `?only=a,b,c` is Home's "Recall
+ * these": just those due cards, in that order. The queue is read here, on the
  * server, and handed to the client session whole: the session needs nothing
  * else until it writes a grade. `asOf` fixes the clock the relative dates are
  * computed from, so the server's render and the browser's agree.
@@ -23,11 +24,13 @@ export default async function ReviewPage({
   const params = await searchParams;
   const raw = Array.isArray(params.concept) ? params.concept[0] : params.concept;
   const focus = typeof raw === "string" && raw !== "" && raw.length <= 128 ? raw : null;
-  const session = await loadReviewSession(focus);
+  // `?only=a,b,c`, Home's "Recall these": just those cards.
+  const only = parseOnly(params.only);
+  const session = await loadReviewSession(focus, only);
   const asOf = new Date().toISOString();
   return (
     <div data-layout="focus">
-      <ReviewSession initial={session} focus={focus} asOf={asOf} />
+      <ReviewSession initial={session} focus={focus} selected={only !== null} asOf={asOf} />
     </div>
   );
 }

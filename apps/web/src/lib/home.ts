@@ -18,26 +18,26 @@ import {
 } from "@self-learn/catalog/state";
 
 import { getCourses } from "@/data/courses";
-import { ContentUnavailableError, contentSource } from "@/data/source";
+import { getTopics } from "@/data/topics";
+import { ContentUnavailableError } from "@/data/source";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import type { Course } from "@/lib/types";
-import { itemStanding } from "@/lib/course-path";
+import { continueHref, conceptsForTopic, itemDoneWith, itemStanding, resolveTopicMastery } from "@/lib/course-path";
 import { activeOnly } from "@/lib/course-summary";
 import { dayKey } from "@/lib/days";
 import {
   conceptTouches,
-  countCheckBlocks,
   coursesInProgress,
-  estimateMinutes,
   homeThreads,
-  lastSeenLabel,
-  reviewKindLabel,
+  nearThreads,
+  nextFromHere,
+  recallPicks,
   toNextUp,
   type HomeModel,
   type ModulePlace,
   type ModuleVisit,
   type NextUp,
-  type ReviewRow,
+  type PathCourse,
   type VideoProgress,
 } from "@/lib/home-core";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -56,8 +56,6 @@ import { appTimeZone } from "@/lib/time-zone";
  * and the shell's banner is what says so.
  */
 
-/** Rows the reviews card lists; the count beside Start review is the whole queue. */
-const REVIEW_ROWS = 5;
 /** Threads under "Pick up where you left off". */
 const THREAD_ROWS = 5;
 /** Courses the card lists; it says how many more there are. */
@@ -86,47 +84,23 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
     return emptyHome(now, timeZone);
   }
 
-  const { kb, events, preferences, due, snapshot, courses, drafts } = rows;
+  const { kb, events, preferences, due, snapshot, courses, drafts, topics } = rows;
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
-  const title = (id: string) => byId.get(id)?.title ?? id;
-
-  const first = kb.frontier.map((id) => byId.get(id)).find((c): c is KbConcept => c !== undefined);
-  const nextUp: NextUp | null =
-    first === undefined ? null : toNextUp(first, placeOf(courses, first), now, timeZone);
 
   // A course set aside on the Courses page is left off the card, as it is
-  // left out of Continue learning there.
-  const courseRows = activeOnly(courses, snapshot.inactiveCourses).map((c) => ({
+  // left out of Continue learning there, and "Next from here" does not walk it.
+  const active = activeOnly(courses, snapshot.inactiveCourses);
+  const courseRows = active.map((c) => ({
     slug: c.slug,
     code: c.code,
     title: c.title,
     order: c.order,
     topicIds: c.modules.flatMap((m) => m.topics.map((t) => t.id)),
   }));
-  const started = coursesInProgress(
-    courseRows,
-    snapshot.completed,
-    itemStanding(kb.concepts, courseRows.flatMap((c) => c.topicIds)),
-  );
+  const standing = itemStanding(kb.concepts, courseRows.flatMap((c) => c.topicIds));
+  const started = coursesInProgress(courseRows, snapshot.completed, standing);
 
-  const shown = due.slice(0, REVIEW_ROWS);
-  const [checks, videos] = await Promise.all([
-    checkCounts(shown.map((card) => card.conceptId)),
-    videoProgress(db, preferences),
-  ]);
-  const reviewRows: ReviewRow[] = shown.map((card) => {
-    const concept = byId.get(card.conceptId);
-    const count = checks[card.conceptId] ?? 0;
-    return {
-      conceptId: card.conceptId,
-      title: title(card.conceptId),
-      bucket: concept === undefined ? "untouched" : bucketOf(concept),
-      lastSeen: lastSeenLabel(concept?.lastSeen ?? null, now, timeZone),
-      checks: count,
-      kindLabel: reviewKindLabel(count),
-    };
-  });
-
+  const videos = await videoProgress(db, preferences);
   const threads = homeThreads(
     {
       modules: moduleVisits(preferences),
@@ -141,14 +115,48 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
     { now, timeZone, limit: THREAD_ROWS },
   );
 
+  const paths: PathCourse[] = active.map((c) => ({
+    slug: c.slug,
+    code: c.code,
+    order: c.order,
+    modules: c.modules.map((m) => ({
+      slug: m.slug,
+      order: m.order,
+      topics: m.topics.map((t) => ({ id: t.id, title: t.title })),
+    })),
+  }));
+  const next = nextFromHere(threads, {
+    concepts: kb.concepts,
+    frontier: kb.frontier,
+    courses: paths,
+    done: itemDoneWith(standing, snapshot.completed),
+    // The course page's own rule (`course-home.ts`), with the module's
+    // authored concept order, so a topic's Continue goes to the same concept
+    // from either page.
+    topicHref: (course, moduleSlug, topicId) => {
+      const vocabulary = active.find((c) => c.slug === course.slug)?.modules.find((m) => m.slug === moduleSlug)?.topic;
+      const authored = topics.find((t) => t.slug === vocabulary)?.maps.concepts ?? [];
+      const mastery = resolveTopicMastery(conceptsForTopic(kb.concepts, topicId, authored), kb.frontier);
+      return continueHref(course.slug, moduleSlug, topicId, mastery);
+    },
+  });
+
+  // The old single pick, kept for a page whose threads open nothing.
+  const first = kb.frontier.map((id) => byId.get(id)).find((c): c is KbConcept => c !== undefined);
+  const nextUp: NextUp | null =
+    next.length > 0 || first === undefined ? null : toNextUp(first, placeOf(courses, first), now, timeZone);
+
+  const recall = recallPicks(due, nearThreads(threads, next, kb.concepts, paths), kb.concepts, { now, timeZone });
+
   return {
     reachable: true,
     asOf: now.toISOString(),
     today: dayKey(now, timeZone),
     conceptCount: kb.concepts.length,
     threads,
+    next,
     nextUp,
-    reviews: { total: due.length, estimateMinutes: estimateMinutes(due.length), rows: reviewRows },
+    recall,
     courses: { rows: started.slice(0, COURSE_ROWS), total: started.length },
   };
 }
@@ -166,7 +174,7 @@ async function readAll(db: CatalogDatabase, now: Date, owner: string) {
   // render. One refused because courses are not flipped is rethrown by
   // `readHome`. Drafts are the studio's, so a deployment without one does
   // not ask for them.
-  const [kb, events, preferences, due, snapshot, courses, drafts] = await Promise.all([
+  const [kb, events, preferences, due, snapshot, courses, drafts, topics] = await Promise.all([
     readKnowledgeBase(db, owner),
     readEvents(db, owner),
     readPreferences(db, owner),
@@ -174,8 +182,11 @@ async function readAll(db: CatalogDatabase, now: Date, owner: string) {
     readLearnerSnapshot(db, owner),
     getCourses(),
     studioEnabled() ? draftsOrNone(db, owner) : Promise.resolve([]),
+    // The topic vocabulary only orders a topic's concepts for its Continue
+    // link; without it the order falls back to the note positions.
+    getTopics().catch(() => []),
   ]);
-  return { kb, events, preferences, due, snapshot, courses, drafts };
+  return { kb, events, preferences, due, snapshot, courses, drafts, topics };
 }
 
 /**
@@ -200,8 +211,9 @@ export function emptyHome(now: Date, timeZone?: string): HomeModel {
     today: dayKey(now, timeZone),
     conceptCount: 0,
     threads: [],
+    next: [],
     nextUp: null,
-    reviews: { total: 0, estimateMinutes: 0, rows: [] },
+    recall: [],
     courses: { rows: [], total: 0 },
   };
 }
@@ -276,29 +288,4 @@ function placeOf(
     if (found !== undefined) return { courseCode: found.course.code, moduleOrder: found.module.order };
   }
   return { domain: concept.domain };
-}
-
-/**
- * How many check blocks each concept's note holds, read through the content
- * seam from `concept.body` (Track C of docs/CONTENT-MIGRATION.md). A note that
- * cannot be read (the database is down, concepts are not flipped, a slug with
- * no note) counts as none, which the row prints as "recall": the card is
- * still due, it just has nothing stored to ask.
- */
-async function checkCounts(slugs: string[]): Promise<Record<string, number>> {
-  if (slugs.length === 0) return {};
-  const source = contentSource();
-  const entries = await Promise.all(
-    slugs.map(async (slug) => {
-      try {
-        const note = await source.concept(slug);
-        return [slug, note === null ? 0 : countCheckBlocks(note.markdown)] as const;
-      } catch {
-        // The rest of the page was read a moment ago; losing the counts
-        // costs the "check · 2" labels, not the page.
-        return [slug, 0] as const;
-      }
-    }),
-  );
-  return Object.fromEntries(entries);
 }
