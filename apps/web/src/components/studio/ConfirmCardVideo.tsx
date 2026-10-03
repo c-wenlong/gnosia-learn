@@ -358,6 +358,7 @@ function ToolRow({
         )}
         {row.line !== null && row.line !== "" && <span className="min-w-0 text-[13px] leading-5 text-text2">{row.line}</span>}
       </div>
+      {row.stop !== null && <p className="text-[12px] leading-4 text-text2">{row.stop}</p>}
       <UseError text={error} />
     </div>
   );

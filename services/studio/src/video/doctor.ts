@@ -260,11 +260,16 @@ export class VideoDoctor {
   /**
    * A job of this tool was stopped because its tools could not start: health
    * reports it beside the checks, and the checks run again now rather than
-   * at the next ten-minute refresh, in case they can see it.
+   * at the next ten-minute refresh, in case they can see it. Always a run
+   * that starts after the stop: one already in flight began before it, so a
+   * forced report would only join that one, and its verdict would stand
+   * until the next refresh. The new run is queued behind it instead.
    */
   noteToolchainStop(stop: ToolchainStop): void {
     this.stopped = stop;
-    void this.report(true);
+    const inFlight = this.running;
+    if (inFlight === null) void this.report(true);
+    else void inFlight.finally(() => this.report(true)).catch(() => undefined);
   }
 
   private withStop(report: VideoDoctorReport): VideoDoctorReport {

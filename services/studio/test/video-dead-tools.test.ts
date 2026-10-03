@@ -5,6 +5,8 @@ import { DEAD_CALLS, DEAD_START_MS, deadTools, deadToolsMessage, diedAtStart } f
 import { VideoDoctor, type VideoDoctorReport } from "../src/video/doctor";
 import { toolsHealth } from "../src/video/tools";
 
+import { until } from "./wait";
+
 /**
  * The rule that stops a job whose tools cannot start (V26 of
  * docs/STUDIO-VIDEOS.md), over sequences of wrapper calls as `calls.ndjson`
@@ -155,6 +157,13 @@ describe("the wrapper's last output", () => {
     tracker.observe(result("d", [{ type: "text", text: "x".repeat(100) }, { type: "text", text: "the end" }]));
     expect(tracker.last).toHaveLength(60);
     expect(tracker.last?.endsWith("the end")).toBe(true);
+    // A wrapper call that printed nothing leaves nothing, never the call before's text.
+    tracker.observe(use("e", "Bash", { command: `${wrapper} api` }));
+    tracker.observe(result("e", ""));
+    expect(tracker.last).toBeNull();
+    tracker.observe(use("f", "Bash", { command: `${wrapper} api` }));
+    tracker.observe(result("f", [{ type: "image", source: {} }]));
+    expect(tracker.last).toBeNull();
   });
 });
 
@@ -179,5 +188,29 @@ describe("the doctor, told", () => {
     const health = toolsHealth({ manimkc: doctor.current() });
     expect(health.find((tool) => tool.name === "manimkc")).toMatchObject({ available: true, reason: null, toolchainStop: stop });
     expect(toolsHealth({ manimkc: passing }).find((tool) => tool.name === "manimkc")).not.toHaveProperty("toolchainStop");
+  });
+
+  it("runs a check that starts after the stop, even with one already in flight", async () => {
+    // Each check started is held until the test lets it end, so the order is the test's.
+    const started: { at: number; end: () => void }[] = [];
+    const doctor = new VideoDoctor(
+      () =>
+        new Promise<VideoDoctorReport>((resolve) => {
+          started.push({ at: Date.now(), end: () => resolve({ ...passing, checkedAt: new Date().toISOString() }) });
+        }),
+    );
+    const first = doctor.report(true);
+    expect(started).toHaveLength(1);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const stoppedAt = Date.now();
+    doctor.noteToolchainStop({ jobId: "j2", at: new Date(stoppedAt).toISOString(), detail: "dead" });
+    // Joining the run in flight would have started nothing new; a second waits for the first.
+    expect(started).toHaveLength(1);
+    started[0]!.end();
+    await first;
+    await until(() => started.length === 2, "no check started after the stop");
+    expect(started[1]!.at).toBeGreaterThanOrEqual(stoppedAt);
+    started[1]!.end();
+    await until(() => doctor.current()?.toolchainStop?.jobId === "j2", "the stop never reached the verdict");
   });
 });

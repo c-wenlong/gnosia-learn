@@ -196,8 +196,10 @@ export class WrapperOutputTracker {
         const command = (block.input as { command?: unknown } | undefined)?.command;
         if (typeof command === "string" && command.includes(this.wrapper)) this.pending.add(block.id);
       } else if (block.type === "tool_result" && typeof block.tool_use_id === "string" && this.pending.delete(block.tool_use_id)) {
+        // Every wrapper call's result replaces the last, an empty one too:
+        // an older call's text must never stand in for the call that ended.
         const text = resultText(block.content);
-        if (text !== "") this.last = text.length <= this.limit ? text : `…${text.slice(text.length - this.limit + 1)}`;
+        this.last = text === "" ? null : text.length <= this.limit ? text : `…${text.slice(text.length - this.limit + 1)}`;
       }
     }
   }
