@@ -506,6 +506,30 @@ describe.skipIf(process.platform !== "darwin")("the revideokc wrapper", () => {
     ]);
   });
 
+  it("relays a step's output as it comes, all of it, without stopping a step that says a lot", async () => {
+    // 80 MiB on stdout, more than any buffer the wrapper could have held, then a last line on each stream.
+    const fake = path.join(root, "fake-sandbox-exec");
+    await writeFile(
+      fake,
+      `#!${process.execPath}\nconst chunk = Buffer.alloc(1024 * 1024, 120);\nfor (let i = 0; i < 80; i++) require("node:fs").writeSync(1, chunk);\nprocess.stdout.write("\\nlast line\\n");\nprocess.stderr.write("to stderr\\n");\n`,
+      "utf8",
+    );
+    await chmod(fake, 0o755);
+    const out = path.join(root, "wrapper-out.txt");
+    const err = path.join(root, "wrapper-err.txt");
+    const { openSync, closeSync, statSync, readFileSync } = await import("node:fs");
+    const outFd = openSync(out, "w");
+    const errFd = openSync(err, "w");
+    const { spawnSync } = await import("node:child_process");
+    const result = spawnSync(paths.wrapper, ["api"], { stdio: ["ignore", outFd, errFd] });
+    closeSync(outFd);
+    closeSync(errFd);
+    expect(result.status).toBe(0);
+    expect(statSync(out).size).toBe(80 * 1024 * 1024 + "\nlast line\n".length);
+    expect(readFileSync(err, "utf8")).toContain("to stderr");
+    expect((await calls()).at(-1)).toMatchObject({ verb: "api", exitCode: 0, steps: [{ step: "render", exitCode: 0 }] });
+  });
+
   it("refuses to render while one of the job's ports is held, and says so", async () => {
     const config = JSON.parse(/const CONFIG = ([\s\S]*?);\n/.exec(await readFile(paths.wrapper, "utf8"))![1]!) as { ports: number[] };
     const server = createServer();
