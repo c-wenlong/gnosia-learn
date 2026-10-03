@@ -5,7 +5,7 @@ import { Fragment, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Chip } from "@/components/ui/Chip";
+import { FilterMenu } from "@/components/ui/FilterMenu";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
@@ -18,7 +18,7 @@ import {
   courseStatus,
   coverLine,
   filterCourses,
-  partnerLine,
+  tagFilterOptions,
   type CourseEntry,
   type CourseFilter,
   type CourseSummary,
@@ -36,9 +36,9 @@ const LINK_FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus
  *   naming the next topic and its module with a Resume button). The course
  *   last opened comes first.
  * - **The grid**: every course as a compact cover card, in the shape of the
- *   cards in Coursera's explore carousels, under a row of tag chips (All,
- *   then each tag a course uses) and the search field. The chips and the
- *   search narrow the grid only; the Continue learning block is the courses
+ *   cards in Coursera's explore carousels, under a tag menu (All, then
+ *   each tag a course uses) and the search field. The menu and the search
+ *   narrow the grid only; the Continue learning block is the courses
  *   under way whatever the grid shows.
  *
  * A client component because it filters as you type and because progress
@@ -65,6 +65,7 @@ export function CourseList({
     [summaries, state.completed, standing, state.lastVisited?.courseSlug],
   );
   const shown = useMemo(() => filterCourses(summaries, query, filter), [summaries, query, filter]);
+  const tagOptions = useMemo(() => tagFilterOptions(tags, summaries), [tags, summaries]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -95,24 +96,13 @@ export function CourseList({
         </h2>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
           {tags.length > 0 && (
-            <div
-              role="group"
-              aria-label="Filter by tag"
-              className="-mx-4 flex min-w-0 flex-1 gap-2 overflow-x-auto px-4 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
-            >
-              <Chip active={filter.tag === null} onClick={() => setFilter(ALL_COURSES)}>
-                All
-              </Chip>
-              {tags.map((t) => (
-                <Chip
-                  key={t.id}
-                  active={filter.tag === t.id}
-                  onClick={() => setFilter({ tag: filter.tag === t.id ? null : t.id })}
-                >
-                  {t.label}
-                </Chip>
-              ))}
-            </div>
+            <FilterMenu
+              label="Tag"
+              options={tagOptions}
+              value={filter.tag ?? ""}
+              defaultValue=""
+              onChange={(tag) => setFilter(tag === "" ? ALL_COURSES : { tag })}
+            />
           )}
           <SearchField
             label="Search courses"
@@ -229,7 +219,7 @@ function CoverCard({ summary, line }: { summary: CourseSummary; line: string[] }
         <CourseCover src={summary.cover} code={summary.code} />
       </div>
       <div className="flex flex-1 flex-col px-2 pt-2.5 pb-2">
-        <p className="truncate text-[14px] leading-6 text-text">{partnerLine(summary)}</p>
+        <p className="truncate text-[14px] leading-6 text-text">{summary.code}</p>
         <h3 className="mt-1 line-clamp-2 text-[16px] leading-5 font-semibold text-text">{summary.title}</h3>
         <p className="mt-auto pt-2 text-[12px] leading-[18px] text-text2">
           {/* Each part keeps to one line, so a narrow card breaks between parts, never inside one. */}

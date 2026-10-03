@@ -11,8 +11,8 @@ import {
   coverVersion,
   filterCourses,
   isInProgress,
-  partnerLine,
   toCourseSummary,
+  tagFilterOptions,
   usedTags,
 } from "./course-summary";
 
@@ -172,7 +172,7 @@ describe("continueLearning", () => {
   });
 });
 
-describe("coverLine and partnerLine", () => {
+describe("coverLine", () => {
   it("says how far along only once a course is started", () => {
     expect(coverLine(graphics, courseStatus(graphics, {})).join(" · ")).toBe("Course · 2 modules · 3 topics");
     expect(coverLine(graphics, courseStatus(graphics, { "cp4281-m1-t1": true })).join(" · ")).toBe(
@@ -180,15 +180,22 @@ describe("coverLine and partnerLine", () => {
     );
     expect(coverLine(hci, courseStatus(hci, { "cs2111-m1-t1": true })).join(" · ")).toBe("Course · 1 module · 1 topic · Completed");
   });
-
-  it("names the code and the credits", () => {
-    expect(partnerLine(graphics)).toBe("CP4281 · 4 MC");
-    expect(partnerLine({ ...graphics, credits: 0 })).toBe("CP4281");
-  });
 });
 
 describe("usedTags", () => {
   it("keeps the vocabulary's order and drops unused tags", () => {
     expect(usedTags(TAGS, [graphics, hci]).map((t) => t.id)).toEqual(["hci", "graphics"]);
+  });
+});
+
+describe("tagFilterOptions", () => {
+  it("leads with All and counts the courses under each tag", () => {
+    const options = tagFilterOptions(usedTags(TAGS, [graphics, hci]), [graphics, hci]);
+    expect(options.map((o) => [o.value, o.count])).toEqual([
+      ["", 2],
+      ["hci", 1],
+      ["graphics", 1],
+    ]);
+    expect(options[0].short).toBe("All");
   });
 });

@@ -1,3 +1,4 @@
+import type { FilterOption } from "@/components/ui/filter-menu";
 import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import type { Course, TagMeta } from "@/lib/types";
 
@@ -32,8 +33,6 @@ export interface CourseSummary {
   slug: string;
   code: string;
   title: string;
-  /** Modular credits, as the course path prints them ("4 MC"). */
-  credits: number;
   /** The cover photo's URL (`coverUrl`), or null to draw the code placeholder. */
   cover: string | null;
   tags: Pick<TagMeta, "id" | "label">[];
@@ -77,7 +76,6 @@ export function toCourseSummary(course: Course, tags: readonly TagMeta[], coverS
     slug: course.slug,
     code: course.code,
     title: course.title,
-    credits: course.credits,
     cover: coverSha256 === null ? null : coverUrl(course.slug, coverSha256),
     tags: tags.map(({ id, label }) => ({ id, label })),
     moduleCount: course.modules.length,
@@ -204,15 +202,6 @@ export function coverLine(summary: CourseSummary, status: CourseStatus): string[
   return parts;
 }
 
-/**
- * A cover card's partner row, where Coursera names the university: the code
- * and the credits. The course's `track` is left out: it is a sentence ("AI
- * focus area, project-heavy"), not a name, and the course page prints it.
- */
-export function partnerLine(summary: CourseSummary): string {
-  return summary.credits > 0 ? `${summary.code} · ${summary.credits} MC` : summary.code;
-}
-
 /** The theme tags any course uses, in the order `content/tags.yaml` lists them. */
 export function usedTags(
   all: readonly TagMeta[],
@@ -220,4 +209,22 @@ export function usedTags(
 ): Pick<TagMeta, "id" | "label">[] {
   const used = new Set(summaries.flatMap((s) => s.tags.map((t) => t.id)));
   return all.filter((t) => used.has(t.id)).map(({ id, label }) => ({ id, label }));
+}
+
+/**
+ * The tag menu's options: All, then each tag a course uses, each with how many
+ * courses carry it. `""` is All, since a menu value is a string.
+ */
+export function tagFilterOptions(
+  tags: readonly Pick<TagMeta, "id" | "label">[],
+  summaries: readonly CourseSummary[],
+): FilterOption[] {
+  return [
+    { value: "", label: "All tags", short: "All", count: summaries.length },
+    ...tags.map((t) => ({
+      value: t.id,
+      label: t.label,
+      count: summaries.filter((s) => s.tags.some((x) => x.id === t.id)).length,
+    })),
+  ];
 }

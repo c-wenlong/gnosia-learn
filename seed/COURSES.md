@@ -39,7 +39,7 @@ credits: 4
 order: 1                         # display order across the shortlist, unique
 prereq: CS1010                   # optional
 track: HCI focus area primary    # optional
-notes: ...                       # optional
+notes: ...                       # optional: what the course covers, shown as its summary
 inferred: false                  # required, and must be a real boolean
 tags: [hci]                      # tag ids (content/tags.yaml in an export)
 cover:                           # optional: the card's photo, beside this file
