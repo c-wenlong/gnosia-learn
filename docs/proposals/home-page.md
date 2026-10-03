@@ -1,7 +1,7 @@
 # Proposal: Home replaces Today
 
-Status: proposed, 2026-10-04. Decisions H1 and H2 are the owner's and
-settled; H3 is open. Nothing here is implemented.
+Status: proposed, 2026-10-04. Decisions H1 to H3 are the owner's and
+settled. Nothing here is implemented.
 
 ## The problem
 
@@ -36,8 +36,9 @@ redirect to `/home`, so a bookmark or an old link still lands. The API route
 `GET /api/learner/today` becomes `GET /api/learner/home`; the `learning`
 plugin does not call it (checked), so nothing outside the repository breaks.
 
-**H3. Open: how recall changes.** See "Recall" below. The recommendation is
-option A.
+**H3. Recall changes only what the web app shows (option A).** Owner's
+call, 2026-10-04. SM-2, the `review` table and `review due --json` stay as
+they are. The options are under "Recall" below.
 
 ## The page
 
@@ -129,8 +130,8 @@ owner learns something else.
 | `/review` in Claude Code | Still sees "11 due" from `review due --json` | Ranks by weakness too |
 | Cost | Small, web only | Rewrites `schedule.mjs`, migrates `review`, and changes `review due --json`, which the `learning` plugin parses ([LEARN.md](../LEARN.md#the-json-shapes)) |
 
-Recommendation: A now. It removes the debt from the screen the owner sees
-every day, and B can follow if the plugin's queue becomes the problem too.
+Chosen: A. It removes the debt from the screen the owner sees every day, and
+B can follow if the plugin's queue becomes the problem too.
 
 ## What is removed (H1)
 
@@ -161,7 +162,7 @@ every event type.
 | Phase | Ships | Done when |
 | --- | --- | --- |
 | 1 | H1 and H2, and Home with Pick up where you left off. Reviews due and Next up stay as they are, worded without "overdue" | `/today` redirects; no streak or target anywhere; the owner's page lists the CS3230 module, the unfinished videos and today's draft; a module visited before the change still appears |
-| 2 | Next from here and Worth a quick recall (option A, unless H3 says B) | Next up follows the threads; recall shows at most three cards and no queue count |
+| 2 | Next from here and Worth a quick recall (option A, H3) | Next up follows the threads; recall shows at most three cards and no queue count |
 | 3 | Ask | Search finds a concept, a course and a video by title; a miss starts a tutor chat |
 
 Each phase is its own PR. DESIGN.md decision 9 and the Today section of
