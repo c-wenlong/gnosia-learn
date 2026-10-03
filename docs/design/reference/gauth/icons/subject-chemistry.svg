@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="29" height="29" fill="none" viewBox="0 0 29 29">
+<mask id="chem-home-list_svg__a" width="31" height="31" x="-1" y="-1" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+<path fill="#D9D9D9" d="M-.35-.832h30v30h-30z">
+</path>
+</mask>
+<g mask="url(#chem-home-list_svg__a)">
+<path stroke="#BFC2D2" stroke-linecap="round" stroke-width="2" d="M9.913 3.118h9.464">
+</path>
+<path stroke="#BFC2D2" stroke-width="2" d="M17.845 4.07v4.168c0 .363.224.685.55.842 2.828 1.355 4.774 4.196 4.774 7.483 0 4.6-3.814 8.328-8.518 8.328s-8.518-3.729-8.518-8.328c0-3.287 1.946-6.128 4.773-7.483a.95.95 0 0 0 .55-.842V4.07">
+</path>
+<path stroke="#BFC2D2" stroke-width="2" d="m22.46 19.081-.755-.74a5.31 5.31 0 0 0-6.551-.702 6.735 6.735 0 0 1-7.675-.342l-1.108-.845">
+</path>
+<circle cx="12.484" cy="13.804" r="1.499" fill="#BFC2D2">
+</circle>
+</g>
+</svg>

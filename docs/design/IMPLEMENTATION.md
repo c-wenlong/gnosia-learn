@@ -604,6 +604,10 @@ its explore carousels for the rest. The layout and components are Coursera's;
 the colours, the type and the primitives are ours, so all six theme modes
 hold.
 
+A second catalogue layout, Gauth Academy's, was read on 2026-10-04 into
+[reference/gauth/](reference/gauth/README.md); nothing on this page is built
+from it.
+
 The page is the title, then **Continue learning**, drawn only when a course
 has a topic done and one left: one `Card` per course in My Learning's shape,
 the course and "7 modules · 20 topics · 35% done" over a `ProgressBar` on the
