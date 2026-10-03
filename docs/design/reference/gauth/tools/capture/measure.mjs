@@ -586,17 +586,19 @@ async function mobile() {
 
 const PAGES = { promo, home, academy, create: createDialog, unit, science, math, history, atlas, story, news, mobile };
 const want = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(PAGES);
+const done = new Set(); // pages whose capture ran to the end
 for (const k of want) {
   const isMobile = k === 'mobile';
   const l = await launch({ mobile: isMobile });
   context = l.context;
   run = k;
-  try { await PAGES[k](); } catch (e) { log('PAGE FAILED', k, String(e.message).split('\n')[0]); }
+  try { await PAGES[k](); done.add(k); } catch (e) { log('PAGE FAILED', k, String(e.message).split('\n')[0]); }
   out._meta.read = new Date().toLocaleDateString('en-CA'); // the local date of the capture
   save();
   await l.browser.close();
 }
-// a component this run's pages no longer produce is dropped, so a re-run cannot leave stale entries
-for (const [key, c] of Object.entries(out.components)) if (want.includes(c.run) && !touched.has(key)) { delete out.components[key]; log('dropped stale', key); }
+// a component a page no longer produces is dropped, so a re-run cannot leave stale entries; a page that
+// failed partway keeps its earlier entries, since what it did not reach is not known to be gone
+for (const [key, c] of Object.entries(out.components)) if (done.has(c.run) && !touched.has(key)) { delete out.components[key]; log('dropped stale', key); }
 save();
 log('done ->', OUT);

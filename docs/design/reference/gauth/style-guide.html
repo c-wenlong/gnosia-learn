@@ -521,7 +521,7 @@ table.t td.src { color: var(--text-meta); font-size: 12px; }
 
 /* ---------- Gauth components, drawn from the tokens ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; cursor: pointer; text-decoration: none; white-space: nowrap; }
-.btn:focus-visible { outline: none; }
+.btn:focus-visible { outline: var(--focus-width) solid var(--action-focus); outline-offset: 2px; } /* the guide keeps a ring for keyboard use, though most of Gauth's controls draw none */
 .btn.primary { height: var(--size-button-lg); padding: 0 18px; border-radius: var(--radius-12); background: var(--action-primary); color: var(--action-primary-text); font: 500 16px/22.4px var(--fontFamily-system); transition: transform var(--duration-press) ease; }
 .btn.primary:hover, .btn.primary.is-hover { background: var(--action-primary-hover); }
 .btn.primary:active, .btn.primary.is-pressed { background: var(--action-primary-hover); transform: scale(var(--scale-press)); }

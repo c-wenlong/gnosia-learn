@@ -14,7 +14,6 @@ import { M, BASE, chromium, UA, closePromo, openStory } from './lib.mjs';
 
 const OUT = new URL('../../icons/', import.meta.url).pathname;
 fs.mkdirSync(OUT, { recursive: true });
-for (const f of fs.readdirSync(OUT)) if (f.endsWith('.svg')) fs.unlinkSync(OUT + f);
 const wait = (p, ms) => p.waitForTimeout(ms);
 
 // Runs in the page: one record per icon-sized svg currently in the DOM.
@@ -81,7 +80,9 @@ async function scrollAll(p, tag) {
 async function open(p, path, w = 6500) {
   await p.goto(BASE + path, { waitUntil: 'load', timeout: 90000 }); await wait(p, w);
 }
-async function tryDo(label, fn) { try { await fn(); } catch (e) { console.log('  skip', label, String(e.message).split('\n')[0]); } }
+// A page that fails is recorded, and a run with any failure leaves the committed icons alone.
+const failed = [];
+async function tryDo(label, fn) { try { await fn(); } catch (e) { failed.push(label); console.log('  skip', label, String(e.message).split('\n')[0]); } }
 
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA });
@@ -122,6 +123,14 @@ await tryDo('atlas', async () => {
   await openStory(p); await grab(p, 'atlas story');
 });
 await b.close();
+
+// The old set is replaced only after a complete collection, so a run that dies early or loses a page
+// cannot leave icons/ emptied or out of step with INDEX.tsv.
+if (failed.length || !seen.size) {
+  console.error(`not replacing icons/: ${failed.length ? 'failed pages: ' + failed.join(', ') : 'no icons collected'}`);
+  process.exit(1);
+}
+for (const f of fs.readdirSync(OUT)) if (f.endsWith('.svg')) fs.unlinkSync(OUT + f);
 
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
 const names = new Map();
