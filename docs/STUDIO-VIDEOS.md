@@ -1260,6 +1260,15 @@ menus:
 No heading beyond the two row names, no helper text that repeats a menu, and
 sentence case throughout (DESIGN.md, "Sentence case").
 
+The dialog opens and closes in the browser (`PanelHost`), with `?settings=1`
+in the address bar as before, and reads its two rows through the
+`loadStudioSettings` server action once per visit, starting on a hover over
+the button. It used to be drawn by the server, so opening it and closing it
+each rendered the whole grid again, about four seconds each way. The runner
+keeps the `GET /api/settings/agent` answer in a probe
+(`HealthProbes.settingsView`), renewed behind the answer once 15 seconds old
+and forgotten by its own `PUT`.
+
 **Where it is stored.** Two `preference` rows, owner-scoped, so no migration:
 `studioVideoAgent` and `studioDiagramAgent`, each
 `{ "model": "default" | "<alias or id>", "effort": "default" | "<level>" }`,

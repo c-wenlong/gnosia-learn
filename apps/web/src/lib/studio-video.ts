@@ -253,9 +253,13 @@ export function posterHref(videoAssetId: string): string {
   return `/api/assets/${encodeURIComponent(videoAssetId)}/poster`;
 }
 
-/** Where the library plays a landed studio video. */
-export function libraryHref(slug: string): string {
-  return `/library/${encodeURIComponent(`video:${slug}`)}`;
+/**
+ * Where the library plays a landed studio video. `from` is the studio view the
+ * link sits on, which the asset page's back link returns to (`assetBackLink`).
+ */
+export function libraryHref(slug: string, from?: string): string {
+  const page = `/library/${encodeURIComponent(`video:${slug}`)}`;
+  return from === undefined ? page : `${page}?${new URLSearchParams({ from })}`;
 }
 
 /** The logical name a video job holds its lease on. */

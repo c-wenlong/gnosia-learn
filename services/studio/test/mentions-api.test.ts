@@ -300,10 +300,18 @@ describe("the agent settings (D53)", () => {
     expect((view.models as { value: string }[]).map((model) => model.value)).toEqual(["fable", "opus", "sonnet", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5"]);
 
     expect(view.video).toMatchObject({ price: { priced: true, pricedAs: "claude-fable-5-1" }, warning: null });
-    // An unpriced model runs, and the menu says how a stopped job is estimated.
+    // The view is kept: a row written behind the runner's back is not read
+    // again for a GET, only once the view is old or this runner's own PUT
+    // forgets it.
+    const reads = catalogMock.preferenceGet.mock.calls.length;
     catalogMock.preferenceGet.mockResolvedValue(ok({ value: { model: "claude-new-9", effort: "default" } }));
-    const unpriced = await get("/api/settings/agent");
+    expect((await get("/api/settings/agent")).diagram).toMatchObject({ value: { model: "sonnet" } });
+    expect(catalogMock.preferenceGet.mock.calls.length).toBe(reads);
+
+    // An unpriced model runs, and the menu says how a stopped job is estimated.
+    const unpriced = (await (await put("/api/settings/agent", { kind: "diagram", model: "claude-new-9", effort: "default" })).json()) as Record<string, unknown>;
     expect(unpriced.diagram).toMatchObject({ price: { priced: false, pricedAs: "claude-fable-5" }, warning: expect.stringContaining('"claude-new-9" has no price') });
+    expect(await get("/api/settings/agent")).toMatchObject({ diagram: { value: { model: "claude-new-9" } } });
     catalogMock.preferenceGet.mockResolvedValue(ok({ value: null }));
 
     const stored = await put("/api/settings/agent", { kind: "diagram", model: "opus", effort: "low" });
