@@ -234,8 +234,10 @@ The last row is the fallback, and it is what the Assets section does today.
 A topic-only video shows as module material, except where it would be wrong:
 eleven vocabulary topics are named by more than one module, so on those
 modules a topic-only video may belong to the other one. A module on such a
-shared topic shows topic-only videos only while it lists none of its own; a
-module on a topic it alone names always shows them, whatever it lists.
+shared topic shows topic-only videos only while none of the videos it lists
+resolves (a listed id still waiting for its tool to be indexed does not
+count, so the module is never left with no video at all); a module on a
+topic it alone names always shows them, whatever it lists.
 `catalog doctor` lists the modules on a shared topic that still list no
 video.
 
@@ -366,8 +368,9 @@ Each is one PR.
   out mastered and in-module prerequisites; a reading with no lessons is
   module material; a `practice` reading appears once, after the last lesson
   or on its lesson, never under "Read alongside"; a concept-linked video lands
-  on its step; a module on a shared topic that lists a video shows no
-  topic-only video, and one on a topic it alone names still does; a video
+  on its step; a module on a shared topic that lists a video that resolves
+  shows no topic-only video, one whose listed videos are all dangling still
+  does, and one on a topic it alone names still does; a video
   reached by a course listing, a concept link and a topic link appears once,
   where the course listed it; a listed id with no readable video is left off; a module whose topic is shared with another module still shows only
   its own lessons.
