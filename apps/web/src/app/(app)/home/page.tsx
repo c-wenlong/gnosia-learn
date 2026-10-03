@@ -5,6 +5,7 @@ import { CoursesCard } from "@/components/home/CoursesCard";
 import { NextUpCard } from "@/components/home/NextUpCard";
 import { NextCard } from "@/components/home/NextCard";
 import { RecallCard } from "@/components/home/RecallCard";
+import { RefreshOnReturn } from "@/components/home/RefreshOnReturn";
 import { ThreadsCard } from "@/components/home/ThreadsCard";
 import { loadHome } from "@/lib/home";
 
@@ -18,12 +19,15 @@ export const metadata: Metadata = { title: "Home" };
  *
  * A server component over one read (`loadHome`). A database that cannot be
  * reached renders every card's empty state and the shell's banner says why.
- * Below 1024px the right column drops under the left.
+ * Below 1024px the right column drops under the left. A tab that comes back
+ * to it reads it again (`RefreshOnReturn`), since what it lists changes in
+ * other tabs.
  */
 export default async function HomePage() {
   const home = await loadHome();
   return (
     <div data-layout="app">
+      <RefreshOnReturn asOf={home.asOf} />
       <h1 className="mb-3 font-display text-[28px] leading-tight font-bold text-text md:sr-only">Home</h1>
       <div className="mb-5">
         <AskBox />

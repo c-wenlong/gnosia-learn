@@ -14,6 +14,7 @@ import {
   pastDayLabel,
   recallHref,
   recallPicks,
+  shouldRefresh,
   type GraphConcept,
   type ModulePlace,
   type ModuleVisit,
@@ -330,5 +331,25 @@ describe("courses in progress", () => {
       { slug: "b", code: "B2", title: "Second", completed: 1, total: 2, percent: 50 },
       { slug: "a", code: "A1", title: "First", completed: 1, total: 4, percent: 25 },
     ]);
+  });
+});
+
+describe("shouldRefresh", () => {
+  const base = { visible: true, pending: false, drawnAt: 1_000, now: 62_001, maxAgeMs: 60_000 };
+
+  it("refreshes a visible page past the age, and not one within it or hidden", () => {
+    expect(shouldRefresh(base)).toBe(true);
+    expect(shouldRefresh({ ...base, now: 60_999 })).toBe(false);
+    expect(shouldRefresh({ ...base, visible: false })).toBe(false);
+  });
+
+  it("asks once when a return fires focus and visibilitychange together", () => {
+    let pending = false;
+    const fire = () => {
+      const go = shouldRefresh({ ...base, pending });
+      if (go) pending = true;
+      return go;
+    };
+    expect([fire(), fire()]).toEqual([true, false]);
   });
 });
