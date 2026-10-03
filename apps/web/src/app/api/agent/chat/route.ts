@@ -7,7 +7,13 @@ import {
 } from "@/lib/agent/guard";
 import { readCoursesOr503 } from "@/lib/agent/courses";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
-import { buildAgentSessionContext, buildConceptSessionContext, type CitationSource } from "@/lib/agent/prompt";
+import {
+  buildAgentSessionContext,
+  buildConceptSessionContext,
+  buildOpenTutorPrompt,
+  OPEN_SUBJECT_LIMIT,
+  type CitationSource,
+} from "@/lib/agent/prompt";
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { readTutorStyle } from "@/lib/settings";
@@ -26,10 +32,11 @@ import type { TopicKnowledge } from "@/lib/types";
 export const runtime = "nodejs";
 
 /**
- * One of two shapes. The topic tutor (the course session) sends
+ * One of three shapes. The topic tutor (the course session) sends
  * `courseSlug`, `moduleSlug` and `topicId`. The concept tutor (the workspace)
  * sends `conceptSlug` instead, and when it is present the three topic fields
- * are ignored. The request and response shapes are written down in
+ * are ignored. The open tutor (`/ask`, from Home's Ask box) sends `subject`,
+ * the text the owner typed, and nothing else. The request and response shapes are written down in
  * docs/design/IMPLEMENTATION.md under "The concept tutor API".
  */
 interface ChatBody {
@@ -37,6 +44,7 @@ interface ChatBody {
   moduleSlug?: string;
   topicId?: string;
   conceptSlug?: unknown;
+  subject?: unknown;
   messages: ChatMessage[];
   learnerNote?: string;
   priorKnowledge?: Partial<TopicKnowledge>;
@@ -115,6 +123,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "The body must be a JSON object" }, { status: 400 });
   }
   if (body.conceptSlug !== undefined) return conceptTurn(req, body, owner);
+  if (body.subject !== undefined) return openTurn(req, body, owner);
 
   const { courseSlug, moduleSlug, topicId, messages, learnerNote, priorKnowledge } =
     body;
@@ -218,6 +227,48 @@ async function conceptTurn(req: Request, body: ChatBody, owner: string) {
     concept: { slug: read.workspace.slug, title: read.workspace.title },
     sources: session.sources,
   });
+}
+
+/** Every turn a `{ role, content }` pair, so a malformed one is a 400 before anything is read. */
+function wellFormedTurns(messages: unknown): messages is ChatMessage[] {
+  return (
+    Array.isArray(messages) &&
+    messages.every(
+      (m: unknown) =>
+        m !== null &&
+        typeof m === "object" &&
+        ["user", "assistant", "system"].includes((m as ChatMessage).role) &&
+        typeof (m as ChatMessage).content === "string",
+    )
+  );
+}
+
+/**
+ * A turn of the open tutor (docs/proposals/home-page.md, part 1): a subject
+ * nothing in the catalog matched. No note, no mastery and nothing recorded
+ * (H4); the prompt is built from the subject and the owner's tutor style only.
+ */
+async function openTurn(req: Request, body: ChatBody, owner: string) {
+  const { subject, messages } = body;
+  const text = typeof subject === "string" ? subject.trim() : "";
+  if (text === "" || text.length > OPEN_SUBJECT_LIMIT || !wellFormedTurns(messages)) {
+    return NextResponse.json(
+      {
+        error: `subject must be the text to learn about (1 to ${OPEN_SUBJECT_LIMIT} characters), and messages an array of { role, content } turns`,
+        code: "BAD_REQUEST",
+      },
+      { status: 400 },
+    );
+  }
+
+  const tooLarge = enforcePayloadBounds(messages, undefined);
+  if (tooLarge) return tooLarge;
+
+  const rateLimited = enforceRateLimit(req, "chat", CHAT_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
+
+  const style = await readTutorStyle();
+  return completeTurn(owner, buildOpenTutorPrompt(text, { style }), messages);
 }
 
 /** Send the turn to the provider cascade and shape the answer both tutors share. */
