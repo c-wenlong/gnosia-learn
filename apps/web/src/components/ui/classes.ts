@@ -139,17 +139,20 @@ export function chipClasses({
  * Kit `Input`: 44px, 2px border, radius 8, or a pill for search. `sm` is 36px
  * with a 12px inset, for a field that sits in a row of text rather than in a
  * form: the confirm card's inline edits, where a 44px field would push every
- * row apart the moment editing starts.
+ * row apart the moment editing starts. `chip` is a `Chip`'s face (34px, 1px
+ * border, 13px), for a field in a row of filter menus: the Library's search
+ * beside its Type, Course and sort menus.
  */
 export function inputClasses({
   pill = false,
   size = "md",
   className,
-}: { pill?: boolean; size?: "md" | "sm"; className?: string } = {}): string {
+}: { pill?: boolean; size?: "md" | "sm" | "chip"; className?: string } = {}): string {
   return cx(
-    size === "md" ? "h-11 px-3.5" : "h-9 px-3",
-    "w-full min-w-0 border-2 border-border bg-surface text-text",
-    FIELD_TEXT.px14,
+    size === "md" ? "h-11 px-3.5" : size === "sm" ? "h-9 px-3" : "h-[34px] px-3.5",
+    "w-full min-w-0 border-border bg-surface text-text",
+    size === "chip" ? "border" : "border-2",
+    size === "chip" ? FIELD_TEXT.px13 : FIELD_TEXT.px14,
     "placeholder:text-text3 outline-none transition-colors duration-100 focus:border-accent",
     "aria-invalid:border-danger",
     DISABLED,
