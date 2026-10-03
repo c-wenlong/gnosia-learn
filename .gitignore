@@ -58,6 +58,12 @@ next-env.d.ts
 # window where they are not.
 .claude/worktrees/
 
+# Another agent harness's copy of this repo's skills (.agents/skills/, the
+# video-router skill with `.claude/` paths rewritten), written on a machine
+# that runs one. The skills live under .claude/skills/; the copy is that
+# machine's, and committing it would give the repo two versions that drift.
+.agents/
+
 # Where a studio job wrote its candidate before candidates moved into the job
 # workspace under STUDIO_HOME (phase 2 of docs/CONTENT-MIGRATION.md). Kept
 # ignored for a job recorded before the move, whose half-drawn file may still
