@@ -25,8 +25,11 @@ export function MenuPopover({ label, children }: { label: string; children: Reac
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || !details!.open) return;
+      // Focus goes back to the button only from inside the menu; from anywhere
+      // else it stays where the person put it.
+      const inside = details!.contains(document.activeElement);
       details!.open = false;
-      details!.querySelector("summary")?.focus();
+      if (inside) details!.querySelector("summary")?.focus();
     }
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -37,6 +40,8 @@ export function MenuPopover({ label, children }: { label: string; children: Reac
   }, []);
 
   function onChoose(event: MouseEvent<HTMLDivElement>) {
+    // A modified click opens the option in a new tab, and this one keeps its menu.
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if ((event.target as Element).closest("a") !== null && ref.current !== null) ref.current.open = false;
   }
 
