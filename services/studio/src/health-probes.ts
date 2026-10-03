@@ -78,6 +78,19 @@ export class HealthProbes {
     this.agent = new Probe(() => agentSettings().catch(() => null), ttls.agent ?? AGENT_PROBE_TTL_MS);
   }
 
+  private settingsProbe: Probe<Record<string, unknown>> | null = null;
+
+  /**
+   * The settings panel's rows (`GET /api/settings/agent`), kept like the rest
+   * so the panel opens on them rather than on three catalog subprocesses. The
+   * route owns their shape, so it hands the check in; the first caller's is
+   * the one kept. The route's own PUT forgets it with `agent`.
+   */
+  settingsView(check: () => Promise<Record<string, unknown>>): Probe<Record<string, unknown>> {
+    this.settingsProbe ??= new Probe(check, this.agent.ttlMs);
+    return this.settingsProbe;
+  }
+
   /** Start every check now, not awaited, so the first health call after a start finds answers. */
   warm(): void {
     // The vocabulary keeps its own last outcome (`vocabularyStatusNow`), which

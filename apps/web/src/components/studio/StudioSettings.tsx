@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useId, useRef, useState, useTransition } from "react";
 
 import type { StudioAgentPreference } from "@self-learn/schema/shared";
 
 import { saveStudioAgent } from "@/app/(app)/studio/actions";
+import { PanelLink } from "@/components/studio/PanelLink";
+import { usePanelHost } from "@/components/studio/panel-host";
 import { cx, inputClasses, LABEL } from "@/components/ui/classes";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { Panel } from "@/components/ui/Panel";
@@ -42,10 +43,13 @@ export interface AgentRow {
 export function StudioSettings({
   rows,
   reachable,
+  onSaved,
 }: {
   rows: AgentRow[];
   /** Whether the catalog answered the read: with it down, a save cannot land either. */
   reachable: boolean;
+  /** Told of each row that saved, so the panel opened again starts from it rather than from the first read. */
+  onSaved?: (kind: AgentKind, value: StudioAgentPreference) => void;
 }) {
   const [values, setValues] = useState<Record<AgentKind, StudioAgentPreference>>(
     () => Object.fromEntries(rows.map((row) => [row.kind, row.value])) as Record<AgentKind, StudioAgentPreference>,
@@ -83,7 +87,10 @@ export function StudioSettings({
       } catch {
         result = { ok: false, error: "Not saved: the studio did not answer." };
       }
-      if (result.ok) saved.current[kind] = next;
+      if (result.ok) {
+        saved.current[kind] = next;
+        onSaved?.(kind, next);
+      }
       if (sequence.current[kind] !== ticket) return;
       if (result.ok) {
         setNotes((held) => ({ ...held, [kind]: { ok: true, text: "Saved" } }));
@@ -195,12 +202,18 @@ function Menu({
   );
 }
 
-/** The strip's way in: a quiet icon button beside Display and Sort. */
+/**
+ * The strip's way in: a quiet icon button beside Display and Sort. A panel
+ * link, so the dialog opens in the browser (`PanelHost`), and a hover or a
+ * focus starts reading its rows, which are then there by the press.
+ */
 export function SettingsLink({ href }: { href: string }) {
+  const host = usePanelHost();
   return (
-    <Link
+    <PanelLink
       href={href}
-      scroll={false}
+      onPointerEnter={() => host?.warmSettings()}
+      onFocus={() => host?.warmSettings()}
       aria-label="Settings"
       title="Settings"
       className={cx(
@@ -212,6 +225,6 @@ export function SettingsLink({ href }: { href: string }) {
       <svg aria-hidden viewBox="0 0 20 20" width={18} height={18} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
         <path d="M4 6h7M15 6h1M4 14h1M9 14h7M13 4v4M7 12v4" />
       </svg>
-    </Link>
+    </PanelLink>
   );
 }

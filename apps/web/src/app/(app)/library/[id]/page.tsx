@@ -31,6 +31,7 @@ import { appTimeZone } from "@/lib/time-zone";
 import { dayKey } from "@/lib/days";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import {
+  assetBackLink,
   assetFileHref,
   assetHref,
   assetPosterHref,
@@ -141,8 +142,24 @@ async function videoSidecars(derived: AssetRef[]): Promise<Sidecars> {
   return { state: "unreadable" };
 }
 
-export default async function AssetPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AssetPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const id = decodeAssetId((await params).id);
+  const back = assetBackLink((await searchParams).from);
+  // Every state of the page has a way back to where it was opened from.
+  const backLink = (
+    <Link
+      href={back.href}
+      className="self-start rounded-sm text-[13px] font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+    >
+      <span aria-hidden>←</span> {back.label}
+    </Link>
+  );
   const [detail, { kb }, lastWatched, playback] = await Promise.all([
     loadAssetDetail(id),
     loadKnowledgeBase(),
@@ -158,12 +175,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
     if (reachable) notFound();
     return (
       <div data-layout="app" className="flex flex-col gap-4">
-        <Link
-          href="/library"
-          className="self-start rounded-sm text-[13px] font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          <span aria-hidden>←</span> Library
-        </Link>
+        {backLink}
         <Notice title="The catalog is unreachable" command="npm run catalog -- status">
           This asset could not be looked up, which is not the same as it not existing. The row is
           where it was.
@@ -268,7 +280,8 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
 
   if (asset.kind === "video" && servable) {
     return (
-      <div data-layout="app">
+      <div data-layout="app" className="flex flex-col gap-4">
+        {backLink}
         <LibraryVideo
           // Its playback state is this asset's: a new asset starts over.
           key={asset.id}
@@ -331,6 +344,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div data-layout="app" className="flex flex-col gap-4">
+      {backLink}
       {!pictureFirst && titleRow}
       <div className="min-w-0">
         {asset.kind === "video" ? (

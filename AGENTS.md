@@ -25,6 +25,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/TUTOR-MODELS.md](docs/TUTOR-MODELS.md) | The tutor's model chain: the owner's ordered provider and model list in `tutor_model`, edited in Settings' Models card, tried top to bottom, with the built-in defaults when there is none, a per-call limit and a turn deadline. Decisions T1 to T11 |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [docs/proposals/course-items-declare-concepts.md](docs/proposals/course-items-declare-concepts.md) | Proposal: the course file lists each item's concepts, and progress derives from mastery everywhere the path already does |
+| [docs/proposals/module-learning-path.md](docs/proposals/module-learning-path.md) | Proposal: the module page becomes one ordered path (before you start, module material, lessons of concept steps, practice, a week check) built from the concept order and prerequisite graph; readings attach to lessons, videos name concepts, and `catalog doctor` guards the order against `requires` |
 | [docs/proposals/home-page.md](docs/proposals/home-page.md) | Proposal: Home at `/home` replaces Today, built on the threads the owner last touched rather than a schedule; the streak and daily target are removed. Decisions H1 to H3 |
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
 | [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) | The diagram studio at `/studio`: the session and job schema, the runner, the UI, and the decisions behind them |
@@ -478,6 +479,18 @@ Rules of engagement:
   family by name, else at the dearest rate in the table (`priceableAs` in
   `cost.ts`), and the reading's `pricedAs` says which: an estimate, never
   none, so the cap still counts a killed attempt.
+- **The grid's three lists are kept in the runner's memory.**
+  `GET /api/diagrams`, `/api/vocabulary` and `/api/videos` answer through
+  `services/studio/src/listings.ts`: the last read at once, and a read older
+  than 30 seconds is served while a fresh one runs, with `cache.renewing`
+  set so the page refreshes itself once (`RenewLists`). Each read is a
+  `catalog` subprocess, and the three together took 2 to 4 seconds on every
+  visit before this. A write through `catalog.ts` (`diagram put` and
+  `commit`, `video put`, `topic add`, `job accept`) drops all three, so a
+  page after the studio's own write waits for fresh lists. A write from
+  outside the runner shows a few seconds after the next visit. Gates (a
+  brief checked against the vocabulary, one diagram's panel) still read the
+  catalog each time.
 - The mirror iframe at `/studio/d/<name>` is cross-origin, so the studio has
   no channel to ask the live canvas anything; it derives the SVG-freshness
   pill by comparing file modification times instead. An open canvas sends a

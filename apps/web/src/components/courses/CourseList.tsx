@@ -5,7 +5,7 @@ import { Fragment, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Chip } from "@/components/ui/Chip";
+import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
@@ -19,8 +19,8 @@ import {
   courseStatus,
   coverLine,
   filterCourses,
-  partnerLine,
   splitByActive,
+  tagFilterOptions,
   type CourseEntry,
   type CourseFilter,
   type CourseSummary,
@@ -38,9 +38,9 @@ const LINK_FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus
  *   naming the next topic and its module with a Resume button). The course
  *   last opened comes first.
  * - **The grid**: every course as a compact cover card, in the shape of the
- *   cards in Coursera's explore carousels, under a row of tag chips (All,
- *   then each tag a course uses) and the search field. The chips and the
- *   search narrow the grid only; the Continue learning block is the courses
+ *   cards in Coursera's explore carousels, under a tag menu (All, then
+ *   each tag a course uses) and the search field. The menu and the search
+ *   narrow the grid only; the Continue learning block is the courses
  *   under way whatever the grid shows.
  * - **Inactive courses**, folded shut under the grid: the courses the learner
  *   set aside with a card's Deactivate button (`inactiveCourses`, a
@@ -83,8 +83,8 @@ export function CourseList({
     () => splitByActive(filterCourses(summaries, query, filter), state.inactiveCourses),
     [summaries, query, filter, state.inactiveCourses],
   );
-  // The chips a set-aside course alone uses go with it, so the row shrinks
-  // with the grid; the chip in use stays, so it can still be turned off.
+  // The tags a set-aside course alone uses leave the menu with it; the tag in
+  // use stays, so it can still be turned off.
   const shownTags = useMemo(() => {
     if (inactiveTotal === 0) return tags;
     const used = new Set(
@@ -92,6 +92,12 @@ export function CourseList({
     );
     return tags.filter((t) => used.has(t.id) || t.id === filter.tag);
   }, [tags, summaries, state.inactiveCourses, inactiveTotal, filter.tag]);
+  // Counted over the active grid: an inactive course that matches shows in the
+  // fold, which prints its own count.
+  const tagOptions = useMemo(
+    () => tagFilterOptions(shownTags, splitByActive(summaries, state.inactiveCourses).active),
+    [shownTags, summaries, state.inactiveCourses],
+  );
   const filtering = query.trim() !== "" || filter.tag !== null;
   const noMatch = shown.active.length === 0 && shown.inactive.length === 0;
   const showInactive = inactiveOpen ?? (filtering && shown.inactive.length > 0);
@@ -146,24 +152,13 @@ export function CourseList({
         </h2>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
           {shownTags.length > 0 && (
-            <div
-              role="group"
-              aria-label="Filter by tag"
-              className="-mx-4 flex min-w-0 flex-1 gap-2 overflow-x-auto px-4 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
-            >
-              <Chip active={filter.tag === null} onClick={() => changeFilter(ALL_COURSES)}>
-                All
-              </Chip>
-              {shownTags.map((t) => (
-                <Chip
-                  key={t.id}
-                  active={filter.tag === t.id}
-                  onClick={() => changeFilter({ tag: filter.tag === t.id ? null : t.id })}
-                >
-                  {t.label}
-                </Chip>
-              ))}
-            </div>
+            <FilterMenu
+              label="Tag"
+              options={tagOptions}
+              value={filter.tag ?? ""}
+              defaultValue=""
+              onChange={(tag) => changeFilter(tag === "" ? ALL_COURSES : { tag })}
+            />
           )}
           <SearchField
             label="Search courses"
@@ -341,7 +336,7 @@ function CoverCard({
           <CourseCover src={summary.cover} code={summary.code} />
         </div>
         <div className="flex flex-1 flex-col px-2 pt-2.5 pb-2">
-          <p className="truncate text-[14px] leading-6 text-text">{partnerLine(summary)}</p>
+          <p className="truncate text-[14px] leading-6 text-text">{summary.code}</p>
           <h3 className="mt-1 line-clamp-2 text-[16px] leading-5 font-semibold text-text">{summary.title}</h3>
           <p className="mt-auto pt-2 text-[12px] leading-[18px] text-text2">
             {/* Each part keeps to one line, so a narrow card breaks between parts, never inside one. */}

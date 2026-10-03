@@ -160,7 +160,7 @@ The pure helpers beside them:
 | [`@/components/ui/classes`](../../apps/web/src/components/ui/classes.ts) | `cx(...)`, `buttonClasses({ variant, size, block, className })`, `chipClasses({ active, size, interactive, className })`, `inputClasses({ pill, className })`, `cardClasses({ tight, className })` |
 | [`@/lib/mastery-bucket`](../../apps/web/src/lib/mastery-bucket.ts) | `type MasteryBucket = "mastered" \| "learning" \| "untouched"`, `bucketOf({ mastery, observations? })`, `MASTERY_BUCKETS`, `MASTERY_BUCKET_LABEL`, `masteryCaption(bucket, pL?)` |
 | [`@/lib/nav`](../../apps/web/src/lib/nav.ts) | `DESTINATIONS`, `type DestinationKey`, `activeDestination(pathname)` |
-| [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags, coverSha256?)`, `coverUrl(slug, sha256)` (the cover route, versioned by the image's hash), `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `partnerLine(...)`, `courseCounts(...)`, `usedTags(...)` |
+| [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags, coverSha256?)`, `coverUrl(slug, sha256)` (the cover route, versioned by the image's hash), `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `courseCounts(...)`, `usedTags(...)`, `tagFilterOptions(tags, summaries)` (the Tag menu's options with their counts) |
 | [`@/lib/days`](../../apps/web/src/lib/days.ts) | `dayKey`, `type LogEvent`: what outlived the habit layer's `habit-core` |
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), and the validators the preference route runs (`validateTutorStyle`, `validateMotionMode`) |
 | [`@/lib/home-core`](../../apps/web/src/lib/home-core.ts) | the Home model (`HomeModel`) and its pure parts: `homeThreads`, `conceptTouches`, `countCheckBlocks`, `coursesInProgress`, `pastDayLabel`, `lastSeenLabel`, `clock` |
@@ -540,7 +540,7 @@ padlock while locked.
 | Unit and header wording | "4 of 4 mastered", "40% mastered" | "mastered" only when every topic has a concept, else "done" | a tick is not mastery |
 | Path, per-node tools | not drawn | any topic row opens the topic's concepts, subtopics, done tick, note, recap and tutor chat; the module's resources are item rows under the topics, with the learner's own and an add form | the module page's checklist and resource list folded in, so nothing it had is lost |
 | Guidebook with no concept | a link | no Guidebook button; "Show learning objectives" lists the topics' subtopics for every module | the brief: no concept note to open. Before the Coursera rebuild the button toggled the same outline |
-| Rail | three cards | Course progress (percent, bar, Continue, Reset), Next up only while the next topic is in another module, About this course (credits, track, prerequisites, notes, capstone, the inferred-roadmap note), Related courses | what the old course page showed, kept, in Coursera's stacked rail cards |
+| Rail | three cards | Course progress (percent, bar, Continue, Reset), Next up only while the next topic is in another module, About this course (the summary from `notes`, track, prerequisites, capstone, the inferred-roadmap note; no credits, since every course is 4 MC), Related courses | what the old course page showed, kept, in Coursera's stacked rail cards |
 | Course home, Coursera slots | partner logo, instructors, ratings, level, time left, deadlines, item types (video, reading), grades, the weekly target and course timeline, the Grades and Notes links | left out; the module's meta row counts topics, concepts, assets and done instead, and the sidebar's one secondary link is the course's assets in the library | no data behind any of them, and the owner's rule is not to invent it |
 | Course home, type | Source Sans, the module title 600 20/24 | Figtree throughout, the module title 600 22/28 and not Georgia | our font; one family, as Coursera uses, since the page title sits in a column rather than over the page |
 | Course home, asset rows | not drawn (the old rail had 72 by 48 thumbnails) | kind icons | Coursera's item rows carry a 20px icon, and a row per asset needs no poster read |
@@ -574,7 +574,7 @@ padlock while locked.
 | Settings, Reminders | "Facts only · 9:00" | not drawn (a disabled "Off" until 2026-09-29) | reminders are not built, and `reminders` is not a preference key yet |
 | Settings, Model providers | "Order: 3 free tiers" | the configured providers' ids in order, the labels and models as a tooltip | the full labels do not fit the 300px box |
 | Settings, field notes | notes under Daily target and BKT priors only | also under Tutor style and Motion | each says what the choice does today (Motion that it is not applied, Tutor style where it is used), so a stored choice does not pretend to do something |
-| Filter rows on Learn and Library | a row of chips, one per option | one `FilterMenu` per group: Learn has Status, Library has Type and Course (and Topic while `?topic=` is set). Each option carries its count | the option count outgrew a row: Library showed twenty chips over three rows. Picking "All" clears a group, so there is no separate clear button. Courses had a Progress and a Tag menu too until 2026-09-29, when it moved to Coursera's layout (see "Courses" below) |
+| Filter rows on Learn and Library | a row of chips, one per option | one `FilterMenu` per group: Learn has Status, Library has Type and Course (and Topic while `?topic=` is set). Each option carries its count | the option count outgrew a row: Library showed twenty chips over three rows. Picking "All" clears a group, so there is no separate clear button. Courses had a Progress and a Tag menu too until 2026-09-29, when it moved to Coursera's layout with tag chips, and the Tag menu came back on 2026-10-04 (see "Courses" below) |
 
 ### Session focus mode (phase 1d)
 
@@ -609,10 +609,10 @@ has a topic done and one left: one `Card` per course in My Learning's shape,
 the course and "7 modules · 20 topics · 35% done" over a `ProgressBar` on the
 left, and on the right an inset card naming the next topic and its module
 with a Resume button. The course last opened (`lastVisited`) comes first,
-then the furthest along. Under it, **All courses**: a row of tag `Chip`s (All,
-then each tag a course uses) with the search at its right, over a grid of
-cover cards. A card is a 16:9 cover in an 8px frame, then the code and
-credits where Coursera names the partner, the title, and the type line
+then the furthest along. Under it, **All courses**: a Tag `FilterMenu` (All,
+then each tag a course uses, with counts) with the search at its right, over a grid of
+cover cards. A card is a 16:9 cover in an 8px frame, then the code
+where Coursera names the partner, the title, and the type line
 ("Course · 6 modules · 13 topics", plus "35% done" or "Completed" once
 started). The whole card links to `/courses/<slug>`. Four across at 1392px
 (280px minimum), two on a phone.
@@ -624,7 +624,7 @@ always on a touch screen; it sits beside the card's link, not inside it. A
 deactivated course leaves the grid for an **Inactive courses** section under
 it, folded shut with its count, where the same corner button says Activate.
 It also leaves Continue learning, here and on Today, and the tags only it
-used leave the chip row. A search or a tag opens the fold whenever an
+used leave the tag menu. A search or a tag opens the fold whenever an
 inactive course matches, and its toggle still closes it; a fold closed by
 hand opens again on the next search or tag. The list is the
 `inactiveCourses` preference (an array of slugs, absent meaning every course
@@ -650,9 +650,9 @@ inside the same 16:9 frame).
 | Right column | a calendar of daily goals, "Last 4 weeks" stats, recent certificates | not drawn | the four-across grid needs the full width, and the top bar's streak and target pills already carry the habit numbers |
 | Course card | partner logo, "Course 1 of 9", estimated completion, an overflow menu | the course and its counts; no logo, no programme position, no date, no menu | we have no partners, programmes or completion estimates, and the menu's actions do not exist here |
 | Next item | its type and length ("Reading (4 minutes)") | the module it sits in ("Module 2 · Transforms") | a topic has no type or length |
-| Chip row | Bestsellers, New, Trending, Staff picks, Top rated | All and the tags | the tags are how our courses group; nothing ranks them |
-| Selected chip | filled near-black | filled accent (`Chip` as it is) | the brief was not to restyle a shared primitive for one page |
-| Cover card partner | an 18px logo and the partner's name | the code and the credits ("CS4263 · 4 MC"), no logo box | no course has a logo; the course's `track` is left off, being a sentence ("AI focus area, project-heavy") rather than a name |
+| Chip row | Bestsellers, New, Trending, Staff picks, Top rated | a Tag `FilterMenu`: All, then each tag with its course count | the tags are how our courses group; nothing ranks them. A chip per tag ran to two rows at twelve tags, so it went back to a menu on 2026-10-04 |
+| Selected tag | filled near-black | the menu's trigger filled with the accent (`FilterMenu` as it is) | the brief was not to restyle a shared primitive for one page |
+| Cover card partner | an 18px logo and the partner's name | the code alone ("CS4263"), no logo box; the credits went with the rail's, every course being 4 MC | no course has a logo; the course's `track` is left off, being a sentence ("AI focus area, project-heavy") rather than a name |
 | Cover card hover | a soft shadow over 0.3s | the 1px `--border` darkens to `--text3` over 0.3s | the kit has no shadows |
 | Card borders and radii | 1px, radius 16, on a white page | the `Card` (2px, radius 20) for Continue learning; the cover card keeps Coursera's 1px `--border` at radius 16 | the kit's card for the block that behaves like our other cards; the cover card is the new component, drawn as measured |
 | Ratings, level, duration, certificates | on Coursera's cards | not drawn | we have none of that data, and nothing is invented to fill the slot |

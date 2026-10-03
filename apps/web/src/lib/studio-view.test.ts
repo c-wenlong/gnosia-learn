@@ -14,6 +14,7 @@ import {
   groupDiagrams,
   panelHref,
   browserPanelMove,
+  gridHref,
   panelSignature,
   parsePanel,
   parseView,
@@ -422,13 +423,23 @@ describe("a move the browser can make on its own", () => {
     expect(browserPanelMove(at("sel=x&v=verify&ok=1&m=done"), "/studio?job=j1")).toBe(true);
   });
 
+  it("opens and closes the settings, which read their own rows", () => {
+    expect(browserPanelMove(at("topic=a"), "/studio?topic=a&settings=1")).toBe(true);
+    expect(browserPanelMove(at("topic=a&settings=1"), "/studio?topic=a")).toBe(true);
+    expect(browserPanelMove(at("topic=a"), "/studio?topic=b&settings=1")).toBe(false);
+  });
+
   it("leaves the rest to the server", () => {
     expect(browserPanelMove(at("topic=a"), "/studio?topic=b&sel=x")).toBe(false);
     expect(browserPanelMove(at(""), "/studio?job=j1&shot=after")).toBe(false);
     expect(browserPanelMove(at("job=j1&shot=after"), "/studio?job=j1")).toBe(false);
-    expect(browserPanelMove(at(""), "/studio?settings=1")).toBe(false);
     expect(browserPanelMove(at("sel=x"), "/studio?extend=x")).toBe(false);
     expect(browserPanelMove(at(""), "/studio/d/x")).toBe(false);
+  });
+
+  it("drops every panel from a path and keeps the filters", () => {
+    expect(gridHref("/studio?topic=a&settings=1&sel=x&v=verify&ok=1&m=done")).toBe("/studio?topic=a");
+    expect(gridHref("/studio?draft=d1&job=j1&extend=e&talk=1&shot=after")).toBe("/studio");
   });
 
   it("drops a verb's outcome from a path and keeps the rest", () => {
