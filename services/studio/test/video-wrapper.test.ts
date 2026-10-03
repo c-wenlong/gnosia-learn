@@ -209,6 +209,23 @@ describe.skipIf(process.platform !== "darwin")("the wrapper", () => {
     expect(await readdir(paths.inflight)).toEqual([]);
   });
 
+  it("keeps relaying stderr when only stdout's reader has gone", async () => {
+    const both = path.join(root, "both-sandbox-exec");
+    await writeFile(both, `#!${process.execPath}\nconst fs = require("node:fs");\nconst chunk = Buffer.alloc(1024 * 1024, 120);\nfor (let i = 0; i < 4; i++) fs.writeSync(1, chunk);\nfs.writeSync(2, "the last diagnostic\\n");\n`, "utf8");
+    await chmod(both, 0o755);
+    await writeWrapper(process.execPath, paths, { ...(await config()), sandboxExec: both });
+    const { spawn } = await import("node:child_process");
+    let stderr = "";
+    const code = await new Promise<number | null>((resolve) => {
+      const child = spawn(paths.wrapper, ["api"], { stdio: ["ignore", "pipe", "pipe"] });
+      (child.stdout as unknown as { destroy(): void }).destroy();
+      child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
+      child.on("close", (exit) => resolve(exit));
+    });
+    expect(code).toBe(0);
+    expect(stderr).toContain("the last diagnostic");
+  });
+
   it("records a step that fails to start, or is killed by a signal, as no exit code, and the call as 1", async () => {
     const dying = path.join(root, "dying-sandbox-exec");
     await writeFile(dying, `#!${process.execPath}\nprocess.kill(process.pid, "SIGKILL");\n`, "utf8");

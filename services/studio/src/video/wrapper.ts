@@ -158,33 +158,35 @@ function record(entry) {
 // Where a step's output goes: this process's own stdout and stderr, written
 // through their streams, so a full pipe is waited on (the step is paused
 // until it drains) rather than spun on. If one fails (its reader went away,
-// its file filled), the rest of the output is dropped and the step runs on,
-// so the call is still recorded and the marker removed.
-let outputLost = false;
-const paused = new Set();
-function loseOutput() {
-  outputLost = true;
-  for (const source of paused) source.resume();
-  paused.clear();
+// its file filled), the rest of that stream's output is dropped, the other
+// keeps going, and the step runs on, so the call is still recorded and the
+// marker removed.
+const lost = new Set();
+const paused = new Map();
+function loseOutput(sink) {
+  lost.add(sink);
+  for (const source of paused.get(sink) || []) source.resume();
+  paused.delete(sink);
 }
-process.stdout.on("error", loseOutput);
-process.stderr.on("error", loseOutput);
+process.stdout.on("error", () => loseOutput(process.stdout));
+process.stderr.on("error", () => loseOutput(process.stderr));
 
 function forward(source, sink) {
   source.on("data", (chunk) => {
-    if (outputLost) return;
+    if (lost.has(sink)) return;
     let flowing;
     try {
       flowing = sink.write(chunk);
     } catch {
-      loseOutput();
+      loseOutput(sink);
       return;
     }
-    if (!flowing && !outputLost) {
+    if (!flowing && !lost.has(sink)) {
       source.pause();
-      paused.add(source);
+      if (!paused.has(sink)) paused.set(sink, new Set());
+      paused.get(sink).add(source);
       sink.once("drain", () => {
-        paused.delete(source);
+        paused.get(sink)?.delete(source);
         source.resume();
       });
     }
