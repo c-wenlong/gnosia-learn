@@ -63,14 +63,32 @@ owner touched that has a place to return to:
 | A course module | The `lastVisited` preference (course and module slugs, time) | `/courses/<slug>/<module>` |
 | A video | `playback:<asset>` preferences (position, ranges, `updatedAt`), only when not finished | The library page, at the saved position |
 | A studio draft | `draft` rows (`updated_at`), when the studio is enabled | `/studio?draft=<id>` |
-| A tutor chat | `session` rows with kind `tutor` | `/learn/<concept>` |
-| A concept | The newest `observation` events per concept | `/learn/<concept>` |
+| A concept | The newest `observation` events per concept | `/learn/<concept>`, the concept's page |
 
 Each row says what it is, where it stopped ("2:17 of 11:36", "Module 6 ·
 Randomized algorithms") and when. This replaces Recent activity: both read
 the same history, and a row you can resume says more than a row you can only
-read. `lastVisited` holds one module today; phase 1 keeps the last few (a
-small list under the same key, still one preference row per owner).
+read.
+
+Two limits of the stored data shape this list:
+
+- **Modules.** `lastVisited` holds one module, and its writer
+  (`/api/learner/preference`) and reader (`asLastVisited` in
+  [snapshot.ts](../../services/catalog/src/state/snapshot.ts)) both refuse
+  anything but a single object. Phase 1 leaves that key and both paths alone,
+  since the course list resumes from it, and adds a new key,
+  `recentModules`: a list of the same objects, newest first, at most five,
+  with its own validator and reader. The course page writes both on a visit.
+  While `recentModules` is absent (every owner before phase 1), Home reads
+  `lastVisited` as a list of one, so no visit recorded before the change is
+  lost.
+- **Tutor chats are not a thread.** A tutor `session` row names no concept,
+  and the chat itself lives in the browser's session storage
+  ([tutor-thread.ts](../../apps/web/src/lib/tutor-thread.ts)), so it is gone
+  once the tab closes. A chat that recorded answers already shows up as its
+  concept, through the `observation` events, and that row opens the
+  concept's page, not the conversation. Restoring a chat would mean storing
+  it on the server, which is out of scope here.
 
 ### 3. Next from here (phase 2)
 
@@ -142,7 +160,7 @@ every event type.
 
 | Phase | Ships | Done when |
 | --- | --- | --- |
-| 1 | H1 and H2, and Home with Pick up where you left off. Reviews due and Next up stay as they are, worded without "overdue" | `/today` redirects; no streak or target anywhere; the owner's page lists the CS3230 module, the unfinished videos and today's draft |
+| 1 | H1 and H2, and Home with Pick up where you left off. Reviews due and Next up stay as they are, worded without "overdue" | `/today` redirects; no streak or target anywhere; the owner's page lists the CS3230 module, the unfinished videos and today's draft; a module visited before the change still appears |
 | 2 | Next from here and Worth a quick recall (option A, unless H3 says B) | Next up follows the threads; recall shows at most three cards and no queue count |
 | 3 | Ask | Search finds a concept, a course and a video by title; a miss starts a tutor chat |
 
