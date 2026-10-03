@@ -9,7 +9,7 @@ import { HOME_PATH, isApiPath, isPublicPath, originFromHeaders, readAuthConfig, 
  * | visitor   | `/` or `/sign-in`      | `/api/auth/*` | anything else                          |
  * | --------- | ---------------------- | ------------- | -------------------------------------- |
  * | anonymous | the page               | the route     | API: 401 JSON. Page: 307 to `/sign-in?next=` |
- * | owner     | 307 to `/today`        | the route     | the page or route                      |
+ * | owner     | 307 to `/home`         | the route     | the page or route                      |
  *
  * Either variable unset means nobody is the owner, an existing cookie
  * included: every protected path sends the visitor to the sign-in page, which

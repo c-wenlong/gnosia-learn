@@ -699,7 +699,7 @@ export function searchableText(kind: string, raw: string): string {
  * the Details tab says "Not yet" for one and "unknown" for the other: a
  * learner told they never read something they did would be told a falsehood.
  *
- * Reads the log in full, as `@/lib/habit` does on every request; the event log
+ * Reads the log in full, as Home (`@/lib/home`) does on every request; the event log
  * is one learner's and small. The payload's `asset` is the join, since a
  * `watched` event names no concept.
  */

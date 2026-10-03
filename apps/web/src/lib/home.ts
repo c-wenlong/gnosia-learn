@@ -1,13 +1,17 @@
 import "server-only";
 
 import { connection } from "next/server";
+import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
 import {
+  asLastVisited,
+  asRecentModules,
   assetsByIds,
   dueReviews,
   readEvents,
   readKnowledgeBase,
   readLearnerSnapshot,
   readPreferences,
+  recentDrafts,
   type CatalogDatabase,
   type KbConcept,
 } from "@self-learn/catalog/state";
@@ -18,48 +22,52 @@ import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import type { Course } from "@/lib/types";
 import { itemStanding } from "@/lib/course-path";
 import { activeOnly } from "@/lib/course-summary";
-import { computeHabit, dayKey, emptyHabit } from "@/lib/habit-core";
-import { habitTimeZone } from "@/lib/habit";
+import { dayKey } from "@/lib/days";
+import {
+  conceptTouches,
+  countCheckBlocks,
+  coursesInProgress,
+  estimateMinutes,
+  homeThreads,
+  lastSeenLabel,
+  reviewKindLabel,
+  toNextUp,
+  type HomeModel,
+  type ModulePlace,
+  type ModuleVisit,
+  type NextUp,
+  type ReviewRow,
+  type VideoProgress,
+} from "@/lib/home-core";
 import { catalogDatabase } from "@/lib/learner-store";
 import { bucketOf } from "@/lib/mastery-bucket";
 import { currentOwner, currentScope } from "@/lib/owner";
-import {
-  activityRows,
-  countCheckBlocks,
-  coursesInProgress,
-  dueLabel,
-  estimateMinutes,
-  reviewKindLabel,
-  toNextUp,
-  type NextUp,
-  type ReviewRow,
-  type TodayModel,
-} from "@/lib/today-core";
+import { parsePlayback } from "@/lib/playback";
+import { studioEnabled } from "@/lib/studio";
+import { appTimeZone } from "@/lib/time-zone";
 
 /**
- * Everything the Today dashboard shows, read in one pass.
+ * Everything Home shows, read in one pass (docs/proposals/home-page.md).
  *
- * The arithmetic and the words are `today-core.ts`; this file fetches the
- * rows and degrades the way `habit.ts` and `learner-store.ts` do: a database
- * that cannot be reached is the empty dashboard with `reachable: false`, never
- * a thrown render, and the shell's banner is what says so.
- *
- * The habit numbers are computed here from the same event log and due queue
- * the rest of the page reads, rather than by calling `readHabit`, which would
- * read both again. The top bar's pills come from the root layout's own read;
- * both run `computeHabit` over the same rows, so they agree.
+ * The arithmetic and the words are `home-core.ts`; this file fetches the rows
+ * and degrades the way `learner-store.ts` does: a database that cannot be
+ * reached is the empty page with `reachable: false`, never a thrown render,
+ * and the shell's banner is what says so.
  */
 
 /** Rows the reviews card lists; the count beside Start review is the whole queue. */
 const REVIEW_ROWS = 5;
-const ACTIVITY_ROWS = 4;
+/** Threads under "Pick up where you left off". */
+const THREAD_ROWS = 5;
 /** Courses the card lists; it says how many more there are. */
 const COURSE_ROWS = 4;
 
-export async function readToday(now: Date = new Date()): Promise<TodayModel> {
-  const timeZone = habitTimeZone();
-  // Whose dashboard, resolved before the degradation below: a request with
-  // no owner fails rather than reading as an empty learner (phase 4).
+const PLAYBACK_PREFIX = "playback:";
+
+export async function readHome(now: Date = new Date()): Promise<HomeModel> {
+  const timeZone = appTimeZone();
+  // Whose page, resolved before the degradation below: a request with no
+  // owner fails rather than reading as an empty learner (phase 4).
   const owner = await currentOwner();
   let db: CatalogDatabase;
   let rows: Awaited<ReturnType<typeof readAll>>;
@@ -68,16 +76,16 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
     rows = await readAll(db, now, owner);
   } catch (error) {
     // A courses type that is not flipped is not an outage. The database
-    // answered, so the shell shows no banner, and the empty dashboard would
-    // read as a learner with no courses; the error boundary names the flip
+    // answered, so the shell shows no banner, and the empty page would read
+    // as a learner with no courses; the error boundary names the flip
     // instead, as it does on every other page.
     if (error instanceof ContentUnavailableError && error.reason === "not-flipped") throw error;
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`today: dashboard unavailable, ${message}`);
-    return emptyToday(now, timeZone);
+    console.warn(`home: page unavailable, ${message}`);
+    return emptyHome(now, timeZone);
   }
 
-  const { kb, events, preferences, due, snapshot, courses } = rows;
+  const { kb, events, preferences, due, snapshot, courses, drafts } = rows;
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
   const title = (id: string) => byId.get(id)?.title ?? id;
 
@@ -101,81 +109,140 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
   );
 
   const shown = due.slice(0, REVIEW_ROWS);
-  const [checks, assets] = await Promise.all([
+  const [checks, videos] = await Promise.all([
     checkCounts(shown.map((card) => card.conceptId)),
-    assetTitles(db, events),
+    videoProgress(db, preferences),
   ]);
   const reviewRows: ReviewRow[] = shown.map((card) => {
     const concept = byId.get(card.conceptId);
-    const when = dueLabel(card.due, now, timeZone);
     const count = checks[card.conceptId] ?? 0;
     return {
       conceptId: card.conceptId,
       title: title(card.conceptId),
       bucket: concept === undefined ? "untouched" : bucketOf(concept),
-      overdueDays: when.overdueDays,
-      dueLabel: when.long,
-      dueShort: when.short,
+      lastSeen: lastSeenLabel(concept?.lastSeen ?? null, now, timeZone),
       checks: count,
       kindLabel: reviewKindLabel(count),
     };
   });
+
+  const threads = homeThreads(
+    {
+      modules: moduleVisits(preferences),
+      place: (visit) => modulePlace(courses, visit),
+      videos,
+      drafts,
+      concepts: conceptTouches(events, (id) => {
+        const c = byId.get(id);
+        return c === undefined ? null : { title: c.title, bucket: bucketOf(c), pL: c.pL };
+      }),
+    },
+    { now, timeZone, limit: THREAD_ROWS },
+  );
 
   return {
     reachable: true,
     asOf: now.toISOString(),
     today: dayKey(now, timeZone),
     conceptCount: kb.concepts.length,
+    threads,
     nextUp,
     reviews: { total: due.length, estimateMinutes: estimateMinutes(due.length), rows: reviewRows },
-    activity: activityRows(events, {
-      now,
-      timeZone,
-      title,
-      nextDue: (id) => byId.get(id)?.due ?? null,
-      assetTitle: (id) => assets[id] ?? null,
-      limit: ACTIVITY_ROWS,
-    }),
-    habit: computeHabit({ events, preferences, dueReviews: due.length, now, timeZone }),
     courses: { rows: started.slice(0, COURSE_ROWS), total: started.length },
   };
 }
 
-/** The dashboard for this request. */
-export async function loadToday(): Promise<TodayModel> {
+/** Home for this request. */
+export async function loadHome(): Promise<HomeModel> {
   await connection();
-  return readToday();
+  return readHome();
 }
 
 async function readAll(db: CatalogDatabase, now: Date, owner: string) {
   // The courses are read with the rows because they are rows (track B of
   // docs/CONTENT-MIGRATION.md), and a course read that fails because the
-  // database is down degrades like the others: the empty dashboard, not a
-  // thrown render. One refused because courses are not flipped is rethrown by
-  // `readToday`.
-  const [kb, events, preferences, due, snapshot, courses] = await Promise.all([
+  // database is down degrades like the others: the empty page, not a thrown
+  // render. One refused because courses are not flipped is rethrown by
+  // `readHome`. Drafts are the studio's, so a deployment without one does
+  // not ask for them.
+  const [kb, events, preferences, due, snapshot, courses, drafts] = await Promise.all([
     readKnowledgeBase(db, owner),
     readEvents(db, owner),
     readPreferences(db, owner),
     dueReviews(db, { now, learnerId: owner }),
     readLearnerSnapshot(db, owner),
     getCourses(),
+    studioEnabled() ? recentDrafts(db, owner, THREAD_ROWS) : Promise.resolve([]),
   ]);
-  return { kb, events, preferences, due, snapshot, courses };
+  return { kb, events, preferences, due, snapshot, courses, drafts };
 }
 
-export function emptyToday(now: Date, timeZone?: string): TodayModel {
+export function emptyHome(now: Date, timeZone?: string): HomeModel {
   return {
     reachable: false,
     asOf: now.toISOString(),
     today: dayKey(now, timeZone),
     conceptCount: 0,
+    threads: [],
     nextUp: null,
     reviews: { total: 0, estimateMinutes: 0, rows: [] },
-    activity: [],
-    habit: emptyHabit(now, timeZone),
     courses: { rows: [], total: 0 },
   };
+}
+
+/**
+ * The module pages to list: `recentModules`, or, for an owner with no list
+ * yet, the one visit `lastVisited` holds (the route starts the list from it
+ * on the next visit).
+ */
+function moduleVisits(preferences: Record<string, unknown>): ModuleVisit[] {
+  const list = asRecentModules(preferences[PREFERENCE_KEYS.recentModules]);
+  if (list !== undefined) return list;
+  const last = asLastVisited(preferences[PREFERENCE_KEYS.lastVisited]);
+  return last === undefined ? [] : [last];
+}
+
+function modulePlace(courses: readonly Course[], visit: ModuleVisit): ModulePlace | null {
+  const course = courses.find((c) => c.slug === visit.courseSlug);
+  if (course === undefined) return null;
+  const found = visit.moduleSlug === undefined ? undefined : course.modules.find((m) => m.slug === visit.moduleSlug);
+  // A module that is gone is not a course page to fall back to: the visit was
+  // to the module, and its course page is one click from anywhere.
+  if (visit.moduleSlug !== undefined && found === undefined) return null;
+  return {
+    courseCode: course.code,
+    courseTitle: course.title,
+    moduleTitle: found?.title ?? null,
+    moduleOrder: found?.order ?? null,
+  };
+}
+
+/**
+ * Every saved video position, with the asset's title. A failed title lookup
+ * costs the video rows (an untitled row would have nothing to say), not the
+ * page.
+ */
+async function videoProgress(db: CatalogDatabase, preferences: Record<string, unknown>): Promise<VideoProgress[]> {
+  const saved = Object.entries(preferences)
+    .filter(([key]) => key.startsWith(PLAYBACK_PREFIX))
+    .map(([key, value]) => ({ assetId: key.slice(PLAYBACK_PREFIX.length), playback: parsePlayback(value) }))
+    .filter((v): v is { assetId: string; playback: NonNullable<typeof v.playback> } => v.playback !== null);
+  if (saved.length === 0) return [];
+  let titles: Record<string, string> = {};
+  try {
+    const rows = await assetsByIds(db, saved.map((v) => v.assetId), await currentScope());
+    titles = Object.fromEntries(rows.filter((r) => r.title !== null).map((r) => [r.id, r.title as string]));
+  } catch {
+    return [];
+  }
+  return saved.map(({ assetId, playback }) => ({
+    assetId,
+    title: titles[assetId] ?? null,
+    position: playback.position,
+    duration: playback.duration,
+    watchedAt: playback.watchedAt,
+    updatedAt: playback.updatedAt,
+  }));
 }
 
 /**
@@ -211,28 +278,11 @@ async function checkCounts(slugs: string[]): Promise<Record<string, number>> {
         const note = await source.concept(slug);
         return [slug, note === null ? 0 : countCheckBlocks(note.markdown)] as const;
       } catch {
-        // The rest of the dashboard was read a moment ago; losing the counts
+        // The rest of the page was read a moment ago; losing the counts
         // costs the "check · 2" labels, not the page.
         return [slug, 0] as const;
       }
     }),
   );
   return Object.fromEntries(entries);
-}
-
-/**
- * Titles for the library assets the log says were watched or read. A failed
- * lookup costs the titles (the rows print the asset id), not the page.
- */
-async function assetTitles(db: CatalogDatabase, events: readonly { type: string; asset?: unknown }[]): Promise<Record<string, string>> {
-  const ids = [
-    ...new Set(events.filter((e) => e.type === "watched" && typeof e.asset === "string").map((e) => e.asset as string)),
-  ];
-  if (ids.length === 0) return {};
-  try {
-    const rows = await assetsByIds(db, ids, await currentScope());
-    return Object.fromEntries(rows.filter((r) => r.title !== null).map((r) => [r.id, r.title as string]));
-  } catch {
-    return {};
-  }
 }

@@ -20,14 +20,14 @@ import {
 } from "@/lib/session-core";
 
 /**
- * The close screen (hi-fi 07): four numbers, what moved as before-and-after
+ * The close screen (hi-fi 07): three numbers, what moved as before-and-after
  * bars, what got scheduled, and the two ways out.
  *
  * Right, mastery moved and review cards come from the answers this session
  * recorded, as the observe route reported them. Mastery moved is the change
- * in p(L), always signed, and a dash when nothing was answered. Target is the habit's own
- * count, read by the server on the refresh after the last answer, so it is the
- * number the top bar shows too.
+ * in p(L), always signed, and a dash when nothing was answered. The fourth
+ * tile, the daily target, went with the habit layer (H1 of
+ * docs/proposals/home-page.md).
  *
  * `reason` is set when the session could ask nothing (no check in the note,
  * no model configured): What moved says why in place of "nothing was
@@ -40,7 +40,6 @@ export function SessionClose({
   plan,
   answers,
   minutes,
-  target,
   next,
   reason = null,
 }: {
@@ -49,7 +48,6 @@ export function SessionClose({
   plan: SessionStep[];
   answers: RecordedAnswer[];
   minutes: number;
-  target: { done: number; total: number; reachable: boolean };
   next: { slug: string; title: string } | null;
   /** Why nothing was asked, when the server knew before the session began. */
   reason?: string | null;
@@ -70,11 +68,10 @@ export function SessionClose({
         <p className="text-[13px] text-text2">{walked === "" ? title : `${title} · ${minutes} min · ${walked}`}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 md:flex md:gap-3.5">
+      <div className="grid grid-cols-3 gap-2.5 md:flex md:gap-3.5">
         <StatTile value={`${totals.right} / ${totals.answered}`} label="Right" tone="ok" />
         <StatTile value={formatTotalsMove(totals)} label="Mastery moved" tone="accent" />
         <StatTile value={totals.cards} label="Review cards" tone="violet" />
-        <StatTile value={target.reachable ? `${target.done} / ${target.total}` : "–"} label="Target" tone="streak" />
       </div>
 
       <Card title="What moved">
@@ -130,8 +127,8 @@ export function SessionClose({
       </Card>
 
       <div className="mt-auto flex flex-wrap items-center gap-3 md:mt-0">
-        <Button variant="secondary" href="/today">
-          Back to Today
+        <Button variant="secondary" href="/home">
+          Back to Home
         </Button>
         <span className="flex-1" />
         {next !== null ? (

@@ -8,8 +8,8 @@ import {
 } from "@self-learn/catalog/state";
 
 import { MAX_ASSET_ID_CHARS } from "@/app/api/learner/watched/route";
-import { habitTimeZone } from "@/lib/habit";
-import { dayKey } from "@/lib/habit-core";
+import { appTimeZone } from "@/lib/time-zone";
+import { dayKey } from "@/lib/days";
 import { BadRequest, handler } from "@/lib/learner-api";
 import { ownerScope } from "@/lib/owner";
 import {
@@ -31,7 +31,7 @@ import {
  * resumes where this one stopped. There is no "Mark watched" button any more:
  * the save that takes coverage past `WATCHED_FRACTION` appends the one
  * `watched` event, `{ asset, kind }`, the same event the button used to write,
- * so the streak and Today's activity list read it unchanged. Later saves do
+ * so everything that reads the log reads it unchanged. Later saves do
  * not append again; `watchedAt` on the stored row is what remembers that.
  *
  * `ranges` are the stretches that played since the last save, in seconds. The
@@ -80,7 +80,7 @@ export const POST = handler(
       coverage: coverage(playback.ranges, playback.duration),
       watchedAt: playback.watchedAt,
       // The same day the page prints, made where the habit's zone is known.
-      watchedDay: playback.watchedAt === null ? null : dayKey(playback.watchedAt, habitTimeZone()),
+      watchedDay: playback.watchedAt === null ? null : dayKey(playback.watchedAt, appTimeZone()),
       // What is stored now, which a slower overlapping save may have written.
       position: playback.position,
       crossed,

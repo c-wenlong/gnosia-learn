@@ -16,7 +16,7 @@ import { loadAssetAccess, readFileProblems, thumbnailFor } from "@/lib/asset-lib
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { isConceptSlug, placeLabel, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { loadConceptWorkspace } from "@/lib/concept-workspace";
-import { habitTimeZone } from "@/lib/habit";
+import { appTimeZone } from "@/lib/time-zone";
 import { dueLabel } from "@/lib/learn-index";
 import { assetFileHref, assetStatusHref, isCompanionKind } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
@@ -72,7 +72,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   const ask = typeof rawAsk === "string" && rawAsk.trim() !== "" ? rawAsk.slice(0, ASK_LIMIT) : undefined;
   const style = await readTutorStyle();
   const session = buildConceptSessionContext(toConceptPromptInput(w), { style });
-  const timeZone = habitTimeZone();
+  const timeZone = appTimeZone();
   const nextReview = w.review ? dueLabel(w.review.due, new Date(), timeZone).label : null;
 
   // Pictures: an asset row's thumbnail and the note's `![[embeds]]`, decided
@@ -113,7 +113,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
         <div className="flex flex-wrap items-center gap-3.5">
           <Button href={`/learn/${w.slug}/session`} aria-describedby={canAsk ? undefined : "session-asks-nothing"}>
             {/* No "· focus mode" suffix: the session page is the focus layout, and
-                Today's button to the same page already says "Continue teaching". */}
+                Home's button to the same page already says "Continue teaching". */}
             Teach me
           </Button>
           <Button variant="secondary" href={`/review?concept=${w.slug}`}>

@@ -38,10 +38,6 @@ export const TRACK = "bg-track inset-ring inset-ring-border";
  */
 export const LABEL = "text-[12px] font-semibold leading-4 text-text2";
 
-/** Kit `Pill`'s face: 36px, 2px border, pill radius, 13/600. `Pill` and the top bar's `HabitPill` share it. */
-export const PILL =
-  "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border-2 border-border bg-surface px-3.5 text-[13px] font-semibold text-text tabular-nums";
-
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent" | "brand";
 export type ButtonSize = "md" | "sm";
 

@@ -1,4 +1,4 @@
-import { dayKey } from "@/lib/habit-core";
+import { dayKey } from "@/lib/days";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 
 /**

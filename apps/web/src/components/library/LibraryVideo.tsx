@@ -155,7 +155,8 @@ export function LibraryVideo({
         .then((payload: { result?: SaveResult } | null) => {
           const result = payload?.result;
           if (!result) return;
-          // A crossing refreshes the streak whichever answer arrives last.
+          // A crossing wrote a `watched` event: re-read the server's render
+          // so it agrees with the log, whichever answer arrives last.
           if (result.crossed) router.refresh();
           if (seq < s.shown) return;
           s.shown = seq;

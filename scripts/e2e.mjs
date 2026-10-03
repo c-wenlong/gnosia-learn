@@ -517,7 +517,7 @@ async function run() {
 
   const go = (path) => page.goto(base + path, { waitUntil: 'load' });
   const main = page.getByRole('main');
-  const state = { concept: null };
+  const state = { concept: null, answered: false };
 
   await step('landing: Open your book goes to /sign-in', page, async () => {
     await go('/');
@@ -535,15 +535,15 @@ async function run() {
     await page.locator('form').getByRole('alert').getByText('That is not the owner password.').waitFor();
   });
 
-  await step('sign-in: the right password lands on /today', page, async () => {
+  await step('sign-in: the right password lands on /home', page, async () => {
     if (!page.url().startsWith(`${base}/sign-in`)) await go('/sign-in');
     await page.getByLabel('Password').fill(PASSWORD);
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await page.waitForURL(`${base}/today`);
+    await page.waitForURL(`${base}/home`);
   });
 
   await step('review: Start review, reveal, rate Good, move on', page, async () => {
-    await go('/today');
+    await go('/home');
     await page.getByRole('link', { name: /^Start review/ }).click();
     await page.waitForURL(`${base}/review`);
     const bar = page.getByRole('progressbar', { name: 'Review progress' });
@@ -635,6 +635,7 @@ async function run() {
         await clickHydrated(page, choices.first());
         await check.click();
         await cont.waitFor();
+        state.answered = true;
       }
       await clickHydrated(page, cont);
       await page.waitForFunction(
@@ -645,6 +646,33 @@ async function run() {
         before,
       );
     }
+  });
+
+  await step('home: Pick up lists the course module opened and the concept answered', page, async () => {
+    // Open a course: its page records the visit (VisitTracker), which the
+    // preference route also puts on recentModules.
+    await go('/courses');
+    const course = main.locator('a[href^="/courses/"]').first();
+    await course.waitFor();
+    const courseHref = await course.getAttribute('href');
+    assert(courseHref !== null, 'no course link on /courses');
+    const visited = page.waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname === '/api/learner/preference' &&
+        r.request().method() === 'POST' &&
+        r.request().postDataJSON()?.key === 'lastVisited',
+    );
+    await go(courseHref);
+    assert((await visited).ok(), 'the visit was not saved');
+    const slug = courseHref.split('/')[2];
+
+    await go('/home');
+    const card = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Pick up where you left off' }) });
+    await card.waitFor();
+    await card.locator(`a[href^="/courses/${slug}"]`).first().waitFor();
+    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).waitFor();
+    // No streak or target anywhere in the shell (H1).
+    assert((await page.getByText(/day streak|Today's target/).count()) === 0, 'a streak or target is still drawn');
   });
 
   if (SEED) skip('library: first video plays and saves its place', 'the seed has no videos (D7)');
@@ -673,14 +701,14 @@ async function run() {
     assert(response.ok(), `the playback save answered ${response.status()}`);
   });
 
-  await step('settings: change the daily target, see Saved', page, async () => {
+  await step('settings: change the tutor style, see Saved', page, async () => {
     await go('/settings');
-    const select = main.getByLabel('Daily target');
+    const select = main.getByLabel('Tutor style');
     await hydrated(page, select);
     const currentValue = await select.inputValue();
     const values = await select.locator('option').evaluateAll((options) => options.map((o) => o.value));
     const next = values.find((v) => v !== currentValue);
-    assert(next !== undefined, `the daily target has no option besides ${currentValue}`);
+    assert(next !== undefined, `the tutor style has no option besides ${currentValue}`);
     await select.selectOption(next);
     await main.getByText('Saved', { exact: true }).waitFor();
   });
@@ -716,13 +744,18 @@ async function run() {
     await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
   });
 
-  await step('sign out: /today answers 307 afterwards', page, async () => {
-    await go('/today');
+  await step('sign out: /home answers 307 afterwards', page, async () => {
+    await go('/home');
     await clickHydrated(page, page.getByRole('button', { name: 'Account and settings' }));
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL(`${base}/`);
-    const after = await page.request.get(`${base}/today`, { maxRedirects: 0 });
-    assert(after.status() === 307, `/today answered ${after.status()} after signing out, expected 307`);
+    const after = await page.request.get(`${base}/home`, { maxRedirects: 0 });
+    assert(after.status() === 307, `/home answered ${after.status()} after signing out, expected 307`);
+    // Today became Home (H2 of docs/proposals/home-page.md): the old path is a
+    // permanent redirect, answered before the proxy asks who is signed in.
+    const old = await page.request.get(`${base}/today`, { maxRedirects: 0 });
+    assert(old.status() === 308, `/today answered ${old.status()}, expected 308`);
+    assert(new URL(old.headers().location ?? '', base).pathname === '/home', `/today redirects to ${old.headers().location}`);
   });
 
   current = 'teardown';

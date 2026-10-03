@@ -3,13 +3,14 @@ import { NextResponse } from "next/server";
 import { ContentUnavailableError } from "@/data/source";
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
-import { readToday } from "@/lib/today";
+import { readHome } from "@/lib/home";
 
 /**
- * `GET /api/learner/today`: the Today dashboard as JSON (DESIGN.md, "API
- * changes"): the next concept, the first reviews due with the queue's size,
- * the recent activity rows, the streak and target, and the courses in
- * progress. The same `TodayModel` the page renders, from the same read.
+ * `GET /api/learner/home`: Home as JSON (docs/proposals/home-page.md): the
+ * threads to pick up, the next concept, the first reviews with the queue's
+ * size, and the courses in progress. The same `HomeModel` the page renders,
+ * from the same read. It was `GET /api/learner/today`; nothing outside this
+ * repository called it.
  *
  * A read, so it degrades rather than fails: an unreachable database is a 200
  * with `reachable: false` and every list empty, exactly what the page shows.
@@ -20,14 +21,14 @@ import { readToday } from "@/lib/today";
  * the rate limit bounds a loop.
  */
 export async function GET(req: Request): Promise<NextResponse> {
-  const limited = enforceRateLimit(req, "learner:today", LEARNER_RATE_LIMIT);
+  const limited = enforceRateLimit(req, "learner:home", LEARNER_RATE_LIMIT);
   if (limited !== null) return limited;
   // A 401 for a request with no owner, before the read that would need one.
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
-  let today;
+  let home;
   try {
-    today = await readToday();
+    home = await readHome();
   } catch (error) {
     if (!(error instanceof ContentUnavailableError)) throw error;
     return NextResponse.json(
@@ -35,5 +36,5 @@ export async function GET(req: Request): Promise<NextResponse> {
       { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
-  return NextResponse.json({ ok: true, today }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ ok: true, home }, { headers: { "Cache-Control": "no-store" } });
 }

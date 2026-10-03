@@ -12,7 +12,6 @@ import { readFileProblems } from "@/lib/asset-library";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { loadConceptWorkspace } from "@/lib/concept-workspace";
-import { loadHabit } from "@/lib/habit";
 import { assetFileHref, assetStatusHref } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
 import { parseMode, teachProse } from "@/lib/session-core";
@@ -26,10 +25,9 @@ import { loadSessionPage, type TeachAsset } from "@/lib/session-page";
  * Everything is read here, on the server: the workspace (the note, its
  * checks, its assets, the learner's p(L)), the step plan built from the
  * checks, the teaching prose cut from the note and rendered by `NoteProse`,
- * the asset for the widget slot, and the habit numbers the close screen's
- * target tile shows. The client session receives it whole and writes one
- * `POST /api/learner/observe` per graded answer, then `router.refresh()`, which
- * re-runs this and moves the streak and target pills.
+ * and the asset for the widget slot. The client session receives it whole and
+ * writes one `POST /api/learner/observe` per graded answer, then
+ * `router.refresh()`, which re-runs this.
  *
  * `?mode=check` (Quiz me) skips the probe and the teaching and asks the note's
  * checks.
@@ -64,7 +62,7 @@ export default async function SessionPage({ params, searchParams }: Props) {
   if (read.state === "unreachable") return <Unreachable slug={slug} />;
   const w = read.workspace;
 
-  const [data, habit] = await Promise.all([loadSessionPage(w, mode), loadHabit()]);
+  const data = await loadSessionPage(w, mode);
 
   // The note's own `![[embeds]]`, decided on the server exactly as the
   // workspace decides them, so the prose never renders a broken picture, and
@@ -118,7 +116,6 @@ export default async function SessionPage({ params, searchParams }: Props) {
         asset={assetElement(data.asset, false)}
         assetCompact={assetElement(data.asset, true)}
         next={data.next}
-        target={{ done: habit.target.done, total: habit.target.total, reachable: habit.reachable }}
       />
     </div>
   );

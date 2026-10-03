@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { getCourses } from "@/data/courses";
 import { defaultSelection } from "@/lib/concept-graph";
 import { courseSlugsOf, placeOf } from "@/lib/concept-workspace";
-import { habitTimeZone } from "@/lib/habit";
+import { appTimeZone } from "@/lib/time-zone";
 import { loadKnowledgeBase } from "@/lib/kb/load";
 import type { KbConcept } from "@/lib/kb/types";
 import { dueLabel, lastSeenLabel, parseFilter, parseScope, parseView, type IndexRow } from "@/lib/learn-index";
@@ -65,7 +65,7 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
   }
 
   const now = new Date();
-  const timeZone = habitTimeZone();
+  const timeZone = appTimeZone();
   // Studied first, then the untouched ones, alphabetical within each: the
   // untouched tail is long and says the least.
   const rows = kb.concepts

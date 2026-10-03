@@ -23,7 +23,7 @@ export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 const FUTURE_SKEW_SECONDS = 60;
 
 /** Where a sign-in lands when the form carries no usable `next`. */
-export const HOME_PATH = "/today";
+export const HOME_PATH = "/home";
 
 /** The variables a deployment has to set before anyone can sign in. */
 export const OWNER_PASSWORD_VAR = "OWNER_PASSWORD";

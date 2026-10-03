@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 
 /**
  * The landing page at `/`, for a visitor who is not signed in (proxy.ts sends
- * a signed-in one to `/today` before this renders). Laid out as a book: a
+ * a signed-in one to `/home` before this renders). Laid out as a book: a
  * title page with one working probe, three chapters, a contents page with a
  * colophon, and the world art as the last page. A server component apart from
  * `ProbeDemo`; no data, no auth, CSS-only motion. Every claim on it maps to
@@ -287,8 +287,8 @@ function ReviewArt() {
 
 const CONTENTS = [
   {
-    title: "Today",
-    body: "Next up, reviews due, a forgiving streak and a target you set. No XP, no hearts, no leagues.",
+    title: "Home",
+    body: "Pick up where you left off: the module, the video, the concept. No schedule, no streak, no leagues.",
   },
   {
     title: "Courses as paths",
@@ -392,7 +392,7 @@ function Closing() {
             Pick up where your book left off.
           </h2>
           <p className="mt-5 text-[17px] leading-relaxed text-[#faf6ec]/80">
-            Sign in to see what is due today and what comes next.
+            Sign in to pick up where you left off.
           </p>
           <div className="mt-9">
             <Button variant="brand" href="/sign-in">

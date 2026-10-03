@@ -1,11 +1,17 @@
 import { asThemeMode, PREFERENCE_KEYS, THEME_MODES, type ThemeMode } from "@self-learn/schema/shared";
-import { writePreference } from "@self-learn/catalog/state";
+import {
+  asLastVisited,
+  asRecentModules,
+  readPreference,
+  withLearnerLock,
+  withRecentModule,
+  writePreference,
+  type CatalogDatabase,
+} from "@self-learn/catalog/state";
 
 import { BadRequest, handler, MAX_ID_CHARS } from "@/lib/learner-api";
 import {
   InvalidPreference,
-  validateDailyTarget,
-  validateLeeway,
   validateMotionMode,
   validateTutorStyle,
 } from "@/lib/preferences";
@@ -13,7 +19,7 @@ import {
 /**
  * The key/value corner of the learner state: theme, where they were last,
  * their own resource links, the courses they set aside, and the Settings
- * page's habit and tutor choices.
+ * page's tutor and motion choices.
  *
  * The allow-list is the point. `preference` is a key/value table so a new UI
  * toggle costs no migration, but an endpoint that wrote any key with any value
@@ -24,6 +30,10 @@ import {
  * `epoch` is not here: it is bumped by `/api/learner/reset`, which is the only
  * thing that has a reason to. `bktParams` is not here either — that belongs to
  * the `learn` CLI, and a browser has no business retuning the BKT model.
+ * `recentModules` is not here because the route keeps it itself, beside every
+ * `lastVisited` write (below). `dailyTarget` and `dailyLeeway` went with the
+ * habit layer (H1 of docs/proposals/home-page.md): their rows stay, and nothing
+ * writes them.
  */
 const WRITABLE = {
   [PREFERENCE_KEYS.theme]: theme,
@@ -33,8 +43,6 @@ const WRITABLE = {
   // The Settings page's keys. Their validators are pure and live in
   // `@/lib/preferences`, beside the vocabulary the form offers, so the two
   // cannot disagree about what a valid value is.
-  [PREFERENCE_KEYS.dailyTarget]: settled(validateDailyTarget),
-  [PREFERENCE_KEYS.dailyLeeway]: settled(validateLeeway),
   [PREFERENCE_KEYS.tutorStyle]: settled(validateTutorStyle),
   [PREFERENCE_KEYS.reducedMotion]: settled(validateMotionMode),
 } as const;
@@ -66,10 +74,36 @@ export const POST = handler(
     return { key, value: validate(body.value) };
   },
   async (db, { key, value }, owner) => {
-    await writePreference(db, key, value, owner);
+    if (key === PREFERENCE_KEYS.lastVisited) {
+      await rememberVisit(db, value, owner);
+    } else {
+      await writePreference(db, key, value, owner);
+    }
     return { key };
   },
 );
+
+/**
+ * Write `lastVisited` and put the same visit at the front of `recentModules`,
+ * the list Home reads, in one transaction under the learner's row lock so two
+ * module pages opened together cannot drop each other's entry.
+ *
+ * Before the first such write an owner has `lastVisited` and no list, so the
+ * list starts from the visit `lastVisited` held until now: a module opened
+ * before `recentModules` existed is still on Home after the next visit.
+ */
+async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string): Promise<void> {
+  const visit = asLastVisited(value);
+  await withLearnerLock(db, owner, async (tx) => {
+    if (visit !== undefined) {
+      const stored = asRecentModules(await readPreference(tx, PREFERENCE_KEYS.recentModules, owner));
+      const previous = asLastVisited(await readPreference(tx, PREFERENCE_KEYS.lastVisited, owner));
+      const list = stored ?? (previous !== undefined ? [previous] : []);
+      await writePreference(tx, PREFERENCE_KEYS.recentModules, withRecentModule(list, visit), owner);
+    }
+    await writePreference(tx, PREFERENCE_KEYS.lastVisited, value, owner);
+  });
+}
 
 function theme(value: unknown): ThemeMode {
   const mode = asThemeMode(value);

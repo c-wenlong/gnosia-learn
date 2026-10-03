@@ -50,6 +50,33 @@ export function asLastVisited(value: unknown): LastVisited | undefined {
   };
 }
 
+/** How many modules `recentModules` keeps. */
+export const RECENT_MODULES_MAX = 5;
+
+/**
+ * A stored `recentModules` list, each entry read as `asLastVisited` reads one,
+ * malformed entries dropped; undefined when the row is absent or not a list,
+ * which a reader takes as "no list yet" and answers from `lastVisited`.
+ */
+export function asRecentModules(value: unknown): LastVisited[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.map(asLastVisited).filter((v): v is LastVisited => v !== undefined);
+}
+
+/**
+ * The list with `visit` in front: a module already on it moves up rather than
+ * appearing twice (a course visited without a module is its own entry), and
+ * the oldest drop off past `max`.
+ */
+export function withRecentModule(
+  list: readonly LastVisited[],
+  visit: LastVisited,
+  max: number = RECENT_MODULES_MAX,
+): LastVisited[] {
+  const same = (v: LastVisited) => v.courseSlug === visit.courseSlug && (v.moduleSlug ?? null) === (visit.moduleSlug ?? null);
+  return [visit, ...list.filter((v) => !same(v))].slice(0, max);
+}
+
 /**
  * A stored `userResources` map, normalised.
  *

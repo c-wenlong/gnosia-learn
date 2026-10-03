@@ -39,11 +39,11 @@ for it. Where a decision changes the API it is marked, and expanded under
 | 2 | Visual tone | Warm, calm, editorial | Serious enough for proofs, warm enough for a daily habit; NotebookLM's chrome overload and Duolingo's mascot both rejected | [brilliant.md](research/brilliant.md) visual language |
 | 3 | Density | Dense dashboard, roomy lessons | Status must fit on one screen; teaching must not | [others.md](research/others.md) Math Academy |
 | 4 | Theme | Light and dark designed together | The app already has a theme class; tokens are two-mode from day one | [notebooklm.md](research/notebooklm.md) |
-| 5 | Streak | Forgiving, no guilt | Duolingo's own data: leeway raised engagement more than strict rules; guilt notifications are the named dark pattern | [duolingo.md](research/duolingo.md) |
-| 6 | Effort counter | Self-set daily target; mastery is the score; no XP shown | XP rewards volume over understanding | [duolingo.md](research/duolingo.md) patterns to avoid |
+| 5 | Streak | Forgiving, no guilt. Superseded 2026-10-04: removed (H1 of [the Home proposal](../proposals/home-page.md)) | Duolingo's own data: leeway raised engagement more than strict rules; guilt notifications are the named dark pattern | [duolingo.md](research/duolingo.md) |
+| 6 | Effort counter | Self-set daily target; mastery is the score; no XP shown. The target was removed 2026-10-04 (H1 of [the Home proposal](../proposals/home-page.md)) | XP rewards volume over understanding | [duolingo.md](research/duolingo.md) patterns to avoid |
 | 7 | Social | None: no hearts, no leagues, no friends | A solo adult learner has no reason to be ranked against strangers | [duolingo.md](research/duolingo.md) |
 | 8 | Feedback | Inline verdict with opt-in "Why", plus a session-close screen with real numbers | Both apps do the inline part; the Close phase of the loop needs a home | [brilliant.md](research/brilliant.md), [duolingo.md](research/duolingo.md) |
-| 9 | Home | A Today dashboard | Nothing on the current site surfaces due reviews, the next step or recent activity | [current-app.md](research/current-app.md) |
+| 9 | Home | A Today dashboard. Superseded 2026-10-04 by Home at `/home`, built on what the owner last touched ([the Home proposal](../proposals/home-page.md)) | Nothing on the current site surfaces due reviews, the next step or recent activity | [current-app.md](research/current-app.md) |
 | 10 | Course navigation | Coursera's course home: one module per URL, a sidebar of modules, the module's topics as item rows marked by mastery, one Continue, a Guidebook per module (revised 2026-09-29; first built as a linear path of unit cards) | Removes "what do I click next" and keeps a long course to one module on screen; the Guidebook is the concept note | [coursera](reference/coursera/README.md), [duolingo.md](research/duolingo.md), [others.md](research/others.md) Khan |
 | 11 | Review rating | Anki four buttons with the resulting interval under each | Maps onto the SM-2 state the database already holds | [others.md](research/others.md) Anki |
 | 12 | Mastery model (API) | One model: chat probes write BKT events | Today two notions of mastery coexist and never reconcile | [current-app.md](research/current-app.md) |
@@ -106,6 +106,8 @@ that runs past the bottom is clipped at the frame edge, the way a scrolling
 page would be (the course home is the one that does).
 
 ### Today
+
+Superseded 2026-10-04 by Home ([docs/proposals/home-page.md](../proposals/home-page.md)); kept as the record of what was designed.
 
 Left: Next up (the active path node with Continue and Open workspace),
 Reviews due (five rows, Start review, Snooze, estimated minutes), Recent

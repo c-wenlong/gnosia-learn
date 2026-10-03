@@ -18,7 +18,7 @@ function first(value: string | string[] | undefined): string | null {
  * no JavaScript in the path: the route answers with a redirect either way and
  * this page reads the outcome from the query string.
  *
- * A signed-in visitor never sees it (the proxy sends them to `/today`), and a
+ * A signed-in visitor never sees it (the proxy sends them to `/home`), and a
  * deployment that has not set both variables gets told exactly which ones,
  * because a sign-in page that silently refuses every password is the kind of
  * bug that costs an evening.

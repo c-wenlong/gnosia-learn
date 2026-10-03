@@ -15,7 +15,7 @@ export const MAX_ASSET_ID_CHARS = 512;
  * Mark a library asset watched (a video) or read (anything else).
  *
  * Appends one `watched` event, `{ asset, kind }`, with no concept: watching is
- * study for the streak and never evidence, so it moves no p(L) and schedules
+ * study and never evidence, so it moves no p(L) and schedules
  * no card (`EVENT_TYPES` in `packages/schema/src/shared.ts` has the rule).
  * Every press appends, so watching twice is two events, the same way a second
  * review is a second row.

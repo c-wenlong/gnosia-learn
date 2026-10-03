@@ -43,8 +43,8 @@ import { SessionClose } from "./SessionClose";
  * recorded, so what the page says and what the log holds cannot disagree. A
  * write that fails stays on screen with the error and the same request id, so
  * pressing Check again retries the same answer rather than recording a second.
- * After each write `router.refresh()` re-reads the layout, which moves the
- * streak and target pills.
+ * After each write `router.refresh()` re-reads the layout, so the learner
+ * snapshot the shell holds moves with the session.
  */
 
 type Resolved = { question: SessionQuestion | null; note: string | null };
@@ -89,7 +89,6 @@ export function SessionFocus({
   asset,
   assetCompact,
   next,
-  target,
 }: {
   slug: string;
   title: string;
@@ -105,7 +104,6 @@ export function SessionFocus({
   /** The same asset, smaller, above a check; null draws nothing. */
   assetCompact: ReactNode | null;
   next: { slug: string; title: string } | null;
-  target: { done: number; total: number; reachable: boolean };
 }) {
   const router = useRouter();
   const [index, setIndex] = useState(0);
@@ -380,7 +378,6 @@ export function SessionFocus({
           plan={plan}
           answers={answers}
           minutes={Math.max(1, Math.round(((closedAt ?? startedAt) - startedAt) / 60_000))}
-          target={target}
           next={next}
           reason={nothingToAsk ? NOTHING_TO_ASK : null}
         />

@@ -15,10 +15,8 @@ type State = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind:
  * same event kind, because the log records that the learner spent time with
  * the asset and the difference is only the word on the button.
  *
- * **It calls `router.refresh()` after a write.** A watched event is a study
- * day, and the streak pill in the top bar is computed by the root layout,
- * which Next keeps mounted across navigation; without the refresh the pill
- * would stay on yesterday's number until something else re-rendered it.
+ * **It calls `router.refresh()` after a write**, so the server-rendered "Last
+ * watched" line picks up the new event.
  *
  * Pressing it again after a save appends again, which is honest (a second
  * viewing is a second event), so the button stays enabled and only its label

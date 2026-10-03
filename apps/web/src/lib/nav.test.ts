@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { activeDestination, DESTINATIONS, STUDIO_DESTINATION, topBarDestinations } from "./nav";
 
 describe("activeDestination", () => {
-  it("matches Today only on the root", () => {
-    expect(activeDestination("/today")).toBe("today");
-    expect(activeDestination("/today?tab=x")).toBe("today");
+  it("matches Home only on its own path", () => {
+    expect(activeDestination("/home")).toBe("home");
+    expect(activeDestination("/home?tab=x")).toBe("home");
     expect(activeDestination("/")).toBeNull();
     expect(activeDestination("/settings")).toBeNull();
   });
@@ -46,7 +46,7 @@ describe("activeDestination", () => {
 describe("the destination lists", () => {
   it("keeps Studio out of the phone tab bar's list", () => {
     expect(DESTINATIONS).toHaveLength(5);
-    expect(DESTINATIONS.map((d) => d.key)).toEqual(["today", "courses", "learn", "library", "review"]);
+    expect(DESTINATIONS.map((d) => d.key)).toEqual(["home", "courses", "learn", "library", "review"]);
     expect(DESTINATIONS.some((d) => d.href.startsWith("/studio"))).toBe(false);
   });
 
