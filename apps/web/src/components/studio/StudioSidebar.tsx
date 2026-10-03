@@ -135,11 +135,16 @@ export function StudioSidebar({
     if (loadingOlder) return;
     setLoadingOlder(true);
     setOlderError(null);
+    // Counted before the read, so a refresh that starts while it runs reads
+    // the new page too rather than landing after it with one page fewer.
     const next = pages.current + 1;
+    pages.current = next;
     const ok = await read(next);
     setLoadingOlder(false);
-    if (ok) pages.current = next;
-    else setOlderError("Older conversations could not be read: the studio did not answer.");
+    if (!ok) {
+      if (pages.current === next) pages.current = next - 1;
+      setOlderError("Older conversations could not be read: the studio did not answer.");
+    }
   }
 
   useEffect(() => {
