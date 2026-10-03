@@ -160,7 +160,7 @@ The pure helpers beside them:
 | [`@/components/ui/classes`](../../apps/web/src/components/ui/classes.ts) | `cx(...)`, `buttonClasses({ variant, size, block, className })`, `chipClasses({ active, size, interactive, className })`, `inputClasses({ pill, className })`, `cardClasses({ tight, className })` |
 | [`@/lib/mastery-bucket`](../../apps/web/src/lib/mastery-bucket.ts) | `type MasteryBucket = "mastered" \| "learning" \| "untouched"`, `bucketOf({ mastery, observations? })`, `MASTERY_BUCKETS`, `MASTERY_BUCKET_LABEL`, `masteryCaption(bucket, pL?)` |
 | [`@/lib/nav`](../../apps/web/src/lib/nav.ts) | `DESTINATIONS`, `type DestinationKey`, `activeDestination(pathname)` |
-| [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags, coverSha256?)`, `coverUrl(slug, sha256)` (the cover route, versioned by the image's hash), `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `partnerLine(...)`, `courseCounts(...)`, `usedTags(...)` |
+| [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags, coverSha256?)`, `coverUrl(slug, sha256)` (the cover route, versioned by the image's hash), `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `courseCounts(...)`, `usedTags(...)`, `tagFilterOptions(tags, summaries)` (the Tag menu's options with their counts) |
 | [`@/lib/habit-core`](../../apps/web/src/lib/habit-core.ts) | the `Habit` types, `computeHabit`, `computeStreak`, `computeTarget`, `habitLabels`, `dayKey`, `weekStart`, `addDays`, `parseDailyTarget`, `parseLeeway` |
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), the validators the preference route runs (`validateDailyTarget`, `validateLeeway`, `validateTutorStyle`, `validateMotionMode`), and the words (`describeTarget`, `describeLeeway`, `targetChoices`) |
 | [`@/lib/today-core`](../../apps/web/src/lib/today-core.ts) | the Today model (`TodayModel`) and its pure parts: `activityRows`, `dueLabel`, `countCheckBlocks`, `targetRows`, `coursesInProgress`, `pastDayLabel`, `futureDayLabel` |
@@ -654,10 +654,10 @@ has a topic done and one left: one `Card` per course in My Learning's shape,
 the course and "7 modules · 20 topics · 35% done" over a `ProgressBar` on the
 left, and on the right an inset card naming the next topic and its module
 with a Resume button. The course last opened (`lastVisited`) comes first,
-then the furthest along. Under it, **All courses**: a row of tag `Chip`s (All,
-then each tag a course uses) with the search at its right, over a grid of
-cover cards. A card is a 16:9 cover in an 8px frame, then the code and
-credits where Coursera names the partner, the title, and the type line
+then the furthest along. Under it, **All courses**: a Tag `FilterMenu` (All,
+then each tag a course uses, with counts) with the search at its right, over a grid of
+cover cards. A card is a 16:9 cover in an 8px frame, then the code
+where Coursera names the partner, the title, and the type line
 ("Course · 6 modules · 13 topics", plus "35% done" or "Completed" once
 started). The whole card links to `/courses/<slug>`. Four across at 1392px
 (280px minimum), two on a phone.
