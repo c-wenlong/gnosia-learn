@@ -164,3 +164,19 @@ describe("a list the runner keeps", () => {
     expect(calls("diagram", "list")).toBe(1);
   });
 });
+
+describe("a list answered from the disk copy", () => {
+  it("is not kept, so the catalog's return shows on the next visit", async () => {
+    listings = new Listings();
+    // One good read writes the copy; then the catalog goes away.
+    await readListing(listings.diagrams, diagramsOk);
+    listings.forget();
+    proc.run.mockImplementationOnce(async () => ({ code: 3, signal: null, stdout: "", stderr: "connect ECONNREFUSED", json: null, timedOut: false }));
+    const fromCopy = await readListing(listings.diagrams, (outcome) => !outcome.ok || outcome.value.stale);
+    expect(fromCopy.value.ok && fromCopy.value.value.stale).toBe(true);
+
+    slugs = ["dot-product", "after-recovery"];
+    const next = await readListing(listings.diagrams, (outcome) => !outcome.ok || outcome.value.stale);
+    expect(next.value.ok && next.value.value.diagrams.map((entry) => entry.name)).toEqual(["dot-product", "after-recovery"]);
+  });
+});

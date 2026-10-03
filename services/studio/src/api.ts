@@ -930,7 +930,7 @@ async function diagrams(
     if (listings === undefined) {
       listing = await listDiagrams();
     } else {
-      const read = await readListing(listings.diagrams, (outcome) => !outcome.ok);
+      const read = await readListing(listings.diagrams, (outcome) => !outcome.ok || outcome.value.stale === true);
       if (!read.value.ok) throw read.value.error;
       listing = read.value.value;
       cache = read.cache;
@@ -1376,7 +1376,7 @@ async function vocabularyRoute(response: ServerResponse, listings?: Listings): P
     if (listings === undefined) {
       read = await loadVocabulary();
     } else {
-      const kept = await readListing(listings.vocabulary, (outcome) => !outcome.ok);
+      const kept = await readListing(listings.vocabulary, (outcome) => !outcome.ok || outcome.value.stale);
       if (!kept.value.ok) throw kept.value.error;
       read = kept.value.value;
       cache = kept.cache;

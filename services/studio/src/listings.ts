@@ -84,6 +84,8 @@ export class Listings {
  * One list's reading, with a failure handed back once and not kept: the
  * next read asks the catalog again rather than repeating the failure for a
  * TTL. A failure is the route's to say, as it was before the lists were kept.
+ * The routes count a list answered from the disk copy (the catalog down) as
+ * one too: kept, it would stand for a TTL after the catalog came back.
  */
 export async function readListing<T>(probe: Probe<T>, failed: (value: T) => boolean): Promise<{ value: T; cache: ListingCache }> {
   const reading: ProbeReading<T> = await probe.read();

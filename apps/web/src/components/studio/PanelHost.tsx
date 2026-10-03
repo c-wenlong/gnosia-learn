@@ -177,7 +177,8 @@ export function PanelHost({
     setSettingsFailed(false);
     settingsRead.current = loadStudioSettings()
       .then(
-        (data) => setSettings((held) => held ?? data),
+        // Rows read with the catalog down are the defaults: a later read replaces them.
+        (data) => setSettings((held) => (held?.reachable ? held : data)),
         () => setSettingsFailed(true),
       )
       .finally(() => {
@@ -189,8 +190,12 @@ export function PanelHost({
   }, []);
   const settingsOpen = view.settings && view.shot === null;
   useEffect(() => {
-    if (settingsOpen && settings === null) warmSettings();
-  }, [settingsOpen, settings, warmSettings]);
+    // Read once a visit, and again on each opening while the last read had
+    // no catalog behind it, so the panel does not keep offering the defaults.
+    if (settingsOpen && (settings === null || !settings.reachable)) warmSettings();
+    // Only an opening asks: `settings` changing while open must not read again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen, warmSettings]);
 
   const controls = useMemo(() => ({ begin, settle, navigate, warmSettings }), [begin, settle, navigate, warmSettings]);
   const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
@@ -206,7 +211,7 @@ export function PanelHost({
         <DialogHeader title="Settings" />
         <div className="min-h-0 flex-1 overflow-y-auto">
           {settings !== null ? (
-            <StudioSettings reachable={settings.reachable} rows={settings.rows} onSaved={settingsSaved} />
+            <StudioSettings key={settings.reachable ? "read" : "defaults"} reachable={settings.reachable} rows={settings.rows} onSaved={settingsSaved} />
           ) : settingsFailed ? (
             <div role="alert" className="flex flex-col items-start gap-3 p-5 text-[14px] text-text2">
               <p>The settings could not be read: the studio did not answer.</p>

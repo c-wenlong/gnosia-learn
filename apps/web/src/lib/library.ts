@@ -531,8 +531,12 @@ export function conceptHref(slug: string): string {
  */
 export function assetBackLink(from: string | string[] | undefined): { href: string; label: string } {
   const raw = Array.isArray(from) ? from[0] : from;
-  if (typeof raw === "string" && /^\/studio(?:[/?#]|$)/.test(raw) && safeNextPath(raw) === raw) {
-    return { href: raw, label: "Studio" };
+  if (typeof raw === "string" && safeNextPath(raw) === raw) {
+    // Resolved the way the browser will, so a `..` cannot leave the studio.
+    const target = new URL(raw, "http://gnosia.invalid");
+    if (target.origin === "http://gnosia.invalid" && (target.pathname === "/studio" || target.pathname.startsWith("/studio/"))) {
+      return { href: `${target.pathname}${target.search}`, label: "Studio" };
+    }
   }
   return { href: "/library", label: "Library" };
 }

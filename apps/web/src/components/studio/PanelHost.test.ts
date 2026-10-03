@@ -367,6 +367,21 @@ describe("the settings", () => {
     expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("read again on the next opening when the last read had no catalog behind it", async () => {
+    mocks.loadSettings.mockResolvedValueOnce({ ...rows("default"), reachable: false }).mockResolvedValueOnce(rows("opus"));
+    setUrl("settings=1");
+    const { container, go } = mount();
+    await act(async () => undefined);
+    expect(container.textContent).toContain("The catalog is not answering");
+
+    close(container);
+    go("");
+    await act(async () => go("settings=1"));
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(2);
+    expect(container.textContent).not.toContain("The catalog is not answering");
+    expect(container.querySelector<HTMLSelectElement>("dialog[open] select")?.value).toBe("opus");
+  });
+
   it("say so when the studio does not answer, and try again on a press", async () => {
     mocks.loadSettings.mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce(rows("default"));
     setUrl("settings=1");

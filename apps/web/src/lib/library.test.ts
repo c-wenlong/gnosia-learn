@@ -456,6 +456,9 @@ describe("assetBackLink", () => {
     expect(assetBackLink("/studios")).toEqual(library);
     expect(assetBackLink("//evil.example/studio")).toEqual(library);
     expect(assetBackLink("https://evil.example/studio")).toEqual(library);
+    expect(assetBackLink("/studio/../settings")).toEqual(library);
+    expect(assetBackLink("/studio/%2e%2e/settings")).toEqual(library);
+    expect(assetBackLink("/studio/./d/x")).toEqual({ href: "/studio/d/x", label: "Studio" });
     expect(assetBackLink("/studio\n")).toEqual(library);
   });
 });
