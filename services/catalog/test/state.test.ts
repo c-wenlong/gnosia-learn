@@ -266,6 +266,14 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       });
       expect((await readLearnerSnapshot(scratch.db)).userResources).toEqual({});
     });
+
+    it("reads the courses set aside as distinct slugs, and anything else as none", async () => {
+      expect((await readLearnerSnapshot(scratch.db)).inactiveCourses).toEqual([]);
+      await writePreference(scratch.db, PREFERENCE_KEYS.inactiveCourses, ["cs2111", "", 7, "cs2111", "cs3230"]);
+      expect((await readLearnerSnapshot(scratch.db)).inactiveCourses).toEqual(["cs2111", "cs3230"]);
+      await writePreference(scratch.db, PREFERENCE_KEYS.inactiveCourses, { cs2111: true });
+      expect((await readLearnerSnapshot(scratch.db)).inactiveCourses).toEqual([]);
+    });
   });
 
   describe("event", () => {

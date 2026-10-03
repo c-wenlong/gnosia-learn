@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
+import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
@@ -19,6 +20,7 @@ import {
   coverLine,
   filterCourses,
   partnerLine,
+  splitByActive,
   type CourseEntry,
   type CourseFilter,
   type CourseSummary,
@@ -40,6 +42,11 @@ const LINK_FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus
  *   then each tag a course uses) and the search field. The chips and the
  *   search narrow the grid only; the Continue learning block is the courses
  *   under way whatever the grid shows.
+ * - **Inactive courses**, folded shut under the grid: the courses the learner
+ *   set aside with a card's Deactivate button (`inactiveCourses`, a
+ *   preference). They leave Continue learning too, and a card's Activate
+ *   brings one back. The section opens by itself while a search or tag is
+ *   set, so a match is never hidden behind the fold.
  *
  * A client component because it filters as you type and because progress
  * comes from `LearnerProvider`, so a topic done on another page shows here
@@ -56,15 +63,44 @@ export function CourseList({
   tags: { id: string; label: string }[];
   standing: ItemStanding;
 }) {
-  const { state } = useLearner();
+  const { state, setCourseActive } = useLearner();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CourseFilter>(ALL_COURSES);
+  const [inactiveOpen, setInactiveOpen] = useState(false);
 
   const continuing = useMemo(
-    () => continueLearning(summaries, state.completed, standing, state.lastVisited?.courseSlug),
-    [summaries, state.completed, standing, state.lastVisited?.courseSlug],
+    () =>
+      continueLearning(summaries, state.completed, standing, state.lastVisited?.courseSlug, state.inactiveCourses),
+    [summaries, state.completed, standing, state.lastVisited?.courseSlug, state.inactiveCourses],
   );
-  const shown = useMemo(() => filterCourses(summaries, query, filter), [summaries, query, filter]);
+  const inactiveTotal = useMemo(
+    () => splitByActive(summaries, state.inactiveCourses).inactive.length,
+    [summaries, state.inactiveCourses],
+  );
+  const shown = useMemo(
+    () => splitByActive(filterCourses(summaries, query, filter), state.inactiveCourses),
+    [summaries, query, filter, state.inactiveCourses],
+  );
+  // The chips a set-aside course alone uses go with it, so the row shrinks
+  // with the grid; the chip in use stays, so it can still be turned off.
+  const shownTags = useMemo(() => {
+    if (inactiveTotal === 0) return tags;
+    const used = new Set(
+      splitByActive(summaries, state.inactiveCourses).active.flatMap((s) => s.tags.map((t) => t.id)),
+    );
+    return tags.filter((t) => used.has(t.id) || t.id === filter.tag);
+  }, [tags, summaries, state.inactiveCourses, inactiveTotal, filter.tag]);
+  const filtering = query.trim() !== "" || filter.tag !== null;
+  const noMatch = shown.active.length === 0 && shown.inactive.length === 0;
+  const showInactive = inactiveOpen || (filtering && shown.inactive.length > 0);
+  const card = (s: CourseSummary, active: boolean) => (
+    <CoverCard
+      summary={s}
+      line={coverLine(s, courseStatus(s, state.completed, standing))}
+      active={active}
+      onToggle={() => setCourseActive(s.slug, !active)}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -91,10 +127,10 @@ export function CourseList({
           id="all-courses"
           className={cx("text-[20px] leading-tight font-bold text-text", continuing.length === 0 && "sr-only")}
         >
-          All courses
+          {inactiveTotal > 0 ? "Active courses" : "All courses"}
         </h2>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-          {tags.length > 0 && (
+          {shownTags.length > 0 && (
             <div
               role="group"
               aria-label="Filter by tag"
@@ -103,7 +139,7 @@ export function CourseList({
               <Chip active={filter.tag === null} onClick={() => setFilter(ALL_COURSES)}>
                 All
               </Chip>
-              {tags.map((t) => (
+              {shownTags.map((t) => (
                 <Chip
                   key={t.id}
                   active={filter.tag === t.id}
@@ -123,7 +159,7 @@ export function CourseList({
           />
         </div>
 
-        {shown.length === 0 ? (
+        {noMatch ? (
           <Card className="items-start">
             <p className="text-text2">
               No course matches{query.trim() ? ` "${query.trim()}"` : ""}
@@ -140,18 +176,46 @@ export function CourseList({
               Clear search and tag
             </Button>
           </Card>
+        ) : shown.active.length === 0 ? (
+          <p className="text-text2">
+            {inactiveTotal === summaries.length && !filtering
+              ? "Every course is inactive. Activate one below to bring it back here."
+              : "No active course matches. The inactive ones that do are below."}
+          </p>
         ) : (
-          // Two to a row on a phone, where one 16:9 cover per row made ten courses
-          // a 3,500px scroll; from 640px up as many 280px columns as fit (four at 1440).
-          <ul className="grid grid-cols-2 gap-3 sm:gap-4 sm:[grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
-            {shown.map((s) => (
-              <li key={s.slug} className="flex">
-                <CoverCard summary={s} line={coverLine(s, courseStatus(s, state.completed, standing))} />
-              </li>
-            ))}
-          </ul>
+          <CourseGrid courses={shown.active} render={(s) => card(s, true)} />
         )}
       </section>
+
+      {inactiveTotal > 0 && (
+        <section aria-labelledby="inactive-courses" className="flex flex-col gap-4">
+          <h2 id="inactive-courses">
+            <button
+              type="button"
+              aria-expanded={showInactive}
+              aria-controls="inactive-courses-list"
+              onClick={() => setInactiveOpen(!showInactive)}
+              className={cx(
+                "flex items-center gap-2 rounded-sm text-[20px] leading-tight font-bold text-text",
+                LINK_FOCUS,
+              )}
+            >
+              Inactive courses{" "}
+              <span className="text-[16px] font-normal text-text2">
+                {filtering ? `${shown.inactive.length} of ${inactiveTotal}` : inactiveTotal}
+              </span>
+              <CollapseChevron open={showInactive} className="text-text2" />
+            </button>
+          </h2>
+          <Collapse open={showInactive} id="inactive-courses-list">
+            {shown.inactive.length === 0 ? (
+              <p className="text-text2">No inactive course matches.</p>
+            ) : (
+              <CourseGrid courses={shown.inactive} render={(s) => card(s, false)} />
+            )}
+          </Collapse>
+        </section>
+      )}
     </div>
   );
 }
@@ -208,42 +272,90 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
 }
 
 /**
+ * The cover cards in a grid: two to a row on a phone, where one 16:9 cover
+ * per row made ten courses a 3,500px scroll; from 640px up as many 280px
+ * columns as fit (four at 1440).
+ */
+function CourseGrid({ courses, render }: { courses: CourseSummary[]; render: (s: CourseSummary) => ReactNode }) {
+  return (
+    <ul className="grid grid-cols-2 gap-3 sm:gap-4 sm:[grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+      {courses.map((s) => (
+        <li key={s.slug} className="group relative flex">
+          {render(s)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * A compact cover card, after the cards in Coursera's explore carousels: the
  * cover at 16:9 inside an 8px frame, then the code where Coursera puts the
  * partner, the title, and the type line. The whole card is the link.
  *
  * Coursera lifts the card with a shadow on hover; the kit has no shadows, so
  * the border darkens to `--text3` instead.
+ *
+ * Deactivate (or Activate, on a card set aside) sits on the cover's corner,
+ * beside the link rather than inside it, since a button inside a link is
+ * invalid. With a mouse it shows on hover or focus only, so ten covers do not
+ * each carry a button; on a touch screen it always shows.
  */
-function CoverCard({ summary, line }: { summary: CourseSummary; line: string[] }) {
+function CoverCard({
+  summary,
+  line,
+  active,
+  onToggle,
+}: {
+  summary: CourseSummary;
+  line: string[];
+  active: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <Link
-      href={`/courses/${summary.slug}`}
-      className={cx(
-        "flex w-full min-w-0 flex-col rounded-2xl border border-border bg-surface p-2",
-        "transition-colors duration-300 hover:border-text3 motion-reduce:transition-none",
-        LINK_FOCUS,
-      )}
-    >
-      <div className="relative aspect-video w-full overflow-hidden rounded-lg">
-        <CourseCover src={summary.cover} code={summary.code} />
-      </div>
-      <div className="flex flex-1 flex-col px-2 pt-2.5 pb-2">
-        <p className="truncate text-[14px] leading-6 text-text">{partnerLine(summary)}</p>
-        <h3 className="mt-1 line-clamp-2 text-[16px] leading-5 font-semibold text-text">{summary.title}</h3>
-        <p className="mt-auto pt-2 text-[12px] leading-[18px] text-text2">
-          {/* Each part keeps to one line, so a narrow card breaks between parts, never inside one. */}
-          {line.map((part, i) => (
-            <Fragment key={part}>
-              {i > 0 && " "}
-              <span className="whitespace-nowrap">
-                {part}
-                {i < line.length - 1 && " ·"}
-              </span>
-            </Fragment>
-          ))}
-        </p>
-      </div>
-    </Link>
+    <>
+      <Link
+        href={`/courses/${summary.slug}`}
+        className={cx(
+          "flex w-full min-w-0 flex-col rounded-2xl border border-border bg-surface p-2",
+          "transition-colors duration-300 hover:border-text3 motion-reduce:transition-none",
+          LINK_FOCUS,
+        )}
+      >
+        <div className="relative aspect-video w-full overflow-hidden rounded-lg">
+          <CourseCover src={summary.cover} code={summary.code} />
+        </div>
+        <div className="flex flex-1 flex-col px-2 pt-2.5 pb-2">
+          <p className="truncate text-[14px] leading-6 text-text">{partnerLine(summary)}</p>
+          <h3 className="mt-1 line-clamp-2 text-[16px] leading-5 font-semibold text-text">{summary.title}</h3>
+          <p className="mt-auto pt-2 text-[12px] leading-[18px] text-text2">
+            {/* Each part keeps to one line, so a narrow card breaks between parts, never inside one. */}
+            {line.map((part, i) => (
+              <Fragment key={part}>
+                {i > 0 && " "}
+                <span className="whitespace-nowrap">
+                  {part}
+                  {i < line.length - 1 && " ·"}
+                </span>
+              </Fragment>
+            ))}
+          </p>
+        </div>
+      </Link>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={`${active ? "Deactivate" : "Activate"} ${summary.code}`}
+        className={cx(
+          "absolute top-3.5 right-3.5 z-10 rounded-full border border-border bg-surface/90 px-2.5 py-1",
+          "text-[12px] font-medium text-text backdrop-blur-sm hover:border-text3",
+          "transition-opacity duration-200 motion-reduce:transition-none",
+          "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100",
+          LINK_FOCUS,
+        )}
+      >
+        {active ? "Deactivate" : "Activate"}
+      </button>
+    </>
   );
 }
