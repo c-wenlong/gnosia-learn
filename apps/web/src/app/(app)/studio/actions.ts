@@ -3,12 +3,25 @@
 import { readPreference, writePreference } from "@self-learn/catalog/state";
 import { redirect } from "next/navigation";
 
+import type { AgentRow } from "@/components/studio/StudioSettings";
 import { noteBody } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { withLearnerStore } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 import { requireStudio, studioApi, type StudioResult } from "@/lib/studio";
-import { AGENT_KEYS, checkedAgent, storedAgent } from "@/lib/studio-agent-settings";
+import {
+  AGENT_KEYS,
+  AGENT_ROWS,
+  agentDefaults,
+  checkedAgent,
+  effortOptions,
+  modelOptions,
+  rowPriced,
+  rowWarning,
+  runnerSettings,
+  storedAgent,
+} from "@/lib/studio-agent-settings";
+import { readStudioAgents } from "@/lib/studio-agents";
 import { withOutcome } from "@/lib/studio-view";
 import { checkHandoffInput, type ConceptConversation } from "@/lib/tutor-handoff";
 
@@ -210,6 +223,44 @@ export async function saveStudioAgent(formData: FormData): Promise<AgentSaved> {
     console.warn(`studio settings: save failed — ${error instanceof Error ? error.message : String(error)}`);
     return { ok: false, error: "Not saved: the catalog did not answer." };
   }
+}
+
+/** The settings panel's two rows and whether the catalog answered, as `StudioSettings` draws them. */
+export interface StudioSettingsData {
+  reachable: boolean;
+  rows: AgentRow[];
+}
+
+/**
+ * The settings panel's rows, for the panel the browser opens (`PanelHost`).
+ *
+ * The page used to read these itself when the URL said `?settings=1`, so
+ * opening the panel and closing it were each a server render of the whole
+ * grid: the five list reads again, then these three, about four seconds each
+ * way. Now the dialog opens and closes in the browser and asks for only this.
+ *
+ * The runner's menu (the models it can price) and its defaults when it
+ * answers (#207), else health's defaults and the built-in list.
+ */
+export async function loadStudioSettings(): Promise<StudioSettingsData> {
+  requireStudio();
+  const [agents, runnerAgents] = await Promise.all([readStudioAgents(), studioApi<unknown>("/api/settings/agent")]);
+  const agentRows = runnerAgents.ok ? runnerAgents.data : null;
+  const fromRunner = runnerSettings(agentRows);
+  // Health answers from its cached checks, so the fallback costs milliseconds.
+  const health = fromRunner.defaults === null ? await studioApi<{ agent?: unknown }>("/api/health", { timeoutMs: 10_000 }) : null;
+  const defaults = fromRunner.defaults ?? agentDefaults(health?.ok ? health.data.agent : null);
+  return {
+    reachable: agents.reachable,
+    rows: AGENT_ROWS.map((row) => ({
+      ...row,
+      value: agents.values[row.kind],
+      fallback: storedAgent(row.kind, null),
+      models: modelOptions(agents.values[row.kind].model, defaults, fromRunner.models ?? undefined, rowPriced(agentRows, row.kind)),
+      efforts: effortOptions(defaults),
+      warning: rowWarning(agentRows, row.kind),
+    })),
+  };
 }
 
 /**
