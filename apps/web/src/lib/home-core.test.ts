@@ -4,17 +4,21 @@ import type { LogEvent } from "@/lib/days";
 import {
   clock,
   conceptTouches,
-  countCheckBlocks,
   coursesInProgress,
   dayDiff,
-  estimateMinutes,
   homeThreads,
   lastSeenLabel,
+  nearThreads,
+  nextFromHere,
   nextUpEyebrows,
   pastDayLabel,
-  reviewKindLabel,
+  recallHref,
+  recallPicks,
+  type GraphConcept,
   type ModulePlace,
   type ModuleVisit,
+  type PathCourse,
+  type Thread,
 } from "@/lib/home-core";
 
 // Every date here is read in UTC so the suite means the same on any machine.
@@ -50,48 +54,6 @@ describe("day words", () => {
   it("counts days in the app's zone, not UTC", () => {
     // 20:00 UTC on the 25th is already the 26th in Singapore.
     expect(lastSeenLabel("2026-09-25T20:00:00Z", NOW, "Asia/Singapore")).toBe("today");
-  });
-});
-
-describe("reviews", () => {
-  it("estimates 45 seconds a card, at least a minute", () => {
-    expect(estimateMinutes(0)).toBe(0);
-    expect(estimateMinutes(1)).toBe(1);
-    expect(estimateMinutes(12)).toBe(9);
-  });
-
-  it("labels a card by the checks its note holds", () => {
-    expect(reviewKindLabel(0)).toBe("recall");
-    expect(reviewKindLabel(2)).toBe("check · 2");
-  });
-
-  it("counts check blocks the way the CLI parses them", () => {
-    const body = [
-      "# Dot product",
-      "",
-      "## Checks",
-      "",
-      "```check",
-      "q: What is a · b for orthogonal vectors?",
-      "a: Zero.",
-      "```",
-      "",
-      "```check",
-      "q:",
-      "  continued on the next line",
-      "why: a question can wrap",
-      "```",
-      "",
-      "```check",
-      "a: an answer with no question is not a check",
-      "```",
-      "",
-      "```ts",
-      "q: not a check block",
-      "```",
-    ].join("\n");
-    expect(countCheckBlocks(body)).toBe(2);
-    expect(countCheckBlocks("")).toBe(0);
   });
 });
 
@@ -196,6 +158,116 @@ describe("pick up where you left off", () => {
     expect(clock(0)).toBe("0:00");
     expect(clock(137.9)).toBe("2:17");
     expect(clock(3723)).toBe("1:02:03");
+  });
+});
+
+describe("next from here", () => {
+  const concept = (id: string, extra: Partial<GraphConcept> = {}): GraphConcept => ({
+    id,
+    title: id.toUpperCase(),
+    pL: 0.25,
+    mastery: "gap",
+    observations: 0,
+    lastSeen: null,
+    requires: [],
+    topics: [],
+    ...extra,
+  });
+  const CONCEPTS = [
+    concept("dot", { pL: 0.8, mastery: "shaky", observations: 3 }),
+    concept("softmax", { requires: ["dot"] }),
+    concept("attention", { requires: ["dot", "softmax"] }),
+    concept("cosine", { requires: ["dot"] }),
+    concept("other"),
+  ];
+  const COURSE: PathCourse = {
+    slug: "cs3230",
+    code: "CS3230",
+    order: 1,
+    modules: [
+      { slug: "m1", order: 1, topics: [{ id: "t1", title: "Big-O" }, { id: "t2", title: "Recurrences" }] },
+      { slug: "m2", order: 2, topics: [{ id: "t3", title: "Divide and conquer" }, { id: "t4", title: "Master theorem" }] },
+    ],
+  };
+  const thread = (extra: Partial<Thread>): Thread => ({
+    key: `t:${extra.title}`,
+    kind: "concept",
+    title: "x",
+    detail: null,
+    href: "/",
+    at: "2026-09-26T09:00:00Z",
+    day: "Today",
+    ...extra,
+  });
+  const graph = (done: string[] = []) => ({
+    concepts: CONCEPTS,
+    frontier: ["softmax", "cosine", "other"],
+    courses: [COURSE],
+    done: (id: string) => done.includes(id),
+    topicHref: (c: PathCourse, m: string, t: string) => `/courses/${c.slug}/${m}#${t}`,
+  });
+
+  it("lists what a concept opens on the frontier, and a module's open topics into the next module", () => {
+    const groups = nextFromHere(
+      [
+        thread({ title: "Dot product", conceptId: "dot" }),
+        thread({ kind: "module", title: "Module one", courseSlug: "cs3230", moduleSlug: "m1" }),
+      ],
+      graph(["t1"]),
+    );
+    expect(groups.map((g) => [g.heading, g.steps.map((s) => s.title)])).toEqual([
+      ["After Dot product", ["SOFTMAX", "COSINE"]],
+      ["After Module one", ["Recurrences", "Divide and conquer", "Master theorem"]],
+    ]);
+    expect(groups[0].steps[0]).toMatchObject({ href: "/learn/softmax", bucket: "untouched" });
+    expect(groups[1].steps[1]).toMatchObject({ detail: "CS3230 · Module 2", href: "/courses/cs3230/m2#t3" });
+  });
+
+  it("skips a thread that opens nothing, a step already shown, and a step that is itself a thread", () => {
+    const groups = nextFromHere(
+      [
+        thread({ title: "Other", conceptId: "other" }),
+        thread({ title: "Dot", conceptId: "dot" }),
+        thread({ title: "Dot again", conceptId: "dot", key: "again" }),
+        thread({ title: "Cosine", conceptId: "cosine" }),
+      ],
+      graph(),
+      { groups: 3 },
+    );
+    expect(groups.map((g) => [g.heading, g.steps.map((s) => s.title)])).toEqual([["After Dot", ["SOFTMAX"]]]);
+  });
+
+  it("starts a page with no threads at the first course's first open topic", () => {
+    expect(nextFromHere([], graph(["t1"]))).toEqual([
+      { key: "start", heading: "Start here", steps: [expect.objectContaining({ title: "Recurrences" })] },
+    ]);
+    expect(nextFromHere([], { ...graph(), courses: [] })).toEqual([]);
+  });
+
+  it("finds the concepts near the threads, and picks the recall cards nearest first, longest unseen first", () => {
+    const concepts = [
+      ...CONCEPTS.filter((c) => c.id !== "other"),
+      concept("other", { lastSeen: "2026-08-01T00:00:00Z" }),
+      concept("topic-bound", { topics: ["t2"], lastSeen: "2026-09-01T00:00:00Z" }),
+      concept("far", { lastSeen: "2026-09-20T00:00:00Z" }),
+    ];
+    const threads = [
+      thread({ title: "Softmax", conceptId: "softmax" }),
+      thread({ kind: "module", title: "M1", courseSlug: "cs3230", moduleSlug: "m1" }),
+    ];
+    const near = nearThreads(threads, [], concepts, [COURSE]);
+    expect([...near].sort()).toEqual(["attention", "dot", "softmax", "topic-bound"]);
+
+    const picks = recallPicks(
+      [{ conceptId: "far" }, { conceptId: "other" }, { conceptId: "topic-bound" }, { conceptId: "gone" }, { conceptId: "dot" }],
+      near,
+      concepts,
+      { now: NOW, timeZone: TZ },
+    );
+    // Near first (dot was never seen, so it leads), then the far ones by age.
+    expect(picks.map((p) => p.conceptId)).toEqual(["dot", "topic-bound", "other"]);
+    expect(picks[1].lastSeen).toBe("25 days ago");
+    expect(recallHref(picks)).toBe("/review?only=dot,topic-bound,other");
   });
 });
 

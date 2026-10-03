@@ -95,3 +95,16 @@ describe("toReviewItem", () => {
     });
   });
 });
+
+describe("parseOnly", () => {
+  it("reads a comma list of slugs, once each, and nothing else", async () => {
+    const { parseOnly, MAX_ONLY } = await import("./review-queue");
+    expect(parseOnly("softmax,dot-product")).toEqual(["softmax", "dot-product"]);
+    expect(parseOnly(["a,b", "c"])).toEqual(["a", "b"]);
+    expect(parseOnly(" a , a ,,b ")).toEqual(["a", "b"]);
+    expect(parseOnly(undefined)).toBeNull();
+    expect(parseOnly(",,")).toBeNull();
+    expect(parseOnly(`${"x".repeat(129)},ok`)).toEqual(["ok"]);
+    expect(parseOnly(Array.from({ length: 20 }, (_, i) => `c${i}`).join(","))).toHaveLength(MAX_ONLY);
+  });
+});

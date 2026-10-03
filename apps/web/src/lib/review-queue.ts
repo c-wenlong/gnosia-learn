@@ -104,6 +104,7 @@ export function toReviewItem(
 export async function readReviewSession(
   focus: string | null = null,
   now: Date = new Date(),
+  only: readonly string[] | null = null,
 ): Promise<ReviewSessionData> {
   let queue: Awaited<ReturnType<typeof reviewQueue>>;
   let summaries: ConceptSummary[];
@@ -117,6 +118,14 @@ export async function readReviewSession(
   } catch (error) {
     console.warn(`review queue unavailable: ${error instanceof Error ? error.message : String(error)}`);
     return { reachable: false, items: [], nextDue: null };
+  }
+
+  // `only` is Home's "Recall these": just those due cards, in that order. A
+  // name that is not due (graded in another tab since the page drew) is
+  // dropped rather than asked early.
+  if (only !== null) {
+    const due = new Map(queue.items.map((item) => [item.conceptId, item]));
+    queue = { ...queue, items: only.map((id) => due.get(id)).filter((item) => item !== undefined) };
   }
 
   // A note that cannot be read costs its checks, not the card: it is asked as
@@ -139,7 +148,24 @@ export async function readReviewSession(
 }
 
 /** The session for a render: marks the request dynamic, then reads. */
-export async function loadReviewSession(focus: string | null): Promise<ReviewSessionData> {
+export async function loadReviewSession(
+  focus: string | null,
+  only: readonly string[] | null = null,
+): Promise<ReviewSessionData> {
   await connection();
-  return readReviewSession(focus);
+  return readReviewSession(focus, new Date(), only);
+}
+
+/** Cards `?only=` may name: Home offers three, and a hand-typed URL is held to a few more. */
+export const MAX_ONLY = 10;
+
+/**
+ * `?only=a,b,c` read into a list of concept slugs, or null when it is absent
+ * or names nothing usable. Each entry is held to the length `?concept=` is.
+ */
+export function parseOnly(raw: string | string[] | undefined): string[] | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") return null;
+  const ids = [...new Set(value.split(",").map((s) => s.trim()))].filter((s) => s !== "" && s.length <= 128);
+  return ids.length === 0 ? null : ids.slice(0, MAX_ONLY);
 }

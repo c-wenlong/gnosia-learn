@@ -150,9 +150,9 @@ says which pages are on the new design and which phase replaces the rest.
 
 | Route | File | What it renders |
 | --- | --- | --- |
-| `/home` | `home/page.tsx` | Home: the threads to pick up (module pages, unfinished videos, studio drafts, concepts answered on), the next concept on the frontier, the first reviews, the courses in progress. `/today` is a permanent redirect here (`next.config.ts`) |
+| `/home` | `home/page.tsx` | Home: the threads to pick up (module pages, unfinished videos, studio drafts, concepts answered on), what they open up (Next from here), at most three due cards worth a quick recall, the courses in progress. `/today` is a permanent redirect here (`next.config.ts`) |
 | `/courses` | `courses/page.tsx` | Every course as a card: search, filter chips by theme, progress, the next topic |
-| `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first |
+| `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first; `?only=a,b,c` (Home's Recall these) asks just those due cards |
 | `/settings` | `settings/page.tsx` | The theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
 | `/learn` | `learn/page.tsx` | The Learn index: every concept in a table with search and mastery filters, and the neighbourhood (or course) graph of the selected row |
 | `/learn/[concept]` | `learn/[concept]/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph. `?ask=` prefills the tutor's input |
@@ -222,9 +222,12 @@ pool, and hands them to the pure `apps/web/src/lib/home-core.ts`. The threads
 under "Pick up where you left off" merge the `recentModules` preference (kept
 by `POST /api/learner/preference` beside every `lastVisited` write), the
 `playback:<asset id>` preferences with somewhere to resume, the drafts and the
-latest answer per concept, newest first. The check count beside each review
-comes from the concept's note, read through the content seam from
-`concept.body`; a note it cannot read counts as a plain recall.
+latest answer per concept, newest first. "Next from here" (`nextFromHere`)
+lists, per thread, the frontier concepts that require a concept thread and
+the open topics after a module thread; "Worth a quick recall" (`recallPicks`)
+takes at most three due cards, nearest the threads first, then the longest
+unseen. The single frontier pick (`nextUp`) is drawn only when no thread
+opens anything.
 
 **The shell.** `AppShell` is a server component: a 64px top bar (the
 wordmark, the five destinations Home, Courses, Learn, Library and Review,

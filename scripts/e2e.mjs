@@ -542,10 +542,12 @@ async function run() {
     await page.waitForURL(`${base}/home`);
   });
 
-  await step('review: Start review, reveal, rate Good, move on', page, async () => {
+  await step('review: Recall these on Home, reveal, rate Good, move on', page, async () => {
     await go('/home');
-    await page.getByRole('link', { name: /^Start review/ }).click();
-    await page.waitForURL(`${base}/review`);
+    // Home offers a few due cards, never the queue's count (H3 of
+    // docs/proposals/home-page.md); the button opens the review with just them.
+    await page.getByRole('link', { name: /^Recall these/ }).click();
+    await page.waitForURL(/\/review\?only=[^&]+$/);
     const bar = page.getByRole('progressbar', { name: 'Review progress' });
     await bar.waitFor();
     const before = await progressValue(bar);
@@ -674,6 +676,10 @@ async function run() {
     await card.waitFor();
     await card.locator(`a[href^="/courses/${slug}"]`).first().waitFor();
     if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).waitFor();
+    // What the threads open up: at least one group, each a heading over links.
+    const next = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Next from here' }) });
+    await next.getByRole('heading', { level: 3, name: /^After / }).first().waitFor();
+    assert((await next.getByRole('link').count()) > 0, 'Next from here lists nothing');
     // No streak or target anywhere in the shell (H1).
     assert((await page.getByText(/day streak|Today's target/).count()) === 0, 'a streak or target is still drawn');
   });

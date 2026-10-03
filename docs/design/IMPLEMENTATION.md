@@ -163,7 +163,7 @@ The pure helpers beside them:
 | [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags, coverSha256?)`, `coverUrl(slug, sha256)` (the cover route, versioned by the image's hash), `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `courseCounts(...)`, `usedTags(...)`, `tagFilterOptions(tags, summaries)` (the Tag menu's options with their counts) |
 | [`@/lib/days`](../../apps/web/src/lib/days.ts) | `dayKey`, `type LogEvent`: what outlived the habit layer's `habit-core` |
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), and the validators the preference route runs (`validateTutorStyle`, `validateMotionMode`) |
-| [`@/lib/home-core`](../../apps/web/src/lib/home-core.ts) | the Home model (`HomeModel`) and its pure parts: `homeThreads`, `conceptTouches`, `countCheckBlocks`, `coursesInProgress`, `pastDayLabel`, `lastSeenLabel`, `clock` |
+| [`@/lib/home-core`](../../apps/web/src/lib/home-core.ts) | the Home model (`HomeModel`) and its pure parts: `homeThreads`, `conceptTouches`, `nextFromHere`, `nearThreads`, `recallPicks`, `recallHref`, `coursesInProgress`, `pastDayLabel`, `lastSeenLabel`, `clock` |
 
 Maths is typeset by KaTeX, through two files. [`@/lib/math`](../../apps/web/src/lib/math.ts)
 is React-free: `renderMath(source, display)` and `splitMath(text)`, which finds

@@ -1,8 +1,9 @@
 /**
  * Home's arithmetic and words (docs/proposals/home-page.md; it replaced the
  * Today dashboard, hi-fi screens 01 and 13): the threads under "Pick up where
- * you left off", the review rows, the next concept and the courses in
- * progress, from rows the server has already read.
+ * you left off", what they open up under "Next from here", the few cards
+ * worth a quick recall, and the courses in progress, from rows the server
+ * has already read.
  *
  * Pure and React-free, so the page, `GET /api/learner/home` and a test all
  * call the same functions. `home.ts` is the server half that reads the
@@ -37,18 +38,6 @@ export interface NextUp {
   eyebrowShort: string;
 }
 
-export interface ReviewRow {
-  conceptId: string;
-  title: string;
-  bucket: MasteryBucket;
-  /** "3 days ago", "on 20 Aug", or null when the concept was never observed. */
-  lastSeen: string | null;
-  /** Check blocks in the concept note; 0 means the card is a plain recall. */
-  checks: number;
-  /** "check · 2" or "recall". */
-  kindLabel: string;
-}
-
 export type ThreadKind = "module" | "video" | "draft" | "concept";
 
 /** One thing to go back to, under "Pick up where you left off". */
@@ -68,6 +57,38 @@ export interface Thread {
   /** A concept's mastery. */
   bucket?: MasteryBucket;
   pL?: number;
+  /** What the thread is about, for "Next from here" and the recall picks. */
+  courseSlug?: string;
+  moduleSlug?: string;
+  conceptId?: string;
+}
+
+/** One step on from a thread: a concept to learn or a course topic to take. */
+export interface NextStep {
+  key: string;
+  title: string;
+  /** "CS3230 · Module 6", or null for a concept, which shows its mastery instead. */
+  detail: string | null;
+  href: string;
+  bucket?: MasteryBucket;
+  pL?: number;
+}
+
+/** The steps one thread opens up, under "Next from here". */
+export interface NextGroup {
+  key: string;
+  /** "After Randomized algorithms", "Start here". */
+  heading: string;
+  steps: NextStep[];
+}
+
+/** A due card Home suggests recalling. */
+export interface RecallPick {
+  conceptId: string;
+  title: string;
+  bucket: MasteryBucket;
+  /** "3 days ago", "on 20 Aug", or null when the concept was never observed. */
+  lastSeen: string | null;
 }
 
 export interface CourseInProgress {
@@ -88,8 +109,12 @@ export interface HomeModel {
   /** Concepts the catalog knows. Zero is a fresh database, which the empty states say. */
   conceptCount: number;
   threads: Thread[];
+  /** What the threads open up; empty when none opens anything. */
+  next: NextGroup[];
+  /** The frontier's first concept, shown only when `next` is empty. */
   nextUp: NextUp | null;
-  reviews: { total: number; estimateMinutes: number; rows: ReviewRow[] };
+  /** At most three due cards, nearest the threads first. */
+  recall: RecallPick[];
   /** The first few courses in progress, and how many there are in all. */
   courses: { rows: CourseInProgress[]; total: number };
 }
@@ -269,6 +294,8 @@ export function homeThreads(
         ? `/courses/${encodeURIComponent(visit.courseSlug)}/${encodeURIComponent(visit.moduleSlug as string)}`
         : `/courses/${encodeURIComponent(visit.courseSlug)}`,
       at: visit.at,
+      courseSlug: visit.courseSlug,
+      ...(inModule ? { moduleSlug: visit.moduleSlug } : {}),
     });
   }
 
@@ -307,6 +334,7 @@ export function homeThreads(
       at: c.at,
       bucket: c.bucket,
       pL: c.pL,
+      conceptId: c.id,
     });
   }
 
@@ -321,50 +349,194 @@ export function homeThreads(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Reviews                                                                    */
+/* Next from here                                                             */
+/* -------------------------------------------------------------------------- */
+
+/** The fields of a `KbConcept` "Next from here" and the recall picks read. */
+export interface GraphConcept {
+  id: string;
+  title: string;
+  pL: number;
+  mastery: MasteryLabel;
+  observations: number;
+  lastSeen: string | null;
+  requires: readonly string[];
+  /** Curriculum item ids the concept supports. */
+  topics: readonly string[];
+}
+
+/** A course as "Next from here" walks it: its modules in order, each topic with its concepts. */
+export interface PathCourse {
+  slug: string;
+  code: string;
+  order: number;
+  modules: readonly {
+    slug: string;
+    order: number;
+    topics: readonly { id: string; title: string }[];
+  }[];
+}
+
+/**
+ * What each of the top threads opens up (docs/proposals/home-page.md, part 3),
+ * at most `perGroup` steps a thread and `groups` threads:
+ *
+ * - after a concept, the concepts on the frontier that require it: ready to
+ *   learn, not yet mastered, the same readiness rule `frontier()` applies;
+ * - after a module, its topics not yet done, in order, then the next module's;
+ *   after a course page with no module, the first topics not yet done in it.
+ *
+ * A thread with nothing after it makes no group, and a step already shown
+ * under an earlier thread, or that is itself a thread, is not repeated. With
+ * no threads at all, the first active course's first open topic is "Start
+ * here". Videos and drafts open nothing: neither names a concept or a topic.
+ */
+export function nextFromHere(
+  threads: readonly Thread[],
+  graph: {
+    concepts: readonly GraphConcept[];
+    frontier: readonly string[];
+    courses: readonly PathCourse[];
+    /** A topic done, by the path's rule (`itemDoneWith`). */
+    done: (topicId: string) => boolean;
+    /** A topic's Continue link (`continueHref`). */
+    topicHref: (course: PathCourse, moduleSlug: string, topicId: string) => string;
+  },
+  options: { groups?: number; perGroup?: number } = {},
+): NextGroup[] {
+  const { groups: maxGroups = 2, perGroup = 3 } = options;
+  const byId = new Map(graph.concepts.map((c) => [c.id, c]));
+  const onThreads = new Set(threads.map((t) => t.conceptId).filter((id): id is string => id !== undefined));
+  const shown = new Set<string>();
+  const out: NextGroup[] = [];
+
+  const conceptStep = (c: GraphConcept): NextStep => ({
+    key: `concept:${c.id}`,
+    title: c.title,
+    detail: null,
+    href: `/learn/${encodeURIComponent(c.id)}`,
+    bucket: bucketOf(c),
+    pL: c.pL,
+  });
+
+  const topicSteps = (course: PathCourse, fromModule: string | undefined): NextStep[] => {
+    const start = fromModule === undefined ? 0 : course.modules.findIndex((m) => m.slug === fromModule);
+    if (start === -1) return [];
+    const steps: NextStep[] = [];
+    for (const mod of course.modules.slice(start)) {
+      for (const topic of mod.topics) {
+        if (graph.done(topic.id)) continue;
+        steps.push({
+          key: `topic:${topic.id}`,
+          title: topic.title,
+          detail: `${course.code} · Module ${mod.order}`,
+          href: graph.topicHref(course, mod.slug, topic.id),
+        });
+        if (steps.length === perGroup) return steps;
+      }
+    }
+    return steps;
+  };
+
+  for (const thread of threads) {
+    if (out.length === maxGroups) break;
+    let steps: NextStep[] = [];
+    if (thread.conceptId !== undefined) {
+      steps = graph.frontier
+        .map((id) => byId.get(id))
+        .filter((c): c is GraphConcept => c !== undefined && c.requires.includes(thread.conceptId as string))
+        .filter((c) => !onThreads.has(c.id))
+        .map(conceptStep);
+    } else if (thread.courseSlug !== undefined) {
+      const course = graph.courses.find((c) => c.slug === thread.courseSlug);
+      if (course !== undefined) steps = topicSteps(course, thread.moduleSlug);
+    }
+    steps = steps.filter((step) => !shown.has(step.key)).slice(0, perGroup);
+    if (steps.length === 0) continue;
+    for (const step of steps) shown.add(step.key);
+    out.push({ key: thread.key, heading: `After ${thread.title}`, steps });
+  }
+
+  if (out.length === 0 && threads.length === 0) {
+    const first = [...graph.courses].sort((a, b) => a.order - b.order).find((c) => topicSteps(c, undefined).length > 0);
+    if (first !== undefined) out.push({ key: "start", heading: "Start here", steps: topicSteps(first, undefined).slice(0, 1) });
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Worth a quick recall                                                       */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Minutes a queue of `cards` takes, for the "Est. 9 min" beside Start review.
- * 45 seconds a card: a recall is a few seconds of thought and a rating, a
- * check is a question to read and answer. It is labelled an estimate on
- * screen, and nothing but that label reads it.
+ * The concepts the threads are about, or one step from: each concept thread
+ * with what it requires and what requires it, every concept a visited
+ * module's topics support, and every concept "Next from here" lists.
  */
-export function estimateMinutes(cards: number): number {
-  if (cards <= 0) return 0;
-  return Math.max(1, Math.round(cards * 0.75));
+export function nearThreads(
+  threads: readonly Thread[],
+  next: readonly NextGroup[],
+  concepts: readonly GraphConcept[],
+  courses: readonly PathCourse[],
+): Set<string> {
+  const near = new Set<string>();
+  const topicIds = new Set<string>();
+  for (const t of threads) {
+    if (t.conceptId !== undefined) {
+      near.add(t.conceptId);
+      for (const c of concepts) {
+        if (c.id === t.conceptId) c.requires.forEach((id) => near.add(id));
+        if (c.requires.includes(t.conceptId)) near.add(c.id);
+      }
+    } else if (t.courseSlug !== undefined) {
+      const course = courses.find((c) => c.slug === t.courseSlug);
+      const modules = course?.modules.filter((m) => t.moduleSlug === undefined || m.slug === t.moduleSlug) ?? [];
+      for (const m of modules) for (const topic of m.topics) topicIds.add(topic.id);
+    }
+  }
+  for (const c of concepts) if (c.topics.some((id) => topicIds.has(id))) near.add(c.id);
+  for (const group of next) {
+    for (const step of group.steps) if (step.key.startsWith("concept:")) near.add(step.key.slice("concept:".length));
+  }
+  return near;
 }
 
 /**
- * The check blocks a concept note holds: fenced ```` ```check ```` blocks with a
- * non-empty `q:` line. The same rule as `parseChecks` in
- * `scripts/learn/lib/markdown.mjs`, which the web app may not import
- * (ARCHITECTURE.md layering rule 1), so a check the CLI would not ask is not
- * counted here either.
+ * At most `limit` due cards worth a quick recall (part 4): those near the
+ * threads first, then the rest, each lot by how long since its concept was
+ * last seen, longest first. No queue count and no "overdue": a due date
+ * passed while the owner learnt something else is not a debt (H3).
  */
-export function countCheckBlocks(body: string): number {
-  const re = /```check\s*\r?\n([\s\S]*?)```/g;
-  let count = 0;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(body)) !== null) {
-    let field: string | null = null;
-    let question = "";
-    for (const line of match[1].split(/\r?\n/)) {
-      const pair = line.match(/^\s*(q|a|why|source):\s*(.*)$/i);
-      if (pair) {
-        field = pair[1].toLowerCase();
-        if (field === "q") question = pair[2].trim();
-      } else if (field === "q" && line.trim()) {
-        question = `${question} ${line.trim()}`.trim();
-      }
-    }
-    if (question !== "") count += 1;
-  }
-  return count;
+export function recallPicks(
+  due: readonly { conceptId: string }[],
+  near: ReadonlySet<string>,
+  concepts: readonly GraphConcept[],
+  options: { now: Date; timeZone?: string; limit?: number },
+): RecallPick[] {
+  const { now, timeZone, limit = 3 } = options;
+  const byId = new Map(concepts.map((c) => [c.id, c]));
+  const seenAt = (id: string) => {
+    const at = byId.get(id)?.lastSeen;
+    const ms = at ? new Date(at).getTime() : Number.NaN;
+    return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+  };
+  return due
+    .filter((card) => byId.has(card.conceptId))
+    .map((card, index) => ({ id: card.conceptId, index }))
+    .sort(
+      (a, b) =>
+        Number(near.has(b.id)) - Number(near.has(a.id)) || seenAt(a.id) - seenAt(b.id) || a.index - b.index,
+    )
+    .slice(0, limit)
+    .map(({ id }) => {
+      const c = byId.get(id) as GraphConcept;
+      return { conceptId: id, title: c.title, bucket: bucketOf(c), lastSeen: lastSeenLabel(c.lastSeen, now, timeZone) };
+    });
 }
 
-export function reviewKindLabel(checks: number): string {
-  return checks > 0 ? `check · ${checks}` : "recall";
+/** `/review` with only these cards, in this order. */
+export function recallHref(picks: readonly RecallPick[]): string {
+  return `/review?only=${picks.map((p) => encodeURIComponent(p.conceptId)).join(",")}`;
 }
 
 /* -------------------------------------------------------------------------- */
