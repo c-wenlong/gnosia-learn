@@ -500,6 +500,12 @@ describe("the review", () => {
     expect(videoFailure(job({ state: "failed", errorKind: "timeout" })).headline).toBe("It stopped: nothing moved for too long");
     expect(videoFailure(job({ state: "interrupted" })).actions).toEqual(["resume"]);
     expect(videoFailure(job({ state: "failed", errorKind: "agent", error: "401" }))).toMatchObject({ actions: [], detail: "401" });
+    // The machine's tools died as they started (V26): nothing to revise until it is fixed.
+    expect(videoFailure(job({ state: "failed", errorKind: "toolchain", error: "The video tools could not start on this machine." }))).toEqual({
+      headline: "The video tools could not start on this machine",
+      detail: "The video tools could not start on this machine.",
+      actions: ["talk"],
+    });
   });
 });
 
