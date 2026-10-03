@@ -870,6 +870,10 @@ export function videoFailure(job: VideoJob): VideoFailure {
       };
     case "spawn":
       return { headline: "The agent never started", detail, actions: [] };
+    case "toolchain":
+      // The machine's tools died as they started (V26): a change to the brief
+      // cannot help, so there is nothing to revise until the machine is fixed.
+      return { headline: "The video tools could not start on this machine", detail, actions: ["talk"] };
     case "cancelled":
       return { headline: "Stopped on request", detail, actions: ["talk"] };
     case "interrupted":
@@ -1131,6 +1135,48 @@ export function gridSections<D>(
   const list = [...sections.values()];
   if (group === "none") return list;
   return list.sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : a.label.localeCompare(b.label)));
+}
+
+/** One tile in a section: a diagram or a studio video. */
+export type SectionItem<D> = { kind: "diagram"; item: D } | { kind: "video"; item: StudioVideo };
+
+/**
+ * A section's diagrams and videos as one list, in the view's Sort.
+ *
+ * Rendering the two lists one after the other put every video ahead of every
+ * diagram whatever Sort said, so a new sort changed nothing in the first row
+ * and read as a control that does nothing. `keyOf` gives a diagram's title and
+ * the time Sort compares (its modified or created time); a video's is its
+ * title and its last write, as `sortVideos` has it. Undated goes last whichever
+ * way the arrow points, and ties keep the order they came in.
+ */
+export function sectionItems<D>(
+  section: Pick<GridSection<D>, "diagrams" | "videos">,
+  view: { sort: "modified" | "title" | "created"; direction: "asc" | "desc" },
+  keyOf: (diagram: D) => { title: string; time: string | null },
+): SectionItem<D>[] {
+  const sign = view.direction === "asc" ? 1 : -1;
+  const keyed = [
+    ...section.videos.map((video) => ({
+      entry: { kind: "video", item: video } as SectionItem<D>,
+      title: video.title ?? video.slug,
+      time: Date.parse(video.updated),
+    })),
+    ...section.diagrams.map((diagram) => {
+      const { title, time } = keyOf(diagram);
+      return { entry: { kind: "diagram", item: diagram } as SectionItem<D>, title, time: time === null ? NaN : Date.parse(time) };
+    }),
+  ];
+  keyed.sort((a, b) => {
+    if (view.sort === "title") return sign * a.title.localeCompare(b.title);
+    const aDated = Number.isFinite(a.time);
+    const bDated = Number.isFinite(b.time);
+    if (!aDated && !bDated) return 0;
+    if (!aDated) return 1;
+    if (!bDated) return -1;
+    return sign * (a.time - b.time);
+  });
+  return keyed.map(({ entry }) => entry);
 }
 
 /**

@@ -149,6 +149,8 @@ export const VIDEO_TOOL_ROUTES: readonly VideoToolRoute[] = [
 export interface ToolDoctorVerdict {
   ok: boolean;
   checks: { name: string; ok: boolean; detail: string }[];
+  /** The last job of this tool stopped because its tools could not start (V26 of docs/STUDIO-VIDEOS.md). */
+  toolchainStop?: { jobId: string; at: string; detail: string } | null;
 }
 
 /**
@@ -160,7 +162,7 @@ export interface ToolDoctorVerdict {
  */
 export function toolsHealth(
   verdicts?: Partial<Record<VideoToolName, ToolDoctorVerdict | null>>,
-): { name: VideoToolName; strength: string; available: boolean; reason: string | null }[] {
+): { name: VideoToolName; strength: string; available: boolean; reason: string | null; toolchainStop?: { jobId: string; at: string; detail: string } }[] {
   return VIDEO_TOOLS.map((tool) => {
     const missing = notInStudio(tool.name);
     if (missing !== null || verdicts === undefined) return { name: tool.name, strength: tool.strength, available: tool.inStudio, reason: missing };
@@ -174,6 +176,9 @@ export function toolsHealth(
       strength: tool.strength,
       available: verdict.ok,
       reason: verdict.ok ? null : `this machine cannot make ${tool.name} videos right now: ${failing === undefined ? "its doctor fails" : `${failing.name}: ${failing.detail}`}`,
+      // Beside the verdict, never in it: the doctor's checks passed while that
+      // job's tools died, so nothing here could say when it is fixed.
+      ...(verdict.toolchainStop === undefined || verdict.toolchainStop === null ? {} : { toolchainStop: verdict.toolchainStop }),
     };
   });
 }

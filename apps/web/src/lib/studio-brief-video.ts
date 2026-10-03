@@ -59,6 +59,12 @@ export interface VideoToolOption {
   available: boolean;
   /** Why not, when it cannot. */
   reason: string | null;
+  /**
+   * The last job of this tool the runner stopped because the tools could not
+   * start on the machine (V26 of docs/STUDIO-VIDEOS.md). It does not make the
+   * tool unavailable, since the doctor's checks passed while that job died.
+   */
+  toolchainStop?: { jobId: string; at: string; detail: string };
 }
 
 /** The tool a brief names, absent meaning manimkc (D72). */
@@ -76,12 +82,23 @@ export function briefTool(brief: Pick<VideoBrief, "tool">): VideoToolName {
 export function toolRow(
   brief: Pick<VideoBrief, "tool" | "toolReason" | "mode">,
   tools: readonly VideoToolOption[],
-): { tool: VideoToolName; line: string | null; choices: VideoToolOption[] } {
+): { tool: VideoToolName; line: string | null; choices: VideoToolOption[]; stop: string | null } {
   const tool = briefTool(brief);
   const own = tools.find((option) => option.name === tool);
   const line = brief.toolReason ?? own?.strength ?? null;
   const available = tools.filter((option) => option.available);
-  return { tool, line, choices: brief.mode === "change" || available.length < 2 ? [] : available };
+  return { tool, line, choices: brief.mode === "change" || available.length < 2 ? [] : available, stop: toolStopLine(own) };
+}
+
+/**
+ * The warning under the tool row when a job of that tool was stopped because
+ * its tools could not start (V26). A note and never a block: the press stays
+ * open, since the doctor passes and a fixed machine should not need a restart
+ * to be used.
+ */
+export function toolStopLine(option: VideoToolOption | undefined): string | null {
+  if (option?.toolchainStop === undefined) return null;
+  return `Since the studio started, a ${option.name} job was stopped because its tools could not start on this machine. Check the tool's install before making another.`;
 }
 
 /** The brief a person's switch saves: the new tool, and no reason, since the planner's was for the old one. */

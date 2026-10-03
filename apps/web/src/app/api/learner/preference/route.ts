@@ -12,7 +12,8 @@ import {
 
 /**
  * The key/value corner of the learner state: theme, where they were last,
- * their own resource links, and the Settings page's habit and tutor choices.
+ * their own resource links, the courses they set aside, and the Settings
+ * page's habit and tutor choices.
  *
  * The allow-list is the point. `preference` is a key/value table so a new UI
  * toggle costs no migration, but an endpoint that wrote any key with any value
@@ -28,6 +29,7 @@ const WRITABLE = {
   [PREFERENCE_KEYS.theme]: theme,
   [PREFERENCE_KEYS.lastVisited]: lastVisited,
   [PREFERENCE_KEYS.userResources]: userResources,
+  [PREFERENCE_KEYS.inactiveCourses]: inactiveCourses,
   // The Settings page's keys. Their validators are pure and live in
   // `@/lib/preferences`, beside the vocabulary the form offers, so the two
   // cannot disagree about what a valid value is.
@@ -99,6 +101,27 @@ function lastVisited(value: unknown): {
     ...(typeof moduleSlug === "string" ? { moduleSlug } : {}),
     at: typeof raw.at === "string" ? raw.at : new Date().toISOString(),
   };
+}
+
+/** More than any catalog holds; a cap so the value stays a short list. */
+const MAX_INACTIVE_COURSES = 200;
+
+/**
+ * The slugs of the courses set aside, deduplicated. A slug the catalog does
+ * not hold is kept rather than refused: the list is only ever read against
+ * the courses a page already has, so a stale slug hides nothing.
+ */
+function inactiveCourses(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new BadRequest(`"value" must be an array of course slugs.`);
+  if (value.length > MAX_INACTIVE_COURSES) {
+    throw new BadRequest(`"value" names more than ${MAX_INACTIVE_COURSES} courses.`);
+  }
+  for (const [i, slug] of value.entries()) {
+    if (typeof slug !== "string" || slug === "" || slug.length > MAX_ID_CHARS) {
+      throw new BadRequest(`"value[${i}]" must be a non-empty slug.`);
+    }
+  }
+  return [...new Set(value as string[])];
 }
 
 /** At most 50 modules, 50 links each: a personal reading list, not a mirror. */

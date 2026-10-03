@@ -178,6 +178,26 @@ export function parseSort(value: string | null | undefined): LibrarySort {
   return value === "title" ? "title" : "newest";
 }
 
+/** The two layouts: the card grid, the default, and a dense list of rows. */
+export type LibraryView = "grid" | "list";
+
+/** Anything but `list` is the grid, so a hand-typed `?view=` cannot break the page. */
+export function parseView(value: string | null | undefined): LibraryView {
+  return value === "list" ? "list" : "grid";
+}
+
+const ADDED_ON = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/**
+ * When a row entered the catalog, as the list view prints it: `4 Oct 2026`.
+ * In UTC, so the server and a test agree on the day; `null` for a value that
+ * does not parse, so a bad timestamp is a blank cell rather than "Invalid Date".
+ */
+export function addedOn(createdAt: string): string | null {
+  const time = Date.parse(createdAt);
+  return Number.isNaN(time) ? null : ADDED_ON.format(time);
+}
+
 /** Every filter the library's URL can carry. */
 export interface LibraryFilters {
   kind?: string | null;
@@ -187,6 +207,8 @@ export interface LibraryFilters {
   /** The search box, as typed. */
   q?: string | null;
   sort?: LibrarySort | null;
+  /** The layout. Not a filter, but URL state like one, so a list view is linkable too. */
+  view?: LibraryView | null;
 }
 
 /**
@@ -196,7 +218,7 @@ export interface LibraryFilters {
  * works: the Library's filter menus push the URL this builds for a pick. A
  * cleared filter drops its key rather than writing
  * `?kind=`, so the default view has a bare `/library` URL, and the default sort
- * is never written either.
+ * and the default layout (the grid) are never written either.
  */
 export function libraryHref(filters: LibraryFilters): string {
   const params = new URLSearchParams();
@@ -206,6 +228,7 @@ export function libraryHref(filters: LibraryFilters): string {
   const q = filters.q?.trim();
   if (q) params.set("q", q);
   if (filters.sort === "title") params.set("sort", "title");
+  if (filters.view === "list") params.set("view", "list");
   const query = params.toString();
   return query === "" ? "/library" : `/library?${query}`;
 }
