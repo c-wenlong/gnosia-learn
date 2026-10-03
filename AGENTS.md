@@ -1051,7 +1051,7 @@ not have to be worked out again.
   prefetch for a dynamic route, and the click changed nothing on screen until
   the next page had read all of its data (0.5 to 2.7 s per tab under load,
   measured). A page whose shape differs a lot adds its own `loading.tsx`
-  beside it, as the studio does.
+  beside it, as the studio and Review (a focus page, `PageLoading layout="focus"`) do.
 - **Every page is dynamic, and that is the point.** The root layout reads the
   theme cookie and the learner snapshot, so nothing is prerendered. Nothing
   reads the database at build time either — every read calls `connection()`
