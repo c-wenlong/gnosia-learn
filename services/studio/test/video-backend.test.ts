@@ -206,7 +206,7 @@ describe("the gate asks the job's backend", () => {
       classes,
       startedAtMs: Date.now() - 60_000,
       sourceHashBefore: null,
-      calls: [preview(at(-5_000), classes), build(at(-1_000), laid.sourceHash)],
+      calls: [preview(at(-5_000), classes, laid.sourceHash), build(at(-1_000), laid.sourceHash)],
       reads: classes.map((scene) => ({ path: sheet(scene), at: at(-4_000) })),
       tools: recordedTools({ duration: Math.round(secondsForLines(voiced)) }),
       backend: standIn,
