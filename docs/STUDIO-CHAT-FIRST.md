@@ -645,7 +645,62 @@ live preview ("The job in the grid" below):
 
 ## UI
 
+### Home and the full-screen conversation
+
+*Since 2026-10-04 (D81, D82). It replaces the plus card and moves the
+conversation out of the dialog; the sections after this one describe what
+came before where they say so.*
+
+`/studio` is a sidebar beside one of two views, the way a chat app is laid
+out (`PanelHost`):
+
+| | Home (`/studio`) | A conversation (`?draft=<id>`) |
+| --- | --- | --- |
+| Sidebar | New chat, then the history | The same, the open conversation marked |
+| Main | "What shall we make?", the composer under it, then the strip, the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
+
+**The home composer** (`HomeComposer`) is the one way into a new
+conversation. It is the conversation's own `MentionComposer`, tags and all.
+Send opens the conversation at once with the person's words in it and a
+pending row at the top of the history, then makes the draft and hands the
+words over as its opener (`leaveOpener`), which the conversation sends once
+it has read its empty record, the way an Extend press hands over its first
+message. A refusal brings the person home with the words still in the box
+and the reason under it. Nothing is made until something is sent, so New
+chat is simply the home view, its composer focused.
+
+**The history** (`StudioSidebar`) lists every conversation but one closed
+with Start over: talking, briefed, drawing and done (`LISTED_STATES`), under
+Today, Yesterday, Previous 7 days, Previous 30 days and Older. The old list
+above the grid showed only the first two, since it was a list of things to
+pick up; a history is where a finished diagram's conversation is found
+again to ask for a change. A briefed one carries an accent dot. It reads the
+runner again when the open conversation changes, when that conversation
+says its title, turns or state moved (`DRAFT_CHANGED_EVENT`), and on focus.
+The runner sends 50 at a time; a full page ends in "Show older
+conversations", which shows one page more. Each page asks for the rows after
+the last of the one before (`?before=<updated>&beforeId=<id>`, newest first,
+ties broken by id), and every refresh reads all the pages shown again from
+the top (`readHistory`), so a row pushed onto the next page, or closed with
+Start over, ends up where the runner now has it.
+
+**The conversation** is `StudioPane`: `StudioDialog`'s controls without the
+dialog. Nothing is modal, so the sidebar stays usable, and there is no Close:
+New chat or another row is the way out. The home view stays mounted under it,
+hidden, so its scroll and anything typed in it survive the trip. A job on its
+own, a tile's panel, the settings and an Extend press are still dialogs over
+the home view, and an Extend press becomes a full-screen conversation once
+its draft exists.
+
+Below 768px the sidebar is a drawer, opened by a toggle at the top left of
+the home view and before the conversation's title, and closed by a pick, the
+backdrop or Escape. While it is open the rest of the studio is inert, Tab
+stays inside it, and closing it hands focus back to the toggle.
+
 ### The plus card and the panel
+
+*Superseded by "Home and the full-screen conversation" above: the plus card
+is gone, and a conversation is no longer in the dialog.*
 
 The right panel on `/studio` goes: the form, the inspector and the job panel
 all leave the 320px column. The canvas screen keeps its own inspector; it was
@@ -959,6 +1014,9 @@ a resume would not carry forward the way the recorded system prompt is.
 
 ### D31. The plus card, and a centred chat panel
 
+*Amended by D81 and D82: the composer on the home view replaced the plus
+card, and the conversation left the panel for the full screen.*
+
 **Verdict:** the right panel goes. A plus card first in the grid opens a
 centred kit `Panel` holding the conversation in the concept tutor's styling;
 Draw turns it into the existing job view; Extend starts from a tile.
@@ -1159,6 +1217,40 @@ the same reason.
 **Rejected:** a generic `asset` brief that tries to describe a diagram and a
 video at once, which would loosen the gate's contract for diagrams; and
 building the video path now, before one diagram has gone through the chat.
+
+### D81. The home view is a composer, and New chat is the home view
+
+**Verdict:** `/studio` opens on a heading and the conversation's composer,
+with the diagrams and videos under it. Sending starts a conversation with
+those words as its first turn. New chat goes back to that view; no draft is
+made until something is sent.
+
+**Why:** the owner asked for the entry point chat apps share (Claude,
+ChatGPT, Lovable): a box to type into first, the things already made under
+it. A plus card that opened an empty conversation asked for a press before
+any typing, and every press that ended in Close left an empty draft behind.
+
+**Rejected:** keeping the plus card beside the composer (two ways into one
+conversation, which D31 closed once already), and New chat making a draft at
+the press, which is the empty-draft problem again.
+
+### D82. A conversation is full screen beside a history sidebar
+
+**Verdict:** `?draft=` draws the conversation in place of the home view,
+beside a sidebar of every unclosed conversation with New chat at its top.
+The dialog (D37) stays for a job on its own, a tile, the settings and an
+Extend press.
+
+**Why:** a conversation is the studio's main activity, and a 720px dialog
+over a dimmed grid made it a detour; moving to another conversation took
+Close, a scroll to the list and a press. The sidebar makes that one press.
+The thread keeps to a 48rem column, so a wide screen does not stretch the
+messages.
+
+**Rejected:** a separate `/studio/c/<id>` route, which would render the page
+on the server for every switch (the cost `PanelHost` exists to avoid), and
+hiding the sidebar inside a conversation, which is the dialog's problem
+again.
 
 ## Later: other kinds of asset
 

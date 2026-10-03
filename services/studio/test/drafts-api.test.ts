@@ -479,6 +479,20 @@ describe("PUT /api/drafts/{id}/brief", () => {
       drafts: { draftId: string }[];
     };
     expect(started.drafts.map((row) => row.draftId).sort()).toEqual([draftId, briefedId].sort());
+
+    // A page at a time: each page starts after the last row of the one before.
+    type Row = { draftId: string; updated: string };
+    const page = async (before?: Row) =>
+      ((await (
+        await fetch(
+          `${base}/api/drafts?state=open,briefed&nonEmpty=1&limit=1${before === undefined ? "" : `&before=${encodeURIComponent(before.updated)}&beforeId=${before.draftId}`}`,
+        )
+      ).json()) as { drafts: Row[] }).drafts;
+    const first = await page();
+    const second = await page(first[0]);
+    const third = await page(second[0]);
+    expect([...first, ...second].map((row) => row.draftId)).toEqual(started.drafts.map((row) => row.draftId));
+    expect(third).toEqual([]);
   });
 });
 

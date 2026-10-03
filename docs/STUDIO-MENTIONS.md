@@ -45,6 +45,8 @@ and "New diagram" as the label until the Video entry ships. The first version's
 seventh question (an untagged question greying both cards) is gone: an
 untagged reply now writes no brief, so it leaves every card as it was.
 
+*Since D81 and D82 of [STUDIO-CHAT-FIRST.md](STUDIO-CHAT-FIRST.md), the plus card is gone: a conversation starts from the composer on the studio's home view, and opens full screen.*
+
 **What changes for the person, in one paragraph.** The plus card opens a chat
 that opens with "Ask me about an idea, or type @ to make a diagram or a video
 of it." The person asks, and the planner answers. When a picture would help,

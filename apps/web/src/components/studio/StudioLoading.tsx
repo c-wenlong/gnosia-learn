@@ -19,28 +19,42 @@ const PULSE = "animate-pulse motion-reduce:animate-none";
 
 export function StudioGridLoading() {
   return (
-    <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col" aria-busy="true">
-      <StudioStrip>
-        <div className={`h-7 w-56 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
-        <div className={`hidden h-6 w-40 rounded-full bg-[var(--surface-hover)] sm:block ${PULSE}`} />
-        <Spacer />
-        <div className={`h-7 w-16 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
-        <div className={`h-7 w-16 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
-      </StudioStrip>
-      <p role="status" className="sr-only">
-        Opening the studio
-      </p>
-      <div className="min-h-0 flex-1 overflow-hidden p-4">
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
-          {Array.from({ length: 8 }, (_, at) => (
-            <div key={at} className="flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-              <div className={`aspect-[16/10] bg-[var(--surface-hover)] ${PULSE}`} />
-              <div className="flex flex-col gap-2 p-3">
-                <div className={`h-3.5 w-3/4 rounded bg-[var(--surface-hover)] ${PULSE}`} />
-                <div className={`h-3 w-1/3 rounded bg-[var(--surface-hover)] ${PULSE}`} />
+    <div data-layout="full" className="flex min-h-0 min-w-0 flex-1" aria-busy="true">
+      {/* The sidebar: New chat, then the history. A column from 768px up, as on the page. */}
+      <div className="hidden w-[260px] shrink-0 flex-col gap-3 border-r border-hair bg-surface p-4 md:flex">
+        <div className={`h-5 w-24 rounded bg-[var(--surface-hover)] ${PULSE}`} />
+        {Array.from({ length: 6 }, (_, at) => (
+          <div key={at} className={`h-4 rounded bg-[var(--surface-hover)] ${PULSE}`} style={{ width: `${85 - at * 8}%` }} />
+        ))}
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* The home view's heading and composer. */}
+        <div className="flex flex-col items-center gap-6 px-4 pb-10 pt-[max(2.5rem,12vh)]">
+          <div className={`h-8 w-64 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
+          <div className={`h-[52px] w-full max-w-2xl rounded-2xl bg-[var(--surface-hover)] ${PULSE}`} />
+        </div>
+        <StudioStrip>
+          <div className={`h-7 w-56 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
+          <div className={`hidden h-6 w-40 rounded-full bg-[var(--surface-hover)] sm:block ${PULSE}`} />
+          <Spacer />
+          <div className={`h-7 w-16 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
+          <div className={`h-7 w-16 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
+        </StudioStrip>
+        <p role="status" className="sr-only">
+          Opening the studio
+        </p>
+        <div className="min-h-0 flex-1 overflow-hidden p-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+            {Array.from({ length: 8 }, (_, at) => (
+              <div key={at} className="flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                <div className={`aspect-[16/10] bg-[var(--surface-hover)] ${PULSE}`} />
+                <div className="flex flex-col gap-2 p-3">
+                  <div className={`h-3.5 w-3/4 rounded bg-[var(--surface-hover)] ${PULSE}`} />
+                  <div className={`h-3 w-1/3 rounded bg-[var(--surface-hover)] ${PULSE}`} />
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>

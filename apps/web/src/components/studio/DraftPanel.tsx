@@ -11,8 +11,9 @@ import { ConfirmCardVideo } from "@/components/studio/ConfirmCardVideo";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
 import { PinnedConcept, PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
-import { useStartDraft } from "@/components/studio/PlusCard";
+import { PANE_GUTTER, usePaneLayout } from "@/components/studio/pane-context";
 import { Sentence } from "@/components/studio/Sentence";
+import { useStartDraft } from "@/components/studio/useStartDraft";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { MentionComposer } from "@/components/studio/StudioComposer";
 import { Button } from "@/components/ui/Button";
@@ -110,6 +111,7 @@ import {
 import { switchedTool, type VideoToolOption } from "@/lib/studio-brief-video";
 import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, OPENER_EVENT, sessionStore, takeOpener } from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
+import { announceDraftChange } from "@/lib/studio-draft-list";
 import { panelHref, titleOf } from "@/lib/studio-view";
 
 /**
@@ -223,8 +225,18 @@ export function DraftPanel({
   const thread = useRef<HTMLDivElement | null>(null);
   const focused = useRef(false);
   const { start: startDraft, busy: starting, error: startError } = useStartDraft(path);
+  const { inline } = usePaneLayout();
+  // Full screen, the thread and the composer keep to a column in the middle.
+  const gutter = inline ? PANE_GUTTER : "px-5";
 
   const arriving = arrivingSource(draftId);
+
+  // The sidebar lists this conversation by its title, its first message and
+  // its state, so each change to those is news to it (`StudioSidebar`).
+  const listed = view === null ? null : `${view.state}|${view.title ?? ""}|${view.transcript.length}`;
+  useEffect(() => {
+    if (listed !== null) announceDraftChange(draftId);
+  }, [draftId, listed]);
 
   /**
    * Focus the composer once it is on screen: it loads lazily, and is not
@@ -778,7 +790,9 @@ export function DraftPanel({
               <Failure text={startError} className="basis-full" />
             </div>
           )}
-          <JobPanel jobId={jobId} path={path} embedded inConversation />
+          <div className={inline ? "mx-auto w-full max-w-4xl" : undefined}>
+            <JobPanel jobId={jobId} path={path} embedded inConversation />
+          </div>
           {settled && !ended && (
             <p className="px-5 pb-5 text-[13px] text-text3">
               Accept or Discard above. Either way, the conversation is where the next one starts.
@@ -821,7 +835,7 @@ export function DraftPanel({
         aria-live="polite"
         aria-busy={busy}
         aria-label="Conversation"
-        className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5"
+        className={cx("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto py-5", gutter)}
       >
         {view.source !== null && sourceTitle !== null && (diagramSource ? <PinnedDiagram name={view.source} title={sourceTitle} /> : <PinnedVideo slug={view.source} title={sourceTitle} />)}
         {concept !== null && <PinnedConcept slug={concept.slug} title={concept.title} tutorTurns={concept.tutorTurns} />}
@@ -924,7 +938,12 @@ export function DraftPanel({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-hair px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 md:px-5">
+      <div
+        className={cx(
+          "shrink-0 pb-[max(12px,env(safe-area-inset-bottom))] pt-3",
+          inline ? PANE_GUTTER : "border-t border-hair px-4 md:px-5",
+        )}
+      >
         {waiting.length > 0 && (
           <div className="mb-2 flex flex-col gap-1 px-1">
             {waiting.map((item) => (
