@@ -29,8 +29,9 @@ export interface LibraryMenu {
  * The right holds the search, the sort and the grid or list switch, all at a
  * chip's 34px so the row reads as one set of controls. From 768px the two
  * halves share a line: the right half takes whatever the filters leave, and
- * the search inside it shrinks (to 140px, up to 260px) before anything wraps,
- * so three filter menus at 768px still fit. Below 768px the right half takes
+ * the search inside it shrinks (to 120px, up to 260px) before anything wraps,
+ * so three filter menus at 768px still fit. The filters never shrink: if the
+ * two halves still cannot share a line, the right half wraps whole. Below 768px the right half takes
  * a line of its own, with the search stretching to fill it.
  *
  * The search and the layout switch arrive as elements from the page (a GET
@@ -88,6 +89,10 @@ export function LibraryToolbar({
         value={value}
         defaultValue={m.defaultValue ?? ""}
         bare={m.bare}
+        // A long topic title ("Frontend toolchains: UI engine, compiler,
+        // bundler, meta-framework") truncates in its pill rather than pushing
+        // the row past the screen; the menu itself shows it whole.
+        className="max-w-[240px]"
         busy={pending && value !== m.value}
         onChange={(next) => {
           latest.current = withPick(latest.current, m.param, next);
@@ -103,10 +108,12 @@ export function LibraryToolbar({
 
   return (
     <section aria-label="Filters" className="flex flex-wrap items-center gap-2">
-      <div role="group" aria-label="Filter by kind and course" className="flex flex-wrap items-center gap-2">
+      {/* Never shrinks: a squeezed group would let its pills spill over the
+          search. When the two halves cannot share a line, the right one wraps. */}
+      <div role="group" aria-label="Filter by kind and course" className="flex shrink-0 flex-wrap items-center gap-2">
         {menus.map(menu)}
       </div>
-      <div className="flex w-full min-w-0 items-center justify-end gap-2 md:w-auto md:flex-1">
+      <div className="flex w-full min-w-0 items-center justify-end gap-2 md:w-auto md:min-w-min md:flex-1">
         {search}
         {menu(sort)}
         {layout}
