@@ -155,17 +155,40 @@ function record(entry) {
   fs.appendFileSync(CONFIG.calls, JSON.stringify(entry) + "\n", { mode: 0o644 });
 }
 
-// Write a whole buffer to one of this process's own descriptors, waiting out
-// a full pipe rather than dropping the rest.
-function relay(fd, buffer) {
-  let offset = 0;
-  while (buffer && offset < buffer.length) {
+// Where a step's output goes: this process's own stdout and stderr, written
+// through their streams, so a full pipe is waited on (the step is paused
+// until it drains) rather than spun on. If one fails (its reader went away,
+// its file filled), the rest of the output is dropped and the step runs on,
+// so the call is still recorded and the marker removed.
+let outputLost = false;
+const paused = new Set();
+function loseOutput() {
+  outputLost = true;
+  for (const source of paused) source.resume();
+  paused.clear();
+}
+process.stdout.on("error", loseOutput);
+process.stderr.on("error", loseOutput);
+
+function forward(source, sink) {
+  source.on("data", (chunk) => {
+    if (outputLost) return;
+    let flowing;
     try {
-      offset += fs.writeSync(fd, buffer, offset, buffer.length - offset);
-    } catch (error) {
-      if (error.code !== "EAGAIN") throw error;
+      flowing = sink.write(chunk);
+    } catch {
+      loseOutput();
+      return;
     }
-  }
+    if (!flowing && !outputLost) {
+      source.pause();
+      paused.add(source);
+      sink.once("drain", () => {
+        paused.delete(source);
+        source.resume();
+      });
+    }
+  });
 }
 
 // A step's output comes back through pipes of the wrapper's own, never the
@@ -190,8 +213,8 @@ function sandboxed(profile, env, argv) {
       ended(null, null);
       return;
     }
-    child.stdout.on("data", (chunk) => relay(1, chunk));
-    child.stderr.on("data", (chunk) => relay(2, chunk));
+    forward(child.stdout, process.stdout);
+    forward(child.stderr, process.stderr);
     child.on("error", () => ended(null, null));
     child.on("close", (code, signal) => ended(code === null ? null : code, signal || null));
   });

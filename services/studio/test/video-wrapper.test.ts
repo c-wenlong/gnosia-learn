@@ -174,6 +174,41 @@ describe.skipIf(process.platform !== "darwin")("the wrapper", () => {
     expect(line).toMatchObject({ verb: "api", exitCode: 0, steps: [{ step: "render", exitCode: 0 }] });
   });
 
+  it("waits on a reader that is slow, and keeps the step going when its reader goes away", async () => {
+    // 16 MiB, far past a pipe's buffer, so the wrapper's own stdout fills.
+    const loud = path.join(root, "loud-sandbox-exec");
+    await writeFile(loud, `#!${process.execPath}\nconst chunk = Buffer.alloc(1024 * 1024, 120);\nfor (let i = 0; i < 16; i++) require("node:fs").writeSync(1, chunk);\n`, "utf8");
+    await chmod(loud, 0o755);
+    await writeWrapper(process.execPath, paths, { ...(await config()), sandboxExec: loud });
+    const { spawn } = await import("node:child_process");
+    const run = (onStdout: (stream: NodeJS.ReadableStream) => void) =>
+      new Promise<number | null>((resolve) => {
+        const child = spawn(paths.wrapper, ["api"], { stdio: ["ignore", "pipe", "ignore"] });
+        onStdout(child.stdout);
+        child.on("close", (code) => resolve(code));
+      });
+
+    // A reader that waits a second before it reads: every byte still arrives.
+    let bytes = 0;
+    const slow = await run((stdout) => {
+      stdout.pause();
+      setTimeout(() => {
+        stdout.on("data", (chunk: Buffer) => (bytes += chunk.length));
+        stdout.resume();
+      }, 1_000);
+    });
+    expect(slow).toBe(0);
+    expect(bytes).toBe(16 * 1024 * 1024);
+
+    // A reader that goes away at once: the step still finishes, the call is recorded, the marker removed.
+    const gone = await run((stdout) => (stdout as unknown as { destroy(): void }).destroy());
+    expect(gone).toBe(0);
+    const lines = (await readFile(paths.calls, "utf8")).trim().split("\n").map((entry) => JSON.parse(entry) as Record<string, unknown>);
+    expect(lines).toHaveLength(2);
+    expect(lines.at(-1)).toMatchObject({ verb: "api", exitCode: 0, steps: [{ step: "render", exitCode: 0 }] });
+    expect(await readdir(paths.inflight)).toEqual([]);
+  });
+
   it("records a step that fails to start, or is killed by a signal, as no exit code, and the call as 1", async () => {
     const dying = path.join(root, "dying-sandbox-exec");
     await writeFile(dying, `#!${process.execPath}\nprocess.kill(process.pid, "SIGKILL");\n`, "utf8");
