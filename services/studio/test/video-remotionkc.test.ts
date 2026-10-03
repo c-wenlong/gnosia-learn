@@ -612,6 +612,23 @@ describe.skipIf(process.platform !== "darwin")("the remotionkc wrapper", () => {
     expect((await calls()).at(-1)).toMatchObject({ verb: "api", exitCode: 0, steps: [{ step: "render", exitCode: 0 }] });
   });
 
+  it("keeps the step going and stderr flowing when stdout's reader goes away", async () => {
+    const fake = path.join(root, "fake-sandbox-exec");
+    await writeFile(fake, `#!${process.execPath}\nconst fs = require("node:fs");\nconst chunk = Buffer.alloc(1024 * 1024, 120);\nfor (let i = 0; i < 4; i++) fs.writeSync(1, chunk);\nfs.writeSync(2, "the last diagnostic\\n");\n`, "utf8");
+    await chmod(fake, 0o755);
+    const { spawn } = await import("node:child_process");
+    let stderr = "";
+    const code = await new Promise<number | null>((resolve) => {
+      const child = spawn(paths.wrapper, ["api"], { stdio: ["ignore", "pipe", "pipe"] });
+      (child.stdout as unknown as { destroy(): void }).destroy();
+      child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
+      child.on("close", (exit) => resolve(exit));
+    });
+    expect(code).toBe(0);
+    expect(stderr).toContain("the last diagnostic");
+    expect((await calls()).at(-1)).toMatchObject({ verb: "api", exitCode: 0, steps: [{ step: "render", exitCode: 0 }] });
+  });
+
   it("refuses to render while one of the job's ports is held, and says so", async () => {
     const config = JSON.parse(/const CONFIG = ([\s\S]*?);\n/.exec(await readFile(paths.wrapper, "utf8"))![1]!) as { ports: number[] };
     const server = createServer();
