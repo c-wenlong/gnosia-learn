@@ -36,7 +36,13 @@ import type { Toolchain } from "./toolchain";
  *   printed into. That file is how the job view shows steps and how the gate
  *   knows what was rendered when.
  * - It prints manimkc's own report back, which is what the skill has the
- *   owner read.
+ *   owner read. A step's output reaches the agent through pipes of the
+ *   wrapper's own, drained as it arrives and written to the wrapper's
+ *   stdout and stderr, never through the descriptors the wrapper was given:
+ *   the CLI hands Bash a file under the temporary directory, which the
+ *   profiles refuse to read, and a strict program aborts at start when it
+ *   cannot fstat its standard streams (revideokc's node did; manimkc's
+ *   Python tolerates it).
  *
  * `narrate` runs `lib/narration.py` under the narration profile, the only one
  * that can read the kokoro model. `preview` and `build` run that same step
@@ -104,7 +110,7 @@ export function wrapperConfig(input: {
  */
 export const WRAPPER_BODY = String.raw`
 "use strict";
-const { spawnSync } = require("node:child_process");
+const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 
@@ -149,14 +155,46 @@ function record(entry) {
   fs.appendFileSync(CONFIG.calls, JSON.stringify(entry) + "\n", { mode: 0o644 });
 }
 
+// Write a whole buffer to one of this process's own descriptors, waiting out
+// a full pipe rather than dropping the rest.
+function relay(fd, buffer) {
+  let offset = 0;
+  while (buffer && offset < buffer.length) {
+    try {
+      offset += fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    } catch (error) {
+      if (error.code !== "EAGAIN") throw error;
+    }
+  }
+}
+
+// A step's output comes back through pipes of the wrapper's own, never the
+// descriptors the wrapper was given: the CLI hands Bash a file under the
+// temporary directory for stdout and stderr, which the profiles refuse to
+// read, and a strict program (node does) aborts at start when it cannot fstat
+// its standard streams. Python tolerates that today; nothing should have to.
+// The pipes are drained as the step writes, so a long or chatty render is
+// neither held in memory nor stopped for its output.
 function sandboxed(profile, env, argv) {
   const started = Date.now();
-  const result = spawnSync(CONFIG.sandboxExec, ["-f", CONFIG.profiles[profile], ...argv], {
-    cwd: CONFIG.checkout,
-    env,
-    stdio: ["ignore", "inherit", "inherit"],
+  return new Promise((resolve) => {
+    const ended = (exitCode, signal) => resolve({ step: profile, exitCode, signal, ms: Date.now() - started });
+    let child;
+    try {
+      child = spawn(CONFIG.sandboxExec, ["-f", CONFIG.profiles[profile], ...argv], {
+        cwd: CONFIG.checkout,
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch {
+      ended(null, null);
+      return;
+    }
+    child.stdout.on("data", (chunk) => relay(1, chunk));
+    child.stderr.on("data", (chunk) => relay(2, chunk));
+    child.on("error", () => ended(null, null));
+    child.on("close", (code, signal) => ended(code === null ? null : code, signal || null));
   });
-  return { step: profile, exitCode: result.status === null ? null : result.status, signal: result.signal || null, ms: Date.now() - started };
 }
 
 function narrate() {
@@ -167,7 +205,7 @@ function manimkc(args) {
   return sandboxed("render", CONFIG.env.render, [CONFIG.python3, CONFIG.checkout + "/tools/cli/manimkc", "--root", CONFIG.checkout, ...args]);
 }
 
-function main(argv) {
+async function main(argv) {
   const verb = argv[0];
   const rest = argv.slice(1);
   if (verb === undefined || verb === "help" || verb === "--help" || verb === "-h") {
@@ -204,27 +242,27 @@ function main(argv) {
     fs.renameSync(pending, marker);
   } catch { /* the hang timer then sees silence, which is the old behaviour */ }
   try {
-    return run(verb, rest, startedAt, startMs);
+    return await run(verb, rest, startedAt, startMs);
   } finally {
     try { fs.unlinkSync(marker); } catch { /* already gone */ }
   }
 }
 
-function run(verb, rest, startedAt, startMs) {
+async function run(verb, rest, startedAt, startMs) {
   const sceneSha256 = hashScene();
   const steps = [];
   const needsVoice = CONFIG.narrated && (verb === "narrate" || verb === "preview" || verb === "build");
   if (needsVoice) {
     process.stderr.write(">>> voicing the scene file's lines (the narration step)\n");
-    steps.push(narrate());
+    steps.push(await narrate());
   }
   const voiced = steps.length === 0 || steps[0].exitCode === 0;
   if (voiced && verb !== "narrate") {
     const jobs = String(CONFIG.jobs);
-    if (verb === "api") steps.push(manimkc(["api", ...rest]));
-    else if (verb === "lint") steps.push(manimkc(["lint", CONFIG.sceneFile]));
-    else if (verb === "preview") steps.push(manimkc(["preview", CONFIG.sceneFile, ...rest, "--no-narration", "--jobs", jobs]));
-    else if (verb === "build") steps.push(manimkc(["build", CONFIG.topicDir, "--no-register", "--jobs", jobs]));
+    if (verb === "api") steps.push(await manimkc(["api", ...rest]));
+    else if (verb === "lint") steps.push(await manimkc(["lint", CONFIG.sceneFile]));
+    else if (verb === "preview") steps.push(await manimkc(["preview", CONFIG.sceneFile, ...rest, "--no-narration", "--jobs", jobs]));
+    else if (verb === "build") steps.push(await manimkc(["build", CONFIG.topicDir, "--no-register", "--jobs", jobs]));
   }
   const last = steps[steps.length - 1];
   const exitCode = last === undefined ? 0 : last.exitCode;
@@ -250,7 +288,10 @@ function run(verb, rest, startedAt, startMs) {
   return exitCode === null ? 1 : exitCode;
 }
 
-process.exitCode = main(process.argv.slice(2));
+main(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error) => {
+  process.stderr.write("video: " + (error && error.message ? error.message : String(error)) + "\n");
+  process.exitCode = 1;
+});
 `;
 
 /** The program's text: the shebang, the compiled-in configuration, the body. */

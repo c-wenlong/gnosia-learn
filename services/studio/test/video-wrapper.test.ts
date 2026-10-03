@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { closeSync, openSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -145,6 +146,45 @@ describe.skipIf(process.platform !== "darwin")("the wrapper", () => {
     // Ended: the marker is gone and the call's line is in calls.ndjson.
     expect(await readdir(paths.inflight)).toEqual([]);
     expect(await stillWorking(paths, 100, Date.now() + 1_000)).toBe(false);
+  });
+
+  it("relays a step's output as it comes, all of it, without stopping a step that says a lot", async () => {
+    // 80 MiB on stdout, more than any buffer the wrapper could have held, then a last line on each stream.
+    // The step also says what its own standard streams are: pipes of the wrapper's, never the file the
+    // wrapper was given (the CLI runs Bash with stdout and stderr on a file the profiles refuse to read).
+    const loud = path.join(root, "loud-sandbox-exec");
+    await writeFile(
+      loud,
+      `#!${process.execPath}\nconst fs = require("node:fs");\nconst chunk = Buffer.alloc(1024 * 1024, 120);\nfor (let i = 0; i < 80; i++) fs.writeSync(1, chunk);\nprocess.stdout.write("\\nlast line\\n");\nconst kind = (fd) => (fs.fstatSync(fd).isFile() ? "a file" : "a stream");\nprocess.stderr.write("to stderr; stdout is " + kind(1) + ", stderr is " + kind(2) + "\\n");\n`,
+      "utf8",
+    );
+    await chmod(loud, 0o755);
+    await writeWrapper(process.execPath, paths, { ...(await config()), sandboxExec: loud });
+    const out = path.join(root, "wrapper-out.txt");
+    const err = path.join(root, "wrapper-err.txt");
+    const outFd = openSync(out, "w");
+    const errFd = openSync(err, "w");
+    const result = spawnSync(paths.wrapper, ["api"], { stdio: ["ignore", outFd, errFd] });
+    closeSync(outFd);
+    closeSync(errFd);
+    expect(result.status).toBe(0);
+    expect(statSync(out).size).toBe(80 * 1024 * 1024 + "\nlast line\n".length);
+    expect(readFileSync(err, "utf8")).toContain("to stderr; stdout is a stream, stderr is a stream");
+    const [line] = (await readFile(paths.calls, "utf8")).trim().split("\n").map((entry) => JSON.parse(entry) as Record<string, unknown>);
+    expect(line).toMatchObject({ verb: "api", exitCode: 0, steps: [{ step: "render", exitCode: 0 }] });
+  });
+
+  it("records a step that fails to start, or is killed by a signal, as no exit code, and the call as 1", async () => {
+    const dying = path.join(root, "dying-sandbox-exec");
+    await writeFile(dying, `#!${process.execPath}\nprocess.kill(process.pid, "SIGKILL");\n`, "utf8");
+    await chmod(dying, 0o755);
+    await writeWrapper(process.execPath, paths, { ...(await config()), sandboxExec: dying });
+    expect((await video(["lint"])).code).toBe(1);
+    await writeWrapper(process.execPath, paths, { ...(await config()), sandboxExec: path.join(root, "no-such-program") });
+    expect((await video(["lint"])).code).toBe(1);
+    const lines = (await readFile(paths.calls, "utf8")).trim().split("\n").map((entry) => JSON.parse(entry) as { exitCode: number | null; steps: { exitCode: number | null; signal: string | null }[] });
+    expect(lines.map((entry) => [entry.exitCode, entry.steps[0]?.exitCode, entry.steps[0]?.signal])).toEqual([[null, null, "SIGKILL"], [null, null, null]]);
+    expect(await readdir(paths.inflight)).toEqual([]);
   });
 
   it("builds the whole topic with --no-register, since a job checkout has no README to register in", async () => {
