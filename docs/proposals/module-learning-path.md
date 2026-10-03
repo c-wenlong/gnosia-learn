@@ -188,21 +188,39 @@ A video reaches a path in one of three ways, and they scope differently:
 | Link | Shows on | Shared across courses and modules |
 | --- | --- | --- |
 | `asset_concept` | that concept's step, in every lesson that teaches it | Yes, on purpose: a video that explains one concept is part of the concept, as its note is |
-| The course file names it | the module, or the lessons its `lessons:` lists | No: the course chose it |
+| The course file names it | the module, or the lesson that lists it | No: the course chose it |
 | `asset_topic` only | the module, as module material | Only when two modules name the same `topic:` |
 
-The middle row is the course-local route, the same one readings take. A
-resource may give `asset: <asset id>` (a catalog video, such as
-`manimkc:out/algorithms/cs3230/week-01-asymptotic-analysis/week_01_asymptotic_analysis.mp4`)
-in place of `url:`, with the same optional `lessons:`. The reader refuses an
-id the owner cannot read or one that is not a `video`.
+The middle row is the course-local route. A module, and a lesson, gain an
+optional `videos:` list of catalog asset ids:
+
+```yaml
+  - id: cs3230-m1
+    videos:
+      - manimkc:out/algorithms/cs3230/week-01-asymptotic-analysis/week_01_asymptotic_analysis.mp4
+    topics:
+      - id: cs3230-m1-t3
+        videos: [video:comparing-growth-rates-on-a-log-plot]   # a studio video, for illustration
+```
+
+A video listed here is a link, not a resource: it has no id of its own,
+because the asset id is already permanent and the course adds nothing to it
+but a place. The module's list is `collection_item` asset rows on the module
+(the table readings already use), the lesson's is `curriculum_item_asset`
+rows, and export writes each list back from those rows, so a round trip keeps
+them. The reader refuses an id the owner cannot read, one that is not a
+`video`, and a video listed twice in one module, so there is never a second
+identity to recover. Readings keep `url:` and their resource ids, unchanged.
 
 The last row is the fallback, and it is what the Assets section does today.
-Eleven vocabulary topics are named by more than one module, so a topic-only
-video can appear on a module it was not made for. A module whose course file
-names any video by `asset:` gets no topic-only videos, so a course fixes a
-shared topic by naming its own. `catalog doctor` lists the modules that still
-fall back on a shared topic.
+A topic-only video shows as module material, except where it would be wrong:
+eleven vocabulary topics are named by more than one module, so on those
+modules a topic-only video may belong to the other one. A module on such a
+shared topic shows topic-only videos only while it lists none of its own; a
+module on a topic it alone names always shows them, whatever it lists. A
+video the course lists is not shown a second time as a topic-only one.
+`catalog doctor` lists the modules on a shared topic that still list no
+video.
 
 The weekly CS3230, CS4223 and CS4225 videos cover a whole module, so they stay
 module material, and that is correct. A video's chapters sidecar could later
@@ -268,7 +286,11 @@ One migration.
   and `course import`. A typed link table, following the rule in
   [SCHEMA.md](../../services/catalog/SCHEMA.md) that each link says what it
   joins; `collection_item` stays the module's own list, so a reading is still
-  on its module whether or not it names lessons.
+  on its module whether or not it names lessons. It holds both a lesson's
+  readings and the videos its `videos:` lists; the asset's kind tells them
+  apart. The exporter, which today keeps only `courses:` link rows
+  ([export.ts](../../services/catalog/src/content/export.ts)), writes the
+  module's `video` rows back as `videos:`.
 - **`asset.resource_type`** accepts `practice`; `asset_resource_type_check`
   is replaced with the longer list.
 
@@ -278,7 +300,7 @@ No change to `event`, `session` or `mastery`.
 
 | Part | Where | What |
 | --- | --- | --- |
-| Parser | `packages/content/src/courses.ts`, `types.ts` | `lessons:` on a resource, refused when an id is not an item of the same module; `asset:` in place of `url:`; `practice` type |
+| Parser | `packages/content/src/courses.ts`, `types.ts` | `lessons:` on a resource, refused when an id is not an item of the same module; `videos:` on a module and on a lesson; `practice` type |
 | Import and export | `services/catalog/src/content/courses.ts`, `content/readers/courses.ts`, `content/export.ts` | write `curriculum_item_asset`, read it back into `lessons:`, so a round trip keeps it |
 | Indexer | `services/catalog/src/index/courses.ts`, `index/video-tool.ts` | the link rows; `concepts:` from `topic.yml` |
 | Doctor and status | `services/catalog/src/commands/doctor.ts`, `status` | the order guard, modules falling back to a shared topic's videos, the two coverage lines |
@@ -314,7 +336,8 @@ Each is one PR.
 - `packages/content/test/courses.test.ts`: `lessons:` naming an item in
   another module, a duplicate, an archived item; `practice`.
 - `services/catalog/test/courses-reader.test.ts` and the export round trip:
-  `lessons:` and `asset:` survive export and import unchanged.
+  `lessons:` and `videos:` survive export and import unchanged; a video listed
+  twice in a module is refused.
 - `services/catalog/test/catalog.test.ts`: the courses run prunes a link the
   file dropped; the video-tool run writes `asset_concept` from `concepts:` and
   refuses an unknown slug.
@@ -323,8 +346,8 @@ Each is one PR.
   out mastered and in-module prerequisites; a reading with no lessons is
   module material; a `practice` reading appears once, after the last lesson
   or on its lesson, never under "Read alongside"; a concept-linked video lands
-  on its step; a module that names a video by `asset:` shows no topic-only
-  video; a module whose topic is shared with another module still shows only
+  on its step; a module on a shared topic that lists a video shows no
+  topic-only video, and one on a topic it alone names still does; a module whose topic is shared with another module still shows only
   its own lessons.
 - `session-core.test.ts`: the module plan asks a concept again after a correct
   answer until it is mastered, stops on a wrong one, stops at three per
