@@ -124,14 +124,15 @@ export const COPIES_FILE = "copies.json";
  * A source file's name: one path segment, the topic file, or a scene file of
  * one of the studio's video tools. manimkc's are Python modules; revideokc's
  * are `scene.tsx`, its `narration.json` and any `.ts` or `.tsx` beside them
- * (D79 of docs/STUDIO-VIDEO-TOOLS.md). Which of them a video may hold is the
+ * (D79 of docs/STUDIO-VIDEO-TOOLS.md), and remotionkc's the same with
+ * `composition.tsx` for its scene (phase 3). Which of them a video may hold is the
  * tool its brief names (`SOURCE_BY_TOOL`); this is any of them, for reading a
  * stored source back.
  */
 const SOURCE_NAME = /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.(?:py|ts|tsx)|topic\.yml|narration\.json)$/;
 
 /** The studio's video tools with a backend, and the brief's default (D72: absent is manimkc). */
-type SourceTool = "manimkc" | "revideokc";
+type SourceTool = "manimkc" | "revideokc" | "remotionkc";
 
 /** Per tool: the files its source may hold, and the ones it must, beside `topic.yml`. */
 const SOURCE_BY_TOOL: Record<SourceTool, { name: RegExp; required: (names: string[]) => string | null }> = {
@@ -143,6 +144,10 @@ const SOURCE_BY_TOOL: Record<SourceTool, { name: RegExp; required: (names: strin
     name: /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.tsx?|topic\.yml|narration\.json)$/,
     required: (names) => (names.includes("scene.tsx") && names.includes("narration.json") ? null : "scene.tsx and narration.json"),
   },
+  remotionkc: {
+    name: /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.tsx?|topic\.yml|narration\.json)$/,
+    required: (names) => (names.includes("composition.tsx") && names.includes("narration.json") ? null : "composition.tsx and narration.json"),
+  },
 };
 
 /** The tool a stored brief names; absent is manimkc, and a tool with no studio backend is refused by name. */
@@ -150,6 +155,7 @@ function sourceTool(brief: Record<string, unknown>): SourceTool {
   const tool = brief.tool;
   if (tool === undefined || tool === null || tool === "" || tool === "manimkc") return "manimkc";
   if (tool === "revideokc") return "revideokc";
+  if (tool === "remotionkc") return "remotionkc";
   throw new VideoError("unreadable", `the brief names the video tool ${JSON.stringify(tool)}, whose source the catalog does not know how to store.`);
 }
 // One pair of limits for the catalog and the studio's gate, which reaches the module by path.
