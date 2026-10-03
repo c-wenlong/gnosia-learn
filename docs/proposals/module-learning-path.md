@@ -203,22 +203,39 @@ optional `videos:` list of catalog asset ids:
         videos: [video:comparing-growth-rates-on-a-log-plot]   # a studio video, for illustration
 ```
 
-A video listed here is a link, not a resource: it has no id of its own,
+A video listed here is a reference, not a resource: it has no id of its own,
 because the asset id is already permanent and the course adds nothing to it
-but a place. The module's list is `collection_item` asset rows on the module
-(the table readings already use), the lesson's is `curriculum_item_asset`
-rows, and export writes each list back from those rows, so a round trip keeps
-them. The reader refuses an id the owner cannot read, one that is not a
-`video`, and a video listed twice in one module, so there is never a second
-identity to recover. Readings keep `url:` and their resource ids, unchanged.
+but a place. Readings keep `url:` and their resource ids, unchanged.
+
+The list is stored as data on the row that owns it, the way `subtopics`
+already is: a `videos` jsonb array on `curriculum_item`, and `videos` in the
+module collection's `metadata`. It is deliberately not a foreign key to
+`asset`. The courses source indexes before the video tools, and a checkout
+without the tool submodules skips them altogether, so a course that names a
+manimkc video would be refused on a fresh catalog or a clone with no tools if
+the link had to resolve at import. Import checks the shape only: an id with an
+asset prefix, and no video listed twice in one module. Export writes the
+arrays back as they are, so a round trip keeps them.
+
+The reference resolves when the page reads it. A listed id the owner can read
+as a `video` is placed; any other id is left off the path and listed by
+`catalog doctor` as dangling, naming the course, module and id. Nothing is
+written from a dangling id, so this is not an indexer skipping a row (the
+rule in [AGENTS.md](../../AGENTS.md#gotchas)); it is a reference waiting for
+its source to be indexed.
+
+**A video appears once on a module page.** The same video can be reached more
+than one way: a studio video carries both concept and topic links, and the
+course may also list it. The path places it at the first match of, in order:
+the course's own list (the lesson, else the module), the step of the first
+concept in the module that it names, then the topic-only fallback below.
 
 The last row is the fallback, and it is what the Assets section does today.
 A topic-only video shows as module material, except where it would be wrong:
 eleven vocabulary topics are named by more than one module, so on those
 modules a topic-only video may belong to the other one. A module on such a
 shared topic shows topic-only videos only while it lists none of its own; a
-module on a topic it alone names always shows them, whatever it lists. A
-video the course lists is not shown a second time as a topic-only one.
+module on a topic it alone names always shows them, whatever it lists.
 `catalog doctor` lists the modules on a shared topic that still list no
 video.
 
@@ -286,11 +303,13 @@ One migration.
   and `course import`. A typed link table, following the rule in
   [SCHEMA.md](../../services/catalog/SCHEMA.md) that each link says what it
   joins; `collection_item` stays the module's own list, so a reading is still
-  on its module whether or not it names lessons. It holds both a lesson's
-  readings and the videos its `videos:` lists; the asset's kind tells them
-  apart. The exporter, which today keeps only `courses:` link rows
-  ([export.ts](../../services/catalog/src/content/export.ts)), writes the
-  module's `video` rows back as `videos:`.
+  on its module whether or not it names lessons. Readings only: the
+  readings are written by the same import, so the foreign key always
+  resolves.
+- **`curriculum_item.videos`**: jsonb, default `[]`, the lesson's `videos:`.
+  The module's list goes in `collection.metadata`, which needs no column.
+  Neither is a foreign key; see
+  [Videos name their concepts](#videos-name-their-concepts).
 - **`asset.resource_type`** accepts `practice`; `asset_resource_type_check`
   is replaced with the longer list.
 
@@ -301,9 +320,9 @@ No change to `event`, `session` or `mastery`.
 | Part | Where | What |
 | --- | --- | --- |
 | Parser | `packages/content/src/courses.ts`, `types.ts` | `lessons:` on a resource, refused when an id is not an item of the same module; `videos:` on a module and on a lesson; `practice` type |
-| Import and export | `services/catalog/src/content/courses.ts`, `content/readers/courses.ts`, `content/export.ts` | write `curriculum_item_asset`, read it back into `lessons:`, so a round trip keeps it |
+| Import and export | `services/catalog/src/content/courses.ts`, `content/readers/courses.ts`, `content/export.ts` | write `curriculum_item_asset` and the two `videos` arrays, read them back into `lessons:` and `videos:`, so a round trip keeps them |
 | Indexer | `services/catalog/src/index/courses.ts`, `index/video-tool.ts` | the link rows; `concepts:` from `topic.yml` |
-| Doctor and status | `services/catalog/src/commands/doctor.ts`, `status` | the order guard, modules falling back to a shared topic's videos, the two coverage lines |
+| Doctor and status | `services/catalog/src/commands/doctor.ts`, `status` | the order guard, modules falling back to a shared topic's videos, dangling `videos:` ids, the two coverage lines |
 | Path | a new `apps/web/src/lib/module-path.ts` | a pure function from the course, the knowledge base, the module's assets and the learner's mastery to the ordered steps above |
 | Page | `ModuleMain.tsx` | renders the steps in place of Topics, Resources and Assets |
 | Week check | `[module]/check/page.tsx`, `session-core.ts` | the `module` mode |
@@ -337,7 +356,8 @@ Each is one PR.
   another module, a duplicate, an archived item; `practice`.
 - `services/catalog/test/courses-reader.test.ts` and the export round trip:
   `lessons:` and `videos:` survive export and import unchanged; a video listed
-  twice in a module is refused.
+  twice in a module is refused; a course listing a manimkc video imports into
+  a fresh catalog with no manimkc source.
 - `services/catalog/test/catalog.test.ts`: the courses run prunes a link the
   file dropped; the video-tool run writes `asset_concept` from `concepts:` and
   refuses an unknown slug.
@@ -347,7 +367,9 @@ Each is one PR.
   module material; a `practice` reading appears once, after the last lesson
   or on its lesson, never under "Read alongside"; a concept-linked video lands
   on its step; a module on a shared topic that lists a video shows no
-  topic-only video, and one on a topic it alone names still does; a module whose topic is shared with another module still shows only
+  topic-only video, and one on a topic it alone names still does; a video
+  reached by a course listing, a concept link and a topic link appears once,
+  where the course listed it; a listed id with no readable video is left off; a module whose topic is shared with another module still shows only
   its own lessons.
 - `session-core.test.ts`: the module plan asks a concept again after a correct
   answer until it is mastered, stops on a wrong one, stops at three per
