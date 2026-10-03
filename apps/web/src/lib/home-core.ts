@@ -472,7 +472,8 @@ export function nextFromHere(
 /**
  * The concepts the threads are about, or one step from: each concept thread
  * with what it requires and what requires it, every concept a visited
- * module's topics support, and every concept "Next from here" lists.
+ * module's topics support, and every concept "Next from here" lists, or that
+ * a topic it lists supports.
  */
 export function nearThreads(
   threads: readonly Thread[],
@@ -495,10 +496,13 @@ export function nearThreads(
       for (const m of modules) for (const topic of m.topics) topicIds.add(topic.id);
     }
   }
-  for (const c of concepts) if (c.topics.some((id) => topicIds.has(id))) near.add(c.id);
   for (const group of next) {
-    for (const step of group.steps) if (step.key.startsWith("concept:")) near.add(step.key.slice("concept:".length));
+    for (const step of group.steps) {
+      if (step.key.startsWith("concept:")) near.add(step.key.slice("concept:".length));
+      if (step.key.startsWith("topic:")) topicIds.add(step.key.slice("topic:".length));
+    }
   }
+  for (const c of concepts) if (c.topics.some((id) => topicIds.has(id))) near.add(c.id);
   return near;
 }
 

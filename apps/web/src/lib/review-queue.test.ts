@@ -103,7 +103,9 @@ describe("parseOnly", () => {
     expect(parseOnly(["a,b", "c"])).toEqual(["a", "b"]);
     expect(parseOnly(" a , a ,,b ")).toEqual(["a", "b"]);
     expect(parseOnly(undefined)).toBeNull();
-    expect(parseOnly(",,")).toBeNull();
+    // Present but empty asks no card, rather than falling back to the queue.
+    expect(parseOnly(",,")).toEqual([]);
+    expect(parseOnly("")).toEqual([]);
     expect(parseOnly(`${"x".repeat(129)},ok`)).toEqual(["ok"]);
     expect(parseOnly(Array.from({ length: 20 }, (_, i) => `c${i}`).join(","))).toHaveLength(MAX_ONLY);
   });

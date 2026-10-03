@@ -112,7 +112,9 @@ export async function readReviewSession(
   try {
     const db = await catalogDatabase();
     [queue, summaries] = await Promise.all([
-      reviewQueue(db, { now, focus, learnerId: owner }),
+      // `only` asks due cards and nothing else, so a focus beside it, which
+      // can bring in a card that is not due, is not applied.
+      reviewQueue(db, { now, focus: only === null ? focus : null, learnerId: owner }),
       conceptSummaries(db, ownerScope(owner)),
     ]);
   } catch (error) {
@@ -160,12 +162,13 @@ export async function loadReviewSession(
 export const MAX_ONLY = 10;
 
 /**
- * `?only=a,b,c` read into a list of concept slugs, or null when it is absent
- * or names nothing usable. Each entry is held to the length `?concept=` is.
+ * `?only=a,b,c` read into a list of concept slugs, or null when it is absent.
+ * Present but naming nothing usable is an empty list, which asks no card,
+ * never the whole queue. Each entry is held to the length `?concept=` is.
  */
 export function parseOnly(raw: string | string[] | undefined): string[] | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (typeof value !== "string") return null;
   const ids = [...new Set(value.split(",").map((s) => s.trim()))].filter((s) => s !== "" && s.length <= 128);
-  return ids.length === 0 ? null : ids.slice(0, MAX_ONLY);
+  return ids.slice(0, MAX_ONLY);
 }

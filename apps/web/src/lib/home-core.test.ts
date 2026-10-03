@@ -272,6 +272,11 @@ describe("next from here", () => {
     ];
     const near = nearThreads(threads, [], concepts, [COURSE]);
     expect([...near].sort()).toEqual(["attention", "dot", "softmax", "topic-bound"]);
+    // A topic "Next from here" lists brings its concepts near, even in a module not visited.
+    const later = [...concepts, concept("in-m2", { topics: ["t3"] })];
+    const listed = [{ key: "g", heading: "After M1", steps: [{ key: "topic:t3", title: "D&C", detail: null, href: "/" }] }];
+    expect(nearThreads(threads, listed, later, [COURSE]).has("in-m2")).toBe(true);
+    expect(nearThreads(threads, [], later, [COURSE]).has("in-m2")).toBe(false);
 
     const picks = recallPicks(
       [{ conceptId: "far" }, { conceptId: "other" }, { conceptId: "topic-bound" }, { conceptId: "gone" }, { conceptId: "dot" }],
