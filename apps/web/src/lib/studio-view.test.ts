@@ -445,6 +445,9 @@ describe("a move the browser can make on its own", () => {
     // A chip closes a tile's panel on the way, and a verb's outcome is dropped.
     expect(browserViewMove(at("sel=x"), "/studio?topic=a")).toBe(true);
     expect(browserViewMove(at("v=verify&ok=1"), "/studio?sort=created")).toBe(true);
+    // A tile's panel kept open over the new view; another tile is a panel move.
+    expect(browserViewMove(at("sel=x"), "/studio?sel=x&sort=title")).toBe(true);
+    expect(browserViewMove(at("sel=x"), "/studio?sel=y&sort=title")).toBe(false);
     // An open conversation or job stays open over the new view.
     expect(browserViewMove(at("draft=d1"), "/studio?draft=d1&sort=title")).toBe(true);
   });
@@ -454,6 +457,7 @@ describe("a move the browser can make on its own", () => {
     expect(browserViewMove(at(""), "/studio?sort=title&job=j1")).toBe(false);
     expect(browserViewMove(at("job=j1&shot=after"), "/studio?job=j1&shot=after&sort=title")).toBe(false);
     expect(browserViewMove(at(""), "/studio?settings=1")).toBe(false);
+    expect(browserViewMove(at("?extend=graph"), "/studio?extend=graph&sort=title")).toBe(false);
     expect(browserViewMove(at("stream=off"), "/studio?sort=title")).toBe(false);
     expect(browserViewMove(at(""), "/studio/d/x?sort=title")).toBe(false);
   });
