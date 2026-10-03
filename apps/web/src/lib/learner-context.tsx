@@ -25,6 +25,7 @@ import {
   recordKnowledge,
   removeUserResource,
   resetCourseProgress,
+  setCourseActive,
   setLastVisited,
   setNote,
   setTheme,
@@ -85,6 +86,8 @@ interface LearnerContextValue {
   /** Resolves true once the reset is stored, false if it was refused. */
   resetCourse: (topicIds: string[]) => Promise<boolean>;
   markVisited: (courseSlug: string, moduleSlug?: string) => void;
+  /** Bring a course back to the Courses page's grid, or fold it under "Inactive courses". */
+  setCourseActive: (courseSlug: string, active: boolean) => void;
 }
 
 const LearnerContext = createContext<LearnerContextValue | null>(null);
@@ -347,6 +350,19 @@ export function LearnerProvider({
     [commit],
   );
 
+  const setActive = useCallback(
+    (courseSlug: string, active: boolean) => {
+      commit(
+        "preference:inactiveCourses",
+        (previous) => setCourseActive(previous, courseSlug, active),
+        // The whole list, from the state the reducer just made. Writes on one
+        // key run in order, so the last of two quick toggles carries both.
+        (next) => post("preference", { key: "inactiveCourses", value: next.inactiveCourses }),
+      );
+    },
+    [commit],
+  );
+
   useLegacyImport(router.refresh);
 
   const value = useMemo(
@@ -365,6 +381,7 @@ export function LearnerProvider({
       forgetKnowledge,
       resetCourse,
       markVisited,
+      setCourseActive: setActive,
     }),
     [
       state,
@@ -379,6 +396,7 @@ export function LearnerProvider({
       forgetKnowledge,
       resetCourse,
       markVisited,
+      setActive,
     ],
   );
 

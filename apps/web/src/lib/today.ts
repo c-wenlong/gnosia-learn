@@ -17,6 +17,7 @@ import { ContentUnavailableError, contentSource } from "@/data/source";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import type { Course } from "@/lib/types";
 import { itemStanding } from "@/lib/course-path";
+import { activeOnly } from "@/lib/course-summary";
 import { computeHabit, dayKey, emptyHabit } from "@/lib/habit-core";
 import { habitTimeZone } from "@/lib/habit";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -84,7 +85,9 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
   const nextUp: NextUp | null =
     first === undefined ? null : toNextUp(first, placeOf(courses, first), now, timeZone);
 
-  const courseRows = courses.map((c) => ({
+  // A course set aside on the Courses page is left off the card, as it is
+  // left out of Continue learning there.
+  const courseRows = activeOnly(courses, snapshot.inactiveCourses).map((c) => ({
     slug: c.slug,
     code: c.code,
     title: c.title,

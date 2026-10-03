@@ -236,6 +236,21 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect((await call("preference", { key: "dailyLeeway", value: 8 })).status).toBe(400);
     });
 
+    it("stores the courses set aside, deduplicated, and refuses anything but slugs", async () => {
+      expect((await call("preference", { key: "inactiveCourses", value: ["cs2111", "cs2111", "cs3230"] })).status).toBe(
+        200,
+      );
+      const { rows } = await scratch.db.execute<{ value: unknown }>(
+        "select value from preference where key = 'inactiveCourses'",
+      );
+      expect(rows[0]?.value).toEqual(["cs2111", "cs3230"]);
+
+      expect((await call("preference", { key: "inactiveCourses", value: "cs2111" })).status).toBe(400);
+      const blank = await call("preference", { key: "inactiveCourses", value: ["cs2111", ""] });
+      expect(blank.status).toBe(400);
+      expect(String(blank.body.error)).toContain("value[1]");
+    });
+
     it("refuses a resource URL that is not http(s)", async () => {
       const { status, body } = await call("preference", {
         key: "userResources",

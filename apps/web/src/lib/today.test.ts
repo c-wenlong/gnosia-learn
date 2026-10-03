@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 const getCourses = vi.hoisted(() => vi.fn());
 const catalogDatabase = vi.hoisted(() => vi.fn());
+const readLearnerSnapshot = vi.hoisted(() => vi.fn());
 
 vi.mock("@/data/courses", () => ({ getCourses }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase }));
@@ -22,7 +23,7 @@ vi.mock("@self-learn/catalog/state", () => ({
   dueReviews: vi.fn(async () => []),
   readEvents: vi.fn(async () => []),
   readKnowledgeBase: vi.fn(async () => ({ concepts: [], frontier: [] })),
-  readLearnerSnapshot: vi.fn(async () => ({ completed: [] })),
+  readLearnerSnapshot,
   readPreferences: vi.fn(async () => ({})),
 }));
 
@@ -31,6 +32,8 @@ describe("readToday", () => {
     getCourses.mockReset();
     catalogDatabase.mockReset();
     catalogDatabase.mockResolvedValue({});
+    readLearnerSnapshot.mockReset();
+    readLearnerSnapshot.mockResolvedValue({ completed: {}, inactiveCourses: [] });
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
@@ -49,5 +52,26 @@ describe("readToday", () => {
     const today = await readToday();
     expect(today.reachable).toBe(false);
     expect(today.courses.total).toBe(0);
+  });
+
+  it("leaves a course set aside off the courses card, however far along", async () => {
+    const course = (slug: string, order: number) => ({
+      slug,
+      code: slug.toUpperCase(),
+      title: slug,
+      order,
+      modules: [{ topics: [{ id: `${slug}-m1-t1` }, { id: `${slug}-m1-t2` }] }],
+    });
+    getCourses.mockResolvedValueOnce([course("cs3230", 1), course("cs2111", 2)]);
+    // CS2111 is further along, and would come first if it were active.
+    readLearnerSnapshot.mockResolvedValueOnce({
+      completed: { "cs3230-m1-t1": true, "cs2111-m1-t1": true, "cs2111-m1-t2": true },
+      inactiveCourses: ["cs2111"],
+    });
+    const { readToday } = await import("./today");
+    const today = await readToday();
+    expect(today.reachable).toBe(true);
+    expect(today.courses.rows.map((r) => r.slug)).toEqual(["cs3230"]);
+    expect(today.courses.total).toBe(1);
   });
 });
