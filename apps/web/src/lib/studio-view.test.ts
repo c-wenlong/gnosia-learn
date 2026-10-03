@@ -14,6 +14,7 @@ import {
   groupDiagrams,
   panelHref,
   browserPanelMove,
+  browserViewMove,
   gridHref,
   panelSignature,
   parsePanel,
@@ -435,6 +436,30 @@ describe("a move the browser can make on its own", () => {
     expect(browserPanelMove(at("job=j1&shot=after"), "/studio?job=j1")).toBe(false);
     expect(browserPanelMove(at("sel=x"), "/studio?extend=x")).toBe(false);
     expect(browserPanelMove(at(""), "/studio/d/x")).toBe(false);
+  });
+
+  it("redraws the grid in the browser for the search, the topics, Display and Sort", () => {
+    expect(browserViewMove(at(""), "/studio?sort=title&dir=asc")).toBe(true);
+    expect(browserViewMove(at("sort=title&dir=asc"), "/studio?sort=title&dir=asc&group=topic&view=list")).toBe(true);
+    expect(browserViewMove(at("chips=1"), "/studio?q=tcp&topic=a,b")).toBe(true);
+    // A chip closes a tile's panel on the way, and a verb's outcome is dropped.
+    expect(browserViewMove(at("sel=x"), "/studio?topic=a")).toBe(true);
+    expect(browserViewMove(at("v=verify&ok=1"), "/studio?sort=created")).toBe(true);
+    // A tile's panel kept open over the new view; another tile is a panel move.
+    expect(browserViewMove(at("sel=x"), "/studio?sel=x&sort=title")).toBe(true);
+    expect(browserViewMove(at("sel=x"), "/studio?sel=y&sort=title")).toBe(false);
+    // An open conversation or job stays open over the new view.
+    expect(browserViewMove(at("draft=d1"), "/studio?draft=d1&sort=title")).toBe(true);
+  });
+
+  it("leaves a view change that also moves a panel, or a server panel, to the server", () => {
+    expect(browserViewMove(at("draft=d1"), "/studio?sort=title")).toBe(false);
+    expect(browserViewMove(at(""), "/studio?sort=title&job=j1")).toBe(false);
+    expect(browserViewMove(at("job=j1&shot=after"), "/studio?job=j1&shot=after&sort=title")).toBe(false);
+    expect(browserViewMove(at(""), "/studio?settings=1")).toBe(false);
+    expect(browserViewMove(at("?extend=graph"), "/studio?extend=graph&sort=title")).toBe(false);
+    expect(browserViewMove(at("stream=off"), "/studio?sort=title")).toBe(false);
+    expect(browserViewMove(at(""), "/studio/d/x?sort=title")).toBe(false);
   });
 
   it("drops every panel from a path and keeps the filters", () => {

@@ -1,7 +1,10 @@
-import Link from "next/link";
-import type { ReactNode } from "react";
+"use client";
+
+import type { FormEvent, ReactNode } from "react";
 
 import { MenuPopover } from "@/components/studio/MenuPopover";
+import { usePanelHost } from "@/components/studio/panel-host";
+import { PanelLink } from "@/components/studio/PanelLink";
 import { ChipLink } from "@/components/studio/StudioChrome";
 import { FIELD_TEXT } from "@/components/ui/classes";
 import {
@@ -20,18 +23,13 @@ import {
 /**
  * Search, the topic chips, Display and Sort.
  *
- * All of it server-rendered, and none of it a client component. Every control
- * here writes to the URL — the search box is a `GET` form, every option is a
- * link, and the popovers are `<details>` — which is the Linear rule the
- * research table adopted ("the set is encoded in the URL") taken to its
- * conclusion: if the view lives in the query string, nothing needs local state
- * to hold it, the back button works for free, and a filtered grid is a link
- * somebody can send.
- *
- * The popovers are `<details>` for the same reason: they open on click and on
- * Enter and are in the tab order with no script. `MenuPopover` is the one
- * client piece, and only adds closing on a choice, an outside press and Escape,
- * and one menu open at a time; the menus' contents stay server-rendered links.
+ * Every control writes to the URL, which is the Linear rule the research
+ * table adopted ("the set is encoded in the URL"): the back button works for
+ * free, and a filtered grid is a link somebody can send. Each option is a
+ * `PanelLink` and the search box a `GET` form, so with no script they are
+ * still links and a form. With it, `PanelHost` moves the URL in the browser
+ * (`browserViewMove`) and `StudioGrid` redraws from what the page already
+ * has, where each one used to be a server render of two seconds or more.
  */
 
 /** The hidden inputs that make a `GET` form preserve the rest of the view. */
@@ -55,12 +53,18 @@ function ViewFields({ view }: { view: StudioView }) {
 
 /** 240px, the width the design gives it, and a plain form so it needs no JS. */
 export function SearchField({ view }: { view: StudioView }) {
+  const host = usePanelHost();
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    const query = String(new FormData(event.currentTarget).get("q") ?? "").trim();
+    if (host?.navigate(studioHref(view, { query, selected: null }))) event.preventDefault();
+  }
   return (
-    <form action="/studio" method="get" className="shrink-0">
+    <form action="/studio" method="get" onSubmit={onSubmit} className="shrink-0">
       <ViewFields view={view} />
       <input
         type="search"
         name="q"
+        key={view.query}
         defaultValue={view.query}
         placeholder="Search diagrams"
         aria-label="Search diagrams"
@@ -230,9 +234,8 @@ function MenuLink({
   children: ReactNode;
 }) {
   return (
-    <Link
+    <PanelLink
       href={href}
-      scroll={false}
       className={`flex h-8 items-center gap-2 rounded-md px-2 text-xs transition-colors ${
         active
           ? "bg-[var(--nav-active-bg)] font-medium text-[var(--accent-strong)]"
@@ -243,6 +246,6 @@ function MenuLink({
         {active ? "✓" : ""}
       </span>
       {children}
-    </Link>
+    </PanelLink>
   );
 }
