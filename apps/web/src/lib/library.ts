@@ -1,6 +1,7 @@
 import type { MasteryLabel } from "@self-learn/catalog/state";
 
 import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
+import { safeNextPath } from "@/lib/auth/core";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
@@ -539,4 +540,26 @@ export function explainedConcepts(
 /** Where a concept's workspace lives (phase 1c's `/learn/[concept]`). */
 export function conceptHref(slug: string): string {
   return `/learn/${encodeURIComponent(slug)}`;
+}
+
+/**
+ * Where an asset page's back link goes, and what it says.
+ *
+ * A studio video opens here, and the page had no way back but the browser's:
+ * the studio passes the view it was opened from as `from`, and the link
+ * returns to it with its filters. Only a path on `/studio` is taken, and only
+ * one `safeNextPath` keeps as it is, so the parameter cannot send the link off
+ * the site. Anything else, a course page's link included, goes up to the
+ * library.
+ */
+export function assetBackLink(from: string | string[] | undefined): { href: string; label: string } {
+  const raw = Array.isArray(from) ? from[0] : from;
+  if (typeof raw === "string" && safeNextPath(raw) === raw) {
+    // Resolved the way the browser will, so a `..` cannot leave the studio.
+    const target = new URL(raw, "http://gnosia.invalid");
+    if (target.origin === "http://gnosia.invalid" && (target.pathname === "/studio" || target.pathname.startsWith("/studio/"))) {
+      return { href: `${target.pathname}${target.search}`, label: "Studio" };
+    }
+  }
+  return { href: "/library", label: "Library" };
 }

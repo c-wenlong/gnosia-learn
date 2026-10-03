@@ -1,13 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import { createApi } from "./api";
+import { agentSettingsView, createApi } from "./api";
 import type { SpendEntry } from "./cost";
 import { Drafts } from "./drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
 import { ManualSource } from "./manual/source";
 import { Mirrors } from "./mirrors";
 import { HealthProbes } from "./health-probes";
+import { Listings } from "./listings";
 import { DraftPruner } from "./prune";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
@@ -153,7 +154,10 @@ async function main(): Promise<void> {
   // health call finds answers and no call after it waits on a subprocess.
   const probes = new HealthProbes();
   probes.warm();
-  const server = createApi({ store, runner, mirrors, drafts, video: { store: videoStore, runner: videoRunner, doctor: videoDoctor }, probes });
+  probes.settingsView(agentSettingsView).warm();
+  const listings = new Listings();
+  listings.warm();
+  const server = createApi({ store, runner, mirrors, drafts, video: { store: videoStore, runner: videoRunner, doctor: videoDoctor }, probes, listings });
   server.listen(PORT, HOST, () => {
     process.stdout.write(
       `studio on http://${HOST}:${PORT}\n` +
