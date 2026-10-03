@@ -108,9 +108,11 @@ export function LibraryToolbar({
 
   return (
     <section aria-label="Filters" className="flex flex-wrap items-center gap-2">
-      {/* Never shrinks: a squeezed group would let its pills spill over the
-          search. When the two halves cannot share a line, the right one wraps. */}
-      <div role="group" aria-label="Filter by kind and course" className="flex shrink-0 flex-wrap items-center gap-2">
+      {/* From 768px it never shrinks: a squeezed group would let its pills
+          spill over the search, so when the two halves cannot share a line the
+          right one wraps instead. It is never wider than the row, so on a
+          phone its pills wrap inside it rather than scrolling the page. */}
+      <div role="group" aria-label="Filter by kind and course" className="flex max-w-full flex-wrap items-center gap-2 md:shrink-0">
         {menus.map(menu)}
       </div>
       <div className="flex w-full min-w-0 items-center justify-end gap-2 md:w-auto md:min-w-min md:flex-1">
