@@ -36,7 +36,7 @@ import { readStudioAgents } from "@/lib/studio-agents";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
 import { diagramAvailability, videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
-import { filterVideos, gridSections, readVideos, sortVideos } from "@/lib/studio-video";
+import { filterVideos, gridSections, readVideos, sectionItems, sortVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   filterDiagrams,
@@ -51,6 +51,7 @@ import {
   studioHref,
   titleOf,
   topicChips,
+  type Diagram,
   type DiagramListing,
   type RawParams,
 } from "@/lib/studio-view";
@@ -246,6 +247,11 @@ export default async function StudioPage({
   // Extend patches this view, so the filters are there when the panel closes.
   const extendFrom = (name: string) => panelHref(path, { extend: name, selected: null, job: null, draft: null });
   const dialog = view.shot !== null ? null : panelFor();
+  // What Sort compares on a diagram, so its tiles and the videos share one order.
+  const sortKey = (diagram: Diagram) => ({
+    title: displayTitle(diagram),
+    time: view.sort === "created" ? diagram.created : diagram.tldr.modified,
+  });
 
   function panelFor() {
     if (view.settings && agents !== null) {
@@ -414,37 +420,39 @@ export default async function StudioPage({
                         {/* A new diagram or video being made sits beside the way in. */}
                         {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="grid" />}
                         {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />}
-                        {section.videos.map((video) => (
-                          <VideoTile key={video.slug} video={video} path={path} />
-                        ))}
-                        {section.diagrams.map((diagram) => (
-                          <DiagramTile
-                            key={diagram.name}
-                            diagram={diagram}
-                            path={path}
-                            selectHref={studioHref(view, { selected: diagram.name })}
-                            extendHref={extendFrom(diagram.name)}
-                            showConcepts={view.chips}
-                          />
-                        ))}
+                        {sectionItems(section, view, sortKey).map((entry) =>
+                          entry.kind === "video" ? (
+                            <VideoTile key={`video:${entry.item.slug}`} video={entry.item} path={path} />
+                          ) : (
+                            <DiagramTile
+                              key={`diagram:${entry.item.name}`}
+                              diagram={entry.item}
+                              path={path}
+                              selectHref={studioHref(view, { selected: entry.item.name })}
+                              extendHref={extendFrom(entry.item.name)}
+                              showConcepts={view.chips}
+                            />
+                          ),
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-0.5">
                         {at === 0 && <PlusCard path={path} layout="list" />}
                         {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="list" />}
                         {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />}
-                        {section.videos.map((video) => (
-                          <VideoRow key={video.slug} video={video} path={path} />
-                        ))}
-                        {section.diagrams.map((diagram) => (
-                          <DiagramRow
-                            key={diagram.name}
-                            diagram={diagram}
-                            path={path}
-                            selectHref={studioHref(view, { selected: diagram.name })}
-                            showConcepts={view.chips}
-                          />
-                        ))}
+                        {sectionItems(section, view, sortKey).map((entry) =>
+                          entry.kind === "video" ? (
+                            <VideoRow key={`video:${entry.item.slug}`} video={entry.item} path={path} />
+                          ) : (
+                            <DiagramRow
+                              key={`diagram:${entry.item.name}`}
+                              diagram={entry.item}
+                              path={path}
+                              selectHref={studioHref(view, { selected: entry.item.name })}
+                              showConcepts={view.chips}
+                            />
+                          ),
+                        )}
                       </div>
                     )}
                   </section>
