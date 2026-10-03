@@ -80,6 +80,13 @@ export function rankAsk(query: string, entries: readonly AskEntry[], limit = 8):
     .map((s) => s.entry);
 }
 
+/**
+ * The session storage key the Ask box sets to the subject when the owner picks
+ * the tutor, and `/ask` reads once: the chat starts on its own only when the
+ * owner asked for it here, never from a link (H4 of the Home proposal).
+ */
+export const ASK_START_KEY = "ask:start";
+
 /** Where a miss goes: a tutor chat on the text as typed. */
 export function askTutorHref(query: string): string {
   return `/ask?q=${encodeURIComponent(query.trim().slice(0, MAX_ASK_QUERY))}`;

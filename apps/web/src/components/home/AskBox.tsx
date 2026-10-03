@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
-import { askTutorHref, MAX_ASK_QUERY, type AskEntry, type AskKind } from "@/lib/ask-core";
+import { ASK_START_KEY, askTutorHref, MAX_ASK_QUERY, type AskEntry, type AskKind } from "@/lib/ask-core";
 
 /** How long typing pauses before the box asks. */
 const DEBOUNCE_MS = 150;
@@ -26,13 +26,18 @@ type Option = { key: string; href: string; entry: AskEntry | null };
  *
  * An ARIA combobox: the input owns a listbox, arrows move
  * `aria-activedescendant`, Escape closes the list and then clears the text.
+ * Matches are drawn only for the text they were asked for, so an Enter while
+ * the next answer is on its way opens the tutor rather than the last text's
+ * match. Choosing the tutor marks the subject as asked from here, which is
+ * what lets `/ask` start the chat without another press (a link from
+ * anywhere else waits for one: a turn is paid for with the owner's keys).
  */
 export function AskBox() {
   const router = useRouter();
   const id = useId();
   const listId = `${id}-list`;
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<AskEntry[]>([]);
+  const [found, setFound] = useState<{ query: string; results: AskEntry[] }>({ query: "", results: [] });
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const latest = useRef(0);
@@ -42,7 +47,7 @@ export function AskBox() {
     trimmed.length < 2
       ? []
       : [
-          ...results.map((entry) => ({ key: entry.key, href: entry.href, entry })),
+          ...(found.query === trimmed ? found.results : []).map((entry) => ({ key: entry.key, href: entry.href, entry })),
           { key: "tutor", href: askTutorHref(trimmed), entry: null },
         ];
 
@@ -55,7 +60,7 @@ export function AskBox() {
         .then((r) => (r.ok ? r.json() : { results: [] }))
         .then((data: { results?: AskEntry[] }) => {
           if (mine !== latest.current) return;
-          setResults(Array.isArray(data.results) ? data.results : []);
+          setFound({ query: trimmed, results: Array.isArray(data.results) ? data.results : [] });
           setActive(0);
         })
         .catch(() => {
@@ -71,6 +76,13 @@ export function AskBox() {
   const go = (option: Option | undefined) => {
     if (option === undefined) return;
     setOpen(false);
+    if (option.entry === null) {
+      try {
+        window.sessionStorage.setItem(ASK_START_KEY, trimmed);
+      } catch {
+        // Without storage the chat waits for a press, which still works.
+      }
+    }
     router.push(option.href);
   };
 
@@ -95,7 +107,7 @@ export function AskBox() {
         onChange={(e) => {
           setQuery(e.target.value);
           setOpen(true);
-          if (e.target.value.trim().length < 2) setResults([]);
+          setActive(0);
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
@@ -107,10 +119,14 @@ export function AskBox() {
             const step = e.key === "ArrowDown" ? 1 : -1;
             setActive((i) => (Math.min(i, options.length - 1) + step + options.length) % options.length);
           } else if (e.key === "Enter") {
-            if (options.length === 0) return;
+            // The Enter that confirms an input method's candidate is not a choice.
+            if (e.nativeEvent.isComposing || options.length === 0) return;
             e.preventDefault();
             go(activeOption ?? options[0]);
           } else if (e.key === "Escape") {
+            // A search field clears itself on Escape; this one closes the
+            // list first, and clears only on the second press.
+            e.preventDefault();
             if (showList) setOpen(false);
             else setQuery("");
           }

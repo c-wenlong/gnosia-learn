@@ -733,6 +733,21 @@ async function run() {
     // No provider key in this run: the tutor's first turn names the gap.
     await main.getByRole('alert').getByText(/no model provider key (is set|yet)\. Add one in Settings/i).waitFor();
     await main.getByRole('button', { name: 'Try again' }).waitFor();
+
+    // A link from anywhere else waits for Start: a turn is paid for.
+    let asked = false;
+    const watch = (r) => {
+      if (new URL(r.url()).pathname === '/api/agent/chat') asked = true;
+    };
+    page.on('request', watch);
+    await go('/ask?q=a%20linked%20subject');
+    const begin = main.getByRole('button', { name: 'Start', exact: true });
+    await hydrated(page, begin);
+    assert(!asked, 'the linked page sent a turn before Start');
+    await begin.click();
+    await main.getByRole('alert').getByText(/no model provider key/i).waitFor();
+    page.off('request', watch);
+    assert(asked, 'Start sent no turn');
   });
 
   if (SEED) skip('library: first video plays and saves its place', 'the seed has no videos (D7)');

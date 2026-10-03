@@ -7,6 +7,7 @@ import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Composer } from "@/components/ui/Composer";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
+import { ASK_START_KEY } from "@/lib/ask-core";
 import { trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
 
 interface ChatReply {
@@ -28,16 +29,21 @@ function errorFor(status: number, data: ChatReply): string {
  * on a subject nothing in the catalog covers, reached from Home's Ask box.
  *
  * It opens by asking for the subject itself, so the tutor's first turn is its
- * question about where the learner starts. The thread lives in this page's
- * state and nowhere else: it is not saved and records no mastery (H4), which
- * the page says above the chat. A failed turn stays on screen with Try again,
- * which resends the same thread.
+ * question about where the learner starts. It sends that opening on its own
+ * only when the Ask box sent the owner here (`ASK_START_KEY`, read once);
+ * from a link or a reload it waits for Start, since every turn is paid for
+ * with the owner's provider keys and a link can come from anywhere. The
+ * thread lives in this page's state and nowhere else: it is not saved and
+ * records no mastery (H4), which the page says above the chat. A failed turn
+ * stays on screen with Try again, which resends the same thread.
  */
 export function OpenTutorChat({ subject }: { subject: string }) {
   const [turns, setTurns] = useState<TutorTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Null until the browser has said whether the Ask box asked for this subject. */
+  const [waiting, setWaiting] = useState<boolean | null>(null);
   const started = useRef(false);
 
   const send = useCallback(
@@ -74,13 +80,38 @@ export function OpenTutorChat({ subject }: { subject: string }) {
     void send(thread);
   };
 
-  useEffect(() => {
+  const start = useCallback(() => {
     if (started.current) return;
     started.current = true;
+    setWaiting(false);
     const opening: TutorTurn[] = [{ role: "user", content: `I want to learn about ${subject}.` }];
     setTurns(opening);
     void send(opening);
   }, [send, subject]);
+
+  useEffect(() => {
+    let asked = false;
+    try {
+      asked = window.sessionStorage.getItem(ASK_START_KEY) === subject;
+      window.sessionStorage.removeItem(ASK_START_KEY);
+    } catch {
+      // No storage: wait for Start.
+    }
+    if (asked) start();
+    // What session storage said is only known here, after hydration, so the
+    // first render draws neither the chat nor Start.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    else setWaiting(true);
+  }, [start, subject]);
+
+  if (waiting) {
+    return (
+      <div className="flex flex-col items-start gap-3">
+        <p className="text-[14px] text-text2">The tutor starts by asking where you are with it.</p>
+        <Button onClick={start}>Start</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5">
