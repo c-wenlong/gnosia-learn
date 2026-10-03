@@ -1,7 +1,8 @@
 # Proposal: Home replaces Today
 
 Status: accepted, 2026-10-04, and being built in phases. Decisions H1 to H3
-are the owner's and settled. Phases 1 and 2 are built; phase 3 is not.
+are the owner's and settled; H4 is a default the build chose and the owner
+may overturn. All three phases are built.
 
 ## The problem
 
@@ -40,6 +41,13 @@ plugin does not call it (checked), so nothing outside the repository breaks.
 call, 2026-10-04. SM-2, the `review` table and `review due --json` stay as
 they are. The options are under "Recall" below.
 
+**H4. The open tutor records nothing (a default, for the owner to confirm).**
+The Ask box's miss opens a tutor chat at `/ask` that is not saved and moves no
+mastery: with no concept row there is nowhere to put either, and drafting a
+concept from a chat is a bigger feature than the box. The page says so above
+the chat. Drafting a concept from the chat, so a miss can become a note with
+mastery, is the follow-up if this proves too forgetful.
+
 ## The page
 
 Four parts, top to bottom. The phone layout is the same column.
@@ -50,9 +58,11 @@ A box at the top: "What do you want to learn?". Typing searches concepts,
 courses and the library by title. Picking a result opens it. When nothing
 matches, Enter starts a tutor chat on the text as typed. This is the entry
 for learning whatever comes to mind, and it is the largest piece, so it ships
-last. Open question for phase 3: a tutor chat on a topic with no concept row
-cannot record mastery (`event.concept_slug` is a foreign key), so the chat
-either drafts a concept first or stays unrecorded until one exists.
+last. A tutor chat on a topic with no concept row cannot record mastery
+(`event.concept_slug` is a foreign key); phase 3 leaves it unrecorded (H4).
+The list always ends with "Ask the tutor about ..." so the box never
+dead-ends, and the search reads titles only (with a course's code and a
+concept's slug as aliases).
 
 ### 2. Pick up where you left off (phase 1)
 

@@ -710,6 +710,31 @@ async function run() {
     assert(titles.join('|') === sorted.join('|'), `the list is not in title order: ${titles.slice(0, 5).join(', ')}`);
   });
 
+  await step('ask: the box finds a concept, and a miss opens the tutor', page, async () => {
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    await go('/home');
+    const box = main.getByRole('combobox', { name: 'What do you want to learn?' });
+    await hydrated(page, box);
+    // The concept's slug as words: the box matches it as an alias of the title.
+    await box.fill(state.concept.replace(/-/g, ' '));
+    const matches = page.getByRole('listbox', { name: 'Matches' });
+    // A match, then the tutor option the list always ends with.
+    await page.waitForFunction(() => document.querySelectorAll('[role=listbox] [role=option]').length > 1);
+    await matches.getByRole('option').first().click();
+    await page.waitForURL(`${base}/learn/${state.concept}`);
+
+    await go('/home');
+    await hydrated(page, box);
+    await box.fill('qzx nothing in the seed is called this');
+    await matches.getByRole('option', { name: /^Ask the tutor about/ }).waitFor();
+    await box.press('Enter');
+    await page.waitForURL(/\/ask\?q=qzx/);
+    await main.getByText('This chat is not saved', { exact: false }).waitFor();
+    // No provider key in this run: the tutor's first turn names the gap.
+    await main.getByRole('alert').getByText(/no model provider key (is set|yet)\. Add one in Settings/i).waitFor();
+    await main.getByRole('button', { name: 'Try again' }).waitFor();
+  });
+
   if (SEED) skip('library: first video plays and saves its place', 'the seed has no videos (D7)');
   else await step('library: first video plays and saves its place', page, async () => {
     await go('/library');
