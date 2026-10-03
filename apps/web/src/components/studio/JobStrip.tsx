@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { useStudioPath } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import {
@@ -40,7 +41,9 @@ import { useElapsed } from "@/lib/use-elapsed";
  * and the second press finds the job already stopping.
  */
 
-export function JobStrip({ path, stream = true }: { path: string; stream?: boolean }) {
+export function JobStrip({ path: drawnFor, stream = true }: { path: string; stream?: boolean }) {
+  // The address bar's view on `/studio`, which can move on from the server's.
+  const path = useStudioPath(drawnFor);
   const { active, lastWatched, jobs, dismissed, dismiss, connection, post, setStreamEnabled } =
     useStudioJobs();
 

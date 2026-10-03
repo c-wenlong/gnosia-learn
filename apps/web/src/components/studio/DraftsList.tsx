@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
+import { useStudioPath } from "@/components/studio/panel-host";
 import { KIND_NAME } from "@/lib/studio-cards";
 import { draftRows, LIST_LIMIT, LIST_ROWS, LISTED_STATES } from "@/lib/studio-draft-list";
 import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
@@ -27,7 +28,7 @@ import { conversationHref, relativeTime } from "@/lib/studio-view";
  */
 export function DraftsList({
   initial,
-  path,
+  path: drawnFor,
   titles,
 }: {
   /** What the page read, or null when the runner did not answer. */
@@ -36,6 +37,8 @@ export function DraftsList({
   /** Diagram titles by name, for a draft that extends one and has no words yet. */
   titles: Readonly<Record<string, string>>;
 }) {
+  // The address bar's view, which can move on from the one the page was drawn for.
+  const path = useStudioPath(drawnFor);
   const [fresh, setFresh] = useState<{ base: string; drafts: DraftSummary[] } | null>(null);
   const [open, setOpen] = useState(false);
   // A read from here stands until the page reads something different: a
