@@ -172,3 +172,19 @@ export function setLastVisited(
     lastVisited: { courseSlug, moduleSlug, at: new Date().toISOString() },
   };
 }
+
+/**
+ * Set one course aside, or bring it back. The list keeps the order courses
+ * were set aside in; bringing back a course that is already active, or
+ * setting aside one already inactive, returns the state unchanged.
+ */
+export function setCourseActive(state: LearnerState, courseSlug: string, active: boolean): LearnerState {
+  const inactive = state.inactiveCourses.includes(courseSlug);
+  if (active !== inactive) return state;
+  return {
+    ...state,
+    inactiveCourses: active
+      ? state.inactiveCourses.filter((slug) => slug !== courseSlug)
+      : [...state.inactiveCourses, courseSlug],
+  };
+}

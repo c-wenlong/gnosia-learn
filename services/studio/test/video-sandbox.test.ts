@@ -1,5 +1,5 @@
-import { execFile, execFileSync } from "node:child_process";
-import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
+import { closeSync, existsSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -15,6 +15,7 @@ import { posterArgs } from "../src/video/gate";
 import { WORKED_HEADER, WORKED_NARRATED, WORKED_TABLE } from "../src/video/manual";
 import { clipKeys, wordsName } from "../src/video/seed";
 import { discoverToolchain, toolchainProblems, type Toolchain } from "../src/video/toolchain";
+import { wrapperConfig, writeWrapper } from "../src/video/wrapper";
 
 /**
  * The sandbox, measured: both hostile scenes blocked on every probe; the
@@ -336,6 +337,28 @@ describe("the video sandbox", () => {
       server.close();
     }
   }, 120_000);
+
+  it("answers through its wrapper when its standard streams are a file the profiles refuse to read", async (context) => {
+    if (skip !== "" || tools === null) return context.skip(skip);
+    // Claude Code 2.1.287 runs Bash with stdout and stderr on a file under the
+    // temporary directory, which every profile denies. manimkc's Python
+    // tolerates inheriting that; the wrapper hands its steps pipes anyway.
+    const config = wrapperConfig({ tools: run.tools, paths: run.paths, home, voice: "af_heart", scenes: [], apiNames: [], narrated: false });
+    await writeWrapper(run.tools.node, run.paths, config);
+    const out = path.join(root, "bash-output.txt");
+    const fd = openSync(out, "w");
+    const callsBefore = existsSync(run.paths.calls) ? readFileSync(run.paths.calls, "utf8") : null;
+    try {
+      const result = spawnSync(run.paths.wrapper, ["api"], { env: { PATH: "/usr/bin:/bin" }, stdio: ["ignore", fd, fd], timeout: 120_000 });
+      const text = readFileSync(out, "utf8");
+      expect(result.status, text.slice(-1500)).toBe(0);
+      expect(text).toContain("labeled_box");
+    } finally {
+      closeSync(fd);
+      if (callsBefore === null) rmSync(run.paths.calls, { force: true });
+      else writeFileSync(run.paths.calls, callsBefore);
+    }
+  }, 150_000);
 
   it("voices a line of shell words under the narration profile, and reaches nothing else", async (context) => {
     if (skip !== "") return context.skip(skip);

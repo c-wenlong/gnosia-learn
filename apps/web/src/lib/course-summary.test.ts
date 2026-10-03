@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Course, TagMeta } from "@/lib/types";
 
 import {
+  activeOnly,
   ALL_COURSES,
   continueLearning,
   courseStatus,
@@ -11,8 +12,9 @@ import {
   coverVersion,
   filterCourses,
   isInProgress,
-  toCourseSummary,
+  splitByActive,
   tagFilterOptions,
+  toCourseSummary,
   usedTags,
 } from "./course-summary";
 
@@ -166,9 +168,32 @@ describe("continueLearning", () => {
     expect(continueLearning([twin, graphics], both).map((e) => e.summary.slug)).toEqual(["cp4283", "cp4281"]);
   });
 
+  it("leaves out a course set aside, however far along", () => {
+    expect(continueLearning(all, done, undefined, "cp4281", ["cp4281"]).map((e) => e.summary.slug)).toEqual([
+      "cp4282",
+    ]);
+  });
+
   it("carries the next topic and its module", () => {
     const [entry] = continueLearning([graphics], { "cp4281-m1-t1": true, "cp4281-m1-t2": true });
     expect(entry.status.next).toMatchObject({ title: "Barycentric", moduleSlug: "m2", moduleTitle: "Module 2" });
+  });
+});
+
+describe("activeOnly and splitByActive", () => {
+  const courses = [{ slug: "a" }, { slug: "b" }, { slug: "c" }];
+
+  it("keeps every course when none is set aside", () => {
+    expect(activeOnly(courses, [])).toEqual(courses);
+    expect(splitByActive(courses, [])).toEqual({ active: courses, inactive: [] });
+  });
+
+  it("splits in the order given, ignoring a slug no course has", () => {
+    expect(activeOnly(courses, ["c", "a", "gone"])).toEqual([{ slug: "b" }]);
+    expect(splitByActive(courses, ["c", "a", "gone"])).toEqual({
+      active: [{ slug: "b" }],
+      inactive: [{ slug: "a" }, { slug: "c" }],
+    });
   });
 });
 

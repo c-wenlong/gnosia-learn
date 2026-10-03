@@ -89,7 +89,8 @@ export interface AgentInit {
   model: string | null;
 }
 
-export type StopReason = "attempt-timeout" | "idle-timeout" | "cancelled" | null;
+/** `dead-tools`: the video runner stopped a session whose wrapper calls show tools that cannot start (`video/dead-tools.ts`). */
+export type StopReason = "attempt-timeout" | "idle-timeout" | "cancelled" | "dead-tools" | null;
 
 export interface AgentOutcome {
   exitCode: number | null;

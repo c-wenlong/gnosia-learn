@@ -53,6 +53,21 @@ export interface VideoDoctorReport {
   voices: string[];
   checks: VideoDoctorCheck[];
   checkedAt: string;
+  /**
+   * The last job of this tool the runner stopped because its tools could not
+   * start (V26), when there was one since the studio started. It does not
+   * change `ok`. The checks above passed while that job's every call died, so
+   * no passing run could ever clear a failure it set, only a restart; and a
+   * job is stopped after three dead calls now, so the next one costs little
+   * to try.
+   */
+  toolchainStop?: ToolchainStop | null;
+}
+
+export interface ToolchainStop {
+  jobId: string;
+  at: string;
+  detail: string;
 }
 
 /**
@@ -236,13 +251,34 @@ export class VideoDoctor {
     this.check = check;
   }
 
+  private stopped: ToolchainStop | null = null;
+
   current(): VideoDoctorReport | null {
-    return this.last;
+    return this.last === null ? null : this.withStop(this.last);
+  }
+
+  /**
+   * A job of this tool was stopped because its tools could not start: health
+   * reports it beside the checks, and the checks run again now rather than
+   * at the next ten-minute refresh, in case they can see it. Always a run
+   * that starts after the stop: one already in flight began before it, so a
+   * forced report would only join that one, and its verdict would stand
+   * until the next refresh. The new run is queued behind it instead.
+   */
+  noteToolchainStop(stop: ToolchainStop): void {
+    this.stopped = stop;
+    const inFlight = this.running;
+    if (inFlight === null) void this.report(true);
+    else void inFlight.finally(() => this.report(true)).catch(() => undefined);
+  }
+
+  private withStop(report: VideoDoctorReport): VideoDoctorReport {
+    return this.stopped === null ? report : { ...report, toolchainStop: this.stopped };
   }
 
   async report(force = false): Promise<VideoDoctorReport> {
     const fresh = this.last !== null && Date.now() - Date.parse(this.last.checkedAt) < VIDEO_DOCTOR_TTL_MS;
-    if (fresh && !force) return this.last!;
+    if (fresh && !force) return this.withStop(this.last!);
     this.running ??= this.check()
       .catch((error: unknown): VideoDoctorReport => ({
         ok: false,
@@ -260,7 +296,7 @@ export class VideoDoctor {
       .finally(() => {
         this.running = null;
       });
-    return this.running;
+    return this.running.then((report) => this.withStop(report));
   }
 
   start(): void {

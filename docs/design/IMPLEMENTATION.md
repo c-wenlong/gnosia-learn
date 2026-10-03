@@ -662,6 +662,20 @@ where Coursera names the partner, the title, and the type line
 started). The whole card links to `/courses/<slug>`. Four across at 1392px
 (280px minimum), two on a phone.
 
+**Inactive courses** (2026-10-04, the owner's call: ten courses crowded the
+page when only a semester's three are being studied). Each cover card carries
+Deactivate on its cover's corner, shown on hover or focus with a mouse and
+always on a touch screen; it sits beside the card's link, not inside it. A
+deactivated course leaves the grid for an **Inactive courses** section under
+it, folded shut with its count, where the same corner button says Activate.
+It also leaves Continue learning, here and on Today, and the tags only it
+used leave the tag menu. A search or a tag opens the fold whenever an
+inactive course matches, and its toggle still closes it; a fold closed by
+hand opens again on the next search or tag. The list is the
+`inactiveCourses` preference (an array of slugs, absent meaning every course
+is active, so a new course starts active), written through
+`POST /api/learner/preference`.
+
 The covers are stock photos (960x540 WebP) kept in the blob store: the course
 row names each by its blob key with its credit beside it (`catalog course
 cover`, services/catalog/SCHEMA.md "Course covers"), `getCourseCovers()` in

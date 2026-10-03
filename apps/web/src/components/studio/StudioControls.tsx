@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { MenuPopover } from "@/components/studio/MenuPopover";
 import { ChipLink } from "@/components/studio/StudioChrome";
 import { FIELD_TEXT } from "@/components/ui/classes";
 import {
@@ -27,11 +28,10 @@ import {
  * to hold it, the back button works for free, and a filtered grid is a link
  * somebody can send.
  *
- * `<details>` as the popover is the same trade. It opens on click and on
- * Enter, it is in the tab order, and it closes when an option is chosen
- * because choosing one navigates. What it does not do is close on an outside
- * click, which is a real loss and a small one next to a client boundary around
- * every control on the strip.
+ * The popovers are `<details>` for the same reason: they open on click and on
+ * Enter and are in the tab order with no script. `MenuPopover` is the one
+ * client piece, and only adds closing on a choice, an outside press and Escape,
+ * and one menu open at a time; the menus' contents stay server-rendered links.
  */
 
 /** The hidden inputs that make a `GET` form preserve the rest of the view. */
@@ -96,7 +96,7 @@ export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioVi
         </ChipLink>
       ))}
       {overflow.length > 0 && (
-        <Popover label={`+${overflow.length}`}>
+        <MenuPopover label={`+${overflow.length}`}>
           <MenuSection title="More topics">
             {overflow.map((chip) => (
               <MenuLink
@@ -109,9 +109,10 @@ export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioVi
               </MenuLink>
             ))}
           </MenuSection>
-        </Popover>
+        </MenuPopover>
       )}
-      {untopiced !== undefined && (
+      {/* At zero it would filter to nothing; shown while on, so it can be turned off. */}
+      {untopiced !== undefined && (untopiced.count > 0 || view.topics.includes(NO_TOPIC)) && (
         <ChipLink
           href={studioHref(toggleTopic(view, NO_TOPIC), { selected: null })}
           active={view.topics.includes(NO_TOPIC)}
@@ -136,7 +137,7 @@ export function DisplayMenu({ view }: { view: StudioView }) {
     ["list", "List"],
   ];
   return (
-    <Popover label="Display">
+    <MenuPopover label="Display">
       <MenuSection title="Group by">
         {groups.map(([value, label]) => (
           <MenuLink key={value} href={studioHref(view, { group: value })} active={view.group === value}>
@@ -156,7 +157,7 @@ export function DisplayMenu({ view }: { view: StudioView }) {
           Concept chips
         </MenuLink>
       </MenuSection>
-    </Popover>
+    </MenuPopover>
   );
 }
 
@@ -179,7 +180,7 @@ export function SortMenu({ view }: { view: StudioView }) {
     ["asc", view.sort === "title" ? "A to Z" : "Oldest first"],
   ];
   return (
-    <Popover label="Sort">
+    <MenuPopover label="Sort">
       <MenuSection title="Sort by">
         {sorts.map(([value, label, direction]) => (
           <MenuLink
@@ -202,27 +203,11 @@ export function SortMenu({ view }: { view: StudioView }) {
           </MenuLink>
         ))}
       </MenuSection>
-    </Popover>
+    </MenuPopover>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-
-function Popover({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <details className="relative shrink-0">
-      <summary className="inline-flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium transition-colors hover:bg-[var(--surface-hover)] [&::-webkit-details-marker]:hidden">
-        {label}
-        <span aria-hidden className="text-[var(--muted)]">
-          ▾
-        </span>
-      </summary>
-      <div className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-1.5 shadow-lg">
-        {children}
-      </div>
-    </details>
-  );
-}
 
 function MenuSection({ title, children }: { title: string; children: ReactNode }) {
   return (
