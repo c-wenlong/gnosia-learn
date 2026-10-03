@@ -10,6 +10,7 @@ import {
   CHANGE_LIMIT,
   filterVideos,
   gridSections,
+  sectionItems,
   sortVideos,
   videoGroupKey,
   libraryHref,
@@ -640,6 +641,22 @@ describe("videos among the grid's groups", () => {
       "Networking: tcp | old",
       "No topic: scribble | loose,undated",
     ]);
+  });
+
+  it("orders a section's diagrams and videos together, so a video does not always come first", () => {
+    const drawn = [
+      { name: "b-mid", title: "Banana", modified: "2026-09-15T00:00:00.000Z" },
+      { name: "y-newest", title: "Yak", modified: "2026-09-25T00:00:00.000Z" },
+      { name: "undrawn", title: "Lemon", modified: null },
+    ];
+    const keyOf = (d: (typeof drawn)[number]) => ({ title: d.title, time: d.modified });
+    const names = (sort: "modified" | "title", direction: "asc" | "desc") =>
+      sectionItems({ diagrams: drawn, videos: list }, { sort, direction }, keyOf).map((entry) =>
+        entry.kind === "video" ? entry.item.slug : entry.item.name,
+      );
+    expect(names("modified", "desc")).toEqual(["y-newest", "new", "b-mid", "loose", "old", "undated", "undrawn"]);
+    expect(names("modified", "asc")).toEqual(["old", "loose", "b-mid", "new", "y-newest", "undated", "undrawn"]);
+    expect(names("title", "asc")).toEqual(["new", "b-mid", "undated", "undrawn", "loose", "y-newest", "old"]);
   });
 
   it("groups videos even when no diagram matches, and keeps one section with no grouping", () => {
