@@ -670,7 +670,8 @@ deactivated course leaves the grid for an **Inactive courses** section under
 it, folded shut with its count, where the same corner button says Activate.
 It also leaves Continue learning, here and on Today, and the tags only it
 used leave the chip row. A search or a tag opens the fold whenever an
-inactive course matches, so nothing is hidden behind it. The list is the
+inactive course matches, and its toggle still closes it; a fold closed by
+hand opens again on the next search or tag. The list is the
 `inactiveCourses` preference (an array of slugs, absent meaning every course
 is active, so a new course starts active), written through
 `POST /api/learner/preference`.

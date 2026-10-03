@@ -45,8 +45,8 @@ const LINK_FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus
  * - **Inactive courses**, folded shut under the grid: the courses the learner
  *   set aside with a card's Deactivate button (`inactiveCourses`, a
  *   preference). They leave Continue learning too, and a card's Activate
- *   brings one back. The section opens by itself while a search or tag is
- *   set, so a match is never hidden behind the fold.
+ *   brings one back. The section opens by itself when a search or tag
+ *   matches inside it, and its toggle still closes it.
  *
  * A client component because it filters as you type and because progress
  * comes from `LearnerProvider`, so a topic done on another page shows here
@@ -66,7 +66,9 @@ export function CourseList({
   const { state, setCourseActive } = useLearner();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CourseFilter>(ALL_COURSES);
-  const [inactiveOpen, setInactiveOpen] = useState(false);
+  // The fold's state as the learner set it, or null to follow the filter:
+  // shut, but open while a search or tag matches an inactive course.
+  const [inactiveOpen, setInactiveOpen] = useState<boolean | null>(null);
 
   const continuing = useMemo(
     () =>
@@ -92,7 +94,20 @@ export function CourseList({
   }, [tags, summaries, state.inactiveCourses, inactiveTotal, filter.tag]);
   const filtering = query.trim() !== "" || filter.tag !== null;
   const noMatch = shown.active.length === 0 && shown.inactive.length === 0;
-  const showInactive = inactiveOpen || (filtering && shown.inactive.length > 0);
+  const showInactive = inactiveOpen ?? (filtering && shown.inactive.length > 0);
+  // A fold closed by hand opens again for the next search or tag that
+  // matches inside it; one opened by hand stays open.
+  const refilter = () => {
+    if (inactiveOpen === false) setInactiveOpen(null);
+  };
+  const changeQuery = (next: string) => {
+    setQuery(next);
+    refilter();
+  };
+  const changeFilter = (next: CourseFilter) => {
+    setFilter(next);
+    refilter();
+  };
   const card = (s: CourseSummary, active: boolean) => (
     <CoverCard
       summary={s}
@@ -136,14 +151,14 @@ export function CourseList({
               aria-label="Filter by tag"
               className="-mx-4 flex min-w-0 flex-1 gap-2 overflow-x-auto px-4 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
             >
-              <Chip active={filter.tag === null} onClick={() => setFilter(ALL_COURSES)}>
+              <Chip active={filter.tag === null} onClick={() => changeFilter(ALL_COURSES)}>
                 All
               </Chip>
               {shownTags.map((t) => (
                 <Chip
                   key={t.id}
                   active={filter.tag === t.id}
-                  onClick={() => setFilter({ tag: filter.tag === t.id ? null : t.id })}
+                  onClick={() => changeFilter({ tag: filter.tag === t.id ? null : t.id })}
                 >
                   {t.label}
                 </Chip>
@@ -154,7 +169,7 @@ export function CourseList({
             label="Search courses"
             placeholder="Search courses"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => changeQuery(e.target.value)}
             className="w-full max-sm:order-first sm:ml-auto sm:w-[280px]"
           />
         </div>
@@ -169,8 +184,8 @@ export function CourseList({
               variant="secondary"
               size="sm"
               onClick={() => {
-                setQuery("");
-                setFilter(ALL_COURSES);
+                changeQuery("");
+                changeFilter(ALL_COURSES);
               }}
             >
               Clear search and tag
