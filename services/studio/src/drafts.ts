@@ -901,8 +901,13 @@ export class Drafts {
     return record;
   }
 
-  /** `state` may name several, comma-separated (`open,briefed`). */
-  list(filter: { state?: string; limit?: number; nonEmpty?: boolean } = {}): DraftSummaryView[] {
+  /**
+   * `state` may name several, comma-separated (`open,briefed`). `before` is
+   * the last row of the page before, by its `updated` and id, so a history
+   * longer than one page can be read a page at a time.
+   */
+  list(filter: { state?: string; limit?: number; nonEmpty?: boolean; before?: { updated: string; id: string } } = {}): DraftSummaryView[] {
+    const before = filter.before;
     const states =
       filter.state === undefined
         ? null
@@ -912,7 +917,15 @@ export class Drafts {
       .filter((record) => states === null || states.size === 0 || states.has(record.state))
       // Before the limit, so conversations never started cannot crowd real ones out.
       .filter((record) => filter.nonEmpty !== true || record.turns > 0)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      // Newest first, and by id where two share a time, so a page boundary
+      // between them neither repeats a row nor drops one.
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id))
+      .filter(
+        (record) =>
+          before === undefined ||
+          record.updatedAt < before.updated ||
+          (record.updatedAt === before.updated && record.id < before.id),
+      )
       .slice(0, filter.limit ?? 50)
       .map((record) => ({
         draftId: record.id,

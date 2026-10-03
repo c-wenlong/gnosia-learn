@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 
 import type { JobRow } from "@/components/studio/DiagramInspector";
 import { PanelHost } from "@/components/studio/PanelHost";
-import { DraftsList } from "@/components/studio/DraftsList";
+import { HomeComposer } from "@/components/studio/HomeComposer";
 import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { RenewLists } from "@/components/studio/RenewLists";
 import { StudioDialog } from "@/components/studio/StudioDialog";
+import { SidebarToggle } from "@/components/studio/StudioSidebar";
 import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import { Notice, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
@@ -33,7 +34,12 @@ import {
 } from "@/lib/studio-view";
 
 /**
- * `/studio`: the corpus.
+ * `/studio`: a composer to start a conversation, and the corpus under it.
+ *
+ * The home view (docs/STUDIO-CHAT-FIRST.md, "Home and the full-screen
+ * conversation"): a heading and the composer in the middle, then the
+ * diagrams and videos, with the conversations down the sidebar `PanelHost`
+ * draws beside it. Sending opens the conversation full screen.
  *
  * Reads the directory through the runner, never the `asset` table. That is the
  * whole reason this screen is not a second view of `/library`: the diagram
@@ -188,6 +194,8 @@ export default async function StudioPage({
   // both to say why the other side is not there rather than linking to a 404.
   const shown = view.shot !== null && view.job !== null ? await openShot(view.job) : null;
   const videoState = videoAvailability(health.data.video);
+  // A job's picture, full width, in place of the home view (the strip stays).
+  const shot = view.shot !== null && view.job !== null ? { jobId: view.job, which: view.shot } : null;
   const diagramState = diagramAvailability(health.data.diagramAgent);
 
   const topicOptions = topicOptionsOf(topics);
@@ -234,80 +242,91 @@ export default async function StudioPage({
         diagramAgent={diagramState}
         diagrams={listing.diagrams}
         jobs={jobRows}
+        drafts={drafts}
       >
-        <StudioStrip>
-          <StudioToolbar chips={chips} />
-        </StudioStrip>
-
-        <JobStrip path={path} stream={view.stream} />
-        {renewing && <RenewLists />}
-
-        {/* Said once: a view change in the browser drops the outcome from the URL. */}
-        {outcome !== null && view.selected === null && (
-          <WhileOutcome>
-            <VerbNotice report={outcome} clearHref={path} />
-          </WhileOutcome>
-        )}
-
-        {/* U5 and U3: both mean everything still works, so both are banners. */}
-        {/* D13: the topic list is the saved copy, or there is none. */}
-        {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
-        {health.data.stale && (
-          <Notice>
-            The tldrawkc page bundle is older than its source. Everything still runs; rebuild with{" "}
-            <span className="font-mono">(cd tools/tldrawkc &amp;&amp; npm run build)</span> when
-            convenient.
-          </Notice>
-        )}
-        {!health.data.postgres && (
-          <Notice>
-            Not connected to the catalog: browsing and drawing still work, and Accept waits for it,
-            since a diagram lands in the database.
-            {listing.stale === true && listing.readAt !== undefined && (
-              <> This list is the copy read at {new Date(listing.readAt).toLocaleString()}.</>
-            )}
-          </Notice>
-        )}
-        {/* U6: a document that will not parse has no tile, so this is the only
-            place it is visible. It used to be the empty inspector's content. */}
-        {listing.errors.length > 0 && (
-          <Notice tone="danger">
-            <details>
-              <summary className="cursor-pointer">
-                {listing.errors.length} diagram{listing.errors.length === 1 ? "" : "s"} could not be read and{" "}
-                {listing.errors.length === 1 ? "is" : "are"} not in the grid.
-              </summary>
-              <ul className="mt-1 space-y-1">
-                {listing.errors.map((problem) => (
-                  <li key={problem.path}>
-                    <span className="font-mono">{problem.path}</span>: {problem.message}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          </Notice>
-        )}
-
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {view.shot !== null && view.job !== null ? (
+          {/* The composer is the home view's; a picture takes its place. */}
+          {shot === null && (
+            <section aria-labelledby="studio-home" className="relative px-4 pb-10 pt-[max(2.5rem,12vh)]">
+              <SidebarToggle className="absolute left-2 top-2" />
+              <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-6">
+                <h1 id="studio-home" className="text-center font-display text-[28px] font-semibold leading-tight text-text md:text-[32px]">
+                  What shall we make?
+                </h1>
+                <HomeComposer path={path} video={videoState} />
+              </div>
+            </section>
+          )}
+
+          <StudioStrip>
+            {/* The picture has no home view above it, so the phone's toggle is here. */}
+            {shot !== null && <SidebarToggle />}
+            <StudioToolbar chips={chips} />
+          </StudioStrip>
+
+          <JobStrip path={path} stream={view.stream} />
+          {renewing && <RenewLists />}
+
+          {/* Said once: a view change in the browser drops the outcome from the URL. */}
+          {outcome !== null && view.selected === null && (
+            <WhileOutcome>
+              <VerbNotice report={outcome} clearHref={path} />
+            </WhileOutcome>
+          )}
+
+          {/* U5 and U3: both mean everything still works, so both are banners. */}
+          {/* D13: the topic list is the saved copy, or there is none. */}
+          {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
+          {health.data.stale && (
+            <Notice>
+              The tldrawkc page bundle is older than its source. Everything still runs; rebuild with{" "}
+              <span className="font-mono">(cd tools/tldrawkc &amp;&amp; npm run build)</span> when
+              convenient.
+            </Notice>
+          )}
+          {!health.data.postgres && (
+            <Notice>
+              Not connected to the catalog: browsing and drawing still work, and Accept waits for it,
+              since a diagram lands in the database.
+              {listing.stale === true && listing.readAt !== undefined && (
+                <> This list is the copy read at {new Date(listing.readAt).toLocaleString()}.</>
+              )}
+            </Notice>
+          )}
+          {/* U6: a document that will not parse has no tile, so this is the only
+              place it is visible. It used to be the empty inspector's content. */}
+          {listing.errors.length > 0 && (
+            <Notice tone="danger">
+              <details>
+                <summary className="cursor-pointer">
+                  {listing.errors.length} diagram{listing.errors.length === 1 ? "" : "s"} could not be read and{" "}
+                  {listing.errors.length === 1 ? "is" : "are"} not in the grid.
+                </summary>
+                <ul className="mt-1 space-y-1">
+                  {listing.errors.map((problem) => (
+                    <li key={problem.path}>
+                      <span className="font-mono">{problem.path}</span>: {problem.message}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </Notice>
+          )}
+
+          {shot !== null ? (
             /* A thumbnail was clicked. The panel closes behind it and one Close
                brings it back, because a picture of a diagram is worth the whole
                width. */
             <ShotView
-              jobId={view.job}
-              which={view.shot}
+              jobId={shot.jobId}
+              which={shot.which}
               path={path}
-              title={shotTitle(allJobs, view.job)}
+              title={shotTitle(allJobs, shot.jobId)}
               comparison={shown?.comparison ?? null}
               mode={shown?.brief?.mode}
             />
           ) : (
             <div className="space-y-6 p-4">
-              <DraftsList
-                initial={drafts}
-                path={path}
-                titles={titles}
-              />
               <StudioGrid
                 diagrams={listing.diagrams}
                 videos={allVideos}
