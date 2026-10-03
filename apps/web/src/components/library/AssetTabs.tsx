@@ -35,7 +35,7 @@ export type AssetTabsInput = {
   /** Other assets under the same topic, already trimmed to what is shown. */
   related: AssetWithTopics[];
   derivations: AssetDerivations;
-  /** The day the row was indexed, in the habit's time zone. */
+  /** The day the row was indexed, in the app's time zone. */
   indexed: string;
   /**
    * How far the reader has got, as the first Details row: "Watched" for a

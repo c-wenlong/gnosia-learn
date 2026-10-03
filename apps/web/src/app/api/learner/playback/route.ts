@@ -79,7 +79,7 @@ export const POST = handler(
       assetId: row.id,
       coverage: coverage(playback.ranges, playback.duration),
       watchedAt: playback.watchedAt,
-      // The same day the page prints, made where the habit's zone is known.
+      // The same day the page prints, made where the app's time zone is known.
       watchedDay: playback.watchedAt === null ? null : dayKey(playback.watchedAt, appTimeZone()),
       // What is stored now, which a slower overlapping save may have written.
       position: playback.position,

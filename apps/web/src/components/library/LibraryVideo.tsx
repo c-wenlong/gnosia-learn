@@ -74,7 +74,7 @@ export function LibraryVideo({
   /** What the store held when the page was rendered, or null for a first visit. */
   saved: Playback | null;
   heading: ReactNode;
-  /** The day `saved.watchedAt` falls on in the habit's time zone, or null. */
+  /** The day `saved.watchedAt` falls on in the app's time zone, or null. */
   watchedDay: string | null;
   actions?: ReactNode;
   /** Quiet lines under the facts: a sidecar that could not be read, say. */

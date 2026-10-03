@@ -33,7 +33,7 @@ export function MarkWatched({
   verb: "watched" | "read";
   /**
    * The day of the last `watched` event for this asset (`2026-09-26`), or null.
-   * A day key made on the server in the habit's time zone, not an instant, so
+   * A day key made on the server in the app's time zone, not an instant, so
    * the server and the browser print the same text and hydration agrees.
    */
   lastWatchedDay: string | null;
