@@ -11,7 +11,7 @@ Gnosia
 </p>
 
 <p align="center">
-  <a href="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml"><img src="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
+  <a href="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml"><img src="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI status"></a>
   <a href="https://app.codecov.io/gh/c-wenlong/self-learn"><img src="https://codecov.io/gh/c-wenlong/self-learn/graph/badge.svg?token=LRJZ81XZA4&branch=main" alt="Test coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/typescript-5-blue.svg" alt="TypeScript 5"></a>
