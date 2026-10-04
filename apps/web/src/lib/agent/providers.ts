@@ -3,14 +3,19 @@ import {
   MODEL_ID_PATTERN,
   PROVIDER_IDS,
   PROVIDER_LABELS,
+  providerLabel,
   TUTOR_MODEL_LIMITS,
   type ProviderId,
+  type ProviderName,
 } from "@self-learn/schema/shared";
 
 import { redactSecrets } from "@/lib/agent/redact";
 import { resolveSiteUrl } from "@/lib/site-url";
 
-export type { ProviderId };
+export type { ProviderId, ProviderName };
+
+/** The owner's saved keys that decrypted, by provider, a custom one's included. */
+export type SavedKeys = Partial<Record<ProviderName, string>>;
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -18,7 +23,7 @@ export type ChatMessage = {
 };
 
 export interface ProviderConfig {
-  id: ProviderId;
+  id: ProviderName;
   label: string;
   baseUrl: string;
   model: string;
@@ -33,17 +38,19 @@ export interface ProviderConfig {
    * shape, or, for a provider with no list endpoint, the ids its docs name.
    */
   models?: { url?: string; shape?: "openai" | "dashscope"; known?: readonly string[] };
+  /** A provider the owner added (T14): no server key, no built-in default model. */
+  custom?: true;
 }
 
 export interface ChatCompletionResult {
   content: string;
   model: string;
-  provider: ProviderId;
+  provider: ProviderName;
   providerLabel: string;
 }
 
 export interface ProviderAttemptError {
-  provider: ProviderId;
+  provider: ProviderName;
   model: string;
   status?: number;
   message: string;
@@ -82,11 +89,11 @@ export interface ProviderCredential {
 /** A chain entry whose provider has no key, saved or server: passed over, and said so (T4). */
 export interface SkippedEntry {
   skipped: true;
-  provider: ProviderId;
+  provider: ProviderName;
   model: string;
   reason: string;
   /** The providers that do have a key, saved or server, for the message that says what to do (T4). */
-  keyed: ProviderId[];
+  keyed: ProviderName[];
 }
 
 /** One place in the order the tutor tries: a call it can make, or an entry it must pass over. */
@@ -98,7 +105,7 @@ export function isCallable(step: ChainStep): step is ProviderCredential {
 
 /** One entry of an owner's model chain, as stored (`tutor_model`). */
 export interface ChainEntry {
-  provider: ProviderId;
+  provider: ProviderName;
   model: string;
 }
 
@@ -227,6 +234,16 @@ const ADDED_PROVIDERS: readonly {
   { id: "xai", model: "grok-4.3", keyUrl: "https://console.x.ai/team/default/api-keys" },
 ];
 
+/**
+ * A provider the owner added (docs/TUTOR-MODELS.md, T14), as the tutor calls
+ * it: its own base URL, its saved key only (`apiKeyEnv` names nothing, so no
+ * server key ever stands in), and no default model, so it is called only
+ * through the owner's chain and never by the built-in defaults.
+ */
+export function customProviderConfig(row: { id: ProviderName; label: string; baseUrl: string }): ProviderConfig {
+  return { id: row.id, label: row.label, baseUrl: row.baseUrl, model: "", apiKeyEnv: "", custom: true };
+}
+
 /** Every provider, in the cascade's order, whether or not a key is set for it. */
 export function providerConfigs(
   env: EnvMap = process.env,
@@ -297,7 +314,7 @@ export function resolveProviders(
  * decrypted; one that did not is missing, and the server's key applies.
  */
 export function orderCredentials(
-  saved: Partial<Record<ProviderId, string>>,
+  saved: SavedKeys,
   env: EnvMap = process.env,
 ): ProviderCredential[] {
   const configs = providerConfigs(env);
@@ -317,14 +334,15 @@ export function orderCredentials(
  * owner's saved key if it decrypted, else the server's, else none.
  */
 export function keyFor(
-  provider: ProviderId,
-  saved: Partial<Record<ProviderId, string>>,
+  provider: ProviderName,
+  saved: SavedKeys,
   env: EnvMap = process.env,
 ): { apiKey: string; source: KeySource } | null {
   const own = saved[provider];
   if (own) return { apiKey: own, source: "saved" };
+  // A custom provider is in no built-in config, so it has no server key (T14).
   const config = providerConfigs(env).find((c) => c.id === provider);
-  const server = config === undefined ? undefined : env[config.apiKeyEnv]?.trim();
+  const server = config === undefined || config.apiKeyEnv === "" ? undefined : env[config.apiKeyEnv]?.trim();
   return server ? { apiKey: server, source: "server" } : null;
 }
 
@@ -342,12 +360,13 @@ export function keyFor(
  */
 export function tutorSteps(
   chain: readonly ChainEntry[],
-  saved: Partial<Record<ProviderId, string>>,
+  saved: SavedKeys,
   env: EnvMap = process.env,
+  custom: readonly ProviderConfig[] = [],
 ): ChainStep[] {
   if (chain.length === 0) return orderCredentials(saved, env).map((c) => ({ ...c, modelFrom: "default" as const }));
-  const configs = new Map(providerConfigs(env).map((c) => [c.id, c]));
-  const keyed = PROVIDER_IDS.filter((id) => keyFor(id, saved, env) !== null);
+  const configs = new Map<string, ProviderConfig>([...providerConfigs(env), ...custom].map((c) => [c.id, c]));
+  const keyed = [...PROVIDER_IDS, ...custom.map((c) => c.id)].filter((id) => keyFor(id, saved, env) !== null);
   return chain.flatMap((entry): ChainStep[] => {
     const config = configs.get(entry.provider);
     if (config === undefined) return [];
@@ -369,13 +388,15 @@ export function tutorSteps(
  */
 export function keyTestModel(
   chain: readonly ChainEntry[],
-  provider: ProviderId,
+  provider: ProviderName,
   env: EnvMap = process.env,
 ): { model: string; modelFrom: "chain" | "default"; used: boolean } {
   const entry = chain.find((e) => e.provider === provider);
   if (entry !== undefined) return { model: entry.model, modelFrom: "chain", used: true };
+  // A custom provider has no default (T14): an empty model, which the key
+  // Test refuses rather than sending.
   const config = providerConfigs(env).find((c) => c.id === provider);
-  return { model: config?.model ?? "", modelFrom: "default", used: chain.length === 0 };
+  return { model: config?.model ?? "", modelFrom: "default", used: chain.length === 0 && config !== undefined };
 }
 
 /** The server's keys alone, for a caller with no owner (the tests, a script). */
@@ -423,13 +444,13 @@ function either(labels: readonly string[]): string {
  */
 export function missingKeyMessage(steps: readonly ChainStep[]): string {
   const skips = steps.filter((s): s is SkippedEntry => !isCallable(s));
-  if (skips.length === 0) return "No model provider key is set. Add one in Settings, under Provider keys.";
-  const lacking = [...new Set(skips.map((s) => PROVIDER_LABELS[s.provider]))];
-  const keyed = (skips[0]?.keyed ?? []).map((id) => PROVIDER_LABELS[id]);
-  const addKey = `add a key for ${either(lacking)} under Provider keys`;
+  if (skips.length === 0) return "No model provider key is set. Add one in Settings, under Providers.";
+  const lacking = [...new Set(skips.map((s) => s.reason.replace(/^no key for /, "")))];
+  const keyed = (skips[0]?.keyed ?? []).map((id) => providerLabel(id));
+  const addKey = `add a key for ${either(lacking)} under Providers`;
   return keyed.length === 0
     ? `None of your models has a key. In Settings, ${addKey}.`
-    : `None of your models has a key. In Settings, ${addKey}, or add a model from ${either(keyed)} under Models.`;
+    : `None of your models has a key. In Settings, ${addKey}, or add a model from ${either(keyed)} there.`;
 }
 
 /** A provider's error body, with every key the caller holds taken out, then clipped. */
@@ -600,7 +621,11 @@ function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string, model
   if (reportedGone.has(key)) return;
   reportedGone.add(key);
   // A chain entry is the owner's to change in Settings; a default is the operator's, in the environment.
-  const fix = modelFrom === "chain" ? "replace it under Models in Settings" : `set ${attempt.provider.toUpperCase()}_MODEL`;
+  // The first three read `<ID>_MODEL`; the providers of T13 read `TUTOR_<ID>_MODEL`.
+  const variable = (["nvidia", "gemini", "openrouter"] as string[]).includes(attempt.provider)
+    ? `${attempt.provider.toUpperCase()}_MODEL`
+    : `TUTOR_${attempt.provider.toUpperCase()}_MODEL`;
+  const fix = modelFrom === "chain" ? "replace it under Providers in Settings" : `set ${variable}`;
   console.error(
     attempt.status === 410
       ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, ${fix}`
@@ -825,7 +850,7 @@ const MODEL_LIST_MAX_MODELS = 2_000;
  * `/models` names each model `models/<id>`, and its chat endpoint is
  * documented with the bare `<id>`.
  */
-function listedId(provider: ProviderId, id: string): string {
+function listedId(provider: ProviderName, id: string): string {
   return provider === "gemini" && id.startsWith("models/") ? id.slice("models/".length) : id;
 }
 

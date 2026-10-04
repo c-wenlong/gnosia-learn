@@ -1,5 +1,7 @@
+import { isCustomProviderId } from "@self-learn/schema/shared";
 import { NextResponse } from "next/server";
 
+import { readOwnerCustomProviders } from "@/lib/custom-providers/store";
 import { KEY_WRITE_RATE_LIMIT, answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 import { checkKeyShape } from "@/lib/provider-keys/seal";
 import { failureCode, NoKeySecretError, removeProviderKey, saveProviderKey } from "@/lib/provider-keys/store";
@@ -34,6 +36,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (!shape.ok) return refuse(shape.reason);
 
   try {
+    // A key is filed under a custom id only while the owner has that provider (T14).
+    if (isCustomProviderId(provider) && !(await readOwnerCustomProviders(owner)).some((p) => p.id === provider)) {
+      return refuse("That is not one of your providers.", "NOT_FOUND", 404);
+    }
     const key = await saveProviderKey(owner, provider, shape.key);
     return answer({ ok: true, key });
   } catch (error) {

@@ -182,8 +182,8 @@ dropped from the list.
   the environment-write row of BYOK's threat model applies to chain entries as
   it does to the defaults: whoever sets a base URL receives the keys sent to
   it. No request can set one.
-- Which providers exist: the fourteen of T13 since 2026-10-05. Another is a
-  code change, or a custom provider.
+- Which built-in providers exist: the fourteen of T13 since 2026-10-05.
+  Another is a code change, or a custom provider (T14).
 - The studio's agents, which run `claude` under the machine's own login.
 
 ## Out of scope
@@ -268,4 +268,40 @@ day, and are `ADDED_PROVIDERS` in `apps/web/src/lib/agent/providers.ts`.
 - **Add provider** links to each provider's key page.
 - The `provider` CHECKs on `provider_key` and `tutor_model` list the
   fourteen (migration `0026_more_providers`).
+
+## T14. Custom providers
+
+Added on 2026-10-05 at the owner's request: any OpenAI-compatible endpoint
+the built-in list does not have (a China-region host, a gateway, a local
+Ollama or LM Studio), by a name, a base URL and a key, from Add provider's
+"Custom provider" choice.
+
+- **Stored as a `custom_provider` row** (migration `0027_custom_provider`):
+  owner, id `custom-<slug>` made from the name and unique among the
+  owner's (`customProviderId`), name, base URL. At most ten per owner. The
+  id goes in the same `provider` columns as a built-in's, whose CHECKs now
+  take a built-in id or that shape, so its key is a sealed `provider_key`
+  row and its models are chain entries like any other.
+- **The base URL** (`checkBaseUrl`, and a CHECK) is `https://`, or `http://`
+  to `localhost`, `127.0.0.1` or `[::1]` only, for a model server on the
+  machine the app runs on; no user name, password, query or fragment; a
+  trailing slash is dropped. The tutor sends the owner's key for that
+  provider to exactly this URL, and never sends it a built-in provider's key
+  or a server key: a custom provider has no `apiKeyEnv`, so `keyFor` finds a
+  saved key or nothing.
+- **No default model.** A custom provider is called only through the
+  owner's chain, never by the built-in defaults (T3), and Test the key is
+  not offered for one with no models, since there is nothing to test with.
+  Its model list is `GET <base>/models` in OpenAI's shape; when that fails,
+  any typed id still works.
+- **One request to add it** (`POST /api/learner/custom-provider`): the key's
+  shape is checked before anything is stored, the row is written, then the
+  key is sealed under its id; a key that cannot be stored removes the row
+  again. `PATCH` changes the name or the base URL and keeps the key and the
+  models. Delete is the provider route's, which removes the row, the key and
+  the models in one transaction.
+- **A key is filed under a custom id only while the owner has it**: the key
+  route refuses one for an id the owner has not added.
+- **The learner export** carries the custom providers' names and base URLs
+  as `customProviders`, never a key, beside `tutorModels` (T6).
 

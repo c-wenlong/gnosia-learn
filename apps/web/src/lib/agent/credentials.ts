@@ -1,24 +1,28 @@
 import "server-only";
 
-import type { ProviderId } from "@self-learn/schema/shared";
+import type { ProviderName } from "@self-learn/schema/shared";
 
 import {
   type ChainEntry,
   type ChainStep,
+  customProviderConfig,
   keyFor,
   keyTestModel,
   providerConfigs,
+  type ProviderConfig,
   type ProviderCredential,
+  type SavedKeys,
   tutorSteps,
 } from "@/lib/agent/providers";
+import { readOwnerCustomProviders } from "@/lib/custom-providers/store";
 import { failureCode, openSavedKeys } from "@/lib/provider-keys/store";
 import { readChain } from "@/lib/tutor-models/store";
 
 type Env = Record<string, string | undefined>;
 
 /** The owner's saved keys and model chain, each empty when it cannot be read. */
-async function ownerInputs(owner: string): Promise<{ saved: Partial<Record<ProviderId, string>>; chain: ChainEntry[] }> {
-  const [saved, chain] = await Promise.all([
+async function ownerInputs(owner: string): Promise<{ saved: SavedKeys; chain: ChainEntry[]; custom: ProviderConfig[] }> {
+  const [saved, chain, custom] = await Promise.all([
     openSavedKeys(owner).catch((error: unknown) => {
       console.warn(`tutor: saved provider keys unavailable (${failureCode(error)}), using the server's`);
       return {};
@@ -27,8 +31,23 @@ async function ownerInputs(owner: string): Promise<{ saved: Partial<Record<Provi
       console.warn(`tutor: model chain unavailable (${failureCode(error)}), using the built-in defaults`);
       return [];
     }),
+    customConfigs(owner),
   ]);
-  return { saved, chain };
+  return { saved, chain, custom };
+}
+
+/**
+ * The owner's own providers as the tutor calls them (T14). Empty when they
+ * cannot be read: their chain entries then have no config and are left out,
+ * as an entry for a provider this build does not know would be.
+ */
+async function customConfigs(owner: string): Promise<ProviderConfig[]> {
+  try {
+    return (await readOwnerCustomProviders(owner)).map(customProviderConfig);
+  } catch (error) {
+    console.warn(`tutor: custom providers unavailable (${failureCode(error)})`);
+    return [];
+  }
 }
 
 /**
@@ -45,8 +64,8 @@ async function ownerInputs(owner: string): Promise<{ saved: Partial<Record<Provi
  * `failureCode`).
  */
 export async function tutorCredentials(owner: string, env: Env = process.env): Promise<ChainStep[]> {
-  const { saved, chain } = await ownerInputs(owner);
-  return tutorSteps(chain, saved, env);
+  const { saved, chain, custom } = await ownerInputs(owner);
+  return tutorSteps(chain, saved, env, custom);
 }
 
 /**
@@ -56,11 +75,11 @@ export async function tutorCredentials(owner: string, env: Env = process.env): P
  */
 export async function keyTestCredential(
   owner: string,
-  provider: ProviderId,
+  provider: ProviderName,
   env: Env = process.env,
 ): Promise<ProviderCredential | null> {
-  const { saved, chain } = await ownerInputs(owner);
-  const config = providerConfigs(env).find((c) => c.id === provider);
+  const { saved, chain, custom } = await ownerInputs(owner);
+  const config = [...providerConfigs(env), ...custom].find((c) => c.id === provider);
   const key = keyFor(provider, saved, env);
   if (config === undefined || key === null) return null;
   const { model, modelFrom } = keyTestModel(chain, provider, env);
@@ -76,7 +95,7 @@ export async function keyTestCredential(
  */
 export async function entryCredential(
   owner: string,
-  provider: ProviderId,
+  provider: ProviderName,
   model?: string,
   env: Env = process.env,
 ): Promise<ProviderCredential | null> {
@@ -84,7 +103,8 @@ export async function entryCredential(
     console.warn(`tutor: saved provider keys unavailable (${failureCode(error)}), using the server's`);
     return {};
   });
-  const config = providerConfigs(env).find((c) => c.id === provider);
+  const custom = provider.startsWith("custom-") ? await customConfigs(owner) : [];
+  const config = [...providerConfigs(env), ...custom].find((c) => c.id === provider);
   const key = keyFor(provider, saved, env);
   if (config === undefined || key === null) return null;
   return { config: model === undefined ? config : { ...config, model }, ...key, modelFrom: "chain" };

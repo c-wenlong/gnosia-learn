@@ -47,6 +47,7 @@ import {
   preference,
   progress,
   providerKey,
+  customProvider,
   recap,
   review,
   tutorModel,
@@ -91,6 +92,7 @@ export const tables = {
   recap,
   preference,
   providerKey,
+  customProvider,
   tutorModel,
   assetName,
   draft,
@@ -166,6 +168,8 @@ export const STATE_TABLES = [
   // The owner's own model provider keys, encrypted (docs/BYOK.md). Counted
   // here for `catalog status`; no exporter reads it.
   "providerKey",
+  // The providers an owner added (docs/TUTOR-MODELS.md, T14): names and base URLs.
+  "customProvider",
   // The tutor's model chain (docs/TUTOR-MODELS.md): owner configuration, no secret.
   "tutorModel",
   // A learner's own names for assets, read in place of `asset.title`.

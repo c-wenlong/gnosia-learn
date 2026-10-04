@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import { PROVIDER_KEY_LIMITS, type ProviderId } from "@self-learn/schema/shared";
+import { PROVIDER_KEY_LIMITS, type ProviderName } from "@self-learn/schema/shared";
 
 import { MIN_SECRET_LENGTH } from "@/lib/auth/core";
 
@@ -47,7 +47,7 @@ function deriveKey(secret: string, version: number): Buffer | null {
 }
 
 /** What the tag vouches for besides the ciphertext. JSON, so no owner id can forge a separator. */
-function additionalData(owner: string, provider: ProviderId, version: number): Buffer {
+function additionalData(owner: string, provider: ProviderName, version: number): Buffer {
   return Buffer.from(JSON.stringify(["gnosia/provider-key", version, owner, provider]), "utf8");
 }
 
@@ -63,7 +63,7 @@ export interface SealContext {
   /** `AUTH_SECRET`. */
   secret: string;
   owner: string;
-  provider: ProviderId;
+  provider: ProviderName;
 }
 
 /** Encrypt a key that has already passed `checkKeyShape`. */

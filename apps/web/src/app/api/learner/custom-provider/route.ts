@@ -1,0 +1,74 @@
+import { CustomProviderError } from "@self-learn/catalog/state";
+import { isCustomProviderId } from "@self-learn/schema/shared";
+import { NextResponse } from "next/server";
+
+import { changeCustomProvider, createCustomProvider } from "@/lib/custom-providers/store";
+import { answer, guard, readBody, refuse } from "@/lib/provider-keys/requests";
+import { checkKeyShape } from "@/lib/provider-keys/seal";
+import { failureCode, NoKeySecretError, saveProviderKey } from "@/lib/provider-keys/store";
+import { CHAIN_WRITE_RATE_LIMIT } from "@/lib/tutor-models/requests";
+import { deleteChainProvider } from "@/lib/tutor-models/store";
+
+export const runtime = "nodejs";
+
+/**
+ * A provider the owner adds themselves (docs/TUTOR-MODELS.md, T14).
+ *
+ * `POST { label, baseUrl, key }` makes it: the name and the base URL are
+ * checked (`checkBaseUrl`: https, or http to this machine only), the key's
+ * shape is checked before anything is stored, the row is written with an id
+ * made from the name, and the key is sealed under that id. If the key cannot
+ * be stored the provider is removed again, so a provider never exists
+ * without its key. The answer names the new id, never the key.
+ *
+ * `PATCH { provider, label?, baseUrl? }` renames it or moves it. Its key and
+ * models stay; a new key goes through `/api/learner/provider-key` as for any
+ * provider. Its Delete is the provider route's, which removes it whole.
+ */
+
+function failed(what: string, error: unknown): NextResponse {
+  if (error instanceof CustomProviderError) {
+    return refuse(error.message, error.code, error.code === "NOT_FOUND" ? 404 : error.code === "FULL" ? 409 : 400);
+  }
+  if (error instanceof NoKeySecretError) return refuse("This server has no AUTH_SECRET, so it cannot store a key.", "NO_SECRET", 503);
+  console.warn(`custom provider ${what} failed (${failureCode(error)})`);
+  return refuse("Not saved: the database is unreachable.", "STORE_UNAVAILABLE", 503);
+}
+
+export async function POST(req: Request): Promise<NextResponse> {
+  const owner = await guard(req, "write", CHAIN_WRITE_RATE_LIMIT, "tutor-model");
+  if (owner instanceof NextResponse) return owner;
+  const body = await readBody(req);
+  if (body instanceof NextResponse) return body;
+  const shape = checkKeyShape(body.key);
+  if (!shape.ok) return refuse(shape.reason);
+
+  let created;
+  try {
+    created = await createCustomProvider(owner, { label: body.label, baseUrl: body.baseUrl });
+  } catch (error) {
+    return failed("add", error);
+  }
+  try {
+    const key = await saveProviderKey(owner, created.id, shape.key);
+    return answer({ ok: true, provider: created, key });
+  } catch (error) {
+    // No provider without its key: take the row back out.
+    await deleteChainProvider(owner, created.id).catch(() => {});
+    return failed("add", error);
+  }
+}
+
+export async function PATCH(req: Request): Promise<NextResponse> {
+  const owner = await guard(req, "write", CHAIN_WRITE_RATE_LIMIT, "tutor-model");
+  if (owner instanceof NextResponse) return owner;
+  const body = await readBody(req);
+  if (body instanceof NextResponse) return body;
+  if (!isCustomProviderId(body.provider)) return refuse(`"provider" must be the id of one of your providers (custom-…).`);
+  if (body.label === undefined && body.baseUrl === undefined) return refuse("Send a new name, a new base URL, or both.");
+  try {
+    return answer({ ok: true, provider: await changeCustomProvider(owner, body.provider, { label: body.label, baseUrl: body.baseUrl }) });
+  } catch (error) {
+    return failed("change", error);
+  }
+}

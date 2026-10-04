@@ -111,7 +111,7 @@ function randomToken(): string {
 function modelProblem(code: string | undefined, error: string | undefined, status: number): string {
   // The server's own words say which case it is (docs/TUTOR-MODELS.md, T4):
   // no key anywhere, or a model list whose providers have none.
-  if (code === "MISSING_API_KEY") return error ?? "The tutor has no model provider key yet. Add one in Settings, under Provider keys.";
+  if (code === "MISSING_API_KEY") return error ?? "The tutor has no model provider key yet. Add one in Settings, under Providers.";
   if (code === "UNSTRUCTURED_REPLY") return "The tutor answered, but not with a question it could be graded on.";
   if (code === "RATE_LIMITED") return "Too many questions in a minute; the tutor is resting.";
   return error ?? `The tutor did not answer (HTTP ${status}).`;

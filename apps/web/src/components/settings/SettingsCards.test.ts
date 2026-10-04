@@ -152,8 +152,51 @@ describe("the Providers card", () => {
     expect(form).not.toBeNull();
     expect(form.textContent).toContain("Google Gemini");
 
+    // With every built-in listed, Add provider still offers a custom one: the form opens on its fields.
     const none = mount(createElement(Providers, { view: view({ addable: [] }) }));
-    expect(button(none, "Add provider")).toBeUndefined();
+    act(() => button(none, "Add provider").click());
+    const custom = none.querySelector('form[aria-label="Add a provider"]')!;
+    expect(custom.textContent).toContain("Base URL");
+    expect(custom.textContent).toContain("Name");
+  });
+
+  it("adds a custom provider in one request with its name, base URL and key", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const container = mount(createElement(Providers, { view: view({ addable: [] }) }));
+    act(() => button(container, "Add provider").click());
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a provider"]')!;
+    const inputs = [...form.querySelectorAll("input")];
+    const set = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    act(() => {
+      set(inputs.find((i) => i.placeholder === "My gateway")!, "My gateway");
+      set(inputs.find((i) => i.type === "url")!, "https://gw.example/v1");
+      set(inputs.find((i) => i.type === "password")!, "gw-key-0123456789abcdef");
+    });
+    await act(async () => form.requestSubmit());
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/learner/custom-provider");
+    expect(JSON.parse(String(init.body))).toEqual({ label: "My gateway", baseUrl: "https://gw.example/v1", key: "gw-key-0123456789abcdef" });
+  });
+
+  it("shows a custom provider's base URL, and its Edit takes the name and the URL with the key optional", () => {
+    const container = mount(
+      createElement(Providers, {
+        view: view({ rows: [row({ id: "custom-my-gateway", label: "My gateway", model: "", custom: { baseUrl: "https://gw.example/v1" }, models: [] })] }),
+      }),
+    );
+    expect(container.textContent).toContain("https://gw.example/v1");
+    expect(container.textContent).toContain("No models");
+    expect(container.textContent).not.toContain("Built-in default");
+    act(() => button(container, "Edit").click());
+    const form = container.querySelector('form[aria-label="My gateway key"]')!;
+    expect(form.querySelector<HTMLInputElement>('input[type="url"]')?.value).toBe("https://gw.example/v1");
+    expect(form.textContent).toContain("Leave it empty to keep the key saved now.");
+    // Nothing changed yet: Save waits for a change.
+    expect([...form.querySelectorAll("button")].find((b) => b.textContent === "Save")?.disabled).toBe(true);
   });
 
   it("moves a provider only where there is a provider with models to pass", () => {
