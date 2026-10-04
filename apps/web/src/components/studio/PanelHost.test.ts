@@ -438,6 +438,35 @@ describe("the settings", () => {
     expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("do not read again on a hover once rows with the catalog behind them are held", async () => {
+    mocks.loadSettings.mockResolvedValue(rows("opus"));
+    mount();
+    await act(async () => grabbed.controls!.warmSettings());
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
+
+    // Each later hover or focus on the Settings button asks again, and reads nothing.
+    await act(async () => grabbed.controls!.warmSettings());
+    await act(async () => grabbed.controls!.warmSettings());
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("read again on a hover while the rows held are the defaults, until the catalog answers", async () => {
+    mocks.loadSettings
+      .mockResolvedValueOnce({ ...rows("default"), reachable: false })
+      .mockResolvedValueOnce(rows("opus"))
+      .mockResolvedValue(rows("default"));
+    mount();
+    await act(async () => grabbed.controls!.warmSettings());
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
+
+    await act(async () => grabbed.controls!.warmSettings());
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(2);
+
+    // That one had the catalog behind it, so the next hover is free.
+    await act(async () => grabbed.controls!.warmSettings());
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(2);
+  });
+
   it("read again on the next opening when the last read had no catalog behind it", async () => {
     mocks.loadSettings.mockResolvedValueOnce({ ...rows("default"), reachable: false }).mockResolvedValueOnce(rows("opus"));
     setUrl("settings=1");
