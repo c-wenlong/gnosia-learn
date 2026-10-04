@@ -1100,10 +1100,16 @@ describe("source selection", () => {
   it("pulls courses, and what else points at concepts, in behind concepts", () => {
     // A course row's `concepts:` list is a row pointing at a concept, so a
     // concept prune cascades into it and the courses source has to rewrite it.
+    // A video's concepts are `asset_concept` rows, which cascade the same way,
+    // and mirrors come along behind manimkc.
     expect([...withDependents(["concepts"])].sort()).toEqual([
       "concepts",
       "courses",
       "diagrams",
+      "manimkc",
+      "mirrors",
+      "remotionkc",
+      "revideokc",
       "sessions",
     ]);
   });
@@ -1144,9 +1150,10 @@ describe("source selection", () => {
     // `--only concepts` pulls courses in as a dependent, and courses cannot
     // write its `collection_tag` rows before tags has written the tags. One
     // pass of each closure would miss tags entirely.
-    expect([...selection(["concepts"])].sort()).toEqual(["concepts", "courses", "diagrams", "sessions", "tags"]);
+    const behindConcepts = ["concepts", "courses", "diagrams", "manimkc", "mirrors", "remotionkc", "revideokc", "sessions", "tags"];
+    expect([...selection(["concepts"])].sort()).toEqual(behindConcepts);
     // Tags go first and courses follow, because pruning a tag clears links
     // only the courses source writes back.
-    expect([...selection(["tags"])].sort()).toEqual(["concepts", "courses", "diagrams", "sessions", "tags"]);
+    expect([...selection(["tags"])].sort()).toEqual(behindConcepts);
   });
 });
