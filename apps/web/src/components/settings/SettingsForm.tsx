@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
+import { Select } from "@/components/ui/Select";
 import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
 import { useLearner } from "@/lib/learner-context";
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
@@ -119,6 +120,8 @@ export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
         {(id) => (
           <Select
             id={id}
+            label="Motion"
+            options={MOTION_MODES.map((m) => ({ value: m.id, label: m.label }))}
             value={motion.value}
             onChange={(v) => {
               const mode = v as MotionMode;
@@ -128,13 +131,7 @@ export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
               writeMotionCookie(mode);
               motion.save(mode);
             }}
-          >
-            {MOTION_MODES.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
+          />
         )}
       </Field>
     </Card>
@@ -264,13 +261,13 @@ export function TutorSettings({
     <Card title="Style and model order">
       <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>
         {(id) => (
-          <Select id={id} value={tutor.value} onChange={(v) => tutor.save(v as TutorStyle)}>
-            {TUTOR_STYLES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </Select>
+          <Select
+            id={id}
+            label="Tutor style"
+            options={TUTOR_STYLES.map((t) => ({ value: t.id, label: t.label }))}
+            value={tutor.value}
+            onChange={(v) => tutor.save(v as TutorStyle)}
+          />
         )}
       </Field>
       <Field
@@ -420,44 +417,6 @@ function Field({
       <div className="min-w-0 md:flex-1">
         <LiveStatus {...statusLine(status, { saving: "Saving…", saved: "Saved" })} />
       </div>
-    </div>
-  );
-}
-
-/** Kit `Input` holding a native select, with a chevron in place of the platform arrow. */
-function Select({
-  id,
-  value,
-  onChange,
-  children,
-}: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="relative">
-      <select
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={inputClasses({ className: "cursor-pointer appearance-none pr-10" })}
-      >
-        {children}
-      </select>
-      <svg
-        aria-hidden
-        viewBox="0 0 16 16"
-        className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-text2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M4 6l4 4 4-4" />
-      </svg>
     </div>
   );
 }
