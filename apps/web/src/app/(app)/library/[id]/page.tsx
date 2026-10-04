@@ -5,6 +5,7 @@ import type { AssetRef } from "@self-learn/catalog/state";
 
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
+import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/library/AssetTabs";
 import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
@@ -174,7 +175,7 @@ export default async function AssetPage({
     // statement about the catalog this page is in no position to make.
     if (reachable) notFound();
     return (
-      <div data-layout="app" className="flex flex-col gap-4">
+      <div data-layout="app" className={`flex flex-col gap-4 ${PAGE_ENTER}`}>
         {backLink}
         <Notice title="The catalog is unreachable" command="npm run catalog -- status">
           This asset could not be looked up, which is not the same as it not existing. The row is
@@ -282,7 +283,7 @@ export default async function AssetPage({
 
   if (asset.kind === "video" && servable) {
     return (
-      <div data-layout="app" className="flex flex-col gap-4">
+      <div data-layout="app" className={`flex flex-col gap-4 ${PAGE_ENTER}`}>
         {backLink}
         <LibraryVideo
           // Its playback state is this asset's: a new asset starts over.
@@ -345,7 +346,7 @@ export default async function AssetPage({
   );
 
   return (
-    <div data-layout="app" className="flex flex-col gap-4">
+    <div data-layout="app" className={`flex flex-col gap-4 ${PAGE_ENTER}`}>
       {backLink}
       {!pictureFirst && titleRow}
       <div className="min-w-0">

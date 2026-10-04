@@ -14,6 +14,13 @@ import { cx } from "./classes";
  * Closed content stays mounted, so its state survives (a half-typed note, a
  * scroll position), and is made `inert`: nobody can tab into a region they
  * cannot see, and a screen reader skips it, as it would `hidden`.
+ *
+ * The inner box clips with `overflow: clip` and a 4px `overflow-clip-margin`
+ * rather than `overflow: hidden`, so a focus ring on a control at the edge
+ * (2px wide, 2px out) is drawn whole instead of cut off, and so the box is
+ * not a scroll container: focusing a field inside while it opens cannot
+ * scroll the content up inside its own frame. A browser without
+ * `overflow-clip-margin` clips at the edge, as before.
  */
 export function Collapse({
   open,
@@ -33,11 +40,11 @@ export function Collapse({
       id={id}
       inert={!open}
       className={cx(
-        "grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
+        "grid transition-[grid-template-rows,opacity] duration-300 ease-soft motion-reduce:transition-none",
         open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
       )}
     >
-      <div className={cx("min-h-0 overflow-hidden", className)}>{children}</div>
+      <div className={cx("min-h-0 overflow-clip [overflow-clip-margin:4px]", className)}>{children}</div>
     </div>
   );
 }
@@ -48,7 +55,7 @@ export function CollapseChevron({ open, className }: { open: boolean; className?
     <svg
       viewBox="0 0 20 20"
       className={cx(
-        "h-5 w-5 transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
+        "h-5 w-5 transition-transform duration-300 ease-soft motion-reduce:transition-none",
         open && "rotate-180",
         className,
       )}

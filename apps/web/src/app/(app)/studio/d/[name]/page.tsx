@@ -8,6 +8,7 @@ import { ExtendLink } from "@/components/studio/ExtendLink";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
+import { FADE_IN } from "@/components/studio/motion";
 import { ShotView } from "@/components/studio/ShotView";
 import { FIELD_TEXT } from "@/components/ui/classes";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
@@ -267,7 +268,8 @@ export default async function CanvasPage({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
+    // Fades in over the loading frame it replaces: opacity only.
+    <div data-layout="full" className={`flex min-h-0 flex-1 flex-col ${FADE_IN}`}>
       {children}
     </div>
   );

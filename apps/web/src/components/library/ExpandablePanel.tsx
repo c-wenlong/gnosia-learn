@@ -3,6 +3,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
 
 import { cx } from "@/components/ui/classes";
+import { prefersReducedMotion } from "@/lib/motion";
+
+/** How long the popup takes to fade and shrink away before it is gone. */
+export const CLOSE_MS = 200;
 
 /**
  * A card of words at a fixed height that scrolls, with an icon in its top
@@ -28,6 +32,12 @@ import { cx } from "@/components/ui/classes";
  * reflow, and the reading position goes with the words: the popup opens at
  * the place the card was scrolled to, and closing puts the card at the place
  * the popup was, each as a share of the way down.
+ *
+ * It opens with a fade and a slight growth (`@starting-style`), its backdrop
+ * fading in with it, and closes the same way backwards: `closing` holds the
+ * popup on screen for `CLOSE_MS` while it fades, and only then does the
+ * state close it. A second Escape or click in that beat does nothing. Under
+ * reduced motion there is no beat.
  */
 export function ExpandablePanel({
   title,
@@ -44,6 +54,7 @@ export function ExpandablePanel({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const pressedOnBackdrop = useRef(false);
@@ -63,10 +74,25 @@ export function ExpandablePanel({
   }
 
   function collapse() {
+    if (closing) return;
     const body = dialogBodyRef.current;
     if (body) readAt.current = shareScrolled(body);
-    setOpen(false);
+    if (prefersReducedMotion()) {
+      setOpen(false);
+      return;
+    }
+    setClosing(true);
   }
+
+  // The beat the popup fades out in; the state closes it once it has.
+  useEffect(() => {
+    if (!closing) return;
+    const timer = window.setTimeout(() => {
+      setClosing(false);
+      setOpen(false);
+    }, CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [closing]);
 
   // Back in the card: scroll it to where the reader was in the popup. A
   // layout effect, so the jump happens before the frame is painted. The popup
@@ -136,8 +162,10 @@ export function ExpandablePanel({
             // A phone gets the whole screen; anything wider a large card.
             "h-dvh max-h-none w-full max-w-none rounded-none",
             "md:h-[calc(100dvh-64px)] md:w-[min(64rem,calc(100vw-48px))] md:rounded-[20px] md:border-2 md:border-border",
-            "transition-[opacity,scale] duration-200 ease-out starting:open:scale-[0.98] starting:open:opacity-0",
-            "motion-reduce:transition-none",
+            "transition-[opacity,scale] duration-200 ease-soft starting:open:scale-[0.98] starting:open:opacity-0",
+            "backdrop:transition-opacity backdrop:duration-200 backdrop:ease-out starting:open:backdrop:opacity-0",
+            closing && "pointer-events-none scale-[0.98] opacity-0 backdrop:opacity-0",
+            "motion-reduce:transition-none motion-reduce:backdrop:transition-none",
           )}
         >
           <PanelHeader title={title} action={action}>

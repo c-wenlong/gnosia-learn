@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { PAGE_ENTER } from "@/components/PageLoading";
 import { ProviderKeys } from "@/components/settings/ProviderKeys";
 import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
@@ -48,7 +49,7 @@ export default async function SettingsPage() {
         })
       : keys.order.map((p) => ({ id: p.id, label: p.label, source: p.source }));
   return (
-    <div data-layout="app" className="flex max-w-[1084px] flex-col gap-4">
+    <div data-layout="app" className={`flex max-w-[1084px] flex-col gap-4 ${PAGE_ENTER}`}>
       <h1 className="font-display text-[28px] leading-tight font-bold text-text">Settings</h1>
       <SettingsTabs
         sections={[

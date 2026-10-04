@@ -70,11 +70,11 @@ export function WidgetFailure({
       <div
         role="status"
         data-problem={code ?? "checking"}
-        className={`flex flex-col items-center justify-center gap-1 px-3 py-2 text-center ${className}`}
+        className={`flex animate-fade-in flex-col items-center justify-center gap-1 px-3 py-2 text-center motion-reduce:animate-none ${className}`}
       >
         <BrokenGlyph className="h-5 w-5 text-text3" />
         <p className="text-[11px] font-medium text-text">{headline}</p>
-        <p className="text-[11px] leading-snug text-text2" title={problem?.reason}>
+        <p key={code ?? "checking"} className="animate-fade-in text-[11px] leading-snug text-text2 motion-reduce:animate-none" title={problem?.reason}>
           {problem === null ? "Checking why…" : problem.label}
         </p>
         {(fix?.kind === "command" || fix?.kind === "env") && (
@@ -93,13 +93,17 @@ export function WidgetFailure({
     <div
       role="status"
       data-problem={code ?? "checking"}
-      className={`flex flex-col items-center justify-center gap-2 bg-surface2 px-5 py-8 text-center ${
+      className={`flex animate-fade-in flex-col items-center justify-center gap-2 bg-surface2 px-5 py-8 text-center motion-reduce:animate-none ${
         inset ? "" : "rounded-xl border-2 border-border"
       } ${className}`}
     >
       <BrokenGlyph className="h-6 w-6 text-text3" />
       <p className="text-sm font-medium text-balance text-text">{headline}</p>
-      <p className="max-w-[52ch] text-[13px] leading-relaxed text-pretty text-text2">
+      {/* Keyed on the answer, so the reason fades in over "Checking why…" rather than snapping. */}
+      <p
+        key={code ?? "checking"}
+        className="max-w-[52ch] animate-fade-in text-[13px] leading-relaxed text-pretty text-text2 motion-reduce:animate-none"
+      >
         {problem === null ? "Checking why…" : problem.reason}
       </p>
       {(fix?.kind === "command" || fix?.kind === "env") && (

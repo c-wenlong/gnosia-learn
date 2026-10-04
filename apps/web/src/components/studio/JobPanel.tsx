@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { PanelLink } from "@/components/studio/PanelLink";
+import { Collapse } from "@/components/ui/Collapse";
 import { ComparisonPanel } from "@/components/studio/ComparisonPanel";
 import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
@@ -491,6 +492,7 @@ export function JobLog({
   const [lines, setLines] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
   const box = useRef<HTMLPreElement | null>(null);
+  const region = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -542,14 +544,16 @@ export function JobLog({
     <div className="mt-4">
       <button
         type="button"
+        aria-expanded={open}
+        aria-controls={region}
         onClick={() => setChoice({ job: jobId, open: !open })}
         className="flex w-full items-center justify-between text-xs font-semibold text-[var(--muted-strong)]"
       >
         <span>Raw log</span>
         <span>{open ? "Hide" : "Show"}</span>
       </button>
-      {open && (
-        <>
+      {/* Folds open and shut; what was read stays while it is shut. */}
+      <Collapse open={open} id={region}>
           <pre
             ref={box}
             className="mt-2 h-60 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 font-mono text-xs whitespace-pre-wrap break-all text-[var(--muted-strong)]"
@@ -559,8 +563,7 @@ export function JobLog({
           <p className="mt-1 text-xs text-[var(--muted)]">
             the last {lines.length} of {total} lines
           </p>
-        </>
-      )}
+      </Collapse>
     </div>
   );
 }

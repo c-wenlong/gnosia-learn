@@ -1,4 +1,4 @@
-
+import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
 import { ExtendLink } from "@/components/studio/ExtendLink";
@@ -160,8 +160,7 @@ function SelectedDiagram({
         {diagram.svg.exists ? (
           /* Same as the grid tile: the runner streams a file from outside the
              app's tree, and an SVG is not a format the optimiser would resize. */
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <FadeImg
             src={thumbnailHref(diagram.name)}
             alt={displayTitle(diagram)}
             className="h-full w-full object-contain p-2"

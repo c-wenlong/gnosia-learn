@@ -14,8 +14,6 @@ const PATHS: Record<DestinationKey, string> = {
   learn: "M7.5 14.5h5M8 17h4M10 3a5 5 0 0 0-3 9c.6.5 1 1.2 1 2h4c0-.8.4-1.5 1-2a5 5 0 0 0-3-9z",
   // Four tiles.
   library: "M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 11h5v5h-5z",
-  // Two arrows chasing: come back to it.
-  review: "M15.5 8A6 6 0 0 0 4.6 7M4.5 12a6 6 0 0 0 10.9 1M4.5 3.5v3.8h3.8M15.5 16.5v-3.8h-3.8",
 };
 
 export function NavIcon({ name, className }: { name: DestinationKey; className?: string }) {

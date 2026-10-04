@@ -6,7 +6,9 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Collapse } from "@/components/ui/Collapse";
 import { Input } from "@/components/ui/Input";
+import { LiveStatus } from "@/components/ui/LiveStatus";
 import { cx, inputClasses, LABEL } from "@/components/ui/classes";
 import type { TutorModelsView } from "@/lib/tutor-models/settings";
 
@@ -21,6 +23,10 @@ import type { TutorModelsView } from "@/lib/tutor-models/settings";
  * comes from, never a key. A model list is fetched on the server
  * (`/api/learner/tutor-model/models`) when the Add form opens. The last Test
  * result per entry lives in this component's state only.
+ *
+ * Nothing swaps in a frame: an entry that arrives (added, or moved, which
+ * re-inserts its row) fades in; Add a model and its form fold into each
+ * other (`Collapse`); the status line glides (`LiveStatus`).
  */
 
 type Entry = TutorModelsView["chain"][number];
@@ -207,7 +213,10 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
             const last = tests[key];
             const rowBusy = busy !== null;
             return (
-              <li key={key} className="flex flex-col gap-2.5 py-3.5 first:pt-1 last:pb-0 md:flex-row md:items-start md:gap-4">
+              <li
+                key={key}
+                className="flex animate-fade-in flex-col gap-2.5 py-3.5 first:pt-1 last:pb-0 motion-reduce:animate-none md:flex-row md:items-start md:gap-4"
+              >
                 <div className="flex min-w-0 flex-1 gap-3">
                   <span aria-hidden className="w-5 shrink-0 pt-px text-[14px] font-semibold text-text2 tabular-nums">
                     {index + 1}
@@ -226,7 +235,12 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
                           : `no key for ${provider?.label ?? providerLabel(entry.provider)}, so the tutor skips it`}
                     </p>
                     {last !== undefined && (
-                      <p className={cx("text-[12px]", last.ok ? "text-ok-text" : "text-danger")}>Last test: {last.text}</p>
+                      <p
+                        key={last.text}
+                        className={cx("animate-fade-in text-[12px] motion-reduce:animate-none", last.ok ? "text-ok-text" : "text-danger")}
+                      >
+                        Last test: {last.text}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -281,11 +295,14 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
           router.refresh();
         }}
       />
-      <p aria-live="polite" className={cx("text-[12px]", notice.kind === "idle" && "sr-only")}>
-        {notice.kind === "busy" && <span className="text-text3">{notice.text}</span>}
-        {notice.kind === "done" && <span className="text-ok-text">{notice.text}</span>}
-        {notice.kind === "error" && <span className="text-danger">{notice.text}</span>}
-      </p>
+      {/* The card's gap would stay behind a shut status, so the space above it folds with it. */}
+      <div className="-mt-3">
+        <LiveStatus
+          text={notice.kind === "idle" ? null : notice.text}
+          tone={notice.kind === "done" ? "ok" : notice.kind === "error" ? "danger" : "muted"}
+          className="pt-3"
+        />
+      </div>
     </Card>
   );
 }
@@ -391,105 +408,106 @@ function AddModel({
     onAdded(reply.data.chain, added);
   };
 
-  if (!open) {
-    const reason = usable.length === 0 ? "Add a provider key first." : full ? `The chain holds at most ${TUTOR_MODEL_LIMITS.maxEntries} models.` : undefined;
-    return (
-      <div>
+  const reason = usable.length === 0 ? "Add a provider key first." : full ? `The chain holds at most ${TUTOR_MODEL_LIMITS.maxEntries} models.` : undefined;
+  const listId = `${base}-models`;
+  // The button and the form take turns in one place, each in a fold, so one
+  // closes as the other opens; both stay mounted, the shut one inert.
+  return (
+    <div>
+      <Collapse open={!open}>
         <Button id={`${base}-open`} variant="secondary" size="sm" disabled={disabled || reason !== undefined} disabledReason={reason} onClick={openForm}>
           Add a model
         </Button>
-      </div>
-    );
-  }
-
-  const listId = `${base}-models`;
-  return (
-    <form onSubmit={(e) => void submit(e)} aria-label="Add a model" className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={`${base}-provider`} className={LABEL}>
-          Provider
-        </label>
-        <select
-          id={`${base}-provider`}
-          value={chosen?.id ?? ""}
-          onChange={(e) => {
-            const id = e.target.value as ProviderId;
-            setProvider(id);
-            void load(id);
-          }}
-          className={inputClasses({ className: "cursor-pointer" })}
-        >
-          {usable.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label} ({p.key === "saved" ? "your key" : "server key"})
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={`${base}-model`} className={LABEL}>
-          Model
-        </label>
-        <Input
-          id={`${base}-model`}
-          name="model"
-          list={list?.state === "ready" ? listId : undefined}
-          autoComplete="off"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          placeholder="Model id"
-          aria-describedby={`${base}-list-state`}
-          aria-invalid={error !== null}
-        />
-        {list?.state === "ready" && (
-          <datalist id={listId}>
-            {list.models.map((m) => (
-              <option key={m.id} value={m.id} label={m.free ? "free" : undefined} />
-            ))}
-          </datalist>
-        )}
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <p id={`${base}-list-state`} aria-live="polite" className="text-[12px] text-text2">
-            {list === undefined || list.state === "loading"
-              ? `Loading ${chosen?.label ?? "the provider"}'s models…`
-              : list.state === "ready"
-                ? list.models.length > 0
-                  ? `${list.models.length} ${list.models.length === 1 ? "model" : "models"} from ${chosen?.label}. Start typing to pick one, or type any model id.`
-                  : `${chosen?.label} listed no models. Type a model id.`
-                : `The list could not be loaded (${list.message}). Type a model id.`}
-          </p>
-          {list?.state === "error" && chosen !== undefined && (
-            <Button variant="ghost" size="sm" onClick={() => void load(chosen.id)}>
-              Try again
-            </Button>
+      </Collapse>
+      <Collapse open={open}>
+        <form onSubmit={(e) => void submit(e)} aria-label="Add a model" className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={`${base}-provider`} className={LABEL}>
+              Provider
+            </label>
+            <select
+              id={`${base}-provider`}
+              value={chosen?.id ?? ""}
+              onChange={(e) => {
+                const id = e.target.value as ProviderId;
+                setProvider(id);
+                void load(id);
+              }}
+              className={inputClasses({ className: "cursor-pointer" })}
+            >
+              {usable.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} ({p.key === "saved" ? "your key" : "server key"})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={`${base}-model`} className={LABEL}>
+              Model
+            </label>
+            <Input
+              id={`${base}-model`}
+              name="model"
+              list={list?.state === "ready" ? listId : undefined}
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="Model id"
+              aria-describedby={`${base}-list-state`}
+              aria-invalid={error !== null}
+            />
+            {list?.state === "ready" && (
+              <datalist id={listId}>
+                {list.models.map((m) => (
+                  <option key={m.id} value={m.id} label={m.free ? "free" : undefined} />
+                ))}
+              </datalist>
+            )}
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <p id={`${base}-list-state`} aria-live="polite" className="text-[12px] text-text2">
+                {list === undefined || list.state === "loading"
+                  ? `Loading ${chosen?.label ?? "the provider"}'s models…`
+                  : list.state === "ready"
+                    ? list.models.length > 0
+                      ? `${list.models.length} ${list.models.length === 1 ? "model" : "models"} from ${chosen?.label}. Start typing to pick one, or type any model id.`
+                      : `${chosen?.label} listed no models. Type a model id.`
+                    : `The list could not be loaded (${list.message}). Type a model id.`}
+              </p>
+              {list?.state === "error" && chosen !== undefined && (
+                <Button variant="ghost" size="sm" onClick={() => void load(chosen.id)}>
+                  Try again
+                </Button>
+              )}
+            </div>
+          </div>
+          {error !== null && (
+            <p role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
+              {error}
+            </p>
           )}
-        </div>
-      </div>
-      {error !== null && (
-        <p role="alert" className="text-[12px] text-danger">
-          {error}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-2.5">
-        <Button type="submit" size="sm" disabled={saving || disabled || model.trim() === ""}>
-          Add model
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={saving}
-          onClick={() => {
-            focusAfter.current = `${base}-open`;
-            setOpen(false);
-            setModel("");
-          }}
-        >
-          Cancel
-        </Button>
-      </div>
-    </form>
+          <div className="flex flex-wrap gap-2.5">
+            <Button type="submit" size="sm" disabled={saving || disabled || model.trim() === ""}>
+              Add model
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={saving}
+              onClick={() => {
+                focusAfter.current = `${base}-open`;
+                setOpen(false);
+                setModel("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Collapse>
+    </div>
   );
 }

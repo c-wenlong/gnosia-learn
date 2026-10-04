@@ -812,6 +812,10 @@ function Field<K extends string>({
             // Under the box, beside its plus; over the row, which sits at the foot of a panel.
             box ? "top-full mt-2" : "bottom-full mb-2",
             "overflow-hidden rounded-xl border border-border bg-surface",
+            // It pops in from the corner it hangs off, the plus's side. Once,
+            // as it opens: typing a query re-renders the rows, not this box.
+            box ? "origin-top-left" : "origin-bottom-left",
+            "animate-pop-in motion-reduce:animate-none",
           )}
         >
           <ul id={listId} role="listbox" aria-label="What to make" className="flex flex-col py-1">

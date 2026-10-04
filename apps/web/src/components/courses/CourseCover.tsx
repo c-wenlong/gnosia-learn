@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 
 import { Placeholder } from "@/components/ui/Placeholder";
+import { useImageReveal } from "@/components/ui/use-image-reveal";
 
 /**
  * A course card's cover: the photo when the course has one and it loads, the
@@ -26,11 +27,26 @@ import { Placeholder } from "@/components/ui/Placeholder";
  * optimizer fetches its source server-side without forwarding any header, so
  * it would get the proxy's 401. The image is stored at the card's size
  * already (960x540), so there is little to gain.
+ *
+ * The photo fades in when it arrives (`useImageReveal`) over the frame's own
+ * ground, rather than painting in at once.
  */
 export function CourseCover({ src, code }: { src: string | null; code: string }) {
   const [failed, setFailed] = useState<string | null>(null);
+  const { attach, onLoad, className: fade } = useImageReveal(src);
   if (src === null || failed === src) {
     return <Placeholder label={code} height="100%" className="rounded-none text-[13px]" />;
   }
-  return <Image src={src} alt="" fill unoptimized className="object-cover" onError={() => setFailed(src)} />;
+  return (
+    <Image
+      ref={attach}
+      src={src}
+      alt=""
+      fill
+      unoptimized
+      className={`object-cover ${fade}`}
+      onLoad={onLoad}
+      onError={() => setFailed(src)}
+    />
+  );
 }

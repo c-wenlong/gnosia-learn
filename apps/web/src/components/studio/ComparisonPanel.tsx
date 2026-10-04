@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { FadeImg } from "@/components/studio/motion-parts";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import {
@@ -273,8 +274,7 @@ function Thumbnail({
           title={`Open the ${label.toLowerCase()} picture full width`}
           className="block aspect-[4/3] w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <FadeImg
             src={shotSrc(job.jobId, which)}
             alt={`${label}: ${job.title ?? "the diagram"}`}
             className="h-full w-full object-contain"

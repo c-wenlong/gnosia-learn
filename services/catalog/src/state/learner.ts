@@ -20,7 +20,11 @@ export async function ensureLearner(
   db: CatalogDatabase,
   learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<string> {
-  await db.insert(learner).values({ id: learnerId }).onConflictDoNothing();
+  // Raw SQL naming `id` alone: drizzle's insert lists every column, each as
+  // `default`, so on a database behind the journal (no `avatar` before 0023)
+  // it failed as an undefined column, and the caller reported an unreachable
+  // database where the honest answer is "run migrate".
+  await db.execute(sql`insert into learner (id) values (${learnerId}) on conflict do nothing`);
   return learnerId;
 }
 

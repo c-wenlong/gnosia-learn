@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConceptGraph, ConceptGraphKey } from "@/components/ConceptGraph";
 import { ConceptMap, type FitRequest, type MapMark } from "@/components/learn/ConceptMap";
@@ -17,6 +17,7 @@ import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/li
 import type { MapLayout } from "@/lib/concept-map";
 import { firstMatch, relatedTo, standingLine } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
+import { scrollBehavior } from "@/lib/reduced-motion";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
@@ -139,8 +140,9 @@ export function LearnIndex({
       {view === "table" ? (
         // Sized by the width the page actually has, not the viewport's: the
         // sidebar takes 60 or 260px of it, so a viewport breakpoint docked the
-        // graph beside a table with no room left for the concept titles.
-        <div className="@container">
+        // graph beside a table with no room left for the concept titles. It
+        // fades in over the map it replaces.
+        <div className="@container animate-fade-in motion-reduce:animate-none">
           <div className="grid grid-cols-1 items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
             <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
             <GraphCard
@@ -216,7 +218,7 @@ function ConceptTable({
                 onClick={() => onSelect(r.id)}
                 aria-selected={r.id === selected}
                 className={cx(
-                  "cursor-pointer border-b border-hair last:border-b-0",
+                  "cursor-pointer border-b border-hair transition-colors duration-100 last:border-b-0 motion-reduce:transition-none",
                   r.id === selected ? "bg-surface2" : "hover:bg-surface2/60",
                 )}
               >
@@ -328,7 +330,7 @@ function MapCard({
  * how well it is known, when it is due, where it is taught, what it needs and
  * what leads on from it. Choosing one of those moves the map to it.
  */
-function MapPanel({
+export function MapPanel({
   focus,
   nodes,
   edges,
@@ -339,6 +341,20 @@ function MapPanel({
   edges: GraphEdge[];
   onPick: (id: string) => void;
 }) {
+  // A "Needs" or "Leads to" press redraws this panel for the concept it names,
+  // and the button that had focus goes with it: focus moves to the new
+  // concept's name, so a keyboard or a screen reader keeps its place.
+  const heading = useRef<HTMLHeadingElement | null>(null);
+  const picked = useRef(false);
+  const focusId = focus?.id ?? null;
+  useEffect(() => {
+    if (!picked.current) return;
+    picked.current = false;
+    // Into view too: a press near the foot of a long panel would leave the
+    // name above the fold. Gliding there unless motion is reduced.
+    heading.current?.focus({ preventScroll: true });
+    heading.current?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() });
+  }, [focusId]);
   if (focus === null) {
     return (
       <section aria-label="Concept details" className="rounded-xl bg-surface2 p-4 text-[13px] text-text2">
@@ -359,7 +375,10 @@ function MapPanel({
               <button
                 type="button"
                 data-concept={n.id}
-                onClick={() => onPick(n.id)}
+                onClick={() => {
+                  picked.current = true;
+                  onPick(n.id);
+                }}
                 className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent"
               >
                 <MasteryDot bucket={n.bucket} size={10} className="shrink-0" />
@@ -374,7 +393,9 @@ function MapPanel({
   return (
     <section aria-label="Concept details" className="flex min-w-0 flex-col gap-3 rounded-xl bg-surface2 p-4">
       <div className="flex flex-col gap-1">
-        <h3 className="text-[15px] leading-snug font-bold text-text">{focus.title}</h3>
+        <h3 ref={heading} tabIndex={-1} className="text-[15px] leading-snug font-bold text-text outline-none">
+          {focus.title}
+        </h3>
         <p className="text-[12px] text-text2">
           {MASTERY_BUCKET_LABEL[focus.bucket]}
           {focus.leech && <span className="font-semibold text-danger"> · {LEECH_LABEL}</span>}
@@ -430,6 +451,21 @@ function GraphCard({
   const course = focus ? courseScope(nodes, edges, focus.id) : null;
   const shown = focus === null ? null : scope === "course" && course ? course : neighbourhood(nodes, edges, focus.id);
   const wider = course?.basis === "domain" ? "Folder" : "Course";
+  const graphBox = useRef<HTMLDivElement>(null);
+  /** A node was chosen from inside the graph, which its key then replaces whole. */
+  const refocus = useRef(false);
+  const select = (id: string) => {
+    // Only a new concept re-keys the graph; pressing the ringed one again changes nothing to follow.
+    refocus.current = id !== focus?.id && (graphBox.current?.contains(document.activeElement) ?? false);
+    onSelect(id);
+  };
+  const drawn = focus === null ? null : `${focus.id}:${scope}`;
+  // The node pressed went with the old graph; the concept it chose, ringed in the new one, takes the focus.
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    graphBox.current?.querySelector<SVGElement>('[aria-pressed="true"]')?.focus();
+  }, [drawn]);
 
   return (
     <Card
@@ -457,12 +493,15 @@ function GraphCard({
               {scope === "course" && course?.basis === "domain" && ` · no course, showing the ${focus.domain} folder`}
             </span>
           </p>
-          <div className="min-h-[300px] rounded-xl bg-surface2 p-2">
+          <div ref={graphBox} className="min-h-[300px] rounded-xl bg-surface2 p-2">
+            {/* Keyed on what it draws, so a new concept's graph fades in rather than snapping into the old one's place. */}
             <ConceptGraph
+              key={drawn}
+              className="animate-fade-in motion-reduce:animate-none"
               nodes={shown.nodes}
               edges={shown.edges}
               focus={focus.id}
-              onSelect={onSelect}
+              onSelect={select}
               fit={scope === "neighbourhood"}
               compact
               label={`${scope === "course" ? "Course" : "Neighbourhood"} graph of ${focus.title}`}

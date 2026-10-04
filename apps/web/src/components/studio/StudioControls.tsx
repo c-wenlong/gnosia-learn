@@ -77,7 +77,7 @@ export function KindSegments({ view }: { view: StudioView }) {
             key={kind}
             href={studioHref(view, { kind, selected: null })}
             aria-current={active ? "true" : undefined}
-            className={`flex h-full items-center rounded-md px-2.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] motion-reduce:transition-none ${
+            className={`flex h-full items-center rounded-md px-2.5 text-xs transition-[color,background-color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] motion-reduce:transition-none ${
               active
                 ? "bg-[var(--surface)] font-semibold text-[var(--foreground)] shadow-sm"
                 : "font-medium text-[var(--muted)] hover:text-[var(--foreground)]"

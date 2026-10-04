@@ -65,6 +65,25 @@ describe("AvatarPicker", () => {
     expect(container.textContent).toContain("Not saved");
   });
 
+  it("tries again when the sprite a failed save left showing is chosen again", async () => {
+    learner.setAvatar.mockResolvedValue(false);
+    const { radios, container } = mount();
+    await act(async () => radios().find((r) => r.value === "bat")?.click());
+    expect(container.textContent).toContain("Not saved");
+    // The provider keeps the attempted sprite in its state, as it does for a refused write.
+    learner.avatar = "bat";
+    learner.setAvatar.mockResolvedValue(true);
+    await act(async () => radios().find((r) => r.value === "bat")?.click());
+    expect(learner.setAvatar).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Saved");
+  });
+
+  it("does not save again when the stored sprite is chosen", async () => {
+    const { radios } = mount();
+    await act(async () => radios().find((r) => r.value === "owl")?.click());
+    expect(learner.setAvatar).not.toHaveBeenCalled();
+  });
+
   it("cannot be used while the sprite is unknown", () => {
     learner.avatar = undefined;
     const { radios, container } = mount();

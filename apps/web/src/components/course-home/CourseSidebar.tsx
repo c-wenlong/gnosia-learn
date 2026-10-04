@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { CollapseChevron } from "@/components/ui/Collapse";
@@ -24,6 +24,16 @@ import { FOCUS_RING, ROW_HOVER } from "./rows";
  * the toggle names the module on screen, and the list opens under it. The
  * two toggles are two buttons, one per width, because which one shows is a
  * container query and the list's open state has to be separate for each.
+ *
+ * The list glides open and shut the way `Collapse` does (grid rows from 0fr
+ * to 1fr, with a fade), written out here because which of the two states
+ * applies is a container query, which `Collapse` cannot take. A shut list is
+ * `invisible` rather than `inert`, for the same reason: visibility can follow
+ * the container query, and it takes the links out of the tab order and the
+ * accessibility tree just the same, once the fold has finished. For the
+ * fold's 300ms on the way shut, while visibility still says visible, the list
+ * is `inert` (`shutting`): a toggle that closes it knows the list is going,
+ * whichever width it is.
  */
 export function CourseSidebar({
   course,
@@ -42,6 +52,17 @@ export function CourseSidebar({
 }) {
   const [wideOpen, setWideOpen] = useState(true);
   const [narrowOpen, setNarrowOpen] = useState(false);
+  // True for the fold's way shut, when visibility has not yet hidden the links.
+  const [shutting, setShutting] = useState(false);
+  useEffect(() => {
+    if (!shutting) return;
+    const timer = window.setTimeout(() => setShutting(false), 350);
+    return () => window.clearTimeout(timer);
+  }, [shutting]);
+  const toggle = (open: boolean, set: (open: boolean) => void) => {
+    set(!open);
+    setShutting(open);
+  };
   const listId = useId();
   const current = course.modules[selected];
 
@@ -55,7 +76,7 @@ export function CourseSidebar({
       <nav aria-label="Course material" className="flex flex-col">
         <button
           type="button"
-          onClick={() => setWideOpen((v) => !v)}
+          onClick={() => toggle(wideOpen, setWideOpen)}
           aria-expanded={wideOpen}
           aria-controls={listId}
           className={cx(
@@ -70,7 +91,7 @@ export function CourseSidebar({
         {current && (
           <button
             type="button"
-            onClick={() => setNarrowOpen((v) => !v)}
+            onClick={() => toggle(narrowOpen, setNarrowOpen)}
             aria-expanded={narrowOpen}
             aria-controls={listId}
             className={cx(
@@ -88,41 +109,52 @@ export function CourseSidebar({
           </button>
         )}
 
-        <ol
+        <div
           id={listId}
+          inert={shutting}
           className={cx(
-            "mt-1 flex-col gap-0.5",
-            narrowOpen ? "flex" : "hidden",
-            wideOpen ? "@3xl:flex" : "@3xl:hidden",
+            "grid duration-300 ease-soft motion-reduce:transition-none",
+            // Visibility is transitioned on the way shut only: on the way open
+            // it would hold the list hidden for its first frame.
+            narrowOpen
+              ? "visible grid-rows-[1fr] opacity-100 transition-[grid-template-rows,opacity]"
+              : "invisible grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity,visibility]",
+            wideOpen
+              ? "@3xl:visible @3xl:grid-rows-[1fr] @3xl:opacity-100 @3xl:transition-[grid-template-rows,opacity]"
+              : "@3xl:invisible @3xl:grid-rows-[0fr] @3xl:opacity-0 @3xl:transition-[grid-template-rows,opacity,visibility]",
           )}
         >
-          {course.modules.map((m, i) => {
-            const s = status.modules[i]!;
-            const here = i === selected;
-            return (
-              <li key={m.id}>
-                <Link
-                  href={moduleHref(course.slug, m.slug)}
-                  aria-current={here ? "page" : undefined}
-                  onClick={() => setNarrowOpen(false)}
-                  className={cx(
-                    "flex min-h-9 items-center gap-2.5 rounded-lg p-2 text-[14px] leading-5 text-text",
-                    here ? "bg-tint font-semibold" : ROW_HOVER,
-                    FOCUS_RING,
-                  )}
-                >
-                  <ModuleMarkIcon mark={moduleMark(s)} fraction={s.total === 0 ? 0 : s.done / s.total} />
-                  <span className="min-w-0 flex-1">
-                    {m.order}. {m.title}
-                  </span>
-                  <span className="shrink-0 text-[12px] font-normal tabular-nums text-text2">
-                    {s.done}/{s.total}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ol>
+          <div className="min-h-0 overflow-clip [overflow-clip-margin:4px]">
+            <ol className="flex flex-col gap-0.5 pt-1">
+              {course.modules.map((m, i) => {
+                const s = status.modules[i]!;
+                const here = i === selected;
+                return (
+                  <li key={m.id}>
+                    <Link
+                      href={moduleHref(course.slug, m.slug)}
+                      aria-current={here ? "page" : undefined}
+                      onClick={() => setNarrowOpen(false)}
+                      className={cx(
+                        "flex min-h-9 items-center gap-2.5 rounded-lg p-2 text-[14px] leading-5 text-text transition-colors duration-150 motion-reduce:transition-none",
+                        here ? "bg-tint font-semibold" : "hover:bg-tint",
+                        FOCUS_RING,
+                      )}
+                    >
+                      <ModuleMarkIcon mark={moduleMark(s)} fraction={s.total === 0 ? 0 : s.done / s.total} />
+                      <span className="min-w-0 flex-1">
+                        {m.order}. {m.title}
+                      </span>
+                      <span className="shrink-0 text-[12px] font-normal tabular-nums text-text2">
+                        {s.done}/{s.total}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </div>
       </nav>
 
       {libraryHref && (

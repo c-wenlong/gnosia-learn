@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   openInStudio: vi.fn(),
   /** How many times the chunk was imported. */
   imported: 0,
+  /** Every `scrollTo` on an element, which jsdom does not have. */
+  scrolls: [] as ScrollToOptions[],
   field: null as null | {
     value: Value;
     disabled: boolean;
@@ -90,6 +92,12 @@ beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   // jsdom has no layout; the composer measures itself.
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 52 });
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+    configurable: true,
+    value(options: ScrollToOptions) {
+      mocks.scrolls.push(options);
+    },
+  });
 });
 
 const GOOD = { ok: true, diagramAgent: { ok: true, problem: null }, video: { ok: true, checks: [] }, dailyCap: { totalUsd: 0 } };
@@ -107,6 +115,7 @@ beforeEach(async () => {
   mocks.focus.mockClear();
   mocks.openInStudio.mockReset();
   mocks.field = null;
+  mocks.scrolls.length = 0;
   health = GOOD;
   fetched.length = 0;
   sessionStorage.clear();
@@ -436,5 +445,74 @@ describe("health on focus", () => {
     expect(studioCalls()).toHaveLength(2);
     expect(mocks.field).not.toBeNull();
     expect(mocks.field!.health).toBeNull();
+  });
+});
+
+describe("motion", () => {
+  const STORED = [
+    { role: "user", content: "What is a SYN?" },
+    { role: "assistant", content: "The opener." },
+  ];
+  const turnsIn = (host: HTMLElement) =>
+    [...host.querySelectorAll('[aria-live="polite"] > *')].filter((el) => el.matches("article, div.flex.justify-end"));
+
+  function reducedMotion(on: boolean) {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: on && query.includes("reduce"),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+  }
+
+  it("fades in a restored thread, and lets only a turn added now rise in", async () => {
+    sessionStorage.setItem(threadKey("tcp-motion"), JSON.stringify(STORED));
+    const host = await mount({ slug: "tcp-motion" });
+    const restored = turnsIn(host);
+    expect(restored).toHaveLength(2);
+    for (const turn of restored) {
+      expect(turn.classList.contains("animate-fade-in")).toBe(true);
+      expect(turn.classList.contains("animate-enter")).toBe(false);
+    }
+
+    await typePlain(host, "And the ACK?");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+    const after = turnsIn(host);
+    expect(after).toHaveLength(4);
+    // The two said before keep their class, so nothing replays; the question and its answer rise in.
+    expect(after.slice(0, 2).every((t) => t.classList.contains("animate-fade-in"))).toBe(true);
+    expect(after.slice(2).every((t) => t.classList.contains("animate-enter"))).toBe(true);
+  });
+
+  it("shows the greeting only once hydration has said there is no thread", async () => {
+    const host = await mount();
+    const greeting = host.querySelector('[aria-live="polite"] > article') as HTMLElement;
+    expect(greeting.textContent).toContain("Ask me anything");
+    expect(greeting.classList.contains("animate-fade-in")).toBe(true);
+    expect(greeting.classList.contains("opacity-0")).toBe(false);
+  });
+
+  it("jumps to the newest turn on its first paint, and glides after a send", async () => {
+    reducedMotion(false);
+    sessionStorage.setItem(threadKey("tcp-glide"), JSON.stringify(STORED));
+    const host = await mount({ slug: "tcp-glide" });
+    expect(mocks.scrolls).toEqual([]);
+
+    await typePlain(host, "And the ACK?");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+    expect(mocks.scrolls.length).toBeGreaterThan(0);
+    expect(mocks.scrolls.every((s) => s.behavior === "smooth")).toBe(true);
+  });
+
+  it("jumps under reduced motion", async () => {
+    reducedMotion(true);
+    sessionStorage.setItem(threadKey("tcp-still"), JSON.stringify(STORED));
+    const host = await mount({ slug: "tcp-still" });
+    await typePlain(host, "And the ACK?");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+    expect(mocks.scrolls).toEqual([]);
   });
 });
