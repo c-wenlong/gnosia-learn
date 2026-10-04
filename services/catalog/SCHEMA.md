@@ -1097,6 +1097,16 @@ the count and the commit; a refusal rolls the arming back with everything
 else. A waived rule is disarmed even if an earlier strict flip armed it.
 `manimkc` cannot be flipped until Track E gives videos a parity.
 
+`catalog flip <type> --strict --rearm` is for a type the database already
+owns, and a rule a later migration added (0021's
+`course-order-respects-requires` was the first). A plain re-flip would run
+parity against the tree the type was last imported from, which the database
+has moved past since it took ownership, and its hint, importing those files,
+would undo the database's own edits. `--rearm` reads no tree: it arms the
+guards and, with `--strict`, every rule of the type that is not waived,
+counts the violators the same way, keeps the last flip's parity report and
+records no export hash. It refuses a type still on files.
+
 ### Export, import and parity
 
 `catalog import` with no directory reads the repository root, and with one
@@ -1155,6 +1165,7 @@ cannot point them elsewhere.
 | `collection_module_has_item`, `curriculum_item_module_has_item` | `collection`, `curriculum_item` | constraint, deferred | **off** | Rule `module-has-item` |
 | `curriculum_item_item_has_concept`, `concept_curriculum_item_item_has_concept` | `curriculum_item`, `concept_curriculum_item` | constraint, deferred | **off** | Rule `item-has-concept`; nine courses fail it today |
 | `concept_curriculum_item_concept_topic`, `concept_concept_topic`, `curriculum_item_concept_topic`, `collection_item_concept_topic` | the four tables that can move either side | constraint, deferred | **off** | Rule `item-concept-in-module-topic` |
+| `concept_prerequisite_course_order`, `concept_curriculum_item_course_order`, `curriculum_item_course_order`, `collection_course_order` | the four tables that can change a course's order or a `requires` edge (0021) | constraint, deferred | **off** | Rule `course-order-respects-requires`: a course teaches no concept before a concept it `requires`, judged by each concept's first appearance (module, item, position). `assumes` out of order is a doctor warning, never refused |
 | `<table>_copy_guard` | every table but `catalog_instance` | before, per statement, including `TRUNCATE` | on | Refuses a write when `catalog_instance.role = 'copy'`, naming `primary_host`, unless the connection set `self_learn.copy_ok = on` |
 
 Why each is shaped the way it is:
