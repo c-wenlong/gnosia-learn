@@ -132,6 +132,38 @@ export async function assetsForConcept(db: CatalogDatabase, slug: string, scope:
 }
 
 /**
+ * `assetsForConcept` for many concepts in one round trip, keyed by concept
+ * slug: the module path places each concept's diagrams and videos on its
+ * step, and a module has a handful of concepts (a course page resolves every
+ * module of the course, so dozens). Scoped as `assetsForConcept` is, at both
+ * ends. A concept with no asset is absent, never an empty-array key, the
+ * `conceptsForAssets` contract; within a concept, kind then id. An empty list
+ * asks nothing.
+ */
+export async function assetsForConcepts(
+  db: CatalogDatabase,
+  slugs: readonly string[],
+  scope: OwnerScope,
+): Promise<Record<string, AssetRef[]>> {
+  const wanted = [...new Set(slugs)];
+  if (wanted.length === 0) return {};
+  const rows = await scopedRead(db, scope.readable, (owners) =>
+    db
+      .select({ ...ASSET_COLUMNS, conceptSlug: assetConcept.conceptSlug })
+      .from(assetConcept)
+      .innerJoin(asset, eq(asset.id, assetConcept.assetId))
+      .innerJoin(concept, eq(concept.slug, assetConcept.conceptSlug))
+      .where(
+        and(inArray(assetConcept.conceptSlug, wanted), ownedBy(asset.ownerId, owners), ownedBy(concept.ownerId, owners)),
+      )
+      .orderBy(asc(bytewise(assetConcept.conceptSlug)), asc(bytewise(asset.kind)), asc(bytewise(asset.id))),
+  );
+  const out: Record<string, AssetRef[]> = {};
+  for (const { conceptSlug, ...row } of rows) (out[conceptSlug] ??= []).push(row);
+  return out;
+}
+
+/**
  * The concepts each of these assets explains, the reverse of
  * `assetsForConcept`, for a page that already holds the assets.
  *

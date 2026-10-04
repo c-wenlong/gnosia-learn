@@ -507,9 +507,10 @@ the learner is on.
 | --- | --- |
 | [`lib/course-home.ts`](../../apps/web/src/lib/course-home.ts) | `loadCourseHome(course)`, server only: each topic's mastery, and per module the Guidebook concept, the assets and the description (the topic vocabulary's `summary` for the module's `topic:`). Both pages call it; every module is resolved, since the sidebar marks all of them |
 | [`lib/course-path.ts`](../../apps/web/src/lib/course-path.ts) | the pure rules, unchanged where Today and Courses read them (`pathStatus`, the lock, `itemStanding`), plus `defaultModuleIndex`, `moduleHref`, `moduleMark`, `topicMark`, `topicMeta`, `moduleMeta`, `moduleObjectives`, `moduleConceptCount`, `doneLine` |
-| [`lib/course-assets.ts`](../../apps/web/src/lib/course-assets.ts) | a module's assets as rows: title, kind label and icon family, the first six, and the library link for the rest. No thumbnails, so no blob reads |
+| [`lib/course-assets.ts`](../../apps/web/src/lib/course-assets.ts) | what each module's path places, as rows (title, kind label, icon family): the topic's videos, each concept's diagrams and videos, the listed videos resolved by id, whether the topic is shared, each note's check count, and the count and library link for everything filed under the topic. No thumbnails, so no blob reads |
+| [`lib/module-path.ts`](../../apps/web/src/lib/module-path.ts) | `modulePath`, pure: the module as one ordered path (phase 3 of [module-learning-path.md](../proposals/module-learning-path.md)), and where each video lands, once per page |
 | [`CourseHome`](../../apps/web/src/components/course-home/CourseHome.tsx) | the client half: the status from the ticks, which module to show, the grid |
-| [`CourseSidebar`](../../apps/web/src/components/course-home/CourseSidebar.tsx), [`ModuleMain`](../../apps/web/src/components/course-home/ModuleMain.tsx), [`TopicRow`](../../apps/web/src/components/course-home/TopicRow.tsx), [`ModuleResources`](../../apps/web/src/components/course-home/ModuleResources.tsx), [`CourseRail`](../../apps/web/src/components/course-home/CourseRail.tsx) | the three columns and their rows; `rows.ts` holds the row classes, `icons.tsx` the glyphs and status marks |
+| [`CourseSidebar`](../../apps/web/src/components/course-home/CourseSidebar.tsx), [`ModuleMain`](../../apps/web/src/components/course-home/ModuleMain.tsx), [`ModulePath`](../../apps/web/src/components/course-home/ModulePath.tsx), [`TopicRow`](../../apps/web/src/components/course-home/TopicRow.tsx), [`ModuleResources`](../../apps/web/src/components/course-home/ModuleResources.tsx), [`CourseRail`](../../apps/web/src/components/course-home/CourseRail.tsx) | the three columns and their rows; `rows.ts` holds the row classes, `icons.tsx` the glyphs and status marks |
 
 **Layout.** Three `Panel`s (surface, radius 16, no border, no shadow) on the
 page colour, 16 apart: from 1280px a 300px sidebar, the module, and a 360px
@@ -531,11 +532,26 @@ a tick: mastered, or ticked when it has no concept), learning (the kit's
 learning dot) or not started (a ring in `--text3`); its meta line is
 "3 concepts · Learning", "Done" or "Not started". The whole row is a toggle
 (a button whose `::after` covers the row) that opens the topic's tools,
-which are the old node panel's: concepts with their mastery, what it covers,
-Mark done, the tutor chat, the recap and the note. Continue sits above the
-toggle at the row's right, and under the title on a phone. A module row's
-mark is done, in progress (an arc for the share done), not started, or a
-padlock while locked.
+which are the old node panel's: what it covers, Mark done, the tutor chat,
+the recap and the note. Continue sits above the toggle at the row's right,
+and under the title on a phone. A module row's mark is done, in progress (an
+arc for the share done), not started, or a padlock while locked.
+
+**The module as a path** (since phase 3 of
+[module-learning-path.md](../proposals/module-learning-path.md)). Under the
+objectives the module is one ordered list in Coursera's groups: Before you
+start (unmastered prerequisites outside the module, `requires` first; only
+when there are any), Watch (the videos the module lists, then its topic's;
+only when there are any), Read alongside (readings with no `lessons:`, the
+learner's own, and the add form), then one group per topic, its row as the
+header and its steps under it on a hairline: each concept is one row, the
+note's title over "Note · Learning" (plus " · 3 checks" when the note has
+checks) with a Quiz me pill at its end, under the title on a phone; its
+diagrams and videos follow as rows of their own, then the readings listed
+on the topic. Practice comes last when there is any, then "All N in the
+library" once. One icon per step kind: a bulb for a prerequisite, a page
+for a note, the family glyph for an asset, the resource type's glyph for a
+reading, a pencil for practice. The concepts left the topic panel, since the steps draw them.
 
 ## Deviations from the hi-fi
 
