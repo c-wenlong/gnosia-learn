@@ -842,6 +842,62 @@ async function run() {
     }
   });
 
+  // D10: on a phone the picture fits its card and its labels keep 11px on
+  // screen; a label that would collide is culled, its title still on the hover
+  // plate. The seed's domain is small enough that nothing collides as laid
+  // out, so a drag piles one concept under another to make a collision.
+  await step('learn: labels stay readable on a phone, and a culled one shows on hover', page, async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await go('/learn?domain=machine-learning');
+      const graph = main.getByRole('group', { name: /^Machine learning map/ });
+      await hydrated(page, graph.locator('[data-concept="positional-encoding"]'));
+      const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
+      assert(overflow <= 0, `the page scrolls sideways by ${overflow}px on a phone`);
+      const read = () =>
+        graph.evaluate((svg) => {
+          const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+          const shown = [...svg.querySelectorAll('[data-concept][data-label="shown"]')];
+          const px = shown.map((g) => Number(g.querySelector('text')?.getAttribute('font-size')) * scale);
+          return { scale, shown: shown.length, smallest: Math.min(...px) };
+        });
+      const before = await read();
+      assert(before.shown > 0, 'no label is drawn on a phone');
+      assert(before.smallest >= 10.9, `a label is ${before.smallest.toFixed(1)}px on screen`);
+
+      // Drop multi-head attention 40 units under positional encoding: its dot lands in that label.
+      const dotOf = (id) => graph.locator(`[data-concept="${id}"] circle[data-dot]`);
+      const target = await dotOf('positional-encoding').boundingBox();
+      const from = await dotOf('multi-head-attention').boundingBox();
+      const to = { x: target.x + target.width / 2, y: target.y + target.height / 2 + 40 * before.scale };
+      const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      for (let i = 1; i <= 10; i++) await page.mouse.move(start.x + ((to.x - start.x) * i) / 10, start.y + ((to.y - start.y) * i) / 10);
+      await page.mouse.up();
+      await page.mouse.move(0, 0);
+      const culled = graph.locator('[data-concept="positional-encoding"]');
+      await graph.locator('[data-concept="positional-encoding"][data-label="hidden"]').waitFor({ state: 'attached' });
+      // Culled, it keeps its dot and its whole name.
+      assert(/^Positional encoding, /.test((await culled.getAttribute('aria-label')) ?? ''), 'the culled concept lost its name');
+      const dot = await dotOf('positional-encoding').boundingBox();
+      await page.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2);
+      await graph.locator('[data-concept="positional-encoding"][data-hover="true"][data-label="shown"]').waitFor();
+      const plate = (await graph.locator('[data-plate]').textContent()) ?? '';
+      assert(plate === 'Positional encoding', `hovering the culled concept showed "${plate}"`);
+      await page.mouse.move(0, 0);
+      await clickHydrated(page, main.locator('[data-moved]').getByRole('button', { name: 'Reset' }));
+      await main.locator('[data-moved]').waitFor({ state: 'detached' });
+    } finally {
+      // However the step ended, no later step inherits the drag: the session's moved positions go.
+      await page.mouse.up().catch(() => {});
+      await page.evaluate(() => {
+        for (const key of Object.keys(sessionStorage)) if (key.startsWith('learn-map:moved:')) sessionStorage.removeItem(key);
+      }).catch(() => {});
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   await step('workspace: Open in the map lands on the concept in its domain', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go(`/learn/${state.concept}`);
