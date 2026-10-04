@@ -112,7 +112,8 @@ export function AskBox() {
         aria-autocomplete="list"
         aria-activedescendant={activeId}
         value={query}
-        inputClassName="h-12 text-[15px]"
+        size="lg"
+        onClear={() => setQuery("")}
         onChange={(e) => {
           setQuery(e.target.value);
           setOpen(true);

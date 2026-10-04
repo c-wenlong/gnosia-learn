@@ -8,6 +8,8 @@ import { PixelAvatar } from "@/components/avatar/PixelAvatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
+import { FormRow, type FormRowField } from "@/components/ui/FormRow";
+import { Input } from "@/components/ui/Input";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
 import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
@@ -110,17 +112,18 @@ export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
   return (
     <Card title="Appearance">
       <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
-        {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}
+        {({ id, labelId }) => <ThemeSwitch id={id} labelledBy={labelId} />}
       </Field>
       <Field
         label="Motion"
         note="Always reduce motion stops the app's animations in this browser, whatever your device says. Respect system follows your device's setting."
         status={motion.status}
       >
-        {(id) => (
+        {({ id, describedBy }) => (
           <Select
             id={id}
             label="Motion"
+            describedBy={describedBy}
             options={MOTION_MODES.map((m) => ({ value: m.id, label: m.label }))}
             value={motion.value}
             onChange={(v) => {
@@ -260,10 +263,11 @@ export function TutorSettings({
   return (
     <Card title="Style and model order">
       <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>
-        {(id) => (
+        {({ id, describedBy }) => (
           <Select
             id={id}
             label="Tutor style"
+            describedBy={describedBy}
             options={TUTOR_STYLES.map((t) => ({ value: t.id, label: t.label }))}
             value={tutor.value}
             onChange={(v) => tutor.save(v as TutorStyle)}
@@ -278,8 +282,8 @@ export function TutorSettings({
             : "The built-in defaults, tried in this order: your own keys first, then the server's. Choose your own under Models below."
         }
       >
-        {(id) => (
-          <ReadOnly id={id} title={providers.map((p) => `${p.label}, ${p.source === "saved" ? "your key" : "server key"}`).join(" → ")}>
+        {(field) => (
+          <ReadOnly field={field} title={providers.map((p) => `${p.label}, ${p.source === "saved" ? "your key" : "server key"}`).join(" → ")}>
             {providers.length === 0
               ? chain
                 ? "None: no model in your list has a key"
@@ -306,8 +310,8 @@ export function DataSettings({
     <>
       <Card title="Mastery model">
         <Field label="BKT priors" note="Advanced. Read-only here: the learn CLI owns them, and they change future observations only.">
-          {(id) => (
-            <ReadOnly id={id}>
+          {(field) => (
+            <ReadOnly field={field}>
               {bkt === null
                 ? "Not read: the database is unreachable"
                 : `pL0 ${short(bkt.pL0)} · pT ${short(bkt.pT)} · pG ${short(bkt.pG)} · pS ${short(bkt.pS)}`}
@@ -361,14 +365,14 @@ export function NameField() {
   };
   return (
     <Field label="Name" note="Shown at the foot of the sidebar. Leave it empty to show Account." status={status}>
-      {(id) => (
-        <input
+      {({ id, describedBy }) => (
+        <Input
           id={id}
           type="text"
           value={draft}
           autoComplete="name"
           placeholder="Your name"
-          aria-describedby={`${id}-note`}
+          aria-describedby={describedBy}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={save}
           onKeyDown={(event) => {
@@ -377,7 +381,6 @@ export function NameField() {
               save();
             }
           }}
-          className={inputClasses()}
         />
       )}
     </Field>
@@ -389,6 +392,7 @@ function short(n: number): string {
   return String(Number(n.toFixed(3)));
 }
 
+/** A Settings row: `FormRow`'s inline layout, its status read from a save's `Status`. */
 function Field({
   label,
   note,
@@ -398,36 +402,28 @@ function Field({
   label: string;
   note?: string;
   status?: Status;
-  children: (id: string) => ReactNode;
+  children: (field: FormRowField) => ReactNode;
 }) {
-  const id = useId();
   return (
-    <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-      <div className="flex flex-col gap-0.5 md:w-[320px] md:shrink-0">
-        <label id={`${id}-label`} htmlFor={id} className="text-[14px] font-medium text-text">
-          {label}
-        </label>
-        {note !== undefined && (
-          <p id={`${id}-note`} className="text-[12px] text-text2">
-            {note}
-          </p>
-        )}
-      </div>
-      <div className="w-full md:w-[300px] md:shrink-0">{children(id)}</div>
-      <div className="min-w-0 md:flex-1">
-        <LiveStatus {...statusLine(status, { saving: "Saving…", saved: "Saved" })} />
-      </div>
-    </div>
+    <FormRow
+      layout="inline"
+      label={label}
+      hint={note}
+      status={status === undefined ? undefined : statusLine(status, { saving: "Saving…", saved: "Saved" })}
+    >
+      {children}
+    </FormRow>
   );
 }
 
 /** The input box, holding text that cannot be changed here. */
-function ReadOnly({ id, title, children }: { id: string; title?: string; children: ReactNode }) {
+function ReadOnly({ field, title, children }: { field: FormRowField; title?: string; children: ReactNode }) {
   return (
     <output
-      id={id}
+      id={field.id}
+      aria-describedby={field.describedBy}
       title={title || undefined}
-      className="flex h-11 w-full min-w-0 items-center truncate rounded-lg border-2 border-border bg-surface px-3.5 text-[14px] text-text"
+      className={inputClasses({ className: "flex items-center truncate" })}
     >
       <span className="truncate">{children}</span>
     </output>

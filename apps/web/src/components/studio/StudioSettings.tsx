@@ -1,14 +1,15 @@
 "use client";
 
-import { useId, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import type { StudioAgentPreference } from "@self-learn/schema/shared";
 
 import { saveStudioAgent } from "@/app/(app)/studio/actions";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { usePanelHost } from "@/components/studio/panel-host";
-import { cx, LABEL } from "@/components/ui/classes";
+import { cx } from "@/components/ui/classes";
 import type { FilterOption } from "@/components/ui/filter-menu";
+import { FormRow } from "@/components/ui/FormRow";
 import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
 import type { AgentKind } from "@/lib/studio-agent-settings";
@@ -161,14 +162,10 @@ function Menu({
   busy: boolean;
   onChange: (value: string) => void;
 }) {
-  const id = useId();
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <label htmlFor={id} className={LABEL}>
-        {label}
-      </label>
-      <Select id={id} label={label} options={options} value={value} busy={busy} onChange={onChange} />
-    </div>
+    <FormRow label={label}>
+      {({ id }) => <Select id={id} label={label} options={options} value={value} busy={busy} onChange={onChange} />}
+    </FormRow>
   );
 }
 

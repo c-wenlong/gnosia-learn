@@ -110,6 +110,7 @@ export function LearnIndex({
           placeholder="Search concepts"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onClear={() => setQuery("")}
           onKeyDown={(e) => {
             // On the map, Enter lands on the best match and fits its neighbourhood.
             if (e.key !== "Enter" || view !== "graph") return;
