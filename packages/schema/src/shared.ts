@@ -159,6 +159,95 @@ export const PROVIDER_IDS = [
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 /**
+ * A provider the owner added themselves (docs/TUTOR-MODELS.md, T14): any
+ * OpenAI-compatible endpoint, named `custom-<slug>`. The id lives in the same
+ * `provider` columns as a built-in's, so its key is a `provider_key` row and
+ * its models are chain entries like any other.
+ */
+export const CUSTOM_PROVIDER_PREFIX = "custom-";
+/** `custom-`, then 1 to 40 lowercase letters, digits and hyphens, not starting or ending with a hyphen. */
+export const CUSTOM_PROVIDER_ID_PATTERN = /^custom-[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+/** The same rule, written for a Postgres CHECK. */
+export const CUSTOM_PROVIDER_ID_SQL = "^custom-[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$";
+export type CustomProviderId = `custom-${string}`;
+/** A built-in provider or one the owner added: what a `provider` column holds. */
+export type ProviderName = ProviderId | CustomProviderId;
+
+/** How many providers an owner may add, and how long a name and a base URL may be. */
+export const CUSTOM_PROVIDER_LIMITS = { maxProviders: 10, maxLabelChars: 60, maxBaseUrlChars: 300 } as const;
+
+export function isCustomProviderId(value: unknown): value is CustomProviderId {
+  return typeof value === "string" && CUSTOM_PROVIDER_ID_PATTERN.test(value);
+}
+
+/** A built-in id or a custom one's shape. Whether the owner has that custom provider is the caller's to check. */
+export function isProviderName(value: unknown): value is ProviderName {
+  return isProviderId(value) || isCustomProviderId(value);
+}
+
+/** The hosts a custom provider may reach over plain http: this machine, for a local model server. */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * A custom provider's base URL, checked (T14): `https:`, or `http:` to this
+ * machine only (a local Ollama or LM Studio), with no user name, password,
+ * query or fragment, at most `maxBaseUrlChars`, and a trailing slash
+ * dropped, since the tutor appends `/chat/completions` and `/models`. The
+ * owner's key for the provider is sent to exactly this URL and no built-in
+ * key ever is. The reason never repeats the value.
+ */
+export function checkBaseUrl(value: unknown): { ok: true; url: string } | { ok: false; reason: string } {
+  if (typeof value !== "string") return { ok: false, reason: "The base URL must be text." };
+  const raw = value.trim();
+  if (raw.length === 0) return { ok: false, reason: "Enter the provider's base URL." };
+  if (raw.length > CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars) {
+    return { ok: false, reason: `The base URL is longer than ${CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars} characters.` };
+  }
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { ok: false, reason: "That is not a URL. It looks like https://api.example.com/v1." };
+  }
+  const loopback = LOOPBACK_HOSTS.has(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    return { ok: false, reason: "The base URL must start with https:// (plain http:// only for localhost)." };
+  }
+  if (url.username !== "" || url.password !== "") return { ok: false, reason: "Put the key in the API key field, not in the URL." };
+  if (url.search !== "" || url.hash !== "") return { ok: false, reason: "The base URL takes no query or fragment." };
+  return { ok: true, url: `${url.origin}${url.pathname}`.replace(/\/+$/, "") };
+}
+
+/** A custom provider's name, checked: 1 to `maxLabelChars` characters with no control characters. */
+export function checkProviderLabel(value: unknown): { ok: true; label: string } | { ok: false; reason: string } {
+  if (typeof value !== "string") return { ok: false, reason: "The name must be text." };
+  const label = value.trim().replace(/\s+/g, " ");
+  if (label.length === 0) return { ok: false, reason: "Give the provider a name." };
+  if (label.length > CUSTOM_PROVIDER_LIMITS.maxLabelChars) {
+    return { ok: false, reason: `The name is longer than ${CUSTOM_PROVIDER_LIMITS.maxLabelChars} characters.` };
+  }
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(label)) return { ok: false, reason: "The name has a character it cannot hold." };
+  return { ok: true, label };
+}
+
+/** The id a new custom provider gets from its name: `custom-<slug>`, with `-2`, `-3`… when `taken` has it. */
+export function customProviderId(label: string, taken: readonly string[]): CustomProviderId {
+  const slug =
+    label
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32)
+      .replace(/-+$/, "") || "provider";
+  const used = new Set(taken);
+  let id: CustomProviderId = `${CUSTOM_PROVIDER_PREFIX}${slug}`;
+  for (let n = 2; used.has(id); n += 1) id = `${CUSTOM_PROVIDER_PREFIX}${slug}-${n}`;
+  return id;
+}
+
+/**
  * The bounds on a stored provider key (docs/BYOK.md, decision 5). Saving
  * checks the shape only; the Test button is the real check. The floor keeps
  * the four characters Settings shows from being a large part of the key: every

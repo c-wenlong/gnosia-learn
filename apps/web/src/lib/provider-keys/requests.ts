@@ -1,7 +1,7 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { isProviderId, PROVIDER_IDS, type ProviderId } from "@self-learn/schema/shared";
+import { isProviderName, PROVIDER_IDS, type ProviderName } from "@self-learn/schema/shared";
 
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
 import { requestOwner } from "@/lib/learner-api";
@@ -71,6 +71,8 @@ export async function readBody(req: Request): Promise<Record<string, unknown> | 
 }
 
 /** `body.provider` as a provider id, or the 400 to answer with. */
-export function readProvider(body: Record<string, unknown>): ProviderId | NextResponse {
-  return isProviderId(body.provider) ? body.provider : refuse(`"provider" must be one of ${PROVIDER_IDS.join(", ")}.`);
+export function readProvider(body: Record<string, unknown>): ProviderName | NextResponse {
+  return isProviderName(body.provider)
+    ? body.provider
+    : refuse(`"provider" must be one of ${PROVIDER_IDS.join(", ")}, or one of your own providers' ids (custom-…).`);
 }

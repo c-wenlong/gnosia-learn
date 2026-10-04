@@ -59,7 +59,7 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
         sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
       );
       expect(rows[0]?.n).toBe(Object.keys(tables).length);
-      expect(rows[0]?.n).toBe(40);
+      expect(rows[0]?.n).toBe(41);
     });
 
     it("is idempotent", async () => {

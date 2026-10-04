@@ -173,6 +173,16 @@ export {
   type LegacyPayload,
 } from "./import";
 export {
+  addCustomProvider,
+  CustomProviderError,
+  readCustomProviders,
+  saveCustomProviderKey,
+  updateCustomProvider,
+  type CustomProviderErrorCode,
+  type CustomProviderKeySaved,
+  type StoredCustomProvider,
+} from "./custom-providers";
+export {
   clearPreference,
   readPreference,
   readPreferences,

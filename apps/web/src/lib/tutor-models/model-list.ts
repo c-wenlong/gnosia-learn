@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import type { ProviderId } from "@self-learn/schema/shared";
+import type { ProviderName } from "@self-learn/schema/shared";
 
 import { listProviderModels, type ModelListResult, type ProviderCredential } from "@/lib/agent/providers";
 
@@ -41,7 +41,7 @@ function fingerprint(credential: ProviderCredential): string {
     .slice(0, 16);
 }
 
-function slot(owner: string, provider: ProviderId): string {
+function slot(owner: string, provider: ProviderName): string {
   return `${owner}\u0000${provider}`;
 }
 

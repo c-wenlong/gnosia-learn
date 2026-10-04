@@ -1,4 +1,4 @@
-import { isProviderId, type ProviderId, providerKey } from "@self-learn/schema";
+import { isProviderName, type ProviderName, providerKey } from "@self-learn/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -36,13 +36,13 @@ export interface SealedProviderKey {
 }
 
 export interface StoredProviderKey extends SealedProviderKey {
-  provider: ProviderId;
+  provider: ProviderName;
   createdAt: Date;
   updatedAt: Date;
 }
 
-function provider(value: string): ProviderId {
-  if (!isProviderId(value)) throw new StateError(`"${value}" is not a model provider.`);
+function provider(value: string): ProviderName {
+  if (!isProviderName(value)) throw new StateError(`"${value}" is not a model provider.`);
   return value;
 }
 
@@ -54,7 +54,7 @@ export async function readProviderKeys(db: CatalogDatabase, owner: string): Prom
     .where(eq(providerKey.ownerId, owner))
     .orderBy(asc(bytewise(providerKey.provider)));
   return rows.flatMap((row) =>
-    isProviderId(row.provider)
+    isProviderName(row.provider)
       ? [
           {
             provider: row.provider,

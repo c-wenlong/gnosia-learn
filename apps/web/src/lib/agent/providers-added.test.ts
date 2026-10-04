@@ -2,11 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   completeWithFallback,
+  customProviderConfig,
   dashScopeListUrl,
   listProviderModels,
   orderCredentials,
   providerConfigs,
   type ProviderCredential,
+  redirectPolicy,
+  testProviderKey,
 } from "./providers";
 
 /**
@@ -122,5 +125,25 @@ describe("the added providers", () => {
     expect(headers.Authorization).toBe("Bearer test-key-0123456789abcdef");
     expect(headers["anthropic-version"]).toBe("2023-06-01");
     expect(JSON.parse(String(init.body))).toMatchObject({ model: "claude-haiku-4-5", stream: false });
+  });
+});
+
+describe("a custom provider's calls", () => {
+  const custom: ProviderCredential = {
+    config: { ...customProviderConfig({ id: "custom-gw", label: "Gateway", baseUrl: "https://gw.example/v1" }), model: "gw/fast" },
+    apiKey: "test-key-0123456789abcdef",
+    source: "saved",
+  };
+
+  it("refuse a redirect, so the key never follows one past the saved URL's check; built-ins keep the default", async () => {
+    expect(redirectPolicy(custom.config)).toBe("error");
+    expect(redirectPolicy(credential("openai").config)).toBe("follow");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await listProviderModels(custom);
+    await testProviderKey(custom);
+    await completeWithFallback([{ role: "user", content: "hi" }], [custom]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const call of fetchMock.mock.calls as unknown as [string, RequestInit][]) expect(call[1].redirect).toBe("error");
   });
 });
