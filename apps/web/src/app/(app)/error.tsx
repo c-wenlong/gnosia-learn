@@ -1,6 +1,6 @@
 "use client";
 
-import { Notice } from "@/components/library/Notice";
+import { Notice } from "@/components/ui/Notice";
 import { Button } from "@/components/ui/Button";
 
 /**
@@ -28,7 +28,16 @@ export default function AppError({
 }) {
   return (
     <div className="flex animate-enter flex-col gap-4 py-6 motion-reduce:animate-none">
-      <Notice role="alert" title="This page could not read its content." command="npm run catalog -- doctor">
+      <Notice
+        role="alert"
+        title="This page could not read its content."
+        command="npm run catalog -- doctor"
+        actions={
+          <Button variant="secondary" onClick={() => retry()}>
+            Try again
+          </Button>
+        }
+      >
         <p>
           The app reads every course, topic, note and diagram from the catalog database, and that read failed.
           Either the database is not answering, or a kind of content has not been moved into it yet. The
@@ -38,11 +47,6 @@ export default function AppError({
           <p className="mt-2 font-mono text-[12px] text-text3">digest {error.digest}</p>
         )}
       </Notice>
-      <div>
-        <Button variant="secondary" onClick={() => retry()}>
-          Try again
-        </Button>
-      </div>
     </div>
   );
 }

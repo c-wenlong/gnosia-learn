@@ -5,7 +5,7 @@ import type { AssetBodyData } from "@/components/library/asset-body-data";
 import { embedAssetId } from "@/components/library/asset-body-data";
 import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
-import { Notice } from "@/components/library/Notice";
+import { Notice } from "@/components/ui/Notice";
 import { NoteProse } from "@/components/NoteProse";
 import { formatTimecode } from "@/components/media";
 import { Button } from "@/components/ui/Button";
