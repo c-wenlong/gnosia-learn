@@ -97,7 +97,8 @@ const words = (text: string) => text.toLowerCase().split(/[\s-]+/).filter(Boolea
 
 /**
  * The concept a search lands on: a title that starts with the query first,
- * then one whose title or slug holds every word, in the order given.
+ * then one whose title or slug holds every word, then one whose summary does,
+ * in the order given. The caller passes only the rows its filter shows.
  */
 export function firstMatch(rows: readonly { id: string; title: string; summary: string }[], query: string): string | null {
   const q = words(query);
@@ -105,11 +106,12 @@ export function firstMatch(rows: readonly { id: string; title: string; summary: 
   const phrase = q.join(" ");
   const starts = rows.find((r) => words(r.title).join(" ").startsWith(phrase));
   if (starts !== undefined) return starts.id;
-  const all = rows.find((r) => {
-    const hay = `${words(r.title).join(" ")} ${words(r.id).join(" ")}`;
-    return q.every((w) => hay.includes(w));
-  });
-  return all?.id ?? null;
+  const holds = (hay: string) => q.every((w) => hay.includes(w));
+  const named = rows.find((r) => holds(`${words(r.title).join(" ")} ${words(r.id).join(" ")}`));
+  if (named !== undefined) return named.id;
+  // Last, the summary, as the search box's own list matches it.
+  const described = rows.find((r) => holds(`${words(r.title).join(" ")} ${words(r.id).join(" ")} ${words(r.summary).join(" ")}`));
+  return described?.id ?? null;
 }
 
 /**

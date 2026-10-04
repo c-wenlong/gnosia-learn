@@ -89,6 +89,8 @@ export function LearnIndex({
   /** Select a concept from outside the map and move the map to it. */
   const reveal = (id: string, to: FitRequest["to"]) => {
     setSelected(id);
+    // A fit to a scope is the map's scope from now on, so the URL and a reload agree with it.
+    if (to !== "center") setScope(to);
     setFitRequest({ to, n: Date.now() });
   };
 
@@ -110,7 +112,8 @@ export function LearnIndex({
           onKeyDown={(e) => {
             // On the map, Enter lands on the best match and fits its neighbourhood.
             if (e.key !== "Enter" || view !== "graph") return;
-            const id = firstMatch(rows, query);
+            // Only among what the filter shows, so Enter never lands on a dimmed concept.
+            const id = firstMatch(rows.filter((r) => matchesFilter(r, filter)), query);
             if (id !== null) {
               e.preventDefault();
               reveal(id, "neighbourhood");
