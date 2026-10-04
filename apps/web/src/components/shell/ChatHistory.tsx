@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { HistorySearch } from "@/components/studio/history-search";
 import { cx, LABEL } from "@/components/ui/classes";
 import {
-  DRAFT_CHANGED_EVENT,
   draftRows,
   historyGroups,
   LIST_LIMIT,
@@ -14,6 +13,7 @@ import {
   readHistory,
   type DraftRow,
 } from "@/lib/studio-draft-list";
+import { useDraftsWake } from "@/lib/use-drafts-wake";
 import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
@@ -117,22 +117,7 @@ export function ChatHistory({ onPick, search }: { onPick: () => void; search: Hi
     return () => clearTimeout(first);
   }, [reread]);
 
-  useEffect(() => {
-    const wake = () => void reread();
-    // A turn streams several changes in a breath; one read covers them.
-    let soon: ReturnType<typeof setTimeout> | null = null;
-    const changed = () => {
-      if (soon !== null) clearTimeout(soon);
-      soon = setTimeout(wake, 400);
-    };
-    window.addEventListener("focus", wake);
-    window.addEventListener(DRAFT_CHANGED_EVENT, changed);
-    return () => {
-      window.removeEventListener("focus", wake);
-      window.removeEventListener(DRAFT_CHANGED_EVENT, changed);
-      if (soon !== null) clearTimeout(soon);
-    };
-  }, [reread]);
+  useDraftsWake(reread, true);
 
   // A conversation opened that the list does not have yet: it was just made.
   const shown = useRef(active);
