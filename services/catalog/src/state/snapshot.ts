@@ -10,6 +10,7 @@ import {
 } from "@self-learn/schema";
 
 import type { CatalogDatabase } from "../db";
+import { readDisplayName } from "./learner";
 import { readPreferences } from "./preference";
 import { readProgress } from "./progress";
 import { readRecaps } from "./recap";
@@ -127,10 +128,11 @@ export async function readLearnerSnapshot(
   db: CatalogDatabase,
   learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<LearnerState> {
-  const [rows, recaps, preferences] = await Promise.all([
+  const [rows, recaps, preferences, displayName] = await Promise.all([
     readProgress(db, learnerId),
     readRecaps(db, learnerId),
     readPreferences(db, learnerId),
+    readDisplayName(db, learnerId),
   ]);
 
   const state = emptyLearnerState();
@@ -146,6 +148,7 @@ export async function readLearnerSnapshot(
   const lastVisited = asLastVisited(preferences[PREFERENCE_KEYS.lastVisited]);
   if (lastVisited !== undefined) state.lastVisited = lastVisited;
   state.inactiveCourses = asCourseSlugs(preferences[PREFERENCE_KEYS.inactiveCourses]);
+  if (displayName !== null) state.displayName = displayName;
 
   return state;
 }
