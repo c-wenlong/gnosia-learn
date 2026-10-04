@@ -152,6 +152,18 @@ async function databasesLike(pattern: string): Promise<string[]> {
   }
 }
 
+/** Whether a database by exactly this name exists; `like` would read `_` as a wildcard. */
+async function databaseExists(name: string): Promise<boolean> {
+  const admin = new pg.Client({ connectionString: url("postgres") });
+  await admin.connect();
+  try {
+    const found = await admin.query("select 1 from pg_database where datname = $1", [name]);
+    return found.rowCount !== 0;
+  } finally {
+    await admin.end();
+  }
+}
+
 describe("scripts/flip-rehearsal.mjs --real refuses", () => {
   it("without --database", async () => {
     const ran = await rehearse(["--real"]);
@@ -401,7 +413,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       // Only this run's copy is looked for: another checkout running this
       // suite at the same time has its own on the same server.
       expect(report.preflight).toMatchObject({ name: expect.stringMatching(/^self_learn_preflight_/), dropped: true });
-      expect(await databasesLike(report.preflight?.name ?? "")).toEqual([]);
+      expect(await databaseExists(report.preflight?.name ?? "")).toBe(false);
       const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
       const assets = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from asset`);
@@ -465,7 +477,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
     expect(report.copy).toMatchObject({ name, kept: false, dropped: true });
     expect(report.preflight).toMatchObject({ name: expect.stringMatching(/^self_learn_preflight_/), dropped: true });
     expect(await databasesLike(`${name}%`)).toEqual([]);
-    expect(await databasesLike(report.preflight?.name ?? "")).toEqual([]);
+    expect(await databaseExists(report.preflight?.name ?? "")).toBe(false);
   }, 120_000);
 });
 
