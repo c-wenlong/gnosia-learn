@@ -1027,18 +1027,24 @@ async function run() {
 
   await step('settings: change the tutor style, see Saved', page, async () => {
     await go('/settings');
-    const select = main.getByLabel('Tutor style');
-    await hydrated(page, select);
-    const currentValue = await select.inputValue();
-    const values = await select.locator('option').evaluateAll((options) => options.map((o) => o.value));
-    const next = values.find((v) => v !== currentValue);
-    assert(next !== undefined, `the tutor style has no option besides ${currentValue}`);
-    await select.selectOption(next);
-    await main.getByText('Saved', { exact: true }).waitFor();
+    // The page opens on General since #342; the style is under Tutor, and a
+    // press on the tab puts it in the address.
+    await clickHydrated(page, main.getByRole('tab', { name: 'Tutor' }));
+    await page.waitForURL((url) => url.searchParams.get('tab') === 'tutor');
+    // A kit menu since #355: the trigger is named "Tutor style: <current>".
+    await clickHydrated(page, main.getByRole('button', { name: /^Tutor style:/ }));
+    const next = page.getByRole('listbox', { name: 'Tutor style' }).locator('[role=option][aria-selected=false]').first();
+    assert((await next.count()) > 0, 'the tutor style has no option besides the current one');
+    await next.click();
+    // `LiveStatus` writes the words twice: the live line a screen reader
+    // hears, and the copy the eye sees.
+    await main.locator('p[aria-live]', { hasText: /^Saved$/ }).waitFor({ state: 'attached' });
+    await main.locator('p[aria-hidden]', { hasText: /^Saved$/ }).waitFor();
   });
 
   await step('provider keys: save a key, see its last four, remove it', page, async () => {
-    if (!page.url().endsWith('/settings')) await go('/settings');
+    // The keys are under Tutor (#342), which `?tab=tutor` opens.
+    if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
     // docs/BYOK.md: a key goes in once and never comes back out. The server
     // starts with every provider key blank, so Gemini's row offers "Add your key".
     const row = main.getByRole('listitem').filter({ has: page.getByText('Google Gemini', { exact: true }) });
