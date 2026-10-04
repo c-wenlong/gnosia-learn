@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 import { GnosiaWordmark } from "@/components/brand";
 import { useHistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
+import { IconButton } from "@/components/ui/IconButton";
 import { rememberFocus } from "@/lib/focus";
 import { activeDestination, DESTINATIONS, STUDIO_DESTINATION } from "@/lib/nav";
 import { isPlainClick } from "@/lib/plain-click";
@@ -255,8 +257,8 @@ export function AppSidebar() {
             </Link>
             <div className="absolute top-1/2 right-3 -translate-y-1/2">
               {drawer ? (
-                <IconButton label="Close the sidebar" onClick={pick}>
-                  <path d="M5 5l10 10M15 5 5 15" />
+                <IconButton label="Close the sidebar" onClick={pick} size="lg" shape="square" inset>
+                  <Glyph name="close" size={18} />
                 </IconButton>
               ) : (
                 <FoldButton rail={rail} peeking={peeking} onPress={stopPeek} />
@@ -398,19 +400,17 @@ function FoldButton({ rail, peeking, onPress }: { rail: boolean; peeking: boolea
   if (shell === null) return null;
   const label = rail ? "Expand the sidebar" : peeking ? "Keep the sidebar open" : "Collapse the sidebar";
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
+    <IconButton
+      label={label}
+      size="lg"
+      shape="square"
+      inset
       data-fold=""
       onClick={() => {
         onPress();
         shell.setCollapsed(!rail && !peeking);
       }}
-      className={cx(
-        "group/fold relative inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-text2 transition-colors hover:bg-surface2 hover:text-text",
-        "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-      )}
+      className="group/fold relative"
     >
       {/* The rail's top is the mark, which gives way to the fold's icon on a
           hover or focus. Both stay mounted and cross-fade. */}
@@ -437,22 +437,7 @@ function FoldButton({ rail, peeking, onPress }: { rail: boolean; peeking: boolea
         <rect x="3" y="4" width="14" height="12" rx="2" />
         <path d="M8 4v12" />
       </svg>
-    </button>
-  );
-}
-
-function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-text2 transition-colors hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
-    >
-      <svg aria-hidden viewBox="0 0 20 20" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-        {children}
-      </svg>
-    </button>
+    </IconButton>
   );
 }
 

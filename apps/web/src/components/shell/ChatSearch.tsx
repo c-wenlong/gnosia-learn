@@ -5,6 +5,7 @@ import type { RefObject } from "react";
 
 import { SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
+import { TextLink } from "@/components/ui/TextLink";
 import { SearchField as KitSearchField } from "@/components/ui/SearchField";
 
 import { FADE, FADE_IN } from "./motion";
@@ -130,14 +131,9 @@ export function SearchResults({
       )}
       {search.found?.more === true && (
         <div className="px-1 pt-2">
-          <button
-            type="button"
-            onClick={search.showMore}
-            disabled={search.loadingMore}
-            className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
-          >
+          <TextLink onClick={search.showMore} pending={search.loadingMore} size="sm" className="px-1.5 py-1">
             {search.loadingMore ? "Reading more matches…" : "Show more matches"}
-          </button>
+          </TextLink>
           {search.moreError !== null && (
             <p role="alert" className="px-1.5 text-[12px] text-danger">
               {search.moreError}

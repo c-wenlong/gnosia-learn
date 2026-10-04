@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { chipClasses, cx, inputClasses } from "./classes";
+import { Glyph } from "./Glyph";
 import { fieldListClasses, fieldListStyle, useFieldList } from "./use-field-list";
 import { usePresence } from "./use-presence";
 import {
@@ -277,22 +278,14 @@ export function FilterMenu<V extends string>({
         <span className={cx("min-w-0 truncate", field && selected < 0 && "text-text3")}>
           {field || bare ? shown : triggerText(label, options, value)}
         </span>
-        <svg
-          aria-hidden
-          viewBox="0 0 16 16"
+        <Glyph
+          name="chevron"
           className={cx(
-            "shrink-0 transition-[rotate] duration-150 ease-soft motion-reduce:transition-none",
+            "transition-[rotate] duration-150 ease-soft motion-reduce:transition-none",
             field ? (size === "inline" ? "size-3 text-text3" : "size-4 text-text2") : "size-3.5",
             open && "rotate-180",
           )}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m4 6 4 4 4-4" />
-        </svg>
+        />
       </button>
       {presence.mounted && (
         <div
@@ -397,18 +390,7 @@ export function ListOption<V extends string>({
         active && keyboard && "outline-2 -outline-offset-2 outline-accent",
       )}
     >
-      <svg
-        aria-hidden
-        viewBox="0 0 16 16"
-        className={cx("size-4 shrink-0 text-accent-text", !selected && "invisible")}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="m3.5 8.5 3 3 6-7" />
-      </svg>
+      <Glyph name="tick" size={16} className={cx("text-accent-text", !selected && "invisible")} />
       <span className="flex min-w-0 flex-1 flex-col">
         {/* The count sits on the label's line, not centred on the row, so it
             reads with the name it counts when a second line is under it. */}

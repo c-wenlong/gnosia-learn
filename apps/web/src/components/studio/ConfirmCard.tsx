@@ -8,8 +8,10 @@ import { PanelLink } from "@/components/studio/PanelLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { chipClasses, cx, LABEL } from "@/components/ui/classes";
+import { chipClasses, cx, LABEL, linkClasses } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
+import { Glyph } from "@/components/ui/Glyph";
+import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import type { TopicOption } from "@/data/topics";
@@ -404,7 +406,7 @@ export function ConfirmCard({
                 disabled={editBlock !== null}
                 title={editBlock ?? "Change the title, topic, elements or arrows"}
               >
-                <PencilIcon />
+                <Glyph name="pencil" size={16} />
                 Edit
               </Button>
             )}
@@ -640,7 +642,7 @@ export function ConfirmCard({
               </p>
             )}
             {holder !== null && (
-              <PanelLink href={holderHref(holder)} scroll={false} className="w-fit text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+              <PanelLink href={holderHref(holder)} scroll={false} className={linkClasses({ size: "sm", className: "w-fit" })}>
                 Open that job
               </PanelLink>
             )}
@@ -661,7 +663,7 @@ export function ConfirmCard({
         <Reveal open={status === "drawn" && jobHref !== null}>
           <div className="mt-3.5 border-t border-hair pt-3">
             {jobHref !== null && (
-              <PanelLink href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+              <PanelLink href={jobHref} scroll={false} className={linkClasses({ size: "sm" })}>
                 {madeLine("diagram", jobRunning)}. Open the job
               </PanelLink>
             )}
@@ -706,28 +708,6 @@ function Problem({ id, problem }: { id: string; problem: FieldProblem | null }) 
     </p>
   );
 }
-
-function PencilIcon() {
-  return (
-    <svg aria-hidden viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13.5 3.5l3 3L7 16H4v-3z" />
-    </svg>
-  );
-}
-
-function RemoveIcon() {
-  return (
-    <svg aria-hidden viewBox="0 0 16 16" className="size-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
-    </svg>
-  );
-}
-
-const REMOVE = cx(
-  "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-text3 transition-colors",
-  "hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
-  "disabled:opacity-40",
-);
 
 function ElementsEditor({
   edit,
@@ -787,17 +767,20 @@ function ElementsEditor({
                 }}
                 className="pr-7"
               />
-              <button
-                type="button"
+              {/* Inside the chip's field, so its ring sits on its own edge. */}
+              <IconButton
+                label={`Remove ${element.label.trim() === "" ? `element ${at + 1}` : element.label}`}
+                title={only ? "A diagram needs at least one element" : "Remove"}
+                size="xs"
+                tone="muted"
+                inset
                 onClick={() => onRemove(element.id)}
                 disabled={locked || only}
                 tabIndex={-1}
-                aria-label={`Remove ${element.label.trim() === "" ? `element ${at + 1}` : element.label}`}
-                title={only ? "A diagram needs at least one element" : "Remove"}
-                className={cx(REMOVE, "absolute right-0.5")}
+                className="absolute right-0.5"
               >
-                <RemoveIcon />
-              </button>
+                <Glyph name="close" size={14} />
+              </IconButton>
             </li>
           );
         })}
@@ -806,7 +789,7 @@ function ElementsEditor({
             type="button"
             onClick={() => onAdd(edit.elements.length - 1)}
             disabled={locked}
-            className={chipClasses({ size: "sm", className: "border-dashed text-text2" })}
+            className={chipClasses({ size: "sm", dashed: true })}
           >
             <span aria-hidden>+</span> Add
             <span className="sr-only"> an element</span>
@@ -898,16 +881,17 @@ function RelationsEditor({
                       describedBy={messageId(`relation:${relation.id}:to`)}
                       onChange={onChange}
                     />
-                    <button
-                      type="button"
+                    <IconButton
+                      label={`Remove arrow ${at + 1}`}
+                      title="Remove"
+                      size="xs"
+                      tone="muted"
                       onClick={() => onRemove(relation.id)}
                       disabled={locked}
-                      aria-label={`Remove arrow ${at + 1}`}
-                      title="Remove"
-                      className={cx(REMOVE, "ml-1")}
+                      className="ml-1"
                     >
-                      <RemoveIcon />
-                    </button>
+                      <Glyph name="close" size={14} />
+                    </IconButton>
                   </span>
                 </div>
                 {shown.map((end) => (
@@ -924,7 +908,7 @@ function RelationsEditor({
           data-field="add-relation"
           onClick={onAdd}
           disabled={locked || edit.elements.length === 0}
-          className={chipClasses({ size: "sm", className: "border-dashed text-text2" })}
+          className={chipClasses({ size: "sm", dashed: true })}
         >
           <span aria-hidden>+</span> Add an arrow
         </button>

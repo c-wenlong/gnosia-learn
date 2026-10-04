@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FocusEvent } from "react";
 
@@ -15,6 +14,7 @@ import { MentionChip } from "@/components/ui/MentionChip";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import type { MentionValue } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
+import { TextLink } from "@/components/ui/TextLink";
 import type { CitationSource } from "@/lib/agent/prompt";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
 import type { DraftKind } from "@/lib/studio-drafts";
@@ -828,8 +828,7 @@ export function TutorChat({
 
         {turns.length > 0 && !busy && !turns.some((t) => t.role === "user" && t.verdict?.state === "saving") && (
           <div className="flex animate-fade-in justify-center motion-reduce:animate-none">
-            <button
-              type="button"
+            <TextLink
               onClick={() => {
                 // A new thread is a new session: the old one closes with what it recorded.
                 closeSession(slug);
@@ -837,10 +836,12 @@ export function TutorChat({
                 setRestored(0);
                 setError(null);
               }}
-              className="rounded-sm text-[12px] text-text3 underline-offset-4 transition-colors duration-100 hover:text-text2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              tone="muted"
+              size="xs"
+              weight="normal"
             >
               Start a new thread
-            </button>
+            </TextLink>
           </div>
         )}
       </div>
@@ -938,12 +939,9 @@ function Handed({ marker, className }: { marker: HandoffMarker; className?: stri
           ),
         )}
       </UserMessage>
-      <Link
-        href={`/studio?draft=${encodeURIComponent(marker.draftId)}`}
-        className="rounded-sm px-1.5 text-[12px] text-text2 underline-offset-4 hover:text-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
+      <TextLink href={`/studio?draft=${encodeURIComponent(marker.draftId)}`} tone="muted" size="xs" weight="normal" className="px-1.5">
         Opened in the studio
-      </Link>
+      </TextLink>
     </div>
   );
 }

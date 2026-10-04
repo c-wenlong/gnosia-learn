@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { cx } from "./classes";
 import { COMPOSER_BOX } from "./composer-keys";
 import { Glyph } from "./Glyph";
+import { IconButton } from "./IconButton";
 
 /**
  * The kit composers' box layout (`layout="box"` on `Composer` and
@@ -62,21 +63,9 @@ export function ComposerBox({
  */
 export function SendDisc({ label, disabled = false, describedBy }: { label: string; disabled?: boolean; describedBy?: string }) {
   return (
-    <button
-      type="submit"
-      aria-label={label}
-      disabled={disabled}
-      aria-describedby={describedBy}
-      className={cx(
-        "relative flex size-9 items-center justify-center rounded-full transition-colors duration-100",
-        "bg-btn-face text-btn-text hover:opacity-90",
-        "disabled:cursor-not-allowed disabled:bg-surface2 disabled:text-text3 disabled:hover:opacity-100",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-        // A 44px target under a finger, the face still 36px.
-        "pointer-coarse:after:absolute pointer-coarse:after:-inset-1 pointer-coarse:after:content-['']",
-      )}
-    >
+    // A 44px target under a finger, the face still 36px.
+    <IconButton type="submit" label={label} size="lg" tone="solid" touch disabled={disabled} aria-describedby={describedBy}>
       <Glyph name="send" size={18} />
-    </button>
+    </IconButton>
   );
 }

@@ -1,7 +1,7 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { cardClasses, cx } from "./classes";
+import { cardClasses } from "./classes";
+import { TextLink } from "./TextLink";
 
 /**
  * Kit `Card`: the flat surface every dashboard block sits on. 2px `--border`,
@@ -42,18 +42,11 @@ export function Card({
   );
 }
 
-/** The "See all" link at the right of a card's title row. */
+/** The "See all" link at the right of a card's title row: a `TextLink` at 13px. */
 export function CardAction({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
   return (
-    <Link
-      href={href}
-      className={cx(
-        "rounded-sm text-[13px] font-medium text-accent-text underline-offset-4 hover:underline",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-        className,
-      )}
-    >
+    <TextLink href={href} size="sm" className={className}>
       {children}
-    </Link>
+    </TextLink>
   );
 }

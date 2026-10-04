@@ -2,11 +2,12 @@
 
 import { useId, useRef, useState, type ReactNode } from "react";
 
+import { linkClasses } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { useHydrated } from "@/lib/use-hydrated";
 
-const TOGGLE =
-  "self-start rounded-sm text-left text-[13px] font-medium text-accent-text underline-offset-4 select-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+/** A text link, as a `<summary>` before hydration and a `<button>` after. */
+const TOGGLE = linkClasses({ size: "sm", className: "self-start text-left select-none" });
 
 /**
  * "Read the whole note" in the workspace's left panel: a button and a

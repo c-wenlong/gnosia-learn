@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Collapse } from "@/components/ui/Collapse";
+import { TextLink } from "@/components/ui/TextLink";
 import { useLearner } from "@/lib/learner-context";
 
 /**
@@ -63,14 +64,9 @@ export function StoreBanner() {
               {shown.message}
             </span>
             {shown.dismissable && (
-              <button
-                type="button"
-                onClick={dismiss}
-                aria-label="Dismiss this message"
-                className="shrink-0 font-semibold underline underline-offset-2"
-              >
+              <TextLink onClick={dismiss} aria-label="Dismiss this message" tone="inherit" weight="semibold" className="shrink-0">
                 Dismiss
-              </button>
+              </TextLink>
             )}
           </div>
         )}

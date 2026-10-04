@@ -42,10 +42,8 @@ export const RESOURCE_GLYPH: Record<ResourceType, GlyphName> = {
 /** A filled mastered disc with a tick: a topic that is done, a module whose topics all are. */
 function DoneDisc({ size }: { size: number }) {
   return (
-    <span className="flex shrink-0 items-center justify-center rounded-full bg-m-hi" style={{ width: size, height: size }}>
-      <svg aria-hidden viewBox="0 0 20 20" width={size - 6} height={size - 6} fill="none">
-        <path d="M5 10.5l3.2 3.2L15 6.8" stroke="var(--m-hi-on)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+    <span className="flex shrink-0 items-center justify-center rounded-full bg-m-hi text-[var(--m-hi-on)]" style={{ width: size, height: size }}>
+      <Glyph name="tick" size={size - 4} />
     </span>
   );
 }
