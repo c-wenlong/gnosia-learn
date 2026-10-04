@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx, inputClasses } from "@/components/ui/classes";
+import { cx } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
+import { Input } from "@/components/ui/Input";
 import { useLearner } from "@/lib/learner-context";
 import { prefersReducedMotion } from "@/lib/motion";
 import type { Resource } from "@/lib/types";
@@ -187,22 +188,22 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
           <span className="pl-1 text-[14px] font-semibold text-text">Add a resource</span>
         </button>
         <Collapse open={adding} id={formId}>
-          <form onSubmit={onSubmit} className="ml-[40px] mr-2 mt-1 mb-2 grid gap-2 sm:grid-cols-2">
-            <input
+          {/* noValidate: a malformed URL gets this form's own line below, not
+              the browser's bubble, which the platform draws in its own style. */}
+          <form onSubmit={onSubmit} noValidate className="ml-[40px] mr-2 mt-1 mb-2 grid gap-2 sm:grid-cols-2">
+            <Input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Title"
               aria-label="Title"
-              className={inputClasses()}
             />
-            <input
+            <Input
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://…"
               aria-label="URL"
-              className={inputClasses()}
             />
             <div className="flex items-center gap-3 sm:col-span-2">
               <Button type="submit" variant="secondary" size="sm">

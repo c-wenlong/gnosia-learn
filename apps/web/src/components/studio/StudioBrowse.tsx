@@ -9,7 +9,7 @@ import { NewDiagramJobs } from "@/components/studio/GridJob";
 import { useStudioPath } from "@/components/studio/panel-host";
 import { EmptyDirectory } from "@/components/studio/StudioBlocked";
 import { Spacer } from "@/components/studio/StudioChrome";
-import { DisplayMenu, KindSegments, SearchField, SortMenu, TopicChips } from "@/components/studio/StudioControls";
+import { DisplayMenu, KindSegments, SortMenu, StudioSearch, TopicChips } from "@/components/studio/StudioControls";
 import { SettingsLink } from "@/components/studio/StudioSettings";
 import { NewVideoJobs, VideoRow, VideoTile } from "@/components/studio/video/VideoGridJob";
 import { filterVideos, gridSections, sectionItems, sortVideos, type StudioVideo } from "@/lib/studio-video";
@@ -50,7 +50,7 @@ export function StudioToolbar({ chips }: { chips: TopicChip[] }) {
   return (
     <>
       <KindSegments view={view} />
-      <SearchField view={view} />
+      <StudioSearch view={view} />
       <TopicChips chips={chips} view={view} />
       <Spacer />
       <DisplayMenu view={view} />
