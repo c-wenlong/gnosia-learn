@@ -110,7 +110,10 @@ describe("the sidebar", () => {
   it("lists only the four destinations, and reads no conversations, without a studio", async () => {
     const container = await mount(false);
     // The account menu's links are mounted too, inert while it is closed.
-    const labels = [...nav(container).querySelectorAll("a")].filter((a) => a.closest("[inert]") === null).map((a) => a.textContent);
+    // The sections below them are their own tests.
+    const labels = [...nav(container).querySelectorAll("a")]
+      .filter((a) => a.closest("[inert]") === null && a.closest("section") === null)
+      .map((a) => a.textContent);
     expect(labels).toEqual(["Gnosia", "Home", "Courses", "Learn", "Library"]);
     expect(mocks.listDrafts).not.toHaveBeenCalled();
     expect(nav(container).textContent).not.toContain("Chats");
@@ -500,6 +503,39 @@ describe("the sections", () => {
       field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
     expect(mocks.changeRecent).toHaveBeenCalledWith({ action: "rename", key: "draft:d1", name: "Transport layer" });
+  });
+
+  it("keeps Courses and its add button for someone who has opened no course", async () => {
+    const container = await mount(false);
+    const courses = section(container, "sidebar-courses");
+    expect(courses.closest("[inert]")).toBeNull();
+    expect(courses.textContent).toContain("Courses you open show here.");
+    expect(courses.querySelector('a[aria-label="Browse courses"]')?.getAttribute("href")).toBe("/courses");
+  });
+
+  it("offers Show older while there is more, even when every row on screen is pinned", async () => {
+    const pins = [VIDEO, MODULE, CONCEPT].map((r) => ({ key: r.key, kind: r.kind, title: r.title, href: r.href, at: ago(0) }));
+    withRows({ more: true, pinned: pins });
+    const container = await mount(false);
+    expect(recentRows(container)).toEqual([]);
+    expect(section(container, "sidebar-recent").textContent).toContain("Show older");
+    expect(section(container, "sidebar-recent").textContent).not.toContain("show here");
+  });
+
+  it("finds a renamed conversation by its new name, which the runner's search does not know", async () => {
+    mocks.listDrafts.mockImplementation(async (query: { q?: string }) => ({ ok: true, data: { drafts: query.q === undefined ? [DRAFT] : [], note: "" } }));
+    mocks.fetchRecent.mockImplementation(async (options: { q?: string }) => ({ ...EMPTY, names: { "draft:d1": "Transport layer" }, items: options.q === undefined ? [] : [] }));
+    const container = await mount(true);
+    const field = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "transport");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    const hits = [...nav(container).querySelectorAll("[data-peek-hold] li a")].map((a) => a.getAttribute("href"));
+    expect(hits).toEqual(["/studio?draft=d1"]);
   });
 
   it("says Recent could not be read, rather than that it is empty, when the catalog did not answer", async () => {

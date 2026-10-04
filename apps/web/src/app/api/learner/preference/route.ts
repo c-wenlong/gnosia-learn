@@ -93,6 +93,14 @@ function failureCode(error: unknown): string {
   return "unknown";
 }
 
+/** Whether a failed write names `constraint`, down the same chain. */
+function mentions(error: unknown, constraint: string): boolean {
+  for (let at: unknown = error; at instanceof Error; at = at.cause) {
+    if ((at as { constraint?: unknown }).constraint === constraint) return true;
+  }
+  return false;
+}
+
 /**
  * Write `lastVisited`, put the same visit at the front of `recentModules`, and
  * append a `visit` event, in one transaction under the learner's row lock so
@@ -129,7 +137,12 @@ async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string)
           ),
         );
       } catch (error) {
-        console.warn(`preference: visit event not written, ${failureCode(error)}`);
+        // Only the one refusal a database without 0025 gives (a check
+        // violation, 23514, on `event_type_check`). Anything else fails the
+        // write as before, so a log that has stopped taking visits is a 503
+        // someone sees, not a quiet gap in Recent.
+        if (failureCode(error) !== "23514" || !mentions(error, "event_type_check")) throw error;
+        console.warn("preference: visit event not written, the database has not taken migration 0025");
       }
       const stored = asRecentModules(await readPreference(tx, PREFERENCE_KEYS.recentModules, owner));
       const previous = asLastVisited(await readPreference(tx, PREFERENCE_KEYS.lastVisited, owner));

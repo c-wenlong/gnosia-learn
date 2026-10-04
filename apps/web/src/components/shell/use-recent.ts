@@ -111,10 +111,11 @@ export interface RecentSearch {
 }
 
 /**
- * The sidebar search over Recent's catalog rows (every kind but the studio's
- * conversations when there is a studio, which the runner searches with their
- * first messages, `useHistorySearch`). Asked once typing rests, and an answer
- * for words no longer in the field is dropped.
+ * The sidebar search over Recent's catalog rows: every kind, conversations
+ * included, since the catalog reads the names the owner gave them; the runner
+ * searches the conversations' own words, first messages too
+ * (`useHistorySearch`), and `SearchResults` merges the two. Asked once typing
+ * rests, and an answer for words no longer in the field is dropped.
  */
 export function useRecentSearch(words: string, studio: boolean): RecentSearch {
   const [landed, setLanded] = useState<{ words: string; items: RecentModel["items"] } | null>(null);
@@ -125,7 +126,9 @@ export function useRecentSearch(words: string, studio: boolean): RecentSearch {
     // Cleared when the words change: an answer for words typed over is dropped.
     let live = true;
     const timer = setTimeout(() => {
-      void fetchRecent({ pages: 1, drafts: !studio, q: words }).then((answer) => {
+      // Conversations too: the catalog applies the names the owner gave them,
+      // which the runner's search does not know.
+      void fetchRecent({ pages: 1, drafts: true, q: words }).then((answer) => {
         if (!live) return;
         if (answer === null || !answer.reachable) {
           setFailed(words);

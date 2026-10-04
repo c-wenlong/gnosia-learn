@@ -142,7 +142,9 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
   return (
     <div className="mt-3 flex flex-col">
       {/* `min-w-0`: a grid item is as wide as its longest title otherwise, and a row would run past the gutter. */}
-      <Collapse open={courses.length > 0} className="min-w-0">
+      {/* Shown once Recent has answered, empty or not, so its add button
+          to /courses is there for someone who has opened no course yet. */}
+      <Collapse open={model?.reachable === true} className="min-w-0">
         <CoursesSection courses={courses} rail={rail} pathname={pathname} onPick={onPick} />
       </Collapse>
 
@@ -161,7 +163,16 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
         </SectionLabel>
         {search.words !== "" ? (
           <div inert={rail}>
-            <SearchResults search={search} studio={studio} names={names} path={path} active={active} navigate={chats?.navigate ?? null} onPick={onPick} />
+            <SearchResults
+              search={search}
+              studio={studio}
+              names={names}
+              renamed={(fromRunner ?? []).filter((item) => names[item.key] !== undefined)}
+              path={path}
+              active={active}
+              navigate={chats?.navigate ?? null}
+              onPick={onPick}
+            />
           </div>
         ) : (
           // The list fades back in as the search is cleared.
@@ -182,7 +193,8 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
                 <ul className="flex flex-col gap-px">{group.rows.map((item) => <li key={item.key}>{row(item, false)}</li>)}</ul>
               </section>
             ))}
-            {merged.more && rows.length > 0 && (
+            {/* Whenever there is more, even with every row on screen pinned. */}
+            {merged.more && (
               <div inert={rail} className={cx("px-0.5 pt-1", FADE, rail ? "opacity-0" : FADE_IN)}>
                 <button
                   type="button"
@@ -199,7 +211,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
                 )}
               </div>
             )}
-            {loaded && rows.length === 0 && !unlisted && (
+            {loaded && rows.length === 0 && !unlisted && !merged.more && (
               <p className={cx("px-2 pt-1 text-[13px] leading-5 text-text3", FADE, rail ? "opacity-0" : FADE_IN)}>
                 {model?.reachable === false && fromRunner === null
                   ? "Recent could not be read."
@@ -292,6 +304,9 @@ function CoursesSection({
       >
         Courses
       </SectionLabel>
+      {courses.length === 0 && (
+        <p className={cx("px-2 pb-1 text-[13px] leading-5 text-text3", FADE, rail ? "opacity-0" : FADE_IN)}>Courses you open show here.</p>
+      )}
       <ul className="flex flex-col gap-px">
         {courses.map((course) => {
           const unfolded = open.has(course.slug) && !rail;
