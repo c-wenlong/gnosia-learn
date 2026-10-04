@@ -9,6 +9,7 @@ import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryTo
 import { Notice } from "@/components/library/Notice";
 import { Previewer } from "@/components/library/Previewer";
 import { loadPreview } from "@/components/library/preview-content";
+import { MasteryDot } from "@/components/ui/MasteryDot";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx } from "@/components/ui/classes";
@@ -36,6 +37,7 @@ import {
   libraryHref,
   libraryTabs,
   OTHERS_KIND,
+  parseGroup,
   parseSort,
   parseView,
   searchHits,
@@ -47,12 +49,14 @@ import {
   type LibraryView,
 } from "@/lib/library";
 import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
-import { dayGroups, editedLabel, timeOfDay, type DayGroup } from "@/lib/day-groups";
+import { dayGroups, editedLabel, timeOfDay } from "@/lib/day-groups";
 import { loadKnowledgeBase } from "@/lib/learner-store";
+import { conceptGroups, courseGroups, type RowGroup } from "@/lib/library-groups";
 import { parseOpen } from "@/lib/library-preview";
 import { conceptOrder, rowSource } from "@/lib/library-source";
 import { bucketOf } from "@/lib/mastery-bucket";
 import { ownValue } from "@/lib/own-key";
+import { rowMenuItems } from "@/lib/row-menu";
 import { appTimeZone } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
@@ -65,7 +69,7 @@ export const metadata: Metadata = {
  * to search and filter, or as a list of rows (`?view=list`) for scanning many.
  *
  * **The filters are the URL.** `?kind=`, `?course=`, `?topic=`, `?favorites=`,
- * `?q=`, `?sort=` and `?view=` are the whole state, so a view is linkable and the back button
+ * `?q=`, `?sort=`, `?view=` and `?group=` are the whole state, so a view is linkable and the back button
  * undoes a filter. The kind is a strip of type tabs under the title (All,
  * Videos, Diagrams, Notes, Sessions, Links, and Others when there are
  * companion files; one chip on a phone), and the course and topic are
@@ -86,6 +90,15 @@ export const metadata: Metadata = {
  * at a chip's height. The search box is a GET form (`next/form`, so
  * submitting it is a client-side navigation) that carries the other filters
  * along as hidden fields.
+ *
+ * **Or by course or by concept** (L4), from the view options beside the
+ * layout switch, as `?group=course` (a heading per course, its modules in
+ * course order inside, "No course" last) or `?group=concept` (a heading per
+ * concept in the prerequisite graph's order, "No concept" last); each row in
+ * the one group its source line names (`@/lib/library-groups`). Every row and
+ * card carries a more menu (L5, `RowMenu`), whose items are decided here per
+ * asset by `rowMenuItems`, so the stars are read on every visit, not only
+ * while Favorites only is on.
  *
  * **Search runs on the server**, over every row's title, filename and URL,
  * plus the words of each note and transcript when this deployment serves
@@ -123,7 +136,8 @@ export default async function LibraryPage({
   const sort = parseSort(firstParam(params.sort));
   const view = parseView(firstParam(params.view));
   const favorites = firstParam(params.favorites) === "1";
-  const filters: LibraryFilters = { kind, topic, course, q, sort, view, favorites };
+  const group = parseGroup(firstParam(params.group));
+  const filters: LibraryFilters = { kind, topic, course, q, sort, view, favorites, group };
   // The asset open in the previewer (L6), when the page is loaded with one:
   // its body is in the first paint rather than a skeleton.
   const open = parseOpen(params.open);
@@ -132,8 +146,8 @@ export default async function LibraryPage({
     loadLibrary(),
     loadKnowledgeBase(),
     getCourses(),
-    // Read only when the filter is on: nothing else on the page draws a star.
-    favorites ? loadFavorites() : Promise.resolve(null),
+    // The filter reads them, and so does every row's menu (Favorite or Unfavorite).
+    loadFavorites(),
     open === null ? Promise.resolve(null) : loadPreview(open),
   ]);
   // A store that could not be read filters to nothing rather than to
@@ -210,7 +224,7 @@ export default async function LibraryPage({
   ].filter((c): c is string => typeof c === "string");
   const noMatchSentence =
     favorites && starred !== null && starred.size === 0
-      ? "Nothing is starred yet. Press Favorite on an asset's page to star it."
+      ? "Nothing is starred yet. Press Favorite in a row's menu or on an asset's page to star it."
       : "Nothing in the catalog" +
     (conditions.length > 0 ? ` is ${conditions.join(", ")}` : "") +
     (q === null ? "" : `${conditions.length > 0 ? " and" : ""} matches "${q}"`) +
@@ -248,7 +262,28 @@ export default async function LibraryPage({
         return known === undefined ? null : { title: known.title, bucket: bucketOf(known) };
       },
     });
-  const groups = dayGroups(matching, (row) => row.createdAt, { now, timeZone });
+  const parentsOf = (row: (typeof matching)[number]) => ownValue(library.parents, row.id);
+  // Day, the default, or course or concept from the view options (L4).
+  const groups: RowGroup<(typeof matching)[number]>[] =
+    group === "course"
+      ? courseGroups(matching, (row) => parentsOf(row)?.places ?? [], { course })
+      : group === "concept"
+        ? conceptGroups(matching, (row) => parentsOf(row)?.concepts ?? [], order, (slug) => {
+            const known = kbById.get(slug);
+            return known === undefined ? null : { title: known.title, bucket: bucketOf(known) };
+          })
+        : dayGroups(matching, (row) => row.createdAt, { now, timeZone });
+  // The more menu's items, per row (L5).
+  const menuOf = (row: (typeof matching)[number]) =>
+    rowMenuItems({
+      id: row.id,
+      kind: row.kind,
+      parents: parentsOf(row),
+      order,
+      course,
+      served: access.served.has(row.id),
+      starred: starred === null ? null : starred.has(row.id),
+    });
   const courseOptions: LibraryMenu["options"] = [
     { value: "", label: "All courses", short: "All" },
     ...courseChips.map((f) => ({ value: f.slug, label: f.code, detail: f.title, count: f.count })),
@@ -350,6 +385,7 @@ export default async function LibraryPage({
                 {favorites && <input type="hidden" name="favorites" value="1" />}
                 {sort !== "newest" && <input type="hidden" name="sort" value={sort} />}
                 {view !== "grid" && <input type="hidden" name="view" value={view} />}
+                {group !== "day" && <input type="hidden" name="group" value={group} />}
                 <SearchField
                   label="Search the library"
                   placeholder="Search"
@@ -421,46 +457,50 @@ export default async function LibraryPage({
               // shown and fades in the ones that arrive.
               className={cx("flex flex-col gap-10", RESULTS_MOTION)}
             >
-              {groups.map((group) => (
-                <DaySection key={group.key} group={group} inset={view === "list"}>
-                  {view === "list" ? (
-                    <ul className="flex flex-col">
-                      {group.rows.map((row) => (
-                        <li key={row.id} className={cx("group/item", ARRIVE)}>
-                          <AssetRow
-                            asset={row}
-                            source={sourceOf(row)}
-                            topic={describe(row).topic}
-                            time={timeOfDay(row.createdAt, timeZone)}
-                            edited={editedLabel(row.createdAt, row.updatedAt, { now, timeZone })}
-                            href={assetHref(row.id)}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]">
-                      {group.rows.map((row) => {
-                        const { concept, topic: topicLabel } = describe(row);
-                        return (
-                          <li key={row.id} className={cx("flex", ARRIVE)}>
-                            <AssetCard
+              {groups.map((held) => (
+                <GroupSection key={held.key} group={held} inset={view === "list"}>
+                  {(rows) =>
+                    view === "list" ? (
+                      <ul className="flex flex-col">
+                        {rows.map((row) => (
+                          <li key={row.id} className={cx("group/item", ARRIVE)}>
+                            <AssetRow
                               asset={row}
-                              concept={concept}
-                              topic={topicLabel}
+                              source={sourceOf(row)}
+                              topic={describe(row).topic}
+                              time={timeOfDay(row.createdAt, timeZone)}
+                              edited={editedLabel(row.createdAt, row.updatedAt, { now, timeZone })}
                               href={assetHref(row.id)}
-                              // A diagram is its own thumbnail; a video gets a frame
-                              // cut out of it on demand; everything else gets the
-                              // labelled placeholder.
-                              thumbnailSrc={thumbnailFor(row, access)}
-                              thumbnailStatusHref={thumbnailStatusFor(row, access)}
+                              menu={menuOf(row)}
                             />
                           </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </DaySection>
+                        ))}
+                      </ul>
+                    ) : (
+                      <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]">
+                        {rows.map((row) => {
+                          const { concept, topic: topicLabel } = describe(row);
+                          return (
+                            <li key={row.id} className={cx("flex", ARRIVE)}>
+                              <AssetCard
+                                asset={row}
+                                concept={concept}
+                                topic={topicLabel}
+                                href={assetHref(row.id)}
+                                menu={menuOf(row)}
+                                // A diagram is its own thumbnail; a video gets a frame
+                                // cut out of it on demand; everything else gets the
+                                // labelled placeholder.
+                                thumbnailSrc={thumbnailFor(row, access)}
+                                thumbnailStatusHref={thumbnailStatusFor(row, access)}
+                              />
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )
+                  }
+                </GroupSection>
               ))}
             </section>
           )}
@@ -490,28 +530,55 @@ const ARRIVE = "animate-fade-in motion-reduce:animate-none";
 const TITLE = "font-display text-[28px] leading-tight font-bold text-text";
 
 /**
- * One day's rows under its heading, Manus's `date-heading`: the day ("4 Oct",
- * the year when it is not this one) and the count in grey, "(5)". The
- * heading is the shell's row height (`--shell-row`); in the list it is inset
- * by the row's start padding (`--shell-row-pad`) so it lines up with the
- * glyphs under it, and in the grid it sits flush with the cards. A day that
- * arrives with a tab or a filter fades in.
+ * One group's rows under its heading, Manus's `date-heading`: the day ("4 Oct",
+ * the year when it is not this one), the course ("CS3230" and its title in
+ * grey) or the concept (with its mastery dot), and the count in grey, "(5)".
+ * The heading is the shell's row height (`--shell-row`); in the list it is
+ * inset by the row's start padding (`--shell-row-pad`) so it lines up with
+ * the glyphs under it, and in the grid it sits flush with the cards. A course
+ * group runs its modules in course order, each under a smaller grey heading
+ * with its own count, 24px apart. A group that arrives with a tab, a filter
+ * or a new grouping fades in.
  */
-function DaySection({ group, inset, children }: { group: DayGroup<unknown>; inset: boolean; children: ReactNode }) {
-  const id = `day-${group.key || "none"}`;
+function GroupSection<T>({
+  group,
+  inset,
+  children,
+}: {
+  group: RowGroup<T>;
+  inset: boolean;
+  children: (rows: T[]) => ReactNode;
+}) {
+  const id = `group-${(group.key || "none").replace(/[^A-Za-z0-9_-]/g, "-")}`;
+  const pad = inset && "px-[var(--shell-row-pad)]";
   return (
     <section aria-labelledby={id} className={cx("flex flex-col", inset ? "gap-1" : "gap-3", ARRIVE)}>
       <h2
         id={id}
-        className={cx(
-          "flex h-[var(--shell-row)] items-center gap-1.5 text-[14px] leading-5 font-medium text-text",
-          inset && "px-[var(--shell-row-pad)]",
-        )}
+        className={cx("flex h-[var(--shell-row)] min-w-0 items-center gap-1.5 text-[14px] leading-5 font-medium text-text", pad)}
       >
-        {group.label}
-        <span className="text-[12px] font-normal text-text2 tabular-nums">({group.rows.length})</span>
+        {group.bucket !== undefined && <MasteryDot bucket={group.bucket} size={12} />}
+        <span className="min-w-0 truncate">
+          {group.label}
+          {group.detail !== undefined && <span className="font-normal text-text2"> {group.detail}</span>}
+        </span>
+        <span className="shrink-0 text-[12px] font-normal text-text2 tabular-nums">({group.rows.length})</span>
       </h2>
-      {children}
+      {group.sections === undefined ? (
+        children(group.rows)
+      ) : (
+        <div className="flex flex-col gap-6">
+          {group.sections.map((section) => (
+            <section key={section.key || "course"} aria-label={`${group.label}, ${section.label}`} className={cx("flex flex-col", inset ? "gap-1" : "gap-3")}>
+              <h3 className={cx("flex min-w-0 items-center gap-1.5 text-[13px] leading-5 text-text2", pad)}>
+                <span className="min-w-0 truncate">{section.label}</span>
+                <span className="shrink-0 text-[12px] tabular-nums">({section.rows.length})</span>
+              </h3>
+              {children(section.rows)}
+            </section>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

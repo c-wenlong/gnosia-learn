@@ -16,6 +16,8 @@ export interface ProviderKeyView {
   id: ProviderId;
   label: string;
   model: string;
+  /** Where a person makes a key for this provider. */
+  keyUrl?: string;
   saved: {
     last4: string;
     /** The day of the last save, already formatted, so server and browser render the same text. */
@@ -54,6 +56,7 @@ export function providerKeyViews(
       id: config.id,
       label: config.label,
       model: config.model,
+      ...(config.keyUrl === undefined ? {} : { keyUrl: config.keyUrl }),
       saved: status === undefined ? null : { last4: status.last4, savedOn: DAY.format(new Date(status.updatedAt)), readable: status.readable },
       server,
       inUse: own ? "saved" : server ? "server" : null,

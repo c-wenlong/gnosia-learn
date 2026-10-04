@@ -32,6 +32,9 @@ const ARROW_WIDGETS =
 /** A control drawn inside a row's link (phase 2's more button); a press on it is not a press on the row. */
 const ROW_CONTROLS = "button, [role=button], [role=menu], [role=menuitem], input, select, textarea, label";
 
+/** A row's own menu, and any dialog it opens: a press there is the menu's, never the row's. */
+const OWN_SURFACES = "[role=menu], dialog";
+
 type Answer = PreviewAnswer | { state: "failed"; id: string };
 
 /**
@@ -213,8 +216,11 @@ export function Previewer({
     const target = event.target instanceof Element ? event.target : null;
     const anchor = target?.closest("a");
     if (!anchor || !event.currentTarget.contains(anchor)) return;
+    // A row's menu and the dialogs it opens are drawn inside the row: their
+    // links ("Open", "Open in course") do what they say, not open the panel.
     const control = target?.closest(ROW_CONTROLS);
-    const inControl = control != null && control !== anchor && anchor.contains(control);
+    const inControl =
+      target?.closest(OWN_SURFACES) != null || (control != null && control !== anchor && anchor.contains(control));
     const id = previewTarget(
       event,
       { href: anchor.getAttribute("href"), target: anchor.getAttribute("target"), download: anchor.hasAttribute("download") },

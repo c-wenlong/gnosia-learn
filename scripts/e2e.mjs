@@ -842,6 +842,62 @@ async function run() {
     }
   });
 
+  // D10: on a phone the picture fits its card and its labels keep 11px on
+  // screen; a label that would collide is culled, its title still on the hover
+  // plate. The seed's domain is small enough that nothing collides as laid
+  // out, so a drag piles one concept under another to make a collision.
+  await step('learn: labels stay readable on a phone, and a culled one shows on hover', page, async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await go('/learn?domain=machine-learning');
+      const graph = main.getByRole('group', { name: /^Machine learning map/ });
+      await hydrated(page, graph.locator('[data-concept="positional-encoding"]'));
+      const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
+      assert(overflow <= 0, `the page scrolls sideways by ${overflow}px on a phone`);
+      const read = () =>
+        graph.evaluate((svg) => {
+          const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+          const shown = [...svg.querySelectorAll('[data-concept][data-label="shown"]')];
+          const px = shown.map((g) => Number(g.querySelector('text')?.getAttribute('font-size')) * scale);
+          return { scale, shown: shown.length, smallest: Math.min(...px) };
+        });
+      const before = await read();
+      assert(before.shown > 0, 'no label is drawn on a phone');
+      assert(before.smallest >= 10.9, `a label is ${before.smallest.toFixed(1)}px on screen`);
+
+      // Drop multi-head attention 40 units under positional encoding: its dot lands in that label.
+      const dotOf = (id) => graph.locator(`[data-concept="${id}"] circle[data-dot]`);
+      const target = await dotOf('positional-encoding').boundingBox();
+      const from = await dotOf('multi-head-attention').boundingBox();
+      const to = { x: target.x + target.width / 2, y: target.y + target.height / 2 + 40 * before.scale };
+      const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      for (let i = 1; i <= 10; i++) await page.mouse.move(start.x + ((to.x - start.x) * i) / 10, start.y + ((to.y - start.y) * i) / 10);
+      await page.mouse.up();
+      await page.mouse.move(0, 0);
+      const culled = graph.locator('[data-concept="positional-encoding"]');
+      await graph.locator('[data-concept="positional-encoding"][data-label="hidden"]').waitFor({ state: 'attached' });
+      // Culled, it keeps its dot and its whole name.
+      assert(/^Positional encoding, /.test((await culled.getAttribute('aria-label')) ?? ''), 'the culled concept lost its name');
+      const dot = await dotOf('positional-encoding').boundingBox();
+      await page.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2);
+      await graph.locator('[data-concept="positional-encoding"][data-hover="true"][data-label="shown"]').waitFor();
+      const plate = (await graph.locator('[data-plate]').textContent()) ?? '';
+      assert(plate === 'Positional encoding', `hovering the culled concept showed "${plate}"`);
+      await page.mouse.move(0, 0);
+      await clickHydrated(page, main.locator('[data-moved]').getByRole('button', { name: 'Reset' }));
+      await main.locator('[data-moved]').waitFor({ state: 'detached' });
+    } finally {
+      // However the step ended, no later step inherits the drag: the session's moved positions go.
+      await page.mouse.up().catch(() => {});
+      await page.evaluate(() => {
+        for (const key of Object.keys(sessionStorage)) if (key.startsWith('learn-map:moved:')) sessionStorage.removeItem(key);
+      }).catch(() => {});
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   await step('workspace: Open in the map lands on the concept in its domain', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go(`/learn/${state.concept}`);
@@ -998,7 +1054,9 @@ async function run() {
     const card = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Pick up where you left off' }) });
     await card.waitFor();
     await card.locator(`a[href^="/courses/${slug}"]`).first().waitFor();
-    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).waitFor();
+    // The concept, and since the visit event (#379) its tutor session too:
+    // both open /learn/<concept>, so either link will do.
+    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).first().waitFor();
     // What the threads open up: at least one group, each a heading over links.
     const next = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Next from here' }) });
     await next.getByRole('heading', { level: 3, name: /^After / }).first().waitFor();
@@ -1020,10 +1078,10 @@ async function run() {
 
   await step('library: a type, a sort and the list layout all land in the URL', page, async () => {
     await go('/library');
-    await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
-    await page.getByRole('listbox', { name: 'Type' }).getByRole('option', { name: /^Note\b/ }).click();
+    // The types are a row of tabs since Library phase 1, links to `?kind=`.
+    await clickHydrated(page, main.getByRole('navigation', { name: 'Type' }).getByRole('link', { name: 'Notes', exact: true }));
     await page.waitForURL(/\/library\?(.*&)?kind=note/);
-    // The sort is a menu in the same toolbar: picking Title keeps the type.
+    // The sort is a bare menu in the toolbar: picking Title keeps the type.
     await clickHydrated(page, main.getByRole('button', { name: 'Sort: Newest' }));
     await page.getByRole('listbox', { name: 'Sort' }).getByRole('option', { name: /^Title\b/ }).click();
     await page.waitForURL((url) => url.searchParams.get('sort') === 'title' && url.searchParams.get('kind') === 'note');
@@ -1031,11 +1089,28 @@ async function run() {
     await main.getByRole('group', { name: 'Layout' }).getByRole('link', { name: 'List' }).click();
     await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('sort') === 'title');
     assert(new URL(page.url()).searchParams.get('kind') === 'note', `the list lost the type: ${page.url()}`);
-    const titles = await page.getByRole('list', { name: 'Assets' }).locator('li a > span:nth-child(2) > span:first-child').allTextContents();
-    assert(titles.length > 1, `the list shows ${titles.length} rows`);
+    // The rows are grouped by the day they arrived, and the sort orders the
+    // rows inside each day. A row's name is its first line, after a
+    // screen-reader-only "Note: ".
+    const days = await main.getByRole('region', { name: 'Assets' }).locator('section ul').evaluateAll((lists) =>
+      lists.map((list) =>
+        [...list.querySelectorAll(':scope > li a > span > span:nth-child(2) > span:first-child')].map((name) =>
+          [...name.childNodes]
+            .filter((n) => !(n instanceof Element && n.classList.contains('sr-only')))
+            .map((n) => n.textContent)
+            .join('')
+            .trim(),
+        ),
+      ),
+    );
+    const rows = days.flat();
+    assert(rows.length > 1, `the list shows ${rows.length} rows`);
+    assert(rows.every((t) => t !== ''), 'a row has no name');
     const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
-    const sorted = [...titles].sort(collator.compare);
-    assert(titles.join('|') === sorted.join('|'), `the list is not in title order: ${titles.slice(0, 5).join(', ')}`);
+    for (const titles of days) {
+      const sorted = [...titles].sort(collator.compare);
+      assert(titles.join('|') === sorted.join('|'), `a day is not in title order: ${titles.slice(0, 5).join(', ')}`);
+    }
   });
 
   await step('ask: the box finds a concept, and a miss opens the tutor', page, async () => {
@@ -1086,11 +1161,10 @@ async function run() {
   if (SEED) skip('library: first video plays and saves its place', 'the seed has no videos (D7)');
   else await step('library: first video plays and saves its place', page, async () => {
     await go('/library');
-    // The Type menu: open it, pick Video from the listbox, and the URL is the filter.
-    await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
-    await page.getByRole('listbox', { name: 'Type' }).getByRole('option', { name: /^Video\b/ }).click();
+    // The Videos tab is a link to `?kind=video`, and the URL is the filter.
+    await clickHydrated(page, main.getByRole('navigation', { name: 'Type' }).getByRole('link', { name: 'Videos', exact: true }));
     await page.waitForURL(/\/library\?(.*&)?kind=video/);
-    await page.getByRole('list', { name: 'Assets' }).getByRole('link').first().click();
+    await main.getByRole('region', { name: 'Assets' }).getByRole('link').first().click();
     await page.waitForURL(/\/library\/[^/?]+$/);
     // No button to press: the player saves its own place. Play a moment,
     // pause, and the pause is a save the route has to accept.
@@ -1129,24 +1203,37 @@ async function run() {
   await step('provider keys: save a key, see its last four, remove it', page, async () => {
     // The keys are under Tutor (#342), which `?tab=tutor` opens.
     if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
-    // docs/BYOK.md: a key goes in once and never comes back out. The server
-    // starts with every provider key blank, so Gemini's row offers "Add your key".
-    const row = main.getByRole('listitem').filter({ has: page.getByText('Google Gemini', { exact: true }) });
-    await clickHydrated(page, row.getByRole('button', { name: 'Add your key' }));
-    const fake = 'e2e-not-a-real-gemini-key-000000000000wxyz';
-    await row.getByLabel(/Paste the key/).fill(fake);
+    // docs/BYOK.md: a key goes in once and never comes back out. The Providers
+    // card (#383) lists a provider only once it has a key or a model; the
+    // rest are offered under Add provider. From the seed that is all three,
+    // but a `--copy` may hold some already, so the step takes whichever
+    // provider the form offers first, which it chooses on its own.
+    const add = main.getByRole('button', { name: 'Add provider', expanded: false });
+    assert((await add.count()) > 0, 'every provider is listed already, so none can be added');
+    await clickHydrated(page, add);
+    const form = main.getByRole('form', { name: 'Add a provider' });
+    // A kit menu: the trigger is named "Provider: <current>".
+    const chosen = form.getByRole('button', { name: /^Provider: / });
+    await chosen.waitFor();
+    const label = (await chosen.getAttribute('aria-label'))?.replace(/^Provider: /, '') ?? '';
+    assert(label !== '', 'the provider menu names no provider');
+    const fake = 'e2e-not-a-real-provider-key-000000000000wxyz';
+    await form.getByLabel('API key', { exact: true }).fill(fake);
     const saving = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/learner/provider-key' && r.request().method() === 'POST',
     );
-    await row.getByRole('button', { name: 'Save key' }).click();
+    await form.getByRole('button', { name: 'Add provider' }).click();
     const response = await saving;
     assert(response.status() === 200, `the save answered ${response.status()}`);
     assert(!(await response.text()).includes(fake), 'the save answered with the key in it');
-    await row.getByText(/Your key, ending wxyz\./).waitFor();
+    const row = main.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
+    await row.getByText(/^Your key, ending wxyz\. Saved /).waitFor();
     assert(!(await page.content()).includes(fake), 'the page still holds the key after saving');
-    await row.getByRole('button', { name: 'Remove', exact: true }).click();
-    await row.getByRole('button', { name: 'Remove key', exact: true }).click();
-    await row.getByText('No key. The tutor skips this provider.').waitFor();
+    // Delete opens a confirm; its own Delete takes the key, and with no
+    // server key and no models the row leaves the list, as it was.
+    await row.getByRole('button', { name: 'Delete', exact: true, expanded: false }).click();
+    await row.getByRole('group', { name: `Confirm deleting ${label}` }).getByRole('button', { name: 'Delete', exact: true }).click();
+    await row.waitFor({ state: 'detached' });
   });
 
   await step('theme: Dark adds `dark` to <html>', page, async () => {

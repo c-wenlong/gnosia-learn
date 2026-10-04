@@ -2,10 +2,12 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { assetDisplayTitle, assetKindLabel, familyOf, type AssetRowRef } from "@/components/asset-meta";
+import { RowMenu } from "@/components/library/RowMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { cx } from "@/components/ui/classes";
 import type { RowSource } from "@/lib/library-source";
+import type { RowMenuSections } from "@/lib/row-menu";
 
 /**
  * One asset as a row of the Library's list view, under its day's heading
@@ -29,6 +31,14 @@ import type { RowSource } from "@/lib/library-source";
  * one there is no image to fail, so this needs none of the card's client
  * state and renders on the server. On a phone the time column goes, as
  * Manus's does at 390.
+ *
+ * **The more button** (L5) sits at the right, after the time: 32px, shown on
+ * the row's hover and while anything in it has focus, opening the row's
+ * menu (`RowMenu`). A button cannot live inside a link, so the row is not one
+ * link any more: the title is, and its `::after` is stretched over the whole
+ * row (the row is `relative`), so a press anywhere on it still opens the
+ * asset and the focus ring still rings the row; the menu sits above that
+ * layer (`z-10`). The row is `group/asset`, which the button reads.
  */
 export function AssetRow({
   asset,
@@ -37,6 +47,7 @@ export function AssetRow({
   time,
   edited,
   href,
+  menu,
 }: {
   asset: AssetRowRef;
   /** Where it came from; null names `topic` instead, or nothing. */
@@ -48,6 +59,8 @@ export function AssetRow({
   /** "edited 2 Oct", or null. */
   edited: string | null;
   href: string;
+  /** The more menu's items (`rowMenuItems`); no button without them. */
+  menu?: RowMenuSections;
 }) {
   const family = familyOf(asset.kind);
   const name = assetDisplayTitle(asset);
@@ -62,16 +75,15 @@ export function AssetRow({
   const line =
     sourceLine(source, name.text) ?? (topic === undefined ? null : <span className="min-w-0 truncate">{topic}</span>);
 
-  // `next/link`: an in-app navigation, not a reload of the whole document.
   return (
-    <Link
-      href={href}
+    <div
       className={cx(
-        "block rounded-[var(--shell-row-radius)] px-[var(--shell-row-pad)] transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none",
-        "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
+        "group/asset relative rounded-[var(--shell-row-radius)] px-[var(--shell-row-pad)] transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none",
+        // An open menu keeps its row lit, as Manus's does.
+        "has-[[aria-expanded=true]]:bg-surface2",
       )}
     >
-      <span
+      <div
         className={cx(
           "flex min-h-[calc(var(--shell-row)+24px)] min-w-0 items-center gap-3 border-b border-hair py-2.5",
           "group-last/item:border-transparent",
@@ -81,11 +93,20 @@ export function AssetRow({
           <Glyph name={family} size={18} />
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className={cx("truncate text-[14px] leading-5", nameClass)}>
+          {/* `next/link`: an in-app navigation, not a reload of the whole document. */}
+          <Link
+            href={href}
+            className={cx(
+              "block truncate text-[14px] leading-5 outline-none",
+              nameClass,
+              "after:absolute after:inset-0 after:rounded-[var(--shell-row-radius)] after:content-['']",
+              "focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-accent",
+            )}
+          >
             {/* The glyph is a family (a note and a session log share one), so the kind is said. */}
             <span className="sr-only">{assetKindLabel(asset.kind)}: </span>
             {name.text}
-          </span>
+          </Link>
           {line !== null && (
             <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-text2">{line}</span>
           )}
@@ -96,8 +117,9 @@ export function AssetRow({
             {edited !== null && <time dateTime={asset.updatedAt}>{edited}</time>}
           </span>
         )}
-      </span>
-    </Link>
+        {menu !== undefined && <RowMenu assetId={asset.id} title={name.text} sections={menu} className="z-10" />}
+      </div>
+    </div>
   );
 }
 
