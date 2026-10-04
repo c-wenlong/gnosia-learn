@@ -231,7 +231,8 @@ export function JobsProvider({
   const post = useCallback(
     async (path: string, body?: unknown): Promise<PostResult> => {
       const result = await postJob(path, body);
-      // A request that never got an answer changed nothing to read back.
+      // Read back only after an answer, as before the split. An unanswered
+      // request may still have committed; the next poll reconciles the list.
       if (result.status !== 0) await refresh();
       return result;
     },
