@@ -8,7 +8,7 @@ import { DomainCards, DomainView, type Place } from "@/components/learn/DomainBr
 import type { MapMark } from "@/components/learn/DomainGraph";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cardClasses, cx, LABEL } from "@/components/ui/classes";
+import { cardClasses, cx, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
@@ -205,8 +205,8 @@ export function LearnIndex({
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <div className="flex min-w-0 flex-1 basis-[20rem] flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="font-display text-[28px] leading-tight font-bold text-text">Learn</h1>
-          <p className="text-[12px] text-text2">
+          <h1 className={PAGE_TITLE}>Learn</h1>
+          <p className={NOTE}>
             {rows.length} concept{rows.length === 1 ? "" : "s"} · {counts.mastered} mastered · {counts.learning} learning ·{" "}
             {counts.untouched} {MASTERY_BUCKET_LABEL.untouched.toLowerCase()}
           </p>

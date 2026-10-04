@@ -26,6 +26,7 @@ import { chipClasses, cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
+import { useFollowFoot } from "@/components/ui/use-follow-foot";
 import {
   EMPTY_MENTION_VALUE,
   isEmptyValue,
@@ -128,7 +129,6 @@ import {
   takeOpener,
 } from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
-import { prefersReducedMotion } from "@/lib/motion";
 import { conversationTitle } from "@/lib/conversation-title";
 import { announceDraftChange } from "@/lib/studio-draft-list";
 import { panelHref, titleOf } from "@/lib/studio-view";
@@ -460,24 +460,15 @@ export function DraftPanel({
   }, [ready, mode]);
 
   const entries = useMemo(() => (view === null ? [] : visibleEntries(view.transcript)), [view]);
-  /** The thread box the last scroll moved: a new one (opening, back from a job) jumps to its foot. */
-  const scrolledBox = useRef<HTMLDivElement | null>(null);
   // What sits at the thread's foot besides the entries: the reply being
   // written, and a problem or refusal in its place when a turn fails
   // without adding an entry.
   const foot = view === null ? null : `${view.inFlight}|${threadProblem(view)?.case ?? ""}|${sendError !== null}`;
-  useEffect(() => {
-    // The thread scrolls, never the page. Something new in it (a message, a
-    // reply, a banner) glides into view; the thread's first drawing jumps
-    // straight to its foot, since gliding through a whole conversation on
-    // opening would be a wait.
-    const box = thread.current;
-    if (box === null) return;
-    const glide = scrolledBox.current === box && !prefersReducedMotion();
-    scrolledBox.current = box;
-    if (typeof box.scrollTo === "function") box.scrollTo({ top: box.scrollHeight, behavior: glide ? "smooth" : "auto" });
-    else box.scrollTop = box.scrollHeight;
-  }, [entries.length, pending, mode, foot]);
+  // The thread scrolls, never the page. Something new in it (a message, a
+  // reply, a banner) glides into view; a new thread box (opening, back from a
+  // job) jumps straight to its foot (`useFollowFoot`).
+  const threadChange = useMemo(() => [entries.length, pending, mode, foot], [entries.length, pending, mode, foot]);
+  useFollowFoot(thread, threadChange, { glide: true });
   const streamText = stream?.text ?? null;
   useEffect(() => {
     // A reply growing as it is written follows at once: a glide per word

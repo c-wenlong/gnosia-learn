@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cardClasses, type CardGap } from "./classes";
+import { CARD_TITLE, cardClasses, cx, type CardGap } from "./classes";
 import { TextLink } from "./TextLink";
 
 /**
@@ -42,7 +42,7 @@ export function Card({
       {(title !== undefined || action !== undefined) && (
         <div className="flex items-center gap-3">
           {title !== undefined && (
-            <h2 className="min-w-0 flex-1 text-[16px] font-bold leading-snug text-text">{title}</h2>
+            <h2 className={cx(CARD_TITLE, "min-w-0 flex-1")}>{title}</h2>
           )}
           {action !== undefined && <div className="ml-auto shrink-0">{action}</div>}
         </div>

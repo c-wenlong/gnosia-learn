@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { TextLink } from "@/components/ui/TextLink";
+import { CONCEPT_TITLE, cx, NOTE } from "@/components/ui/classes";
 import { NoteAndSources } from "@/components/workspace/NoteAndSources";
 import { StudioCards, type StudioAsset } from "@/components/workspace/StudioCards";
 import { dueRecall } from "@/lib/tutor-check";
@@ -116,7 +117,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
       <header className="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-3">
         <div className="min-w-0 flex-1 basis-[18rem]">
           <Eyebrow>{eyebrow}</Eyebrow>
-          <h1 className="mt-1 font-display text-[26px] leading-tight font-bold text-text">{w.title}</h1>
+          <h1 className={cx(CONCEPT_TITLE, "mt-1")}>{w.title}</h1>
         </div>
         <MasteryDot bucket={w.bucket} showLabel pL={w.pL} />
         <div className="flex flex-wrap items-center gap-3.5">
@@ -127,7 +128,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
           </Button>
         </div>
         {!canAsk && (
-          <p id="session-asks-nothing" className="basis-full text-[13px] text-text2">
+          <p id="session-asks-nothing" className={cx(NOTE, "basis-full")}>
             {NOTHING_TO_ASK} A session here teaches and asks nothing, so nothing is recorded.
           </p>
         )}

@@ -1,4 +1,4 @@
-import { PROVIDER_IDS, TUTOR_MODEL_LIMITS, type ProviderId } from "@self-learn/schema/shared";
+import { PROVIDER_IDS, TUTOR_MODEL_LIMITS, type ProviderId, type ProviderName } from "@self-learn/schema/shared";
 
 import type { ChainEntry } from "@/lib/agent/providers";
 import type { ProviderKeyView, ProviderKeysView } from "@/lib/provider-keys/settings";
@@ -37,8 +37,8 @@ export interface ProvidersView {
 }
 
 export function providersView(keys: ProvidersKeysInput, chain: readonly ChainEntry[], chainReachable: boolean): ProvidersView {
-  const byId = new Map(keys.rows.map((row) => [row.id, row]));
-  const withModels = [...new Set(chain.map((e) => e.provider))];
+  const byId = new Map<string, ProviderKeyView>(keys.rows.map((row) => [row.id, row]));
+  const withModels = [...new Set(chain.map((e) => e.provider))].filter((id) => byId.has(id));
   const listed = (id: ProviderId) => {
     const row = byId.get(id);
     return row !== undefined && (row.saved !== null || row.server || withModels.includes(id));
@@ -48,7 +48,9 @@ export function providersView(keys: ProvidersKeysInput, chain: readonly ChainEnt
     const use = byId.get(id)?.inUse;
     return use === "saved" ? 0 : use === "server" ? 1 : 2;
   };
-  const order = [...withModels, ...(chain.length === 0 ? [...rest].sort((a, b) => rank(a) - rank(b)) : rest)];
+  // A provider the owner added is always listed: it exists because they made it (T14).
+  const custom = keys.rows.filter((row) => row.custom !== undefined && !withModels.includes(row.id)).map((row) => row.id);
+  const order: ProviderName[] = [...withModels, ...(chain.length === 0 ? [...rest].sort((a, b) => rank(a) - rank(b)) : rest), ...custom];
   const rows = order.flatMap((id): ProviderRowView[] => {
     const row = byId.get(id);
     return row === undefined ? [] : [{ ...row, models: chain.filter((e) => e.provider === id).map((e) => e.model) }];
@@ -59,7 +61,7 @@ export function providersView(keys: ProvidersKeysInput, chain: readonly ChainEnt
     usingDefaults: chain.length === 0,
     rows,
     addable: keys.rows
-      .filter((row) => !order.includes(row.id))
+      .filter((row): row is ProviderKeyView & { id: ProviderId } => row.custom === undefined && !order.includes(row.id))
       .map((row) => (row.keyUrl === undefined ? { id: row.id, label: row.label } : { id: row.id, label: row.label, keyUrl: row.keyUrl })),
     full: chain.length >= TUTOR_MODEL_LIMITS.maxEntries,
   };

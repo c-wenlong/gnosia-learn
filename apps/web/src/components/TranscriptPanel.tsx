@@ -9,6 +9,7 @@ import {
 } from "@/components/media";
 import { cardClasses } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
+import { CARD_TITLE } from "@/components/ui/classes";
 
 /**
  * The spoken lines of a video, following playback.
@@ -100,7 +101,7 @@ export function TranscriptPanel({
   const content = (
     <>
       <div className={bare ? "flex items-center justify-end gap-3 px-2 empty:hidden" : "flex items-center justify-between gap-3 px-2"}>
-        {!bare && <h3 className="text-[16px] font-bold text-text">Transcript</h3>}
+        {!bare && <h3 className={CARD_TITLE}>Transcript</h3>}
         {cues.length > 0 &&
           (following ? (
             <span className="text-[12px] tabular-nums text-text3">

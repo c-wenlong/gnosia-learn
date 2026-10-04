@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useAssetFailure } from "@/components/use-asset-failure";
-import { cardClasses, chipClasses, cx } from "@/components/ui/classes";
+import { CARD_TITLE, cardClasses, chipClasses, cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { WidgetFailure } from "@/components/WidgetFailure";
 
@@ -99,7 +99,7 @@ export function DiagramView({
     <figure className={cardClasses({ flush: true, className: "relative" })}>
       {heading ? (
         <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-3">
-          <h3 className="truncate text-[16px] font-bold text-text">{title}</h3>
+          <h3 className={cx(CARD_TITLE, "truncate")}>{title}</h3>
           <TextLink href={src} external size="sm" className="shrink-0 px-1.5 py-0.5">
             Full size
           </TextLink>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Fragment, useId, useRef, useState, type ReactNode } from "react";
 
 import { formatTimecode, type TranscriptCue, type VideoChapter } from "@/components/media";
 import { JobLog } from "@/components/studio/JobPanel";
@@ -19,6 +19,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { Textarea } from "@/components/ui/Textarea";
 import { TextLink } from "@/components/ui/TextLink";
+import { useFollowFoot } from "@/components/ui/use-follow-foot";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
@@ -469,7 +470,7 @@ function SheetStrip({
                     className="h-full w-full object-contain"
                   />
                   {sheet.round > 1 && (
-                    <span className="absolute top-1.5 right-1.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[11px] font-medium text-white">
+                    <span className="absolute top-1.5 right-1.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[12px] font-medium text-white">
                       Round {sheet.round}
                     </span>
                   )}
@@ -542,15 +543,16 @@ function StepMark({ status, live }: { status: StepRow["status"]; live: boolean }
 /**
  * The log of what happened: one line per wrapper call and per sheet read,
  * from the runner's own records (D24), newest last, and the runner's seeding
- * of the voice before any of it.
+ * of the voice before any of it. Exported for its test.
  */
-function MakingLog({ job, events, chapters }: { job: VideoJob; events: StudioEvent[]; chapters: VideoChapter[] | null }) {
+export function MakingLog({ job, events, chapters }: { job: VideoJob; events: StudioEvent[]; chapters: VideoChapter[] | null }) {
   const labelId = useId();
   const lines = narration(events, 40);
   const box = useRef<HTMLOListElement>(null);
-  useEffect(() => {
-    if (box.current !== null) box.current.scrollTop = box.current.scrollHeight;
-  }, [lines.length]);
+  // A new line follows the foot, unless the reader has scrolled up to read.
+  // Keyed on the newest line's `seq`, not the count: the list is capped at 40,
+  // so once it is full a new line leaves the count where it was.
+  useFollowFoot(box, lines.at(-1)?.seq ?? null, { onlyNearFoot: true });
   const seeded = job.seeded ?? null;
   return (
     <section aria-labelledby={labelId} className="min-w-0">
@@ -731,7 +733,7 @@ function Chapters({
                 {scene.lines.map((line, at) => (
                   <li key={at} className="text-[13px] leading-5 text-text2">
                     {line.changed && (
-                      <span className="mr-1.5 inline-block rounded-sm bg-warn-tint px-1 text-[11px] font-semibold text-warn-text">Changed</span>
+                      <span className="mr-1.5 inline-block rounded-sm bg-warn-tint px-1 text-[12px] font-semibold text-warn-text">Changed</span>
                     )}
                     {line.text}
                   </li>
