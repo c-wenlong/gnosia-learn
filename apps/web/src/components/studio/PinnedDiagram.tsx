@@ -26,7 +26,7 @@ export function PinnedDiagram({ name, title }: { name: string; title: string }) 
   return (
     <div
       className={`flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-border ${
-        missing ? "bg-surface2" : "bg-[#f7f6f3]"
+        missing ? "bg-surface2" : "bg-diagram-matte"
       }`}
     >
       {missing ? (
@@ -57,7 +57,7 @@ export function PinnedVideo({ slug, title }: { slug: string; title: string }) {
   return (
     <div
       className={`flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-border ${
-        missing ? "bg-surface2" : "bg-[#111]"
+        missing ? "bg-surface2" : "bg-black"
       }`}
     >
       {missing ? (

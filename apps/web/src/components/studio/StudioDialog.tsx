@@ -3,11 +3,13 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { ENTER, reducedMotion } from "@/components/studio/motion";
+import { ENTER } from "@/components/studio/motion";
 import { PaneContext, usePaneLayout } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
+import { rememberFocus } from "@/lib/focus";
+import { prefersReducedMotion } from "@/lib/motion";
 
 import "./motion.css";
 
@@ -101,7 +103,6 @@ export function StudioDialog({
 }) {
   const router = useRouter();
   const ref = useRef<HTMLDialogElement | null>(null);
-  const opener = useRef<HTMLElement | null>(null);
   const closing = useRef(false);
   const pressedOnBackdrop = useRef(false);
   /** The fade before Close navigates, while it runs. */
@@ -137,7 +138,7 @@ export function StudioDialog({
         shutEarly.current = true;
       }
     };
-    if (reducedMotion()) {
+    if (prefersReducedMotion()) {
       go();
       return;
     }
@@ -167,8 +168,7 @@ export function StudioDialog({
     const dialog = ref.current;
     if (dialog === null) return;
     closing.current = false;
-    const active = document.activeElement;
-    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    const opener = rememberFocus();
     if (!dialog.open) dialog.showModal();
     // `showModal()` focuses the first focusable thing, which is Close in the
     // header. A panel that wants its composer focused marks it, and a panel
@@ -180,14 +180,11 @@ export function StudioDialog({
       // close it was fading out for is not wanted any more.
       if (leaveTimer.current !== null) clearTimeout(leaveTimer.current);
       if (dialog.open) dialog.close();
-      // Back to whatever opened the panel. A reload with a panel open had no
-      // opener, so New chat takes it: it is where the person would start
-      // again.
-      const back =
-        opener.current !== null && opener.current.isConnected
-          ? opener.current
-          : document.querySelector<HTMLElement>("[data-studio-new]");
-      back?.focus({ preventScroll: true });
+      // Back to whatever opened the panel, while it is still on screen. A
+      // reload with a panel open had no opener, and an opener the page has
+      // since hidden is no place to land, so New chat takes it: it is where
+      // the person would start again.
+      opener.restore(() => document.querySelector<HTMLElement>("[data-studio-new]"));
     };
   }, []);
 

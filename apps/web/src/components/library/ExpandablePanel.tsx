@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
-import { prefersReducedMotion } from "@/lib/motion";
+import { usePresence } from "@/components/ui/use-presence";
 
 /** How long the popup takes to fade and shrink away before it is gone. */
 export const CLOSE_MS = 200;
@@ -36,10 +36,10 @@ export const CLOSE_MS = 200;
  * the popup was, each as a share of the way down.
  *
  * It opens with a fade and a slight growth (`@starting-style`), its backdrop
- * fading in with it, and closes the same way backwards: `closing` holds the
- * popup on screen for `CLOSE_MS` while it fades, and only then does the
- * state close it. A second Escape or click in that beat does nothing. Under
- * reduced motion there is no beat.
+ * fading in with it, and closes the same way backwards: `usePresence` keeps
+ * the popup mounted for `CLOSE_MS` while it fades (`leaving`), and only then
+ * is it gone and the words back in the card. A second Escape or click in
+ * that beat does nothing. Under reduced motion there is no beat.
  */
 export function ExpandablePanel({
   title,
@@ -56,7 +56,8 @@ export function ExpandablePanel({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [closing, setClosing] = useState(false);
+  // The popup is drawn while `mounted`, which outlasts `open` by the fade.
+  const { mounted, leaving } = usePresence(open, CLOSE_MS);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const pressedOnBackdrop = useRef(false);
@@ -76,35 +77,24 @@ export function ExpandablePanel({
   }
 
   function collapse() {
-    if (closing) return;
+    // Closed already, or fading out: nothing more to do.
+    if (!open) return;
     const body = dialogBodyRef.current;
     if (body) readAt.current = shareScrolled(body);
-    if (prefersReducedMotion()) {
-      setOpen(false);
-      return;
-    }
-    setClosing(true);
+    setOpen(false);
   }
-
-  // The beat the popup fades out in; the state closes it once it has.
-  useEffect(() => {
-    if (!closing) return;
-    const timer = window.setTimeout(() => {
-      setClosing(false);
-      setOpen(false);
-    }, CLOSE_MS);
-    return () => window.clearTimeout(timer);
-  }, [closing]);
 
   // Back in the card: scroll it to where the reader was in the popup. A
   // layout effect, so the jump happens before the frame is painted. The popup
   // is scrolled in the effect below, since it has no height until it is open.
   useLayoutEffect(() => {
-    if (!open && cardBodyRef.current) scrollToShare(cardBodyRef.current, readAt.current);
-  }, [open]);
+    if (!mounted && cardBodyRef.current) scrollToShare(cardBodyRef.current, readAt.current);
+  }, [mounted]);
 
+  // Keyed on `mounted`, not `open`: the dialog stays open, in the top layer,
+  // while it fades, and closes when it unmounts.
   useEffect(() => {
-    if (!open) return;
+    if (!mounted) return;
     const dialog = dialogRef.current;
     if (dialog === null) return;
     // The icon that opened it, to give focus back to on close.
@@ -119,7 +109,7 @@ export function ExpandablePanel({
       if (dialog.open) dialog.close();
       opener?.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [mounted]);
 
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-[20px] border-2 border-border bg-surface">
@@ -144,13 +134,13 @@ export function ExpandablePanel({
       </PanelHeader>
       <div
         ref={cardBodyRef}
-        style={open && heldHeight !== null ? { height: heldHeight } : undefined}
+        style={mounted && heldHeight !== null ? { height: heldHeight } : undefined}
         className="max-h-[min(36rem,65dvh)] overflow-y-auto overscroll-contain px-5 pt-1 pb-5"
       >
-        {open ? null : children}
+        {mounted ? null : children}
       </div>
 
-      {open && (
+      {mounted && (
         <dialog
           ref={dialogRef}
           aria-label={label}
@@ -177,7 +167,7 @@ export function ExpandablePanel({
             "md:h-[calc(100dvh-64px)] md:w-[min(64rem,calc(100vw-48px))] md:rounded-[20px] md:border-2 md:border-border",
             "transition-[opacity,scale] duration-200 ease-soft starting:open:scale-[0.98] starting:open:opacity-0",
             "backdrop:transition-opacity backdrop:duration-200 backdrop:ease-out starting:open:backdrop:opacity-0",
-            closing && "pointer-events-none scale-[0.98] opacity-0 backdrop:opacity-0",
+            leaving && "pointer-events-none scale-[0.98] opacity-0 backdrop:opacity-0",
             "motion-reduce:transition-none motion-reduce:backdrop:transition-none",
           )}
         >

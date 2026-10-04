@@ -79,6 +79,20 @@ export function composerBoxHeight(
   return Math.min(max, Math.max(min, scrollHeight));
 }
 
+/**
+ * Whether a key belongs to an input method that is composing a word
+ * (Japanese, Chinese, Korean): Enter there confirms the word, and acting on
+ * it would send or save half a sentence. Safari reports the Enter that
+ * commits a word with `isComposing` already false and `keyCode` 229, the code
+ * every browser gives a key the IME took, so 229 counts as composing too.
+ *
+ * Takes the native event (`event.nativeEvent` from a React handler), which
+ * carries both.
+ */
+export function isImeKey(event: { isComposing?: boolean; keyCode?: number }): boolean {
+  return event.isComposing === true || event.keyCode === 229;
+}
+
 /** What a key press in the composer means. */
 export type ComposerKey = "send" | "mod-send" | "newline" | "none";
 
@@ -87,11 +101,11 @@ export type ComposerKey = "send" | "mod-send" | "newline" | "none";
  * thing: the studio's panel gives it to a live Draw (`aria-keyshortcuts`),
  * and a composer with no use for it sends.
  *
- * A key pressed while an input method is composing (Japanese, Chinese,
- * Korean) belongs to the IME: Enter there confirms a word, and sending on it
- * would post half a sentence. Safari reports the Enter that commits a word
- * with `isComposing` already false and `keyCode` 229, the code every browser
- * gives a key the IME took, so 229 counts as composing too.
+ * A key pressed while an input method is composing belongs to the IME
+ * (`isImeKey`), and means nothing here.
+ *
+ * Shaped as a native `KeyboardEvent`, so a React handler passes
+ * `event.nativeEvent` whole rather than rebuilding it.
  */
 export function composerKey(event: {
   key: string;
@@ -102,7 +116,7 @@ export function composerKey(event: {
   isComposing?: boolean;
   keyCode?: number;
 }): ComposerKey {
-  if (event.key !== "Enter" || event.isComposing === true || event.keyCode === 229) return "none";
+  if (event.key !== "Enter" || isImeKey(event)) return "none";
   if (event.metaKey || event.ctrlKey) return "mod-send";
   if (event.shiftKey || event.altKey === true) return "newline";
   return "send";

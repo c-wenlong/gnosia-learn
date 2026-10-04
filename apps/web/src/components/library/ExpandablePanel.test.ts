@@ -124,6 +124,9 @@ describe("ExpandablePanel", () => {
     // Still there, fading, and no longer taking clicks.
     expect(dialog(host)?.className).toContain("opacity-0");
     expect(dialog(host)?.className).toContain("pointer-events-none");
+    // The words stay in the popup while it fades: the card has none yet, so there is one copy.
+    expect(host.querySelectorAll(".words")).toHaveLength(1);
+    expect(dialog(host)?.querySelector(".words")).not.toBeNull();
     act(() => {
       vi.advanceTimersByTime(CLOSE_MS / 2);
     });

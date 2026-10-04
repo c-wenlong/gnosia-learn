@@ -3,6 +3,7 @@
 import { useId, type KeyboardEvent } from "react";
 
 import { cx } from "@/components/ui/classes";
+import { tabKeyIndex } from "@/components/ui/roving";
 import { useLearner } from "@/lib/learner-context";
 import {
   APPEARANCE_LABELS,
@@ -109,11 +110,11 @@ function Segments<T extends string>({
   const gap = small ? 2 : 4;
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, option: T) => {
-    const step =
-      event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
-    if (step === 0) return;
+    // Every arrow moves, and there is no Home or End: the radio group pattern.
+    const at = tabKeyIndex(event.key, options.indexOf(option), options.length, "both", false);
+    if (at < 0) return;
     event.preventDefault();
-    const next = options[(options.indexOf(option) + step + options.length) % options.length] as T;
+    const next = options[at] as T;
     onChange(next);
     (event.currentTarget.parentElement?.querySelector(`[data-option="${next}"]`) as HTMLElement | null)?.focus();
   };

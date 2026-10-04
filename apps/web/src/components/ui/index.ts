@@ -51,3 +51,4 @@ export type {
   LinkWeight,
 } from "./classes";
 export type { FilterOption } from "./filter-menu";
+export { tabKeyIndex, type RovingOrientation } from "./roving";

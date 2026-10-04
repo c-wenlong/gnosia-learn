@@ -5,6 +5,7 @@ import type { AssetRef } from "@self-learn/catalog/state";
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
 import { PAGE_ENTER } from "@/components/PageLoading";
+import { DownloadButton, FavoriteButton } from "@/components/library/AssetActions";
 import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/library/AssetTabs";
 import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
@@ -20,6 +21,7 @@ import { TextLink } from "@/components/ui/TextLink";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import {
   loadAssetDetail,
+  loadFavorite,
   loadLastWatched,
   loadPlayback,
   readAssetText,
@@ -59,6 +61,8 @@ import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/tra
  * the stretches that played, resumes there on the next visit, and appends
  * the `watched` event itself once most of it has played. Anything else keeps
  * "Mark read" beside its title, and Details says when it was last read.
+ * Every asset gets Favorite (the star) and, when it has a file to hand over,
+ * Download; a video gets Ask too, an unsaved chat about it (`LibraryVideo`).
  *
  * **Four shapes, and none of them is a broken version of another.** A video
  * gets a player with its chapters on the scrub bar and its transcript beneath it. A
@@ -158,11 +162,12 @@ export default async function AssetPage({
       <span aria-hidden>←</span> {back.label}
     </TextLink>
   );
-  const [detail, { kb }, lastWatched, playback] = await Promise.all([
+  const [detail, { kb }, lastWatched, playback, favorite] = await Promise.all([
     loadAssetDetail(id),
     loadKnowledgeBase(),
     loadLastWatched(id),
     loadPlayback(id),
+    loadFavorite(id),
   ]);
   const { asset, derivations, related, reachable, titles, notes, concepts } = detail;
 
@@ -188,6 +193,9 @@ export default async function AssetPage({
   // What a failure names as the way back: a studio video is made again, not uploaded.
   const failureSource = problemSource(asset.id, asset.sourceRepo) ?? asset.sourceRepo;
   const statusHref = assetStatusHref(asset.id);
+  // What Download saves the file as: its own name, as the file route's
+  // `Content-Disposition` already gives it.
+  const downloadName = asset.path?.split("/").filter(Boolean).pop();
   const zone = appTimeZone();
 
   const explained = explainedConcepts(concepts, new Map(kb.concepts.map((c) => [c.id, c])));
@@ -296,6 +304,8 @@ export default async function AssetPage({
           saved={playback}
           heading={heading}
           watchedDay={playback?.watchedAt ? dayKey(playback.watchedAt, zone) : null}
+          favorite={favorite !== null}
+          downloadName={downloadName}
           actions={addToNote ?? undefined}
           notes={
             <>
@@ -337,6 +347,8 @@ export default async function AssetPage({
           // Details says when it was last read, so the button does not.
           <MarkWatched assetId={asset.id} verb="read" lastWatchedDay={null} />
         )}
+        <FavoriteButton assetId={asset.id} initial={favorite !== null} />
+        {servable && <DownloadButton href={fileHref} filename={downloadName} />}
         {addToNote}
       </div>
     </div>

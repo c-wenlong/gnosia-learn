@@ -58,6 +58,7 @@ import {
   COMPOSER_TEXT,
   composerBoxFieldPx,
   composerKey,
+  isImeKey,
 } from "./composer-keys";
 import { Glyph, type GlyphName } from "./Glyph";
 import { IconButton } from "./IconButton";
@@ -627,7 +628,7 @@ function Field<K extends string>({
       const current = menuRef.current;
       if (current === null) return false;
       event.preventDefault();
-      openMenu({ ...current, active: moveActive(current.options, current.active, delta) });
+      openMenu({ ...current, active: moveActive(current.options, current.active, delta, isUsable) });
       return true;
     };
     const choose = (event: KeyboardEvent | null) => {
@@ -666,21 +667,13 @@ function Field<K extends string>({
       editor.registerCommand(
         KEY_ENTER_COMMAND,
         (event) => {
-          if (event !== null && (event.isComposing || event.keyCode === 229)) {
+          if (event !== null && isImeKey(event)) {
             // The input method's Enter confirms a word; leave it to the browser.
             return true;
           }
           if (menuRef.current !== null && choose(event)) return true;
           if (event === null) return false;
-          const meaning = composerKey({
-            key: event.key,
-            shiftKey: event.shiftKey,
-            metaKey: event.metaKey,
-            ctrlKey: event.ctrlKey,
-            altKey: event.altKey,
-            isComposing: event.isComposing,
-            keyCode: event.keyCode,
-          });
+          const meaning = composerKey(event);
           if (meaning === "send") {
             event.preventDefault();
             submit();

@@ -16,6 +16,14 @@ const getCourses = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
 vi.mock("@/lib/settings", () => ({ readTutorStyle }));
 vi.mock("@/data/courses", () => ({ getCourses }));
+// Ask on a video reads the asset, its sidecars and the transcript's text.
+const readAssetDetail = vi.hoisted(() => vi.fn());
+const readAssetText = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/asset-library", () => ({
+  readAssetDetail,
+  readAssetText,
+  withCatalog: async (fn: (db: unknown) => Promise<unknown>) => fn({}),
+}));
 vi.mock("@/lib/agent/providers", async (importOriginal) => ({
   // The pure helpers (the missing-key message, the skipped entries) are real.
   ...(await importOriginal<typeof import("@/lib/agent/providers")>()),
@@ -307,5 +315,94 @@ describe("POST /api/agent/chat with subject", () => {
     const block = prompt.slice(prompt.indexOf("```text"), prompt.indexOf("## What is known"));
     expect(block.match(/```/g)).toHaveLength(2);
     expect(block).toContain("` ` `");
+  });
+});
+
+describe("POST /api/agent/chat with assetId", () => {
+  const VIDEO = "manimkc:out/algorithms/dp/knapsack.mp4";
+  const TRANSCRIPT = "manimkc:out/algorithms/dp/knapsack.transcript.json";
+  const video = { id: VIDEO, kind: "video", title: "Knapsack, one row at a time", path: "out/algorithms/dp/knapsack.mp4", url: null };
+  const reply = {
+    ok: true,
+    attempts: [],
+    result: { content: "At [0:04] it fills the first row.", model: "m", provider: "gemini", providerLabel: "Gemini" },
+  };
+
+  beforeEach(() => {
+    readAssetDetail.mockReset();
+    readAssetText.mockReset();
+    completeWithFallback.mockReset();
+    tutorCredentials.mockReset();
+    tutorCredentials.mockResolvedValue(CREDENTIALS);
+    signedIn.value = true;
+    readTutorStyle.mockReset();
+    readTutorStyle.mockResolvedValue("direct");
+  });
+
+  it("refuses a malformed asset id, position or thread before any read or provider call", async () => {
+    for (const body of [
+      { assetId: "", messages: [] },
+      { assetId: 42, messages: [] },
+      { assetId: "x".repeat(513), messages: [] },
+      { assetId: VIDEO, at: -1, messages: [] },
+      { assetId: VIDEO, at: "12", messages: [] },
+      { assetId: VIDEO, messages: [{ role: "robot", content: "hi" }] },
+    ]) {
+      const { status, json } = await call(body);
+      expect(status, JSON.stringify(body).slice(0, 60)).toBe(400);
+      expect(json.code).toBe("BAD_REQUEST");
+    }
+    expect(readAssetDetail).not.toHaveBeenCalled();
+    expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for a row that is missing or not a video, and 503 when the catalog is down", async () => {
+    readAssetDetail.mockResolvedValueOnce({ asset: null, derivations: { sources: [], derived: [] }, reachable: true });
+    expect((await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] })).status).toBe(404);
+    readAssetDetail.mockResolvedValueOnce({
+      asset: { ...video, kind: "note" },
+      derivations: { sources: [], derived: [] },
+      reachable: true,
+    });
+    expect((await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] })).status).toBe(404);
+    readAssetDetail.mockResolvedValueOnce({ asset: null, derivations: { sources: [], derived: [] }, reachable: false });
+    const down = await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] });
+    expect(down.status).toBe(503);
+    expect(down.json.code).toBe("ASSET_UNAVAILABLE");
+    expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("builds the prompt from the video, its transcript and the position, and returns the reply", async () => {
+    readAssetDetail.mockResolvedValue({
+      asset: video,
+      derivations: { sources: [], derived: [{ id: TRANSCRIPT, kind: "transcript" }] },
+      reachable: true,
+    });
+    readAssetText.mockResolvedValue(
+      JSON.stringify({ segments: [{ start: 4, text: "We fill the first row." }, { start: 75, text: "Then the second." }] }),
+    );
+    completeWithFallback.mockResolvedValue(reply);
+
+    const res = await call({ assetId: VIDEO, at: 80.6, messages: [{ role: "user", content: "What just happened?" }] });
+    expect(res.status).toBe(200);
+    expect(res.json.message).toEqual({ role: "assistant", content: "At [0:04] it fills the first row." });
+    expect(readAssetDetail).toHaveBeenCalledWith(VIDEO);
+    expect(readAssetText.mock.calls[0][1]).toBe(TRANSCRIPT);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].role).toBe("system");
+    expect(sent[0].content).toContain("Knapsack, one row at a time");
+    expect(sent[0].content).toContain("1:20 into the video");
+    expect(sent[0].content).toContain("this chat is not stored");
+  });
+
+  it("still answers when the video has no transcript, and says so in the prompt", async () => {
+    readAssetDetail.mockResolvedValue({ asset: video, derivations: { sources: [], derived: [] }, reachable: true });
+    completeWithFallback.mockResolvedValue(reply);
+    const res = await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] });
+    expect(res.status).toBe(200);
+    expect(readAssetText).not.toHaveBeenCalled();
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("No transcript is indexed");
+    expect(sent[0].content).toContain("## Where the player is\nNot known.");
   });
 });

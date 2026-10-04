@@ -36,7 +36,7 @@ const CHIP_FIELD = cx(
  * the list takes focus and points at the highlighted row with
  * `aria-activedescendant`. Arrow keys, Home and End move; Enter or Space
  * picks; typing jumps to the next option starting with what was typed;
- * Escape closes with focus back on the trigger, the way `AvatarMenu` does, and
+ * Escape closes with focus back on the trigger, the way `AccountMenu` does, and
  * so does a click outside or Tab. Picking the first option ("All") is how a
  * filter is cleared, so there is no separate clear button.
  *
@@ -145,7 +145,7 @@ export function FilterMenu<V extends string>({
     if (option !== undefined && option.value !== value) onChange(option.value);
   };
 
-  // Escape and a pointer outside, the way AvatarMenu listens for them.
+  // Escape and a pointer outside, the way AccountMenu listens for them.
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: PointerEvent) => {

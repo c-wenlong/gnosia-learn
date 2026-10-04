@@ -12,7 +12,12 @@ import {
 import {
   activeChapterIndex,
   formatTimecode,
+  nextSkip,
+  SKIP_FLASH_MS,
+  SKIP_STEP,
+  skipLabel,
   subtitleAt,
+  type SkipFlash,
   type TranscriptCue,
   type VideoChapter,
 } from "@/components/media";
@@ -49,10 +54,15 @@ export type PlaybackSignal = {
  * the file and this component draws the bar (`VideoScrubber`: one stretch per
  * chapter, a frame preview on hover), play, volume, the time and the current
  * chapter, speed and fullscreen, over a gradient that fades while the video
- * plays untouched. Keyboard: Space or K plays and pauses, J and L move ten
- * seconds, M mutes, C toggles subtitles, I pops the picture out (where the
+ * plays untouched. Keyboard: Space or K plays and pauses, the left and right
+ * arrows move five seconds (on the bar too), J and L move ten, M mutes, C toggles subtitles, I pops the picture out (where the
  * browser has picture-in-picture), F goes fullscreen, and the bar
- * itself takes arrows and Page Up / Page Down for chapters.
+ * itself takes Page Up / Page Down for chapters. A click anywhere in the
+ * player gives it focus, so the keys work after a click on the picture.
+ *
+ * **An arrow press flashes what it did.** "+ 5 ›" on the right or "‹ − 5" on
+ * the left, for a second. Presses in the same direction while it is up add
+ * to it, so holding the key reads "+ 170" rather than "+ 5" over and over.
  *
  * **Subtitles are the transcript.** The time-synced lines under the video are
  * the same cues a caption track would carry, so the CC button draws the line
@@ -123,6 +133,8 @@ export function VideoPlayer({
   const [fullscreen, setFullscreen] = useState(false);
   const [awake, setAwake] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
+  const [skip, setSkip] = useState<SkipFlash | null>(null);
+  const skipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subtitles = useSyncExternalStore(subscribeSubtitles, readSubtitles, () => false);
   // Off on the server, so the first client render matches it.
   const canPip = useSyncExternalStore(noSubscription, pipSupported, () => false);
@@ -153,6 +165,7 @@ export function VideoPlayer({
     setDuration(Number.NaN);
     setBuffered(0);
     setPaused(true);
+    setSkip(null);
   }
 
   // A jump from outside goes through `seek`, the same path as a click on the
@@ -201,6 +214,7 @@ export function VideoPlayer({
   useEffect(
     () => () => {
       if (idle.current) clearTimeout(idle.current);
+      if (skipTimer.current) clearTimeout(skipTimer.current);
     },
     [],
   );
@@ -232,6 +246,29 @@ export function VideoPlayer({
       // it at `loadedmetadata`.
       pendingSeek.current = { load: source.load, seconds: target };
     }
+  }
+
+  /** One arrow press: five seconds either way, and the flash that says so. */
+  function step(direction: 1 | -1) {
+    // A seek still held for this load is where the playhead is going, so
+    // presses before the metadata add up rather than each restarting from 0.
+    const pending = pendingSeek.current;
+    const from =
+      pending !== null && pending.load === source.load
+        ? pending.seconds
+        : (videoRef.current?.currentTime ?? time);
+    const end = Number.isFinite(duration) ? duration : Number.POSITIVE_INFINITY;
+    const target = Math.min(Math.max(from + direction * SKIP_STEP, 0), end);
+    seek(target);
+    wake();
+    // At either end nothing moved, so the flash neither appears nor grows.
+    if (target === from) return;
+    setSkip((prev) => nextSkip(prev, direction));
+    if (skipTimer.current) clearTimeout(skipTimer.current);
+    skipTimer.current = setTimeout(
+      () => setSkip((prev) => (prev === null ? null : { ...prev, shown: false })),
+      SKIP_FLASH_MS,
+    );
   }
 
   function applyPendingSeek(video: HTMLVideoElement) {
@@ -303,18 +340,24 @@ export function VideoPlayer({
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const target = event.target as HTMLElement;
     // A focused button handles its own Space and Enter.
-    if (
-      (event.target as HTMLElement).closest("button, input") &&
-      (event.key === " " || event.key === "Enter")
-    ) {
+    if (target.closest("button, input") && (event.key === " " || event.key === "Enter")) {
       return;
     }
+    // And the volume slider its own arrows.
+    if (target.closest("input") && event.key.startsWith("Arrow")) return;
     const video = videoRef.current;
     switch (event.key.toLowerCase()) {
       case " ":
       case "k":
         togglePlay();
+        break;
+      case "arrowleft":
+        step(-1);
+        break;
+      case "arrowright":
+        step(1);
         break;
       case "j":
         seek((video?.currentTime ?? time) - 10);
@@ -370,13 +413,18 @@ export function VideoPlayer({
     ) : (
       <div
         ref={frameRef}
+        // Out of the tab order, but a click on the picture lands focus here
+        // rather than on the page, so the keys below answer straight away.
+        tabIndex={-1}
         onKeyDown={onKeyDown}
         onPointerMove={wake}
         onPointerLeave={() => setAwake(false)}
         className={cx(
-          "group/player relative overflow-hidden bg-black",
+          "group/player relative overflow-hidden bg-black outline-none",
           fullscreen ? "flex items-center" : "rounded-xl",
-          !controlsUp && "cursor-none focus-within:cursor-auto",
+          // Keyboard focus on a control holds the controls up. Focus a click
+          // left on the frame does not, or a clicked video never hid them.
+          !controlsUp && "cursor-none has-[:focus-visible]:cursor-auto",
         )}
       >
         <video
@@ -439,7 +487,7 @@ export function VideoPlayer({
               // Above the controls whenever they show, focus included.
               controlsUp
                 ? "bottom-[4.25rem] sm:bottom-24"
-                : "bottom-4 group-focus-within/player:bottom-[4.25rem] sm:bottom-6 sm:group-focus-within/player:bottom-24",
+                : "bottom-4 group-has-[:focus-visible]/player:bottom-[4.25rem] sm:bottom-6 sm:group-has-[:focus-visible]/player:bottom-24",
             )}
           >
             <p
@@ -454,9 +502,37 @@ export function VideoPlayer({
         {/* Kept mounted, so it fades and shrinks away as play starts and comes back
             the same way on pause, rather than blinking. Gone, it is invisible and
             inert: no focus, no click through to the video under it. */}
+        {skip !== null && (
+          <div
+            // A turn of direction is a new flash, which fades in on its own side.
+            key={skip.direction}
+            aria-hidden
+            data-skip={skip.shown ? "shown" : "away"}
+            className={cx(
+              "pointer-events-none absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xl font-semibold text-white tabular-nums [text-shadow:0_1px_4px_rgb(0_0_0/0.6)] sm:text-2xl",
+              "transition-[opacity,translate] duration-200 ease-soft starting:opacity-0 motion-reduce:transition-none",
+              skip.direction > 0 ? "right-[12%]" : "left-[12%] flex-row-reverse",
+              skip.shown
+                ? "translate-x-0 opacity-100"
+                : cx("opacity-0", skip.direction > 0 ? "translate-x-2" : "-translate-x-2"),
+            )}
+          >
+            <span>{skipLabel(skip)}</span>
+            <Icon
+              name={skip.direction > 0 ? "forward" : "back"}
+              className="size-6 drop-shadow-[0_1px_3px_rgb(0_0_0/0.6)] sm:size-7"
+            />
+          </div>
+        )}
+
         <button
           type="button"
-          onClick={togglePlay}
+          onClick={() => {
+            togglePlay();
+            // This button goes inert as play starts, which would drop focus
+            // on the page; the frame keeps it, so the keys still answer.
+            frameRef.current?.focus({ preventScroll: true });
+          }}
           aria-label="Play"
           inert={!(paused && !scrubbing)}
           data-big-play={paused && !scrubbing ? "shown" : "away"}
@@ -475,7 +551,7 @@ export function VideoPlayer({
         <div
           className={cx(
             "absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/35 to-transparent px-2 pt-8 pb-1 sm:px-4 sm:pt-12 sm:pb-1.5 text-white transition-opacity duration-200 motion-reduce:transition-none",
-            controlsUp ? "opacity-100" : "opacity-0 group-focus-within/player:opacity-100",
+            controlsUp ? "opacity-100" : "opacity-0 group-has-[:focus-visible]/player:opacity-100",
           )}
         >
           <VideoScrubber
@@ -487,6 +563,7 @@ export function VideoPlayer({
             label={title ? `Seek in ${title}` : "Seek"}
             onSeek={seek}
             onScrub={setScrubbing}
+            onStep={step}
           />
           <div className="flex items-center gap-1 text-[13px]">
             <ControlButton label={paused ? "Play (k)" : "Pause (k)"} onClick={togglePlay}>
@@ -717,6 +794,8 @@ const PATHS = {
   ),
   expand: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
   shrink: <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />,
+  forward: <path d="M9.5 5.5l6.5 6.5-6.5 6.5" strokeWidth="2.4" />,
+  back: <path d="M14.5 5.5L8 12l6.5 6.5" strokeWidth="2.4" />,
 } satisfies Record<string, ReactNode>;
 
 function Icon({ name, className }: { name: keyof typeof PATHS; className?: string }) {

@@ -1,11 +1,10 @@
 "use client";
 
-import { useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 
 import { linkClasses } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
-
-const noSubscribe = () => () => undefined;
+import { useHydrated } from "@/lib/use-hydrated";
 
 /** A text link, as a `<summary>` before hydration and a `<button>` after. */
 const TOGGLE = linkClasses({ size: "sm", className: "self-start text-left select-none" });
@@ -26,11 +25,7 @@ const TOGGLE = linkClasses({ size: "sm", className: "self-start text-left select
  */
 export function NoteDisclosure({ children }: { children: ReactNode }) {
   // False on the server and while hydrating, so the page's `<details>` hydrates as it was sent.
-  const enhanced = useSyncExternalStore(
-    noSubscribe,
-    () => true,
-    () => false,
-  );
+  const enhanced = useHydrated();
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(false);
   /** The page's `<summary>` had the focus when the button replaced it: the button takes it on. */

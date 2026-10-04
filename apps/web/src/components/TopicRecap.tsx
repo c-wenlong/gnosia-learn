@@ -134,7 +134,7 @@ export function RecapCard({
               forgetKnowledge(topic.id);
             }
           }}
-          className="font-medium text-[var(--muted)] hover:text-red-600 hover:underline dark:hover:text-red-400"
+          className="font-medium text-[var(--muted)] hover:text-danger hover:underline"
         >
           Forget
         </button>

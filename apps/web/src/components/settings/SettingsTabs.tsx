@@ -1,10 +1,12 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { cx } from "@/components/ui/classes";
+import { tabKeyIndex } from "@/components/ui/roving";
+import { useMediaQuery } from "@/components/ui/use-media-query";
 
 import { parseSettingsTab, settingsHref, type SettingsTab } from "./tabs";
 
@@ -39,7 +41,7 @@ export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
     setSeen(asked);
     setSelected(asked);
   }
-  const vertical = useSyncExternalStore(onWideChange, isWide, () => false);
+  const vertical = useMediaQuery(WIDE, false);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
   function choose(id: SettingsTab) {
@@ -49,11 +51,8 @@ export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const index = sections.findIndex((section) => section.id === selected);
-    let next = -1;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % sections.length;
-    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + sections.length) % sections.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = sections.length - 1;
+    // Either pair of arrows, since the row turns into a column at `xl`.
+    const next = tabKeyIndex(event.key, index, sections.length, "both", true);
     if (next < 0) return;
     event.preventDefault();
     choose(sections[next].id);
@@ -121,13 +120,3 @@ export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
 
 /** The `xl` breakpoint, where the tab row becomes a column. */
 const WIDE = "(min-width: 1280px)";
-
-function isWide(): boolean {
-  return window.matchMedia(WIDE).matches;
-}
-
-function onWideChange(callback: () => void): () => void {
-  const query = window.matchMedia(WIDE);
-  query.addEventListener("change", callback);
-  return () => query.removeEventListener("change", callback);
-}

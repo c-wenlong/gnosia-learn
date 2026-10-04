@@ -1,3 +1,4 @@
+import { readCookie, writeCookie } from "@/lib/client-cookie";
 import type { MotionMode } from "@/lib/preferences";
 import { parseMotionMode } from "@/lib/preferences";
 
@@ -56,18 +57,12 @@ export function applyMotionToDocument(mode: MotionMode): void {
 
 /** Write the cookie from the browser. */
 export function writeMotionCookie(mode: MotionMode): void {
-  if (typeof document === "undefined") return;
-  const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `${MOTION_COOKIE}=${mode}; Path=/; Max-Age=${MOTION_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
+  writeCookie(MOTION_COOKIE, mode, MOTION_COOKIE_MAX_AGE);
 }
 
 /** The mode the browser's cookie holds, or null when it has none. */
-export function readMotionCookie(cookie: string = typeof document === "undefined" ? "" : document.cookie): MotionMode | null {
-  const entry = cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${MOTION_COOKIE}=`));
-  return asMotionMode(entry?.slice(MOTION_COOKIE.length + 1));
+export function readMotionCookie(cookie?: string): MotionMode | null {
+  return asMotionMode(readCookie(MOTION_COOKIE, cookie));
 }
 
 /** The corner of `window` and `document` this reads, so a test can hand in fakes. */

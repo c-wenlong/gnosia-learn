@@ -580,17 +580,21 @@ async function run() {
   });
 
   // G1 of docs/proposals/knowledge-map.md: the map is the default view, the
-  // table one press away, and each says so in the URL.
-  await step('learn: /learn opens on the map, and the table is one press away', page, async () => {
+  // table one press away, and each says so in the URL. The map opens on a card
+  // per domain (D2 of docs/proposals/domain-map.md).
+  await step('learn: /learn opens on the domain cards, and the table is one press away', page, async () => {
     await go('/learn');
-    await main.getByRole('group', { name: /^Concept map/ }).waitFor();
+    const cards = main.getByRole('region', { name: 'Domains' });
+    await cards.waitFor();
+    const slugs = await cards.locator('[data-domain-card]').evaluateAll((els) => els.map((el) => el.getAttribute('data-domain-card')));
+    for (const slug of ['foundations', 'machine-learning', 'agentic-ai']) assert(slugs.includes(slug), `no card for ${slug}: ${slugs}`);
     assert(!new URL(page.url()).searchParams.has('view'), 'the default view wrote view= into the URL');
     await clickHydrated(page, main.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Table' }));
     await main.getByRole('table').waitFor();
     await page.waitForFunction(() => new URL(location.href).searchParams.get('view') === 'table');
     await page.reload({ waitUntil: 'load' });
     await main.getByRole('table').waitFor();
-    assert((await main.getByRole('group', { name: /^Concept map/ }).count()) === 0, 'the table view also drew the map');
+    assert((await main.locator('[data-domain-card], svg[data-domain-graph]').count()) === 0, 'the table view also drew the map');
   });
 
   await step('learn: /learn renders the concept table', page, async () => {
@@ -611,271 +615,128 @@ async function run() {
     state.concept = href.slice('/learn/'.length);
   });
 
-  // Phase 1 of docs/proposals/knowledge-map.md: the Graph view draws every
-  // concept on one map, an island per connected cluster, each titled.
-  await step('learn: the Graph view draws the map, one titled island per cluster', page, async () => {
-    await go('/learn?view=graph');
-    const total = Number((await main.getByText(/^\d+ concepts? ·/).first().textContent())?.match(/^(\d+)/)?.[1]);
-    assert(total > 0, 'the header names no concept count');
-    const map = main.getByRole('group', { name: /^Concept map/ });
-    await map.waitFor();
-    const islands = map.locator('[data-island]');
-    assert((await islands.count()) >= 1, 'the map drew no island');
-    const titles = await map.locator('[data-island-title]').allTextContents();
-    for (const title of titles) assert(title.trim().length > 0, 'an island has an empty title');
-    // The seed is one course, so its one island is named after it.
-    if (SEED) assert(titles.includes('CP4284'), `the seed island is titled ${JSON.stringify(titles)}, not CP4284`);
-    const concepts = map.locator('[data-concept]');
-    assert((await concepts.count()) === total, `the map drew ${await concepts.count()} concepts of ${total}`);
-    // Choosing a concept on the map selects it and records it in the URL.
-    const other = map.locator('[data-concept][aria-pressed="false"]').first();
-    const id = await other.getAttribute('data-concept');
-    await clickHydrated(page, other);
-    await page.waitForFunction((slug) => new URL(location.href).searchParams.get('concept') === slug, id);
-    assert((await map.locator(`[data-concept="${id}"]`).getAttribute('aria-pressed')) === 'true', 'the clicked concept is not selected');
-    // A reload keeps the view and the selection.
-    await page.reload({ waitUntil: 'load' });
-    await map.locator(`[data-concept="${id}"][aria-pressed="true"]`).waitFor();
+  // D2 and D4: a card opens its domain's picture, a topic's title narrows it,
+  // and the breadcrumb and Back go back up.
+  await step('learn: a domain card opens its picture, a topic narrows it, and Back goes up', page, async () => {
+    await go('/learn');
+    const card = main.locator('[data-domain-card="machine-learning"]');
+    const total = Number((await card.textContent())?.match(/(\d+) concepts?/)?.[1]);
+    await clickHydrated(page, card);
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('domain') === 'machine-learning');
+    const graph = main.getByRole('group', { name: /^Machine learning map/ });
+    await graph.waitFor();
+    assert((await graph.locator('[data-concept]').count()) === total, `the picture drew ${await graph.locator('[data-concept]').count()} of ${total}`);
+    // Every concept the picture draws is in this domain; the edge out to foundations is listed instead.
+    await main.locator('[data-outside]').getByRole('button', { name: /^Foundations/ }).waitFor();
+    const crumbs = main.getByRole('navigation', { name: 'Breadcrumb' });
+    assert((await crumbs.getByRole('listitem').allTextContents()).join('/') === 'Learn/Machine learning', 'the breadcrumb is wrong');
+
+    const title = graph.locator('[data-topic-title]').first();
+    const topic = await title.getAttribute('data-topic-title');
+    await title.click();
+    await page.waitForFunction((t) => new URL(location.href).searchParams.get('topic') === t, topic);
+    assert((await crumbs.getByRole('listitem').count()) === 3, 'the topic is not in the breadcrumb');
+
+    await page.goBack();
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has('topic'));
+    await main.getByRole('group', { name: /^Machine learning map/ }).locator('[data-topic-title]').first().waitFor();
+    await page.goBack();
+    await main.getByRole('region', { name: 'Domains' }).waitFor();
+    assert(!new URL(page.url()).searchParams.has('domain'), 'Back did not leave the domain');
   });
 
-  // Phase 2 of docs/proposals/knowledge-map.md: the map pans, zooms and fits,
-  // opens on the selected concept's island, and the URL keeps its scope.
-  await step('learn: the map pans, zooms and fits, and the URL keeps the scope', page, async () => {
-    assert(state.concept !== null, 'no concept: the /learn step found none');
-    await go(`/learn?view=graph&concept=${state.concept}`);
-    const map = main.getByRole('group', { name: /^Concept map/ });
-    await map.waitFor();
-    const svg = map;
-    const view = async () => (await svg.getAttribute('viewBox')).split(/\s+/).map(Number);
-    /** Wait for the view to stop moving (fits and button zooms animate), and return it. */
-    const settled = async () => {
-      let last = await view();
-      for (let i = 0; i < 40; i++) {
-        await page.waitForTimeout(50);
-        const next = await view();
-        if (next.every((n, k) => n === last[k])) return next;
-        last = next;
-      }
-      return last;
-    };
-    const param = () => new URL(page.url()).searchParams;
-    await page.waitForFunction(() => new URL(location.href).searchParams.get('scope') === 'island');
-    assert((await svg.getAttribute('data-fit')) === 'island', `opened fitted to ${await svg.getAttribute('data-fit')}, not the island`);
-
-    const zoomIn = main.getByRole('button', { name: 'Zoom in' });
-    const zoomOut = main.getByRole('button', { name: 'Zoom out' });
-    const start = await settled();
-    await clickHydrated(page, zoomIn);
-    const nearer = await settled();
-    assert(nearer[2] < start[2], `Zoom in left the view ${start[2]} wide, now ${nearer[2]}`);
-    await zoomOut.click();
-    await zoomOut.click();
-    const farther = await settled();
-    assert(farther[2] > nearer[2], 'Zoom out did not widen the view');
-
-    // The wheel zooms around the pointer; a drag pans and does not select anything.
-    const box = await svg.boundingBox();
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    await page.mouse.move(cx, cy);
-    await page.mouse.wheel(0, -300);
-    const wheeled = await settled();
-    assert(wheeled[2] < farther[2], 'scrolling the wheel up did not zoom in');
-    const before = param().get('concept');
-    await page.mouse.move(cx + 40, cy + 40);
-    await page.mouse.down();
-    await page.mouse.move(cx - 80, cy - 20, { steps: 8 });
-    await page.mouse.up();
-    const panned = await settled();
-    assert(panned[0] > wheeled[0] && panned[1] > wheeled[1], 'dragging left and up did not move the view right and down');
-    assert(param().get('concept') === before, 'a drag changed the selection');
-
-    // Fit all shows the whole map; the scope chips fit and land in the URL.
-    await main.getByRole('button', { name: 'Fit all' }).click();
-    const all = await settled();
-    assert(all[2] >= Number(await svg.getAttribute('data-map-width')), 'Fit all does not show the whole width');
-    assert((await svg.getAttribute('data-fit')) === 'all', 'Fit all did not record its fit');
-    await main.getByRole('group', { name: 'Map scope' }).getByRole('button', { name: 'Course' }).click();
-    await page.waitForFunction(() => new URL(location.href).searchParams.get('scope') === 'course');
-    assert((await svg.getAttribute('data-fit')) === 'course', 'the Course chip did not fit the course');
-    await page.reload({ waitUntil: 'load' });
-    await map.waitFor();
-    assert((await svg.getAttribute('data-fit')) === 'course', 'a reload lost the course scope');
-
-    // Zoomed far enough out, the concept labels hide and the island titles stay.
-    for (let i = 0; i < 12 && (await svg.getAttribute('data-labels')) !== 'hidden'; i++) {
-      await zoomOut.click();
-      await settled();
-    }
-    assert((await svg.getAttribute('data-labels')) === 'hidden', 'the labels never hid when zoomed out');
-    await map.locator('[data-island-title]').first().waitFor({ state: 'visible' });
-    await zoomIn.click();
-    for (let i = 0; i < 12 && (await svg.getAttribute('data-labels')) !== 'shown'; i++) {
-      await zoomIn.click();
-      await settled();
-    }
-    assert((await svg.getAttribute('data-labels')) === 'shown', 'the labels did not come back when zoomed in');
-  });
-
-  // Phase 3 of docs/proposals/knowledge-map.md: reading the map. A concept's
-  // panel, search, the filters, and the p(L) arc.
-  await step('learn: a concept on the map opens its panel, and search and filters work on the map', page, async () => {
-    await go('/learn?view=graph&concept=vector-as-a-list-of-numbers');
-    const map = main.getByRole('group', { name: /^Concept map/ });
-    await map.waitFor();
+  // D4 and D8: a concept opens its panel, a pick there crosses into the
+  // prerequisite's domain, and search and filters work on both levels.
+  await step('learn: a concept opens its panel, a pick crosses domains, and search and filters work', page, async () => {
+    await go('/learn?domain=machine-learning');
+    const graph = main.getByRole('group', { name: /^Machine learning map/ });
+    await clickHydrated(page, graph.locator('[data-concept="softmax"]'));
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('concept') === 'softmax');
     const panel = main.getByRole('region', { name: 'Concept details' });
-    await panel.getByRole('heading', { name: 'Vector as a list of numbers' }).waitFor();
-    const leads = panel.getByRole('list', { name: 'Leads to' }).getByRole('button');
-    const leadIds = await leads.evaluateAll((els) => els.map((el) => el.getAttribute('data-concept')));
-    assert(leadIds.length === 3, `Leads to lists ${leadIds.length} concepts, not the seed's 3`);
-    for (const id of leadIds) {
-      assert((await map.locator(`[data-concept="${id}"]`).getAttribute('data-related')) === 'true', `${id} is not marked on the map`);
-    }
+    await panel.getByRole('heading', { name: 'Softmax' }).waitFor();
+    const vector = panel.locator('button[data-concept="vector-as-a-list-of-numbers"]');
+    assert(/Foundations/.test((await vector.textContent()) ?? ''), 'the prerequisite in another domain does not say which');
+    await vector.click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('domain') === 'foundations');
     assert(
-      (await panel.getByRole('link', { name: 'Open in workspace' }).getAttribute('href')) === '/learn/vector-as-a-list-of-numbers',
-      'the panel does not open the concept',
+      (await main.getByRole('group', { name: /^Foundations map/ }).locator('[data-concept="vector-as-a-list-of-numbers"]').getAttribute('aria-pressed')) === 'true',
+      'the picked concept is not selected in its domain',
     );
-    // Following a link in the panel selects that concept.
-    await clickHydrated(page, leads.first());
-    await page.waitForFunction((slug) => new URL(location.href).searchParams.get('concept') === slug, leadIds[0]);
 
-    // Search selects the best match and fits the map to its neighbourhood.
+    // On the cards, a search counts matches per domain, and Enter opens the best one.
+    await go('/learn');
     const search = main.getByRole('searchbox', { name: 'Search concepts' });
-    await search.fill('self attention');
+    await hydrated(page, search);
+    await search.fill('react');
+    await page.waitForFunction(() => document.querySelector('[data-domain-card="foundations"]')?.getAttribute('data-dim') === 'true');
+    assert((await main.locator('[data-domain-card="agentic-ai"]').getAttribute('data-dim')) === 'false', 'the domain with the match is dimmed');
     await search.press('Enter');
-    await page.waitForFunction(() => new URL(location.href).searchParams.get('concept') === 'self-attention');
-    await page.waitForFunction(() => document.querySelector('[aria-label^="Concept map"]')?.getAttribute('data-fit') === 'neighbourhood');
-    // The URL says the neighbourhood too, so a reload shows what the search showed.
-    await page.waitForFunction(() => new URL(location.href).searchParams.get('scope') === 'neighbourhood');
-    await search.fill('');
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('concept') === 'react-loop');
+    assert(new URL(page.url()).searchParams.get('domain') === 'agentic-ai', 'Enter did not open the match in its domain');
 
-    // A learning concept carries its p(L) arc.
-    assert((await map.locator('[data-concept="tool-calling"] [data-arc]').count()) === 1, 'tool-calling has no p(L) arc');
-
-    // Not in a course dims every concept that is in one, and only those.
-    await clickHydrated(page, main.getByRole('button', { name: /^Status:/ }));
-    await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^Not in a course\b/ }).click();
-    const marks = await map.locator('[data-concept]').evaluateAll((els) =>
-      els.map((el) => ({ dim: el.getAttribute('data-dim') === 'true', courses: el.getAttribute('data-courses') ?? '' })),
+    // Inside a domain, a filter dims what it would hide.
+    await go('/learn?domain=machine-learning&filter=untouched');
+    const filtered = main.getByRole('group', { name: /^Machine learning map/ });
+    await filtered.locator('[data-concept]').first().waitFor();
+    const marks = await filtered.locator('[data-concept]').evaluateAll((els) =>
+      els.map((el) => ({ dim: el.getAttribute('data-dim') === 'true', untouched: /Not started/.test(el.getAttribute('aria-label') ?? '') })),
     );
-    assert(marks.some((m) => !m.dim), 'Not in a course left nothing undimmed');
-    for (const m of marks) assert(m.dim === (m.courses !== ''), 'a concept in a course was left undimmed, or one in none dimmed');
-    // Enter searches only what the filter shows: a concept in a course is not found while it is dimmed.
-    const chosen = new URL(page.url()).searchParams.get('concept');
-    await search.fill('self attention');
-    await search.press('Enter');
-    await page.waitForTimeout(300);
-    assert(new URL(page.url()).searchParams.get('concept') === chosen, 'Enter selected a concept the filter dims');
-    await search.fill('');
-    await clickHydrated(page, main.getByRole('button', { name: /^Status:/ }));
-    await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^All\b/ }).click();
-    assert((await map.locator('[data-concept][data-dim="true"]').count()) === 0, 'All left concepts dimmed');
+    assert(marks.length > 0 && marks.every((m) => m.dim === !m.untouched), 'the filter dimmed the wrong concepts');
   });
 
-  // Phase 4: every concept on the map can be reached with the keyboard alone.
-  await step('learn: the map can be walked with the keyboard alone', page, async () => {
-    // Opened on the course, so tabbing to an island has a scope to change.
-    await go('/learn?concept=vector-as-a-list-of-numbers&scope=course');
-    const map = main.getByRole('group', { name: /^Concept map/ });
-    await map.waitFor();
-    await hydrated(page, map.locator('[data-island-focus]').first());
-    const active = () =>
-      page.evaluate(() => {
-        const el = document.activeElement;
-        return { island: el?.getAttribute('data-island-focus') ?? null, concept: el?.getAttribute('data-concept') ?? null };
-      });
-    const fit = () => page.evaluate(() => document.querySelector('[aria-label^="Concept map"]')?.getAttribute('data-fit'));
-    // Tab from the top of the page until an island takes the focus.
-    await page.locator('body').click({ position: { x: 1, y: 1 } });
-    let at = await active();
-    for (let i = 0; i < 60 && at.island === null; i++) {
-      await page.keyboard.press('Tab');
-      at = await active();
-    }
-    assert(at.island !== null, 'Tab never reached an island');
-    // Enter at once, before the island's fit has finished: the fit must still land, and the URL says it.
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(500);
-    assert((await fit()) === 'island', `going into an island left the map fitted to ${await fit()}`);
-    await page.waitForFunction(() => new URL(location.href).searchParams.get('scope') === 'island');
-    at = await active();
-    assert(at.concept === 'vector-as-a-list-of-numbers', `Enter went in at ${at.concept}, not the top concept`);
-    // A screen reader hears what the map holds and how to move on it.
-    const summary = await map.evaluate((el) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent ?? '');
-    assert(/Tab/.test(summary) && /table/i.test(summary), `the map's description is ${JSON.stringify(summary)}`);
-
-    // Down and Up follow the edges.
-    await page.keyboard.press('ArrowDown');
-    at = await active();
-    assert(['dot-product', 'softmax', 'query-key-value-projections'].includes(at.concept), `ArrowDown went to ${at.concept}`);
-    await page.keyboard.press('ArrowUp');
-    assert((await active()).concept === 'vector-as-a-list-of-numbers', 'ArrowUp did not come back to the prerequisite');
-
-    // Every concept on every island: Escape back to the island, Tab to the next, Enter, then Right to the end.
-    const islands = await map.locator('[data-island-focus]').count();
-    const total = await map.locator('[data-concept]').count();
+  // D7: every concept in a domain is a button in the list, reached by Tab.
+  await step('learn: a domain can be walked with the keyboard alone', page, async () => {
+    await go('/learn?domain=machine-learning');
+    const list = main.getByRole('region', { name: 'Concepts in Machine learning' });
+    const first = list.locator('[data-list-concept]').first();
+    await hydrated(page, first);
+    await first.focus();
+    const total = await list.locator('[data-list-concept]').count();
     const seen = new Set();
-    await page.keyboard.press('Escape');
-    for (let k = 0; k < islands; k++) {
-      at = await active();
-      assert(at.island !== null, `the focus left the map before island ${k + 1} of ${islands}`);
-      await page.keyboard.press('Enter');
-      let previous = null;
-      for (let i = 0; i <= total; i++) {
-        const here = (await active()).concept;
-        seen.add(here);
-        if (here === previous) break;
-        previous = here;
-        await page.keyboard.press('ArrowRight');
-      }
-      if (k < islands - 1) await page.keyboard.press('Tab');
+    for (let i = 0; i < total * 3 && seen.size < total; i++) {
+      const id = await page.evaluate(() => document.activeElement?.getAttribute('data-list-concept'));
+      if (id) seen.add(id);
+      await page.keyboard.press('Tab');
     }
-    assert(seen.size === total, `the keyboard reached ${seen.size} of ${total} concepts on ${islands} island(s)`);
-
-    // Enter on a concept selects it and opens its panel; Escape goes back to the island.
-    const last = (await active()).concept;
+    assert(seen.size === total, `Tab reached ${seen.size} of ${total} concepts in the list`);
+    assert((await main.getByRole('group', { name: /^Machine learning map/ }).locator('[data-concept]').count()) === total, 'the list and the picture disagree');
+    await first.focus();
     await page.keyboard.press('Enter');
-    await page.waitForFunction((slug) => new URL(location.href).searchParams.get('concept') === slug, last);
+    await page.waitForFunction(() => new URL(location.href).searchParams.has('concept'));
     await main.getByRole('region', { name: 'Concept details' }).getByRole('heading').first().waitFor();
-    await page.keyboard.press('Escape');
-    assert((await active()).island !== null, 'Escape did not go back to the island');
   });
 
   await step('learn: the map works on a phone', page, async () => {
     await page.setViewportSize({ width: 390, height: 844 });
     try {
-      await go('/learn?view=graph&concept=vector-as-a-list-of-numbers');
-      const map = main.getByRole('group', { name: /^Concept map/ });
-      await map.waitFor();
+      await go('/learn?concept=vector-as-a-list-of-numbers');
+      const graph = main.getByRole('group', { name: /^Foundations map/ });
+      await graph.waitFor();
       const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
       assert(overflow <= 0, `the page scrolls sideways by ${overflow}px on a phone`);
-      const box = await map.boundingBox();
-      assert(box.width <= 390 && box.width > 300, `the map is ${box.width}px wide on a 390px phone`);
-      // The island is fitted on open, so its concepts are on screen to tap.
-      await clickHydrated(page, map.locator('[data-concept="dot-product"]'));
+      await clickHydrated(page, graph.locator('[data-concept="dot-product"]'));
       await page.waitForFunction(() => new URL(location.href).searchParams.get('concept') === 'dot-product');
       await main.getByRole('region', { name: 'Concept details' }).getByRole('heading', { name: 'Dot product' }).waitFor();
-      const before = (await map.getAttribute('viewBox')).split(/\s+/).map(Number);
-      await clickHydrated(page, main.getByRole('button', { name: 'Zoom in' }));
-      await page.waitForFunction(
-        (w) => Number(document.querySelector('[aria-label^="Concept map"]')?.getAttribute('viewBox')?.split(/\s+/)[2]) < w,
-        before[2],
-      );
+      // The cards stack in one column.
+      await go('/learn');
+      await main.locator('[data-domain-card]').first().waitFor();
+      const boxes = await main.locator('[data-domain-card]').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().left));
+      assert(new Set(boxes.map(Math.round)).size === 1, 'the cards do not stack on a phone');
     } finally {
       await page.setViewportSize({ width: 1280, height: 860 });
     }
   });
 
-  await step('workspace: Open full course graph lands on the course scope of the map', page, async () => {
+  await step('workspace: Open in the map lands on the concept in its domain', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go(`/learn/${state.concept}`);
-    const link = main.getByRole('link', { name: 'Open full course graph' });
-    assert((await link.getAttribute('href')) === `/learn?concept=${state.concept}&view=graph&scope=course`, `the link is ${await link.getAttribute('href')}`);
+    const link = main.getByRole('link', { name: 'Open in the map' });
+    assert((await link.getAttribute('href')) === `/learn?concept=${state.concept}`, `the link is ${await link.getAttribute('href')}`);
     await clickHydrated(page, link);
-    await page.waitForURL((url) => url.pathname === '/learn' && url.searchParams.get('scope') === 'course');
-    const map = main.getByRole('group', { name: /^Concept map/ });
-    await map.waitFor();
-    assert((await map.getAttribute('data-fit')) === 'course', 'the link did not open the map on the course');
+    await page.waitForURL((url) => url.pathname === '/learn' && url.searchParams.has('domain'));
+    const graph = main.locator('svg[data-domain-graph]');
+    await graph.waitFor();
+    assert((await graph.locator(`[data-concept="${state.concept}"]`).getAttribute('aria-pressed')) === 'true', 'the concept is not selected on the map');
   });
 
   await step('workspace: a concept renders three panels', page, async () => {
@@ -1034,16 +895,12 @@ async function run() {
   // G5: with a course opened (the step above), its ready concepts are marked,
   // the background it builds on included, and nothing outside it.
   await step('learn: the map marks the ready concepts of the course opened recently', page, async () => {
-    await go('/learn?view=graph');
-    const map = main.getByRole('group', { name: /^Concept map/ });
-    await map.waitFor();
-    const ready = await map.locator('[data-concept][data-ready="true"]').evaluateAll((els) =>
-      els.map((el) => ({ id: el.getAttribute('data-concept'), courses: el.getAttribute('data-courses') ?? '' })),
-    );
-    assert(ready.some((r) => r.id === 'vector-as-a-list-of-numbers'), 'the background of the course (vector) is not marked ready');
-    for (const r of ready) assert(r.courses === '' || r.courses.split(',').includes('cp4284'), `${r.id} is marked ready outside the recent course`);
+    await go('/learn?domain=foundations');
+    const graph = main.getByRole('group', { name: /^Foundations map/ });
+    await graph.waitFor();
+    assert((await graph.locator('[data-concept="vector-as-a-list-of-numbers"]').getAttribute('data-ready')) === 'true', 'the background of the course (vector) is not marked ready');
     // dot-product needs vector, which nobody has mastered.
-    assert((await map.locator('[data-concept="dot-product"]').getAttribute('data-ready')) !== 'true', 'dot-product is marked ready before its prerequisite');
+    assert((await graph.locator('[data-concept="dot-product"]').getAttribute('data-ready')) !== 'true', 'dot-product is marked ready before its prerequisite');
   });
 
   await step('library: a type, a sort and the list layout all land in the URL', page, async () => {
@@ -1139,18 +996,24 @@ async function run() {
 
   await step('settings: change the tutor style, see Saved', page, async () => {
     await go('/settings');
-    const select = main.getByLabel('Tutor style');
-    await hydrated(page, select);
-    const currentValue = await select.inputValue();
-    const values = await select.locator('option').evaluateAll((options) => options.map((o) => o.value));
-    const next = values.find((v) => v !== currentValue);
-    assert(next !== undefined, `the tutor style has no option besides ${currentValue}`);
-    await select.selectOption(next);
-    await main.getByText('Saved', { exact: true }).waitFor();
+    // The page opens on General since #342; the style is under Tutor, and a
+    // press on the tab puts it in the address.
+    await clickHydrated(page, main.getByRole('tab', { name: 'Tutor' }));
+    await page.waitForURL((url) => url.searchParams.get('tab') === 'tutor');
+    // A kit menu since #355: the trigger is named "Tutor style: <current>".
+    await clickHydrated(page, main.getByRole('button', { name: /^Tutor style:/ }));
+    const next = page.getByRole('listbox', { name: 'Tutor style' }).locator('[role=option][aria-selected=false]').first();
+    assert((await next.count()) > 0, 'the tutor style has no option besides the current one');
+    await next.click();
+    // `LiveStatus` writes the words twice: the live line a screen reader
+    // hears, and the copy the eye sees.
+    await main.locator('p[aria-live]', { hasText: /^Saved$/ }).waitFor({ state: 'attached' });
+    await main.locator('p[aria-hidden]', { hasText: /^Saved$/ }).waitFor();
   });
 
   await step('provider keys: save a key, see its last four, remove it', page, async () => {
-    if (!page.url().endsWith('/settings')) await go('/settings');
+    // The keys are under Tutor (#342), which `?tab=tutor` opens.
+    if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
     // docs/BYOK.md: a key goes in once and never comes back out. The server
     // starts with every provider key blank, so Gemini's row offers "Add your key".
     const row = main.getByRole('listitem').filter({ has: page.getByText('Google Gemini', { exact: true }) });
