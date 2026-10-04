@@ -59,7 +59,10 @@ for the studio to be the main page, "like the main chatgpt page to generate
 things", with the learning pages folded into its sidebar and the top bar
 removed). From the top: New chat, which is the studio's composer, when
 `STUDIO_ENABLED` is set; the four learning destinations, Home, Courses,
-Learn and Library; the studio's conversations; and the account at
+Learn and Library; then Courses, Pinned and Recent as sections (L7 of
+[the Library proposal](../proposals/library-by-type-and-day.md), built
+2026-10-05), Recent holding the studio's conversations beside modules, videos,
+concepts and tutor sessions; and the account at
 the foot, with the theme, Settings and Sign out behind it. On a phone the
 sidebar is a drawer behind a header button. Before this, five
 destinations sat in a top bar with Studio as a sixth (2026-09-30), and the
@@ -67,7 +70,7 @@ phone had a five-column tab bar. The streak and target the bar once carried
 went with the habit layer (H1 of docs/proposals/home-page.md).
 
 Review left the sidebar on 2026-10-04 (owner's call). `/review` stays as
-the full queue, reached from Review now on a concept page and Recall these
+the full queue, reached from Review now on a concept page and All reviews
 on Home, and the `review` and `mastery` tables are untouched. The reason is
 in [the recall proposal](../proposals/recall-in-chat.md): only the Teach
 session, a module's week check and the terminal's `/learn` skill make a

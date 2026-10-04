@@ -1,5 +1,6 @@
 import { asThemeMode, PREFERENCE_KEYS, THEME_MODES, type ThemeMode } from "@self-learn/schema/shared";
 import {
+  appendEvent,
   asLastVisited,
   asRecentModules,
   readPreference,
@@ -83,10 +84,37 @@ export const POST = handler(
   },
 );
 
+/** A failed write's SQLSTATE, read down drizzle's `cause` chain; never its message, which carries the bind parameters. */
+function failureCode(error: unknown): string {
+  for (let at: unknown = error; at instanceof Error; at = at.cause) {
+    const code = (at as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+  }
+  return "unknown";
+}
+
+/** Whether a failed write names `constraint`, down the same chain. */
+function mentions(error: unknown, constraint: string): boolean {
+  for (let at: unknown = error; at instanceof Error; at = at.cause) {
+    if ((at as { constraint?: unknown }).constraint === constraint) return true;
+  }
+  return false;
+}
+
 /**
- * Write `lastVisited` and put the same visit at the front of `recentModules`,
- * the list Home reads, in one transaction under the learner's row lock so two
- * module pages opened together cannot drop each other's entry.
+ * Write `lastVisited`, put the same visit at the front of `recentModules`, and
+ * append a `visit` event, in one transaction under the learner's row lock so
+ * two module pages opened together cannot drop each other's entry.
+ *
+ * The event is what the sidebar's Recent and Home read from now on
+ * (`apps/web/src/lib/recent.ts`, L7 of
+ * docs/proposals/library-by-type-and-day.md): one row per visit, so a visit
+ * older than the preference's five survives. The preference is still written
+ * for one release, as the proposal says, so a deployment rolled back past
+ * this change still finds its list current; after that it is left unread, as
+ * H1 left the streak's rows. Recent reads both meanwhile and merges them by
+ * course and module, which is what keeps the five modules a list held before
+ * the first event on Home and in the sidebar.
  *
  * Before the first such write an owner has `lastVisited` and no list, so the
  * list starts from the visit `lastVisited` held until now: a module opened
@@ -96,6 +124,26 @@ async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string)
   const visit = asLastVisited(value);
   await withLearnerLock(db, owner, async (tx) => {
     if (visit !== undefined) {
+      // Stamped by the server, as `watched` is: the log orders by it, and a
+      // browser's clock is not the log's. In a savepoint, so a database that
+      // has not yet taken migration 0025 (which allows the type) loses the
+      // event and still keeps the preferences, which Recent reads as well.
+      try {
+        await tx.transaction((savepoint) =>
+          appendEvent(
+            savepoint,
+            { type: "visit", course: visit.courseSlug, ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }) },
+            owner,
+          ),
+        );
+      } catch (error) {
+        // Only the one refusal a database without 0025 gives (a check
+        // violation, 23514, on `event_type_check`). Anything else fails the
+        // write as before, so a log that has stopped taking visits is a 503
+        // someone sees, not a quiet gap in Recent.
+        if (failureCode(error) !== "23514" || !mentions(error, "event_type_check")) throw error;
+        console.warn("preference: visit event not written, the database has not taken migration 0025");
+      }
       const stored = asRecentModules(await readPreference(tx, PREFERENCE_KEYS.recentModules, owner));
       const previous = asLastVisited(await readPreference(tx, PREFERENCE_KEYS.lastVisited, owner));
       const list = stored ?? (previous !== undefined ? [previous] : []);

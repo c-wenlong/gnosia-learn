@@ -3,7 +3,10 @@ import { act, createElement, Fragment, useMemo, useState, type ComponentProps, t
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { Dialog, type DialogProps } from "./Dialog";
+import { FilterMenu } from "./FilterMenu";
 import { Popover, type PopoverCloseReason } from "./Popover";
+import { Select } from "./Select";
 
 /**
  * The kit `Popover`: shown in the top layer, closed by a press outside, by
@@ -14,6 +17,8 @@ import { Popover, type PopoverCloseReason } from "./Popover";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom lays nothing out, so it has no scrolling to do.
+  Element.prototype.scrollIntoView ??= () => undefined;
 });
 
 const shown: Element[] = [];
@@ -255,4 +260,57 @@ describe("Popover's placement", () => {
       globalThis.ResizeObserver = original;
     }
   });
+});
+
+describe("Popover's Escape inside the kit Dialog", () => {
+  // jsdom's dialog neither opens itself nor turns an Escape into a close
+  // request. A browser does both: `showModal()` opens it, and an Escape
+  // keydown nobody cancelled is followed by a `cancel` event on the open
+  // modal dialog, which the kit Dialog answers with `onClose`.
+  const closeRequest = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    document.querySelector("dialog[open]")?.dispatchEvent(new Event("cancel", { cancelable: true }));
+  };
+  beforeAll(() => {
+    // Left in place: the dialogs are unmounted, and closed, after this block's hooks.
+    const proto = HTMLDialogElement.prototype as unknown as { showModal: () => void; close: () => void };
+    proto.showModal ??= function (this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    };
+    proto.close ??= function (this: HTMLDialogElement) {
+      this.removeAttribute("open");
+    };
+  });
+  beforeEach(() => window.addEventListener("keydown", closeRequest));
+  afterEach(() => window.removeEventListener("keydown", closeRequest));
+
+  const options = [
+    { value: "a", label: "A" },
+    { value: "b", label: "B" },
+  ];
+  const cases: Array<[string, ReactNode]> = [
+    ["a Select", createElement(Select<string>, { label: "Motion", options, value: "a", onChange: () => undefined })],
+    ["a FilterMenu", createElement(FilterMenu<string>, { label: "Type", options, value: "a", defaultValue: "a", onChange: () => undefined })],
+  ];
+
+  for (const [name, menu] of cases) {
+    it(`closes ${name} on the first Escape and leaves the dialog open; the next one asks the dialog to close`, () => {
+      const onClose = vi.fn();
+      const { escape } = mount(createElement(Dialog, { label: "Settings", onClose } as DialogProps, menu));
+      const dialog = document.querySelector("dialog")!;
+      const trigger = dialog.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
+      act(() => trigger.click());
+      const list = dialog.querySelector('[role="listbox"]')!;
+      expect(document.activeElement).toBe(list);
+
+      expect(escape().defaultPrevented).toBe(true);
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      expect(document.activeElement).toBe(trigger);
+      expect(onClose).not.toHaveBeenCalled();
+      expect(dialog.open).toBe(true);
+
+      escape();
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  }
 });

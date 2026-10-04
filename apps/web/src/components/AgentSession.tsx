@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { providerLabel } from "@self-learn/schema/shared";
 import { MathText } from "@/components/Math";
 import { FIELD_TEXT } from "@/components/ui/classes";
@@ -18,6 +19,20 @@ import {
   DEFAULT_AGENT_MODEL,
 } from "@/lib/agent/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
+import { VerdictRow } from "@/components/workspace/VerdictRow";
+import {
+  chatRequestId,
+  closeChatSession,
+  judgeAnswer,
+  recordAnswer,
+} from "@/lib/chat-recall";
+import {
+  checkSource,
+  newVerdict,
+  pendingCheck,
+  type TurnCheck,
+  type Verdict,
+} from "@/lib/tutor-check";
 import { scrollBehavior } from "@/lib/motion";
 
 type Role = "user" | "assistant";
@@ -27,6 +42,11 @@ interface UiMessage {
   role: Role;
   content: string;
   meta?: string;
+  /** A tutor turn that asked a check, naming the topic concept it tests (phase 3 of docs/proposals/recall-in-chat.md). */
+  check?: TurnCheck | null;
+  /** A learner turn that answered one: its verdict row, and the concept it records against. */
+  verdict?: Verdict | null;
+  concept?: string;
 }
 
 function uid() {
@@ -42,6 +62,7 @@ export function AgentSession({
   module: Module;
   topic: Topic;
 }) {
+  const router = useRouter();
   const { state, ready, saveKnowledge, saveError } = useLearner();
   const learnerNote = state.notes[topic.id] ?? "";
   const storedKnowledge = state.knowledge[topic.id];
@@ -122,6 +143,7 @@ export function AgentSession({
       });
       const data = (await res.json()) as {
         message?: { content?: string };
+        check?: TurnCheck | null;
         error?: string;
         code?: string;
         detail?: string;
@@ -133,7 +155,10 @@ export function AgentSession({
         const attemptHint =
           data.attempts && data.attempts.length
             ? ` Attempts: ${data.attempts
-                .map((a) => `${providerLabel(a.provider)}${a.model ? ` ${a.model}` : ""}: ${a.message.slice(0, 80)}`)
+                .map(
+                  (a) =>
+                    `${providerLabel(a.provider)}${a.model ? ` ${a.model}` : ""}: ${a.message.slice(0, 80)}`,
+                )
                 .join(" | ")}`
             : "";
         throw new Error(
@@ -160,6 +185,11 @@ export function AgentSession({
           id: uid(),
           role: "assistant",
           content,
+          // The route keeps a check only when it names a concept this topic declares.
+          check:
+            data.check?.question && data.check.concept
+              ? { question: data.check.question, concept: data.check.concept }
+              : null,
           meta: data.providerLabel
             ? `${data.providerLabel} · ${data.model ?? ""}`
             : data.model,
@@ -216,7 +246,9 @@ export function AgentSession({
       setRecapDraft(null);
     } catch (e) {
       setRecapError(
-        e instanceof Error ? e.message : "Recap request failed — write it by hand.",
+        e instanceof Error
+          ? e.message
+          : "Recap request failed — write it by hand.",
       );
       setRecapDraft({});
     } finally {
@@ -236,11 +268,107 @@ export function AgentSession({
     await callAgent([seed]);
   }
 
+  /** Change one answer's verdict row. */
+  function patchVerdict(messageId: string, patch: Partial<Verdict>) {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId && m.verdict
+          ? { ...m, verdict: { ...m.verdict, ...patch } }
+          : m,
+      ),
+    );
+  }
+
+  /** Request ids with a write in flight: a second tap waits on the first. */
+  const recording = useRef(new Set<string>());
+  /** This topic's chat session (R6), shared with nothing else on the page. */
+  const scope = `topic-${topic.id}`;
+
+  /** The learner's tap: one observation on the check's concept, replayed rather than doubled on a retry. */
+  async function record(messageId: string, tappedNow: boolean) {
+    const m = messages.find((x) => x.id === messageId);
+    const verdict = m?.verdict;
+    if (
+      !m ||
+      !verdict ||
+      !m.concept ||
+      verdict.state === "saving" ||
+      verdict.state === "recorded"
+    )
+      return;
+    if (recording.current.has(verdict.requestId)) return;
+    const correct = verdict.tapped ?? tappedNow;
+    recording.current.add(verdict.requestId);
+    patchVerdict(messageId, { state: "saving", tapped: correct, error: null });
+    try {
+      const recorded = await recordAnswer({
+        scope,
+        sessionLabel: topic.id,
+        conceptSlug: m.concept,
+        correct,
+        source: verdict.source,
+        requestId: verdict.requestId,
+        question: verdict.question,
+        answer: m.content,
+        // The session is the topic's: its answers span the concepts the topic declares.
+        sessionTitle: `${course.code} · ${topic.title}`,
+        sessionGoal: topic.id,
+      });
+      patchVerdict(messageId, { state: "recorded", error: null, recorded });
+      // The shell's learner snapshot (mastery, progress) reads the new state.
+      router.refresh();
+    } catch (e) {
+      patchVerdict(messageId, {
+        state: "failed",
+        error: e instanceof Error ? e.message : "The answer was not recorded.",
+      });
+    } finally {
+      recording.current.delete(verdict.requestId);
+    }
+  }
+
+  // R6: the topic's chat session closes when the page goes away. Best-effort.
+  useEffect(() => {
+    const onHide = () => closeChatSession(scope);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      closeChatSession(scope);
+    };
+  }, [scope]);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
     if (!text || busy) return;
-    const next: UiMessage = { id: uid(), role: "user", content: text };
+    // A reply to a turn that asked a check is its answer, on the concept the check named.
+    const asked = pendingCheck(messages);
+    const check = asked === null ? null : messages[asked].check;
+    const next: UiMessage =
+      check?.concept && asked !== null
+        ? {
+            id: uid(),
+            role: "user",
+            content: text,
+            concept: check.concept,
+            verdict: newVerdict(
+              check.question,
+              chatRequestId(),
+              checkSource(messages, asked),
+            ),
+          }
+        : { id: uid(), role: "user", content: text };
+    if (next.verdict && next.concept) {
+      const id = next.id;
+      void judgeAnswer(next.concept, next.verdict.question, text).then((v) =>
+        patchVerdict(
+          id,
+          v === null
+            ? { judged: "unavailable", suggested: null }
+            : { judged: "ready", suggested: v.correct, feedback: v.feedback },
+        ),
+      );
+    }
     const history = [...messages, next];
     setMessages(history);
     setInput("");
@@ -346,7 +474,7 @@ export function AgentSession({
 
       <section className="flex min-h-[420px] flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)]">
         <div className="border-b border-[var(--border)] px-4 py-2 text-xs text-[var(--muted)]">
-          Browser session · {activeModel} · progress stays local
+          Browser session · {activeModel}
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           {!started && messages.length === 0 && (
@@ -356,27 +484,47 @@ export function AgentSession({
               NVIDIA NIM → Gemini Flash → OpenRouter free.
             </p>
           )}
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`rounded-lg px-3 py-2 text-sm leading-relaxed ${
-                m.role === "assistant"
-                  ? "bg-[var(--sidebar-bg)] text-[var(--foreground)]"
-                  : "ml-6 border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]"
-              }`}
-            >
-              {/* No "Agent" or "You" over each turn: the two sides are told
+          {messages.map((m, i) => {
+            // Each answer's row sits under the tutor's reply to it, or under the answer until that arrives.
+            const answered =
+              messages[i - 1]?.role === "user" && m.role === "assistant"
+                ? messages[i - 1]
+                : m.role === "user" && messages[i + 1]?.role !== "assistant"
+                  ? m
+                  : null;
+            const lastVerdict = messages.findLastIndex((x) => x.verdict);
+            return [
+              <div
+                key={m.id}
+                className={`rounded-lg px-3 py-2 text-sm leading-relaxed ${
+                  m.role === "assistant"
+                    ? "bg-[var(--sidebar-bg)] text-[var(--foreground)]"
+                    : "ml-6 border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]"
+                }`}
+              >
+                {/* No "Agent" or "You" over each turn: the two sides are told
                   apart by their shape, so only the provider, when there is
                   one, is shown. */}
-              {m.role === "assistant" && m.meta && (
-                <p className="mb-1 text-xs text-[var(--muted)]">{m.meta}</p>
-              )}
-              <span className="sr-only">{m.role === "assistant" ? "Tutor: " : "You: "}</span>
-              <div className="whitespace-pre-wrap">
-                <MathText text={m.content} />
-              </div>
-            </div>
-          ))}
+                {m.role === "assistant" && m.meta && (
+                  <p className="mb-1 text-xs text-[var(--muted)]">{m.meta}</p>
+                )}
+                <span className="sr-only">
+                  {m.role === "assistant" ? "Tutor: " : "You: "}
+                </span>
+                <div className="whitespace-pre-wrap">
+                  <MathText text={m.content} />
+                </div>
+              </div>,
+              answered?.verdict ? (
+                <VerdictRow
+                  key={`v-${answered.id}`}
+                  verdict={answered.verdict}
+                  live={messages.indexOf(answered) === lastVerdict}
+                  onRecord={(correct) => void record(answered.id, correct)}
+                />
+              ) : null,
+            ];
+          })}
           {busy && (
             <p className="text-sm text-[var(--muted)]">Agent is thinking…</p>
           )}

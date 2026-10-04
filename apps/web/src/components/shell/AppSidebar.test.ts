@@ -3,6 +3,7 @@ import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { RecentItem, RecentModel } from "@/lib/recent-core";
 import type { DraftSummary } from "@/lib/studio-drafts";
 
 /**
@@ -12,9 +13,16 @@ import type { DraftSummary } from "@/lib/studio-drafts";
  * when the studio page published a way to.
  */
 
-const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn(), displayName: undefined as string | undefined }));
+const mocks = vi.hoisted(() => ({
+  pathname: "/home",
+  listDrafts: vi.fn(),
+  displayName: undefined as string | undefined,
+  fetchRecent: vi.fn(),
+  changeRecent: vi.fn(),
+}));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
+vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
@@ -49,7 +57,11 @@ beforeEach(() => {
   mocks.pathname = "/home";
   mocks.displayName = undefined;
   mocks.listDrafts.mockReset().mockResolvedValue({ ok: true, data: { drafts: [DRAFT], note: "" } });
+  mocks.fetchRecent.mockReset().mockResolvedValue(EMPTY);
+  mocks.changeRecent.mockReset().mockResolvedValue(true);
 });
+
+const EMPTY: RecentModel = { reachable: true, items: [], more: false, pinned: [], names: {}, courses: [] };
 
 const mounted: Array<() => void> = [];
 afterEach(() => {
@@ -76,6 +88,9 @@ async function mount(studio: boolean, page: () => null = () => null) {
   return container;
 }
 
+/** The account row, at the sidebar's foot under its hairline. */
+const ACCOUNT = "div.border-t button[aria-expanded]";
+
 const nav = (container: HTMLElement) => container.querySelector<HTMLElement>('nav[aria-label="Primary"]')!;
 
 /** The frame without a studio, folded, mounted in one act. */
@@ -95,7 +110,10 @@ describe("the sidebar", () => {
   it("lists only the four destinations, and reads no conversations, without a studio", async () => {
     const container = await mount(false);
     // The account menu's links are mounted too, inert while it is closed.
-    const labels = [...nav(container).querySelectorAll("a")].filter((a) => a.closest("[inert]") === null).map((a) => a.textContent);
+    // The sections below them are their own tests.
+    const labels = [...nav(container).querySelectorAll("a")]
+      .filter((a) => a.closest("[inert]") === null && a.closest("section") === null)
+      .map((a) => a.textContent);
     expect(labels).toEqual(["Gnosia", "Home", "Courses", "Learn", "Library"]);
     expect(mocks.listDrafts).not.toHaveBeenCalled();
     expect(nav(container).textContent).not.toContain("Chats");
@@ -105,7 +123,7 @@ describe("the sidebar", () => {
     const container = await mount(true);
     expect(nav(container).querySelector("[data-studio-new]")?.getAttribute("href")).toBe("/studio");
     expect(mocks.listDrafts).toHaveBeenCalledTimes(1);
-    const row = [...nav(container).querySelectorAll("a")].find((a) => a.textContent?.startsWith("TCP vs UDP"));
+    const row = [...nav(container).querySelectorAll("a")].find((a) => a.textContent?.includes("TCP vs UDP"));
     expect(row?.getAttribute("href")).toBe("/studio?draft=d1");
     expect(nav(container).querySelector('a[aria-current="page"]')?.textContent).toBe("Home");
   });
@@ -147,7 +165,7 @@ describe("the sidebar", () => {
   it("closes the account menu on Escape and leaves the drawer around it open, until the next Escape", async () => {
     const container = await mount(true);
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
-    const account = nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    const account = nav(container).querySelector<HTMLButtonElement>(ACCOUNT)!;
     act(() => account.click());
     expect(account.getAttribute("aria-expanded")).toBe("true");
     const escape = () =>
@@ -163,16 +181,16 @@ describe("the sidebar", () => {
 
   it("shows the learner's name on the account row, and Account until there is one", async () => {
     const unnamed = await mount(false);
-    expect(nav(unnamed).querySelector("button[aria-expanded]")?.textContent).toBe("Account");
+    expect(nav(unnamed).querySelector(ACCOUNT)?.textContent).toBe("Account");
     mocks.displayName = "Ada Lovelace";
     const named = await mount(false);
-    expect(nav(named).querySelector("button[aria-expanded]")?.textContent).toBe("Ada Lovelace");
+    expect(nav(named).querySelector(ACCOUNT)?.textContent).toBe("Ada Lovelace");
   });
 
   it("wraps Tab inside the drawer past the closed account menu, which is inert", async () => {
     const container = await mount(true);
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
-    const account = nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    const account = nav(container).querySelector<HTMLButtonElement>(ACCOUNT)!;
     account.focus();
     // Tab from the account row, the last stop that is not inert, wraps to the first.
     act(() => {
@@ -206,7 +224,7 @@ describe("the sidebar", () => {
     expect(nav(container).getAttribute("role")).toBeNull();
   });
 
-  it("keeps the conversations mounted, hidden, while folded to the rail", async () => {
+  it("keeps Recent mounted while folded to the rail, its rows drawn as glyphs", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root: Root = createRoot(container);
@@ -218,8 +236,13 @@ describe("the sidebar", () => {
       act(() => root.unmount());
       container.remove();
     });
-    const history = [...nav(container).querySelectorAll("div")].find((div) => div.textContent?.startsWith("Chats"))!;
-    expect(history.closest("[inert]")).not.toBeNull();
+    // A row is its glyph alone on the rail, named for a screen reader and a tooltip.
+    const row = nav(container).querySelector<HTMLAnchorElement>('a[aria-label="Conversation: TCP vs UDP"]')!;
+    expect(row.closest("[inert]")).toBeNull();
+    expect(row.querySelector("span.opacity-0")?.textContent).toContain("TCP vs UDP");
+    expect(nav(container).querySelector("#sidebar-recent")?.className).toContain("opacity-0");
+    // Its menu is out of reach until the sidebar unfolds.
+    expect(row.parentElement!.querySelector("button[aria-haspopup]")?.closest("[inert]")).not.toBeNull();
     // Read while folded, so it is current when it unfolds.
     expect(mocks.listDrafts).toHaveBeenCalledTimes(1);
   });
@@ -261,7 +284,7 @@ describe("the fold", () => {
   it("pops the account menu in as a kit Popover, and keeps it inert for its way out so it can fade", () => {
     vi.useFakeTimers();
     const { container } = mountFolded(false);
-    const account = nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    const account = nav(container).querySelector<HTMLButtonElement>(ACCOUNT)!;
     expect(nav(container).querySelector("[popover]")).toBeNull();
     act(() => account.click());
     const menu = nav(container).querySelector<HTMLElement>("[popover]")!;
@@ -326,5 +349,224 @@ describe("the fold", () => {
     expect(document.cookie).toContain("gnosia-sidebar=open");
     expect(room().className).toContain("w-[260px]");
     expect(nav(container).dataset.state).not.toBe("peek");
+  });
+});
+
+describe("the sections", () => {
+  const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const item = (patch: Partial<RecentItem> & Pick<RecentItem, "key" | "kind" | "title" | "href">): RecentItem => ({
+    detail: null,
+    at: ago(0),
+    ...patch,
+  });
+  const VIDEO = item({ key: "video:video:abc", kind: "video", title: "Master theorem", href: "/library/video%3Aabc", at: ago(1) });
+  const CONCEPT = item({ key: "concept:recurrences", kind: "concept", title: "Recurrences", href: "/learn/recurrences", at: ago(3) });
+  const MODULE = item({
+    key: "module:cs3230/m2",
+    kind: "module",
+    title: "Divide and conquer",
+    href: "/courses/cs3230/m2",
+    at: ago(2),
+    courseSlug: "cs3230",
+    moduleSlug: "m2",
+  });
+  const COURSE = {
+    slug: "cs3230",
+    code: "CS3230",
+    title: "Algorithms",
+    href: "/courses/cs3230",
+    modules: [
+      { slug: "m1", title: "Asymptotics", order: 1, href: "/courses/cs3230/m1" },
+      { slug: "m2", title: "Divide and conquer", order: 2, href: "/courses/cs3230/m2" },
+    ],
+  };
+  const withRows = (patch: Partial<RecentModel> = {}) => mocks.fetchRecent.mockResolvedValue({ ...EMPTY, items: [VIDEO, MODULE, CONCEPT], courses: [COURSE], ...patch });
+  const section = (container: HTMLElement, id: string) => nav(container).querySelector(`#${id}`)!.closest("section")!;
+  const recentRows = (container: HTMLElement) =>
+    [...section(container, "sidebar-recent").querySelectorAll<HTMLAnchorElement>("li a")].map((a) => a.querySelector("span")?.textContent);
+  const moreFor = (container: HTMLElement, title: string) => nav(container).querySelector<HTMLButtonElement>(`button[aria-label="More for ${title}"]`)!;
+  const menuItems = (container: HTMLElement, title: string) =>
+    [...moreFor(container, title).parentElement!.querySelectorAll("ul li")].map((li) => li.textContent);
+
+  it("reads Recent without the conversations when the runner has them, and whole without a studio", async () => {
+    await mount(true);
+    expect(mocks.fetchRecent).toHaveBeenCalledWith({ pages: 1, drafts: false });
+    mocks.fetchRecent.mockClear();
+    mocks.listDrafts.mockClear();
+    await mount(false);
+    expect(mocks.fetchRecent).toHaveBeenCalledWith({ pages: 1, drafts: true });
+    expect(mocks.listDrafts).not.toHaveBeenCalled();
+  });
+
+  it("merges the catalog's rows with the runner's conversations, newest first under day headings, each with its kind", async () => {
+    withRows();
+    const container = await mount(true);
+    expect(recentRows(container)).toEqual([
+      "Conversation: TCP vs UDP",
+      "Video: Master theorem",
+      "Course module: Divide and conquer",
+      "Concept: Recurrences",
+    ]);
+    const headings = [...section(container, "sidebar-recent").querySelectorAll("h3")].map((h) => h.textContent);
+    expect(headings).toEqual(["Today", "Yesterday", "Previous 7 days"]);
+    // Each row carries its kind's 18px glyph.
+    expect(section(container, "sidebar-recent").querySelector("li a svg")?.getAttribute("width")).toBe("18");
+  });
+
+  it("marks the row of the page on screen, whichever way its path is escaped", async () => {
+    mocks.pathname = "/library/video:abc";
+    withRows();
+    const container = await mount(false);
+    const current = section(container, "sidebar-recent").querySelector('a[aria-current="page"]');
+    expect(current?.getAttribute("href")).toBe("/library/video%3Aabc");
+  });
+
+  it("lists Courses under a sticky 13px label with an add button to /courses, and unfolds a course on press", async () => {
+    withRows();
+    const container = await mount(false);
+    const label = nav(container).querySelector("#sidebar-courses")!;
+    expect(label.className).toContain("text-[13px]");
+    expect(label.parentElement!.className).toContain("sticky");
+    expect(nav(container).querySelector('a[aria-label="Browse courses"]')?.getAttribute("href")).toBe("/courses");
+
+    const folder = section(container, "sidebar-courses").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    expect(folder.textContent).toBe("CS3230 Algorithms");
+    const modules = container.querySelector<HTMLElement>(`#${folder.getAttribute("aria-controls")}`)!;
+    expect(folder.getAttribute("aria-expanded")).toBe("false");
+    expect(modules.hasAttribute("inert")).toBe(true);
+    act(() => folder.click());
+    expect(folder.getAttribute("aria-expanded")).toBe("true");
+    expect(modules.hasAttribute("inert")).toBe(false);
+    expect([...modules.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual(["/courses/cs3230/m1", "/courses/cs3230/m2"]);
+    // It glides open rather than appearing, and snaps under reduced motion.
+    expect(modules.className).toContain("transition-[grid-template-rows,opacity]");
+    expect(modules.className).toContain("motion-reduce:transition-none");
+  });
+
+  it("opens the course of the page on screen by itself, its module marked", async () => {
+    mocks.pathname = "/courses/cs3230/m2/check";
+    withRows();
+    const container = await mount(false);
+    const folder = section(container, "sidebar-courses").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    expect(folder.getAttribute("aria-expanded")).toBe("true");
+    expect(section(container, "sidebar-courses").querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/courses/cs3230/m2");
+  });
+
+  it("shows Pinned only when something is pinned, and moves a pinned row out of Recent", async () => {
+    withRows();
+    const bare = await mount(false);
+    expect(nav(bare).querySelector("#sidebar-pinned")!.closest("[inert]")).not.toBeNull();
+
+    withRows({ pinned: [{ key: VIDEO.key, kind: "video", title: "Old title", href: VIDEO.href, at: ago(5) }] });
+    const container = await mount(false);
+    const pinned = section(container, "sidebar-pinned");
+    expect(pinned.closest("[inert]")).toBeNull();
+    // Titled as the live row is now.
+    expect([...pinned.querySelectorAll("li a")].map((a) => a.textContent)).toEqual(["Video: Master theorem"]);
+    expect(recentRows(container)).not.toContain("Video: Master theorem");
+  });
+
+  it("offers Pin on every row, Rename on a conversation and Open in course on a module", async () => {
+    withRows();
+    const container = await mount(true);
+    act(() => moreFor(container, "Divide and conquer").click());
+    expect(menuItems(container, "Divide and conquer")).toEqual(["Pin", "Open in course"]);
+    expect(moreFor(container, "Divide and conquer").parentElement!.querySelector("ul a")?.getAttribute("href")).toBe("/courses/cs3230");
+    act(() => moreFor(container, "TCP vs UDP").click());
+    expect(menuItems(container, "TCP vs UDP")).toEqual(["Pin", "Rename"]);
+    act(() => moreFor(container, "Master theorem").click());
+    expect(menuItems(container, "Master theorem")).toEqual(["Pin"]);
+  });
+
+  it("pins a row through the route and reads Recent back", async () => {
+    withRows();
+    const container = await mount(false);
+    const reads = mocks.fetchRecent.mock.calls.length;
+    // What the route stores, which the read after the pin brings back.
+    withRows({ pinned: [{ key: VIDEO.key, kind: "video", title: "Master theorem", href: VIDEO.href, at: ago(0) }] });
+    act(() => moreFor(container, "Master theorem").click());
+    const pin = [...moreFor(container, "Master theorem").parentElement!.querySelectorAll("ul button")].find((b) => b.textContent === "Pin")!;
+    await act(async () => {
+      (pin as HTMLButtonElement).click();
+    });
+    expect(mocks.changeRecent).toHaveBeenCalledWith({
+      action: "pin",
+      row: { key: VIDEO.key, kind: "video", title: "Master theorem", href: VIDEO.href },
+    });
+    expect([...section(container, "sidebar-pinned").querySelectorAll("li a")].map((a) => a.textContent)).toEqual(["Video: Master theorem"]);
+    expect(mocks.fetchRecent.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it("opens a row's menu with a pop and closes it on Escape, focus back on its more button", async () => {
+    withRows();
+    const container = await mount(false);
+    const more = moreFor(container, "Recurrences");
+    // The more button fades in on hover rather than appearing.
+    expect(more.className).toContain("group-hover/row:opacity-100");
+    expect(more.className).toContain("motion-reduce:transition-none");
+    act(() => more.click());
+    const menu = more.parentElement!.querySelector<HTMLElement>("div.animate-pop-in")!;
+    expect(menu.className).toContain("motion-reduce:animate-none");
+    expect(document.activeElement?.textContent).toBe("Pin");
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(more);
+  });
+
+  it("renames a conversation in place", async () => {
+    const container = await mount(true);
+    act(() => moreFor(container, "TCP vs UDP").click());
+    const rename = [...moreFor(container, "TCP vs UDP").parentElement!.querySelectorAll("ul button")].find((b) => b.textContent === "Rename")!;
+    act(() => (rename as HTMLButtonElement).click());
+    const field = nav(container).querySelector<HTMLInputElement>('input[aria-label="Name this conversation"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Transport layer");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    expect(mocks.changeRecent).toHaveBeenCalledWith({ action: "rename", key: "draft:d1", name: "Transport layer" });
+  });
+
+  it("keeps Courses and its add button for someone who has opened no course", async () => {
+    const container = await mount(false);
+    const courses = section(container, "sidebar-courses");
+    expect(courses.closest("[inert]")).toBeNull();
+    expect(courses.textContent).toContain("Courses you open show here.");
+    expect(courses.querySelector('a[aria-label="Browse courses"]')?.getAttribute("href")).toBe("/courses");
+  });
+
+  it("offers Show older while there is more, even when every row on screen is pinned", async () => {
+    const pins = [VIDEO, MODULE, CONCEPT].map((r) => ({ key: r.key, kind: r.kind, title: r.title, href: r.href, at: ago(0) }));
+    withRows({ more: true, pinned: pins });
+    const container = await mount(false);
+    expect(recentRows(container)).toEqual([]);
+    expect(section(container, "sidebar-recent").textContent).toContain("Show older");
+    expect(section(container, "sidebar-recent").textContent).not.toContain("show here");
+  });
+
+  it("finds a renamed conversation by its new name, which the runner's search does not know", async () => {
+    mocks.listDrafts.mockImplementation(async (query: { q?: string }) => ({ ok: true, data: { drafts: query.q === undefined ? [DRAFT] : [], note: "" } }));
+    mocks.fetchRecent.mockImplementation(async (options: { q?: string }) => ({ ...EMPTY, names: { "draft:d1": "Transport layer" }, items: options.q === undefined ? [] : [] }));
+    const container = await mount(true);
+    const field = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "transport");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    const hits = [...nav(container).querySelectorAll("[data-peek-hold] li a")].map((a) => a.getAttribute("href"));
+    expect(hits).toEqual(["/studio?draft=d1"]);
+  });
+
+  it("says Recent could not be read, rather than that it is empty, when the catalog did not answer", async () => {
+    mocks.fetchRecent.mockResolvedValue({ ...EMPTY, reachable: false });
+    const container = await mount(false);
+    expect(section(container, "sidebar-recent").textContent).toContain("Recent could not be read.");
   });
 });
