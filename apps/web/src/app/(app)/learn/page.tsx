@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { LearnIndex } from "@/components/learn/LearnIndex";
-import { Card } from "@/components/ui/Card";
+import { Notice } from "@/components/ui/Notice";
 import { getCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
 import { defaultSelection } from "@/lib/concept-graph";
@@ -141,28 +141,24 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
 
 function Unreachable() {
   return (
-    <Card title="Knowledge base unavailable" className="max-w-2xl">
-      <p className="text-[14px] text-text2">
-        The database could not be reached, so this page has nothing to show. Nothing has been lost: this is a view, and
-        the concepts, the mastery model and the schedule are all still where they were.
-      </p>
-      <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px]">npm run catalog -- status</pre>
-    </Card>
+    <Notice title="Knowledge base unavailable" command="npm run catalog -- status" className="max-w-2xl">
+      The database could not be reached, so this page has nothing to show. Nothing has been lost: this is a view, and
+      the concepts, the mastery model and the schedule are all still where they were.
+    </Notice>
   );
 }
 
 function EmptyState() {
   return (
-    <Card title="No concepts yet" className="max-w-2xl">
-      <p className="text-[14px] text-text2">
-        The knowledge base is empty. This page is a view over the concept, mastery and review tables: the pipeline writes
-        them, the site reads them. Start a session in Claude Code with /learn &lt;topic&gt;, or seed it by hand:
-      </p>
-      <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px] leading-relaxed">
-        {`npm run learn -- concept add --title "Softmax" \\
+    <Notice
+      title="No concepts yet"
+      command={`npm run learn -- concept add --title "Softmax" \\
   --topic <topic-slug> --domain <folder> \\
   --summary "Normalises scores into a distribution."`}
-      </pre>
-    </Card>
+      className="max-w-2xl"
+    >
+      The knowledge base is empty. This page is a view over the concept, mastery and review tables: the pipeline writes
+      them, the site reads them. Start a session in Claude Code with /learn &lt;topic&gt;, or seed it by hand:
+    </Notice>
   );
 }

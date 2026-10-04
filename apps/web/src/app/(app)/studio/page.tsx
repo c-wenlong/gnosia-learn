@@ -10,7 +10,8 @@ import { RenewLists } from "@/components/studio/RenewLists";
 import { StudioDialog } from "@/components/studio/StudioDialog";
 import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
-import { Notice, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
+import { StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
+import { Banner } from "@/components/ui/Banner";
 import { StudioGrid, StudioToolbar, WhileOutcome } from "@/components/studio/StudioBrowse";
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
@@ -309,27 +310,27 @@ export default async function StudioPage({
 
             {/* U5 and U3: both mean everything still works, so both are banners. */}
             {/* D13: the topic list is the saved copy, or there is none. */}
-            {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
+            {staleVocabulary !== null && <Banner tone={staleVocabulary.tone}>{staleVocabulary.text}</Banner>}
             {health.data.stale && (
-              <Notice>
+              <Banner>
                 The tldrawkc page bundle is older than its source. Everything still runs; rebuild with{" "}
                 <span className="font-mono">(cd tools/tldrawkc &amp;&amp; npm run build)</span> when
                 convenient.
-              </Notice>
+              </Banner>
             )}
             {!health.data.postgres && (
-              <Notice>
+              <Banner>
                 Not connected to the catalog: browsing and drawing still work, and Accept waits for it,
                 since a diagram lands in the database.
                 {listing.stale === true && listing.readAt !== undefined && (
                   <> This list is the copy read at {new Date(listing.readAt).toLocaleString()}.</>
                 )}
-              </Notice>
+              </Banner>
             )}
             {/* U6: a document that will not parse has no tile, so this is the only
                 place it is visible. It used to be the empty inspector's content. */}
             {listing.errors.length > 0 && (
-              <Notice tone="danger">
+              <Banner tone="danger">
                 <details>
                   <summary className="cursor-pointer">
                     {listing.errors.length} diagram{listing.errors.length === 1 ? "" : "s"} could not be read and{" "}
@@ -343,7 +344,7 @@ export default async function StudioPage({
                     ))}
                   </ul>
                 </details>
-              </Notice>
+              </Banner>
             )}
 
             {shot !== null ? (

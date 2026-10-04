@@ -140,6 +140,10 @@ export const session = pgTable(
  * `kind` is what the draft's briefs produce (D42). Only `diagram` exists; the
  * column is here now so a second kind needs no backfill.
  *
+ * `name` is the owner's, `title` the planner's: a conversation shows its
+ * name, else its title, else the person's first message (the runner has
+ * that; this row does not).
+ *
  * `turns` counts the person's turns against the turn cap. `cost_usd` sums
  * every planner turn with the same paired source check as `job`; the daily
  * cap dates each turn at its own end from the runner's disk record, not from
@@ -153,8 +157,15 @@ export const draft = pgTable(
     kind: text("kind").notNull().default("diagram"),
     /** The slug of the diagram an extend draft was opened on. */
     source: text("source"),
-    /** The latest brief's title, for the drafts list. */
+    /** The latest brief's title, for the drafts list. Written by the planner's briefs, and moves with each one. */
     title: text("title"),
+    /**
+     * The name the owner gave the conversation (the sidebar's Rename), or
+     * null for none. Every page shows it before `title`, which keeps moving
+     * with the briefs underneath it. Set and cleared by the runner's
+     * `PUT /api/drafts/{id}/name`; one line, at most 200 characters.
+     */
+    name: text("name"),
     /** The headless session every turn resumes. Minted before the first spawn. */
     plannerSessionId: text("planner_session_id").notNull(),
     /** `drafts/<id>/transcript.ndjson`, relative to the runner's `STUDIO_HOME`. */
@@ -185,6 +196,9 @@ export const draft = pgTable(
     // A pending topic belongs to a brief that names it, so one with no brief
     // beside it is a proposal nothing would ever draw.
     check("draft_pending_topic_brief_check", sql`pending_topic is null or brief is not null`),
+    // The runner trims a name and sends a blank one as null, so an empty
+    // string here is a writer that skipped that, not a name.
+    check("draft_name_check", sql`name is null or char_length(name) between 1 and 200`),
     check("draft_turns_check", sql`turns >= 0`),
     check("draft_cost_usd_check", sql`cost_usd is null or cost_usd >= 0`),
     check(

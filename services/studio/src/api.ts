@@ -412,6 +412,7 @@ async function handle(
         "/api/drafts/{id}",
         "/api/drafts/{id}/messages|events|draw|abandon",
         "PUT /api/drafts/{id}/brief",
+        "PUT /api/drafts/{id}/name",
         "/api/diagrams",
         "/api/diagrams/{name}",
         "/api/diagrams/{name}/svg",
@@ -1399,8 +1400,8 @@ async function vocabularyRoute(response: ServerResponse, listings?: Listings): P
 }
 
 /**
- * `/api/drafts`: create, list, read, talk, follow, draw, abandon, and edit
- * the brief by hand.
+ * `/api/drafts`: create, list, read, talk, follow, draw, abandon, edit the
+ * brief by hand, and name the conversation.
  *
  * Every refusal is a `JobRefused` from `drafts.ts` with the status the API
  * table in docs/STUDIO-CHAT-FIRST.md names, answered in the `{ error, detail }`
@@ -1443,7 +1444,7 @@ async function draftRoutes(
       const beforeUpdated = url.searchParams.get("before");
       const beforeId = url.searchParams.get("beforeId");
       const before = beforeUpdated !== null && beforeId !== null ? { updated: beforeUpdated, id: beforeId } : undefined;
-      // Words to find in a draft's title, first message or concept title,
+      // Words to find in a draft's name, title, first message or concept title,
       // applied before the cursor and the limit. Empty is no search.
       const q = (url.searchParams.get("q") ?? "").trim();
       if (q.length > DRAFT_SEARCH_LIMIT) return fail(response, 400, `"q" is at most ${DRAFT_SEARCH_LIMIT} characters`, { field: "q" });
@@ -1588,6 +1589,25 @@ async function draftRoutes(
         return refusal(error);
       }
     }
+    case "PUT name": {
+      // The owner's name for the conversation (the sidebar's Rename): every
+      // page that reads the draft shows it before the planner's title.
+      const input = await body();
+      if (input === null) return;
+      if (!("name" in input)) return fail(response, 400, `"name" is required: a string, or null to clear the name`, { field: "name" });
+      try {
+        const { record, changed } = await drafts.rename(id, input.name);
+        return send(response, 200, {
+          draftId: id,
+          name: record.name ?? null,
+          title: record.title,
+          changed,
+          note: !changed ? "the name is unchanged" : record.name == null ? "the name is cleared" : "the conversation is renamed",
+        });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
     case "PUT brief": {
       const input = await body();
       if (input === null) return;
@@ -1611,7 +1631,7 @@ async function draftRoutes(
     }
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`, {
-        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
+        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief", "PUT name", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
       });
   }
 }

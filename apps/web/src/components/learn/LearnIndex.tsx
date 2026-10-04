@@ -14,6 +14,7 @@ import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
+import { Callout } from "@/components/ui/Callout";
 import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
 import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
 import type { DomainMapData } from "@/lib/domain-map";
@@ -246,9 +247,9 @@ export function LearnIndex({
       </div>
 
       {view === "graph" && foldersOnly && (
-        <p role="status" className="rounded-xl bg-warn-tint px-4 py-2 text-[13px] text-text">
+        <Callout role="status">
           Topics could not be read, so concepts are grouped by their note folders until they can.
-        </p>
+        </Callout>
       )}
 
       {view === "table" ? (

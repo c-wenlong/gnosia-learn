@@ -10,7 +10,7 @@ import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/libr
 import { AssetTitle } from "@/components/library/AssetTitle";
 import { WatchProgress } from "@/components/library/WatchProgress";
 import { MarkWatched } from "@/components/library/MarkWatched";
-import { Notice } from "@/components/library/Notice";
+import { Notice } from "@/components/ui/Notice";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";

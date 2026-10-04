@@ -1,13 +1,13 @@
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeClaude, proposing, type FakeClaude } from "./fake-claude";
-import { candidatePath, candidateSvgPath, targetPath, targetSvgPath } from "../src/paths";
+import { candidatePath, candidateSvgPath, draftJsonPath, targetPath, targetSvgPath } from "../src/paths";
 import type { JobRecord } from "../src/store";
 import { topicListAnswer } from "./vocabulary";
 import { until } from "./wait";
@@ -226,7 +226,7 @@ describe("the draft routes", () => {
 
     const list = (await (await fetch(`${base}/api/drafts?state=briefed`)).json()) as { drafts: Record<string, unknown>[] };
     expect(list.drafts).toEqual([
-      { draftId, kind: "diagram", kinds: ["diagram"], state: "briefed", title: "TCP congestion window", firstMessage: expect.any(String), source: null, concept: null, turns: 1, costUsd: 0.02, updated: expect.any(String), jobId: null },
+      { draftId, kind: "diagram", kinds: ["diagram"], state: "briefed", title: "TCP congestion window", name: null, firstMessage: expect.any(String), source: null, concept: null, turns: 1, costUsd: 0.02, updated: expect.any(String), jobId: null },
     ]);
 
     // Replay from the start carries ids; ?after skips what the client has.
@@ -553,6 +553,81 @@ describe("PUT /api/drafts/{id}/brief", () => {
     const tooLong = await fetch(`${base}/api/drafts?q=${"a".repeat(201)}`);
     expect(tooLong.status).toBe(400);
     expect(await tooLong.json()).toMatchObject({ detail: { field: "q" } });
+  });
+});
+
+describe("PUT /api/drafts/{id}/name", () => {
+  const rename = (draftId: string, body: unknown) =>
+    fetch(`${base}/api/drafts/${draftId}/name`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const rows = async (query = ""): Promise<Record<string, unknown>[]> =>
+    ((await (await fetch(`${base}/api/drafts${query}`)).json()) as { drafts: Record<string, unknown>[] }).drafts;
+
+  /** A conversation the planner titled "TCP congestion window". */
+  async function titled(): Promise<string> {
+    await fake.script([{ text: proposing(good) }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, tagged("draw it"));
+    await drafts.settled(draftId);
+    expect(drafts.get(draftId)?.title).toBe("TCP congestion window");
+    return draftId;
+  }
+
+  it("names a conversation beside its title, on disk, in the mirror, the list and the record, without moving it up", async () => {
+    const draftId = await titled();
+    const before = drafts.get(draftId)!.updatedAt;
+    const mirrors = catalogMock.draftUpsert.mock.calls.length;
+
+    const answer = await rename(draftId, { name: "  Transport \n layer  " });
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toMatchObject({ draftId, name: "Transport layer", title: "TCP congestion window", changed: true });
+    await drafts.settledAll();
+
+    const disk = JSON.parse(await readFile(draftJsonPath(draftId), "utf8")) as Record<string, unknown>;
+    expect(disk).toMatchObject({ name: "Transport layer", title: "TCP congestion window", updatedAt: before });
+    expect(catalogMock.draftUpsert.mock.calls.length).toBeGreaterThan(mirrors);
+    expect((await rows()).find((row) => row.draftId === draftId)).toMatchObject({ name: "Transport layer", title: "TCP congestion window", updated: before });
+    const view = (await (await fetch(`${base}/api/drafts/${draftId}`)).json()) as Record<string, unknown>;
+    expect(view).toMatchObject({ name: "Transport layer", title: "TCP congestion window" });
+
+    // The same name again writes nothing.
+    const again = await rename(draftId, { name: "Transport layer" });
+    expect(await again.json()).toMatchObject({ changed: false });
+
+    // Null, or a name with nothing in it, takes the name off.
+    expect(await (await rename(draftId, { name: "   " })).json()).toMatchObject({ name: null, changed: true });
+    await rename(draftId, { name: "Again" });
+    expect(await (await rename(draftId, { name: null })).json()).toMatchObject({ name: null, changed: true });
+    expect(drafts.get(draftId)?.name).toBeNull();
+  });
+
+  it("finds a conversation by its name with q, as it finds one by its own words", async () => {
+    const draftId = await titled();
+    await rename(draftId, { name: "Transport layer" });
+    expect((await rows("?q=transport")).map((row) => row.draftId)).toEqual([draftId]);
+    expect((await rows("?q=congestion")).map((row) => row.draftId)).toEqual([draftId]);
+  });
+
+  it("refuses what is not a name, and a conversation that is not there", async () => {
+    const draftId = await titled();
+    for (const body of [{ name: 7 }, { name: ["a"] }, {}]) {
+      const refused = await rename(draftId, body);
+      expect(refused.status, JSON.stringify(body)).toBe(400);
+      expect(await refused.json()).toMatchObject({ detail: { field: "name" } });
+    }
+    expect((await rename("no-such-draft", { name: "x" })).status).toBe(404);
+    // A long name is cut to the 200 characters the catalog keeps.
+    expect(((await (await rename(draftId, { name: "x".repeat(300) })).json()) as { name: string }).name).toHaveLength(200);
+  });
+
+  it("is a write drain waits for, and refused once the studio is shutting down", async () => {
+    const draftId = await titled();
+    const landing = drafts.rename(draftId, "Named on the way out");
+    await drafts.drain();
+    await landing;
+    const disk = JSON.parse(await readFile(draftJsonPath(draftId), "utf8")) as Record<string, unknown>;
+    expect(disk.name).toBe("Named on the way out");
+    const late = await rename(draftId, { name: "Too late" });
+    expect(late.status).toBe(503);
   });
 });
 

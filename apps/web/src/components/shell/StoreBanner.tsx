@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
+import { Banner } from "@/components/ui/Banner";
 import { Collapse } from "@/components/ui/Collapse";
-import { TextLink } from "@/components/ui/TextLink";
 import { useLearner } from "@/lib/learner-context";
 
 /**
@@ -15,9 +15,10 @@ import { useLearner } from "@/lib/learner-context";
  * could not ask, and the last change the learner made did not land. Both are
  * said in words rather than left to be inferred from a bar that reads zero.
  *
- * The text is `--text`, not `--warn-text`: amber on its own tint clears 4.5:1
- * (4.71 in both light palettes) but is still the lightest text on the page, fine
- * for a two-word verdict and harder going for a whole sentence.
+ * The strip is the kit's `Banner`, whose words are `--text`, not `--warn-text`:
+ * amber on its own tint clears 4.5:1 (4.71 in both light palettes) but is still
+ * the lightest text on the page, fine for a two-word verdict and harder going
+ * for a whole sentence.
  *
  * It slides down over the page and back up (`Collapse`) rather than shoving
  * the page in a frame, keeping its last words while it folds away. A screen
@@ -58,17 +59,14 @@ export function StoreBanner() {
       </p>
       <Collapse open={message !== null}>
         {shown !== null && (
-          <div className="flex items-start gap-3 border-b-2 border-warn bg-warn-tint px-4 py-2 text-sm text-text md:px-7">
-            <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-warn-lip" />
-            <span aria-hidden className="min-w-0 flex-1">
-              {shown.message}
-            </span>
-            {shown.dismissable && (
-              <TextLink onClick={dismiss} aria-label="Dismiss this message" tone="inherit" weight="semibold" className="shrink-0">
-                Dismiss
-              </TextLink>
-            )}
-          </div>
+          <Banner
+            role="none"
+            onDismiss={shown.dismissable ? dismiss : undefined}
+            dismissAriaLabel="Dismiss this message"
+            className="md:px-7"
+          >
+            <span aria-hidden>{shown.message}</span>
+          </Banner>
         )}
       </Collapse>
     </>

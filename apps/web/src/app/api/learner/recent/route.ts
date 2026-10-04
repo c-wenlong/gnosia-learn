@@ -6,14 +6,12 @@ import { enforceRateLimit } from "@/lib/agent/guard";
 import { BadRequest, handler, LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
 import { readRecent } from "@/lib/recent";
 import {
-  asNames,
   asPinned,
   cleanTitle,
   isAppPath,
   isRecentKey,
   MAX_RECENT_PAGES,
   RECENT_KINDS,
-  withName,
   withoutPin,
   withPin,
   type RecentKind,
@@ -23,21 +21,23 @@ import {
  * The sidebar's Recent (L7 of docs/proposals/library-by-type-and-day.md).
  *
  * `GET` answers with `RecentModel`: `pages` pages of rows (50 a page), the
- * pins, the names, and the courses the owner opened. `drafts=0` leaves the
+ * pins, and the courses the owner opened. `drafts=0` leaves the
  * studio's conversations out, for a sidebar that reads them from the runner;
  * `q` searches every row's title instead of paging. A read, so it degrades
  * the way `GET /api/learner/home` does: an unreachable database is a 200
  * with `reachable: false`. No same-origin check, for the reason that route
  * gives; the rate limit bounds a loop.
  *
- * `POST` changes the two preferences the sidebar's row menu writes, under the
- * learner's row lock so two quick presses cannot drop each other's change:
+ * `POST` changes the `pinned` preference the sidebar's row menu writes, under
+ * the learner's row lock so two quick presses cannot drop each other's change:
  *
  * - `{ action: "pin", row: { key, kind, title, href } }` puts a copy of the
  *   row at the top of `pinned`;
- * - `{ action: "unpin", key }` takes it off;
- * - `{ action: "rename", key, name }` names a conversation (`draft:` keys
- *   only), and an empty name takes the name off.
+ * - `{ action: "unpin", key }` takes it off.
+ *
+ * Rename is not here: a conversation's name is kept on its draft, by the
+ * studio runner (`PUT /api/drafts/{id}/name`), so every page that reads the
+ * draft shows it.
  */
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -58,8 +58,7 @@ export async function GET(req: Request): Promise<NextResponse> {
 
 type Change =
   | { action: "pin"; row: { key: string; kind: RecentKind; title: string; href: string } }
-  | { action: "unpin"; key: string }
-  | { action: "rename"; key: string; name: string | null };
+  | { action: "unpin"; key: string };
 
 export const POST = handler<Change>(
   "recent",
@@ -82,24 +81,12 @@ export const POST = handler<Change>(
         if (!isRecentKey(body.key)) throw new BadRequest('"key" must be a row key.');
         return { action: "unpin", key: body.key };
       }
-      case "rename": {
-        // Only a conversation: a module, a video or a concept is named by the
-        // catalog, and a second name for it would disagree with every other page.
-        if (!isRecentKey(body.key, "draft")) throw new BadRequest('"key" must name a conversation.');
-        if (typeof body.name !== "string") throw new BadRequest('"name" must be a string.');
-        return { action: "rename", key: body.key, name: cleanTitle(body.name) };
-      }
       default:
-        throw new BadRequest('"action" must be one of pin, unpin, rename.');
+        throw new BadRequest('"action" must be one of pin, unpin.');
     }
   },
   async (db, change, owner) =>
     withLearnerLock(db, owner, async (tx) => {
-      if (change.action === "rename") {
-        const names = asNames(await readPreference(tx, PREFERENCE_KEYS.recentNames, owner));
-        await writePreference(tx, PREFERENCE_KEYS.recentNames, withName(names, change.key, change.name), owner);
-        return { key: change.key, name: change.name };
-      }
       const pinned = asPinned(await readPreference(tx, PREFERENCE_KEYS.pinned, owner));
       const next =
         change.action === "pin"

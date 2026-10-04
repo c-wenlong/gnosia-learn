@@ -344,14 +344,6 @@ export const PREFERENCE_KEYS = {
    * `POST /api/learner/recent`, never through the preference route.
    */
   pinned: "pinned",
-  /**
-   * `Record<key, string>`: the names the owner gave studio conversations
-   * from the sidebar's Rename, by row key (`draft:<id>`). A conversation's
-   * own title is its latest brief's and moves with every brief, so a name
-   * lives here rather than on the `draft` row. Written by
-   * `POST /api/learner/recent`.
-   */
-  recentNames: "recentNames",
 } as const;
 
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[keyof typeof PREFERENCE_KEYS];

@@ -145,6 +145,28 @@ describe("the Providers card", () => {
     expect(document.activeElement).toBe(button(container, "Delete"));
   });
 
+  it("gives focus to Add provider once a deleted row has left with the refresh", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    act(() => root.render(createElement(Providers, { view: view() })));
+    act(() => button(container, "Delete").click());
+    const group = container.querySelector('[role="group"][aria-label^="Confirm deleting"]')!;
+    const confirm = [...group.querySelectorAll("button")].find((b) => b.textContent === "Delete")!;
+    await act(async () => {
+      confirm.focus();
+      confirm.click();
+    });
+    // The refresh's answer: the row is gone and the provider can be added again.
+    act(() => root.render(createElement(Providers, { view: view({ rows: [], addable: [{ id: "openrouter", label: "OpenRouter" }] }) })));
+    expect(document.activeElement).toBe(button(container, "Add provider"));
+  });
+
   it("offers only the providers not listed in Add provider, and hides the button when none is left", () => {
     const container = mount(createElement(Providers, { view: view() }));
     act(() => button(container, "Add provider").click());
