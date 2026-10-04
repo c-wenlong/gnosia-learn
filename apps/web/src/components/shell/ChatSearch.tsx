@@ -5,6 +5,8 @@ import type { RefObject } from "react";
 
 import { SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
+
+import { FADE, FADE_IN } from "./motion";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
@@ -36,12 +38,22 @@ export function SearchIcon({ className = "size-[18px] shrink-0 text-text2" }: { 
  * drawer or a slid-out sidebar is not closed by the same press; with the field
  * empty Escape goes on to close them.
  */
-export function SearchField({ search, inputRef }: { search: HistorySearch; inputRef: RefObject<HTMLInputElement | null> }) {
+export function SearchField({
+  search,
+  inputRef,
+  compact = false,
+}: {
+  search: HistorySearch;
+  inputRef: RefObject<HTMLInputElement | null>;
+  /** Narrowed to its icon on the folded rail: no fill, so it reads as one of the rail's icons. */
+  compact?: boolean;
+}) {
   return (
     <div
       data-peek-hold=""
       className={cx(
-        "relative flex h-10 items-center rounded-lg bg-surface2 text-text2 transition-colors",
+        "relative flex h-10 items-center overflow-hidden rounded-lg text-text2 transition-colors duration-150 motion-reduce:transition-none",
+        compact ? "bg-transparent" : "bg-surface2",
         "focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
       )}
     >
@@ -64,10 +76,14 @@ export function SearchField({ search, inputRef }: { search: HistorySearch; input
         }}
         className={cx(
           "h-full min-w-0 flex-1 appearance-none rounded-lg bg-transparent pl-9 pr-8 text-[16px] text-text outline-none md:text-[14px]",
+          // The words fade with the sidebar's labels; the icon beside them stays.
+          FADE,
+          compact ? "opacity-0" : FADE_IN,
           "placeholder:text-text3 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",
         )}
       />
-      {search.query !== "" && (
+      {/* Not on the folded rail: it would sit on the icon, under the rail's search button. */}
+      {search.query !== "" && !compact && (
         <button
           type="button"
           aria-label="Clear the search"

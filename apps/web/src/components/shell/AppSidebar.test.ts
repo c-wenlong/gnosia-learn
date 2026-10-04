@@ -78,10 +78,24 @@ async function mount(studio: boolean, page: () => null = () => null) {
 
 const nav = (container: HTMLElement) => container.querySelector<HTMLElement>('nav[aria-label="Primary"]')!;
 
+/** The frame without a studio, folded, mounted in one act. */
+function mountFoldedForClip() {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root: Root = createRoot(container);
+  act(() => root.render(createElement(ShellFrame, { studio: false, initialCollapsed: true } as ComponentProps<typeof ShellFrame>, null)));
+  mounted.push(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+  return { container };
+}
+
 describe("the sidebar", () => {
   it("lists only the five destinations, and reads no conversations, without a studio", async () => {
     const container = await mount(false);
-    const labels = [...nav(container).querySelectorAll("a")].map((a) => a.textContent);
+    // The account menu's links are mounted too, inert while it is closed.
+    const labels = [...nav(container).querySelectorAll("a")].filter((a) => a.closest("[inert]") === null).map((a) => a.textContent);
     expect(labels).toEqual(["Gnosia", "Home", "Courses", "Learn", "Library", "Review"]);
     expect(mocks.listDrafts).not.toHaveBeenCalled();
     expect(nav(container).textContent).not.toContain("Chats");
@@ -138,6 +152,33 @@ describe("the sidebar", () => {
     expect(nav(named).querySelector("button[aria-expanded]")?.textContent).toBe("Ada Lovelace");
   });
 
+  it("wraps Tab inside the drawer past the closed account menu, which is inert", async () => {
+    const container = await mount(true);
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    const account = nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    account.focus();
+    // Tab from the account row, the last stop that is not inert, wraps to the first.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    });
+    expect(document.activeElement?.closest("[inert]")).toBeNull();
+    expect(document.activeElement).not.toBe(account);
+    expect(nav(container).contains(document.activeElement)).toBe(true);
+  });
+
+  it("does not clip the nav, so the account menu can open past the rail", () => {
+    const { container } = mountFoldedForClip();
+    expect(nav(container).className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
+  });
+
+  it("transitions the drawer's visibility only as it closes, so focus can land as it opens", async () => {
+    const container = await mount(true);
+    expect(nav(container).className).toContain("max-md:transition-[translate,visibility,box-shadow]");
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    expect(nav(container).className).toContain("max-md:transition-[translate,box-shadow]");
+    expect(nav(container).className).not.toContain("visibility");
+  });
+
   it("closes the drawer on Back or Forward, which can change the studio's view without its path", async () => {
     const container = await mount(true);
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
@@ -161,7 +202,7 @@ describe("the sidebar", () => {
       container.remove();
     });
     const history = [...nav(container).querySelectorAll("div")].find((div) => div.textContent?.startsWith("Chats"))!;
-    expect(history.closest("[hidden]")).not.toBeNull();
+    expect(history.closest("[inert]")).not.toBeNull();
     // Read while folded, so it is current when it unfolds.
     expect(mocks.listDrafts).toHaveBeenCalledTimes(1);
   });
@@ -186,6 +227,28 @@ describe("the fold", () => {
   afterEach(() => {
     vi.useRealTimers();
     document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
+  });
+
+  it("animates its width and fades its labels, and drops both under reduced motion", () => {
+    const { container, room } = mountFolded(true);
+    const panel = nav(container);
+    expect(panel.className).toContain("md:transition-[width,box-shadow]");
+    expect(panel.className).toContain("motion-reduce:transition-none");
+    expect(room().className).toContain("transition-[width]");
+    // Labels stay mounted on the rail and fade, so they can fade back in.
+    const label = [...panel.querySelectorAll("a span")].find((span) => span.textContent === "Courses")!;
+    expect(label.className).toContain("opacity-0");
+    expect(label.className).toContain("transition-opacity");
+  });
+
+  it("keeps the account menu mounted, invisible and inert until opened, so it can fade", () => {
+    const { container } = mountFolded(false);
+    const menu = nav(container).querySelector<HTMLElement>("[id]:has(> ul)")!;
+    expect(menu.hasAttribute("inert")).toBe(true);
+    expect(menu.className).toContain("invisible");
+    act(() => nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!.click());
+    expect(menu.hasAttribute("inert")).toBe(false);
+    expect(menu.className).toContain("opacity-100");
   });
 
   it("carries the studio sidebar's saved fold into the cookie once", () => {
@@ -219,9 +282,9 @@ describe("the fold", () => {
       });
     over();
     // Not at once: a pointer passing over on its way elsewhere does nothing.
-    expect(nav(container).className).not.toContain("absolute");
+    expect(nav(container).dataset.state).not.toBe("peek");
     act(() => vi.advanceTimersByTime(150));
-    expect(nav(container).className).toContain("absolute");
+    expect(nav(container).dataset.state).toBe("peek");
     // The room stays the rail's: the page does not move.
     expect(room().className).toContain("w-[60px]");
 
@@ -229,13 +292,13 @@ describe("the fold", () => {
       room().dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: document.body } as PointerEventInit));
     });
     act(() => vi.advanceTimersByTime(250));
-    expect(nav(container).className).not.toContain("absolute");
+    expect(nav(container).dataset.state).not.toBe("peek");
 
     over();
     act(() => vi.advanceTimersByTime(150));
     act(() => button("Keep the sidebar open")!.click());
     expect(document.cookie).toContain("gnosia-sidebar=open");
     expect(room().className).toContain("w-[260px]");
-    expect(nav(container).className).not.toContain("absolute");
+    expect(nav(container).dataset.state).not.toBe("peek");
   });
 });
