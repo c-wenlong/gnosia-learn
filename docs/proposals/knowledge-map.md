@@ -1,7 +1,7 @@
 # Proposal: the Learn page is a map of what you know
 
-Status: proposed, 2026-10-04. Nothing here is implemented. Decisions G1 to
-G8 are the build's defaults; G1 revises decision 13 of
+Status: being built in phases, 2026-10-04. Phase 1 (the layout) is built.
+Decisions G1 to G8 are the build's defaults; G1 revises decision 13 of
 [DESIGN.md](../design/DESIGN.md) and is the owner's to confirm.
 
 ## The problem
@@ -35,7 +35,7 @@ Measured on `self_learn` on 2026-10-04:
 | --- | --- | --- |
 | Concepts | 306 | Few enough to draw every node as SVG without a canvas renderer |
 | Prerequisite edges | 332 (216 `requires`, 116 `assumes`) | Sparse: about one edge per concept |
-| Separate clusters (connected components) | 33 | The map is islands, not one graph |
+| Separate clusters (connected components) | 34: 33 joined by edges, and one concept with no edge at all | The map is islands, not one graph |
 | Largest cluster | 89 concepts, 12 layers deep, 17 wide at its widest layer | Mostly CP4284, CP4282 and CP4285. About 1,900 by 1,200 pixels at today's spacing, so it needs zoom |
 | Next clusters | 34 (CS3230), 26 (CS4223), 26 (CS4225), 20 (CS4263) | Most clusters belong to one course |
 | Small clusters (4 concepts or fewer) | 23, holding 59 concepts | Need packing, or they scatter across the map |
@@ -156,6 +156,12 @@ working.
 | 2. Viewer | Pan, zoom, pinch, fit island and fit all on the Graph view; labels hide when zoomed out; it opens on the selected concept's island (G2); the workspace's "Open full course graph" button passes `scope=course`, and the graph view always writes `scope` to the URL | `?concept=<slug>&view=graph` opens zoomed to that island, and the button opens fitted to every island of the concept's course. Switching to Graph, then to course scope, then reloading shows the same view each time. A Playwright walk times a pan across the largest island on the owner's database and finds no frame over 50 ms |
 | 3. Reading the map | Node selection with the side panel, search to zoom, filter dims, the p(L) arc and the overdue and leech marks (G4), the ready highlight (G5), the "Not in a course" filter (G8). Pinch and drag at 375 pixels wide | Selecting "Vector as a list of numbers" shows its four dependants in the accent and the panel's "Open in workspace" lands on its page. With CS3230 in `recentModules`, only CS3230's ready concepts are highlighted, "Cost model and input size" among them. "Not in a course" leaves exactly the concepts in no course undimmed (10 today). The phone walk pans and zooms the largest island without a frame over 50 ms (else G3's fallback is taken, and this proposal is amended) |
 | 4. Keyboard, then the default | Keyboard: Tab and Shift-Tab move between islands in map order, focusing each island's title and fitting the view to it; Enter enters the island at its first concept; the arrow keys then move to a prerequisite, a dependant, or the next concept in the same layer, so every concept of an island is reachable; Enter opens the panel; Escape goes back to the island's title; a text summary for screen readers that names the islands and points to the table. Then, in the same PR, the map becomes the default view (G1) | Every concept on every island, panel included, can be reached with the keyboard alone, starting from the first island, and a screen reader announces the summary. Only then does `/learn` open on the map |
+
+Phase 1 measured on `self_learn`, 2026-10-04: the layout takes about 100 ms
+on the server for all 306 concepts. Counting crossings of straight lines
+between the dots, island by island, today's alphabetical rows cross 827
+times and the map 112; on the largest island 464 against 32. The map is
+3,572 by 5,804 at natural size, which phase 2's zoom is for.
 
 DESIGN.md's decision 13 row and the `/learn` screen row are rewritten in
 phase 4, when the default changes, not before. Until then the map is the

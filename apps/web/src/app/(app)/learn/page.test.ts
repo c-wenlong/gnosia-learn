@@ -121,6 +121,9 @@ describe("/learn", () => {
     });
     const html = await render({ concept: "beta", view: "graph" });
 
-    expect(html).toContain("Course graph of Beta");
+    // The Graph view is the whole map (phase 1 of docs/proposals/knowledge-map.md), Beta ringed on it.
+    expect(html).toContain('aria-label="Concept map, 2 concepts in 1 island"');
+    expect(html).toMatch(/data-concept="beta"[^>]*aria-pressed="true"/);
+    expect(html).toMatch(/data-concept="alpha"[^>]*aria-pressed="false"/);
   });
 });

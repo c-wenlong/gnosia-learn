@@ -1,6 +1,6 @@
 import { formatCaps } from "./blob-audit";
 import { ownerCapsOrError, type OwnerCaps } from "../content/blob";
-import { catalogInstance, contentSource } from "@self-learn/schema";
+import { catalogInstance, COMMONS_OWNER, contentSource } from "@self-learn/schema";
 import { sql } from "drizzle-orm";
 
 import {
@@ -82,6 +82,20 @@ export interface DoctorResult {
    */
   orderWarnings: { course: string; concept: string; prerequisite: string }[];
   /**
+   * Videos a course lists (`videos:` on a module, or on a lesson when `item`
+   * is set) that resolve to no `video` asset the module's owner can read.
+   * The module path leaves each off; a reference waiting for its tool to be
+   * indexed, so reported and never counted
+   * (docs/proposals/module-learning-path.md, "Videos name their concepts").
+   */
+  danglingVideos: { course: string; module: string; item: string | null; id: string }[];
+  /**
+   * Live modules on a vocabulary topic another live module also names, that
+   * list no video of their own: their path falls back to the topic's videos,
+   * which may be the other module's. Reported, never counted.
+   */
+  sharedTopicWithoutVideos: { course: string; module: string; topic: string }[];
+  /**
    * Concepts with no topic, archived ones included. Not a trigger: the
    * column is `NOT NULL` from Track C's contract migration (0012), which
    * refuses to run while this is not empty and makes it empty for good.
@@ -142,6 +156,8 @@ export async function doctor(
     courses: [],
     conceptlessCourses: [],
     orderWarnings: [],
+    danglingVideos: [],
+    sharedTopicWithoutVideos: [],
     conceptsWithoutTopic: [],
     conceptTopicRequired: false,
     blobContract: { inForce: false, unstored: [], unkeyed: [] },
@@ -219,6 +235,7 @@ export async function doctor(
   }));
 
   const soft = await db.execute<{ id: string; concept: string; prerequisite: string }>(outOfOrder("assumes"));
+  const { dangling, sharedWithout } = await listedVideos(db);
 
   // Archived concepts too: the column's `NOT NULL` binds every row, and
   // migration 0012 refuses while any row, archived or not, has a null.
@@ -278,6 +295,8 @@ export async function doctor(
       .filter((row) => row.items > 0 && row.withoutConcept === row.items)
       .map((row) => row.course),
     orderWarnings: soft.rows.map((row) => ({ course: row.id, concept: row.concept, prerequisite: row.prerequisite })),
+    danglingVideos: dangling,
+    sharedTopicWithoutVideos: sharedWithout,
     conceptsWithoutTopic: orphans.rows.map((row) => row.slug),
     conceptTopicRequired: topicColumn?.nullable === "NO",
     blobContract,
@@ -291,6 +310,60 @@ export async function doctor(
     // carries one over on purpose, and removing it is a person's decision.
     ok: !contradicted && !missingGuard && links.mixed.length === 0,
   };
+}
+
+/**
+ * The two module-path reports: listed videos that resolve to nothing, and
+ * modules on a shared topic that list none. Whole-database, as the rest of
+ * this report is; "resolves" means a `video` its module's owner can read
+ * (their own or the commons'), which is what the page asks. The item lists
+ * are read through `to_jsonb`, so a database without 0022 reports none.
+ */
+async function listedVideos(db: CatalogDatabase): Promise<{
+  dangling: DoctorResult["danglingVideos"];
+  sharedWithout: DoctorResult["sharedTopicWithoutVideos"];
+}> {
+  const listed = sql`
+    select m.parent_id as course, m.id as module, null::text as item, v.id, m.owner_id
+    from collection m
+    cross join jsonb_array_elements_text(coalesce(m.metadata -> 'videos', '[]'::jsonb)) as v(id)
+    where m.kind = 'module' and m.archived_at is null
+    union all
+    select m.parent_id, m.id, i.id, v.id, m.owner_id
+    from curriculum_item i
+    join collection m on m.id = i.collection_id
+    cross join jsonb_array_elements_text(coalesce(to_jsonb(i) -> 'videos', '[]'::jsonb)) as v(id)
+    where i.archived_at is null and m.archived_at is null`;
+  const dangling = await db.execute<{ course: string; module: string; item: string | null; id: string }>(sql`
+    with listed as (${listed})
+    select course, module, item, id from listed l
+    where not exists (
+      select 1 from asset a
+      where a.id = l.id and a.kind = 'video' and (a.owner_id = l.owner_id or a.owner_id = ${COMMONS_OWNER})
+    )
+    order by course collate "C", module collate "C", item collate "C" nulls first, id collate "C"
+  `);
+  const shared = await db.execute<{ course: string; module: string; topic: string }>(sql`
+    with listed as (${listed}),
+    module_topic as (
+      select m.parent_id as course, m.id as module, t.topic_slug as topic, m.owner_id
+      from collection m
+      join collection_item t on t.collection_id = m.id and t.topic_slug is not null
+      where m.kind = 'module' and m.archived_at is null
+    )
+    select course, module, topic from module_topic mt
+    -- Shared only between modules one owner can read together: two of
+    -- theirs, or one of theirs and one of the commons, which every owner
+    -- reads. Two owners on one commons topic never see each other's.
+    where exists (
+      select 1 from module_topic o
+      where o.topic = mt.topic and o.module <> mt.module
+        and (o.owner_id = mt.owner_id or o.owner_id = ${COMMONS_OWNER} or mt.owner_id = ${COMMONS_OWNER})
+    )
+      and not exists (select 1 from listed l where l.module = mt.module)
+    order by course collate "C", module collate "C"
+  `);
+  return { dangling: dangling.rows, sharedWithout: shared.rows };
 }
 
 export function formatDoctor(result: DoctorResult): string {
@@ -347,6 +420,23 @@ export function formatDoctor(result: DoctorResult): string {
       "",
       `assumes edges taught out of order (${result.orderWarnings.length}, warnings only):`,
       ...result.orderWarnings.map((w) => `  ${w.course.padEnd(10)} ${w.concept} before ${w.prerequisite}, which it assumes`),
+    );
+  }
+  if (result.danglingVideos.length > 0) {
+    lines.push(
+      "",
+      `listed videos that resolve to no video (${result.danglingVideos.length}, left off the module path, not counted):`,
+      ...result.danglingVideos.map(
+        (v) =>
+          `  ${v.course.padEnd(10)} ${v.item === null ? v.module : `${v.item} (${v.module})`} lists ${v.id}, which is no video in the catalog`,
+      ),
+    );
+  }
+  if (result.sharedTopicWithoutVideos.length > 0) {
+    lines.push(
+      "",
+      `modules on a shared topic that list no video (${result.sharedTopicWithoutVideos.length}, their path shows the topic's videos, not counted):`,
+      ...result.sharedTopicWithoutVideos.map((m) => `  ${m.course.padEnd(10)} ${m.module} on ${m.topic}`),
     );
   }
   lines.push(
