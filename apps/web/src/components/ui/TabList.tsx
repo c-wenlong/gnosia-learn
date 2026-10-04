@@ -80,8 +80,12 @@ export function TabList<T extends string>({
       aria-orientation={vertical ? "vertical" : "horizontal"}
       onKeyDown={onKeyDown}
       className={cx(
-        "flex gap-1 overflow-x-auto border-b-2 border-border [scrollbar-width:none]",
-        responsive && "xl:sticky xl:top-6 xl:w-[200px] xl:shrink-0 xl:flex-col xl:overflow-visible xl:border-b-0",
+        // The baseline is an inset shadow, not a border: a row that scrolls
+        // sideways clips at its padding box, so a tab pulled down over the
+        // row's own border had its accent line cut off. The shadow is painted
+        // under the tabs, so the chosen one's line covers it.
+        "flex gap-1 overflow-x-auto shadow-[inset_0_-2px_0_var(--border)] [scrollbar-width:none]",
+        responsive && "xl:sticky xl:top-6 xl:w-[200px] xl:shrink-0 xl:flex-col xl:overflow-visible xl:shadow-none",
         className,
       )}
     >
@@ -102,10 +106,10 @@ export function TabList<T extends string>({
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(item.id)}
             className={cx(
-              "relative -mb-0.5 flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-[14px] font-medium whitespace-nowrap",
+              "relative flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-[14px] font-medium whitespace-nowrap",
               "transition-colors duration-150 motion-reduce:transition-none",
               "focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-accent",
-              responsive && "xl:mb-0 xl:h-10 xl:gap-2.5 xl:rounded-lg xl:border-b-0 xl:px-2.5 xl:py-0",
+              responsive && "xl:h-10 xl:gap-2.5 xl:rounded-lg xl:border-b-0 xl:px-2.5 xl:py-0",
               active ? "border-accent text-text" : "border-transparent text-text2 hover:text-text",
               responsive && (active ? "xl:bg-surface2" : "xl:hover:bg-surface2"),
             )}
