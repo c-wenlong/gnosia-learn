@@ -534,7 +534,10 @@ None blocks phase 1. For later work:
    measured and costs nothing; an install per job would take minutes and the
    network the profile denies.
 3. Whether revideokc's narrate profile needs the same shells remotionkc's
-   does. It allows `/bin/sh` and not the shell `sh` runs, so a revideokc
-   checkout at a path long enough for uv to write `#!/bin/sh` console scripts
-   would fail its narration the way remotionkc's did before `scriptShells`.
-   The owner's checkout is not at such a path today.
+   does. **Answered: yes, and it has them since #314.** It allowed `/bin/sh`
+   and not the shell `sh` runs, so a revideokc checkout at a path long enough
+   for uv to write `#!/bin/sh` console scripts failed its narration with
+   "Failed to exec /bin/bash as variant for /bin/sh", reproduced with a venv
+   python path of 245 characters. Both backends now read the console
+   script's first line (`video/script-shells.ts`) and allow `/bin/sh` and the
+   shell it runs only when the script needs them.
