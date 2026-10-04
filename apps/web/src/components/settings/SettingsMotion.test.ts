@@ -27,6 +27,8 @@ const { DataSettings, GeneralSettings } = await import("./SettingsForm");
 const { MOTION_COOKIE, readMotionCookie } = await import("@/lib/motion");
 
 beforeAll(() => {
+  // jsdom lays nothing out, so the open list has no row to scroll to.
+  Element.prototype.scrollIntoView ??= () => undefined;
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
@@ -67,15 +69,14 @@ function mount(snapshot: SettingsSnapshot, tab: "general" | "data" = "general") 
   return container;
 }
 
-function choose(select: HTMLSelectElement, value: string) {
-  act(() => {
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+/** Opens the kit `Select` and presses the option with this value. */
+function choose(trigger: HTMLButtonElement, value: string) {
+  act(() => trigger.click());
+  act(() => trigger.parentElement!.querySelector<HTMLElement>(`[role="option"][data-value="${value}"]`)!.click());
 }
 
 const motionSelect = (container: HTMLElement) =>
-  [...container.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "always"))!;
+  [...container.querySelectorAll<HTMLButtonElement>('[aria-haspopup="listbox"]')].find((b) => b.getAttribute("aria-label")?.startsWith("Motion:"))!;
 
 describe("the motion setting", () => {
   it("applies Always reduce motion at once, as the cookie and data-motion, and saves it", async () => {

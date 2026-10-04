@@ -7,9 +7,10 @@ import type { StudioAgentPreference } from "@self-learn/schema/shared";
 import { saveStudioAgent } from "@/app/(app)/studio/actions";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { usePanelHost } from "@/components/studio/panel-host";
-import { cx, inputClasses, LABEL } from "@/components/ui/classes";
+import { cx, LABEL } from "@/components/ui/classes";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { Panel } from "@/components/ui/Panel";
+import { Select } from "@/components/ui/Select";
 import type { AgentKind } from "@/lib/studio-agent-settings";
 
 /**
@@ -146,12 +147,7 @@ export function StudioSettings({
   );
 }
 
-/**
- * One menu: a native `<select>` in the kit's field face. Native rather than
- * the kit's `FilterMenu`, whose popover a short dialog clips, and whose
- * filled "active" face reads as a filter being on; a phone gets its own
- * picker for free.
- */
+/** One menu: the kit `Select` under its label, its list in the top layer so the dialog cannot clip it. */
 function Menu({
   label,
   options,
@@ -171,33 +167,7 @@ function Menu({
       <label htmlFor={id} className={LABEL}>
         {label}
       </label>
-      <span className="relative flex min-w-0">
-        <select
-          id={id}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          aria-busy={busy || undefined}
-          className={inputClasses({ className: "cursor-pointer appearance-none truncate pr-9" })}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <svg
-          aria-hidden
-          viewBox="0 0 16 16"
-          className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-text2"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m4 6 4 4 4-4" />
-        </svg>
-      </span>
+      <Select id={id} label={label} options={options} value={value} busy={busy} onChange={onChange} />
     </div>
   );
 }
