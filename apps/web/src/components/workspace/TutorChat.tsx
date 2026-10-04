@@ -212,6 +212,13 @@ function writeSession(slug: string, id: string | null): void {
  */
 const savingAnswer = new Map<string, Record<string, unknown>>();
 
+/**
+ * The write in flight per concept. Saves on one thread run one at a time, so
+ * `savingAnswer` only ever holds the one in flight, and a close always resends
+ * the answer that might open the session.
+ */
+const saveQueue = new Map<string, Promise<void>>();
+
 /** Close the thread's session, if an answer opened one, and forget it. Idempotent on the server. */
 function closeSession(slug: string): void {
   const id = readSession(slug);
@@ -453,6 +460,12 @@ export function TutorChat({
         keepalive: true,
       });
     };
+    // One save at a time per thread (see `saveQueue`).
+    const ahead = saveQueue.get(slug);
+    let release: () => void = () => {};
+    const mine = new Promise<void>((resolve) => (release = resolve));
+    saveQueue.set(slug, mine);
+    if (ahead) await ahead;
     try {
       let res = await send(session());
       let data = (await res.json().catch(() => null)) as ObserveReply | null;
@@ -481,6 +494,8 @@ export function TutorChat({
     } finally {
       recording.current.delete(requestId);
       if ((savingAnswer.get(slug) as { requestId?: string } | undefined)?.requestId === requestId) savingAnswer.delete(slug);
+      release();
+      if (saveQueue.get(slug) === mine) saveQueue.delete(slug);
     }
   }
 
