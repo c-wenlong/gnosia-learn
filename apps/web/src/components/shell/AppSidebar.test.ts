@@ -78,6 +78,19 @@ async function mount(studio: boolean, page: () => null = () => null) {
 
 const nav = (container: HTMLElement) => container.querySelector<HTMLElement>('nav[aria-label="Primary"]')!;
 
+/** The frame without a studio, folded, mounted in one act. */
+function mountFoldedForClip() {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root: Root = createRoot(container);
+  act(() => root.render(createElement(ShellFrame, { studio: false, initialCollapsed: true } as ComponentProps<typeof ShellFrame>, null)));
+  mounted.push(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+  return { container };
+}
+
 describe("the sidebar", () => {
   it("lists only the five destinations, and reads no conversations, without a studio", async () => {
     const container = await mount(false);
@@ -137,6 +150,25 @@ describe("the sidebar", () => {
     mocks.displayName = "Ada Lovelace";
     const named = await mount(false);
     expect(nav(named).querySelector("button[aria-expanded]")?.textContent).toBe("Ada Lovelace");
+  });
+
+  it("wraps Tab inside the drawer past the closed account menu, which is inert", async () => {
+    const container = await mount(true);
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    const account = nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    account.focus();
+    // Tab from the account row, the last stop that is not inert, wraps to the first.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    });
+    expect(document.activeElement?.closest("[inert]")).toBeNull();
+    expect(document.activeElement).not.toBe(account);
+    expect(nav(container).contains(document.activeElement)).toBe(true);
+  });
+
+  it("does not clip the nav, so the account menu can open past the rail", () => {
+    const { container } = mountFoldedForClip();
+    expect(nav(container).className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
   });
 
   it("closes the drawer on Back or Forward, which can change the studio's view without its path", async () => {

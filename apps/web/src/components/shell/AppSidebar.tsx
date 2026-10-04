@@ -114,7 +114,10 @@ export function AppSidebar() {
       }
       // Tab stays inside the drawer: the page behind it is covered.
       if (event.key !== "Tab" || panel.current === null) return;
-      const stops = [...panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled])")];
+      // Not what is inert (the closed account menu, mounted so it can fade).
+      const stops = [...panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled])")].filter(
+        (stop) => stop.closest("[inert]") === null,
+      );
       const first = stops[0];
       const last = stops.at(-1);
       if (first === undefined || last === undefined) return;
@@ -201,7 +204,9 @@ export function AppSidebar() {
           // otherwise have to read it back out of the classes.
           data-state={drawer ? "drawer" : peeking ? "peek" : rail ? "rail" : "open"}
           className={cx(
-            "flex flex-col overflow-hidden border-r border-hair bg-surface motion-reduce:transition-none",
+            // No overflow clipping on the nav itself: the account menu opens past its
+            // edge on the rail. Each part clips its own labels instead.
+            "flex flex-col border-r border-hair bg-surface motion-reduce:transition-none",
             // A phone: off the left edge until the drawer opens, then slid in.
             // `invisible` once out, so nothing in it takes focus, and only
             // once out: visibility waits for the slide to finish.
@@ -220,7 +225,7 @@ export function AppSidebar() {
           {/* The wordmark at the left and the fold at the right, both placed
               absolutely so neither moves while the width changes: the fold sits
               12px in from the right edge, which on the 60px rail is its centre. */}
-          <div className="relative h-14 shrink-0">
+          <div className="relative h-14 shrink-0 overflow-hidden">
             <Link
               href={studio ? STUDIO_DESTINATION.href : "/home"}
               onClick={pick}
