@@ -221,3 +221,36 @@ export function subtitleAt(cues: readonly TranscriptCue[], time: number): string
   const chunks = captionChunks(best);
   return (chunks.find((chunk) => time < chunk.end) ?? chunks[chunks.length - 1])?.text ?? null;
 }
+
+/** Seconds one arrow press moves the playhead. */
+export const SKIP_STEP = 5;
+
+/** How long the skip flash stays up after the last press, in milliseconds. */
+export const SKIP_FLASH_MS = 1000;
+
+/**
+ * The "+5 ›" or "‹ −5" the player flashes on an arrow press. `shown` goes
+ * false when the flash times out, and the rest is kept so it fades out with
+ * the number it had rather than blanking first.
+ */
+export interface SkipFlash {
+  direction: 1 | -1;
+  /** The total of every press in this run, always a multiple of `SKIP_STEP`. */
+  seconds: number;
+  shown: boolean;
+}
+
+/**
+ * The flash after one more press. A press in the same direction while the
+ * last flash is still up adds to its total, as a video site does; a press
+ * after it went, or the other way, starts a new run at one step.
+ */
+export function nextSkip(prev: SkipFlash | null, direction: 1 | -1): SkipFlash {
+  const running = prev !== null && prev.shown && prev.direction === direction;
+  return { direction, seconds: running ? prev.seconds + SKIP_STEP : SKIP_STEP, shown: true };
+}
+
+/** What the flash reads: "+ 10" forward, "− 10" back, with a true minus. */
+export function skipLabel(flash: SkipFlash): string {
+  return `${flash.direction > 0 ? "+" : "−"} ${flash.seconds}`;
+}
