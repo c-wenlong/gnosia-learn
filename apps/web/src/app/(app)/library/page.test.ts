@@ -13,10 +13,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 const loadLibrary = vi.hoisted(() => vi.fn());
 const loadKnowledgeBase = vi.hoisted(() => vi.fn());
+const loadFavorites = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/asset-library", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/asset-library")>()),
   loadLibrary,
+  loadFavorites,
   loadAssetAccess: async () => ({ served: new Set<string>(), posters: new Set<string>() }),
   loadSearchText: async () => ({ texts: {}, sources: {}, searchedText: false, skipped: 0 }),
 }));
@@ -96,6 +98,8 @@ describe("/library", () => {
       titles: { "operating-systems": "Operating systems" },
       concepts: { "video:paging": ["paging"], "note:tlb": ["tlb"] },
     });
+    loadFavorites.mockReset();
+    loadFavorites.mockResolvedValue(new Set(["note:tlb"]));
     loadKnowledgeBase.mockResolvedValue({
       reachable: true,
       kb: {
@@ -154,5 +158,29 @@ describe("/library", () => {
     expect(currentLayout(html)).toEqual({ href: "/library?sort=title&amp;view=list", label: "List" });
     expect(html).toContain('href="/library?sort=title"');
     expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="view"[^>]*value="list"/);
+  });
+
+  it("shows only the starred assets with ?favorites=1, and keeps the filter on a search", async () => {
+    const html = await render({ favorites: "1", view: "list" });
+    expect(html).toContain("The TLB");
+    expect(html).not.toContain("Paging, step by step");
+    expect(html).not.toContain("OSTEP");
+    expect(html).toContain("1 of 3 assets");
+    expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="favorites"[^>]*value="1"/);
+  });
+
+  it("does not read the stars when the filter is off", async () => {
+    await render();
+    expect(loadFavorites).not.toHaveBeenCalled();
+  });
+
+  it("says how to star something when nothing is starred, and says so when the stars cannot be read", async () => {
+    loadFavorites.mockResolvedValueOnce(new Set());
+    expect(await render({ favorites: "1" })).toContain("Nothing is starred yet. Press Favorite on an asset");
+
+    loadFavorites.mockResolvedValueOnce(null);
+    const down = await render({ favorites: "1" });
+    expect(down).toContain("Your stars could not be read just now");
+    expect(down).toContain("No assets match");
   });
 });
