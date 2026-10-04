@@ -14,8 +14,8 @@ import { usePresence } from "@/components/ui/use-presence";
 import { isCurrentRow } from "@/lib/nav";
 import type { RecentChange } from "@/lib/recent-client";
 import {
+  cleanTitle,
   mergeStreams,
-  named,
   recentGroups,
   splitPinned,
   type PinnedRow,
@@ -23,7 +23,8 @@ import {
   type RecentKind,
   type SidebarCourse,
 } from "@/lib/recent-core";
-import { draftRows } from "@/lib/studio-draft-list";
+import { announceDraftChange, draftRows } from "@/lib/studio-draft-list";
+import { renameDraft } from "@/lib/studio-drafts";
 import { conversationHref } from "@/lib/studio-view";
 
 import { SearchResults } from "./ChatSearch";
@@ -49,6 +50,12 @@ import { useRecent } from "./use-recent";
  * has more could still outrank, so Show older is never wrong about order.
  * Without a studio the catalog's read is the whole list.
  *
+ * Rename keeps the name on the conversation's draft, through the runner
+ * (`renameDraft`), so the studio's own pages, Home and the runner's search
+ * all call it by the same name (`conversationTitle`). The new name shows at
+ * once and stays until the runner's list carries it, or is taken back when
+ * the runner refuses it.
+ *
  * Each section label is 13px grey and sticks to the top of the sidebar's
  * scroller while its section scrolls under it. A row's more button appears on
  * hover or focus (always, on a screen with no hover), and its menu has Pin,
@@ -67,30 +74,55 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
   const recent = useRecent(studio);
   const conversations = useConversations(studio, chats);
   const model = recent.model;
-  const names = model?.names ?? {};
   const path = chats?.path ?? "/studio";
   const active = chats?.active ?? null;
   const pending = chats?.pending ?? null;
 
-  // The runner's conversations as Recent's rows, named as the owner named them.
+  // Names given here that the runner's list may not carry yet, by draft id;
+  // null is a name taken off. Each goes once a list carries it, or at once
+  // when the runner refused it.
+  const [renames, setRenames] = useState<Readonly<Record<string, string | null>>>({});
+  const drop = (draftId: string) => setRenames((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== draftId)));
+  async function rename(draftId: string, typed: string | null) {
+    // A field left blank takes the name off, and the planner's title shows again.
+    const name = typed === null ? null : cleanTitle(typed);
+    setRenames((current) => ({ ...current, [draftId]: name }));
+    const saved = await renameDraft(draftId, name);
+    // Read back either way: a refused rename puts the row back as the runner has it.
+    const read = await conversations.refresh();
+    // A saved name stays shown until a read carries it, so a read that failed
+    // does not put the old name back over one the runner kept.
+    if (!saved.ok || read) drop(draftId);
+    // An open conversation hears it from its own stream; Home and the rest of the shell from this.
+    if (saved.ok) announceDraftChange(draftId);
+  }
+  // Dropped while rendering, as `useConversations` adopts a page's list: the
+  // render that sees the list carry a name is the one that lets it go.
+  const listed = conversations.list;
+  const carried = Object.entries(renames).filter(([id, name]) => listed?.drafts.some((d) => d.draftId === id && (d.name ?? null) === name) === true);
+  if (carried.length > 0) {
+    setRenames((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !carried.some(([gone]) => gone === id))));
+  }
+
+  // The runner's conversations as Recent's rows, called as `conversationTitle` calls them.
   const fromRunner =
     conversations.list === null
       ? null
-      : named(
-          draftRows(conversations.list.drafts, conversations.titles).map(
-            (row): RecentItem => ({
-              key: `draft:${row.draftId}`,
-              kind: "draft",
-              title: row.heading,
-              detail: row.state,
-              href: `/studio?draft=${encodeURIComponent(row.draftId)}`,
-              at: row.updated,
-              draftId: row.draftId,
-              quoted: row.quoted,
-              briefed: row.briefed,
-            }),
-          ),
-          names,
+      : draftRows(
+          conversations.list.drafts.map((draft) => (draft.draftId in renames ? { ...draft, name: renames[draft.draftId] } : draft)),
+          conversations.titles,
+        ).map(
+          (row): RecentItem => ({
+            key: `draft:${row.draftId}`,
+            kind: "draft",
+            title: row.heading,
+            detail: row.state,
+            href: `/studio?draft=${encodeURIComponent(row.draftId)}`,
+            at: row.updated,
+            draftId: row.draftId,
+            quoted: row.quoted,
+            briefed: row.briefed,
+          }),
         );
   const streams = [
     ...(model === null ? [] : [{ items: model.items, more: model.more }]),
@@ -135,6 +167,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
       courseHref={item.kind === "module" ? courseOf(item.key) : null}
       onClick={item.kind === "draft" ? rowClick(chats?.navigate ?? null, linkFor(item), onPick) : onPick}
       onChange={recent.change}
+      onRename={item.kind === "draft" ? (name) => void rename(item.key.slice("draft:".length), name) : null}
     />
   );
 
@@ -167,8 +200,6 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
             <SearchResults
               search={search}
               studio={studio}
-              names={names}
-              renamed={(fromRunner ?? []).filter((item) => names[item.key] !== undefined)}
               path={path}
               active={active}
               navigate={chats?.navigate ?? null}
@@ -388,6 +419,7 @@ function RecentRow({
   courseHref,
   onClick,
   onChange,
+  onRename,
 }: {
   item: { key: string; kind: RecentKind; title: string; href: string };
   href: string;
@@ -399,6 +431,8 @@ function RecentRow({
   courseHref: string | null;
   onClick: (event: React.MouseEvent<HTMLAnchorElement>) => void;
   onChange: (change: RecentChange) => Promise<boolean>;
+  /** A conversation's Rename: a name, or null to take the name off. Null for every other kind. */
+  onRename: ((name: string | null) => void) | null;
 }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -412,7 +446,9 @@ function RecentRow({
         onDone={(name) => {
           setRenaming(false);
           requestAnimationFrame(() => more.current?.focus());
-          if (name !== null && name !== item.title) void onChange({ action: "rename", key: item.key, name });
+          // Undefined is Escape. A blank field takes the name off; an unchanged one writes nothing.
+          if (name === undefined || name === item.title) return;
+          onRename?.(name);
         }}
       />
     );
@@ -484,7 +520,7 @@ function RecentRow({
               >
                 {pinned ? "Unpin" : "Pin"}
               </MenuItem>
-              {item.kind === "draft" && (
+              {onRename !== null && (
                 <MenuItem
                   glyph="rename"
                   onSelect={() => {
@@ -604,14 +640,18 @@ function MenuItem({ glyph, href, onSelect, children }: { glyph: GlyphName; href?
   );
 }
 
-/** Rename in place: Enter keeps the name, Escape keeps the old one, and leaving the field keeps what was typed. */
-function RenameField({ title, onDone }: { title: string; onDone: (name: string | null) => void }) {
+/**
+ * Rename in place: Enter keeps the name, Escape keeps the old one, and leaving
+ * the field keeps what was typed. A field emptied and kept takes the name off
+ * (`null`), so the planner's title shows again; Escape is `undefined`.
+ */
+function RenameField({ title, onDone }: { title: string; onDone: (name: string | null | undefined) => void }) {
   const [value, setValue] = useState(title);
   const done = useRef(false);
-  const finish = (name: string | null) => {
+  const finish = (name: string | undefined) => {
     if (done.current) return;
     done.current = true;
-    onDone(name === null ? null : name.trim() === "" ? null : name);
+    onDone(name === undefined ? undefined : name.trim() === "" ? null : name);
   };
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" && !isImeKey(event.nativeEvent)) {
@@ -620,7 +660,7 @@ function RenameField({ title, onDone }: { title: string; onDone: (name: string |
     } else if (event.key === "Escape") {
       // The field's Escape, not the drawer's.
       event.stopPropagation();
-      finish(null);
+      finish(undefined);
     }
   };
   return (

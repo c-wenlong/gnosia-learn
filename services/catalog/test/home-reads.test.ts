@@ -1,7 +1,7 @@
 import { draft, learner, LOCAL_LEARNER_ID, session } from "@self-learn/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { asRecentModules, appendEvent, draftsByIds, readEvents, recentDrafts, recentTutorSessions, withRecentModule } from "../src/state";
+import { asRecentModules, appendEvent, readEvents, recentDrafts, recentTutorSessions, withRecentModule } from "../src/state";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -86,13 +86,27 @@ describe.skipIf(!reachable.ok)("recentDrafts", () => {
     expect(drafts[0]?.updatedAt).toBe("2026-10-03T10:02:00.000Z");
   });
 
-  it("reads some of one owner's drafts by id, titled or not, leaving abandoned ones and other owners' out", async () => {
-    const drafts = await draftsByIds(scratch.db, LOCAL_LEARNER_ID, ["untitled", "titled", "abandoned", "theirs", "missing"]);
-    expect(drafts.map((d) => [d.id, d.title])).toEqual([
-      ["untitled", ""],
-      ["titled", "titled"],
+  it("lists a draft the owner named before the planner titled it, and gives both words back as they are", async () => {
+    await scratch.db.delete(draft);
+    const row = (id: string, minutes: number, extra: Partial<typeof draft.$inferInsert> = {}) => ({
+      id,
+      plannerSessionId: `s-${id}`,
+      transcriptPath: `drafts/${id}/transcript.ndjson`,
+      title: null,
+      updatedAt: new Date(Date.UTC(2026, 9, 4, 10, minutes)),
+      ...extra,
+    });
+    await scratch.db.insert(draft).values([
+      row("named", 1, { name: "Transport layer" }),
+      row("both", 2, { name: "Mine", title: "Planner's" }),
+      row("blank-name", 3, { name: "\u3000" }),
+      row("neither", 4),
     ]);
-    expect(await draftsByIds(scratch.db, LOCAL_LEARNER_ID, [])).toEqual([]);
+    const drafts = await recentDrafts(scratch.db, LOCAL_LEARNER_ID, 5);
+    expect(drafts.map((d) => [d.id, d.name, d.title])).toEqual([
+      ["both", "Mine", "Planner's"],
+      ["named", "Transport layer", null],
+    ]);
   });
 });
 

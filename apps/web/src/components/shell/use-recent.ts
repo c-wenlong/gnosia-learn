@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { changeRecent, fetchRecent, type RecentChange } from "@/lib/recent-client";
-import { named, withName, withoutPin, withPin, type RecentModel } from "@/lib/recent-core";
+import { withoutPin, withPin, type RecentModel } from "@/lib/recent-core";
 import { useDraftsWake } from "@/lib/use-drafts-wake";
 
 /** How long a run of navigations rests before Recent is read again. */
@@ -15,7 +15,7 @@ export interface RecentState {
   model: RecentModel | null;
   /** One more page; resolves false, and keeps the pages shown, when the server did not answer. */
   showOlder: () => Promise<boolean>;
-  /** Pin, unpin or rename a row: shown at once, saved, then read back. False when the save failed. */
+  /** Pin or unpin a row: shown at once, saved, then read back. False when the save failed. */
   change: (change: RecentChange) => Promise<boolean>;
 }
 
@@ -92,11 +92,6 @@ export function applyChange(model: RecentModel, change: RecentChange): RecentMod
       return { ...model, pinned: withPin(model.pinned, { ...change.row, at: new Date().toISOString() }) };
     case "unpin":
       return { ...model, pinned: withoutPin(model.pinned, change.key) };
-    case "rename": {
-      const name = change.name.replace(/\s+/g, " ").trim();
-      const names = withName(model.names, change.key, name === "" ? null : name);
-      return { ...model, names, items: named(model.items, names) };
-    }
   }
 }
 
@@ -112,9 +107,8 @@ export interface RecentSearch {
 
 /**
  * The sidebar search over Recent's catalog rows: every kind but the studio's
- * conversations when there is a studio, save the ones the owner renamed,
- * which the catalog finds by their names; the runner searches the rest by
- * their own words, first messages too (`useHistorySearch`), and
+ * conversations when there is a studio; the runner searches those by their
+ * names and their own words, first messages too (`useHistorySearch`), and
  * `SearchResults` merges the two. Asked once typing rests, and an answer for
  * words no longer in the field is dropped.
  */
@@ -127,9 +121,7 @@ export function useRecentSearch(words: string, studio: boolean): RecentSearch {
     // Cleared when the words change: an answer for words typed over is dropped.
     let live = true;
     const timer = setTimeout(() => {
-      // With a studio, the catalog leaves conversations to the runner's search
-      // except the ones the owner renamed, which only the catalog can find by
-      // their names (`readRecent`).
+      // With a studio, the catalog leaves conversations to the runner's search.
       void fetchRecent({ pages: 1, drafts: !studio, q: words }).then((answer) => {
         if (!live) return;
         if (answer === null || !answer.reachable) {
