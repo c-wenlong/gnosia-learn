@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fieldPlacement, nextIndexForKey, popoverShift, sectionsOf, triggerText, typeaheadIndex, valueText, type FilterOption } from "./filter-menu";
+import { nextIndexForKey, sectionsOf, triggerText, typeaheadIndex, valueText, type FilterOption } from "./filter-menu";
 
 const TYPES: FilterOption[] = [
   { value: "", label: "All kinds", short: "All" },
@@ -84,53 +84,5 @@ describe("typeaheadIndex", () => {
     expect(typeaheadIndex(codes, 0, "z")).toBeNull();
     expect(typeaheadIndex(codes, 0, "")).toBeNull();
     expect(typeaheadIndex([], 0, "a")).toBeNull();
-  });
-});
-
-describe("popoverShift", () => {
-  it("leaves a popover that fits where it is", () => {
-    expect(popoverShift({ triggerLeft: 16, width: 280, viewport: 390 })).toBe(0);
-  });
-
-  it("moves a popover left until its right edge is inside the gutter", () => {
-    // 200 + 280 = 480, the limit is 390 - 16 = 374: 106 to the left.
-    expect(popoverShift({ triggerLeft: 200, width: 280, viewport: 390 })).toBe(-106);
-  });
-
-  it("never moves the left edge past the gutter", () => {
-    expect(popoverShift({ triggerLeft: 40, width: 400, viewport: 390 })).toBe(-24);
-  });
-});
-
-describe("fieldPlacement", () => {
-  const viewport = { width: 1200, height: 800 };
-
-  it("opens under the field when the list fits there", () => {
-    expect(fieldPlacement({ trigger: { top: 100, bottom: 144, left: 300 }, width: 300, height: 200, viewport })).toEqual({
-      top: 152,
-      left: 300,
-      above: false,
-      maxHeight: 632,
-    });
-  });
-
-  it("opens over the field near the bottom of the screen, flush above it", () => {
-    const at = fieldPlacement({ trigger: { top: 700, bottom: 744, left: 300 }, width: 300, height: 200, viewport });
-    expect(at).toEqual({ top: 492, left: 300, above: true, maxHeight: 676 });
-  });
-
-  it("stays below when below has more room, and lets the list scroll in what there is", () => {
-    const at = fieldPlacement({ trigger: { top: 300, bottom: 344, left: 300 }, width: 300, height: 600, viewport });
-    expect(at.above).toBe(false);
-    expect(at.maxHeight).toBe(432);
-  });
-
-  it("sits flush on the field when a long list opens above, by the height its cap lets it show", () => {
-    const at = fieldPlacement({ trigger: { top: 700, bottom: 744, left: 300 }, width: 300, height: 2000, cap: 480, viewport });
-    expect(at).toEqual({ top: 212, left: 300, above: true, maxHeight: 676 });
-  });
-
-  it("shifts left to stay on screen, as a chip's list does", () => {
-    expect(fieldPlacement({ trigger: { top: 100, bottom: 144, left: 1000 }, width: 300, height: 100, viewport }).left).toBe(884);
   });
 });

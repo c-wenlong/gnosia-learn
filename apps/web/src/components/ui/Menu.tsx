@@ -5,7 +5,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -15,18 +14,14 @@ import {
   type ReactNode,
 } from "react";
 
-import { cx } from "./classes";
+import { cx, MENU_HEADING, MENU_PANEL, menuRowClasses } from "./classes";
 import { typeaheadIndex } from "./filter-menu";
 import { Glyph, type GlyphName } from "./Glyph";
-import { menuPlacement, type MenuPlace } from "./menu-place";
+import { Popover } from "./Popover";
 import { tabKeyIndex } from "./roving";
-import { usePresence } from "./use-presence";
 
 /** A pause this long between keys starts a new typeahead prefix. */
 const TYPEAHEAD_RESET_MS = 700;
-
-/** The leave animation's length (`animate-pop-out`). */
-const EXIT_MS = 120;
 
 interface MenuControls {
   /** Close the menu; `refocus` puts focus back on its button. */
@@ -53,20 +48,19 @@ function useMenu(): MenuControls {
  * Down move and wrap, Home and End jump, a letter goes to the next item
  * starting with it, Enter and Space choose. Escape closes with focus back on
  * the button, and so does a choice; Tab closes and lets focus move on; a
- * press outside closes. Every item is `tabIndex={-1}`, so the list is one
- * stop for Tab, as the pattern asks.
+ * press outside or the focus leaving closes. Every item is `tabIndex={-1}`,
+ * so the list is one stop for Tab, as the pattern asks. Escape is the kit
+ * `Popover`'s: it closes this menu only, so a dialog around it stays open.
  *
- * **Where it opens.** In the top layer, as a manual popover at fixed
- * coordinates (`menuPlacement`): a card or a list row clips what overflows
- * it, and a menu must not be cut by the card it belongs to. Under the button,
- * its edge on the button's (`align`, the end by default, for a more button at
- * a row's right), above when there is more room there, kept inside the
- * screen, and placed again on a scroll or a resize, since a fixed list does
- * not move with the page.
+ * **Where it opens.** The list is a kit `Popover` in the kit's menu box
+ * (`MENU_PANEL`, rows from `menuRowClasses`): in the top layer at fixed
+ * coordinates, so the card or list row it belongs to cannot clip it. Under
+ * the button, its edge on the button's (`align`, the end by default, for a
+ * more button at a row's right), above when there is more room there, kept
+ * inside the screen, and placed again on a scroll or a resize.
  *
- * **Motion.** It pops in from the corner it opened at (`animate-pop-in`) and
- * pops out (`usePresence`: kept 120ms, inert), and goes at once under reduced
- * motion.
+ * **Motion.** It pops in from the corner it opened at and out again (kept
+ * 120ms, inert), and goes at once under reduced motion.
  *
  * **It keeps its events.** A click or a key inside the button or the list
  * does not reach the elements around it (`stopPropagation`), so a menu on a
@@ -97,15 +91,12 @@ export function Menu({
   children: ReactNode;
 }) {
   const [open, setOpenState] = useState(false);
-  const [place, setPlace] = useState<MenuPlace | null>(null);
-  const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   // Which item opening focuses: the first, the last (Up on the button), or the checked one.
   const opening = useRef<"first" | "last">("first");
   const typed = useRef({ buffer: "", at: 0 });
   const id = useId();
-  const presence = usePresence(open, EXIT_MS);
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -125,52 +116,16 @@ export function Menu({
 
   const items = () => [...(list.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])];
 
-  // Escape and a press outside, as FilterMenu and AccountMenu listen for them.
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) close(false);
-    };
-    document.addEventListener("pointerdown", onPointer);
-    return () => document.removeEventListener("pointerdown", onPointer);
-  }, [open, close]);
-
-  // Opening: show the popover, place it, then focus an item. A layout effect,
-  // so the list never paints at the corner of the screen before it moves.
+  // Opening: focus an item. A layout effect, which runs after the
+  // `Popover`'s own (a child's run first), so the list is showing and placed
+  // by then, and never paints with nothing focused.
   useLayoutEffect(() => {
     if (!open) return;
-    const box = list.current;
-    if (box !== null && typeof box.showPopover === "function") {
-      try {
-        box.showPopover();
-      } catch {
-        // Already showing: opened again on its way out.
-      }
-    }
-    const measure = () => {
-      const at = button.current?.getBoundingClientRect();
-      if (at === undefined || box === null) return;
-      const viewport = { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight };
-      const height = box.scrollHeight + box.offsetHeight - box.clientHeight;
-      const next = menuPlacement({ trigger: at, width: box.offsetWidth, height, viewport, align });
-      setPlace((held) =>
-        held !== null && held.top === next.top && held.left === next.left && held.above === next.above && held.maxHeight === next.maxHeight
-          ? held
-          : next,
-      );
-    };
-    measure();
     const all = items();
     const checked = all.find((item) => item.getAttribute("aria-checked") === "true");
     const first = opening.current === "last" ? all[all.length - 1] : (checked ?? all[0]);
     first?.focus({ preventScroll: true });
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, { capture: true, passive: true });
-    return () => {
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, { capture: true });
-    };
-  }, [open, align]);
+  }, [open]);
 
   const show = (from: "first" | "last") => {
     opening.current = from;
@@ -188,13 +143,8 @@ export function Menu({
   const onListKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const all = items();
     const at = all.indexOf(document.activeElement as HTMLElement);
-    if (event.key === "Escape") {
-      // The menu's Escape only: inside a modal dialog an Escape nobody
-      // cancels would close the dialog too.
-      event.preventDefault();
-      close(true);
-      return;
-    }
+    // Escape never gets here: the `Popover` takes it first, closes this
+    // menu only and puts focus back on the button.
     if (event.key === "Tab") {
       close(false);
       return;
@@ -228,7 +178,6 @@ export function Menu({
   return (
     <MenuContext.Provider value={{ close }}>
       <div
-        ref={root}
         className="relative inline-flex"
         // The menu's events are its own: a row around it that opens on a press must not hear them.
         onClick={(event) => event.stopPropagation()}
@@ -248,52 +197,29 @@ export function Menu({
         >
           {trigger}
         </button>
-        {presence.mounted && (
-          <div
-            ref={list}
-            id={presence.leaving ? undefined : listId}
-            role="menu"
-            aria-label={menuLabel ?? label}
-            aria-orientation="vertical"
-            popover="manual"
-            inert={presence.leaving}
-            onKeyDown={onListKey}
-            onBlur={(event) => {
-              if (!root.current?.contains(event.relatedTarget as Node | null) && event.relatedTarget !== null) close(false);
-            }}
-            style={
-              place === null
-                ? { top: 0, left: 0, minWidth }
-                : { top: place.top, left: place.left, minWidth, maxHeight: `min(30rem, ${place.maxHeight}px)` }
-            }
-            className={cx(
-              "fixed inset-auto m-0 flex flex-col gap-0.5 overflow-y-auto overscroll-contain text-text",
-              "max-w-[calc(100vw-1rem)] rounded-2xl border-2 border-border bg-surface p-1.5 shadow-lg outline-none",
-              place?.above
-                ? align === "end"
-                  ? "origin-bottom-right"
-                  : "origin-bottom-left"
-                : align === "end"
-                  ? "origin-top-right"
-                  : "origin-top-left",
-              presence.leaving ? "pointer-events-none animate-pop-out" : "animate-pop-in",
-              "motion-reduce:animate-none",
-            )}
-          >
-            {children}
-          </div>
-        )}
+        <Popover
+          ref={list}
+          anchorRef={button}
+          open={open}
+          onOpenChange={() => close(false)}
+          placement={align === "end" ? "bottom-end" : "bottom-start"}
+          minWidth={minWidth}
+          id={listId}
+          role="menu"
+          aria-label={menuLabel ?? label}
+          aria-orientation="vertical"
+          onKeyDown={onListKey}
+          className={cx(MENU_PANEL, "max-w-[calc(100vw-2rem)]")}
+        >
+          {children}
+        </Popover>
       </div>
     </MenuContext.Provider>
   );
 }
 
-/** A menu row's face: Manus's `menu-item`, 36px (`--shell-row`), the glyph then the words. */
-const ITEM = cx(
-  "flex min-h-[var(--shell-row)] w-full shrink-0 items-center gap-2.5 rounded-[var(--shell-row-radius)] px-[var(--shell-row-pad)]",
-  "text-left text-[14px] leading-5 whitespace-nowrap text-text transition-colors duration-100 motion-reduce:transition-none",
-  "outline-none hover:bg-surface2 focus-visible:bg-surface2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
-);
+/** A menu row: the kit's (`menuRowClasses`), a row that takes the focus itself, the glyph then the words. */
+const ITEM = menuRowClasses({ className: "shrink-0 leading-5 whitespace-nowrap" });
 
 /**
  * One action. A `href` makes it a link (`next/link`, or a plain anchor with
@@ -372,16 +298,15 @@ export function MenuItem({
 }
 
 /**
- * A run of items under a small grey heading ("Group by"), Manus's view
- * options heading: 13px in `--text2`, named to a screen reader as the group's
- * label.
+ * A run of items under a small grey heading ("Group by"), the kit's menu
+ * heading (`MENU_HEADING`), named to a screen reader as the group's label.
  */
 export function MenuGroup({ label, children }: { label?: string; children: ReactNode }) {
   const id = useId();
   return (
     <div role="group" aria-labelledby={label === undefined ? undefined : id} className="flex flex-col gap-0.5">
       {label !== undefined && (
-        <p id={id} className="px-[var(--shell-row-pad)] pt-1.5 pb-1 text-[13px] leading-5 text-text2">
+        <p id={id} className={MENU_HEADING}>
           {label}
         </p>
       )}
@@ -392,5 +317,5 @@ export function MenuGroup({ label, children }: { label?: string; children: React
 
 /** A rule between groups of items. */
 export function MenuDivider() {
-  return <div role="separator" className="mx-[var(--shell-row-pad)] my-1 h-px shrink-0 bg-hair" />;
+  return <div role="separator" className="mx-2 my-1 h-px shrink-0 bg-hair" />;
 }
