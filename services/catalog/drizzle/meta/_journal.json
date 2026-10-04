@@ -169,6 +169,13 @@
       "when": 1791109233810,
       "tag": "0023_learner_avatar",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791125752876,
+      "tag": "0024_asset_name",
+      "breakpoints": true
     }
   ]
 }

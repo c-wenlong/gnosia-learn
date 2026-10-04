@@ -1,7 +1,9 @@
-import { asset, concept, topic } from "@self-learn/schema";
-import { sql } from "drizzle-orm";
+import { asset, assetName, concept, topic } from "@self-learn/schema";
+import { sql, type SQL } from "drizzle-orm";
 
+import { CLI_OWNER } from "../content/scope";
 import { withDatabase } from "../db";
+import { assetNamesExist } from "../state/assets";
 
 /**
  * `catalog search <term>` — the way in when you do not know the slug.
@@ -50,6 +52,7 @@ export async function runSearch(term: string, limit = SEARCH_LIMIT): Promise<Sea
   const prefix = `${escapeLike(trimmed)}%`;
 
   return withDatabase(async ({ db }) => {
+    const names = await assetNamesExist(db);
     // One statement over three tables. `rank` puts an exact match first, then a
     // prefix match, then anything containing the term; the type order after
     // that is deliberate — a topic is the thing you can then `ls`, a concept is
@@ -75,9 +78,7 @@ export async function runSearch(term: string, limit = SEARCH_LIMIT): Promise<Sea
         select 'concept', ${concept.slug}, ${concept.title}, ${concept.title}, ${concept.topicSlug}, 1
           from ${concept} where ${concept.title} ilike ${pattern}
         union all
-        select 'asset', ${asset.id}, coalesce(${asset.title}, ${asset.id}),
-               coalesce(${asset.title}, ${asset.id}), coalesce(${asset.path}, ${asset.url}), 2
-          from ${asset} where ${asset.title} ilike ${pattern}
+        ${names ? namedAssetHits(pattern) : plainAssetHits(pattern)}
       )
       select distinct on (type, id) type, id, title, matched, context, type_rank,
              case when lower(matched) = lower(${trimmed}) then 0
@@ -120,4 +121,28 @@ export function formatSearch(result: SearchResult): string {
     lines.push("", `showing the first ${result.hits.length}; narrow the term for the rest`);
   }
   return lines.join("\n");
+}
+
+/** Asset hits under the source's title, on a database from before `asset_name` (0024). */
+function plainAssetHits(pattern: string): SQL {
+  return sql`select 'asset', ${asset.id}, coalesce(${asset.title}, ${asset.id}),
+               coalesce(${asset.title}, ${asset.id}), coalesce(${asset.path}, ${asset.url}), 2
+          from ${asset} where ${asset.title} ilike ${pattern}`;
+}
+
+/**
+ * Asset hits under the CLI owner's own name, as every page shows it. The
+ * source's title still finds a renamed asset, which is then listed under the
+ * name it now shows.
+ */
+function namedAssetHits(pattern: string): SQL {
+  // Spelled with their table: `asset_name` has a `title` too.
+  const shown = sql`coalesce(n.title, "asset"."title", "asset"."id")`;
+  const named = sql`left join ${assetName} n on n.asset_id = "asset"."id" and n.learner_id = ${CLI_OWNER}`;
+  const where = sql`coalesce("asset"."path", "asset"."url")`;
+  return sql`select 'asset', "asset"."id", ${shown}, ${shown}, ${where}, 2
+          from ${asset} ${named} where n.title ilike ${pattern}
+        union all
+        select 'asset', "asset"."id", ${shown}, "asset"."title", ${where}, 2
+          from ${asset} ${named} where "asset"."title" ilike ${pattern}`;
 }
