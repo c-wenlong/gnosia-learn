@@ -236,9 +236,9 @@ describe("pins and names", () => {
 /* -------------------------------------------------------------------------- */
 
 const state = vi.hoisted(() => ({
-  readEvents: vi.fn(),
+  recentActivity: vi.fn(),
   readPreferences: vi.fn(),
-  readKnowledgeBase: vi.fn(),
+  recentConcepts: vi.fn(),
   readLearnerSnapshot: vi.fn(),
   recentDrafts: vi.fn(),
   recentTutorSessions: vi.fn(),
@@ -249,9 +249,9 @@ const state = vi.hoisted(() => ({
 vi.mock("@self-learn/catalog/state", () => ({
   asLastVisited: (value: unknown) => (value !== null && typeof value === "object" && "courseSlug" in value ? value : undefined),
   asRecentModules: (value: unknown) => (Array.isArray(value) ? value : undefined),
-  readEvents: state.readEvents,
+  recentActivity: state.recentActivity,
   readPreferences: state.readPreferences,
-  readKnowledgeBase: state.readKnowledgeBase,
+  recentConcepts: state.recentConcepts,
   readLearnerSnapshot: state.readLearnerSnapshot,
   recentDrafts: state.recentDrafts,
   recentTutorSessions: state.recentTutorSessions,
@@ -283,7 +283,7 @@ describe("readRecent", () => {
   beforeEach(() => {
     for (const fn of Object.values(state)) fn.mockReset();
     state.catalogDatabase.mockResolvedValue({});
-    state.readEvents.mockResolvedValue([
+    state.recentActivity.mockResolvedValue([
       { type: "visit", at: AT(3), course: "cs3230", module: "m3" },
       { type: "observation", at: AT(2), concept: "recurrences" },
     ]);
@@ -293,7 +293,7 @@ describe("readRecent", () => {
       "playback:video:done": { position: 300, duration: 600, watchedAt: AT(4), updatedAt: AT(4) },
       pinned: [{ key: "concept:recurrences", kind: "concept", title: "Recurrences", href: "/learn/recurrences", at: AT(4) }],
     });
-    state.readKnowledgeBase.mockResolvedValue({ concepts: [{ id: "recurrences", title: "Recurrences", pL: 0.5, mastery: "learning", observations: 2 }], frontier: [] });
+    state.recentConcepts.mockResolvedValue([{ id: "recurrences", title: "Recurrences", pL: 0.5, mastery: "weak", observations: 2 }]);
     state.readLearnerSnapshot.mockResolvedValue({ completed: {}, inactiveCourses: [] });
     state.recentDrafts.mockResolvedValue([{ id: "d1", kind: "diagram", state: "open", name: "My name", title: "Planner title", updatedAt: AT(5) }]);
     state.recentTutorSessions.mockResolvedValue([
@@ -334,10 +334,14 @@ describe("readRecent", () => {
     expect(recent.items.find((r) => r.key === "session:web-x")?.href).toBe("/learn/recurrences");
     expect(recent.pinned.map((p) => p.key)).toEqual(["concept:recurrences"]);
     expect(recent.courses.map((c) => [c.slug, c.modules.map((m) => m.slug)])).toEqual([["cs3230", ["m1", "m3"]]]);
-    // Every read is the owner's.
-    for (const fn of [state.readEvents, state.readPreferences, state.readKnowledgeBase, state.readLearnerSnapshot, state.recentTutorSessions]) {
-      expect(fn).toHaveBeenCalledWith(expect.anything(), "local", ...(fn === state.recentTutorSessions ? [51] : []));
+    // Every read is the owner's, and bounded by the page: the newest 51
+    // concepts and sessions, and the concepts those name, once each.
+    for (const fn of [state.readPreferences, state.readLearnerSnapshot]) {
+      expect(fn).toHaveBeenCalledWith(expect.anything(), "local");
     }
+    expect(state.recentTutorSessions).toHaveBeenCalledWith(expect.anything(), "local", 51);
+    expect(state.recentActivity).toHaveBeenCalledWith(expect.anything(), "local", { limit: 51 });
+    expect(state.recentConcepts).toHaveBeenCalledWith(expect.anything(), "local", ["recurrences"]);
   });
 
   it("leaves the conversations to the runner when asked, and reads the next pages on Show older", async () => {
@@ -346,12 +350,15 @@ describe("readRecent", () => {
     expect(state.recentDrafts).not.toHaveBeenCalled();
     expect(recent.items.some((r) => r.kind === "draft")).toBe(false);
     expect(state.recentTutorSessions).toHaveBeenCalledWith(expect.anything(), "local", 101);
+    expect(state.recentActivity).toHaveBeenCalledWith(expect.anything(), "local", { limit: 101 });
   });
 
   it("searches every row's title, not only the pages shown", async () => {
     const { readRecent } = await import("./recent");
     const recent = await readRecent({ q: "theorem" });
     expect(recent.items.map((r) => r.key)).toEqual(["video:video:abc"]);
+    // A search reads every concept answered on, not the newest page of them.
+    expect(state.recentActivity).toHaveBeenCalledWith(expect.anything(), "local", {});
   });
 
   it("finds a renamed conversation by its name without a runner, and leaves conversations to the runner with one", async () => {
@@ -366,7 +373,7 @@ describe("readRecent", () => {
   });
 
   it("falls back to the courses with a tick when none was opened, leaving a course set aside out", async () => {
-    state.readEvents.mockResolvedValue([]);
+    state.recentActivity.mockResolvedValue([]);
     state.readPreferences.mockResolvedValue({});
     state.readLearnerSnapshot.mockResolvedValue({ completed: { "cs3230-m1-t1": true, "cs4225-m1-t1": true }, inactiveCourses: ["cs4225"] });
     const { readRecent } = await import("./recent");
@@ -382,7 +389,28 @@ describe("readRecent", () => {
     expect(partial.items.some((r) => r.kind === "session" || r.kind === "module")).toBe(false);
     expect(partial.items.some((r) => r.kind === "video")).toBe(true);
 
+    state.recentConcepts.mockRejectedValue(new Error("connect ECONNREFUSED"));
+    expect((await readRecent()).reachable).toBe(false);
+
     state.catalogDatabase.mockRejectedValue(new Error("connect ECONNREFUSED"));
     expect(await readRecent()).toEqual({ reachable: false, items: [], more: false, pinned: [], courses: [] });
+  });
+});
+
+describe("conceptsNamed", () => {
+  it("names each concept answered on and each session's goal once, and nothing else", async () => {
+    const { conceptsNamed } = await import("./recent");
+    const session = (goal: string | null) => ({ id: "s", title: null, goal, logAssetId: null, state: "closed", updatedAt: AT(1) });
+    expect(
+      conceptsNamed(
+        [
+          { type: "observation", at: AT(1), concept: "a" },
+          { type: "visit", at: AT(1), course: "cs3230" },
+          { type: "observation", at: AT(2), concept: "" },
+          { type: "observation", at: AT(2), concept: "b" },
+        ],
+        [session("b"), session("c"), session(null), session("")],
+      ),
+    ).toEqual(["a", "b", "c"]);
   });
 });
