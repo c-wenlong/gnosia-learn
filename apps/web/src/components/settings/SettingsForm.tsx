@@ -169,15 +169,25 @@ export function SettingsForm({
  * Enter or when the field loses focus, through the provider, so the sidebar
  * changes the moment it is saved; empty clears it and the row says "Account".
  */
-function NameField() {
+export function NameField() {
   const { state, setDisplayName } = useLearner();
   const saved = state.displayName ?? "";
   const [draft, setDraft] = useState(saved);
+  // A newer name from the server (a refresh, another tab's save) replaces an
+  // untouched field, so a focus and blur cannot save the old one over it. A
+  // field being edited keeps what is typed.
+  const [base, setBase] = useState(saved);
+  if (saved !== base) {
+    setBase(saved);
+    if (draft === base) setDraft(saved);
+  }
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const latest = useRef(0);
   const save = () => {
     const next = draft.replace(/\s+/g, " ").trim();
-    if (next === saved) return;
+    // After a failed save the provider still holds the name it tried, so the
+    // same text is sent again rather than taken as already stored.
+    if (next === saved && status.kind !== "error") return;
     if (next.length > DISPLAY_NAME_MAX) {
       setStatus({ kind: "error", message: `At most ${DISPLAY_NAME_MAX} characters.` });
       return;
@@ -197,7 +207,6 @@ function NameField() {
           id={id}
           type="text"
           value={draft}
-          maxLength={DISPLAY_NAME_MAX}
           autoComplete="name"
           placeholder="Your name"
           aria-describedby={`${id}-note`}

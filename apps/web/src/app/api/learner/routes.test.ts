@@ -310,6 +310,10 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect((await call("name", { name: "x".repeat(61) })).status).toBe(400);
       expect((await call("name", { name: 42 })).status).toBe(400);
       expect((await snapshot()).displayName).toBe("Ada");
+      // The catalog's writer holds the limit too, for a caller that is not this route.
+      const { writeDisplayName } = await import("@self-learn/catalog/state");
+      await expect(writeDisplayName(scratch.db, "x".repeat(61))).rejects.toThrow(RangeError);
+      expect((await snapshot()).displayName).toBe("Ada");
       await call("name", { name: null });
     });
   });
