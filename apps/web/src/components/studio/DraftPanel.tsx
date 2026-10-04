@@ -126,6 +126,7 @@ import {
 } from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { prefersReducedMotion } from "@/lib/motion";
+import { conversationTitle } from "@/lib/conversation-title";
 import { announceDraftChange } from "@/lib/studio-draft-list";
 import { panelHref, titleOf } from "@/lib/studio-view";
 
@@ -255,9 +256,9 @@ export function DraftPanel({
   // opening turn speak of the video, not of extending the diagram.
   const forVideo = arrivingPurpose(draftId) === "video";
 
-  // The sidebar lists this conversation by its title, its first message and
-  // its state, so each change to those is news to it (`ChatHistory`).
-  const listed = view === null ? null : `${view.state}|${view.title ?? ""}|${view.transcript.length}`;
+  // The sidebar lists this conversation by its name, its title, its first
+  // message and its state, so each change to those is news to it (`ChatHistory`).
+  const listed = view === null ? null : `${view.state}|${view.name ?? ""}|${view.title ?? ""}|${view.transcript.length}`;
   useEffect(() => {
     if (listed !== null) announceDraftChange(draftId);
   }, [draftId, listed]);
@@ -815,9 +816,11 @@ export function DraftPanel({
   const sourceTitle =
     view.source === null ? null : ((diagramSource ? titleOf(titles, view.source) : titleOf(videoTitles, view.source)) ?? view.source);
   const newestTitle = cards.at(-1)?.brief.title ?? null;
+  // The owner's name, the planner's title or the concept, as every other page
+  // calls the conversation (`conversationTitle`); the first message is the
+  // thread's own first line, so the header does not repeat it.
   const title =
-    view.title ??
-    newestTitle ??
+    conversationTitle({ name: view.name, title: view.title ?? newestTitle, concept: view.concept })?.text ??
     (sourceTitle === null
       ? "New conversation"
       : diagramSource

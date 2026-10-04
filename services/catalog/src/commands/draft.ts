@@ -64,6 +64,8 @@ export interface DraftSummary {
   state: string;
   source: string | null;
   title: string | null;
+  /** The owner's name for the conversation, shown before `title`; null for none. */
+  name: string | null;
   plannerSessionId: string;
   transcriptPath: string;
   turns: number;
@@ -129,6 +131,7 @@ function summarise(row: Draft, jobId: string | null): DraftSummary {
     state: row.state,
     source: row.source,
     title: row.title,
+    name: row.name,
     plannerSessionId: row.plannerSessionId,
     transcriptPath: row.transcriptPath,
     turns: row.turns,
@@ -154,6 +157,7 @@ export interface DraftDocument {
   kind?: unknown;
   source?: unknown;
   title?: unknown;
+  name?: unknown;
   plannerSessionId?: unknown;
   transcriptPath?: unknown;
   brief?: unknown;
@@ -165,6 +169,13 @@ export interface DraftDocument {
   errorKind?: unknown;
   error?: unknown;
   createdAt?: unknown;
+  /**
+   * When the runner last moved the record. Kept on the row when given, so a
+   * rename (which leaves it alone) does not move the conversation up a list,
+   * and a mirror that catches up after Postgres was down does not either.
+   * Absent means now.
+   */
+  updatedAt?: unknown;
 }
 
 export async function readDraftFile(file: string): Promise<DraftDocument> {
@@ -195,6 +206,20 @@ function optionalText(value: unknown, field: string, limit = 2_000): string | nu
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") throw new DraftError(`"${field}" must be a string or null`);
   return value.slice(0, limit);
+}
+
+/** The longest name kept, as the runner's `cleanName` cuts it. */
+export const DRAFT_NAME_LIMIT = 200;
+
+/**
+ * A name as the row keeps it: one line, trimmed, at most `DRAFT_NAME_LIMIT`
+ * characters; null when nothing is left, so a blank name is no name.
+ */
+function optionalName(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") throw new DraftError(`"name" must be a string or null`);
+  const line = value.replace(/\s+/g, " ").trim().slice(0, DRAFT_NAME_LIMIT).trim();
+  return line === "" ? null : line;
 }
 
 function optionalObject(value: unknown, field: string): Record<string, unknown> | null {
@@ -258,12 +283,14 @@ export function draftRow(document: DraftDocument): NewDraft {
     throw new DraftError(`"pendingTopic" belongs to a brief that names it, and this draft has none`);
   }
   const createdAt = optionalInstant(document.createdAt, "createdAt");
+  const updatedAt = optionalInstant(document.updatedAt, "updatedAt");
   return {
     id,
     state: oneOf(document.state, "state", DRAFT_STATES, "open"),
     kind: oneOf(document.kind, "kind", DRAFT_KINDS, "diagram"),
     source: optionalText(document.source, "source", 200),
     title: optionalText(document.title, "title", 200),
+    name: optionalName(document.name),
     plannerSessionId: requiredText(document.plannerSessionId, "plannerSessionId"),
     transcriptPath,
     brief,
@@ -275,6 +302,7 @@ export function draftRow(document: DraftDocument): NewDraft {
     errorKind,
     error: optionalText(document.error, "error", 1_000),
     ...(createdAt === null ? {} : { createdAt }),
+    ...(updatedAt === null ? {} : { updatedAt }),
   };
 }
 
@@ -308,12 +336,13 @@ export async function runDraftUpsert(document: DraftDocument, owner: string = CL
     const changes: Partial<NewDraft> = { ...row };
     delete changes.id;
     delete changes.createdAt;
+    delete changes.updatedAt;
     const [written] = await db
       .insert(draftTable)
       .values({ ...row, ownerId: owner })
       .onConflictDoUpdate({
         target: draftTable.id,
-        set: { ...changes, updatedAt: sql`now()` },
+        set: { ...changes, updatedAt: row.updatedAt ?? sql`now()` },
         // The lock as well as the message: a row another owner took between
         // the read above and this write is left alone, and the empty return
         // is the refusal.
@@ -451,7 +480,7 @@ export async function runDraftList(options: DraftListOptions = {}): Promise<Draf
 /* -------------------------------------------------------------------------- */
 
 function line(draft: DraftSummary): string {
-  return `${draft.state.padEnd(10)} ${String(draft.turns).padStart(3)} turns  ${(draft.title ?? "(no brief yet)").padEnd(40)} ${draft.id}`;
+  return `${draft.state.padEnd(10)} ${String(draft.turns).padStart(3)} turns  ${(draft.name ?? draft.title ?? "(no brief yet)").padEnd(40)} ${draft.id}`;
 }
 
 export function formatDraft(result: DraftResult): string {
@@ -465,6 +494,7 @@ export function formatDraft(result: DraftResult): string {
         `  kind      ${d.kind}`,
         `  state     ${d.state}`,
         `  title     ${d.title ?? "(no brief yet)"}`,
+        ...(d.name === null ? [] : [`  name      ${d.name}`]),
         `  source    ${d.source ?? "(new diagram)"}`,
         `  turns     ${d.turns}`,
         `  cost      ${d.costUsd === null ? "(none)" : `$${d.costUsd.toFixed(4)} (${d.costSource ?? "?"})`}`,

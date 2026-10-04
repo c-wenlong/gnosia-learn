@@ -20,6 +20,7 @@
  * call the same functions.
  */
 
+import { conversationTitle } from "@/lib/conversation-title";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 import { resumeAt } from "@/lib/playback";
 
@@ -29,7 +30,7 @@ export const RECENT_KINDS: readonly RecentKind[] = ["module", "video", "draft", 
 
 /** One row of Recent. */
 export interface RecentItem {
-  /** `<kind>:<id>`, unique in the list; the pinned and renamed preferences key by it. */
+  /** `<kind>:<id>`, unique in the list; the pinned preference keys by it. */
   key: string;
   kind: RecentKind;
   title: string;
@@ -85,11 +86,13 @@ export interface VideoProgress {
   updatedAt: string;
 }
 
-/** A studio draft with a title (`recentDrafts`). */
+/** A studio draft with a name or a title (`recentDrafts`), called by `conversationTitle`. */
 export interface DraftTouch {
   id: string;
   kind: string;
-  title: string;
+  /** The owner's name for it, which it is called before its title. */
+  name?: string | null;
+  title: string | null;
   updatedAt: string;
 }
 
@@ -213,10 +216,14 @@ export function recentItems(sources: RecentSources): RecentItem[] {
   }
 
   for (const draft of sources.drafts) {
+    // `recentDrafts` reads only drafts with a name or a title, so a draft
+    // with neither is one some other caller passed, with nothing to call it.
+    const called = conversationTitle(draft);
+    if (called === null) continue;
     out.push({
       key: `draft:${draft.id}`,
       kind: "draft",
-      title: draft.title,
+      title: called.text,
       detail: draft.kind === "video" ? "Video draft" : "Diagram draft",
       href: `/studio?draft=${encodeURIComponent(draft.id)}`,
       at: draft.updatedAt,
@@ -265,17 +272,15 @@ export interface SidebarCourse {
   modules: { slug: string; title: string; order: number; href: string }[];
 }
 
-/** What `GET /api/learner/recent` answers with: Recent's rows, the pins, the names, and the courses. */
+/** What `GET /api/learner/recent` answers with: Recent's rows, the pins, and the courses. */
 export interface RecentModel {
   /** False when the catalog could not be read; every list is then empty. */
   reachable: boolean;
-  /** Newest first, the pages asked for, every conversation named as the owner named it. */
+  /** Newest first, the pages asked for, every conversation called by `conversationTitle`. */
   items: RecentItem[];
   /** Whether there are rows past `items`. */
   more: boolean;
   pinned: PinnedRow[];
-  /** The owner's names for conversations, by row key, for the runner's rows the sidebar merges in. */
-  names: Record<string, string>;
   courses: SidebarCourse[];
 }
 
@@ -357,7 +362,7 @@ export function recentGroups<T extends { at: string }>(rows: readonly T[], now: 
 }
 
 /* -------------------------------------------------------------------------- */
-/* Pins and names                                                             */
+/* Pins                                                                       */
 /* -------------------------------------------------------------------------- */
 
 /** A pinned row: a copy of the row as it was pinned, so the pin outlives its leaving Recent. */
@@ -372,7 +377,7 @@ export interface PinnedRow {
 
 /** The most pins kept. */
 export const MAX_PINS = 50;
-/** The longest title or name kept. */
+/** The longest title kept. */
 export const MAX_RECENT_TITLE = 200;
 const MAX_HREF = 1_000;
 const MAX_KEY = 600;
@@ -446,36 +451,6 @@ export function withPin(list: readonly PinnedRow[], row: PinnedRow): PinnedRow[]
 
 export function withoutPin(list: readonly PinnedRow[], key: string): PinnedRow[] {
   return list.filter((p) => p.key !== key);
-}
-
-/** The stored `recentNames` preference read back: conversation keys to names, anything else dropped. */
-export function asNames(value: unknown): Record<string, string> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, string> = {};
-  for (const [key, name] of Object.entries(value as Record<string, unknown>)) {
-    const clean = cleanTitle(name);
-    if (isRecentKey(key, "draft") && clean !== null) out[key] = clean;
-  }
-  return out;
-}
-
-/** The most names kept; the oldest given goes first past it (object order is insertion order). */
-export const MAX_NAMES = 500;
-
-/** `names` with `key` named `name`, or unnamed when `name` is null. */
-export function withName(names: Readonly<Record<string, string>>, key: string, name: string | null): Record<string, string> {
-  const next = Object.fromEntries(Object.entries(names).filter(([k]) => k !== key));
-  if (name !== null) next[key] = name;
-  const entries = Object.entries(next);
-  return Object.fromEntries(entries.slice(Math.max(0, entries.length - MAX_NAMES)));
-}
-
-/** Each row with the name the owner gave it, where there is one. */
-export function named<T extends { key: string; title: string; quoted?: boolean }>(
-  rows: readonly T[],
-  names: Readonly<Record<string, string>>,
-): T[] {
-  return rows.map((row) => (names[row.key] === undefined ? row : { ...row, title: names[row.key], quoted: false }));
 }
 
 /**

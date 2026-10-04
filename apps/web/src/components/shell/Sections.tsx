@@ -14,8 +14,8 @@ import { usePresence } from "@/components/ui/use-presence";
 import { isCurrentRow } from "@/lib/nav";
 import type { RecentChange } from "@/lib/recent-client";
 import {
+  cleanTitle,
   mergeStreams,
-  named,
   recentGroups,
   splitPinned,
   type PinnedRow,
@@ -23,7 +23,8 @@ import {
   type RecentKind,
   type SidebarCourse,
 } from "@/lib/recent-core";
-import { draftRows } from "@/lib/studio-draft-list";
+import { announceDraftChange, draftRows } from "@/lib/studio-draft-list";
+import { renameDraft } from "@/lib/studio-drafts";
 import { conversationHref } from "@/lib/studio-view";
 
 import { SearchResults } from "./ChatSearch";
@@ -49,6 +50,12 @@ import { useRecent } from "./use-recent";
  * has more could still outrank, so Show older is never wrong about order.
  * Without a studio the catalog's read is the whole list.
  *
+ * Rename keeps the name on the conversation's draft, through the runner
+ * (`renameDraft`), so the studio's own pages, Home and the runner's search
+ * all call it by the same name (`conversationTitle`). The new name shows at
+ * once and stays until the runner's list carries it, or is taken back when
+ * the runner refuses it.
+ *
  * Each section label is 13px grey and sticks to the top of the sidebar's
  * scroller while its section scrolls under it. A row's more button appears on
  * hover or focus (always, on a screen with no hover), and its menu has Pin,
@@ -67,30 +74,43 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
   const recent = useRecent(studio);
   const conversations = useConversations(studio, chats);
   const model = recent.model;
-  const names = model?.names ?? {};
   const path = chats?.path ?? "/studio";
   const active = chats?.active ?? null;
   const pending = chats?.pending ?? null;
 
-  // The runner's conversations as Recent's rows, named as the owner named them.
+  // Names given here that the runner's list may not carry yet, by draft id.
+  const [renames, setRenames] = useState<Readonly<Record<string, string>>>({});
+  async function rename(draftId: string, typed: string) {
+    const name = cleanTitle(typed);
+    if (name === null) return;
+    setRenames((current) => ({ ...current, [draftId]: name }));
+    const saved = await renameDraft(draftId, name);
+    // Read back either way: a refused rename puts the row back as the runner has it.
+    await conversations.refresh();
+    setRenames((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== draftId)));
+    // An open conversation hears it from its own stream; Home and the rest of the shell from this.
+    if (saved.ok) announceDraftChange(draftId);
+  }
+
+  // The runner's conversations as Recent's rows, called as `conversationTitle` calls them.
   const fromRunner =
     conversations.list === null
       ? null
-      : named(
-          draftRows(conversations.list.drafts, conversations.titles).map(
-            (row): RecentItem => ({
-              key: `draft:${row.draftId}`,
-              kind: "draft",
-              title: row.heading,
-              detail: row.state,
-              href: `/studio?draft=${encodeURIComponent(row.draftId)}`,
-              at: row.updated,
-              draftId: row.draftId,
-              quoted: row.quoted,
-              briefed: row.briefed,
-            }),
-          ),
-          names,
+      : draftRows(
+          conversations.list.drafts.map((draft) => (renames[draft.draftId] === undefined ? draft : { ...draft, name: renames[draft.draftId] })),
+          conversations.titles,
+        ).map(
+          (row): RecentItem => ({
+            key: `draft:${row.draftId}`,
+            kind: "draft",
+            title: row.heading,
+            detail: row.state,
+            href: `/studio?draft=${encodeURIComponent(row.draftId)}`,
+            at: row.updated,
+            draftId: row.draftId,
+            quoted: row.quoted,
+            briefed: row.briefed,
+          }),
         );
   const streams = [
     ...(model === null ? [] : [{ items: model.items, more: model.more }]),
@@ -135,6 +155,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
       courseHref={item.kind === "module" ? courseOf(item.key) : null}
       onClick={item.kind === "draft" ? rowClick(chats?.navigate ?? null, linkFor(item), onPick) : onPick}
       onChange={recent.change}
+      onRename={item.kind === "draft" ? (name) => void rename(item.key.slice("draft:".length), name) : null}
     />
   );
 
@@ -167,8 +188,6 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
             <SearchResults
               search={search}
               studio={studio}
-              names={names}
-              renamed={(fromRunner ?? []).filter((item) => names[item.key] !== undefined)}
               path={path}
               active={active}
               navigate={chats?.navigate ?? null}
@@ -388,6 +407,7 @@ function RecentRow({
   courseHref,
   onClick,
   onChange,
+  onRename,
 }: {
   item: { key: string; kind: RecentKind; title: string; href: string };
   href: string;
@@ -399,6 +419,8 @@ function RecentRow({
   courseHref: string | null;
   onClick: (event: React.MouseEvent<HTMLAnchorElement>) => void;
   onChange: (change: RecentChange) => Promise<boolean>;
+  /** A conversation's Rename; null for every other kind. */
+  onRename: ((name: string) => void) | null;
 }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -412,7 +434,7 @@ function RecentRow({
         onDone={(name) => {
           setRenaming(false);
           requestAnimationFrame(() => more.current?.focus());
-          if (name !== null && name !== item.title) void onChange({ action: "rename", key: item.key, name });
+          if (name !== null && name !== item.title) onRename?.(name);
         }}
       />
     );
@@ -484,7 +506,7 @@ function RecentRow({
               >
                 {pinned ? "Unpin" : "Pin"}
               </MenuItem>
-              {item.kind === "draft" && (
+              {onRename !== null && (
                 <MenuItem
                   glyph="rename"
                   onSelect={() => {

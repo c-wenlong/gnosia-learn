@@ -15,6 +15,8 @@ export interface Conversations {
   titles: Readonly<Record<string, string>>;
   /** One more page; resolves false, and keeps the pages shown, when the runner did not answer. */
   showOlder: () => Promise<boolean>;
+  /** Every page shown, read again now (after a rename); false when the runner did not answer. */
+  refresh: () => Promise<boolean>;
 }
 
 /**
@@ -116,9 +118,10 @@ export function useConversations(enabled: boolean, chats: StudioChats | null): C
     return ok;
   }, [read]);
 
-  return { list: enabled ? list : null, titles, showOlder };
+  return { list: enabled ? list : null, titles, showOlder, refresh: reread };
 }
 
 function signature(drafts: readonly DraftSummary[] | null): string {
-  return drafts === null ? "none" : drafts.map((draft) => `${draft.draftId}@${draft.updated}:${draft.state}`).join(",");
+  // The name too: a rename leaves `updated` alone.
+  return drafts === null ? "none" : drafts.map((draft) => `${draft.draftId}@${draft.updated}:${draft.state}:${draft.name ?? ""}`).join(",");
 }
