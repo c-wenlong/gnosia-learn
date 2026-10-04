@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 25 24">
+<g clip-path="url(#youtube_svg__a)">
+<path fill="currentColor" d="M.544 11.846a11.804 11.804 0 1 0 23.607 0 11.804 11.804 0 0 0-23.607 0">
+</path>
+<path fill="#fff" d="M17.067 7.715a1.18 1.18 0 0 1 1.18 1.18v5.508a1.18 1.18 0 0 1-1.18 1.18H7.625a1.18 1.18 0 0 1-1.18-1.18V8.895a1.18 1.18 0 0 1 1.18-1.18zm-6.032 1.967v3.935l3.934-1.961z">
+</path>
+</g>
+<defs>
+<clipPath id="youtube_svg__a">
+<path fill="#fff" d="M.347 0h24v24h-24z">
+</path>
+</clipPath>
+</defs>
+</svg>
