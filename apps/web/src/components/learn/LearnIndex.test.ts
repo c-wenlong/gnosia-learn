@@ -141,10 +141,16 @@ describe("LearnIndex map details", () => {
       act(() => root.unmount());
       host.remove();
     });
+    const scrolled: string[] = [];
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      scrolled.push(this.textContent ?? "");
+    };
     const leadsTo = host.querySelector<HTMLButtonElement>('button[data-concept="b"]')!;
     act(() => leadsTo.focus());
     act(() => leadsTo.click());
     expect(document.activeElement?.tagName).toBe("H3");
     expect(document.activeElement?.textContent).toBe("UDP");
+    // And brought into view, since a press near the foot of the panel could leave it above the fold.
+    expect(scrolled).toContain("UDP");
   });
 });

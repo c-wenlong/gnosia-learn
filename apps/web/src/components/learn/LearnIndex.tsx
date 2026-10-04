@@ -17,6 +17,7 @@ import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/li
 import type { MapLayout } from "@/lib/concept-map";
 import { firstMatch, relatedTo, standingLine } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
+import { scrollBehavior } from "@/lib/reduced-motion";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
@@ -349,7 +350,10 @@ export function MapPanel({
   useEffect(() => {
     if (!picked.current) return;
     picked.current = false;
+    // Into view too: a press near the foot of a long panel would leave the
+    // name above the fold. Gliding there unless motion is reduced.
     heading.current?.focus({ preventScroll: true });
+    heading.current?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() });
   }, [focusId]);
   if (focus === null) {
     return (
