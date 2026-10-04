@@ -8,6 +8,8 @@ import {
   isAssetProblemCode,
   probeAssetProblem,
   problemFromStatus,
+  problemSource,
+  STUDIO_SOURCE,
 } from "./asset-problems";
 
 const ALL = [...ROUTE_PROBLEM_CODES, ...CLIENT_PROBLEM_CODES];
@@ -66,6 +68,24 @@ describe("the problem table", () => {
     expect(assetProblem("not-uploaded")).toBe(ASSET_PROBLEMS["not-uploaded"]);
     // Only the upload names a tool.
     expect(assetProblem("catalog-unreachable", "remotionkc")).toBe(ASSET_PROBLEMS["catalog-unreachable"]);
+  });
+
+  it("tells a studio video with no stored copy to make it again from the studio, not to upload it", () => {
+    const fix = assetProblem("not-uploaded", STUDIO_SOURCE).fix;
+    expect(fix?.kind).toBe("note");
+    expect(fix?.text).toContain("Change");
+    expect(fix?.text).not.toContain("asset upload");
+    // Every other code reads as the table has it.
+    expect(assetProblem("catalog-unreachable", STUDIO_SOURCE)).toBe(ASSET_PROBLEMS["catalog-unreachable"]);
+  });
+
+  it("reads a studio video, its sidecars and its poster as the studio's, and anything else by its row", () => {
+    expect(problemSource("video:attention", "self-learn")).toBe(STUDIO_SOURCE);
+    expect(problemSource("video:attention.vtt", "self-learn")).toBe(STUDIO_SOURCE);
+    expect(problemSource("poster:video:attention", "self-learn")).toBe(STUDIO_SOURCE);
+    expect(problemSource("manimkc:out/a/b.mp4", "manimkc")).toBe("manimkc");
+    expect(problemSource("diagram:learn/assets/x.svg", "self-learn")).toBe("self-learn");
+    expect(problemSource("note:x", null)).toBeNull();
   });
 
   it("offers Try again only where asking again could change the answer", () => {

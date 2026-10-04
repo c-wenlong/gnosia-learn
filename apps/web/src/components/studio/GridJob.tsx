@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
+import { KindBadge, TILE_LIFT } from "@/components/studio/KindBadge";
 import { Chip } from "@/components/studio/StudioChrome";
 import { finishedHeadline, type Job } from "@/lib/studio-jobs";
 import {
@@ -142,9 +143,10 @@ export function NewDiagramJobs({
 function NewDiagramCard({ job, path }: { job: Job; path: string }) {
   const title = job.title ?? "New diagram";
   return (
-    <div className="relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+    <div className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${TILE_LIFT}`}>
       <div className="relative aspect-[4/3] overflow-hidden border-b border-[var(--border)]">
         <JobStage job={job} title={title} thumbnail={null} path={path} isNew />
+        <KindBadge kind="diagram" />
       </div>
       <div className="flex min-w-0 flex-col gap-1.5 p-3">
         <span className="line-clamp-2 text-sm font-medium">{title}</span>
@@ -166,6 +168,7 @@ function NewDiagramRow({ job, path }: { job: Job; path: string }) {
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[var(--surface2)]">
         <Dot stage={tileStage(job)} />
       </span>
+      <KindBadge kind="diagram" inline />
       <span className="min-w-[5rem] flex-1 truncate font-medium">{job.title ?? "New diagram"}</span>
       <span className="flex min-w-0 max-w-[45%]">
         <RowWords job={job} />

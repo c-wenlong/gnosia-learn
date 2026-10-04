@@ -16,11 +16,13 @@ import {
   panelHref,
   browserPanelMove,
   browserViewMove,
+  CLOSED,
   gridHref,
   panelSignature,
   parsePanel,
   parseView,
   rawParamsOf,
+  showsKind,
   withoutOutcome,
   relativeTime,
   sortDiagrams,
@@ -109,6 +111,7 @@ describe("writing the view back into a URL", () => {
       direction: "asc",
       chips: true,
       layout: "list",
+      kind: "video",
       selected: "dot-product",
       panel: false,
       job: "job-1",
@@ -119,10 +122,20 @@ describe("writing the view back into a URL", () => {
       shot: "after",
       draft: "draft-1",
       settings: true,
+      play: "attention-weights",
     };
     const href = studioHref(view);
     const params = Object.fromEntries(new URL(href, "http://x").searchParams);
     expect(parseView(params)).toEqual(view);
+  });
+
+  it("writes the kind only when it narrows, and reads an unknown one as all", () => {
+    expect(studioHref(DEFAULT_VIEW, { kind: "all" })).toBe("/studio");
+    expect(studioHref(DEFAULT_VIEW, { kind: "diagram" })).toBe("/studio?kind=diagram");
+    expect(parseView({ kind: "video" }).kind).toBe("video");
+    expect(parseView({ kind: "all" }).kind).toBe("all");
+    expect(parseView({ kind: "picture" }).kind).toBe("all");
+    expect(parseView({ kind: ["diagram", "video"] }).kind).toBe("diagram");
   });
 
   it("toggles a topic on and back off", () => {
@@ -173,6 +186,23 @@ describe("filtering", () => {
   it("uses the No topic chip to reach the diagrams the indexer refuses", () => {
     const view = { ...DEFAULT_VIEW, topics: [NO_TOPIC] };
     expect(filterDiagrams(corpus, view).map((entry) => entry.name)).toEqual(["loose"]);
+  });
+
+  it("keeps the diagrams under All and Diagrams, and none under Videos (D85)", () => {
+    const all = [diagram({ name: "a" }), diagram({ name: "b", topic: null })];
+    expect(filterDiagrams(all, { ...DEFAULT_VIEW, kind: "all" })).toHaveLength(2);
+    expect(filterDiagrams(all, { ...DEFAULT_VIEW, kind: "diagram" })).toHaveLength(2);
+    expect(filterDiagrams(all, { ...DEFAULT_VIEW, kind: "video" })).toEqual([]);
+    // The topics still apply under a kind.
+    expect(filterDiagrams(all, { ...DEFAULT_VIEW, kind: "diagram", topics: [NO_TOPIC] }).map((d) => d.name)).toEqual(["b"]);
+  });
+
+  it("lets a job card through by its kind, as its tile would be", () => {
+    expect(showsKind("all", "diagram")).toBe(true);
+    expect(showsKind("all", "video")).toBe(true);
+    expect(showsKind("diagram", "video")).toBe(false);
+    expect(showsKind("video", "diagram")).toBe(false);
+    expect(showsKind("video", "video")).toBe(true);
   });
 
   it("searches the name, the title, the topic and the concepts", () => {
@@ -404,6 +434,18 @@ describe("what the panel holds", () => {
     expect(panelHref("/studio?sel=dot-product", { selected: null })).toBe("/studio");
   });
 
+  it("opens a video's preview, and closes it when any other panel opens over it", () => {
+    expect(panelHref("/studio?kind=video", { play: "a" })).toBe("/studio?kind=video&play=a");
+    expect(panelHref("/studio?play=a", { play: null })).toBe("/studio");
+    // Change in the preview opens a conversation, which takes the preview's place.
+    expect(conversationHref("/studio?kind=video&play=a", "d1")).toBe("/studio?kind=video&draft=d1");
+    expect(panelHref("/studio?play=a", { job: "j1" })).toBe("/studio?job=j1");
+    expect(panelHref("/studio?play=a", { settings: true })).toBe("/studio?settings=1");
+    // A patch that names no panel leaves it alone.
+    expect(panelHref("/studio?play=a", { shot: null })).toBe("/studio?play=a");
+    expect(panelHref("/studio?play=a&kind=video", CLOSED)).toBe("/studio?kind=video");
+  });
+
   it("drops a verb outcome, so a stale message does not read as this panel's", () => {
     expect(panelHref("/studio?v=export&ok=0&m=it+failed", { job: "job-1" })).toBe("/studio?job=job-1");
   });
@@ -419,6 +461,12 @@ describe("the full-width picture's title (review of #217)", () => {
 });
 
 describe("the panel a URL names", () => {
+  it("tells a video's preview apart from the rest, and ignores the kind filter", () => {
+    expect(panelSignature({ play: "a" })).not.toBe(panelSignature({}));
+    expect(panelSignature({ play: "a" })).not.toBe(panelSignature({ play: "b" }));
+    expect(panelSignature({ play: "a", kind: "video" })).toBe(panelSignature({ play: "a" }));
+  });
+
   it("ignores the filters and tells each panel apart", () => {
     expect(panelSignature({ draft: "d1", topic: "a", q: "x" })).toBe(panelSignature({ draft: "d1" }));
     const panels = [{}, { draft: "d1" }, { draft: "d2" }, { job: "j1" }, { extend: "e" }, { extend: "e", talk: "1" }, { sel: "s" }, { settings: "1" }, { job: "j1", shot: "after" }];
@@ -476,6 +524,23 @@ describe("a move the browser can make on its own", () => {
     expect(browserViewMove(at("draft=d1"), "/studio?draft=d1&sort=title")).toBe(true);
   });
 
+  it("redraws the grid in the browser for the kind filter, and keeps a panel open over it", () => {
+    expect(browserViewMove(at(""), "/studio?kind=diagram")).toBe(true);
+    expect(browserViewMove(at("kind=diagram&topic=a"), "/studio?kind=video&topic=a")).toBe(true);
+    expect(browserViewMove(at("kind=video"), "/studio")).toBe(true);
+    // A tile's panel closes on the way, as a topic chip closes it.
+    expect(browserViewMove(at("sel=x"), "/studio?kind=video")).toBe(true);
+    // Not a panel move: the grid under it changes.
+    expect(browserPanelMove(at(""), "/studio?kind=video")).toBe(false);
+  });
+
+  it("opens, closes and swaps a video's preview over the same grid", () => {
+    expect(browserPanelMove(at("kind=video"), "/studio?kind=video&play=a")).toBe(true);
+    expect(browserPanelMove(at("play=a"), "/studio")).toBe(true);
+    expect(browserPanelMove(at("play=a"), "/studio?draft=d1")).toBe(true);
+    expect(browserPanelMove(at("kind=video"), "/studio?play=a")).toBe(false);
+  });
+
   it("leaves a view change that also moves a panel, or a server panel, to the server", () => {
     expect(browserViewMove(at("draft=d1"), "/studio?sort=title")).toBe(false);
     expect(browserViewMove(at(""), "/studio?sort=title&job=j1")).toBe(false);
@@ -489,6 +554,8 @@ describe("a move the browser can make on its own", () => {
   it("drops every panel from a path and keeps the filters", () => {
     expect(gridHref("/studio?topic=a&settings=1&sel=x&v=verify&ok=1&m=done")).toBe("/studio?topic=a");
     expect(gridHref("/studio?draft=d1&job=j1&extend=e&talk=1&shot=after")).toBe("/studio");
+    // The library's back link from a preview's Open lands on the grid, not the preview.
+    expect(gridHref("/studio?kind=video&play=a")).toBe("/studio?kind=video");
   });
 
   it("drops a verb's outcome from a path and keeps the rest", () => {
