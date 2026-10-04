@@ -188,9 +188,12 @@ each moves to version 2 when its key is next saved. No migration.
   (`key_version`) is where one would go.
 - Re-encrypting stored keys when `AUTH_SECRET` rotates.
 - A log of which key paid for which turn, and per-owner spend caps.
-- Choosing the base URL per owner. The base URL still comes from the
-  environment (`<PROVIDER>_BASE_URL`), so an owner's key cannot point the
-  server at a host of their choosing. The other side of that is the
+- Choosing the base URL of a built-in provider per owner. Its base URL still
+  comes from the environment (`<PROVIDER>_BASE_URL`), so an owner's key for
+  it cannot point the server at a host of their choosing. A provider the
+  owner adds themselves (TUTOR-MODELS.md, T14) has the base URL they type,
+  `https://` or loopback `http://`, and is sent only their key for that
+  provider, never a built-in provider's key or a server key. The other side of that is the
   environment-write row of the threat model: whoever sets the base URL
   receives the saved keys, which must be closed before a second account
   exists. The model is the owner's to choose since the model chain

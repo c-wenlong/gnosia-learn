@@ -1,3 +1,4 @@
+import { CustomProviderError } from "@self-learn/catalog/state";
 import { NextResponse } from "next/server";
 
 import { KEY_WRITE_RATE_LIMIT, answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
@@ -34,6 +35,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (!shape.ok) return refuse(shape.reason);
 
   try {
+    // A key under a custom id is stored only while the owner has that
+    // provider, checked under the lock its Delete holds (T14).
     const key = await saveProviderKey(owner, provider, shape.key);
     return answer({ ok: true, key });
   } catch (error) {
@@ -57,6 +60,9 @@ export async function DELETE(req: Request): Promise<NextResponse> {
 }
 
 function failed(what: string, error: unknown): NextResponse {
+  if (error instanceof CustomProviderError && error.code === "NOT_FOUND") {
+    return refuse("That is not one of your providers.", "NOT_FOUND", 404);
+  }
   if (error instanceof NoKeySecretError) {
     return refuse("This server has no AUTH_SECRET, so it cannot store a key.", "NO_SECRET", 503);
   }

@@ -25,6 +25,8 @@ import { session } from "./studio";
 import {
   ASSET_NAME_MAX,
   AVATARS,
+  CUSTOM_PROVIDER_ID_SQL,
+  CUSTOM_PROVIDER_LIMITS,
   DEFAULT_P_L,
   EVENT_TYPES,
   KNOWLEDGE_LIMITS,
@@ -58,6 +60,10 @@ import {
 
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
+
+/** A `provider` column: a built-in provider, or a custom one's id (docs/TUTOR-MODELS.md, T14). */
+const providerName = (column: string) =>
+  sql.raw(`(${column} in (${PROVIDER_IDS.map((v) => `'${v}'`).join(", ")}) or ${column} ~ '${CUSTOM_PROVIDER_ID_SQL}')`);
 
 /** One of `values` at random, each as likely as the next: `random()` is in [0, 1), so the index is 1 to n. */
 const randomAvatar = () =>
@@ -363,7 +369,7 @@ export const providerKey = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.ownerId, t.provider] }),
-    check("provider_key_provider_check", inList("provider", PROVIDER_IDS)),
+    check("provider_key_provider_check", providerName("provider")),
     // GCM's 96-bit nonce and 128-bit tag, the only sizes the code writes.
     check("provider_key_iv_check", sql`octet_length(iv) = 12`),
     check("provider_key_auth_tag_check", sql`octet_length(auth_tag) = 16`),
@@ -407,7 +413,7 @@ export const tutorModel = pgTable(
   (t) => [
     primaryKey({ columns: [t.ownerId, t.provider, t.model] }),
     uniqueIndex("tutor_model_owner_position_idx").on(t.ownerId, t.position),
-    check("tutor_model_provider_check", inList("provider", PROVIDER_IDS)),
+    check("tutor_model_provider_check", providerName("provider")),
     check(
       "tutor_model_position_check",
       sql.raw(`position between 0 and ${TUTOR_MODEL_LIMITS.maxEntries - 1}`),
@@ -416,6 +422,43 @@ export const tutorModel = pgTable(
     check(
       "tutor_model_model_check",
       sql.raw(`char_length(model) between 1 and ${TUTOR_MODEL_LIMITS.maxModelChars} and model ~ '^[!-~]+$'`),
+    ),
+  ],
+);
+
+/**
+ * The providers an owner added themselves (docs/TUTOR-MODELS.md, T14): any
+ * OpenAI-compatible endpoint, by a name and a base URL. `id` is
+ * `custom-<slug>` and is what `provider_key.provider` and
+ * `tutor_model.provider` hold for it, so its key and its models are rows
+ * there like a built-in's. No secret here: the key is in `provider_key`.
+ *
+ * No `owner_id` default and `cascade` on delete, as `provider_key`. Written
+ * only by `services/catalog/src/state/custom-providers.ts`, and a provider's
+ * Delete removes this row, its key and its models in one transaction
+ * (`deleteTutorProvider`).
+ */
+export const customProvider = pgTable(
+  "custom_provider",
+  {
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    id: text("id").notNull(),
+    label: text("label").notNull(),
+    baseUrl: text("base_url").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ownerId, t.id] }),
+    check("custom_provider_id_check", sql.raw(`id ~ '${CUSTOM_PROVIDER_ID_SQL}'`)),
+    check("custom_provider_label_check", sql.raw(`char_length(label) between 1 and ${CUSTOM_PROVIDER_LIMITS.maxLabelChars}`)),
+    check(
+      "custom_provider_base_url_check",
+      sql.raw(
+        `char_length(base_url) between 1 and ${CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars} and base_url !~ '/$' and (base_url ~ '^https://[^/@?#[:space:]]+(/[^@?#[:space:]]*)?$' or base_url ~ '^http://(localhost|127[.]0[.]0[.]1|\\[::1\\])(:[0-9]+)?(/[^@?#[:space:]]*)?$')`,
+      ),
     ),
   ],
 );

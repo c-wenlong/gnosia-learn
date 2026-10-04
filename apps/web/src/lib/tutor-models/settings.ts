@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ProviderId } from "@self-learn/schema/shared";
+import type { ProviderName } from "@self-learn/schema/shared";
 
 import type { ChainEntry, KeySource } from "@/lib/agent/providers";
 import type { ProviderKeysView } from "@/lib/provider-keys/settings";
@@ -19,9 +19,9 @@ export interface TutorModelsView {
   reachable: boolean;
   chain: ChainEntry[];
   /** Every provider, in the built-in order, with whose key the tutor calls it, or null for none. */
-  providers: { id: ProviderId; label: string; key: KeySource | null }[];
+  providers: { id: ProviderName; label: string; key: KeySource | null }[];
   /** The built-in defaults the tutor tries with no chain, in order, for the providers that have a key. */
-  defaults: { id: ProviderId; label: string; model: string; key: KeySource }[];
+  defaults: { id: ProviderName; label: string; model: string; key: KeySource }[];
 }
 
 /** The pure half: the Provider keys card's data and the chain in, the Models card's out. */

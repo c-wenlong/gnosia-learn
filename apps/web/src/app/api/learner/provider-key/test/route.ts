@@ -32,6 +32,8 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const credential = await keyTestCredential(owner, provider);
   if (credential === null) return refuse("There is no key for this provider to test.", "NO_KEY");
+  // A provider the owner added has no default model to test with (T14).
+  if (credential.config.model === "") return refuse("Add a model to this provider first, then Test it.", "NO_MODEL");
 
   const result = await testProviderKey(credential);
   return answer(
