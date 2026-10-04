@@ -1,9 +1,7 @@
 # Proposal: the Learn page is a map of what you know
 
-Status: being built in phases, 2026-10-04. Phases 1 (the layout) and 2 (the
-viewer) are built.
-Decisions G1 to G8 are the build's defaults; G1 revises decision 13 of
-[DESIGN.md](../design/DESIGN.md) and is the owner's to confirm.
+Status: being built in phases, 2026-10-04. Phases 1 (the layout), 2 (the
+viewer) and 3 (reading the map) are built.
 
 ## The problem
 
@@ -171,6 +169,14 @@ measurement turned up are in the build: zoomed out, a title shows only over an
 island wide enough on screen to hold it, and a row of islands may run as wide
 as the widest island, so the map is no longer one wide island over a tall thin
 column.
+
+Phase 3 measured on `self_learn`, 2026-10-04: selecting "Vector as a list of
+numbers" marks its four dependants and lists them in the panel; with CS4225
+and CS3230 in `recentModules`, 19 concepts are marked ready, all in those two
+courses or serving them, "Cost model and input size" among them; "Not in a
+course" leaves the 10 such concepts undimmed. On a 390 by 844 phone the page
+does not scroll sideways, and a touch drag then a pinch on the largest island
+held 16.8 ms a frame at worst.
 
 DESIGN.md's decision 13 row and the `/learn` screen row are rewritten in
 phase 4, when the default changes, not before. Until then the map is the
