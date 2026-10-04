@@ -13,7 +13,10 @@ import { describe, expect, it } from "vitest";
  * (`role="tabpanel"`) is the caller's to draw and is not counted.
  */
 const KIT = new Set(["components/ui/SegmentedControl.tsx", "components/ui/TabList.tsx"]);
-const HAND_DRAWN = /role=["{]+"?(radiogroup|radio|tablist|tab)"/;
+// A literal role, a role inside a JSX expression (`role={on ? "tab" : "group"}`),
+// and a role in props spread on (`{ role: "tab" }`).
+const ROLE = `["'\`](?:radiogroup|radio|tablist|tab)["'\`]`;
+const HAND_DRAWN = new RegExp(`role=${ROLE}|role=\\{[^}]*${ROLE}[^}]*\\}|\\brole:\\s*${ROLE}`);
 
 describe("segmented controls and tab rows", () => {
   it("draws no radio group or tab row outside the kit", () => {
@@ -39,7 +42,11 @@ describe("segmented controls and tab rows", () => {
     expect(HAND_DRAWN.test('<div role="tablist">')).toBe(true);
     expect(HAND_DRAWN.test('<button role="tab" id="x">')).toBe(true);
     expect(HAND_DRAWN.test('<div role={"tab"}>')).toBe(true);
+    expect(HAND_DRAWN.test('<button role={wide ? "group" : "radio"}>')).toBe(true);
+    expect(HAND_DRAWN.test("const props = { role: 'tablist' };")).toBe(true);
     expect(HAND_DRAWN.test('<div role="tabpanel">')).toBe(false);
+    expect(HAND_DRAWN.test('<div role={wide ? undefined : "tabpanel"}>')).toBe(false);
+    expect(HAND_DRAWN.test('{ id, role: "tabpanel" }')).toBe(false);
     expect(HAND_DRAWN.test('<div role="group">')).toBe(false);
   });
 });
