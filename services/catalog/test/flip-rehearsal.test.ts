@@ -79,6 +79,7 @@ interface Report {
   ok: boolean;
   tree: string;
   copy: { name: string; method: string; kept: boolean; dropped: boolean };
+  preflight: { name: string; dropped: boolean } | null;
   backup: { path: string; bytes: number; tables: number; restore: string; restoreArgv: string[][] } | null;
   steps: Step[];
   warnings: number;
@@ -397,7 +398,10 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       }
 
       // The throwaway copy is gone, and the template is as it was: no content.
-      expect(await databasesLike("self_learn_preflight_%")).toEqual([]);
+      // Only this run's copy is looked for: another checkout running this
+      // suite at the same time has its own on the same server.
+      expect(report.preflight).toMatchObject({ name: expect.stringMatching(/^self_learn_preflight_/), dropped: true });
+      expect(await databasesLike(report.preflight?.name ?? "")).toEqual([]);
       const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
       const assets = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from asset`);
@@ -459,8 +463,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
     expect(report.steps.at(-1)?.gist).toMatch(/^on a copy, before touching .*: the import removed 1 row\(s\).*manimkc:out\/demo\/one\/gone\.mp4/);
     // Both copies are dropped, without --keep.
     expect(report.copy).toMatchObject({ name, kept: false, dropped: true });
+    expect(report.preflight).toMatchObject({ name: expect.stringMatching(/^self_learn_preflight_/), dropped: true });
     expect(await databasesLike(`${name}%`)).toEqual([]);
-    expect(await databasesLike("self_learn_preflight_%")).toEqual([]);
+    expect(await databasesLike(report.preflight?.name ?? "")).toEqual([]);
   }, 120_000);
 });
 

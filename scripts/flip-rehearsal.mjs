@@ -742,6 +742,9 @@ async function main(argv) {
     checkout: null,
     blobRoot: null,
     copy: real ? null : { name: database, method: null, kept: opts.keep, dropped: false },
+    // The throwaway copy the first import runs on, named per run so a caller
+    // can check this run's copy is gone without counting another run's.
+    preflight: null,
     backup: null,
     backups: [],
     steps: [],
@@ -884,6 +887,7 @@ async function main(argv) {
     importIntoCopy: async () => {
       const name = `self_learn_preflight_${stamp}`;
       const home = mkdtempSync(join(tmpdir(), 'self-learn-flip-preflight-'));
+      report.preflight = { name, dropped: false };
       try {
         await copyDatabase(database, name, { env: maintenance, created: () => made.add(name) });
         if (report.interrupted) return { problem: 'interrupted', result: null };
@@ -901,6 +905,7 @@ async function main(argv) {
         };
       } finally {
         if (made.has(name)) await drop(name);
+        report.preflight.dropped = !made.has(name);
         rmSync(home, { recursive: true, force: true });
       }
     },
@@ -1349,6 +1354,7 @@ async function main(argv) {
       if (name === database && opts.keep) continue;
       const dropped = await drop(name);
       if (name === database) report.copy.dropped = dropped;
+      if (name === report.preflight?.name) report.preflight.dropped = dropped;
     }
     if (real && state.exportDir !== null) rmSync(state.exportDir, { recursive: true, force: true });
     if (scratch !== null && !opts.keep) rmSync(scratch, { recursive: true, force: true });
