@@ -303,6 +303,70 @@ export function valueOf<K extends string>(pieces: readonly ValuePiece<K>[]): Men
 }
 
 /* -------------------------------------------------------------------------- */
+/* A kind's toggle                                                            */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * The studio home's Diagram and Video buttons (D84 of
+ * docs/STUDIO-CHAT-FIRST.md): one press puts the kind's chip in the message,
+ * the next takes it out, and the button shows pressed whenever the chip is
+ * there, however it got there. They work on the value, not the editor, so
+ * the plain fallback (which cannot draw a chip) takes them the same way.
+ */
+
+/** Whether `value` tags `kind`: a chip of it that reads `@<kind>` where it sits. */
+export function hasMention<K extends string>(value: MentionValue<K>, kind: K): boolean {
+  return validMentions(value.text, value.mentions).some((mention) => mention.kind === kind);
+}
+
+/**
+ * `value` with `kind`'s chip at the start and a space after it (none when the
+ * text already starts with whitespace), every other position moved to match.
+ * A value that already tags `kind` comes back as it is: one chip per kind.
+ */
+export function withMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
+  const kept = validMentions(value.text, value.mentions);
+  if (kept.some((mention) => mention.kind === kind)) return value;
+  const token = mentionToken(kind);
+  const lead = token + (/^\s/.test(value.text) ? "" : " ");
+  return {
+    text: lead + value.text,
+    mentions: [
+      { kind, start: 0, end: token.length },
+      ...kept.map((mention) => ({ kind: mention.kind, start: mention.start + lead.length, end: mention.end + lead.length })),
+    ],
+  };
+}
+
+/**
+ * `value` without `kind`'s chip, and without the one space that kept it apart
+ * from its neighbour (the one after it, else the one before), so taking out a
+ * chip the toggle put in gives back the words as they were. A value that does
+ * not tag `kind` comes back as it is.
+ */
+export function withoutMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
+  const kept = validMentions(value.text, value.mentions);
+  const gone = kept.find((mention) => mention.kind === kind);
+  if (gone === undefined) return value;
+  let start = gone.start;
+  let end = gone.end;
+  if (value.text[end] === " ") end += 1;
+  else if (start > 0 && value.text[start - 1] === " ") start -= 1;
+  const cut = end - start;
+  return {
+    text: value.text.slice(0, start) + value.text.slice(end),
+    mentions: kept
+      .filter((mention) => mention !== gone)
+      .map((mention) => (mention.start >= end ? { kind: mention.kind, start: mention.start - cut, end: mention.end - cut } : mention)),
+  };
+}
+
+/** The toggle's press: the chip out when it is there, in at the start when it is not. */
+export function toggleMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
+  return hasMention(value, kind) ? withoutMention(value, kind) : withMention(value, kind);
+}
+
+/* -------------------------------------------------------------------------- */
 /* The @ menu                                                                 */
 /* -------------------------------------------------------------------------- */
 

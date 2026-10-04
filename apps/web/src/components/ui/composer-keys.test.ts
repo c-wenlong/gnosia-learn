@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { COMPOSER_PLACEHOLDER, COMPOSER_TEXT, composerHeight, composerKey, modEnterTarget } from "./composer-keys";
+import { COMPOSER_PLACEHOLDER, COMPOSER_TEXT, composerBoxHeight, composerHeight, composerKey, modEnterTarget } from "./composer-keys";
 import { inputClasses } from "./classes";
 
 const key = (over: Partial<Parameters<typeof composerKey>[0]> = {}) =>
@@ -38,6 +38,13 @@ describe("composerHeight", () => {
     expect(composerHeight(10_000)).toBe(28 + 24 * 6);
     expect(composerHeight(10_000, 3)).toBe(28 + 24 * 3);
   });
+});
+
+describe("composerBoxHeight (the box layout, D84)", () => {
+  it("shows three lines when empty", () => expect(composerBoxHeight(40)).toBe(16 + 24 * 3));
+  it("grows a line at a time past them", () => expect(composerBoxHeight(16 + 24 * 4)).toBe(16 + 24 * 4));
+  it("stops at six lines and scrolls past them", () => expect(composerBoxHeight(10_000)).toBe(16 + 24 * 6));
+  it("never caps under its own minimum", () => expect(composerBoxHeight(10, 4, 2)).toBe(16 + 24 * 4));
 });
 
 /**

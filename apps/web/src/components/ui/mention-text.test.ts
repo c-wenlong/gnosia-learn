@@ -5,6 +5,7 @@ import {
   fallbackTagLine,
   filterMentionOptions,
   firstActive,
+  hasMention,
   inlinePieces,
   isBareTag,
   isEmptyValue,
@@ -17,10 +18,13 @@ import {
   rowAnnouncement,
   sameValue,
   serializeMentions,
+  toggleMention,
   trimValue,
   validMentions,
   valueOf,
   valuePieces,
+  withMention,
+  withoutMention,
   type MentionOption,
   type SerializedNodeLike,
 } from "./mention-text";
@@ -144,6 +148,68 @@ describe("the value's shape", () => {
     expect(back.text).toBe("@video tcp\nand @video");
     expect(validMentions(back.text, back.mentions)).toEqual([{ kind: "video", start: 15, end: 21 }]);
     expect(prependValue(refused, { text: "", mentions: [] })).toBe(refused);
+  });
+});
+
+describe("a kind's toggle (D84)", () => {
+  const empty = { text: "", mentions: [] };
+
+  it("puts the chip at the start of an empty field, with a space to type after", () => {
+    const tagged = withMention(empty, "diagram");
+    expect(tagged).toEqual({ text: "@diagram ", mentions: [{ kind: "diagram", start: 0, end: 8 }] });
+    expect(hasMention(tagged, "diagram")).toBe(true);
+    expect(hasMention(tagged, "video")).toBe(false);
+  });
+
+  it("puts the chip in front of words already typed, and moves every other chip with them", () => {
+    const typed = valueOf([{ type: "text", text: "how raft keeps a " }, { type: "mention", kind: "video" }]);
+    const tagged = withMention(typed, "diagram");
+    expect(tagged.text).toBe("@diagram how raft keeps a @video");
+    expect(validMentions(tagged.text, tagged.mentions)).toEqual([
+      { kind: "diagram", start: 0, end: 8 },
+      { kind: "video", start: 26, end: 32 },
+    ]);
+  });
+
+  it("adds no space when the text already starts with one", () => {
+    expect(withMention({ text: " tcp", mentions: [] }, "video").text).toBe("@video tcp");
+  });
+
+  it("never tags a kind twice", () => {
+    const typed = valueOf([{ type: "text", text: "a " }, { type: "mention", kind: "diagram" }]);
+    expect(withMention(typed, "diagram")).toBe(typed);
+  });
+
+  it("takes the chip out with its space, giving back the words as they were", () => {
+    const words = { text: "how raft keeps a log in step", mentions: [] };
+    expect(withoutMention(withMention(words, "video"), "video")).toEqual(words);
+    expect(toggleMention(toggleMention(empty, "diagram"), "diagram")).toEqual(empty);
+  });
+
+  it("takes out a chip typed mid-sentence, and moves the chips after it back", () => {
+    const typed = valueOf([
+      { type: "text", text: "make a " },
+      { type: "mention", kind: "video" },
+      { type: "text", text: " of tcp and a " },
+      { type: "mention", kind: "diagram" },
+    ]);
+    const out = withoutMention(typed, "video");
+    expect(out.text).toBe("make a of tcp and a @diagram");
+    expect(validMentions(out.text, out.mentions)).toEqual([{ kind: "diagram", start: 20, end: 28 }]);
+  });
+
+  it("takes the space before a chip that ends the text", () => {
+    const typed = valueOf([{ type: "text", text: "tcp " }, { type: "mention", kind: "video" }]);
+    expect(withoutMention(typed, "video")).toEqual({ text: "tcp", mentions: [] });
+  });
+
+  it("leaves a value that does not tag the kind, and ignores a range that does not read @<kind>", () => {
+    const typed = { text: "@video typed as words", mentions: [] };
+    expect(withoutMention(typed, "video")).toBe(typed);
+    expect(hasMention(typed, "video")).toBe(false);
+    const stale = { text: "words", mentions: [{ kind: "video", start: 0, end: 5 }] };
+    expect(hasMention(stale, "video")).toBe(false);
+    expect(withMention(stale, "video")).toEqual({ text: "@video words", mentions: [{ kind: "video", start: 0, end: 6 }] });
   });
 });
 

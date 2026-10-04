@@ -49,6 +49,36 @@ export function composerHeight(scrollHeight: number, maxRows: number = COMPOSER_
   return Math.min(max, Math.max(min, scrollHeight + 4));
 }
 
+/*
+ * The box layout (`layout="box"`, D84 of docs/STUDIO-CHAT-FIRST.md): the
+ * field on top and a row of controls inside the frame under it, as Gauth's
+ * Atlas prompt box is laid out. Radius 20 as a card (DESIGN.md), the same 2px
+ * border going `--accent` on focus, and no shadow: the kit has none.
+ */
+export const COMPOSER_BOX = "rounded-[20px] border-2 border-border bg-surface transition-colors duration-100";
+/** The field's padding inside the box: 12px over the text and 4px under it, before the row of controls. */
+export const COMPOSER_BOX_PAD_PX = 16;
+/** Lines the box's field shows when empty, so it reads as a place to write a paragraph. */
+export const COMPOSER_BOX_MIN_ROWS = 3;
+/** The box's field height for `rows` lines: what both fields and the loading frame take. */
+export function composerBoxFieldPx(rows: number): number {
+  return COMPOSER_BOX_PAD_PX + COMPOSER_LINE_PX * Math.max(1, rows);
+}
+
+/**
+ * The height a textarea in the box should take. Unlike the row's, it has no
+ * border of its own (the box draws it), so `scrollHeight` is the whole of it.
+ */
+export function composerBoxHeight(
+  scrollHeight: number,
+  minRows: number = COMPOSER_BOX_MIN_ROWS,
+  maxRows: number = COMPOSER_MAX_ROWS,
+): number {
+  const min = composerBoxFieldPx(minRows);
+  const max = composerBoxFieldPx(Math.max(minRows, maxRows));
+  return Math.min(max, Math.max(min, scrollHeight));
+}
+
 /** What a key press in the composer means. */
 export type ComposerKey = "send" | "mod-send" | "newline" | "none";
 

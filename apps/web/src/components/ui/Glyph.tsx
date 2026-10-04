@@ -29,6 +29,8 @@ const PATHS = {
   book: "M10 6.5C8.5 5 6 4.5 3 4.8v10.4c3-.3 5.5.2 7 1.8 1.5-1.6 4-2.1 7-1.8V4.8c-3-.3-5.5.2-7 1.7zm0 0V17",
   // A plus.
   add: "M10 4.5v11M4.5 10h11",
+  // An arrow, for the box composer's round Send.
+  send: "M4.5 10h11M11 5.5l4.5 4.5-4.5 4.5",
   // A padlock.
   lock: "M6 9V7a4 4 0 0 1 8 0v2M5 9h10v8H5z",
   // Arrows for the previous and next module.

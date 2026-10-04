@@ -261,9 +261,14 @@ export default async function StudioPage({
               />
               <SidebarToggle className="absolute left-2 top-2" />
               <div className="relative mx-auto flex w-full max-w-3xl -translate-y-4 flex-col items-center gap-7">
-                <h1 id="studio-home" className="text-center font-display text-[30px] font-semibold leading-tight text-text md:text-[40px]">
-                  What shall we make?
-                </h1>
+                <div className="flex flex-col items-center gap-2.5">
+                  <h1 id="studio-home" className="text-center font-display text-[30px] font-semibold leading-tight text-text md:text-[40px]">
+                    What shall we make?
+                  </h1>
+                  <p className="text-center font-display text-[16px] leading-snug text-text2 md:text-[19px]">
+                    Talk an idea through, then make it a diagram or a video.
+                  </p>
+                </div>
                 <HomeComposer path={path} video={videoState} />
               </div>
             </section>

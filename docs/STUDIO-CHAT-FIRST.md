@@ -647,7 +647,7 @@ live preview ("The job in the grid" below):
 
 ### Home and the full-screen conversation
 
-*Since 2026-10-04 (D81, D82). It replaces the plus card and moves the
+*Since 2026-10-04 (D81, D82, D83, D84). It replaces the plus card and moves the
 conversation out of the dialog; the sections after this one describe what
 came before where they say so.*
 
@@ -657,7 +657,7 @@ out (`PanelHost`):
 | | Home (`/studio`) | A conversation (`?draft=<id>`) |
 | --- | --- | --- |
 | Sidebar | New chat, then the history | The same, the open conversation marked |
-| Main | "What shall we make?" and the composer, filling the first screen, then the assets panel: the strip (search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
+| Main | "What shall we make?", a line under it, and the composer, filling the first screen, then the assets panel: the strip (search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
 
 *Since D83:* the composer has the first screen to itself, over a soft wash
 of the accent, and the assets sit in a rounded panel under it whose head
@@ -675,6 +675,31 @@ it has read its empty record, the way an Extend press hands over its first
 message. A refusal brings the person home with the words still in the box
 and the reason under it. Nothing is made until something is sent, so New
 chat is simply the home view, its composer focused.
+
+*Since D84:* the heading has a line under it in the display serif, muted:
+"Talk an idea through, then make it a diagram or a video." The composer is a
+box, laid out as Gauth's Atlas prompt box is
+([reference](design/reference/gauth/components.md)): the field three lines
+tall on top, and a row inside the same frame under it holding the plus, a
+Diagram and a Video toggle, and a round Send at the right. It is the kit
+`MentionComposer` with `layout="box"` and the toggles as its `toolbar`; the
+conversation and the concept tutor keep the row layout, a 52px field with the
+Send pill beside it. In the box the @ menu opens under the frame, beside the
+plus that opens it.
+
+The toggles work on the message, not on a setting beside it. A press puts
+that kind's chip at the start of the message and focuses the field; a second
+press takes the chip out with the space after it. Neither ever sends. A
+toggle shows pressed (`aria-pressed`, the accent's tint) whenever its kind's
+chip is in the message, however it got there, typed with `@` or picked from
+the plus included, so the two buttons always say what Send will ask for. A
+kind `mentionOptions` gives a reason for, such as video turned off by the
+doctor, is `aria-disabled` with that reason as its description and tooltip,
+and a press adds nothing; one already in the message can still be taken out.
+The rules are `hasMention`, `withMention`, `withoutMention` and
+`toggleMention` in `mention-text.ts`. Because they change the value rather
+than the editor, the plain textarea that stands in when Lexical will not load
+is a box with the same toggles, and they still tag there.
 
 **The history** (`StudioSidebar`) lists every conversation but one closed
 with Start over: talking, briefed, drawing and done (`LISTED_STATES`), under
@@ -1282,6 +1307,33 @@ rail, and both were the reference given.
 reach a diagram, which is the studio's other main use), and a rail that
 only opens on a click (the owner asked for hover, and the click is there
 too, on the toggle).
+
+### D84. The home composer is a box with Diagram and Video toggles
+
+**Verdict:** the home composer is a box: the field three lines tall on top,
+and inside the frame under it the plus, a Diagram and a Video toggle, and a
+round Send. A toggle adds or removes its kind's chip in the message and never
+sends, and shows pressed whenever that chip is in the message, typed tags
+included. A muted line under the heading says what the page is for. The box
+is a `layout` option on the kit composers, so the conversation and the tutor
+keep their row.
+
+**Why:** the owner pointed at Gauth: its Atlas page opens on a tall prompt
+box with its controls inside it, and its Homework page shows the subjects as
+buttons under the prompt. A one-line field read as a search box, and the @
+menu was the only way to learn that a diagram or a video could be asked for;
+two buttons with the kinds' names say it before anything is typed. Making the
+toggle a view of the chips, rather than a mode of its own, keeps one source
+of truth for what a message asks for (D57): what is pressed is what the runner
+receives as tags, and there is no state for the two to disagree in.
+
+**Rejected:** a toggle that sets a mode outside the message (two places to say
+what to make, which could disagree with a typed `@video`); a toggle that
+sends, or starts a conversation, on its own (a bare tag gives the planner
+nothing to go on, T15); suggested prompts under the box (the owner removed
+that idea); Atlas's glow shadow (the kit has no shadows, DESIGN.md); and a
+second composer component for the home view, which would have forked the
+keys, the menu and the fallback that `MentionComposer` already has.
 
 ## Later: other kinds of asset
 

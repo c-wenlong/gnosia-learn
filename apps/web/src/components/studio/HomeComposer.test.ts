@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement } from "react";
+import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
     value: Value;
     sendDisabled?: boolean;
     disabledReason?: string;
+    layout?: string;
+    toolbar?: ReactNode;
     onChange: (value: Value) => void;
     onSubmit: (value: Value) => void;
   },
@@ -32,7 +34,18 @@ vi.mock("next/dynamic", () => ({
   default: () =>
     function StubComposer(props: NonNullable<typeof mocks.composer>) {
       mocks.composer = props;
-      return createElement("div", { "data-composer": JSON.stringify(props.value) });
+      // A form, as the real composer is, so a toggle that submitted it would show.
+      return createElement(
+        "form",
+        {
+          "data-composer": JSON.stringify(props.value),
+          onSubmit: (event: Event) => {
+            event.preventDefault();
+            props.onSubmit(props.value);
+          },
+        },
+        props.toolbar,
+      );
     },
 }));
 vi.mock("@/components/studio/panel-host", async (importOriginal) => ({
@@ -65,11 +78,11 @@ afterEach(() => {
   while (mounted.length) mounted.pop()?.();
 });
 
-function mount() {
+function mount(video: { ok: boolean; reason: string | null } | null = null) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  act(() => root.render(createElement(HomeComposer, { path: "/studio?topic=graphs", video: null })));
+  act(() => root.render(createElement(HomeComposer, { path: "/studio?topic=graphs", video })));
   mounted.push(() => {
     act(() => root.unmount());
     container.remove();
@@ -119,5 +132,64 @@ describe("the home composer", () => {
     mount();
     await send({ text: "a picture of UDP", mentions: [] });
     expect(mocks.composer!.value.text).toBe("a picture of UDP");
+  });
+});
+
+describe("the Diagram and Video toggles (D84)", () => {
+  const toggle = (container: HTMLElement, name: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")].find((button) => button.textContent === name)!;
+
+  it("sit in the box's row, and the box is the home composer's layout", () => {
+    const container = mount();
+    expect(mocks.composer!.layout).toBe("box");
+    expect(toggle(container, "Diagram").getAttribute("aria-pressed")).toBe("false");
+    expect(toggle(container, "Video").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("put the chip in on one press and take it out on the next, and never send", () => {
+    const container = mount();
+    act(() => mocks.composer!.onChange({ text: "how raft keeps a log in step", mentions: [] }));
+
+    act(() => toggle(container, "Diagram").click());
+    expect(mocks.composer!.value).toEqual({
+      text: "@diagram how raft keeps a log in step",
+      mentions: [{ kind: "diagram", start: 0, end: 8 }],
+    });
+    expect(toggle(container, "Diagram").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector("[role=status]")?.textContent).toBe("Diagram tag added.");
+
+    act(() => toggle(container, "Diagram").click());
+    expect(mocks.composer!.value).toEqual({ text: "how raft keeps a log in step", mentions: [] });
+    expect(toggle(container, "Diagram").getAttribute("aria-pressed")).toBe("false");
+    expect(container.querySelector("[role=status]")?.textContent).toBe("Diagram tag removed.");
+
+    expect(mocks.createDraft).not.toHaveBeenCalled();
+    expect(mocks.begin).not.toHaveBeenCalled();
+  });
+
+  it("shows pressed for a tag typed with @, and a press takes that chip out", () => {
+    const container = mount();
+    act(() => mocks.composer!.onChange({ text: "a @video of tcp", mentions: [{ kind: "video", start: 2, end: 8 }] }));
+    expect(toggle(container, "Video").getAttribute("aria-pressed")).toBe("true");
+    expect(toggle(container, "Diagram").getAttribute("aria-pressed")).toBe("false");
+
+    act(() => toggle(container, "Video").click());
+    expect(mocks.composer!.value).toEqual({ text: "a of tcp", mentions: [] });
+  });
+
+  it("say why a kind cannot be made, and add nothing when pressed", () => {
+    const container = mount({ ok: false, reason: "ffmpeg is missing" });
+    const video = toggle(container, "Video");
+    expect(video.getAttribute("aria-disabled")).toBe("true");
+    expect(video.title).toBe("Videos are unavailable: ffmpeg is missing");
+    expect(document.getElementById(video.getAttribute("aria-describedby")!)?.textContent).toBe(
+      "Videos are unavailable: ffmpeg is missing",
+    );
+
+    act(() => video.click());
+    expect(mocks.composer!.value.mentions).toEqual([]);
+    expect(video.getAttribute("aria-pressed")).toBe("false");
+    // The other kind is unaffected.
+    expect(toggle(container, "Diagram").getAttribute("aria-disabled")).toBeNull();
   });
 });

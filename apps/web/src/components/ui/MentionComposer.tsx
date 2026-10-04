@@ -46,7 +46,18 @@ import {
 
 import { Button } from "./Button";
 import { cx } from "./classes";
-import { COMPOSER_FRAME, COMPOSER_LINE_PX, COMPOSER_MAX_ROWS, COMPOSER_PLACEHOLDER, COMPOSER_REASON, COMPOSER_TEXT, composerKey } from "./composer-keys";
+import { ComposerBox, SendDisc } from "./ComposerBox";
+import {
+  COMPOSER_BOX_MIN_ROWS,
+  COMPOSER_FRAME,
+  COMPOSER_LINE_PX,
+  COMPOSER_MAX_ROWS,
+  COMPOSER_PLACEHOLDER,
+  COMPOSER_REASON,
+  COMPOSER_TEXT,
+  composerBoxFieldPx,
+  composerKey,
+} from "./composer-keys";
 import { Glyph, type GlyphName } from "./Glyph";
 import { MentionChip } from "./MentionChip";
 import {
@@ -88,6 +99,12 @@ import {
  * from the last one reported (a refused send's words coming back, a
  * suggestion's prefill, a clear after Send) rebuilds the field from it.
  * `insertMention` on the handle is for the suggestion buttons.
+ *
+ * `layout="box"` is the studio home's (D84 of docs/STUDIO-CHAT-FIRST.md): the
+ * field three lines tall on top, and under it, inside the same frame, the
+ * plus, the caller's `toolbar` and a round Send (`ComposerBox`). The menu then
+ * opens under the box, beside the plus that opens it. Everything else is the
+ * same field.
  *
  * Only the studio renders it, lazily, so Lexical stays out of every other
  * route (open question 4 of the mentions doc). The React-free rules are
@@ -133,6 +150,12 @@ export interface MentionComposerProps<K extends string = string> {
    * in place of its "reload the page" line. Not read here.
    */
   fallbackNote?: string;
+  /** `row`, the default: Send beside the field. `box`: the field over a row of controls, in one frame. */
+  layout?: "row" | "box";
+  /** The box's controls, between the plus and Send. Not drawn in the row layout. */
+  toolbar?: ReactNode;
+  /** Lines the box's field shows when empty. */
+  minRows?: number;
 }
 
 export function MentionComposer<K extends string = string>(props: MentionComposerProps<K>) {
@@ -286,6 +309,9 @@ function Field<K extends string>({
   className,
   handleRef,
   autoFocus,
+  layout = "row",
+  toolbar,
+  minRows = COMPOSER_BOX_MIN_ROWS,
 }: MentionComposerProps<K>) {
   const [editor] = useLexicalComposerContext();
   const base = useId();
@@ -655,13 +681,86 @@ function Field<K extends string>({
   const activeOption = menu?.options[menu.active];
   const tagged = new Set(value.mentions.map((mention) => mention.kind as string));
   const maxHeight = COMPOSER_LINE_PX * Math.max(1, maxRows) + 24;
+  const box = layout === "box";
+  const describedBy = reason === null ? undefined : reasonId;
+
+  const plus = (
+    <button
+      type="button"
+      aria-label="Tag what to make"
+      aria-haspopup="listbox"
+      aria-expanded={open && menu.mode === "plus"}
+      aria-controls={open ? listId : undefined}
+      disabled={disabled}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => (open && menu.mode === "plus" ? openMenu(null) : openFromPlus())}
+      className={cx(
+        "relative flex size-8 items-center justify-center rounded-full text-text2 transition-colors",
+        "hover:bg-surface2 hover:text-text disabled:cursor-not-allowed",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        // A 44px target under a finger, the face still 32px.
+        "pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5 pointer-coarse:after:content-['']",
+      )}
+    >
+      <Glyph name="add" size={20} />
+    </button>
+  );
+
+  const field = (
+    <div className="relative min-w-0 flex-1">
+      <PlainTextPlugin
+        contentEditable={
+          <ContentEditable
+            role="textbox"
+            aria-multiline
+            aria-label={label}
+            aria-describedby={describedBy}
+            aria-controls={open ? listId : undefined}
+            aria-activedescendant={open && activeOption !== undefined ? optionId(activeOption) : undefined}
+            aria-autocomplete="list"
+            spellCheck
+            style={
+              box
+                ? { minHeight: composerBoxFieldPx(minRows), maxHeight: composerBoxFieldPx(Math.max(minRows, maxRows)) }
+                : { maxHeight }
+            }
+            className={cx(
+              "block w-full overflow-y-auto outline-none",
+              box ? "px-4 pb-1 pt-3" : "min-h-12 py-3 pl-1 pr-4",
+              "whitespace-pre-wrap break-words",
+              COMPOSER_TEXT,
+              disabled && "cursor-not-allowed",
+            )}
+            aria-placeholder={placeholder ?? ""}
+            placeholder={
+              <div
+                aria-hidden
+                className={cx(
+                  "pointer-events-none absolute top-3",
+                  // The box has room for a placeholder that wraps; the row's is one line.
+                  box ? "left-4 right-4" : "left-1 right-4 truncate",
+                  COMPOSER_PLACEHOLDER,
+                )}
+              >
+                {placeholder}
+              </div>
+            }
+          />
+        }
+        ErrorBoundary={LexicalErrorBoundary}
+      />
+      <HistoryPlugin />
+    </div>
+  );
 
   return (
     <form onSubmit={submit} className={cx("relative flex flex-col gap-1.5", className)}>
       {open && (
         <div
           className={cx(
-            "absolute bottom-full left-0 z-20 mb-2 w-full md:max-w-[360px]",
+            "absolute left-0 z-20 w-full md:max-w-[360px]",
+            // Under the box, beside its plus; over the row, which sits at the foot of a panel.
+            box ? "top-full mt-2" : "bottom-full mb-2",
             "overflow-hidden rounded-xl border border-border bg-surface",
           )}
         >
@@ -722,74 +821,34 @@ function Field<K extends string>({
         </div>
       )}
 
-      <div className="flex items-end gap-2.5">
-        <div
-          className={cx(
-            "relative flex min-w-0 flex-1 items-end",
-            COMPOSER_FRAME,
-            "focus-within:border-accent",
-            disabled && "cursor-not-allowed opacity-60",
-          )}
-        >
-          <div className="shrink-0 p-2">
-            <button
-              type="button"
-              aria-label="Tag what to make"
-              aria-haspopup="listbox"
-              aria-expanded={open && menu.mode === "plus"}
-              aria-controls={open ? listId : undefined}
-              disabled={disabled}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => (open && menu.mode === "plus" ? openMenu(null) : openFromPlus())}
-              className={cx(
-                "relative flex size-8 items-center justify-center rounded-full text-text2 transition-colors",
-                "hover:bg-surface2 hover:text-text disabled:cursor-not-allowed",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                // A 44px target under a finger, the face still 32px.
-                "pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5 pointer-coarse:after:content-['']",
-              )}
-            >
-              <Glyph name="add" size={20} />
-            </button>
+      {box ? (
+        <ComposerBox
+          disabled={disabled}
+          field={field}
+          leading={plus}
+          toolbar={toolbar}
+          send={<SendDisc label={sendLabel} disabled={blocked} describedBy={describedBy} />}
+        />
+      ) : (
+        <div className="flex items-end gap-2.5">
+          <div
+            className={cx(
+              "relative flex min-w-0 flex-1 items-end",
+              COMPOSER_FRAME,
+              "focus-within:border-accent",
+              disabled && "cursor-not-allowed opacity-60",
+            )}
+          >
+            <div className="shrink-0 p-2">{plus}</div>
+            {field}
           </div>
-          <div className="relative min-w-0 flex-1">
-            <PlainTextPlugin
-              contentEditable={
-                <ContentEditable
-                  role="textbox"
-                  aria-multiline
-                  aria-label={label}
-                  aria-describedby={reason === null ? undefined : reasonId}
-                  aria-controls={open ? listId : undefined}
-                  aria-activedescendant={open && activeOption !== undefined ? optionId(activeOption) : undefined}
-                  aria-autocomplete="list"
-                  spellCheck
-                  style={{ maxHeight }}
-                  className={cx(
-                    "block min-h-12 w-full overflow-y-auto py-3 pl-1 pr-4 outline-none",
-                    "whitespace-pre-wrap break-words",
-                    COMPOSER_TEXT,
-                    disabled && "cursor-not-allowed",
-                  )}
-                  aria-placeholder={placeholder ?? ""}
-                  placeholder={
-                    <div aria-hidden className={cx("pointer-events-none absolute left-1 right-4 top-3 truncate", COMPOSER_PLACEHOLDER)}>
-                      {placeholder}
-                    </div>
-                  }
-                />
-              }
-              ErrorBoundary={LexicalErrorBoundary}
-            />
-            <HistoryPlugin />
+          <div className="pb-0.5">
+            <Button type="submit" disabled={blocked} aria-describedby={describedBy}>
+              {sendLabel}
+            </Button>
           </div>
         </div>
-        <div className="pb-0.5">
-          <Button type="submit" disabled={blocked} aria-describedby={reason === null ? undefined : reasonId}>
-            {sendLabel}
-          </Button>
-        </div>
-      </div>
+      )}
       {reason !== null && (
         <p id={reasonId} className={COMPOSER_REASON}>
           {reason}
