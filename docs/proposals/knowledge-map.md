@@ -1,6 +1,7 @@
 # Proposal: the Learn page is a map of what you know
 
-Status: being built in phases, 2026-10-04. Phase 1 (the layout) is built.
+Status: being built in phases, 2026-10-04. Phases 1 (the layout) and 2 (the
+viewer) are built.
 Decisions G1 to G8 are the build's defaults; G1 revises decision 13 of
 [DESIGN.md](../design/DESIGN.md) and is the owner's to confirm.
 
@@ -162,6 +163,14 @@ on the server for all 306 concepts. Counting crossings of straight lines
 between the dots, island by island, today's alphabetical rows cross 827
 times and the map 112; on the largest island 464 against 32. The map is
 3,572 by 5,804 at natural size, which phase 2's zoom is for.
+
+Phase 2 measured on `self_learn`, 2026-10-04, in Chromium at 1440 by 900: a
+drag across the largest island, fifteen wheel steps in and out, and the fit
+animations all held 16.8 ms a frame at worst, none over 50 ms. Two things the
+measurement turned up are in the build: zoomed out, a title shows only over an
+island wide enough on screen to hold it, and a row of islands may run as wide
+as the widest island, so the map is no longer one wide island over a tall thin
+column.
 
 DESIGN.md's decision 13 row and the `/learn` screen row are rewritten in
 phase 4, when the default changes, not before. Until then the map is the

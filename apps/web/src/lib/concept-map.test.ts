@@ -168,6 +168,19 @@ describe("mapLayout", () => {
     }
   });
 
+  it("by default lets a row run as wide as the widest island, so one wide island does not leave a tall thin map", () => {
+    // One island 30 concepts wide, and sixteen pairs.
+    const wide = [node("hub"), ...Array.from({ length: 30 }, (_, i) => node(`leaf${i}`))];
+    const pairs = Array.from({ length: 16 }, (_, i) => [node(`p${i}`), node(`q${i}`)]).flat();
+    const links = [...wide.slice(1).map((n) => req("hub", n.id)), ...Array.from({ length: 16 }, (_, i) => req(`p${i}`, `q${i}`))];
+    const all = [...wide, ...pairs];
+    const free = mapLayout(all, links);
+    const widest = Math.max(...free.islands.map((i) => i.width));
+    expect(widest).toBeGreaterThan(2400);
+    expect(free.width).toBeLessThanOrEqual(widest);
+    expect(free.height).toBeLessThan(mapLayout(all, links, { maxRowWidth: 2400 }).height);
+  });
+
   it("draws each island's edges transitively reduced", () => {
     // cost -> recurrence (assumes) is implied by cost -> big-o -> recurrence.
     const l = layout();
