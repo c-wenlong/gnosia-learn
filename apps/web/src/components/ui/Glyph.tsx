@@ -40,6 +40,14 @@ const PATHS = {
   // Arrows for the previous and next module.
   previous: "M12 5l-5 5 5 5",
   next: "M8 5l5 5-5 5",
+  // Two sliders: the Settings page's General tab.
+  sliders: "M4 6.5h6M14 6.5h2M4 13.5h2M10 13.5h6M12 4.5v4M8 11.5v4",
+  // A head and shoulders: the Settings page's Profile tab.
+  person: "M10 9.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 16.5c.8-2.8 3.2-4.3 6-4.3s5.2 1.5 6 4.3",
+  // A speech bubble: the Settings page's Tutor tab.
+  chat: "M4 4.5h12v8.5H9.5L6 16v-3H4z",
+  // A stack of disks: the Settings page's Data tab.
+  data: "M4 5.5c0-1.1 2.7-2 6-2s6 .9 6 2-2.7 2-6 2-6-.9-6-2zM4 5.5v9c0 1.1 2.7 2 6 2s6-.9 6-2v-9M4 10c0 1.1 2.7 2 6 2s6-.9 6-2",
 } as const;
 
 export type GlyphName = keyof typeof PATHS;

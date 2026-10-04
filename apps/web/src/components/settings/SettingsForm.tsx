@@ -20,9 +20,9 @@ import {
 import type { SettingsSnapshot } from "@/lib/settings";
 
 /**
- * The Settings page's cards: the name the sidebar shows, then the hi-fi 12's
- * two (hi-fi 12, less the Habit card, which went
- * with the streak and the daily target: H1 of docs/proposals/home-page.md).
+ * The Settings page's cards, one export per tab (`SettingsTabs`): the hi-fi
+ * 12's cards (less the Habit card, which went with the streak and the daily
+ * target: H1 of docs/proposals/home-page.md), regrouped so each tab is short.
  * Each select saves on change through `POST /api/learner/preference` and says
  * what happened beside it. The theme is `ThemeSwitch`, which goes through the
  * provider's `setThemeMode` and so also writes the cookie the layout reads.
@@ -92,25 +92,8 @@ function usePreference<T>(key: string, initial: T) {
   return { value, status, save };
 }
 
-export function SettingsForm({
-  settings,
-  providers,
-  chain,
-  topicIds,
-}: {
-  settings: SettingsSnapshot;
-  /**
-   * What the tutor tries, in order, and whose key each uses: the providers
-   * with a key, or with a model chain the chain's entries with a key, by
-   * model id (docs/TUTOR-MODELS.md).
-   */
-  providers: { id: string; label: string; source: "saved" | "server" }[];
-  /** Whether `providers` is the owner's model chain rather than the built-in defaults. */
-  chain: boolean;
-  /** Every curriculum item id, for Reset progress. */
-  topicIds: string[];
-}) {
-  const tutor = usePreference<TutorStyle>(PREFERENCE_KEYS.tutorStyle, settings.tutorStyle);
+/** The General tab: how the app looks and moves. */
+export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
   const motion = usePreference<MotionMode>(PREFERENCE_KEYS.reducedMotion, settings.motion);
 
   // The stored row is the truth once it has been read: a browser whose
@@ -122,59 +105,118 @@ export function SettingsForm({
     writeMotionCookie(storedMotion);
     applyMotionToDocument(storedMotion);
   }, [storedMotion]);
+  return (
+    <Card title="Appearance">
+      <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
+        {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}
+      </Field>
+      <Field
+        label="Motion"
+        note="Always reduce motion stops the app's animations in this browser, whatever your device says. Respect system follows your device's setting."
+        status={motion.status}
+      >
+        {(id) => (
+          <Select
+            id={id}
+            value={motion.value}
+            onChange={(v) => {
+              const mode = v as MotionMode;
+              // At once, and whether or not the save lands, as the theme
+              // does: the cookie is what the next page's first paint reads.
+              applyMotionToDocument(mode);
+              writeMotionCookie(mode);
+              motion.save(mode);
+            }}
+          >
+            {MOTION_MODES.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+    </Card>
+  );
+}
 
+/** The Profile tab: who the app says you are. */
+export function ProfileSettings() {
+  return (
+    <Card>
+      <NameField />
+    </Card>
+  );
+}
+
+/**
+ * The top of the Tutor tab: how the tutor talks, and the models it tries in
+ * order, read-only. The Models and Provider keys cards follow it on the tab.
+ */
+export function TutorSettings({
+  settings,
+  providers,
+  chain,
+}: {
+  settings: SettingsSnapshot;
+  /**
+   * What the tutor tries, in order, and whose key each uses: the providers
+   * with a key, or with a model chain the chain's entries with a key, by
+   * model id (docs/TUTOR-MODELS.md).
+   */
+  providers: { id: string; label: string; source: "saved" | "server" }[];
+  /** Whether `providers` is the owner's model chain rather than the built-in defaults. */
+  chain: boolean;
+}) {
+  const tutor = usePreference<TutorStyle>(PREFERENCE_KEYS.tutorStyle, settings.tutorStyle);
+  return (
+    <Card title="Style and model order">
+      <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>
+        {(id) => (
+          <Select id={id} value={tutor.value} onChange={(v) => tutor.save(v as TutorStyle)}>
+            {TUTOR_STYLES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+      <Field
+        label="Model providers"
+        note={
+          chain
+            ? "Your models, tried in this order. Change them under Models below."
+            : "The built-in defaults, tried in this order: your own keys first, then the server's. Choose your own under Models below."
+        }
+      >
+        {(id) => (
+          <ReadOnly id={id} title={providers.map((p) => `${p.label}, ${p.source === "saved" ? "your key" : "server key"}`).join(" → ")}>
+            {providers.length === 0
+              ? chain
+                ? "None: no model in your list has a key"
+                : "None yet: add a key under Provider keys below"
+              : providers.map((p) => `${p.id} (${p.source === "saved" ? "yours" : "server"})`).join(" → ")}
+          </ReadOnly>
+        )}
+      </Field>
+    </Card>
+  );
+}
+
+/** The Data tab: the mastery model's priors, read-only, then export and reset. */
+export function DataSettings({
+  settings,
+  topicIds,
+}: {
+  settings: SettingsSnapshot;
+  /** Every curriculum item id, for Reset progress. */
+  topicIds: string[];
+}) {
   const bkt = settings.bkt;
-
   return (
     <>
-      <Card title="Profile">
-        <NameField />
-      </Card>
-
-      <Card title="Appearance and tutor">
-        <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
-          {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}
-        </Field>
-        <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>
-          {(id) => (
-            <Select id={id} value={tutor.value} onChange={(v) => tutor.save(v as TutorStyle)}>
-              {TUTOR_STYLES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-        <Field
-          label="Motion"
-          note="Always reduce motion stops the app's animations in this browser, whatever your device says. Respect system follows your device's setting."
-          status={motion.status}
-        >
-          {(id) => (
-            <Select
-              id={id}
-              value={motion.value}
-              onChange={(v) => {
-                const mode = v as MotionMode;
-                // At once, and whether or not the save lands, as the theme
-                // does: the cookie is what the next page's first paint reads.
-                applyMotionToDocument(mode);
-                writeMotionCookie(mode);
-                motion.save(mode);
-              }}
-            >
-              {MOTION_MODES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-      </Card>
-
-      <Card title="Model">
+      <Card title="Mastery model">
         <Field label="BKT priors" note="Advanced. Read-only here: the learn CLI owns them, and they change future observations only.">
           {(id) => (
             <ReadOnly id={id}>
@@ -184,24 +226,8 @@ export function SettingsForm({
             </ReadOnly>
           )}
         </Field>
-        <Field
-          label="Model providers"
-          note={
-            chain
-              ? "Your models, tried in this order. Change them under Models."
-              : "The built-in defaults, tried in this order: your own keys first, then the server's. Choose your own under Models."
-          }
-        >
-          {(id) => (
-            <ReadOnly id={id} title={providers.map((p) => `${p.label}, ${p.source === "saved" ? "your key" : "server key"}`).join(" → ")}>
-              {providers.length === 0
-                ? chain
-                  ? "None: no model in your list has a key"
-                  : "None yet: add a key under Provider keys"
-                : providers.map((p) => `${p.id} (${p.source === "saved" ? "yours" : "server"})`).join(" → ")}
-            </ReadOnly>
-          )}
-        </Field>
+      </Card>
+      <Card title="Export and reset">
         <DataActions topicIds={topicIds} />
       </Card>
     </>

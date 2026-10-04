@@ -23,7 +23,7 @@ vi.mock("@/lib/learner-context", () => ({
   }),
 }));
 
-const { SettingsForm } = await import("./SettingsForm");
+const { DataSettings, GeneralSettings } = await import("./SettingsForm");
 const { MOTION_COOKIE, readMotionCookie } = await import("@/lib/motion");
 
 beforeAll(() => {
@@ -49,11 +49,17 @@ function settings(over: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
   return { reachable: true, tutorStyle: "guide-concise", motion: "system", bkt: null, ...over };
 }
 
-function mount(snapshot: SettingsSnapshot) {
+function mount(snapshot: SettingsSnapshot, tab: "general" | "data" = "general") {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  act(() => root.render(createElement(SettingsForm, { settings: snapshot, providers: [], chain: false, topicIds: ["t1"] })));
+  act(() =>
+    root.render(
+      tab === "general"
+        ? createElement(GeneralSettings, { settings: snapshot })
+        : createElement(DataSettings, { settings: snapshot, topicIds: ["t1"] }),
+    ),
+  );
   mounted.push(() => {
     act(() => root.unmount());
     container.remove();
@@ -106,7 +112,7 @@ describe("the motion setting", () => {
 
 describe("Reset progress", () => {
   it("folds the confirm open and shut, and gives focus back to the button on Cancel", () => {
-    const container = mount(settings());
+    const container = mount(settings(), "data");
     const toggle = [...container.querySelectorAll("button")].find((b) => b.textContent === "Reset progress")!;
     const fold = document.getElementById(toggle.getAttribute("aria-controls")!)!;
     expect(fold.hasAttribute("inert")).toBe(true);
@@ -123,7 +129,7 @@ describe("Reset progress", () => {
   });
 
   it("says the reset in a live line, and closes the confirm", async () => {
-    const container = mount(settings());
+    const container = mount(settings(), "data");
     const toggle = [...container.querySelectorAll("button")].find((b) => b.textContent === "Reset progress")!;
     act(() => toggle.click());
     const go = [...container.querySelectorAll("button")].find((b) => b.textContent === "Reset every course")!;

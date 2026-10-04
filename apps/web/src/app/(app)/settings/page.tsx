@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { ProviderKeys } from "@/components/settings/ProviderKeys";
-import { SettingsForm } from "@/components/settings/SettingsForm";
+import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
+import { SettingsTabs } from "@/components/settings/SettingsTabs";
 import { TutorModels } from "@/components/settings/TutorModels";
 import { getAllTopicIds, getCourses } from "@/data/courses";
 import { currentOwner } from "@/lib/owner";
@@ -20,7 +21,7 @@ export const metadata: Metadata = { title: "Settings" };
  * docs/proposals/home-page.md).
  *
  * The server reads what is stored and what only the server knows (the BKT
- * parameters, which providers have a key); `SettingsForm` writes through
+ * parameters, which providers have a key); the cards in `SettingsForm.tsx` write through
  * `/api/learner/preference` one field at a time.
  *
  * Provider keys (docs/BYOK.md) are the owner's own, saved through
@@ -28,6 +29,9 @@ export const metadata: Metadata = { title: "Settings" };
  * characters and date, never the key. The Models card (docs/TUTOR-MODELS.md)
  * is the owner's model chain, which replaces the built-in defaults once it
  * holds a model.
+ *
+ * The cards are grouped into tabs (General, Profile, Tutor, Data) so the page
+ * is one short group at a time; `?tab=` opens one, read by `SettingsTabs`.
  */
 export default async function SettingsPage() {
   const owner = await currentOwner();
@@ -45,14 +49,30 @@ export default async function SettingsPage() {
         })
       : keys.order.map((p) => ({ id: p.id, label: p.label, source: p.source }));
   return (
-    <div data-layout="app" className={`flex max-w-[852px] flex-col gap-4 ${PAGE_ENTER}`}>
+    <div data-layout="app" className={`flex max-w-[1084px] flex-col gap-4 ${PAGE_ENTER}`}>
       <h1 className="font-display text-[28px] leading-tight font-bold text-text">Settings</h1>
-      <SettingsForm settings={settings} providers={providers} chain={models.chain.length > 0} topicIds={getAllTopicIds(courses)} />
-      <ProviderKeys
-        rows={keys.rows.map((row) => ({ ...row, test: keyTestModel(models.chain, row.id) }))}
-        reachable={keys.reachable}
+      <SettingsTabs
+        sections={[
+          { id: "general", label: "General", glyph: "sliders", content: <GeneralSettings settings={settings} /> },
+          { id: "profile", label: "Profile", glyph: "person", content: <ProfileSettings /> },
+          {
+            id: "tutor",
+            label: "Tutor",
+            glyph: "chat",
+            content: (
+              <>
+                <TutorSettings settings={settings} providers={providers} chain={models.chain.length > 0} />
+                <TutorModels view={models} />
+                <ProviderKeys
+                  rows={keys.rows.map((row) => ({ ...row, test: keyTestModel(models.chain, row.id) }))}
+                  reachable={keys.reachable}
+                />
+              </>
+            ),
+          },
+          { id: "data", label: "Data", glyph: "data", content: <DataSettings settings={settings} topicIds={getAllTopicIds(courses)} /> },
+        ]}
       />
-      <TutorModels view={models} />
     </div>
   );
 }

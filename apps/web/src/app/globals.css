@@ -843,3 +843,25 @@ html.theme-fade *::after {
   transition-timing-function: ease-out !important;
   transition-delay: 0s !important;
 }
+
+/* A Settings tab's panel fades and rises a little as it is shown, so a press
+   on a tab reads as a change of page rather than a jump. `hidden` is
+   display: none, so the animation runs again each time a panel comes back.
+   Not under either kind of reduced motion: the device's, or Settings'
+   "Always reduce motion" (`data-motion="reduce"`). */
+@keyframes settings-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .settings-panel:not([hidden]) {
+    animation: settings-panel-in 180ms ease-out both;
+  }
+}
