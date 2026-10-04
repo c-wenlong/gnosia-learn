@@ -1,3 +1,5 @@
+import { restoreCheck, restoreVerdict, type TurnCheck, type Verdict } from "@/lib/tutor-check";
+
 /**
  * The concept tutor's thread as the browser keeps it, and the pure rules the
  * chat needs: which `[n]` markers in a reply are real citations, how much of
@@ -15,6 +17,10 @@
 export interface TutorTurn {
   role: "user" | "assistant";
   content: string;
+  /** A tutor turn that asked a check (its `CHECK:` marker, taken off by the route). */
+  check?: TurnCheck | null;
+  /** A learner turn that answered one: its verdict row (docs/proposals/recall-in-chat.md, R2). */
+  verdict?: Verdict | null;
 }
 
 /**
@@ -35,6 +41,16 @@ export interface HandoffMarker {
 }
 
 export type ThreadItem = TutorTurn | HandoffMarker;
+
+/** A stored turn back, with its check and verdict kept only when they are well formed. */
+function restoreTurn(t: TutorTurn): TutorTurn {
+  const turn: TutorTurn = { role: t.role, content: t.content };
+  const check = t.role === "assistant" ? restoreCheck(t.check) : null;
+  if (check !== null) turn.check = check;
+  const verdict = t.role === "user" ? restoreVerdict(t.verdict) : null;
+  if (verdict !== null) turn.verdict = verdict;
+  return turn;
+}
 
 /** A runner's draft id: a UUID today; anything else stored is not linked to. */
 const DRAFT_ID = /^[A-Za-z0-9-]{1,100}$/;
@@ -87,15 +103,23 @@ export function markerPieces(marker: Pick<HandoffMarker, "content" | "mentions">
   return pieces;
 }
 
-/** The tutor's own turns, markers left out: the only thing the chat route or the planner is sent. */
+/**
+ * The tutor's own turns, markers left out and each cut to its role and
+ * words: the only thing the chat route or the planner is sent. A turn's
+ * check and verdict are the page's, and never reach a model.
+ */
 export function chatTurns(items: readonly ThreadItem[]): TutorTurn[] {
-  return items.filter((item): item is TutorTurn => item.role !== "studio");
+  return items
+    .filter((item): item is TutorTurn => item.role !== "studio")
+    .map(({ role, content }) => ({ role, content }));
 }
 
 /**
  * Where a concept's thread lives in `sessionStorage`. Per tab and gone when
- * the tab closes, on purpose for now: the thread is a scratchpad, and what
- * counts as evidence is written by the session and the CLI, not by chat.
+ * the tab closes, on purpose for now: the thread is a scratchpad. What counts
+ * as evidence from it is an answer the learner chose to record, which the
+ * observe route writes to the database (docs/proposals/recall-in-chat.md);
+ * the words stay here.
  */
 export function threadKey(slug: string): string {
   return `self-learn:tutor:${slug}`;
@@ -122,7 +146,7 @@ export function parseThread(raw: string | null): ThreadItem[] {
                 m !== null && typeof m === "object" && typeof m.kind === "string" && Number.isInteger(m.start) && Number.isInteger(m.end),
             ),
           }
-        : t,
+        : restoreTurn(t),
     );
   } catch {
     return [];

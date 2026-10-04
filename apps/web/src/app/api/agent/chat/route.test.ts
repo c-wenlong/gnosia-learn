@@ -158,6 +158,43 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(sent[1]).toEqual({ role: "user", content: "What is it?" });
   });
 
+  it("takes a CHECK marker off the reply and returns it beside the prose", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    completeWithFallback.mockResolvedValue({
+      ok: true,
+      attempts: [],
+      result: {
+        content: "Good. Now try one.\n\nWhat does a zero dot product say?\n**CHECK:** What does a zero dot product say?",
+        model: "m",
+        provider: "gemini",
+        providerLabel: "Gemini",
+      },
+    });
+    const { json } = await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "Check me" }] });
+    expect(json.message).toEqual({ role: "assistant", content: "Good. Now try one.\n\nWhat does a zero dot product say?" });
+    expect(json.check).toEqual({ question: "What does a zero dot product say?" });
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("CHECK: <the question, on one line>");
+  });
+
+  it("answers check: null for a turn that asked none, and leaves the open tutor's reply alone", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    completeWithFallback.mockResolvedValue({
+      ok: true,
+      attempts: [],
+      result: { content: "It measures alignment.", model: "m", provider: "gemini", providerLabel: "Gemini" },
+    });
+    expect((await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "Q" }] })).json.check).toBeNull();
+    completeWithFallback.mockResolvedValue({
+      ok: true,
+      attempts: [],
+      result: { content: "Hi.\nCHECK: Q?", model: "m", provider: "gemini", providerLabel: "Gemini" },
+    });
+    const open = await call({ subject: "Kalman", messages: [{ role: "user", content: "Q" }] });
+    expect(open.json.message).toEqual({ role: "assistant", content: "Hi.\nCHECK: Q?" });
+    expect(open.json.check).toBeUndefined();
+  });
+
   it("reads the learner's tutor style on the server and puts it in the prompt", async () => {
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
     readTutorStyle.mockResolvedValue("socratic");
