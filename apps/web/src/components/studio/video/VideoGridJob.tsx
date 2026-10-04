@@ -13,6 +13,7 @@ import { usePanelHost } from "@/components/studio/panel-host";
 import { Chip } from "@/components/studio/StudioChrome";
 import { linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
+import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { useSheets } from "@/components/studio/video/use-video-job";
 import { useElapsed } from "@/lib/use-elapsed";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
@@ -349,16 +350,15 @@ function Backdrop({
   live: { current: string | null; previous: string | null };
   backdrop: string | null;
 }) {
-  const [posterShown, setPosterShown] = useState(false);
   const [posterMissing, setPosterMissing] = useState(false);
-  const posterImage = useRef<HTMLImageElement>(null);
   const fallback = live.current ?? backdrop;
   // The server renders the poster's `<img>`, so a cached one can finish
-  // loading before React attaches `onLoad`: ask the element once mounted.
-  useEffect(() => {
-    const image = posterImage.current;
-    if (image !== null && image.complete && image.naturalWidth > 0) setPosterShown(true);
-  }, [stage]);
+  // loading before React attaches `onLoad`; `useImageReveal` asks the element too.
+  const {
+    attach: attachPoster,
+    onLoad: posterLoaded,
+    loaded: posterShown,
+  } = useImageReveal(stage === "review" ? mediaHref(job.jobId, "poster.jpg") : null);
 
   if (stage === "review") {
     return (
@@ -373,11 +373,11 @@ function Backdrop({
         {!posterMissing && (
           // eslint-disable-next-line @next/next/no-img-element -- the gate's poster, behind the proxy.
           <img
-            ref={posterImage}
+            ref={attachPoster}
             src={mediaHref(job.jobId, "poster.jpg")}
             alt=""
             decoding="async"
-            onLoad={() => setPosterShown(true)}
+            onLoad={posterLoaded}
             onError={() => setPosterMissing(true)}
             className={`relative h-full w-full object-contain pb-12 ${posterShown ? "studio-fade-in" : "opacity-0"}`}
           />

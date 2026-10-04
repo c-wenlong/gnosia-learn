@@ -10,10 +10,11 @@ import { Card } from "@/components/ui/Card";
 import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow, type FormRowField } from "@/components/ui/FormRow";
 import { Input } from "@/components/ui/Input";
-import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
+import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
 import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
+import { statusProps, useSaveStatus, type SaveStatus } from "@/components/ui/save-status";
 import { useLearner } from "@/lib/learner-context";
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
 import { sendJson } from "@/lib/send-json";
@@ -36,22 +37,6 @@ import type { SettingsSnapshot } from "@/lib/settings";
  * `self-learn-motion` cookie and `data-motion` on <html> (`@/lib/motion`).
  */
 
-type Status = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string };
-
-/** What a status says, for `LiveStatus`: nothing while idle. */
-function statusLine(status: Status | undefined, words: { saving: string; saved: string }): { text: string | null; tone: StatusTone } {
-  switch (status?.kind) {
-    case "saving":
-      return { text: words.saving, tone: "muted" };
-    case "saved":
-      return { text: words.saved, tone: "ok" };
-    case "error":
-      return { text: status.message, tone: "danger" };
-    default:
-      return { text: null, tone: "muted" };
-  }
-}
-
 async function savePreference(key: string, value: unknown): Promise<string | null> {
   const reply = await sendJson<{ ok?: boolean; error?: string }>("POST", "/api/learner/preference", { key, value });
   if (reply === null) return "Not saved: the server did not answer.";
@@ -64,28 +49,19 @@ async function savePreference(key: string, value: unknown): Promise<string | nul
  *
  * Saves to one key run one after another: two quick changes are two requests,
  * and if they ran side by side the first could land last and leave the row
- * on the older choice while the select shows the newer one. Only the newest save reports, so an earlier one finishing late
- * cannot print "Saved" over a later one still in flight.
+ * on the older choice while the select shows the newer one. Only the newest
+ * save reports (`useSaveStatus`). A failed save leaves the new choice on
+ * screen, with the error beside it, rather than putting the old one back.
  */
 function usePreference<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(initial);
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const { status, track } = useSaveStatus();
   const chain = useRef<Promise<unknown>>(Promise.resolve());
-  const latest = useRef(0);
   const save = (next: T) => {
     setValue(next);
-    setStatus({ kind: "saving" });
-    const mine = ++latest.current;
     const run = chain.current.then(() => savePreference(key, next));
     chain.current = run;
-    void run.then((error) => {
-      if (mine !== latest.current) return;
-      if (error === null) {
-        setStatus({ kind: "saved" });
-      } else {
-        setStatus({ kind: "error", message: error });
-      }
-    });
+    track(run);
   };
   return { value, status, save };
 }
@@ -160,8 +136,7 @@ export function ProfileSettings() {
  */
 export function AvatarPicker() {
   const { state, setAvatar } = useLearner();
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
-  const latest = useRef(0);
+  const { status, track } = useSaveStatus();
   const name = useId();
   const current = state.avatar;
 
@@ -170,14 +145,7 @@ export function AvatarPicker() {
   // be chosen again to retry; `change` would not fire for it.
   const choose = (avatar: AvatarId) => {
     if (avatar === current && status.kind !== "error") return;
-    setStatus({ kind: "saving" });
-    const mine = ++latest.current;
-    void setAvatar(avatar).then((ok) => {
-      if (mine !== latest.current) return;
-      setStatus(
-        ok ? { kind: "saved" } : { kind: "error", message: "Not saved: the database did not answer. Choose it again to retry." },
-      );
-    });
+    track(setAvatar(avatar).then((ok) => (ok ? null : "Not saved: the database did not answer. Choose it again to retry.")));
   };
 
   return (
@@ -229,7 +197,7 @@ export function AvatarPicker() {
           );
         })}
       </div>
-      <LiveStatus {...statusLine(status, { saving: "Saving…", saved: "Saved" })} />
+      <LiveStatus {...statusProps(status)} />
     </fieldset>
   );
 }
@@ -329,7 +297,7 @@ export function NameField() {
   const { state, setDisplayName } = useLearner();
   const saved = state.displayName ?? "";
   const [draft, setDraft] = useState(saved);
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const { status, setStatus, track } = useSaveStatus();
   // A newer name from the server (a refresh, another tab's save) replaces an
   // untouched field, so a focus and blur cannot save the old one over it. A
   // field being edited keeps what is typed, and so does one whose save is
@@ -339,7 +307,6 @@ export function NameField() {
     setBase(saved);
     if (draft === base && status.kind !== "saving") setDraft(saved);
   }
-  const latest = useRef(0);
   const save = () => {
     const next = draft.replace(/\s+/g, " ").trim();
     // After a failed save the provider still holds the name it tried, so the
@@ -350,12 +317,7 @@ export function NameField() {
       return;
     }
     setDraft(next);
-    setStatus({ kind: "saving" });
-    const mine = ++latest.current;
-    void setDisplayName(next).then((ok) => {
-      if (mine !== latest.current) return;
-      setStatus(ok ? { kind: "saved" } : { kind: "error", message: "Not saved: the database did not answer." });
-    });
+    track(setDisplayName(next).then((ok) => (ok ? null : "Not saved: the database did not answer.")));
   };
   return (
     <Field label="Name" note="Shown at the foot of the sidebar. Leave it empty to show Account." status={status}>
@@ -387,7 +349,7 @@ function short(n: number): string {
   return String(Number(n.toFixed(3)));
 }
 
-/** A Settings row: `FormRow`'s inline layout, its status read from a save's `Status`. */
+/** A Settings row: `FormRow`'s inline layout, its status read from a save's `SaveStatus`. */
 function Field({
   label,
   note,
@@ -396,7 +358,7 @@ function Field({
 }: {
   label: string;
   note?: string;
-  status?: Status;
+  status?: SaveStatus;
   children: (field: FormRowField) => ReactNode;
 }) {
   return (
@@ -404,7 +366,7 @@ function Field({
       layout="inline"
       label={label}
       hint={note}
-      status={status === undefined ? undefined : statusLine(status, { saving: "Saving…", saved: "Saved" })}
+      status={status === undefined ? undefined : statusProps(status)}
     >
       {children}
     </FormRow>
@@ -443,7 +405,7 @@ function ReadOnly({ field, title, children }: { field: FormRowField; title?: str
 function DataActions({ topicIds }: { topicIds: string[] }) {
   const { resetCourse } = useLearner();
   const [confirming, setConfirming] = useState(false);
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
   const confirmId = useId();
   const toggle = useRef<HTMLButtonElement>(null);
 
@@ -490,7 +452,7 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
         returnFocusTo={toggle}
       />
       <LiveStatus
-        {...statusLine(status, { saving: "Resetting…", saved: "Progress reset. Ticks and notes are cleared." })}
+        {...statusProps(status, { saving: "Resetting…", saved: "Progress reset. Ticks and notes are cleared." })}
         className="pt-3"
       />
     </div>

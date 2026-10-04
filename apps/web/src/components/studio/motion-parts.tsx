@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode, type RefObject } from "react";
 
 import { ENTER, FOLD_MS } from "@/components/studio/motion";
 import { Collapse } from "@/components/ui/Collapse";
+import { revealClass, useImageReveal } from "@/components/ui/use-image-reveal";
 import { usePresence } from "@/components/ui/use-presence";
 import { cx } from "@/components/ui/classes";
 import { prefersReducedMotion } from "@/lib/motion";
@@ -67,25 +68,18 @@ export function Reveal({
 
 /**
  * An `<img>` that fades in once its picture has loaded, rather than painting
- * in strips or popping in over its mat.
+ * in strips or popping in over its mat (`useImageReveal`, which also counts a
+ * picture that finished loading before React was listening).
  *
- * A picture the browser already had can finish loading before React attaches
- * `onLoad` (the server rendered the element), so the element is asked once it
- * is attached as well; otherwise a cached thumbnail would stay at opacity 0.
- * A lazy picture not yet fetched is not complete, and waits for its load.
- * A picture that fails is shown too, so its alt text or the browser's broken
- * mark is not hidden.
+ * A picture that fails is shown too (`showOnError`), so its alt text or the
+ * browser's broken mark is not hidden. Unlike a cover's, this picture is held
+ * transparent from the server's HTML on (`loaded`, not the hook's hydration-
+ * aware class), as it always was: every studio screen needs script anyway,
+ * and showing a half-loaded picture before hydration only to hide it and
+ * fade it in again after would be the worse flash.
  */
 export function FadeImg({ src, className, onLoad, onError, alt, ...rest }: ImgHTMLAttributes<HTMLImageElement> & { src: string; alt: string }) {
-  const [shown, setShown] = useState<string | null>(null);
-  const ready = shown === src;
-  const attach = useCallback(
-    (image: HTMLImageElement | null) => {
-      // Complete covers a picture that failed before React was listening, too.
-      if (image !== null && image.complete) setShown(src);
-    },
-    [src],
-  );
+  const { attach, onLoad: revealLoad, onError: revealError, loaded } = useImageReveal(src, { showOnError: true });
   return (
     // eslint-disable-next-line @next/next/no-img-element -- every caller's picture is a runner file or a blob behind a route, which the optimiser cannot reach.
     <img
@@ -93,16 +87,16 @@ export function FadeImg({ src, className, onLoad, onError, alt, ...rest }: ImgHT
       ref={attach}
       src={src}
       alt={alt}
-      data-loaded={ready ? "" : undefined}
+      data-loaded={loaded ? "" : undefined}
       onLoad={(event) => {
-        setShown(src);
+        revealLoad();
         onLoad?.(event);
       }}
       onError={(event) => {
-        setShown(src);
+        revealError();
         onError?.(event);
       }}
-      className={cx("transition-opacity duration-200 ease-out motion-reduce:transition-none", ready ? "opacity-100" : "opacity-0", className)}
+      className={cx(revealClass(loaded), className)}
     />
   );
 }
