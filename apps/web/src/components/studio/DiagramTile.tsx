@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { PanelLink, SelectableFrame } from "@/components/studio/PanelLink";
 import { RowJob, TileJob } from "@/components/studio/GridJob";
+import { KindBadge, KindWord, TILE_LIFT } from "@/components/studio/KindBadge";
 import { Chip } from "@/components/studio/StudioChrome";
 import {
   canvasHref,
@@ -57,13 +58,14 @@ export function DiagramTile({
   return (
     <SelectableFrame
       name={diagram.name}
-      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-[var(--surface)] transition-colors ${
+      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-[var(--surface)] ${TILE_LIFT} ${
         untopiced ? "border-[var(--warn-border)]" : "border-[var(--border)]"
       }`}
       selectedClassName="ring-2 ring-[var(--accent)]"
       idleClassName="hover:bg-[var(--surface-hover)]"
     >
       <PanelLink href={selectHref} className="flex min-w-0 flex-col">
+        <KindWord kind="diagram" />
         <Thumbnail diagram={diagram} />
         <div className="flex min-w-0 flex-col gap-1.5 p-3">
           <span className="line-clamp-2 text-sm font-medium">{displayTitle(diagram)}</span>
@@ -102,6 +104,9 @@ export function DiagramTile({
         thumbnail={diagram.svg.exists ? thumbnailHref(diagram.name) : null}
         path={path}
       />
+      {/* After the job's loader, so a change being drawn does not hide what
+          the tile is. Over the thumbnail's top left, which is the tile's. */}
+      <KindBadge kind="diagram" />
       {/* Selecting opens the tile's panel; the two controls here go straight
           to the canvas, or to a conversation about extending the diagram.
           Separate targets, because a grid where one click does everything has
@@ -217,10 +222,12 @@ export function DiagramRow({
           />
         )}
       </span>
+      <KindBadge kind="diagram" inline />
       <PanelLink
         href={selectHref}
         className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
       >
+        <KindWord kind="diagram" />
         {displayTitle(diagram)}
       </PanelLink>
       <RowJob target={diagram.tldr.path} title={displayTitle(diagram)} path={path} />

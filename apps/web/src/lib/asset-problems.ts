@@ -166,15 +166,46 @@ export function uploadCommand(source: RenderSource): string {
 }
 
 /**
+ * The source a failure names for a studio video and its sidecars and poster.
+ * Their rows say `self-learn`, as every row this repository writes does, but
+ * their bytes are stored only by the studio's Accept (`catalog video put
+ * --job`), so no upload command brings one back.
+ */
+export const STUDIO_SOURCE = "studio";
+
+/**
+ * The source a surface hands `assetProblem` for one asset: `studio` for the
+ * studio's `video:<slug>` ids (and the poster derived from one), else the
+ * row's own `sourceRepo`.
+ */
+export function problemSource(assetId: string, sourceRepo: string | null | undefined): string | null {
+  if (assetId.startsWith("video:") || assetId.startsWith("poster:video:")) return STUDIO_SOURCE;
+  return sourceRepo ?? null;
+}
+
+/**
+ * A studio video with no stored copy is made again, not uploaded: a change
+ * job with no script change renders it from its stored source (V17 of
+ * docs/STUDIO-VIDEOS.md), and Change on its studio tile is the way in.
+ */
+const STUDIO_REMAKE = {
+  kind: "note",
+  text: "A studio video is stored only when its job is accepted. Make it again from the studio: press Change on its tile and ask for the same video, which renders it from its stored source.",
+} as const;
+
+/**
  * What a surface says about one code for a row made by `sourceRepo`, when
  * the surface knows it. The same entry as `ASSET_PROBLEMS`, except that the
- * upload command names the tool that made the render: the table's own
- * sentence names manimkc's, which is what a surface that cannot tell (a note
+ * upload command names the tool that made the render, and a studio video
+ * (`STUDIO_SOURCE`) is told how to make it again: the table's own sentence
+ * names manimkc's, which is what a surface that cannot tell (a note
  * embedding a video by URL) keeps showing.
  */
 export function assetProblem(code: AssetProblemCode, sourceRepo?: string | null): AssetProblem {
   const problem = ASSET_PROBLEMS[code];
-  if (code !== "not-uploaded" || !isRenderSource(sourceRepo)) return problem;
+  if (code !== "not-uploaded") return problem;
+  if (sourceRepo === STUDIO_SOURCE) return { ...problem, fix: STUDIO_REMAKE };
+  if (!isRenderSource(sourceRepo)) return problem;
   return { ...problem, fix: { kind: "command", text: uploadCommand(sourceRepo) } };
 }
 

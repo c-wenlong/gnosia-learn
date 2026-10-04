@@ -8,7 +8,7 @@ import { NewDiagramJobs } from "@/components/studio/GridJob";
 import { useStudioPath } from "@/components/studio/panel-host";
 import { EmptyDirectory } from "@/components/studio/StudioBlocked";
 import { Spacer } from "@/components/studio/StudioChrome";
-import { DisplayMenu, SearchField, SortMenu, TopicChips } from "@/components/studio/StudioControls";
+import { DisplayMenu, KindSegments, SearchField, SortMenu, TopicChips } from "@/components/studio/StudioControls";
 import { SettingsLink } from "@/components/studio/StudioSettings";
 import { NewVideoJobs, VideoRow, VideoTile } from "@/components/studio/video/VideoGridJob";
 import { filterVideos, gridSections, sectionItems, sortVideos, type StudioVideo } from "@/lib/studio-video";
@@ -19,6 +19,7 @@ import {
   panelHref,
   parseView,
   rawParamsOf,
+  showsKind,
   sortDiagrams,
   studioHref,
   type Diagram,
@@ -31,7 +32,7 @@ import {
  * bar.
  *
  * The page reads the diagrams, the videos and the vocabulary once and hands
- * them here whole. A change to the search, the topics, Display or Sort moves
+ * them here whole. A change to the kind, the search, the topics, Display or Sort moves
  * the URL without a server render (`browserViewMove`), and this redraws from
  * what it already holds: filtering, sorting and grouping are pure functions
  * of the two, and a server render to run them took two seconds or more.
@@ -47,12 +48,13 @@ export function StudioToolbar({ chips }: { chips: TopicChip[] }) {
   const view = useStudioView();
   return (
     <>
+      <KindSegments view={view} />
       <SearchField view={view} />
       <TopicChips chips={chips} view={view} />
       <Spacer />
       <DisplayMenu view={view} />
       <SortMenu view={view} />
-      <SettingsLink href={studioHref(view, { settings: true, draft: null, job: null, extend: null, selected: null, shot: null })} />
+      <SettingsLink href={studioHref(view, { settings: true, draft: null, job: null, extend: null, selected: null, shot: null, play: null })} />
     </>
   );
 }
@@ -114,15 +116,12 @@ export function StudioGrid({
 
   // The jobs making something new lead the first section. The way in is the
   // home view's composer above the grid (D81 of docs/STUDIO-CHAT-FIRST.md).
-  const lead = grid ? (
+  // They follow the kind filter: a new diagram's job is a diagram.
+  const layout = grid ? "grid" : "list";
+  const lead = (
     <>
-      <NewDiagramJobs targets={targets} path={path} layout="grid" />
-      <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />
-    </>
-  ) : (
-    <>
-      <NewDiagramJobs targets={targets} path={path} layout="list" />
-      <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />
+      {showsKind(view.kind, "diagram") && <NewDiagramJobs targets={targets} path={path} layout={layout} />}
+      {showsKind(view.kind, "video") && <NewVideoJobs slugs={videoSlugs} path={path} layout={layout} />}
     </>
   );
   const frame = grid ? "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3" : "space-y-0.5";
@@ -136,7 +135,11 @@ export function StudioGrid({
           <EmptyDirectory dir={dir} />
         ) : (
           <p className="text-sm text-[var(--muted)]">
-            {videos.length === 0 ? "No diagram matches this filter." : "No diagram or video matches this filter."}{" "}
+            {view.kind === "video"
+              ? "No video matches this filter."
+              : view.kind === "diagram" || videos.length === 0
+                ? "No diagram matches this filter."
+                : "No diagram or video matches this filter."}{" "}
             <a className="underline underline-offset-2" href="/studio">
               Clear it
             </a>

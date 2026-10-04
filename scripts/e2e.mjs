@@ -848,6 +848,23 @@ async function run() {
     }
   });
 
+  await step('course: the module column has room beside the app sidebar', page, async () => {
+    // At 1280px the app sidebar takes 260px, and a course page laid out by
+    // window breakpoints squeezed its module column to under 300px.
+    await go('/courses');
+    const course = main.locator('a[href^="/courses/"]').first();
+    await course.waitFor();
+    await go((await course.getAttribute('href')) ?? '/courses');
+    const heading = main.getByRole('heading', { level: 1 }).first();
+    await heading.waitFor();
+    const width = await heading.evaluate((h) => {
+      let node = h;
+      while (node.parentElement && getComputedStyle(node.parentElement).display !== 'grid') node = node.parentElement;
+      return node.getBoundingClientRect().width;
+    });
+    assert(width >= 440, `the module column is ${Math.round(width)}px wide at 1280px, expected at least 440`);
+  });
+
   await step('home: Pick up lists the course module opened and the concept answered', page, async () => {
     // Open a course: its page records the visit (VisitTracker), which the
     // preference route also puts on recentModules.

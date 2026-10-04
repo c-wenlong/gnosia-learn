@@ -1,10 +1,21 @@
 "use client";
 
-import { useId, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, type RefObject } from "react";
+import { useId, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 
 import { Button } from "./Button";
 import { cx } from "./classes";
-import { COMPOSER_FRAME, COMPOSER_MAX_ROWS, COMPOSER_REASON, COMPOSER_TEXT, composerHeight, composerKey, modEnterTarget } from "./composer-keys";
+import { ComposerBox, SendDisc } from "./ComposerBox";
+import {
+  COMPOSER_BOX_MIN_ROWS,
+  COMPOSER_FRAME,
+  COMPOSER_MAX_ROWS,
+  COMPOSER_REASON,
+  COMPOSER_TEXT,
+  composerBoxHeight,
+  composerHeight,
+  composerKey,
+  modEnterTarget,
+} from "./composer-keys";
 
 /**
  * Kit composer: the chat input the concept tutor and the studio's planner
@@ -19,6 +30,12 @@ import { COMPOSER_FRAME, COMPOSER_MAX_ROWS, COMPOSER_REASON, COMPOSER_TEXT, comp
  * Enter sends and Shift+Enter is a new line (`composer-keys.ts`). Cmd or
  * Ctrl+Enter goes to `onModEnter` from an empty field when the caller has a
  * use for it, the studio's Draw, and sends otherwise.
+ *
+ * `layout="box"` draws the field in `ComposerBox` instead: three lines tall
+ * when empty, with `toolbar` and a round Send in a row inside the frame under
+ * it (D88 of docs/STUDIO-CHAT-FIRST.md). The keys and the growth rule are the
+ * same. Nothing else uses it today but the studio's plain fallback for a box
+ * `MentionComposer`.
  *
  * A client component, like `FilterMenu`: it measures itself on every change.
  */
@@ -38,6 +55,9 @@ export function Composer({
   maxRows = COMPOSER_MAX_ROWS,
   sendLabel = "Send",
   className,
+  layout = "row",
+  toolbar,
+  minRows = COMPOSER_BOX_MIN_ROWS,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -65,6 +85,12 @@ export function Composer({
   maxRows?: number;
   sendLabel?: string;
   className?: string;
+  /** `row`, the default: Send beside the field. `box`: the field over a row of controls, in one frame. */
+  layout?: "row" | "box";
+  /** The box's controls, between its left edge and Send. Not drawn in the row layout. */
+  toolbar?: ReactNode;
+  /** Lines the box's field shows when empty. */
+  minRows?: number;
 }) {
   const fallback = useRef<HTMLTextAreaElement | null>(null);
   const own = inputRef ?? fallback;
@@ -78,8 +104,8 @@ export function Composer({
     if (box === null) return;
     // Collapse first, so a deleted line gives its height back.
     box.style.height = "auto";
-    box.style.height = `${composerHeight(box.scrollHeight, maxRows)}px`;
-  }, [value, maxRows, own]);
+    box.style.height = `${layout === "box" ? composerBoxHeight(box.scrollHeight, minRows, maxRows) : composerHeight(box.scrollHeight, maxRows)}px`;
+  }, [value, maxRows, minRows, layout, own]);
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -108,6 +134,49 @@ export function Composer({
     }
   }
 
+  const describedBy = reason === null ? undefined : reasonId;
+  const reasonLine = reason !== null && (
+    <p id={reasonId} className={COMPOSER_REASON}>
+      {reason}
+    </p>
+  );
+
+  if (layout === "box") {
+    return (
+      <form onSubmit={submit} className={cx("flex flex-col gap-1.5", className)}>
+        <ComposerBox
+          disabled={disabled}
+          toolbar={toolbar}
+          send={<SendDisc label={sendLabel} disabled={blocked} describedBy={describedBy} />}
+          field={
+            <label className="block min-w-0">
+              <span className="sr-only">{label}</span>
+              <textarea
+                ref={own}
+                rows={minRows}
+                autoFocus={autoFocus}
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                onKeyDown={onKeyDown}
+                maxLength={maxLength}
+                placeholder={placeholder}
+                disabled={disabled}
+                autoComplete="off"
+                aria-describedby={describedBy}
+                className={cx(
+                  "block w-full min-w-0 resize-none bg-transparent px-4 pb-1 pt-3 outline-none",
+                  COMPOSER_TEXT,
+                  "placeholder:text-text3 disabled:cursor-not-allowed",
+                )}
+              />
+            </label>
+          }
+        />
+        {reasonLine}
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={submit} className={cx("flex flex-col gap-1.5", className)}>
       <div className="flex items-end gap-2.5">
@@ -124,7 +193,7 @@ export function Composer({
           placeholder={placeholder}
           disabled={disabled}
           autoComplete="off"
-          aria-describedby={reason === null ? undefined : reasonId}
+          aria-describedby={describedBy}
           className={cx(
             "block h-[52px] w-full min-w-0 resize-none px-4 py-3 outline-none",
             COMPOSER_FRAME,
@@ -136,16 +205,12 @@ export function Composer({
       {/* The 2px under the button puts its face where the old centred row put
           it: the textarea grows downwards and Send stays on its last line. */}
       <div className="pb-0.5">
-        <Button type="submit" disabled={blocked} aria-describedby={reason === null ? undefined : reasonId}>
+        <Button type="submit" disabled={blocked} aria-describedby={describedBy}>
           {sendLabel}
         </Button>
       </div>
       </div>
-      {reason !== null && (
-        <p id={reasonId} className={COMPOSER_REASON}>
-          {reason}
-        </p>
-      )}
+      {reasonLine}
     </form>
   );
 }

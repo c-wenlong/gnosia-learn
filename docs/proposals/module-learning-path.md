@@ -179,9 +179,9 @@ A video lands on a concept step only when it has an `asset_concept` row. The
 video-tool indexers read a `concepts:` list from each `topic.yml`, check each
 id the way the diagram indexer does
 ([diagrams.ts:335](../../services/catalog/src/index/diagrams.ts)), and write
-`asset_concept` rows for the video and its sidecars. `TopicEntry` already
-declares the field and nothing reads it
-([video-tool.ts:179](../../services/catalog/src/index/video-tool.ts)).
+`asset_concept` rows for the video and its sidecars. `TopicEntry` declared
+the field and nothing read it until phase 5; `resolveConcepts` in
+[video-tool.ts](../../services/catalog/src/index/video-tool.ts) reads it now.
 
 A video reaches a path in one of three ways, and they scope differently:
 
@@ -412,4 +412,5 @@ Each is one PR.
 | Proposal | #284 |
 | Order guard: rule `course-order-respects-requires` (migration 0021), doctor warnings for `assumes`, the three `requires` cases reordered in the catalog, `catalog flip --rearm` to arm a rule on a type the database already owns | #302 |
 | Readings on lessons: `lessons:` on a reading (`curriculum_item_asset`, migration 0022), `type: practice`, `videos:` on a module and a lesson kept as data (`collection.metadata.videos`, `curriculum_item.videos`), import, export and the reader carrying them, and a `catalog status` line of readings placed on a lesson per course | #309 |
-| The path: `apps/web/src/lib/module-path.ts` and the module page drawn from it (before you start, Watch, Read alongside, a lesson per item with each concept's note row with Quiz me, then its diagrams and videos, practice), the owner-scoped `assetsForConcepts` and `conceptCheckCounts` reads, and `catalog doctor`'s listed videos that resolve to nothing and modules on a shared topic listing none | the PR that follows #309 |
+| The path: `apps/web/src/lib/module-path.ts` and the module page drawn from it (before you start, Watch, Read alongside, a lesson per item with each concept's note row with Quiz me, then its diagrams and videos, practice), the owner-scoped `assetsForConcepts` and `conceptCheckCounts` reads, and `catalog doctor`'s listed videos that resolve to nothing and modules on a shared topic listing none | #317 |
+| Videos name concepts: the manimkc, remotionkc and revideokc sources read each topic.yml's `concepts:` and write `asset_concept` for the video and each sidecar, refusing a slug the owner cannot read or a value that is not a list of slugs by folder and slug, and `--only concepts` now pulls the three tools in behind it. manimkc's topic.yml files already carry 30 lists (39 concepts); remotionkc's and revideokc's say `concepts: []` | the PR that follows #317 |

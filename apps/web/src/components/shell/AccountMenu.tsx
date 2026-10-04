@@ -5,14 +5,15 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { cx } from "@/components/ui/classes";
+import { useLearner } from "@/lib/learner-context";
 
 /**
  * The account row at the foot of the sidebar, and the small menu it opens
  * upwards: the theme switch, Settings and Sign out. Folded to the rail it is
  * the avatar alone, and the menu opens to its right.
  *
- * The row says "Account": the app has one owner and stores no name for them
- * (`learner.display_name` is empty), so there is nothing truer to print.
+ * The row shows the learner's name (`learner.display_name`, set on Settings),
+ * and says "Account" until there is one.
  *
  * Sign out is a form post rather than a link, so nothing that prefetches or
  * embeds a URL can end the session (see `api/auth/sign-out`).
@@ -28,6 +29,7 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
   const themeLabel = useId();
+  const name = useLearner().state.displayName ?? "Account";
 
   useEffect(() => {
     if (!open) return;
@@ -65,8 +67,8 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
         type="button"
         aria-expanded={open}
         aria-controls={id}
-        aria-label={collapsed ? "Account and settings" : undefined}
-        title={collapsed ? "Account and settings" : undefined}
+        aria-label={collapsed ? `${name}, account and settings` : undefined}
+        title={collapsed ? name : undefined}
         onClick={() => setOpen((v) => !v)}
         className={cx(
           "flex h-12 w-full items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-surface2",
@@ -82,7 +84,7 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
         </span>
         {!collapsed && (
           <>
-            <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-text">Account</span>
+            <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-text">{name}</span>
             <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0 text-text3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6.5 8 10 4.5 13.5 8M6.5 12l3.5 3.5 3.5-3.5" />
             </svg>
