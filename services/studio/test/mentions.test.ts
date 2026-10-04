@@ -633,6 +633,46 @@ describe("a video of a diagram (D86 of STUDIO-CHAT-FIRST.md)", () => {
     expect(runner.enqueue).not.toHaveBeenCalled();
   });
 
+  it("steers the planner to another slug when a studio video has the diagram's, never to a change it cannot make (#305 review)", async () => {
+    const id = await openOnDiagram();
+    // The real runner's refusal for a new video on a taken slug, offering a change.
+    videoRunner.admit.mockRejectedValueOnce(
+      new JobRefused(409, 'a studio video called tcp-congestion-window already exists, and this brief says mode "new": make it a change, or pick another slug', {
+        reason: "slug-taken",
+        slug: "tcp-congestion-window",
+      }),
+    );
+    await fake.script([
+      { text: videoOnly({ kind: "video", ...videoBrief, slug: "tcp-congestion-window", mode: "new" }) },
+      { text: videoOnly({ kind: "video", ...videoBrief, slug: "tcp-congestion-window-explained", mode: "new" }) },
+    ]);
+    await send(id, "Make a video that explains this diagram.", "video");
+    await expect(drafts.drawOne(id, "v1", "video")).rejects.toMatchObject({
+      status: 409,
+      detail: { reason: "slug-taken", slug: "tcp-congestion-window", field: "slug" },
+    });
+    const refused = (await drafts.view(id)).transcript.at(-1)!;
+    expect(refused.text).toContain("this conversation did not open on it or make it");
+    expect(refused.text).toContain("give the new video a slug no video uses");
+    expect(refused.text).not.toContain("make it a change");
+
+    // The next turn carries that note to the planner, whose new slug is pressable.
+    await send(id, "Use another name.", "video");
+    expect(await prompt(1)).toContain("give the new video a slug no video uses");
+    await expect(drafts.drawOne(id, "v2", "video")).resolves.toMatchObject({ kind: "video", created: true });
+    expect(videoRunner.enqueue.mock.calls[0]![0]).toMatchObject({ slug: "tcp-congestion-window-explained", mode: "new" });
+  });
+
+  it("keeps the runner's words where the conversation could change that video", async () => {
+    catalogMock.videoShow.mockResolvedValue(ok({ video: { slug: "two-boxes", title: "x", topic: "tcp-congestion-control", durationSeconds: 61, sourceHash: "h", revision: 1, brief: narratedBrief() } }));
+    const opened = await drafts.create({ source: "two-boxes", sourceKind: "video" });
+    const runnerWords = 'a studio video called two-boxes already exists, and this brief says mode "new": make it a change, or pick another slug';
+    videoRunner.admit.mockRejectedValueOnce(new JobRefused(409, runnerWords, { reason: "slug-taken", slug: "two-boxes" }));
+    await fake.script([{ text: videoOnly({ kind: "video", ...videoBrief, slug: "two-boxes", mode: "new" }) }]);
+    await send(opened.record.id, "again, from scratch", "video");
+    await expect(drafts.drawOne(opened.record.id, "v", "video")).rejects.toMatchObject({ status: 409, message: runnerWords });
+  });
+
   it("cannot change a video by the diagram's name: a diagram is not a video the conversation opened on", async () => {
     const id = await openOnDiagram();
     await fake.script([{ text: videoOnly({ kind: "video", ...videoBrief, slug: "tcp-congestion-window", mode: "change" }) }]);

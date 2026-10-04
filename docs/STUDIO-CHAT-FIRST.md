@@ -1306,8 +1306,13 @@ carries every kind the machine has (`plannerKinds`), the video section of
 the combined prompt, and the EXTENDING block, and `prepare` makes a new video
 from any draft. A `change` brief naming the diagram's slug is still refused
 (`change-not-in-conversation`), since the diagram is not a video the
-conversation opened on. `services/studio/test/mentions.test.ts`, "a video of
-a diagram", holds both with the fake `claude`. The button is disabled with the
+conversation opened on. So when a studio video already has the diagram's
+slug (a diagram and a video of one idea share one), the press's refusal no
+longer offers the change it cannot make: `prepare` rewords the runner's
+`slug-taken` refusal into "give the new video a slug no video uses", and the
+STUDIO note carries that to the planner's next brief.
+`services/studio/test/mentions.test.ts`, "a video of a diagram", holds all of
+it with the fake `claude`. The button is disabled with the
 video doctor's reason when videos cannot be made (`kindUnavailable`), and
 left out of the crowded canvas toolbar then.
 

@@ -398,6 +398,23 @@ describe("an Extend press run twice for the same draft", () => {
     const since = { ...rerun, send: "Show it on a graph" };
     expect(carryOpener(queued, since, true)).toMatchObject({ send: "Show it on a graph", compose: "and label it" });
   });
+  it("never lets Make a video of this's own sentence replace words typed before a reload (#305 review)", () => {
+    // Send pressed during the read, then more typed, then a reload after the hand-off was saved.
+    const value = makeVideoValue({ ok: true, reason: null });
+    const before = { send: "@video Show the projection", sendMentions: [{ kind: "video" as const, start: 0, end: 6 }], compose: "and keep it short", composeMentions: [], source: "dot-product" };
+    const reloaded = { send: null, sendMentions: [], compose: value.text, composeMentions: value.mentions, source: "dot-product" };
+    expect(carryOpener(before, reloaded, false, { composeUntouched: true })).toMatchObject({
+      send: "@video Show the projection",
+      sendMentions: before.sendMentions,
+      compose: "and keep it short",
+    });
+    // Words the person typed over the sentence since are theirs, and win.
+    const edited = { ...reloaded, compose: "@video Only the second panel", composeMentions: [{ kind: "video" as const, start: 0, end: 6 }] };
+    expect(carryOpener(before, edited, false, { composeUntouched: false })).toMatchObject({ compose: "@video Only the second panel" });
+    // An untouched sentence over an untouched sentence stays the sentence.
+    const first = { ...reloaded };
+    expect(carryOpener(first, reloaded, false, { composeUntouched: true })).toMatchObject({ compose: value.text, composeMentions: value.mentions });
+  });
 });
 
 describe("reading an opener without taking it", () => {

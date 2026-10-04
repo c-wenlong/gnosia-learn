@@ -321,11 +321,21 @@ export function leaveOpener(storage: Storage | null, draftId: string, opener: Ex
  * the person did since the reload wins: a message they queued (`queued`) is
  * the one sent, and words they typed are the ones composed. Otherwise the
  * earlier run's are kept.
+ *
+ * `composeUntouched` says the composer still holds only what the press put
+ * there itself (Make a video of this starts with the Video chip and a
+ * sentence, D86): that is no more the person's words than an empty composer
+ * is, so it never replaces words an earlier run carried (the #305 review).
  */
-export function carryOpener(earlier: ExtendOpener | null, next: ExtendOpener, queued: boolean): ExtendOpener {
+export function carryOpener(
+  earlier: ExtendOpener | null,
+  next: ExtendOpener,
+  queued: boolean,
+  options: { composeUntouched?: boolean } = {},
+): ExtendOpener {
   if (earlier === null) return next;
   const keepSend = !queued && earlier.send !== null;
-  const keepCompose = next.compose.trim() === "";
+  const keepCompose = next.compose.trim() === "" || options.composeUntouched === true;
   return {
     ...next,
     send: keepSend ? earlier.send : next.send,

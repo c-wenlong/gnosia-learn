@@ -16,6 +16,7 @@ import {
   EMPTY_MENTION_VALUE,
   isEmptyValue,
   prependValue,
+  sameValue,
   trimValue,
   type MentionValue,
 } from "@/components/ui/mention-text";
@@ -176,10 +177,10 @@ export function ExtendStart({
         compose: unsent.text,
         composeMentions: unsent.mentions,
         source: name,
-      }, waiting !== null),
+      }, waiting !== null, { composeUntouched: !isEmptyValue(initial) && sameValue(unsent, initial) }),
     );
     router.replace(panelHref(path, { extend: null, draft: result.data.draftId }), { scroll: false });
-  }, [name, title, path, talk, makeVideo, router, isClosing, setQueued, setValue]);
+  }, [name, title, path, talk, makeVideo, initial, router, isClosing, setQueued, setValue]);
 
   useEffect(() => {
     // The post runs from an effect because this panel is what a link opens:
