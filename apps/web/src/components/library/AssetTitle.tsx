@@ -107,7 +107,10 @@ export function AssetTitle({
         setStatus({ text: payload.error ?? `Not saved (HTTP ${response.status}).`, tone: "danger" });
         return;
       }
-      const next = payload.result.name ?? fallback;
+      // The server's title is the source's as of now, newer than the page's
+      // fallback if an import ran since; the fallback stands in only when the
+      // source has none (a filename or a host).
+      const next = payload.result.title ?? fallback;
       setShown(next);
       setNamed(payload.result.name);
       setDraft(next);
