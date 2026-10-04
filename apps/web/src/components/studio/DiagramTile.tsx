@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { PanelLink, SelectableFrame } from "@/components/studio/PanelLink";
 import { RowJob, TileJob } from "@/components/studio/GridJob";
+import { KindBadge, TILE_LIFT } from "@/components/studio/KindBadge";
 import { Chip } from "@/components/studio/StudioChrome";
 import {
   canvasHref,
@@ -57,7 +58,7 @@ export function DiagramTile({
   return (
     <SelectableFrame
       name={diagram.name}
-      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-[var(--surface)] transition-colors ${
+      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-[var(--surface)] ${TILE_LIFT} ${
         untopiced ? "border-[var(--warn-border)]" : "border-[var(--border)]"
       }`}
       selectedClassName="ring-2 ring-[var(--accent)]"
@@ -166,6 +167,7 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
           <span className="text-xs">{diagram.shapes} shapes</span>
         </div>
       )}
+      <KindBadge kind="diagram" />
       {badges.length > 0 && (
         <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
           {badges.map((badge) => (
@@ -217,6 +219,7 @@ export function DiagramRow({
           />
         )}
       </span>
+      <KindBadge kind="diagram" inline />
       <PanelLink
         href={selectHref}
         className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"

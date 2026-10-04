@@ -657,7 +657,7 @@ out (`PanelHost`):
 | | Home (`/studio`) | A conversation (`?draft=<id>`) |
 | --- | --- | --- |
 | Sidebar | New chat, then the history | The same, the open conversation marked |
-| Main | "What shall we make?" and the composer, filling the first screen, then the assets panel: the strip (search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
+| Main | "What shall we make?" and the composer, filling the first screen, then the assets panel: the strip (the kind filter, search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
 
 *Since D83:* the composer has the first screen to itself, over a soft wash
 of the accent, and the assets sit in a rounded panel under it whose head
@@ -665,6 +665,35 @@ and the top of the first row are all that show until the page scrolls, as
 Lovable lays out its projects. The strip is the panel's head, below its top
 edge. Tiles are 200px at least (they were 260px), so a laptop shows five or
 six in a row.
+
+*Since D85:* every tile says what it is, and a video plays where it is.
+
+- **Kind badge.** A "Video" or "Diagram" label over the thumbnail's top
+  left, radius 8 (`KindBadge`): translucent black over a video's poster,
+  `--surface2` with a `--border` hairline over a diagram's light mat. The
+  in-progress job cards carry one too. A list row has no room over its 48px
+  thumbnail, so the label sits beside it from 640px up; on a phone the
+  thumbnail's mat (black or light) is the tell.
+- **Lift.** A tile, or a job card, rises 3px with a deeper shadow under the
+  pointer or keyboard focus (`TILE_LIFT`), and only changes colour under
+  reduced motion. Tailwind's translate and shadow, so a selected tile's ring
+  composes with it.
+- **Kind filter.** All, Diagrams and Videos, a segmented control at the
+  start of the strip. It is `?kind=diagram|video` in the URL, absent for
+  all, a view parameter like Sort: `browserViewMove` lets it redraw the grid
+  in the browser with no server render. It narrows the tiles and the job
+  cards making something new (a new diagram's job is a diagram), and the
+  search box says what it searches. The topic chips still count both kinds.
+- **Preview.** Pressing a video tile opens `?play=<slug>`: a 960px dialog
+  over the grid (`StudioDialog`'s `wide`, a sheet on a phone) with the
+  video playing in the library's `VideoPlayer` from the library's own
+  routes (`/api/assets/video:<slug>/file` and `/poster`), its title, Change
+  (the tile's, a conversation on the video) and Open (the library page, with
+  its chapters and transcript and the `from` link back to this view).
+  Escape, Close and the backdrop close it, and Back and Forward move it,
+  since `PanelHost` draws it from the URL like a tile's panel. A modified
+  click (cmd, ctrl, middle) on the tile is still the library link, so a new
+  tab gets the full page. Opening any other panel closes it (`panelHref`).
 
 **The home composer** (`HomeComposer`) is the one way into a new
 conversation. It is the conversation's own `MentionComposer`, tags and all.
@@ -695,9 +724,9 @@ Start over, ends up where the runner now has it.
 dialog. Nothing is modal, so the sidebar stays usable, and there is no Close:
 New chat or another row is the way out. The home view stays mounted under it,
 hidden, so its scroll and anything typed in it survive the trip. A job on its
-own, a tile's panel, the settings and an Extend press are still dialogs over
-the home view, and an Extend press becomes a full-screen conversation once
-its draft exists.
+own, a tile's panel, the settings, an Extend press and a video's preview
+(D85) are still dialogs over the home view, and an Extend press becomes a
+full-screen conversation once its draft exists.
 
 From 768px up the sidebar collapses to a 52px rail (its toggle, then New
 chat), as ChatGPT's does, and remembers that in `localStorage`
@@ -1282,6 +1311,36 @@ rail, and both were the reference given.
 reach a diagram, which is the studio's other main use), and a rail that
 only opens on a click (the owner asked for hover, and the click is there
 too, on the toggle).
+
+### D85. Tiles say their kind, the grid filters by it, and a video previews in place
+
+**Verdict:** every tile carries a "Video" or "Diagram" badge over its
+thumbnail and lifts a few pixels on hover; the strip starts with an All,
+Diagrams and Videos control written to the URL as `?kind=`; and pressing a
+video tile plays it in a large dialog (`?play=<slug>`) with Open and Change
+under it, instead of leaving for the library page.
+
+**Why:** since videos joined the grid (STUDIO-VIDEOS.md) the two kinds share
+one order, and a poster on black and a diagram on its mat were the only
+tell; the owner asked for the Gauth Atlas grid's shape (its story cards,
+video badge, play disc and story preview), in our tokens. Leaving the
+studio to watch a video lost the grid, its scroll and its filters, and the
+library page took a server render to reach and another to come back. The
+preview plays from the routes the library page already uses, so nothing new
+serves video bytes, and the full page stays one press away. The filter is a
+view parameter like Sort because it changes what the grid draws of what the
+page already holds, which is what `browserViewMove` exists for. The lift's
+shadow is the one the kit's "no shadows" rule (DESIGN.md) gives way on, as
+the studio's hover controls already do; on a dark ground it barely shows,
+and the 3px rise carries the hover there.
+
+**Rejected:** a kind facet inside Display (one press more for the filter a
+mixed grid most needs, and hidden where nobody looks); a separate
+`/studio/v/<slug>` route for the preview (a server render per open, the
+cost `PanelHost` exists to avoid); playing inline in the tile (a 200px
+picture is too small to judge a video by, and a grid of autoplaying tiles
+is noise); and dropping the library link from the tile (a new tab with the
+chapters and transcript is still what a modified click should give).
 
 ## Later: other kinds of asset
 

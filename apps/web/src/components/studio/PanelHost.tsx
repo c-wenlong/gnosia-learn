@@ -24,15 +24,18 @@ import { VerbNotice } from "@/components/studio/StudioChrome";
 import { DialogHeader, StudioDialog, StudioPane } from "@/components/studio/StudioDialog";
 import { StudioSettings } from "@/components/studio/StudioSettings";
 import { SidebarToggle, StudioSidebar } from "@/components/studio/StudioSidebar";
+import { VideoPreview } from "@/components/studio/video/VideoPreview";
 import { PANE_GUTTER } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
 import type { MentionValue } from "@/components/ui/mention-text";
 import { UserMessage } from "@/components/ui/Message";
 import type { AgentKind } from "@/lib/studio-agent-settings";
 import type { DraftKind, DraftSummary } from "@/lib/studio-drafts";
+import type { StudioVideo } from "@/lib/studio-video";
 import {
   browserPanelMove,
   browserViewMove,
+  CLOSED,
   displayTitle,
   panelHref,
   panelSignature,
@@ -45,7 +48,8 @@ import {
 
 /**
  * The studio's frame, and the panels on `/studio` that open and close in
- * the browser: a conversation, a job, and a tile's panel.
+ * the browser: a conversation, a job, a tile's panel, the settings and a
+ * video's preview.
  *
  * The frame is the sidebar of conversations beside one of two things
  * (docs/STUDIO-CHAT-FIRST.md, "Home and the full-screen conversation"):
@@ -54,7 +58,8 @@ import {
  * (`StudioPane`). The home view stays mounted under a conversation, hidden,
  * so going back to it keeps its scroll and whatever was typed in it. A job
  * on its own, a tile, the settings and an Extend press are still dialogs
- * over the home view.
+ * over the home view, and so is a video playing in its preview (`?play=`,
+ * D85), from the videos the page already read.
  *
  * Each of them used to be a router push, and so was closing it: every one
  * rendered the whole page on the server again, which reads the diagrams, the
@@ -115,6 +120,7 @@ export function PanelHost({
   panel,
   panelKey,
   diagrams,
+  videos,
   jobs,
   drafts,
   children,
@@ -128,6 +134,8 @@ export function PanelHost({
   panelKey: string;
   /** Every diagram in the directory, for a tile's panel. */
   diagrams: Diagram[];
+  /** Every studio video, for its preview. */
+  videos: StudioVideo[];
   /** The runner's jobs as the page read them, for a tile's history and a job's title. */
   jobs: JobRow[];
   children: ReactNode;
@@ -258,7 +266,7 @@ export function PanelHost({
   // the compiler reads the state setters behind them as dependencies and
   // gives up on the component.
   const controls = { ...verbs, path };
-  const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
+  const closeHref = panelHref(path, CLOSED);
 
   // New chat is the home view: its composer is where a conversation starts.
   // Nothing is made until something is sent, so pressing it twice, or
@@ -274,7 +282,7 @@ export function PanelHost({
   const toggle = <SidebarToggle onOpen={openSidebar} />;
 
   // The page's order: a picture closes every panel, then the settings, a
-  // conversation, a job, an Extend press, and a tile last. A conversation is
+  // conversation, a job, an Extend press, a tile, and a video's preview last. A conversation is
   // the frame's main view rather than a dialog.
   let dialog: ReactNode = null;
   let chat: ReactNode = null;
@@ -360,6 +368,14 @@ export function PanelHost({
             extendHref={panelHref(path, { extend: diagram.name, selected: null, job: null, draft: null })}
           />
         )}
+      </StudioDialog>
+    );
+  } else if (view.play !== null) {
+    const slug = view.play;
+    const video = videos.find((entry) => entry.slug === slug) ?? null;
+    dialog = (
+      <StudioDialog key={`play:${slug}`} closeHref={closeHref} navigate={pushUrl} label={video?.title ?? slug} wide>
+        <VideoPreview video={video} slug={slug} path={path} />
       </StudioDialog>
     );
   }
