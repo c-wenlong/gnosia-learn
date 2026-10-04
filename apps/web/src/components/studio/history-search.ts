@@ -67,8 +67,8 @@ export function useHistorySearch(): HistorySearch {
   const shownPages = useRef(1);
   const issued = useRef(0);
   const shownTicket = useRef(0);
-  /** Reads started and not yet finished, for any words. */
-  const inflight = useRef(0);
+  /** Reads started and not yet finished, by the words they were for. */
+  const inflight = useRef(new Map<string, number>());
 
   const read = useCallback(async (q: string, count: number): Promise<ReadOutcome> => {
     issued.current += 1;
@@ -95,14 +95,18 @@ export function useHistorySearch(): HistorySearch {
       return "landed";
     };
 
-    inflight.current += 1;
+    inflight.current.set(q, (inflight.current.get(q) ?? 0) + 1);
     const outcome = await readOnce();
-    inflight.current -= 1;
-    // With every read finished, a page that was asked for and never landed
-    // (its press, or a refresh that began under it, failed) is taken back, so
-    // the next press asks for that page again rather than the one after it,
-    // and the person is told. While a read is still out, it may yet land it.
-    if (inflight.current === 0 && current.current === q && pages.current > shownPages.current) {
+    inflight.current.set(q, (inflight.current.get(q) ?? 1) - 1);
+    if (inflight.current.get(q) === 0) inflight.current.delete(q);
+    // With every read for the words in the field finished (one for words
+    // since typed over says nothing), a page that was asked for and never
+    // landed (its press, or a refresh that began under it, failed) is taken
+    // back, so the next press asks for that page again rather than the one
+    // after it, and the person is told. While a read for them is still out,
+    // it may yet land it.
+    const now = current.current;
+    if (now !== "" && !inflight.current.has(now) && pages.current > shownPages.current) {
       pages.current = shownPages.current;
       setMoreError("More matches could not be read: the studio did not answer.");
     }

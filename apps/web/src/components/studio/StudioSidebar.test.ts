@@ -426,6 +426,32 @@ describe("the history search", () => {
       expect(second).toHaveLength(2);
     });
 
+    it("takes the page back, and says so, while a read for words typed over is still out", async () => {
+      const { second } = held();
+      // The read for "matc" never answers until told; "match" answers.
+      let late: (value: unknown) => void = () => {};
+      const answerFor = listMock.getMockImplementation()!;
+      listMock.mockImplementation((query: { q?: string; before?: unknown }) =>
+        query.q === "matc" ? new Promise((resolve) => (late = resolve)) : answerFor(query),
+      );
+      const { field, container } = mount();
+      type(field(), "matc");
+      await settle();
+      type(field(), "match");
+      await settle();
+      expect(rows(container)).toBe(50);
+      const more = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
+      act(() => more.click());
+      await settle(0);
+      await act(async () => second[0](down));
+      expect(container.textContent).toContain("More matches could not be read");
+      // Back to one page, though the old read has not finished: a refresh asks for no second page.
+      await wake();
+      expect(second).toHaveLength(1);
+      await act(async () => late(answer(many)));
+      expect(rows(container)).toBe(50);
+    });
+
     it("takes the page back, and says so, when the Show more read is the newest and fails", async () => {
       const { second } = held();
       const { field, container } = mount();
