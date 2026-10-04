@@ -202,15 +202,30 @@ function writeSession(slug: string, id: string | null): void {
   }
 }
 
+/**
+ * The observe payload of an answer still saving, per concept. Its request can
+ * reach the server after a close does, and the first answer is what opens the
+ * session, so a close sent alone could find no session and the answer then
+ * open one nobody closes. A close while an answer is saving therefore resends
+ * that answer with `closeSession`: its request id makes it a replay, and the
+ * answer and the close commit together, as the session page does.
+ */
+const savingAnswer = new Map<string, Record<string, unknown>>();
+
 /** Close the thread's session, if an answer opened one, and forget it. Idempotent on the server. */
 function closeSession(slug: string): void {
   const id = readSession(slug);
   if (id === null) return;
   writeSession(slug, null);
-  void fetch("/api/learner/session/close", {
+  const saving = savingAnswer.get(slug);
+  const [url, body] =
+    saving !== undefined && saving.sessionId === id
+      ? ["/api/learner/observe", { ...saving, closeSession: true }]
+      : ["/api/learner/session/close", { sessionId: id }];
+  void fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId: id }),
+    body: JSON.stringify(body),
     // Survives the page going away, which is when this is usually sent.
     keepalive: true,
   }).catch(() => {
@@ -419,22 +434,25 @@ export function TutorChat({
       writeSession(slug, id);
       return id;
     };
-    const send = (sessionId: string) =>
-      fetch("/api/learner/observe", {
+    const send = (sessionId: string) => {
+      const payload = {
+        conceptSlug: slug,
+        correct,
+        source: verdict.source,
+        requestId,
+        sessionId,
+        question: verdict.question,
+        // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
+        chosen: turn.content.slice(0, SESSION_TEXT_LIMIT),
+      };
+      savingAnswer.set(slug, payload);
+      return fetch("/api/learner/observe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conceptSlug: slug,
-          correct,
-          source: verdict.source,
-          requestId,
-          sessionId,
-          question: verdict.question,
-          // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
-          chosen: turn.content.slice(0, SESSION_TEXT_LIMIT),
-        }),
+        body: JSON.stringify(payload),
         keepalive: true,
       });
+    };
     try {
       let res = await send(session());
       let data = (await res.json().catch(() => null)) as ObserveReply | null;
@@ -462,6 +480,7 @@ export function TutorChat({
       patchVerdict(requestId, { state: "failed", error: e instanceof Error ? e.message : "The answer was not recorded." });
     } finally {
       recording.current.delete(requestId);
+      if ((savingAnswer.get(slug) as { requestId?: string } | undefined)?.requestId === requestId) savingAnswer.delete(slug);
     }
   }
 
@@ -495,6 +514,43 @@ export function TutorChat({
   // R3: a due concept opens on the tutor. Once per mount, after hydration,
   // and only into an empty thread: a thread the learner already has is theirs.
   const opened = useRef(false);
+  const [openingFailed, setOpeningFailed] = useState(false);
+  /** The model opening in flight, aborted if the page goes away so a late reply never lands in the thread. */
+  const openingRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => openingRequest.current?.abort(), []);
+
+  /** Ask the model for the opening recall question (a note with no check). Retryable from the row it leaves on failure. */
+  async function askOpening() {
+    const controller = new AbortController();
+    openingRequest.current = controller;
+    setOpeningFailed(false);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptSlug: slug, messages: [{ role: "user", content: RECALL_SEED }] }),
+        signal: controller.signal,
+      });
+      const data = (await res.json().catch(() => ({}))) as ChatReply;
+      const content = data.message?.content?.trim();
+      if (controller.signal.aborted) return;
+      // Only a reply that asked a check opens the thread, and only an empty one.
+      if (res.ok && content && data.check?.question) {
+        if (parseThread(readRaw(key)).length === 0) {
+          writeTurns(key, [{ role: "assistant", content, check: { question: data.check.question } }]);
+        }
+        return;
+      }
+      setOpeningFailed(true);
+    } catch {
+      if (!controller.signal.aborted) setOpeningFailed(true);
+    } finally {
+      if (openingRequest.current === controller) openingRequest.current = null;
+      if (!controller.signal.aborted) setBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!hydrated || recall === null || opened.current) return;
     opened.current = true;
@@ -503,26 +559,10 @@ export function TutorChat({
       writeTurns(key, [recallOpening(title, recall.question)]);
       return;
     }
-    void (async () => {
-      setBusy(true);
-      try {
-        const res = await fetch("/api/agent/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conceptSlug: slug, messages: [{ role: "user", content: RECALL_SEED }] }),
-        });
-        const data = (await res.json().catch(() => ({}))) as ChatReply;
-        const content = data.message?.content?.trim();
-        // Only a reply that asked a check opens the thread; anything else leaves the greeting.
-        if (res.ok && content && data.check?.question && parseThread(readRaw(key)).length === 0) {
-          writeTurns(key, [{ role: "assistant", content, check: { question: data.check.question } }]);
-        }
-      } catch {
-        // The greeting stays; the learner can still ask for a check.
-      } finally {
-        setBusy(false);
-      }
-    })();
+    // Started from a callback, so the effect itself sets no state.
+    void Promise.resolve().then(askOpening);
+    // `askOpening` reads only what these name; listing it would re-run the opening on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, recall, key, slug, title]);
 
   async function ask(
@@ -710,6 +750,16 @@ export function TutorChat({
           <p className="animate-fade-in px-1.5 text-[13px] text-text3 motion-reduce:animate-none" role="status">
             The tutor is thinking…
           </p>
+        )}
+
+        {!busy && openingFailed && turns.length === 0 && (
+          // R3: the model could not open on a recall question; the learner can ask again.
+          <div role="status" className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none">
+            <span className="min-w-0 flex-1">This review is due, but the tutor could not open on a recall question.</span>
+            <Button variant="secondary" size="sm" onClick={() => void askOpening()}>
+              Try again
+            </Button>
+          </div>
         )}
 
         {!busy && (error || last?.role === "user") && (
