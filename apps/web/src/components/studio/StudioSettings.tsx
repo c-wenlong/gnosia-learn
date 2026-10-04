@@ -13,6 +13,7 @@ import type { FilterOption } from "@/components/ui/filter-menu";
 import { FormRow } from "@/components/ui/FormRow";
 import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
+import { Callout } from "@/components/ui/Callout";
 import type { AgentKind } from "@/lib/studio-agent-settings";
 
 /**
@@ -110,9 +111,9 @@ export function StudioSettings({
   return (
     <Panel as="div" aria-label="Agents" className="rounded-none" bodyClassName="gap-5 p-5">
       {!reachable && (
-        <p role="status" className="rounded-lg bg-warn-tint px-3 py-2 text-[13px] leading-5 text-text">
+        <Callout role="status">
           The catalog is not answering, so these show the defaults and a change cannot be saved yet.
-        </p>
+        </Callout>
       )}
       {rows.map((row) => {
         const value = values[row.kind];

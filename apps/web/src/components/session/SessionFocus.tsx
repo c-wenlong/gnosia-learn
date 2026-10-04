@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
 import { Collapse } from "@/components/ui/Collapse";
 import { MathText } from "@/components/Math";
@@ -510,12 +511,9 @@ export function SessionFocus({
           <div className="min-w-0">{teach}</div>
           {asset ?? <Placeholder label="No diagram or video explains this concept yet" height={170} className="md:h-[220px]!" />}
           {nothingToAsk && (
-            <div role="status" className="flex flex-col gap-2 rounded-2xl bg-surface2 p-5">
-              <p className="text-[15px] font-semibold text-text">No question this session</p>
-              <p className="text-[14px] leading-[1.5] text-text2">
-                {withConsequence(NOTHING_TO_ASK, "Nothing is recorded; Continue closes the session.")}
-              </p>
-            </div>
+            <Callout tone="neutral" role="status" title="No question this session">
+              {withConsequence(NOTHING_TO_ASK, "Nothing is recorded; Continue closes the session.")}
+            </Callout>
           )}
           <div className="mt-auto flex items-center justify-end gap-3 md:mt-0">
             <Button onClick={advance} className="md:min-w-40">
@@ -537,22 +535,26 @@ export function SessionFocus({
           )}
 
           {noQuestion !== null && (
-            <div role="status" className="flex animate-enter flex-col gap-2 rounded-2xl bg-surface2 p-5 motion-reduce:animate-none">
-              <p className="text-[15px] font-semibold text-text">No question for this step</p>
-              <p className="text-[14px] leading-[1.5] text-text2">
-                {noQuestion}
-              </p>
-              {canAskAgain({
-                modelAvailable,
-                hasOwnQuestion: step?.question != null,
-                hasFallback: step?.fallback != null,
-                resolved: resolved[index],
-              }) && (
-                <Button variant="secondary" size="sm" className="self-start" onClick={askAgain}>
-                  Ask again
-                </Button>
-              )}
-            </div>
+            <Callout
+              tone="neutral"
+              role="status"
+              title="No question for this step"
+              className="animate-enter motion-reduce:animate-none"
+              actions={
+                canAskAgain({
+                  modelAvailable,
+                  hasOwnQuestion: step?.question != null,
+                  hasFallback: step?.fallback != null,
+                  resolved: resolved[index],
+                }) ? (
+                  <Button variant="secondary" size="sm" onClick={askAgain}>
+                    Ask again
+                  </Button>
+                ) : undefined
+              }
+            >
+              {noQuestion}
+            </Callout>
           )}
 
           {question !== null && (

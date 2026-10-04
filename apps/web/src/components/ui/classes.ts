@@ -405,3 +405,66 @@ export function cardClasses({ tight = false, className }: { tight?: boolean; cla
     className,
   );
 }
+
+export type CalloutTone = "warn" | "neutral" | "danger";
+
+/**
+ * Kit `Callout`: an inline tinted box in the flow of a page or a thread, one
+ * shape for every tone: radius 12, padding 12 by 16, 13px words. `warn` is the
+ * `--warn-tint` box (a failure with what to do, a caveat, a confirm), `neutral`
+ * the `--surface2` one (a status that is not a problem), `danger` a red tint
+ * for something lost. `bordered` adds a 2px ring in the tone, for a box that
+ * sits on a card of the same pale ground (a confirm, a settings card's status).
+ *
+ * The words stay `--text` on every tint, never the tone's own text colour: the
+ * amber on its tint clears 4.5:1 but is the lightest text on the page, fine for
+ * a verdict and harder going for a sentence (the store banner's reasoning).
+ */
+export function calloutClasses({
+  tone = "warn",
+  bordered = false,
+  className,
+}: { tone?: CalloutTone; bordered?: boolean; className?: string } = {}): string {
+  return cx(
+    "flex min-w-0 flex-col gap-2 rounded-xl px-4 py-3 text-[13px] leading-5 text-text",
+    CALLOUT_TONE[tone],
+    bordered && cx("border-2", CALLOUT_BORDER[tone]),
+    className,
+  );
+}
+
+const CALLOUT_TONE: Record<CalloutTone, string> = {
+  warn: "bg-warn-tint",
+  neutral: "bg-surface2",
+  danger: "bg-danger/8",
+};
+
+const CALLOUT_BORDER: Record<CalloutTone, string> = {
+  warn: "border-warn",
+  neutral: "border-border",
+  danger: "border-danger/45",
+};
+
+export type BannerTone = "warn" | "danger" | "ok";
+
+/**
+ * Kit `Banner`: a full-width strip across the top of a region, under a 2px
+ * rule in its tone, with a dot in the tone before the words. `--text` words
+ * for the same reason as the callout's.
+ */
+export function bannerClasses({ tone = "warn", className }: { tone?: BannerTone; className?: string } = {}): string {
+  return cx("flex items-start gap-3 border-b-2 px-4 py-2 text-[13px] leading-5 text-text", BANNER_TONE[tone], className);
+}
+
+const BANNER_TONE: Record<BannerTone, string> = {
+  warn: "border-warn bg-warn-tint",
+  danger: "border-danger/45 bg-danger/8",
+  ok: "border-ok bg-ok-tint",
+};
+
+/** The banner's dot: the tone's strongest colour, which the tint cannot drown. */
+export const BANNER_MARK: Record<BannerTone, string> = {
+  warn: "bg-warn-lip",
+  danger: "bg-danger",
+  ok: "bg-ok-lip",
+};

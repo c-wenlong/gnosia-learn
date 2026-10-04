@@ -7,6 +7,8 @@ import { useState } from "react";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import { Callout } from "@/components/ui/Callout";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import {
   catalogErrorLine,
   countRows,
@@ -27,7 +29,8 @@ import { panelHref } from "@/lib/studio-view";
  *
  * The design's finished-job screen, in its order: two thumbnails, the counts,
  * the Fixed and New lint lists, the four verify checks, then Accept filled and
- * Discard bordered. Nothing under `learn/assets/` has changed while this is on
+ * Discard, which asks before it acts as a video's Discard does (the kit's
+ * `InlineConfirm`). Nothing under `learn/assets/` has changed while this is on
  * screen — the job wrote a candidate (D2) — which is what makes both buttons
  * safe to look at for as long as somebody wants.
  *
@@ -53,6 +56,8 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<{ ok: boolean; text: string; recompare?: boolean } | null>(null);
+  // Discard asks first, as a video's does: the candidate goes for good.
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const comparison: Comparison = job.comparison ?? {
     before: null,
@@ -69,6 +74,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
     setBusy(verb);
     const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/${verb}`);
     setBusy(null);
+    setConfirmDiscard(false);
     const note = typeof result.data.note === "string" ? result.data.note : null;
     const error = typeof result.data.error === "string" ? result.data.error : null;
     const detail = (result.data.detail ?? {}) as { recompare?: boolean };
@@ -124,9 +130,17 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
           <Button type="button" filled disabled={busy !== null} onClick={() => void act("accept")}>
             {busy === "accept" ? "Accepting…" : "Accept"}
           </Button>
-          <Button type="button" disabled={busy !== null} onClick={() => void act("discard")}>
-            {busy === "discard" ? "Discarding…" : "Discard"}
-          </Button>
+          <InlineConfirm
+            label="Discard"
+            question="The candidate is deleted; the diagram stays as it was."
+            confirmLabel="Discard it"
+            busyLabel={busy === "discard" ? "Discarding…" : undefined}
+            onConfirm={() => void act("discard")}
+            busy={busy !== null}
+            open={confirmDiscard}
+            onOpenChange={setConfirmDiscard}
+            buttonSize="sm"
+          />
         </div>
       )}
 
@@ -197,28 +211,24 @@ function Accepted({
       </div>
 
       {!job.indexed && (
-        <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2 text-xs text-[var(--warn-text)]">
-          <p className="font-medium">
-            <Mono>indexed: false</Mono>
-          </p>
-          <p className="mt-1">
+        <Callout
+          title={<Mono>indexed: false</Mono>}
+          actions={
+            <Button type="button" disabled={busy} onClick={onReindex}>
+              {busy ? "Reindexing…" : "Reindex"}
+            </Button>
+          }
+        >
+          <p>
             The diagram is stored; the job row did not record the accept. Reindex finishes it,
             and changes nothing about the diagram.
           </p>
           {lastCatalogError !== null && (
-            <p
-              className="mt-1 font-mono text-xs break-words opacity-90"
-              title={(job.catalogErrors ?? []).at(-1)}
-            >
+            <p className="mt-1 font-mono text-xs break-words" title={(job.catalogErrors ?? []).at(-1)}>
               {lastCatalogError}
             </p>
           )}
-          <div className="mt-2">
-            <Button type="button" disabled={busy} onClick={onReindex}>
-              {busy ? "Reindexing…" : "Reindex"}
-            </Button>
-          </div>
-        </div>
+        </Callout>
       )}
 
       {line !== null && (
