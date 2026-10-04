@@ -5,6 +5,7 @@ import { PanelHost } from "@/components/studio/PanelHost";
 import { HomeComposer } from "@/components/studio/HomeComposer";
 import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobStrip } from "@/components/studio/JobStrip";
+import { FADE_IN } from "@/components/studio/motion";
 import { RenewLists } from "@/components/studio/RenewLists";
 import { StudioDialog } from "@/components/studio/StudioDialog";
 import { ShotView } from "@/components/studio/ShotView";
@@ -132,7 +133,7 @@ export default async function StudioPage({
   if (!health.ok) {
     moot.abort();
     return (
-      <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div data-layout="full" className={`flex min-h-0 min-w-0 flex-1 flex-col ${FADE_IN}`}>
         <BlockedCard
           title={health.headline}
           lead={health.detail}
@@ -150,7 +151,7 @@ export default async function StudioPage({
   if (!health.data.tldrawkc) {
     moot.abort();
     return (
-      <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div data-layout="full" className={`flex min-h-0 min-w-0 flex-1 flex-col ${FADE_IN}`}>
         <BlockedCard
           title="tldrawkc cannot run on this machine"
           lead="Every verb the studio drives launches this tool, so nothing here would work. doctor says:"
@@ -173,7 +174,7 @@ export default async function StudioPage({
   const topicDomains = topicDomainMap(topics);
   if (!listed.ok) {
     return (
-      <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div data-layout="full" className={`flex min-h-0 min-w-0 flex-1 flex-col ${FADE_IN}`}>
         <BlockedCard title={listed.headline} lead={listed.detail} retryHref={path} />
       </div>
     );
@@ -241,7 +242,9 @@ export default async function StudioPage({
   }
 
   return (
-    <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
+    // Fades in over the loading frame it replaces (opacity only, filling
+    // backwards, so the home composer's @ menu keeps its stacking).
+    <div data-layout="full" className={`flex min-h-0 min-w-0 flex-1 flex-col ${FADE_IN}`}>
       <PanelHost
         panel={dialog}
         panelKey={panelSignature(params)}
@@ -356,7 +359,7 @@ export default async function StudioPage({
                 mode={shown?.brief?.mode}
               />
             ) : (
-              <div className="space-y-6 p-4">
+              <div className="p-4">
                 <StudioGrid
                   diagrams={listing.diagrams}
                   videos={allVideos}

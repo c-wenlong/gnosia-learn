@@ -78,6 +78,7 @@ const { PanelHost, historyOf } = await import("./PanelHost");
 const { VideoRow, VideoTile } = await import("./video/VideoGridJob");
 const { DiagramRow, DiagramTile } = await import("./DiagramTile");
 const { usePanelHost } = await import("./panel-host");
+const { CLOSE_MS } = await import("./StudioDialog");
 const { PanelLink } = await import("./PanelLink");
 
 type Controls = NonNullable<ReturnType<typeof usePanelHost>>;
@@ -194,8 +195,24 @@ function mount(options: { panel?: ReactNode; panelKey?: string; extra?: ReactNod
   return { container, go };
 }
 
-const close = (container: HTMLElement) =>
-  act(() => container.querySelector<HTMLButtonElement>("[data-dialog-close]")!.click());
+/**
+ * An in-app close: the dialog fades out first (`CLOSE_MS`), then navigates.
+ * The clock is faked for the press, so the fade passes at once.
+ */
+function close(container: HTMLElement, how: () => void = () => container.querySelector<HTMLButtonElement>("[data-dialog-close]")!.click()) {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(how);
+    act(() => vi.advanceTimersByTime(CLOSE_MS));
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+/** The reader's motion setting, as `matchMedia` answers it; jsdom has none of its own. */
+function prefersReducedMotion(reduce: boolean) {
+  window.matchMedia = ((query: string) => ({ matches: reduce && query.includes("reduce"), media: query })) as unknown as typeof window.matchMedia;
+}
 
 // The sidebar's New chat, which calls what the host published.
 const newChat = () => act(() => published.chats!.newChat());
@@ -420,6 +437,63 @@ describe("a job and a tile", () => {
   });
 });
 
+describe("closing, in motion", () => {
+  const dialog = (container: HTMLElement) => container.querySelector<HTMLDialogElement>("dialog[open]");
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it("fades the dialog out before it navigates, and takes one press only", () => {
+    setUrl("job=j1");
+    const { container } = mount();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const press = () => act(() => container.querySelector<HTMLButtonElement>("[data-dialog-close]")!.click());
+    press();
+    expect(dialog(container)!.hasAttribute("data-closing")).toBe(true);
+    expect(pushState).not.toHaveBeenCalled();
+    // A second press while it fades is the same close.
+    press();
+    act(() => vi.advanceTimersByTime(CLOSE_MS - 1));
+    expect(pushState).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(pushState).toHaveBeenCalledTimes(1);
+    expect(pushState).toHaveBeenCalledWith(null, "", "/studio");
+  });
+
+  it("closes at once, with no fade, for a reader who asked for less motion", () => {
+    prefersReducedMotion(true);
+    setUrl("job=j1");
+    const { container } = mount();
+    act(() => container.querySelector<HTMLButtonElement>("[data-dialog-close]")!.click());
+    expect(pushState).toHaveBeenCalledWith(null, "", "/studio");
+    expect(dialog(container)!.hasAttribute("data-closing")).toBe(false);
+  });
+
+  it("drops a close still fading when the dialog has gone another way first", () => {
+    setUrl("job=j1");
+    const { container, go } = mount();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    act(() => container.querySelector<HTMLButtonElement>("[data-dialog-close]")!.click());
+    // Back, mid-fade: the dialog is gone, and nothing navigates after it.
+    go("");
+    expect(container.querySelector("dialog")).toBeNull();
+    act(() => vi.advanceTimersByTime(CLOSE_MS));
+    expect(pushState).not.toHaveBeenCalled();
+  });
+
+  it("raises the conversation in over the home view, which fades back in after it", () => {
+    setUrl("draft=d1");
+    const { container, go } = mount();
+    expect(pane(container)?.className).toContain("animate-enter");
+    expect(home(container).hidden).toBe(true);
+    // An animation starts again when `hidden` lets the box be drawn.
+    expect(home(container).className).toContain("animate-fade-in");
+    go("");
+    expect(home(container).hidden).toBe(false);
+  });
+});
+
 describe("a video's preview (D85)", () => {
   const dialog = (container: HTMLElement) => container.querySelector<HTMLDialogElement>("dialog[open]");
 
@@ -454,7 +528,7 @@ describe("a video's preview (D85)", () => {
   it("closes on Escape through the URL", () => {
     setUrl("play=attention");
     const { container } = mount();
-    act(() => {
+    close(container, () => {
       dialog(container)!.dispatchEvent(new Event("cancel", { cancelable: true }));
     });
     expect(pushState).toHaveBeenCalledWith(null, "", "/studio");
