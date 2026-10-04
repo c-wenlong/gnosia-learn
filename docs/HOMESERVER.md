@@ -13,7 +13,7 @@ and points there.
 | --- | --- | --- |
 | S1 | The homeserver gets its own `primary` database, seeded from a `pg_dump` of the laptop's, and the two are expected to diverge. | The owner's call (2026-10-04). A sync, when one is wanted, is a fresh dump and restore in either direction; nothing merges two primaries, and nothing here pretends to. Marking either side `copy` ([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md), edge case 14) would stop every write there, which is not the shape wanted. |
 | S2 | The database moves as a dump, never as an export. | `catalog export` is content only. The learner state (`event`, `mastery`, `review`, `progress`, `recap`), `content_revision`, the studio's `job`, `session` and `draft` rows, and the sealed `provider_key` are only in the dump. |
-| S3 | The blob store moves as files without its `.owner` marker, and the server's copy is claimed by its own database. | The `fs` store is content-addressed, so the bytes are the same on both machines and every key still resolves. Its `.owner` marker names the database by name, `pg_database` oid and port (`services/catalog/src/content/blob-owner.ts`), and a restored database has a new oid, so a copied marker would name a database that is not there and the root would refuse uploads and `--fix`. Left out of the copy, the first audit or upload writes a new one. |
+| S3 | The blob store moves as files without its `.owner` marker, and the server's copy is claimed by its own database. | The `fs` store is content-addressed, so the bytes are the same on both machines and every key still resolves. Its `.owner` marker names the database by name, `pg_database` oid and port (`services/catalog/src/content/blob-owner.ts`), and a restored database has a new oid, so a copied marker would name a database that is not there and the root would refuse uploads and `--fix`. Left out of the copy, `blob audit --fix` or the first upload claims the root by writing a new one (`claimRoot` in that module); a plain audit only reads. |
 | S4 | `AUTH_SECRET` is the same on both machines. | The provider key saved in Settings is encrypted under a key derived from it ([BYOK.md](BYOK.md)). A different secret makes the restored row read as "re-enter this key". `OWNER_PASSWORD` can differ freely; it is checked, not used to encrypt anything. |
 | S5 | The studio runs diagram jobs on the homeserver and no video jobs. | Diagram jobs are bounded by the Claude Code permission file and the `PreToolUse` hook in `services/studio/src/diagram-guard.ts`, which run anywhere `claude` does. Video jobs run inside a Seatbelt profile through `/usr/bin/sandbox-exec`, and the runner refuses them on any other platform (`toolchainProblems` in `services/studio/src/video/toolchain.ts`, decision V4 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)). The Linux boundary, bubblewrap, is designed there and not measured, and there is no unsandboxed fallback. Videos stay a Mac job until someone builds and measures that profile. |
 | S6 | Plain http over Tailscale, no TLS terminator. | The session cookie is `Secure` only when the request arrived over https (`apps/web/src/app/api/auth/shared.ts`), so sign-in works on `http://<tailnet name>:3000`. Tailscale encrypts the hop. A reverse proxy is an addition, not a requirement. |
@@ -131,19 +131,25 @@ and points there.
    Leave `STUDIO_ENABLED` out until step 12 is done, or `/studio` renders
    with no runner behind it.
 
-9. Check the whole thing. `migrate` should report nothing to apply;
-   `doctor` checks the completeness rules and that the instance is
-   `primary`; `blob audit` writes the store's `.owner` marker for this
-   database (S3) and exits 0 once every stored asset serves:
+9. Check the whole thing and claim the blob store. `migrate` should
+   report nothing to apply; `doctor` checks the completeness rules and
+   that the instance is `primary`; `blob audit` exits 0 once every stored
+   asset serves, and `--fix` is what writes the store's `.owner` marker
+   for this database (S3), since a plain audit only reads:
 
    ```bash
    npm run catalog -- migrate
    npm run catalog -- doctor
    npm run catalog -- blob audit
+   npm run catalog -- blob audit --fix
    ```
 
-   An audit that lists `present` rows whose object is missing means the
-   `rsync` was partial; run it again and re-audit.
+   Run the plain audit first. One that lists `present` rows whose object
+   is missing means the `rsync` was partial; run that again and re-audit
+   before `--fix`. `--fix` deletes only objects no row names and that are
+   a day old, and a store copied whole from the database it was dumped
+   with has none, so on a clean audit it claims the root and changes
+   nothing else.
 
 10. Build and serve. `npm run start` is `next start` on port 3000, and the
     unit below keeps it up. Save it as
@@ -261,20 +267,24 @@ and points there.
     again:
 
     ```bash
-    sudo systemctl stop gnosia gnosia-studio gnosia-export.timer gnosia-export.service \
+    sudo systemctl stop gnosia gnosia-studio gnosia-export.timer \
+      && while systemctl is-active -q gnosia-export.service; do sleep 10; done \
       && git pull --ff-only && npm ci && npm run catalog -- migrate && npm run build \
       && sudo systemctl start gnosia gnosia-studio gnosia-export.timer
     ```
 
     One chain, so a pull, install, migration or build that fails leaves
     everything stopped for you to fix, rather than starting the app on
-    new dependencies with an old `.next/`. The export timer is in the
-    stop list because an export that fires mid-install runs from a
-    half-replaced `node_modules` and costs that night's archive; stopping
-    the service too ends one already running. Stopping before the pull
-    matters because `npm ci` replaces `node_modules` under a running
-    `next start`, and `next build` rewrites `.next/` while it is being
-    served.
+    new dependencies with an old `.next/`. Leave `gnosia-studio` out of
+    both lists until step 12 has created it: `systemctl` refuses a unit it
+    does not know, and the chain would stop at the first command with
+    nothing updated. The export timer is stopped so an export cannot fire
+    mid-install and run from a half-replaced `node_modules`; the `while`
+    lets one already running finish rather than killing it, since a
+    killed export is that night's archive lost, where a wait of a few
+    seconds costs nothing. Stopping before the pull matters because
+    `npm ci` replaces `node_modules` under a running `next start`, and
+    `next build` rewrites `.next/` while it is being served.
 
 ## What to expect afterwards
 
@@ -290,7 +300,8 @@ and points there.
   key the restored rows name has an object, and delete the receiving
   side's own `.owner`, which names the database just dropped (after the
   `rsync`, not before, so nothing copies a marker back over the gap);
-  then audit, which writes a new one, and start the clients again.
+  then `blob audit` and `blob audit --fix`, which writes a new one, and
+  start the clients again.
 - **Videos in `/library` play on both.** They are in the blob store, which
   moved whole. A video rendered on the Mac after the copy is on the Mac
   only until the next `rsync` and dump.
