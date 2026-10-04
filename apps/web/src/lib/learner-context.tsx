@@ -310,6 +310,11 @@ export function LearnerProvider({
    * Resolves once the write has settled, true when it was stored. Most
    * callers ignore it and let the banner speak; one that has to say
    * "done" in words (Settings' reset) waits for it.
+   *
+   * A write that a newer one on the same key superseded resolves too, with
+   * its own outcome: a stored reset was stored even when a note queued
+   * behind it is refused. Only the newest write sets `saveError`, records a
+   * confirmation and hands over a held snapshot, as before.
    */
   const commit = useCallback(
     (
@@ -335,6 +340,7 @@ export function LearnerProvider({
             if (queue.current.pending === 0 && held.current !== null) receive(held.current);
             resolve(response.ok !== false);
           },
+          (response) => resolve(response.ok !== false),
         );
       });
     },
