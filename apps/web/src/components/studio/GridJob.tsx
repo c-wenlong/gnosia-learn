@@ -8,6 +8,7 @@ import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
 import { KindBadge, TILE_LIFT } from "@/components/studio/KindBadge";
 import { Chip } from "@/components/studio/StudioChrome";
+import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { finishedHeadline, type Job } from "@/lib/studio-jobs";
 import {
   adoptPicture,
@@ -255,19 +256,13 @@ function Backdrop({
   thumbnail: string | null;
 }) {
   const [afterMissing, setAfterMissing] = useState(false);
-  const [afterShown, setAfterShown] = useState(false);
-  const afterImage = useRef<HTMLImageElement>(null);
+  const fallback = live.current ?? thumbnail;
+  const src = stage !== "review" ? null : afterMissing ? fallback : afterShotHref(job.jobId);
   // The server renders this `<img>`, so a cached picture can finish loading
-  // before React attaches `onLoad`, and the event is never seen: ask the
-  // element itself once it is mounted.
-  useEffect(() => {
-    const image = afterImage.current;
-    if (image !== null && image.complete && image.naturalWidth > 0) setAfterShown(true);
-  }, [stage]);
+  // before React attaches `onLoad`; `useImageReveal` asks the element too.
+  const { attach: attachAfter, onLoad: afterLoaded, loaded: afterShown } = useImageReveal(src);
 
   if (stage === "review") {
-    const fallback = live.current ?? thumbnail;
-    const src = afterMissing ? fallback : afterShotHref(job.jobId);
     return (
       <div className="absolute inset-0">
         {src !== null && <div aria-hidden className={MAT} />}
@@ -283,11 +278,11 @@ function Backdrop({
         {src !== null && (
           // eslint-disable-next-line @next/next/no-img-element -- a runner file behind the proxy, see Thumbnail.
           <img
-            ref={afterImage}
+            ref={attachAfter}
             src={src}
             alt=""
             decoding="async"
-            onLoad={() => setAfterShown(true)}
+            onLoad={afterLoaded}
             onError={() => setAfterMissing(true)}
             // Clear of the status bar, so the bar never sits on the drawing.
             className={`relative h-full w-full object-contain px-2 pt-2 pb-14 ${afterShown ? "studio-fade-in" : "opacity-0"}`}
