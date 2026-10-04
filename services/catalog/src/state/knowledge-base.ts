@@ -7,6 +7,7 @@ import {
   LOCAL_LEARNER_ID,
   type OwnerScope,
   readableOwners,
+  topic,
 } from "@self-learn/schema";
 import { asc, eq } from "drizzle-orm";
 
@@ -60,6 +61,13 @@ export interface KbConcept {
   positions: Record<string, number>;
   /** Folder the note lives in, read off `concept.path`. Presentation only. */
   domain: string | null;
+  /**
+   * The catalog topic the concept is filed under (`concept.topic_slug`),
+   * which places it in a domain. Null when the topic is not one the reader may
+   * read (another owner's concept filed under this owner's topic, or the
+   * reverse), so no other owner's slug reaches the page.
+   */
+  topic: string | null;
 }
 
 export interface KbEdge {
@@ -178,7 +186,7 @@ export async function readKnowledgeBase(
   // The learner is the owner (`owner_id` references `learner`), so the
   // concepts they may see are their own and the commons' (phase 4).
   const readable = readableOwners(learnerId);
-  const [concepts, allPrerequisites, curriculumLinks, model, reviews, runs] = await Promise.all([
+  const [concepts, allPrerequisites, curriculumLinks, model, reviews, runs, topicRows] = await Promise.all([
     scopedRead(db, readable, (owners) =>
       db.select().from(concept).where(ownedBy(concept.ownerId, owners)).orderBy(asc(bytewise(concept.slug))),
     ),
@@ -199,7 +207,10 @@ export async function readKnowledgeBase(
     readModel(db, learnerId),
     readReviews(db, learnerId),
     db.select().from(indexRun).where(eq(indexRun.source, "concepts")).limit(1),
+    // The topics the reader may read, so `topic` names no other owner's.
+    scopedRead(db, readable, (owners) => db.select({ slug: topic.slug }).from(topic).where(ownedBy(topic.ownerId, owners))),
   ]);
+  const readableTopics = new Set(topicRows.map((t) => t.slug));
   const prerequisites = readableEdges(concepts, allPrerequisites);
 
   const { requires, assumes } = edgeLists(prerequisites);
@@ -241,6 +252,7 @@ export async function readKnowledgeBase(
       topics: topics.get(row.slug) ?? [],
       positions: positions.get(row.slug) ?? {},
       domain: domainOf(row.path),
+      topic: readableTopics.has(row.topicSlug) ? row.topicSlug : null,
     };
   });
 
