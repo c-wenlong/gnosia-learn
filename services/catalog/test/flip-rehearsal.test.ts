@@ -45,6 +45,8 @@ const reachable = await probe();
 const SCRIPT = path.join(REPO_ROOT, "scripts", "flip-rehearsal.mjs");
 
 interface Ran {
+  /** The rehearsal's own pid, which its throwaway copy's name carries. */
+  pid: number | undefined;
   code: number | null;
   stdout: string;
   stderr: string;
@@ -62,7 +64,7 @@ function rehearse(args: string[], env: NodeJS.ProcessEnv = {}, script: string = 
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
     child.on("error", reject);
-    child.on("close", (code) => resolve({ code, stdout, stderr }));
+    child.on("close", (code) => resolve({ pid: child.pid, code, stdout, stderr }));
   });
 }
 
@@ -138,6 +140,17 @@ function pgToolEnv(): NodeJS.ProcessEnv {
   if (at.username !== "") env["PGUSER"] = decodeURIComponent(at.username);
   if (at.password !== "") env["PGPASSWORD"] = decodeURIComponent(at.password);
   return env;
+}
+
+/**
+ * The throwaway copies one rehearsal made, by the pid its name carries
+ * (`self_learn_preflight_<pid>_<time>` in scripts/flip-rehearsal.mjs). Never
+ * every preflight copy on the server: another checkout's suite running at the
+ * same time has its own, alive while this one looks.
+ */
+async function preflightCopiesOf(ran: Ran): Promise<string[]> {
+  if (ran.pid === undefined) throw new Error("the rehearsal never started, so it has no pid to look for");
+  return databasesLike(`self\\_learn\\_preflight\\_${ran.pid}\\_%`);
 }
 
 async function databasesLike(pattern: string): Promise<string[]> {
@@ -397,7 +410,12 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       }
 
       // The throwaway copy is gone, and the template is as it was: no content.
-      expect(await databasesLike("self_learn_preflight_%")).toEqual([]);
+      // The step names the copy it dropped, which pins the name the check
+      // below looks for.
+      expect(report.steps.find((s) => s.name === "import into a throwaway copy")?.gist).toMatch(
+        new RegExp(`on self_learn_preflight_${ran.pid}_[0-9a-z]+; dropped$`),
+      );
+      expect(await preflightCopiesOf(ran)).toEqual([]);
       const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
       const assets = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from asset`);
@@ -460,7 +478,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
     // Both copies are dropped, without --keep.
     expect(report.copy).toMatchObject({ name, kept: false, dropped: true });
     expect(await databasesLike(`${name}%`)).toEqual([]);
-    expect(await databasesLike("self_learn_preflight_%")).toEqual([]);
+    expect(await preflightCopiesOf(ran)).toEqual([]);
   }, 120_000);
 });
 
