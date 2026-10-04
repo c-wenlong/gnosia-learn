@@ -18,7 +18,7 @@ import { isNarrated, type ValidVideoBrief } from "./brief";
 import { briefTool, DEFAULT_VIDEO_TOOL, notInStudio, type VideoToolName } from "./tools";
 import { backendFor, type BackendJob, type VideoBackend } from "./backend";
 import { appendRead, editsOn, readCalls, readReads, ReadTracker, isToolResult, LineQueue, WrapperOutputTracker } from "./calls";
-import { BASH_TIMEOUT_MS, VIDEO_CONCURRENCY, VIDEO_MAX_ATTEMPTS, VIDEO_RUNNER_NAME, videoHangMs, videoMaxTurns } from "./config";
+import { BASH_TIMEOUT_MS, VIDEO_MAX_ATTEMPTS, VIDEO_RUNNER_NAME, videoConcurrency, videoHangMs, videoMaxTurns } from "./config";
 import { safeCopy, safeRead } from "./copy";
 import { deadTools, deadToolsMessage, type DeadTools } from "./dead-tools";
 import type { VideoDoctor, VideoDoctorReport } from "./doctor";
@@ -26,6 +26,7 @@ import { runVideoGate, type GateTools } from "./gate";
 import { manualFile, writeManual } from "./manual";
 import { videoCandidateRef, videoTarget, type VideoPaths } from "./paths";
 import { writeGuard } from "./bash-guard";
+import { releaseJobPorts } from "./ports";
 import { deriveSteps } from "./steps";
 import type { Toolchain } from "./toolchain";
 import type { VideoGateResult, VideoJobRecord } from "./types";
@@ -491,8 +492,11 @@ export class VideoRunner {
 
   async kick(): Promise<void> {
     if (this.draining) return;
-    while (this.running.size < VIDEO_CONCURRENCY) {
-      const next = this.queued().find((record) => !this.running.has(record.id) && !this.unanswered.has(record.id));
+    while (this.running.size < videoConcurrency()) {
+      // The oldest queued job whose tool has no job running: never two of one
+      // tool at once, so a job of another tool can start past one waiting.
+      const busy = new Set([...this.running.values()].map((entry) => briefTool(entry.record.brief)));
+      const next = this.queued().find((record) => !this.running.has(record.id) && !this.unanswered.has(record.id) && !busy.has(briefTool(record.brief)));
       if (next === undefined) return;
       const entry: Running = {
         record: next,
@@ -532,6 +536,7 @@ export class VideoRunner {
         })
         .finally(() => {
           this.running.delete(next.id);
+          releaseJobPorts(next.id);
           settle();
           void this.kick();
         });

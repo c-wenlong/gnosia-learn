@@ -508,3 +508,99 @@ describe("a kick while a job's enqueue has not answered", () => {
     await made.drain();
   });
 });
+
+describe("jobs of different tools at once (open question 1 of docs/STUDIO-VIDEO-TOOLS.md)", () => {
+  /*
+   * Each claim waits until the test answers it, so a job the runner started
+   * stays started, and `running` is what the runner chose. Answered with a
+   * refusal, a job ends there (`not-claimed`) without spending anything, and
+   * the runner picks the next.
+   */
+  let claims: Map<string, (result: { ok: boolean; json: unknown; error: string | null; offline: boolean }) => void>;
+  const savedConcurrency = process.env.STUDIO_VIDEO_CONCURRENCY;
+
+  beforeEach(() => {
+    claims = new Map();
+    catalogMock.sessionStart.mockReset().mockResolvedValue(ok());
+    catalogMock.jobClaim.mockReset().mockImplementation(
+      (id: string) => new Promise((resolve) => claims.set(id, resolve)),
+    );
+  });
+
+  afterEach(() => {
+    catalogMock.jobClaim.mockReset();
+    catalogMock.sessionStart.mockReset();
+    if (savedConcurrency === undefined) delete process.env.STUDIO_VIDEO_CONCURRENCY;
+    else process.env.STUDIO_VIDEO_CONCURRENCY = savedConcurrency;
+  });
+
+  const refuse = { ok: false, json: null, error: "the test ends this job", offline: false };
+
+  async function queueFour(made: InstanceType<typeof VideoRunner>) {
+    const manimkc = await made.enqueue(brief({ slug: "first-manimkc" }));
+    const second = await made.enqueue(brief({ slug: "second-manimkc" }));
+    const revideokc = await made.enqueue(brief({ slug: "a-revideokc", tool: "revideokc" }));
+    const remotionkc = await made.enqueue(brief({ slug: "a-remotionkc", tool: "remotionkc" }));
+    return { manimkc, second, revideokc, remotionkc };
+  }
+
+  function running(): string[] {
+    return store.list({ state: "running" }).map((record) => record.slug).sort();
+  }
+
+  async function finish(made: InstanceType<typeof VideoRunner>, ids: string[]) {
+    for (const id of ids) {
+      await until(() => claims.has(id), `job ${id} never reached its claim`);
+      claims.get(id)!(refuse);
+      await made.settled(id);
+    }
+    await made.drain();
+  }
+
+  it("runs two jobs of different tools by default, and a second of one tool waits for the first", async () => {
+    delete process.env.STUDIO_VIDEO_CONCURRENCY;
+    const made = new VideoRunner(store, { doctor: doctor(), doctors: { revideokc: doctor(), remotionkc: doctor() } });
+    const queued = await queueFour(made);
+    await until(() => claims.size === 2, "the first two jobs never started");
+    // The second manimkc job is older than the revideokc one, and is passed over.
+    expect(running()).toEqual(["a-revideokc", "first-manimkc"]);
+    expect(made.busy).toBe(2);
+    expect(store.get(queued.second.record.id)?.state).toBe("queued");
+    expect(store.get(queued.remotionkc.record.id)?.state).toBe("queued");
+
+    // The first manimkc job ends: the oldest job whose tool is free starts.
+    claims.get(queued.manimkc.record.id)!(refuse);
+    await made.settled(queued.manimkc.record.id);
+    await until(() => claims.has(queued.second.record.id), "the second manimkc job never started");
+    expect(running()).toEqual(["a-revideokc", "second-manimkc"]);
+
+    await finish(made, [queued.second.record.id, queued.revideokc.record.id, queued.remotionkc.record.id]);
+  });
+
+  it("runs one job of each tool at STUDIO_VIDEO_CONCURRENCY=3, and still never two of one", async () => {
+    process.env.STUDIO_VIDEO_CONCURRENCY = "3";
+    const made = new VideoRunner(store, { doctor: doctor(), doctors: { revideokc: doctor(), remotionkc: doctor() } });
+    const queued = await queueFour(made);
+    await until(() => claims.size === 3, "the three tools' jobs never all started");
+    expect(running()).toEqual(["a-remotionkc", "a-revideokc", "first-manimkc"]);
+    expect(store.get(queued.second.record.id)?.state).toBe("queued");
+
+    await finish(made, [queued.manimkc.record.id, queued.second.record.id, queued.revideokc.record.id, queued.remotionkc.record.id]);
+  });
+
+  it("runs one job at a time, in the order they were queued, at STUDIO_VIDEO_CONCURRENCY=1", async () => {
+    process.env.STUDIO_VIDEO_CONCURRENCY = "1";
+    const made = new VideoRunner(store, { doctor: doctor(), doctors: { revideokc: doctor(), remotionkc: doctor() } });
+    const queued = await queueFour(made);
+    await until(() => claims.size === 1, "the first job never started");
+    expect(running()).toEqual(["first-manimkc"]);
+    expect(made.busy).toBe(1);
+
+    claims.get(queued.manimkc.record.id)!(refuse);
+    await made.settled(queued.manimkc.record.id);
+    await until(() => claims.has(queued.second.record.id), "the second job never started");
+    expect(running()).toEqual(["second-manimkc"]);
+
+    await finish(made, [queued.second.record.id, queued.revideokc.record.id, queued.remotionkc.record.id]);
+  });
+});
