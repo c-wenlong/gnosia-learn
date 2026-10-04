@@ -99,6 +99,18 @@ describe("LearnIndex graph card", () => {
     expect(document.activeElement?.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("does not pull the focus into the graph later after the ringed node is pressed again", () => {
+    const host = mount();
+    const tcp = node(host, "TCP");
+    tcp.focus();
+    act(() => {
+      tcp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const link = [...host.querySelectorAll("table a")].find((a) => a.textContent === "IP") as HTMLAnchorElement;
+    act(() => link.focus());
+    expect(document.activeElement).toBe(link);
+  });
+
   it("leaves the focus alone when the choice came from outside the graph", () => {
     const host = mount();
     const link = [...host.querySelectorAll("table a")].find((a) => a.textContent === "IP") as HTMLAnchorElement;

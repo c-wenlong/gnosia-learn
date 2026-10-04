@@ -296,7 +296,8 @@ function GraphCard({
   /** A node was chosen from inside the graph, which its key then replaces whole. */
   const refocus = useRef(false);
   const select = (id: string) => {
-    refocus.current = graphBox.current?.contains(document.activeElement) ?? false;
+    // Only a new concept re-keys the graph; pressing the ringed one again changes nothing to follow.
+    refocus.current = id !== focus?.id && (graphBox.current?.contains(document.activeElement) ?? false);
     onSelect(id);
   };
   const drawn = focus === null ? null : `${focus.id}:${scope}`;

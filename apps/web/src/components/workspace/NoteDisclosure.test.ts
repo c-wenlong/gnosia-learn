@@ -77,6 +77,20 @@ describe("NoteDisclosure", () => {
     expect(el.textContent).toContain("The whole note.");
   });
 
+  it("hands the focus from the page's summary to the button that replaces it", async () => {
+    const el = host(renderToString(note()));
+    (el.querySelector("summary") as HTMLElement).focus();
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    await act(async () => {
+      root = hydrateRoot(el, note());
+    });
+    mounted.push(() => {
+      act(() => root?.unmount());
+      el.remove();
+    });
+    expect(document.activeElement).toBe(el.querySelector("button"));
+  });
+
   it("renders the button at once on a client-side navigation", () => {
     const el = host();
     const root = createRoot(el);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Collapse } from "@/components/ui/Collapse";
 
@@ -32,14 +32,19 @@ export function NoteDisclosure({ children }: { children: ReactNode }) {
   );
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(false);
+  /** The page's `<summary>` had the focus when the button replaced it: the button takes it on. */
+  const focusToggle = useRef(false);
   const id = useId();
 
   if (!enhanced) {
     return (
       <details
-        // Hydration attaches this before the button replaces it: a note opened before then stays open.
+        // Hydration attaches this before the button replaces it: a note opened
+        // before then stays open, and a focused summary hands its focus on.
         ref={(element) => {
-          if (element?.open) {
+          if (element === null) return;
+          focusToggle.current = element.contains(document.activeElement);
+          if (element.open) {
             setOpen(true);
             setOpened(true);
           }
@@ -58,6 +63,11 @@ export function NoteDisclosure({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-col">
       <button
+        ref={(button) => {
+          if (button === null || !focusToggle.current) return;
+          focusToggle.current = false;
+          button.focus();
+        }}
         type="button"
         aria-expanded={open}
         aria-controls={id}
