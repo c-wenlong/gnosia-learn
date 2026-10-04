@@ -1,0 +1,4 @@
+ALTER TABLE "provider_key" DROP CONSTRAINT "provider_key_provider_check";--> statement-breakpoint
+ALTER TABLE "tutor_model" DROP CONSTRAINT "tutor_model_provider_check";--> statement-breakpoint
+ALTER TABLE "provider_key" ADD CONSTRAINT "provider_key_provider_check" CHECK (provider in ('nvidia', 'gemini', 'openrouter', 'openai', 'anthropic', 'deepseek', 'glm', 'qwen', 'moonshot', 'minimax', 'mimo', 'mistral', 'groq', 'xai'));--> statement-breakpoint
+ALTER TABLE "tutor_model" ADD CONSTRAINT "tutor_model_provider_check" CHECK (provider in ('nvidia', 'gemini', 'openrouter', 'openai', 'anthropic', 'deepseek', 'glm', 'qwen', 'moonshot', 'minimax', 'mimo', 'mistral', 'groq', 'xai'));

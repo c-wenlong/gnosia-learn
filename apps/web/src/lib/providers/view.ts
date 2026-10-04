@@ -30,8 +30,8 @@ export interface ProvidersView {
    * the rows follow that order; otherwise the rest follow the built-in order.
    */
   rows: ProviderRowView[];
-  /** The providers not listed yet, for Add provider. */
-  addable: { id: ProviderId; label: string }[];
+  /** The providers not listed yet, for Add provider, each with where its key is made. */
+  addable: { id: ProviderId; label: string; keyUrl?: string }[];
   /** The chain holds as many models as it may. */
   full: boolean;
 }
@@ -58,7 +58,9 @@ export function providersView(keys: ProvidersKeysInput, chain: readonly ChainEnt
     chainReachable,
     usingDefaults: chain.length === 0,
     rows,
-    addable: keys.rows.filter((row) => !order.includes(row.id)).map((row) => ({ id: row.id, label: row.label })),
+    addable: keys.rows
+      .filter((row) => !order.includes(row.id))
+      .map((row) => (row.keyUrl === undefined ? { id: row.id, label: row.label } : { id: row.id, label: row.label, keyUrl: row.keyUrl })),
     full: chain.length >= TUTOR_MODEL_LIMITS.maxEntries,
   };
 }
