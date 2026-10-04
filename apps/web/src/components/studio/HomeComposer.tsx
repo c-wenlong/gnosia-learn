@@ -6,7 +6,7 @@ import { NEW_CHAT_EVENT } from "@/components/studio/panel-host";
 import { MentionComposerBox } from "@/components/studio/StudioComposer";
 import { useStartDraft } from "@/components/studio/useStartDraft";
 import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
-import { cx } from "@/components/ui/classes";
+import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -136,17 +136,18 @@ function KindToggle({ option, pressed, onPress }: { option: MentionOption<DraftK
         // The field keeps its focus and its caret, as the plus does.
         onMouseDown={(event) => event.preventDefault()}
         onClick={onPress}
-        className={cx(
-          "relative inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium leading-none transition-colors duration-100",
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-          // A 44px target under a finger, the face still 32px.
-          "pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5 pointer-coarse:after:content-['']",
-          pressed
-            ? "border-accent bg-tint text-accent-text"
-            : blocked
-              ? "cursor-not-allowed border-border text-text3"
-              : "border-border text-text2 hover:bg-surface2 hover:text-text",
-        )}
+        // A blocked kind is aria-disabled, which the chip's `disabled:` styles
+        // do not read, so it drops the hover and dims as a disabled chip does.
+        className={chipClasses({
+          active: pressed,
+          tone: "tint",
+          interactive: !blocked,
+          className: cx(
+            blocked && cx(FOCUS, "cursor-not-allowed opacity-50"),
+            // A 44px target under a finger, the face 34px.
+            "relative pointer-coarse:after:absolute pointer-coarse:after:-inset-[5px] pointer-coarse:after:content-['']",
+          ),
+        })}
       >
         <Glyph name={(option.icon ?? option.id) as GlyphName} size={16} />
         {option.name}

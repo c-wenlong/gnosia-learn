@@ -16,6 +16,7 @@ export { Eyebrow } from "./Eyebrow";
 export { FeedbackBar } from "./FeedbackBar";
 export { FilterMenu } from "./FilterMenu";
 export { Glyph, type GlyphName } from "./Glyph";
+export { IconButton, type IconButtonProps } from "./IconButton";
 export { Input } from "./Input";
 export { MasteryDot } from "./MasteryDot";
 export { Panel } from "./Panel";
@@ -25,6 +26,28 @@ export { RatingButton } from "./RatingButton";
 export { SearchField } from "./SearchField";
 export { Select } from "./Select";
 export { StatTile, type StatTone } from "./StatTile";
-export { buttonClasses, cardClasses, chipClasses, cx, inputClasses, LABEL } from "./classes";
-export type { ButtonSize, ButtonVariant, ChipSize } from "./classes";
+export { TextLink, type TextLinkProps } from "./TextLink";
+export {
+  buttonClasses,
+  cardClasses,
+  chipClasses,
+  cx,
+  FOCUS,
+  iconButtonClasses,
+  inputClasses,
+  LABEL,
+  linkClasses,
+} from "./classes";
+export type {
+  ButtonSize,
+  ButtonVariant,
+  ChipSize,
+  ChipTone,
+  IconButtonShape,
+  IconButtonSize,
+  IconButtonTone,
+  LinkSize,
+  LinkTone,
+  LinkWeight,
+} from "./classes";
 export type { FilterOption } from "./filter-menu";

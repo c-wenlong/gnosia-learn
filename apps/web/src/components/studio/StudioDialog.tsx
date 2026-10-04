@@ -6,6 +6,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { ENTER, reducedMotion } from "@/components/studio/motion";
 import { PaneContext, usePaneLayout } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
+import { IconButton } from "@/components/ui/IconButton";
 
 import "./motion.css";
 
@@ -326,17 +328,9 @@ export function DialogHeader({ title, meta, children }: { title: ReactNode; meta
       <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text">{title}</h2>
       {meta !== undefined && meta !== null && <span className="shrink-0 text-[12px] tabular-nums text-text3">{meta}</span>}
       {children}
-      <button
-        type="button"
-        onClick={close}
-        aria-label="Close"
-        data-dialog-close=""
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text2 transition-colors hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        <svg aria-hidden viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <path d="M5 5l10 10M15 5L5 15" />
-        </svg>
-      </button>
+      <IconButton label="Close" onClick={close} data-dialog-close="">
+        <Glyph name="close" size={16} />
+      </IconButton>
     </div>
   );
 }

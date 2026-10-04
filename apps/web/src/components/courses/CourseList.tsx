@@ -9,7 +9,7 @@ import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
-import { cx } from "@/components/ui/classes";
+import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { CourseCover } from "@/components/courses/CourseCover";
 import type { ItemStanding } from "@/lib/course-path";
 import {
@@ -26,8 +26,6 @@ import {
   type CourseSummary,
 } from "@/lib/course-summary";
 import { useLearner } from "@/lib/learner-context";
-
-const LINK_FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 /**
  * The Courses page's interactive half, in two sections after Coursera.
@@ -222,7 +220,7 @@ export function CourseList({
               onClick={() => setInactiveOpen(!showInactive)}
               className={cx(
                 "flex items-center gap-2 rounded-sm text-[20px] leading-tight font-bold text-text",
-                LINK_FOCUS,
+                FOCUS,
               )}
             >
               Inactive courses{" "}
@@ -259,7 +257,7 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
         <h3 className="text-[16px] leading-snug font-bold text-text">
           <Link
             href={`/courses/${summary.slug}`}
-            className={cx("rounded-sm underline-offset-4 hover:underline", LINK_FOCUS)}
+            className={cx("rounded-sm underline-offset-4 hover:underline", FOCUS)}
           >
             {summary.code} {summary.title}
           </Link>
@@ -344,7 +342,7 @@ function CoverCard({
         className={cx(
           "flex w-full min-w-0 flex-col rounded-2xl border border-border bg-surface p-2",
           "transition-colors duration-300 hover:border-text3 motion-reduce:transition-none",
-          LINK_FOCUS,
+          FOCUS,
         )}
       >
         <div className="relative aspect-video w-full overflow-hidden rounded-lg">
@@ -367,20 +365,22 @@ function CoverCard({
           </p>
         </div>
       </Link>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-label={`${active ? "Deactivate" : "Activate"} ${summary.code}`}
+      {/* The reveal is on a wrapper, so its 200ms fade is not the chip's own 100ms colour change. */}
+      <span
         className={cx(
-          "absolute top-3.5 right-3.5 z-10 rounded-full border border-border bg-surface/90 px-2.5 py-1",
-          "text-[12px] font-medium text-text backdrop-blur-sm hover:border-text3",
-          "transition-opacity duration-200 motion-reduce:transition-none",
+          "absolute top-3.5 right-3.5 z-10 transition-opacity duration-200 motion-reduce:transition-none",
           "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100",
-          LINK_FOCUS,
         )}
       >
-        {active ? "Deactivate" : "Activate"}
-      </button>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={`${active ? "Deactivate" : "Activate"} ${summary.code}`}
+          className={chipClasses({ size: "sm", tone: "overlay" })}
+        >
+          {active ? "Deactivate" : "Activate"}
+        </button>
+      </span>
     </>
   );
 }

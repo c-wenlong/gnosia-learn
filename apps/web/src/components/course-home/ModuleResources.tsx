@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx, inputClasses } from "@/components/ui/classes";
+import { cx, FOCUS, inputClasses } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { useLearner } from "@/lib/learner-context";
 import { prefersReducedMotion } from "@/lib/motion";
@@ -12,7 +12,7 @@ import type { Resource } from "@/lib/types";
 
 import { Glyph, RESOURCE_GLYPH } from "./icons";
 import { resourceLink } from "./resource-link";
-import { FOCUS_RING, ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
+import { ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 
 const TYPE_LABEL: Record<Resource["type"], string> = {
   paper: "Paper",
@@ -62,7 +62,7 @@ export function ResourceRow({ resource: r }: { resource: Resource }) {
   const link = resourceLink(r.url);
   return (
     <li>
-      <ResourceAnchor href={r.url} internal={link.internal} className={cx(ROW, ROW_HOVER, FOCUS_RING)}>
+      <ResourceAnchor href={r.url} internal={link.internal} className={cx(ROW, ROW_HOVER, FOCUS)}>
         <Glyph name={RESOURCE_GLYPH[r.type] ?? "link"} className="text-text2" />
         <span className="min-w-0 flex-1 pl-1">
           <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
@@ -165,7 +165,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
                 <button
                   type="button"
                   onClick={() => remove(r, at)}
-                  className={cx("relative z-10 rounded-sm px-1 text-[13px] text-text2 transition-colors duration-100 hover:text-danger motion-reduce:transition-none", FOCUS_RING)}
+                  className={cx("relative z-10 rounded-sm px-1 text-[13px] text-text2 transition-colors duration-100 hover:text-danger motion-reduce:transition-none", FOCUS)}
                 >
                   Remove
                 </button>
@@ -181,7 +181,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
           onClick={() => setAdding((v) => !v)}
           aria-expanded={adding}
           aria-controls={formId}
-          className={cx(ROW, ROW_HOVER, FOCUS_RING, "w-full min-h-[44px] cursor-pointer text-left")}
+          className={cx(ROW, ROW_HOVER, FOCUS, "w-full min-h-[44px] cursor-pointer text-left")}
         >
           <Glyph name="add" className="text-text2" />
           <span className="pl-1 text-[14px] font-semibold text-text">Add a resource</span>

@@ -5,6 +5,8 @@ import type { RefObject } from "react";
 
 import { SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
+import { TextLink } from "@/components/ui/TextLink";
 
 import { FADE, FADE_IN } from "./motion";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
@@ -25,12 +27,7 @@ import { rowClick } from "./row-click";
 
 /** A magnifying glass, the field's and the rail's. */
 export function SearchIcon({ className = "size-[18px] shrink-0 text-text2" }: { className?: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-      <circle cx="9" cy="9" r="5.5" />
-      <path d="m13.2 13.2 3.3 3.3" />
-    </svg>
-  );
+  return <Glyph name="search" size={18} className={className} />;
 }
 
 /**
@@ -164,14 +161,9 @@ export function SearchResults({
       )}
       {search.found?.more === true && (
         <div className="px-1 pt-2">
-          <button
-            type="button"
-            onClick={search.showMore}
-            disabled={search.loadingMore}
-            className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
-          >
+          <TextLink onClick={search.showMore} pending={search.loadingMore} size="sm" className="px-1.5 py-1">
             {search.loadingMore ? "Reading more matches…" : "Show more matches"}
-          </button>
+          </TextLink>
           {search.moreError !== null && (
             <p role="alert" className="px-1.5 text-[12px] text-danger">
               {search.moreError}

@@ -13,6 +13,8 @@ import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/component
 import { Button } from "@/components/ui/Button";
 import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
+import { TextLink } from "@/components/ui/TextLink";
+import { Glyph } from "@/components/ui/Glyph";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
@@ -524,9 +526,7 @@ function StepMark({ status, live }: { status: StepRow["status"]; live: boolean }
   if (status === "done") {
     return (
       <span aria-hidden className={cx(base, "bg-ok text-white")}>
-        <svg viewBox="0 0 12 12" className="size-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M2.5 6.2 5 8.5 9.5 3.5" />
-        </svg>
+        <Glyph name="tick" size={12} />
       </span>
     );
   }
@@ -792,15 +792,9 @@ function Checks({ job }: { job: VideoJob }) {
           {length !== null && ` · ${spokenLength(length.durationSeconds)} against ${spokenLength(length.predictedSeconds)} predicted`}
           {length !== null && length.bytes > 0 && ` · ${formatSize(length.bytes)}`}
         </span>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={id}
-          onClick={() => setOpen((was) => !was)}
-          className="ml-auto rounded-sm text-[12px] font-medium text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
+        <TextLink aria-expanded={open} aria-controls={id} onClick={() => setOpen((was) => !was)} size="xs" className="ml-auto">
           {open ? "Hide each check" : "Show each check"}
-        </button>
+        </TextLink>
       </div>
       {gate.warnings.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1 rounded-xl bg-warn-tint px-4 py-2.5">

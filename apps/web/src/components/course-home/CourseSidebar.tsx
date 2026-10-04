@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { CollapseChevron } from "@/components/ui/Collapse";
 import { Panel } from "@/components/ui/Panel";
 import { moduleHref, moduleMark, type PathStatus } from "@/lib/course-path";
 import type { Course } from "@/lib/types";
 
 import { Glyph, ModuleMarkIcon } from "./icons";
-import { FOCUS_RING, ROW_HOVER } from "./rows";
+import { ROW_HOVER } from "./rows";
 
 /**
  * The left column, after Coursera's course sidebar: the course's code and
@@ -82,7 +82,7 @@ export function CourseSidebar({
           className={cx(
             "hidden min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg p-2 text-left text-[16px] leading-6 text-text @3xl:flex",
             ROW_HOVER,
-            FOCUS_RING,
+            FOCUS,
           )}
         >
           Course material
@@ -96,7 +96,7 @@ export function CourseSidebar({
             aria-controls={listId}
             className={cx(
               "flex min-h-12 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border-2 border-border px-3 py-2 text-left @3xl:hidden",
-              FOCUS_RING,
+              FOCUS,
             )}
           >
             <span className="min-w-0">
@@ -138,7 +138,7 @@ export function CourseSidebar({
                       className={cx(
                         "flex min-h-9 items-center gap-2.5 rounded-lg p-2 text-[14px] leading-5 text-text transition-colors duration-150 motion-reduce:transition-none",
                         here ? "bg-tint font-semibold" : "hover:bg-tint",
-                        FOCUS_RING,
+                        FOCUS,
                       )}
                     >
                       <ModuleMarkIcon mark={moduleMark(s)} fraction={s.total === 0 ? 0 : s.done / s.total} />
@@ -163,7 +163,7 @@ export function CourseSidebar({
           className={cx(
             "flex min-h-10 items-center gap-2.5 rounded-lg p-2 text-[16px] leading-6 text-text",
             ROW_HOVER,
-            FOCUS_RING,
+            FOCUS,
           )}
         >
           <Glyph name="assets" className="text-text2" />

@@ -8,6 +8,7 @@ import { saveStudioAgent } from "@/app/(app)/studio/actions";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { cx, LABEL } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
@@ -191,10 +192,8 @@ export function SettingsLink({ href }: { href: string }) {
         "hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
       )}
     >
-      {/* Three sliders. Drawn here rather than added to the kit's glyphs, which every course page carries. */}
-      <svg aria-hidden viewBox="0 0 20 20" width={18} height={18} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-        <path d="M4 6h7M15 6h1M4 14h1M9 14h7M13 4v4M7 12v4" />
-      </svg>
+      {/* The kit's sliders, the mark Settings' General tab carries too. */}
+      <Glyph name="sliders" size={18} />
     </PanelLink>
   );
 }

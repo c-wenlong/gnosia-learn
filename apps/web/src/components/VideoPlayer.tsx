@@ -18,6 +18,8 @@ import {
 } from "@/components/media";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
 import { cx } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
+import { IconButton } from "@/components/ui/IconButton";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { useAssetFailure } from "@/components/use-asset-failure";
 import { VideoScrubber } from "@/components/VideoScrubber";
@@ -467,7 +469,7 @@ export function VideoPlayer({
               : "invisible scale-90 opacity-0 transition-[opacity,scale,visibility]",
           )}
         >
-          <Icon name="play" className="size-6 translate-x-0.5 sm:size-7" />
+          <Glyph name="play" className="size-6 translate-x-0.5 fill-current sm:size-7" />
         </button>
 
         <div
@@ -488,7 +490,7 @@ export function VideoPlayer({
           />
           <div className="flex items-center gap-1 text-[13px]">
             <ControlButton label={paused ? "Play (k)" : "Pause (k)"} onClick={togglePlay}>
-              <Icon name={paused ? "play" : "pause"} className="size-5" />
+              {paused ? <Glyph name="play" className="size-5 fill-current" /> : <Icon name="pause" className="size-5" />}
             </ControlButton>
             <div className="group/volume flex items-center">
               <ControlButton label={muted || volume === 0 ? "Unmute (m)" : "Mute (m)"} onClick={toggleMute}>
@@ -681,21 +683,13 @@ function ControlButton({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={pressed}
-      aria-label={label}
-      title={label}
-      className="flex h-9 min-w-9 items-center justify-center rounded-full text-white/90 transition-colors duration-100 hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-white motion-reduce:transition-none"
-    >
+    <IconButton label={label} onClick={onClick} pressed={pressed} tone="onDark" inset>
       {children}
-    </button>
+    </IconButton>
   );
 }
 
 const PATHS = {
-  play: <path d="M7 4.5v15l12.5-7.5z" fill="currentColor" stroke="none" />,
   pause: <path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" fill="currentColor" stroke="none" />,
   volume: (
     <>

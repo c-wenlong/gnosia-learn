@@ -10,6 +10,7 @@ import { Notice } from "@/components/library/Notice";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
+import { TextLink } from "@/components/ui/TextLink";
 import { getCourses } from "@/data/courses";
 import {
   loadAssetAccess,
@@ -319,9 +320,7 @@ export default async function LibraryPage({
             <Notice title="No assets match">
               <p>{noMatchSentence}</p>
               <p className="mt-3">
-                <Link href="/library" className="font-semibold text-accent-text underline-offset-4 hover:underline">
-                  Clear every filter
-                </Link>
+                <TextLink href="/library">Clear every filter</TextLink>
               </p>
             </Notice>
           ) : view === "list" ? (

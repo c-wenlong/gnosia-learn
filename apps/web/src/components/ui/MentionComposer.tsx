@@ -60,6 +60,7 @@ import {
   composerKey,
 } from "./composer-keys";
 import { Glyph, type GlyphName } from "./Glyph";
+import { IconButton } from "./IconButton";
 import { MentionChip } from "./MentionChip";
 import {
   caretOffset,
@@ -735,25 +736,20 @@ function Field<K extends string>({
   const describedBy = reason === null ? undefined : reasonId;
 
   const plus = (
-    <button
-      type="button"
-      aria-label="Tag what to make"
+    // A 44px target under a finger, the face still 32px.
+    <IconButton
+      label="Tag what to make"
+      size="md"
+      touch
       aria-haspopup="listbox"
       aria-expanded={open && menu.mode === "plus"}
       aria-controls={open ? listId : undefined}
       disabled={disabled}
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => (open && menu.mode === "plus" ? openMenu(null) : openFromPlus())}
-      className={cx(
-        "relative flex size-8 items-center justify-center rounded-full text-text2 transition-colors",
-        "hover:bg-surface2 hover:text-text disabled:cursor-not-allowed",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-        // A 44px target under a finger, the face still 32px.
-        "pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5 pointer-coarse:after:content-['']",
-      )}
     >
       <Glyph name="add" size={20} />
-    </button>
+    </IconButton>
   );
 
   const field = (
@@ -860,9 +856,7 @@ function Field<K extends string>({
                     </span>
                     {tagged.has(option.id) && (
                       <>
-                        <svg aria-hidden viewBox="0 0 20 20" width={16} height={16} className="mt-1 shrink-0 text-accent-text" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M4.5 10.5l3.5 3.5 7.5-8" />
-                        </svg>
+                        <Glyph name="tick" size={16} className="mt-1 text-accent-text" />
                         <span className="sr-only">, already tagged</span>
                       </>
                     )}

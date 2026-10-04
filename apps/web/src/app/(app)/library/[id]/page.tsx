@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import type { AssetRef } from "@self-learn/catalog/state";
@@ -17,6 +16,7 @@ import { formatTimecode, type VideoChapter } from "@/components/media";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/classes";
+import { TextLink } from "@/components/ui/TextLink";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import {
   loadAssetDetail,
@@ -154,12 +154,9 @@ export default async function AssetPage({
   const back = assetBackLink((await searchParams).from);
   // Every state of the page has a way back to where it was opened from.
   const backLink = (
-    <Link
-      href={back.href}
-      className="self-start rounded-sm text-[13px] font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-    >
+    <TextLink href={back.href} size="sm" className="self-start">
       <span aria-hidden>←</span> {back.label}
-    </Link>
+    </TextLink>
   );
   const [detail, { kb }, lastWatched, playback] = await Promise.all([
     loadAssetDetail(id),
@@ -448,14 +445,9 @@ function RawText({ text }: { text: string }) {
 /** "Raw file", the ghost link at the right of a text card's title. */
 function RawLink({ href, children = "Raw file" }: { href: string; children?: ReactNode }) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="rounded-sm text-[13px] font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-    >
+    <TextLink href={href} external size="sm">
       {children}
-    </a>
+    </TextLink>
   );
 }
 

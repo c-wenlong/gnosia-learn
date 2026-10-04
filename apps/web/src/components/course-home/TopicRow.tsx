@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { TopicRecap } from "@/components/TopicRecap";
 import { Button } from "@/components/ui/Button";
 import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
+import { TextLink } from "@/components/ui/TextLink";
 import { topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
 import type { Course, Module, Topic } from "@/lib/types";
@@ -180,12 +180,9 @@ function TopicPanel({
           />
           Mark done
         </label>
-        <Link
-          href={topicSessionHref(course.slug, module.slug, topic.id)}
-          className="font-medium text-accent-text underline-offset-4 hover:underline"
-        >
+        <TextLink href={topicSessionHref(course.slug, module.slug, topic.id)}>
           {hasRecap ? "Resume tutor chat" : "Tutor chat"}
-        </Link>
+        </TextLink>
         <TopicRecap course={course} module={module} topic={topic} />
       </div>
       {mastery && (

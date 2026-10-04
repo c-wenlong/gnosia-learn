@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { FadeImg } from "@/components/studio/motion-parts";
 import { Glyph } from "@/components/ui/Glyph";
+import { TextLink } from "@/components/ui/TextLink";
 import { tutorTurnsWords, videoPosterHref } from "@/lib/studio-cards";
 import { thumbnailHref } from "@/lib/studio-view";
 
@@ -84,12 +84,7 @@ export function PinnedConcept({ slug, title, tutorTurns }: { slug: string; title
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-xl border-2 border-border px-4 py-2.5 text-[13px] leading-5 text-text2">
       <Glyph name="book" size={16} className="shrink-0 text-text3" />
-      <Link
-        href={`/learn/${encodeURIComponent(slug)}`}
-        className="rounded-sm font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        {title}
-      </Link>
+      <TextLink href={`/learn/${encodeURIComponent(slug)}`}>{title}</TextLink>
       {turns !== null && <span>{turns}</span>}
     </p>
   );

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { cx } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
+import { IconButton } from "@/components/ui/IconButton";
 import { prefersReducedMotion } from "@/lib/motion";
 
 /** How long the popup takes to fade and shrink away before it is gone. */
@@ -122,12 +124,23 @@ export function ExpandablePanel({
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-[20px] border-2 border-border bg-surface">
       <PanelHeader title={title} action={action}>
-        <CornerButton
-          ref={openerRef}
-          label={`Expand ${label}`}
-          onClick={expand}
-          path="M12.5 3.5h4v4M7.5 16.5h-4v-4M16.5 3.5 11 9M3.5 16.5 9 11"
-        />
+        <IconButton ref={openerRef} label={`Expand ${label}`} onClick={expand}>
+          {/* Four corners pulled outward: open it larger. Only this panel draws it. */}
+          <svg
+            aria-hidden
+            viewBox="0 0 20 20"
+            width={16}
+            height={16}
+            className="shrink-0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12.5 3.5h4v4M7.5 16.5h-4v-4M16.5 3.5 11 9M3.5 16.5 9 11" />
+          </svg>
+        </IconButton>
       </PanelHeader>
       <div
         ref={cardBodyRef}
@@ -169,7 +182,9 @@ export function ExpandablePanel({
           )}
         >
           <PanelHeader title={title} action={action}>
-            <CornerButton label="Close" onClick={collapse} path="M5 5l10 10M15 5 5 15" />
+            <IconButton label="Close" onClick={collapse}>
+              <Glyph name="close" size={16} />
+            </IconButton>
           </PanelHeader>
           <div ref={dialogBodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-6 md:px-8">
             {children}
@@ -197,41 +212,5 @@ function PanelHeader({ title, action, children }: { title: ReactNode; action?: R
       {action}
       {children}
     </div>
-  );
-}
-
-function CornerButton({
-  ref,
-  label,
-  onClick,
-  path,
-}: {
-  ref?: Ref<HTMLButtonElement>;
-  label: string;
-  onClick: () => void;
-  path: string;
-}) {
-  return (
-    <button
-      ref={ref}
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text2 transition-colors hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-    >
-      <svg
-        aria-hidden
-        viewBox="0 0 20 20"
-        className="h-4 w-4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d={path} />
-      </svg>
-    </button>
   );
 }
