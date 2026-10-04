@@ -7,6 +7,7 @@ import { usePanelHost } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { ChipLink } from "@/components/studio/StudioChrome";
 import { SearchField } from "@/components/ui/SearchField";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import {
   DEFAULT_VIEW,
   KINDS,
@@ -62,32 +63,21 @@ const SEARCH_WORDS: Record<KindFilter, string> = {
 
 /**
  * All, Diagrams, Videos: a segmented control at the start of the strip
- * (D85 of docs/STUDIO-CHAT-FIRST.md). Three links, like every other control
- * here, so the choice is `?kind=` in the URL and the grid redraws in the
- * browser. Choosing one closes a tile's panel, as a topic chip does.
+ * (D85 of docs/STUDIO-CHAT-FIRST.md), the kit's in its links mode. Three
+ * links, like every other control here, so the choice is `?kind=` in the URL
+ * and, through `PanelLink`, the grid redraws in the browser. Choosing one
+ * closes a tile's panel, as a topic chip does.
  */
 export function KindSegments({ view }: { view: StudioView }) {
   const words: Record<KindFilter, string> = { all: "All", diagram: "Diagrams", video: "Videos" };
   return (
-    <div role="group" aria-label="Kind" className="flex h-8 shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--surface2)] p-0.5">
-      {KINDS.map((kind) => {
-        const active = view.kind === kind;
-        return (
-          <PanelLink
-            key={kind}
-            href={studioHref(view, { kind, selected: null })}
-            aria-current={active ? "true" : undefined}
-            className={`flex h-full items-center rounded-md px-2.5 text-xs transition-[color,background-color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] motion-reduce:transition-none ${
-              active
-                ? "bg-[var(--surface)] font-semibold text-[var(--foreground)] shadow-sm"
-                : "font-medium text-[var(--muted)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {words[kind]}
-          </PanelLink>
-        );
-      })}
-    </div>
+    <SegmentedControl
+      mode="links"
+      label="Kind"
+      link={PanelLink}
+      value={view.kind}
+      items={KINDS.map((kind) => ({ id: kind, label: words[kind], href: studioHref(view, { kind, selected: null }) }))}
+    />
   );
 }
 

@@ -13,6 +13,7 @@ const KIND: Record<ThreadKind, { glyph: GlyphName; word: string }> = {
   video: { glyph: "video", word: "Video" },
   draft: { glyph: "diagram", word: "Studio draft" },
   concept: { glyph: "concepts", word: "Concept" },
+  session: { glyph: "chat", word: "Tutor session" },
 };
 
 /**
@@ -29,7 +30,7 @@ export function ThreadsCard({ threads, reachable }: { threads: Thread[]; reachab
         <div className="flex flex-col items-start gap-3">
           <p className="text-[14px] text-text2">
             {reachable
-              ? "Nothing to go back to yet. Course modules, videos and concepts you answer questions on show here."
+              ? "Nothing to go back to yet. Course modules, videos, tutor sessions and concepts you answer questions on show here."
               : "What you were doing could not be read."}
           </p>
           {reachable && (

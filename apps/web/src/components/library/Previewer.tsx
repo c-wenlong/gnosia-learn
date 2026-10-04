@@ -6,6 +6,7 @@ import { previewAsset } from "@/app/(app)/library/preview-action";
 import type { PreviewAnswer } from "@/components/library/preview-content";
 import { LOADING_BLOCK } from "@/components/PageLoading";
 import { Button } from "@/components/ui/Button";
+import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { cx, iconButtonClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
@@ -20,9 +21,6 @@ import {
   withOpen,
   type PreviewHeader,
 } from "@/lib/library-preview";
-
-/** How long the panel and its mask take to fade away before they are gone. */
-export const CLOSE_MS = 200;
 
 /** Marks a history entry the panel pushed, so Close knows it can go back to the list. */
 const PUSHED = "libraryPreview";
@@ -63,13 +61,13 @@ type Answer = PreviewAnswer | { state: "failed"; id: string };
  * skeleton, never a blank. "Open page" goes to `/library/<id>`, which keeps
  * the tabs and stays the deep link.
  *
- * The panel is a `<dialog>` opened with `showModal()`: the platform puts it
- * in the top layer over a dimmed, blurred mask, makes the page inert and
- * traps focus. It fades and grows in and out over 200ms on the kit's curve
- * (`usePresence` keeps it mounted while it leaves), and does neither under
- * reduced motion. On close, the page is scrolled back to where it was and
- * focus returns to the row that opened it (or, after an arrow, the row now
- * shown). On a phone the panel is the whole screen.
+ * The panel is the kit's `Dialog` at its `preview` size, Manus's 1200 by
+ * 820 at 1440 and the whole screen on a phone, with the kit's one look and
+ * motion (a fade and an 8px rise with its backdrop, the same backwards while
+ * `usePresence` keeps it for `DIALOG_CLOSE_MS`, nothing under reduced
+ * motion). It holds the page still while open; on close the page is
+ * scrolled back to where it was and focus returns to the row that opened it
+ * (or, after an arrow, the row now shown).
  */
 export function Previewer({
   initialOpen,
@@ -83,11 +81,9 @@ export function Previewer({
   children: ReactNode;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const scrollAt = useRef<number | null>(null);
-  const pressedOnBackdrop = useRef(false);
 
   // `openId` is what the URL says is open; `shownId` outlives it by the fade,
   // so the panel keeps its content while it leaves.
@@ -108,7 +104,7 @@ export function Previewer({
   const [held, setHeld] = useState<{ visit: number; answer: Answer } | null>(() =>
     initial === null ? null : { visit: 0, answer: initial },
   );
-  const { mounted, leaving } = usePresence(openId !== null, CLOSE_MS);
+  const { mounted, leaving } = usePresence(openId !== null, DIALOG_CLOSE_MS);
   // Read by the dialog's cleanup, which runs after the render that unmounts it.
   const shownIdRef = useRef(shownId);
   useEffect(() => {
@@ -231,38 +227,37 @@ export function Previewer({
     open(id, anchor);
   }
 
-  // The dialog's life: shown modal while mounted (through the fade out), the
-  // page held still under it, and on the way out the page scrolled back and
-  // focus given back to the row.
+  // The row to give focus back to: the one that opened the panel, or after
+  // an arrow the one now shown. `Dialog` focuses it as it unmounts.
+  const returnTo = useCallback(
+    () =>
+      opener.current?.isConnected
+        ? opener.current
+        : shownIdRef.current === null
+          ? null
+          : rowLink(shownIdRef.current),
+    [rowLink],
+  );
+
+  // On the way out, the page goes back to where it was when the panel
+  // opened; after an arrow moved the panel, to wherever shows the row now
+  // shown. `Dialog` holds the page still while it is open (`lockScroll`).
   useEffect(() => {
     if (!mounted) return;
-    const dialog = dialogRef.current;
-    if (dialog === null) return;
-    if (!dialog.open) dialog.showModal();
-    bodyRef.current?.focus({ preventScroll: true });
-    const root = document.documentElement;
-    const overflow = root.style.overflow;
-    root.style.overflow = "hidden";
     return () => {
-      root.style.overflow = overflow;
-      if (dialog.open) dialog.close();
       if (scrollAt.current !== null) window.scrollTo({ top: scrollAt.current, behavior: "instant" });
-      const back = opener.current?.isConnected ? opener.current : shownIdRef.current === null ? null : rowLink(shownIdRef.current);
-      if (back) {
-        back.focus({ preventScroll: scrollAt.current !== null });
-        if (scrollAt.current === null) back.scrollIntoView({ block: "nearest" });
-      }
+      else returnTo()?.scrollIntoView({ block: "nearest" });
       opener.current = null;
       scrollAt.current = null;
     };
-  }, [mounted, rowLink]);
+  }, [mounted, returnTo]);
 
   // A fresh asset starts at the top of the panel.
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [shownId]);
 
-  function onDialogKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
+  function onPanelKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.defaultPrevented) return;
     const target = event.target instanceof Element ? event.target : null;
     const by = arrowStep({
@@ -291,69 +286,45 @@ export function Previewer({
       </div>
 
       {mounted && shownId !== null && (
-        <dialog
-          ref={dialogRef}
-          aria-label={header?.title ?? "Preview"}
-          aria-busy={answer === undefined}
-          onCancel={(event) => {
-            // Escape: closed through the URL, so the two cannot disagree.
-            event.preventDefault();
-            close();
-          }}
-          onKeyDown={onDialogKeyDown}
-          onPointerDown={(event) => {
-            pressedOnBackdrop.current = event.target === event.currentTarget;
-          }}
-          onClick={(event) => {
-            // The mask is the dialog element itself; a press that starts and
-            // ends there closes it, so a text selection dragged out does not.
-            const started = pressedOnBackdrop.current;
-            pressedOnBackdrop.current = false;
-            if (started && event.target === event.currentTarget) close();
-          }}
-          className={cx(
-            "m-auto flex-col overflow-hidden bg-page p-0 text-text open:flex",
-            "backdrop:bg-black/30 dark:backdrop:bg-black/60 backdrop:backdrop-blur-[4px]",
-            // A phone gets the whole screen; anything wider Manus's 1200 by 820.
-            "h-dvh max-h-none w-full max-w-none rounded-none",
-            "md:h-[min(820px,calc(100dvh-80px))] md:w-[min(1200px,calc(100vw-96px))] md:rounded-[12px] md:border md:border-hair md:shadow-[0_0_8px_rgba(0,0,0,0.02)]",
-            "transition-[opacity,scale] duration-200 ease-soft starting:open:scale-[0.98] starting:open:opacity-0",
-            "backdrop:transition-opacity backdrop:duration-200 backdrop:ease-out starting:open:backdrop:opacity-0",
-            leaving && "pointer-events-none scale-[0.98] opacity-0 backdrop:opacity-0",
-            "motion-reduce:transition-none motion-reduce:backdrop:transition-none",
-          )}
+        <Dialog
+          label={header?.title ?? "Preview"}
+          onClose={close}
+          closing={leaving}
+          size="preview"
+          lockScroll
+          opener={returnTo}
         >
-          <PreviewerHeader header={header} id={shownId} onClose={close} />
-          <div
-            ref={bodyRef}
-            tabIndex={-1}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-5 pb-10 outline-none md:px-12"
-          >
+          <div className="flex min-h-0 flex-1 flex-col" aria-busy={answer === undefined} onKeyDown={onPanelKeyDown}>
+            <PreviewerHeader header={header} id={shownId} onClose={close} />
             <div
-              className={cx("mx-auto w-full", header?.wide ? "max-w-[1000px]" : "max-w-[712px]")}
+              ref={bodyRef}
+              tabIndex={-1}
+              // Focus lands here on open, so the keys scroll the asset.
+              data-autofocus
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-5 pb-10 outline-none md:px-12"
             >
-              {answer === undefined ? (
-                <BodySkeleton />
-              ) : (
-                // Keyed, so each asset's body fades in as it arrives.
-                <div key={shownId} className="animate-fade-in motion-reduce:animate-none">
-                  {answer.state === "ok" ? (
-                    <Suspense fallback={<BodySkeleton />}>{answer.body}</Suspense>
-                  ) : (
-                    <NoBody
-                      answer={answer}
-                      page={assetHref(shownId)}
-                      retry={() => {
+              <div className={cx("mx-auto w-full", header?.wide ? "max-w-[1000px]" : "max-w-[712px]")}>
+                {answer === undefined ? (
+                  <BodySkeleton />
+                ) : (
+                  // Keyed, so each asset's body fades in as it arrives.
+                  <div key={shownId} className="animate-fade-in motion-reduce:animate-none">
+                    {answer.state === "ok" ? (
+                      <Suspense fallback={<BodySkeleton />}>{answer.body}</Suspense>
+                    ) : (
+                      <NoBody
+                        answer={answer}
+                        page={assetHref(shownId)}
                         // Another visit to the same asset asks again.
-                        setVisit((n) => n + 1);
-                      }}
-                    />
-                  )}
-                </div>
-              )}
+                        retry={() => setVisit((n) => n + 1)}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </dialog>
+        </Dialog>
       )}
     </>
   );

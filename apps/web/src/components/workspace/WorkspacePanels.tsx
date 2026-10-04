@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState, type ReactNode, type RefObject } from "react";
+import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
 
-import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/classes";
 import { Panel } from "@/components/ui/Panel";
+import { tabIds } from "@/components/ui/roving";
+import { TabList } from "@/components/ui/TabList";
 import { TextLink } from "@/components/ui/TextLink";
 import { useMediaQuery } from "@/components/ui/use-media-query";
 
@@ -14,7 +15,9 @@ import { useMediaQuery } from "@/components/ui/use-media-query";
  * From 900px up they sit side by side at 290, the rest, and 310, each one the
  * height of the window so it scrolls on its own, and either side panel can
  * collapse to a 48px rail to give the tutor the room. Below 900px three
- * columns do not fit, so the panels become tabs and one shows at a time.
+ * columns do not fit, so the panels become tabs and one shows at a time: the
+ * kit's `TabList` over them, each panel its `tabpanel`, since one panel on
+ * show at a time, chosen from a row that names them, is the tabs pattern.
  *
  * The panels' contents are server-rendered and arrive as props; only the
  * layout state lives here.
@@ -32,10 +35,10 @@ import { useMediaQuery } from "@/components/ui/use-media-query";
 
 type PanelKey = "note" | "tutor" | "studio";
 
-const TABS: { key: PanelKey; label: string }[] = [
-  { key: "note", label: "Note & sources" },
-  { key: "tutor", label: "Tutor" },
-  { key: "studio", label: "Studio" },
+const TABS: { id: PanelKey; label: string }[] = [
+  { id: "note", label: "Note & sources" },
+  { id: "tutor", label: "Tutor" },
+  { id: "studio", label: "Studio" },
 ];
 
 const WIDE = "(min-width: 900px)";
@@ -188,6 +191,7 @@ export function WorkspacePanels({
   const [noteOpen, setNoteOpen] = useState(true);
   const [studioOpen, setStudioOpen] = useState(true);
   const wide = useWide();
+  const base = useId();
   const noteRail = useRef<HTMLButtonElement>(null);
   const noteCollapse = useRef<HTMLButtonElement>(null);
   const studioRail = useRef<HTMLButtonElement>(null);
@@ -209,6 +213,14 @@ export function WorkspacePanels({
       "max-[899px]:transition-opacity max-[899px]:duration-150 max-[899px]:ease-out max-[899px]:starting:opacity-0 max-[899px]:motion-reduce:transition-none",
       active !== key && "max-[899px]:hidden",
     );
+  // Below 900px the panels are the tab row's panels; from 900px up they sit
+  // side by side with no tab row, so they are plain regions (each `Panel` is a
+  // named section either way). Before hydration `wide` is false, so the
+  // server's markup is the phone's, as the classes already are.
+  const tabPanel = (key: PanelKey) => {
+    const ids = tabIds(base, key);
+    return wide ? { id: ids.panel } : { id: ids.panel, role: "tabpanel", "aria-labelledby": ids.tab };
+  };
   // Below 900px the tab row names the one panel on show, so its title would
   // repeat the tab just pressed. The note and studio headers hold nothing else
   // there (Collapse is desktop-only) and go; the tutor's keeps its style line
@@ -218,13 +230,14 @@ export function WorkspacePanels({
 
   return (
     <div className="flex min-h-0 flex-col gap-4 min-[900px]:flex-1">
-      <div role="group" aria-label="Workspace panels" className="flex gap-2 overflow-x-auto min-[900px]:hidden">
-        {TABS.map((t) => (
-          <Chip key={t.key} active={active === t.key} onClick={() => setActive(t.key)}>
-            {t.label}
-          </Chip>
-        ))}
-      </div>
+      <TabList
+        label="Workspace panels"
+        items={TABS}
+        value={active}
+        onChange={setActive}
+        idBase={base}
+        className="min-[900px]:hidden"
+      />
 
       <div
         className={cx(
@@ -240,7 +253,7 @@ export function WorkspacePanels({
           "min-[900px]:transition-[grid-template-columns] min-[900px]:duration-200 min-[900px]:ease-soft min-[900px]:motion-reduce:transition-none",
         )}
       >
-        <div className={shown("note")} data-panel="note" data-active={active === "note"}>
+        <div className={shown("note")} data-panel="note" data-active={active === "note"} {...tabPanel("note")}>
           <SidePanel
             label="Note & sources"
             open={noteOpen}
@@ -257,7 +270,7 @@ export function WorkspacePanels({
           </SidePanel>
         </div>
 
-        <div className={shown("tutor")} data-panel="tutor" data-active={active === "tutor"}>
+        <div className={shown("tutor")} data-panel="tutor" data-active={active === "tutor"} {...tabPanel("tutor")}>
           <Panel
             title="Tutor"
             aria-label="Tutor"
@@ -272,7 +285,7 @@ export function WorkspacePanels({
           </Panel>
         </div>
 
-        <div className={shown("studio")} data-panel="studio" data-active={active === "studio"}>
+        <div className={shown("studio")} data-panel="studio" data-active={active === "studio"} {...tabPanel("studio")}>
           <SidePanel
             label="Studio"
             open={studioOpen}

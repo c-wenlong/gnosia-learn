@@ -34,7 +34,7 @@ const SERVER_NVIDIA = "nvapi-ServerKeyExample0123456789abcdef";
 let ip = 0;
 
 function request(
-  path: "" | "/test" | "/models",
+  path: "" | "/test" | "/models" | "/provider",
   method: "POST" | "DELETE" | "PATCH",
   body: unknown,
   options: { origin?: string | null; ip?: string } = {},
@@ -53,6 +53,7 @@ function request(
 type Routes = typeof import("./route");
 type TestRoute = typeof import("./test/route");
 type ModelsRoute = typeof import("./models/route");
+type ProviderRoute = typeof import("./provider/route");
 type KeyRoutes = typeof import("../provider-key/route");
 type Store = typeof import("@/lib/tutor-models/store");
 type Credentials = typeof import("@/lib/agent/credentials");
@@ -63,6 +64,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
   let routes: Routes;
   let testRoute: TestRoute;
   let modelsRoute: ModelsRoute;
+  let providerRoute: ProviderRoute;
   let keyRoutes: KeyRoutes;
   let store: Store;
   let credentials: Credentials;
@@ -87,7 +89,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
     scratch = await migratedScratchDatabase();
     process.env.DATABASE_URL = scratch.url;
     process.env.AUTH_SECRET = SECRET;
-    [routes, testRoute, modelsRoute, keyRoutes, store, credentials, cache] = await Promise.all([
+    [routes, testRoute, modelsRoute, keyRoutes, store, credentials, cache, providerRoute] = await Promise.all([
       import("./route"),
       import("./test/route"),
       import("./models/route"),
@@ -95,6 +97,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
       import("@/lib/tutor-models/store"),
       import("@/lib/agent/credentials"),
       import("@/lib/tutor-models/model-list"),
+      import("./provider/route"),
     ]);
   }, 60_000);
 
@@ -144,10 +147,11 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
     }
+    // The second NVIDIA model joined NVIDIA's, above OpenRouter's (T12); moving it up stays inside them.
     const moved = await json(await routes.PATCH(request("", "PATCH", { provider: "nvidia", model: "c/three", direction: "up" })));
     expect(moved.chain).toEqual([
-      { provider: "nvidia", model: "a/one" },
       { provider: "nvidia", model: "c/three" },
+      { provider: "nvidia", model: "a/one" },
       { provider: "openrouter", model: "b/two:free" },
     ]);
     const removed = await json(await routes.DELETE(request("", "DELETE", { provider: "nvidia", model: "a/one" })));
@@ -163,6 +167,46 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
       ["nvidia", "c/three", "server"],
       ["openrouter", "b/two:free", "saved"],
     ]);
+  });
+
+  it("moves a provider's models together, and Delete takes its models and the saved key, leaving the server's", async () => {
+    const saveKey = (provider: string) =>
+      keyRoutes.POST(
+        new Request(`${ORIGIN}/api/learner/provider-key`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", host: "localhost:3000", origin: ORIGIN, "x-forwarded-for": "10.7.0.2" },
+          body: JSON.stringify({ provider, key: KEY }),
+        }),
+      );
+    await saveKey("openrouter");
+    for (const [provider, model] of [
+      ["nvidia", "a/one"],
+      ["nvidia", "c/three"],
+      ["openrouter", "b/two:free"],
+    ]) {
+      expect((await routes.POST(request("", "POST", { provider, model }))).status).toBe(200);
+    }
+    const up = await json(await providerRoute.PATCH(request("/provider", "PATCH", { provider: "openrouter", direction: "up" })));
+    expect(up.chain).toEqual([
+      { provider: "openrouter", model: "b/two:free" },
+      { provider: "nvidia", model: "a/one" },
+      { provider: "nvidia", model: "c/three" },
+    ]);
+    expect((await providerRoute.PATCH(request("/provider", "PATCH", { provider: "gemini", direction: "up" }))).status).toBe(404);
+    expect((await providerRoute.PATCH(request("/provider", "PATCH", { provider: "nvidia", direction: "left" }))).status).toBe(400);
+
+    const gone = await json(await providerRoute.DELETE(request("/provider", "DELETE", { provider: "openrouter" })));
+    expect(gone).toMatchObject({ ok: true, keyRemoved: true });
+    expect(gone.chain).toEqual([
+      { provider: "nvidia", model: "a/one" },
+      { provider: "nvidia", model: "c/three" },
+    ]);
+    expect((await scratch.pool.query("select 1 from provider_key where provider = 'openrouter'")).rowCount).toBe(0);
+    // NVIDIA's key is the server's: Delete takes the models and has no saved key to remove.
+    const server = await json(await providerRoute.DELETE(request("/provider", "DELETE", { provider: "nvidia" })));
+    expect(server).toMatchObject({ ok: true, keyRemoved: false, chain: [] });
+    // Cross-origin is refused before anything moves.
+    expect((await providerRoute.DELETE(request("/provider", "DELETE", { provider: "nvidia" }, { origin: "https://evil.example" }))).status).toBe(403);
   });
 
   it("refuses a bad body, a duplicate, a missing entry and a provider with no key, by code and without echoing", async () => {
@@ -192,7 +236,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
   it("refuses a model id that is, holds or is part of one of the owner's keys, and never repeats it", async () => {
     // A key with no key-like shape, so only the comparison with the stored key can catch it.
     const plain = "my-own-gateway-token-for-gemini";
-    await store.addChainEntry("local", "nvidia", "a/one");
+    await store.addChainEntry("local", "nvidia", "a/one", true);
     const { saveProviderKey } = await import("@/lib/provider-keys/store");
     await saveProviderKey("local", "gemini", plain);
     for (const model of [plain, `prefix/${plain}`, plain.slice(3, 20), SERVER_NVIDIA, KEY]) {
@@ -231,7 +275,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
 
   it("keeps owner B off owner A's chain: B reads none of it, and B's tutor uses the defaults", async () => {
     await scratch.pool.query("insert into learner (id) values ('owner-b') on conflict do nothing");
-    await store.addChainEntry("local", "nvidia", "a/one");
+    await store.addChainEntry("local", "nvidia", "a/one", true);
     expect(await store.readChain("owner-b")).toEqual([]);
     await expect(store.removeChainEntry("owner-b", "nvidia", "a/one")).rejects.toMatchObject({ code: "NOT_FOUND" });
     const steps = await credentials.tutorCredentials("owner-b");

@@ -67,7 +67,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   try {
-    return answer({ ok: true, chain: await addChainEntry(owner, provider, model) });
+    return answer({ ok: true, chain: await addChainEntry(owner, provider, model, keyFor(provider, {}) !== null) });
   } catch (error) {
     return chainFailed("add", error);
   }
