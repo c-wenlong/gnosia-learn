@@ -150,7 +150,7 @@ export function StudioGrid({
         {diagrams.length === 0 && unreadable === 0 && videos.length === 0 ? (
           <EmptyDirectory dir={dir} />
         ) : (
-          <p className="text-sm text-[var(--muted)]">
+          <p className="text-sm text-text2">
             {view.kind === "video"
               ? "No video matches this filter."
               : view.kind === "diagram" || videos.length === 0

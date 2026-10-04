@@ -142,30 +142,14 @@
   --shell-row-pad: 8px;
 
   /*
-   * The old palette's names, kept as aliases so the pages not yet redesigned
-   * (the course and module pages, the library, the studio) keep rendering.
-   * Defined once: every alias is a var() of a token, and both :root and .dark
-   * sit on <html>, so an alias resolves against whichever theme is active.
-   * `--border`, `--surface`, `--accent`, `--ok`, `--warn` and `--danger` are
-   * both old and new names; the new meaning won, and the old uses of `--warn`
-   * and `--ok` as a text colour now read `--warn-text` and `--ok-text`.
-   * Delete an alias once nothing reads it.
+   * A panel raised above the page (the studio canvas page's right panel):
+   * the card in the light palettes, the step lighter in the dark ones, where
+   * `.dark` and `.gnosia.dark` point it at `--surface2`. The one name left of
+   * the pre-redesign palette, kept because it is a different token per
+   * palette and so has no single token to be replaced by; the others went on
+   * 2026-10-05 (#359) and `theme-tokens.test.ts` fails one coming back.
    */
-  --background: var(--page);
-  --foreground: var(--text);
-  --muted: var(--text2);
-  --muted-strong: color-mix(in srgb, var(--text) 45%, var(--text2));
-  --surface-hover: var(--surface2);
-  --sidebar-bg: var(--surface2);
-  --header-bg: var(--surface);
-  --chip-bg: var(--surface2);
-  --nav-active-bg: var(--tint);
-  --accent-strong: var(--accent-text);
   --surface-raised: var(--surface);
-  --warn-bg: var(--warn-tint);
-  --warn-border: var(--warn);
-  --danger-bg: color-mix(in srgb, var(--danger) 8%, var(--surface));
-  --danger-border: color-mix(in srgb, var(--danger) 45%, var(--surface));
 }
 
 .dark {
@@ -428,6 +412,7 @@
   --color-page: var(--page);
   --color-surface: var(--surface);
   --color-surface2: var(--surface2);
+  --color-surface-raised: var(--surface-raised);
   --color-tint: var(--tint);
   --color-border: var(--border);
   --color-hair: var(--hair);
@@ -469,9 +454,6 @@
   --color-brand-ink: var(--brand-ink);
   --color-brand-mist: var(--brand-mist);
 
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-
   /* Figtree for the interface (next/font, see layout.tsx); Georgia for page
      titles, concept titles and the wordmark, from the system, no download. */
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
@@ -508,31 +490,6 @@ body {
  */
 .katex {
   font-size: 1.06em;
-}
-
-/* Docs-style prose tweaks */
-.prose-docs {
-  max-width: 72ch;
-  line-height: 1.7;
-  color: var(--foreground);
-}
-
-.prose-docs h1,
-.prose-docs h2,
-.prose-docs h3 {
-  letter-spacing: -0.02em;
-  color: var(--foreground);
-}
-
-.prose-docs a {
-  color: var(--accent-strong);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.prose-docs code {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.9em;
 }
 
 /*

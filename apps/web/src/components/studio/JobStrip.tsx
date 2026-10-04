@@ -88,7 +88,7 @@ function Strip({
   dismiss: ReturnType<typeof useStudioJobs>["dismiss"];
 }) {
   return (
-    <div className="flex h-8 shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-xs">
+    <div className="flex h-8 shrink-0 items-center gap-3 border-b border-border bg-surface px-3 text-xs">
       <Dot job={job} />
       <PanelLink
         href={panelHref(path, { job: job.jobId })}
@@ -103,7 +103,7 @@ function Strip({
         <>
           <Elapsed job={job} />
           {connection === "polling" && (
-            <span className="shrink-0 text-[var(--muted)]" title="The event stream is not connected; this is the polled GET, which is the record anyway.">
+            <span className="shrink-0 text-text2" title="The event stream is not connected; this is the polled GET, which is the record anyway.">
               polling
             </span>
           )}
@@ -135,20 +135,20 @@ function Words({ job }: { job: Job }) {
   const video = asVideoJob(job);
   if (video !== null) return <VideoWords job={video} />;
   if (job.state === "awaiting_review") {
-    return <span className="truncate text-[var(--muted-strong)]">{finishedHeadline(job)} · ready to review</span>;
+    return <span className="truncate text-text2">{finishedHeadline(job)} · ready to review</span>;
   }
   if (job.state === "failed" || job.state === "interrupted" || job.state === "cancelled") {
-    return <span className="truncate text-[var(--danger)]">{failureReport(job).headline}</span>;
+    return <span className="truncate text-danger">{failureReport(job).headline}</span>;
   }
   if (!isActive(job.state)) {
-    return <span className="truncate text-[var(--muted)]">{jobStateLabel(job.state)}</span>;
+    return <span className="truncate text-text2">{jobStateLabel(job.state)}</span>;
   }
   // The step and the attempt stay: this is the only progress a person sees
   // when the tile is filtered out, scrolled away, or on the canvas route.
   return (
     <>
-      <span className="truncate text-[var(--muted-strong)]">{phaseWords(job)}</span>
-      <span className="shrink-0 tabular-nums text-[var(--muted)]">
+      <span className="truncate text-text2">{phaseWords(job)}</span>
+      <span className="shrink-0 tabular-nums text-text2">
         {stepLabel(job)}
         {job.attempt > 1 && ` · attempt ${job.attempt}`}
       </span>
@@ -159,20 +159,20 @@ function Words({ job }: { job: Job }) {
 /** The same for a video job, whose steps are the manimkc-video skill's, not the seven phases. */
 function VideoWords({ job }: { job: NonNullable<ReturnType<typeof asVideoJob>> }) {
   if (job.state === "awaiting_review") {
-    return <span className="truncate text-[var(--muted-strong)]">{readyHeadline(job)} · ready to review</span>;
+    return <span className="truncate text-text2">{readyHeadline(job)} · ready to review</span>;
   }
   if (job.state === "failed" || job.state === "interrupted" || job.state === "cancelled") {
-    return <span className="truncate text-[var(--danger)]">{videoFailureLine(job)}</span>;
+    return <span className="truncate text-danger">{videoFailureLine(job)}</span>;
   }
   if (!isActive(job.state)) {
-    return <span className="truncate text-[var(--muted)]">{jobStateLabel(job.state)}</span>;
+    return <span className="truncate text-text2">{jobStateLabel(job.state)}</span>;
   }
   const step = videoStepCount(job);
   return (
     <>
-      <span className="truncate text-[var(--muted-strong)]">{videoPhaseWords(job)}</span>
+      <span className="truncate text-text2">{videoPhaseWords(job)}</span>
       {(step !== null || job.attempt > 1) && (
-        <span className="shrink-0 tabular-nums text-[var(--muted)]">
+        <span className="shrink-0 tabular-nums text-text2">
           {step === null ? "" : step.toLowerCase()}
           {job.attempt > 1 && `${step === null ? "" : " · "}attempt ${job.attempt}`}
         </span>
@@ -184,12 +184,12 @@ function VideoWords({ job }: { job: NonNullable<ReturnType<typeof asVideoJob>> }
 function Dot({ job }: { job: Job }) {
   const tone =
     job.state === "failed" || job.state === "interrupted"
-      ? "bg-[var(--danger)]"
+      ? "bg-danger"
       : job.state === "awaiting_review" || job.state === "accepted"
-        ? "bg-[var(--ok)]"
+        ? "bg-ok"
         : job.state === "cancelled" || job.state === "discarded"
-          ? "bg-[var(--muted)]"
-          : "bg-[var(--accent)]";
+          ? "bg-text2"
+          : "bg-accent";
   const pulse = job.state === "running" ? "animate-pulse motion-reduce:animate-none" : "";
   return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone} ${pulse}`} />;
 }
@@ -204,7 +204,7 @@ function Dot({ job }: { job: Job }) {
 export function Elapsed({ job }: { job: Job }) {
   const ms = useElapsed(job);
   return (
-    <span className="shrink-0 text-[var(--muted)]">
+    <span className="shrink-0 text-text2">
       <Duration ms={ms} live={job.finished === null} />
     </span>
   );
@@ -234,9 +234,9 @@ export function IndeterminateBar() {
   return (
     <span
       aria-hidden
-      className="h-1 w-24 shrink-0 overflow-hidden rounded-full bg-[var(--chip-bg)]"
+      className="h-1 w-24 shrink-0 overflow-hidden rounded-full bg-surface2"
     >
-      <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] rounded-full bg-[var(--accent)]" />
+      <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] rounded-full bg-accent" />
     </span>
   );
 }

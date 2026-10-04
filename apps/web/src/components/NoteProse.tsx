@@ -26,8 +26,8 @@ import type { AssetProblemCode } from "@/lib/asset-problems";
  *
  * **A 72ch measure, at 15px on a 1.7 line.** These pages are wide so a video
  * can sit beside its transcript, and prose set across that whole column is
- * prose nobody finishes. 72ch is what `.prose-docs` already uses for the
- * hand-written pages, so a note and a course page read at the same width.
+ * prose nobody finishes. 72ch is the measure the reading pages share, so a
+ * note and a course page read at the same width.
  *
  * **Space above a heading, not below it.** The gap over an `##` is four times
  * the gap under it, which is what makes a heading look attached to the section
@@ -37,7 +37,7 @@ import type { AssetProblemCode } from "@/lib/asset-problems";
  *
  * **One rendering in both themes, from the tokens.** Nothing here is a
  * `dark:` variant. Every colour is a token from `globals.css`, and the
- * callouts mix their one hue into `var(--surface)` and `var(--foreground)` with
+ * callouts mix their one hue into `var(--surface)` and `var(--text)` with
  * `color-mix`, so a green "correct" panel is a pale green on the light theme
  * and a deep green on the dark one from the same declaration.
  *
@@ -131,7 +131,7 @@ export function NoteProse({
 
   if (blocks.length === 0) {
     return (
-      <p className={`text-sm text-[var(--muted)] ${className}`}>
+      <p className={`text-sm text-text2 ${className}`}>
         This note has no body yet, only the metadata at the top of the file.
       </p>
     );
@@ -139,7 +139,7 @@ export function NoteProse({
 
   return (
     <article
-      className={`max-w-[72ch] text-[15px] leading-[1.7] text-[var(--foreground)] [&>*:first-child]:mt-0 ${className}`}
+      className={`max-w-[72ch] text-[15px] leading-[1.7] text-text [&>*:first-child]:mt-0 ${className}`}
     >
       <Blocks blocks={blocks} links={links} ids={ids} />
     </article>
@@ -272,7 +272,7 @@ function BlockView({
       return <CodeBlock info={block.info} text={block.text} className={space.code} />;
 
     case "rule":
-      return <hr className={`${space.rule} h-px border-0 bg-[var(--border)]`} />;
+      return <hr className={`${space.rule} h-px border-0 bg-border`} />;
 
     case "list":
       return <ListView block={block} links={links} ids={ids} className={space.list} tight={tight} />;
@@ -333,7 +333,7 @@ function Heading({
       return (
         <h2
           id={id}
-          className={`${space.h2} group scroll-mt-20 border-b border-[var(--border)] pb-2 text-[1.25rem] font-semibold ${balance}`}
+          className={`${space.h2} group scroll-mt-20 border-b border-border pb-2 text-[1.25rem] font-semibold ${balance}`}
         >
           {children}
           {anchor}
@@ -353,7 +353,7 @@ function Heading({
       return (
         <h4
           id={id}
-          className={`${space.h4} group scroll-mt-20 text-[0.9375rem] font-semibold text-[var(--muted-strong)]`}
+          className={`${space.h4} group scroll-mt-20 text-[0.9375rem] font-semibold text-text2`}
         >
           {children}
           {anchor}
@@ -394,7 +394,7 @@ function HeadingAnchor({ id, text }: { id: string; text: string }) {
       // written, whatever it contains; a Unicode id survives it the same way.
       href={`#${encodeURIComponent(id)}`}
       aria-label={`Link to "${text}"`}
-      className="-m-2 ml-0.5 inline-block rounded-sm p-2 align-middle text-[0.8em] font-normal text-[var(--muted)] no-underline opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] [@media(hover:none)]:opacity-100"
+      className="-m-2 ml-0.5 inline-block rounded-sm p-2 align-middle text-[0.8em] font-normal text-text2 no-underline opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [@media(hover:none)]:opacity-100"
     >
       #
     </a>
@@ -411,14 +411,14 @@ function HeadingAnchor({ id, text }: { id: string; text: string }) {
 function CodeBlock({ info, text, className }: { info: string; text: string; className: string }) {
   return (
     <div
-      className={`${className} overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)]`}
+      className={`${className} overflow-hidden rounded-lg border border-border bg-surface2`}
     >
       {info !== "" && (
-        <p className="border-b border-[var(--border)] px-3 py-1.5 font-mono text-xs text-[var(--muted)]">
+        <p className="border-b border-border px-3 py-1.5 font-mono text-xs text-text2">
           {info}
         </p>
       )}
-      <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[13px] leading-relaxed text-[var(--muted-strong)]">
+      <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[13px] leading-relaxed text-text2">
         <code>{text}</code>
       </pre>
     </div>
@@ -445,7 +445,7 @@ function ListView({
   className: string;
   tight: boolean;
 }) {
-  const shared = `${className} ${tight ? "space-y-1" : "space-y-2"} pl-5 marker:text-[var(--muted)]`;
+  const shared = `${className} ${tight ? "space-y-1" : "space-y-2"} pl-5 marker:text-text2`;
   const items = block.items.map((item, i) => (
     <li key={i} className="pl-1 [&>*:first-child]:mt-0">
       <Blocks blocks={item} links={links} ids={ids} tight />
@@ -467,7 +467,7 @@ function ListView({
  * A callout is a full 1px border plus a wash of its hue, never a thick
  * coloured rule down the left side. The hue is set once as `--tone` and mixed
  * three ways: into the border, into a nearly transparent wash for the ground,
- * and — for the title — into `var(--foreground)`, which is what makes the
+ * and, for the title, into `var(--text)`, which is what makes the
  * label legible in both themes without a second declaration. Mixing toward the
  * page's own text colour means the label lands dark green on the light theme
  * and pale green on the dark one, always at a readable contrast against the
@@ -494,7 +494,7 @@ const CALLOUT_TONE: Record<string, string> = {
   caution: "var(--warn-text)",
   attention: "var(--warn-text)",
   example: "var(--violet)",
-  quote: "var(--muted)",
+  quote: "var(--text2)",
 };
 
 function QuoteView({
@@ -513,7 +513,7 @@ function QuoteView({
   if (block.callout === null) {
     return (
       <blockquote
-        className={`${className} border-l border-[var(--border)] pl-4 text-[var(--muted-strong)] [&>*:first-child]:mt-0`}
+        className={`${className} border-l border-border pl-4 text-text2 [&>*:first-child]:mt-0`}
       >
         <Blocks blocks={block.blocks} links={links} ids={ids} tight={tight} />
       </blockquote>
@@ -522,14 +522,14 @@ function QuoteView({
 
   // An unknown kind gets the neutral tone and keeps its own name as the title,
   // so a callout this app has never heard of still reads as a callout.
-  const tone = CALLOUT_TONE[block.callout] ?? "var(--muted)";
+  const tone = CALLOUT_TONE[block.callout] ?? "var(--text2)";
 
   return (
     <aside
       style={{ "--tone": tone } as React.CSSProperties}
       className={`${className} rounded-xl border border-[color-mix(in_srgb,var(--tone)_32%,var(--border))] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)] px-4 py-3`}
     >
-      <p className="text-[13px] font-semibold tracking-[-0.01em] text-[color-mix(in_srgb,var(--tone)_55%,var(--foreground))]">
+      <p className="text-[13px] font-semibold tracking-[-0.01em] text-[color-mix(in_srgb,var(--tone)_55%,var(--text))]">
         {block.title}
       </p>
       <div className="mt-1.5 [&>*:first-child]:mt-0">
@@ -564,7 +564,7 @@ function Figure({
   if (node.kind === "image" && links.imagesAsLinks === true) {
     const href = safeHref(node.src);
     return (
-      <p className={`${className} text-sm text-[var(--muted)]`}>
+      <p className={`${className} text-sm text-text2`}>
         Image:{" "}
         {href === null ? (
           <span className="font-mono">{node.alt || node.src}</span>
@@ -602,9 +602,9 @@ function Figure({
   if (problem === null && src === null) {
     return (
       <p
-        className={`${className} rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-xs text-[var(--muted)]`}
+        className={`${className} rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-text2`}
       >
-        Embedded asset <span className="font-mono text-[var(--muted-strong)]">{name}</span> is not
+        Embedded asset <span className="font-mono text-text">{name}</span> is not
         available on this page.
       </p>
     );
@@ -613,7 +613,7 @@ function Figure({
   const isVector = /\.svgz?(?:[?#]|$)/i.test(src ?? name);
 
   return (
-    <figure className={`${className} overflow-hidden rounded-xl border border-[var(--border)]`}>
+    <figure className={`${className} overflow-hidden rounded-xl border border-border`}>
       {problem !== null ? (
         <WidgetFailure
           inset
@@ -631,7 +631,7 @@ function Figure({
         )
       )}
       {caption !== null && caption !== "" && (
-        <figcaption className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-strong)]">
+        <figcaption className="border-t border-border px-3 py-2 text-xs text-text2">
           {caption}
         </figcaption>
       )}
@@ -640,7 +640,7 @@ function Figure({
 }
 
 const LINK_CLASS =
-  "rounded-sm text-[var(--accent-strong)] underline decoration-1 underline-offset-2 transition-colors duration-150 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]";
+  "rounded-sm text-accent-text underline decoration-1 underline-offset-2 transition-colors duration-150 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 function Inlines({ nodes, links }: { nodes: Inline[]; links: Resolvers }) {
   return (
@@ -659,7 +659,7 @@ function InlineView({ node, links }: { node: Inline; links: Resolvers }) {
 
     case "strong":
       return (
-        <strong className="font-semibold text-[var(--foreground)]">
+        <strong className="font-semibold text-text">
           <Inlines nodes={node.children} links={links} />
         </strong>
       );
@@ -673,7 +673,7 @@ function InlineView({ node, links }: { node: Inline; links: Resolvers }) {
 
     case "code":
       return (
-        <code className="rounded bg-[var(--chip-bg)] px-1.5 py-0.5 font-mono text-[0.85em] text-[var(--foreground)]">
+        <code className="rounded bg-surface2 px-1.5 py-0.5 font-mono text-[0.85em] text-text">
           {node.text}
         </code>
       );
@@ -691,7 +691,7 @@ function InlineView({ node, links }: { node: Inline; links: Resolvers }) {
       return (
         <span
           title={`Note: ${node.target}`}
-          className="text-[var(--muted-strong)] underline decoration-dotted decoration-[var(--muted)] underline-offset-2"
+          className="text-text2 underline decoration-dotted decoration-text2 underline-offset-2"
         >
           {node.label}
         </span>
@@ -703,7 +703,7 @@ function InlineView({ node, links }: { node: Inline; links: Resolvers }) {
       // A picture in the middle of a sentence cannot be a figure without
       // putting a block element inside a `<p>`, so it is named instead.
       return (
-        <span className="font-mono text-[0.85em] text-[var(--muted)]">
+        <span className="font-mono text-[0.85em] text-text2">
           {node.kind === "image" ? node.alt || node.src : node.target}
         </span>
       );

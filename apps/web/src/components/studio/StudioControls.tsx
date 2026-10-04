@@ -280,8 +280,13 @@ export function SortMenu({ view }: { view: StudioView }) {
  * this it stayed open over the grid it had just changed, which read as
  * nothing having happened. A modified click keeps it open. One is open at a
  * time: pressing another's button is a press outside this one.
+ *
+ * A row can also be a form's submit button (the canvas page's verbs, which
+ * are server actions): submitting it closes the menu the same way. Closed on
+ * the submit event rather than the click, so React has read the form's data
+ * before the row goes.
  */
-function StripMenu({
+export function StripMenu({
   label,
   name,
   placement = "bottom-end",
@@ -299,6 +304,10 @@ function StripMenu({
 
   function onChoose(event: MouseEvent<HTMLDivElement>) {
     if (!isPlainClick(event) || (event.target as Element).closest("a") === null) return;
+    close();
+  }
+
+  function close() {
     setOpen(false);
     trigger.current?.focus();
   }
@@ -328,6 +337,7 @@ function StripMenu({
         placement={placement}
         id={id}
         onClick={onChoose}
+        onSubmit={close}
         className={cx(MENU_PANEL, "w-max min-w-[13rem] max-w-[min(22rem,calc(100vw-2rem))]")}
       >
         {children}
