@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement, type ComponentProps, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { FOLD_MS } from "./motion";
@@ -128,6 +129,12 @@ describe("FadeImg", () => {
     act(() => image.dispatchEvent(new Event("error")));
     expect(image.className).toContain("opacity-100");
     expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it("is transparent from the server's HTML on, unlike a cover, which hides nothing there", () => {
+    const html = renderToString(createElement(FadeImg, { src: "/a.svg", alt: "A" }));
+    expect(html).toContain("opacity-0");
+    expect(html).not.toContain("data-loaded");
   });
 
   it("goes transparent again for a new picture until that one loads", () => {

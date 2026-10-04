@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Fragment, useId, useRef, useState, type ReactNode } from "react";
 
 import { formatTimecode, type TranscriptCue, type VideoChapter } from "@/components/media";
 import { JobLog } from "@/components/studio/JobPanel";
@@ -19,6 +19,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { Textarea } from "@/components/ui/Textarea";
 import { TextLink } from "@/components/ui/TextLink";
+import { useFollowFoot } from "@/components/ui/use-follow-foot";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
@@ -548,9 +549,8 @@ function MakingLog({ job, events, chapters }: { job: VideoJob; events: StudioEve
   const labelId = useId();
   const lines = narration(events, 40);
   const box = useRef<HTMLOListElement>(null);
-  useEffect(() => {
-    if (box.current !== null) box.current.scrollTop = box.current.scrollHeight;
-  }, [lines.length]);
+  // A new line follows the foot, unless the reader has scrolled up to read.
+  useFollowFoot(box, lines.length, { onlyNearFoot: true });
   const seeded = job.seeded ?? null;
   return (
     <section aria-labelledby={labelId} className="min-w-0">
