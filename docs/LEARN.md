@@ -462,6 +462,14 @@ reports per concept is always empty now and stays for the plugin's sake.
  "pLBefore":0.25,"pLAfter":0.6,"session":"2026-08-18-react-agents"}
 ```
 
+An observation the web app records adds two optional keys the terminal's
+never carries: `requestId`, the page's name for one answer, so a retried
+request is found rather than recorded twice; and `module`, the id of the
+module whose week check asked (`/courses/<slug>/<module>/check`, a live
+module the owner can read, or the answer is refused). A week check's answers
+are ordinary `source: "probe"` observations, so the module is the only thing
+that tells them apart; there is no event type of its own and no score.
+
 Append-only is enforced by a trigger, not by discipline. An UPDATE or a DELETE
 raises. The correction path is a new row: `learn void --session S --reason R`
 retracts a session's evidence, and the next rebuild skips it while the history
