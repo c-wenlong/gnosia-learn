@@ -553,72 +553,75 @@ function ProviderRow({
         </div>
       </div>
 
-      <Collapse open={mode === "edit"} className="pt-3">
+      <Collapse open={mode === "edit"}>
+        {/* The space above sits inside the fold, so a shut fold measures 0. */}
         {keyForm.mounted && (
-          <form onSubmit={(e) => void saveKey(e)} aria-label={`${row.label} key`} className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
-            {row.custom !== undefined && (
-              <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
-                <FormRow label="Name">
-                  {({ id }) => <Input id={id} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />}
-                </FormRow>
-                <FormRow label="Base URL">
-                  {({ id }) => (
-                    <Input
-                      id={id}
-                      type="url"
-                      inputMode="url"
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      value={url}
-                      onChange={(e) => setUrl(e.target.value)}
-                    />
-                  )}
-                </FormRow>
-              </div>
-            )}
-            <FormRow
-              id={`${base}-key`}
-              label={saved === null ? `Your ${row.label} key` : `A new ${row.label} key`}
-              hint={
-                row.custom !== undefined
-                  ? "Leave it empty to keep the key saved now. A new one is sent once and stored encrypted."
-                  : "Sent once and stored encrypted. It replaces the key saved now."
-              }
-            >
-              {({ id, describedBy }) => (
-                <Input
-                  id={id}
-                  type="password"
-                  name={`${row.id}-api-key`}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  aria-describedby={describedBy}
-                />
+          <div className="pt-3">
+            <form onSubmit={(e) => void saveKey(e)} aria-label={`${row.label} key`} className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
+              {row.custom !== undefined && (
+                <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+                  <FormRow label="Name">
+                    {({ id }) => <Input id={id} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />}
+                  </FormRow>
+                  <FormRow label="Base URL">
+                    {({ id }) => (
+                      <Input
+                        id={id}
+                        type="url"
+                        inputMode="url"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                      />
+                    )}
+                  </FormRow>
+                </div>
               )}
-            </FormRow>
-            <div className="flex flex-wrap gap-2.5">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={
-                  busy ||
-                  (row.custom === undefined
-                    ? draft.trim() === ""
-                    : draft.trim() === "" && name.trim() === row.label && url.trim() === row.custom.baseUrl)
+              <FormRow
+                id={`${base}-key`}
+                label={saved === null ? `Your ${row.label} key` : `A new ${row.label} key`}
+                hint={
+                  row.custom !== undefined
+                    ? "Leave it empty to keep the key saved now. A new one is sent once and stored encrypted."
+                    : "Sent once and stored encrypted. It replaces the key saved now."
                 }
               >
-                {row.custom !== undefined ? "Save" : "Save key"}
-              </Button>
-              <Button variant="secondary" size="sm" disabled={busy} onClick={() => open("idle")}>
-                Cancel
-              </Button>
-            </div>
-          </form>
+                {({ id, describedBy }) => (
+                  <Input
+                    id={id}
+                    type="password"
+                    name={`${row.id}-api-key`}
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    aria-describedby={describedBy}
+                  />
+                )}
+              </FormRow>
+              <div className="flex flex-wrap gap-2.5">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={
+                    busy ||
+                    (row.custom === undefined
+                      ? draft.trim() === ""
+                      : draft.trim() === "" && name.trim() === row.label && url.trim() === row.custom.baseUrl)
+                  }
+                >
+                  {row.custom !== undefined ? "Save" : "Save key"}
+                </Button>
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => open("idle")}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </div>
         )}
       </Collapse>
 

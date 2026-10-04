@@ -80,24 +80,27 @@ export function CourseRail({
 
       {/* The column's gap is folded into the card, so a shut card leaves none. */}
       <div className="-mt-4">
-        <Collapse open={nextOpen} className="pt-4">
+        <Collapse open={nextOpen}>
+          {/* The space above sits inside the fold, so a shut fold measures 0. */}
           {nextShown && (
-            <RailCard title="Next up">
-              <div>
-                <p className="text-[16px] font-semibold leading-6 text-text">{nextShown.topic.title}</p>
-                <p className="text-[14px] leading-5 text-text2">
-                  {topicMeta(mastery[nextShown.topic.id], false)} · Module {nextShown.module.order}
-                </p>
-              </div>
-              <Button
-                href={moduleHref(course.slug, nextShown.module.slug)}
-                variant="secondary"
-                size="sm"
-                className="self-start"
-              >
-                Open module {nextShown.module.order}
-              </Button>
-            </RailCard>
+            <div className="pt-4">
+              <RailCard title="Next up">
+                <div>
+                  <p className="text-[16px] font-semibold leading-6 text-text">{nextShown.topic.title}</p>
+                  <p className="text-[14px] leading-5 text-text2">
+                    {topicMeta(mastery[nextShown.topic.id], false)} · Module {nextShown.module.order}
+                  </p>
+                </div>
+                <Button
+                  href={moduleHref(course.slug, nextShown.module.slug)}
+                  variant="secondary"
+                  size="sm"
+                  className="self-start"
+                >
+                  Open module {nextShown.module.order}
+                </Button>
+              </RailCard>
+            </div>
           )}
         </Collapse>
       </div>

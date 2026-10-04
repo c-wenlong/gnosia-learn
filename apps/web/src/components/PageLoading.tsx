@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Skeleton, SKELETON } from "@/components/ui/Skeleton";
 import { cardClasses, cx } from "@/components/ui/classes";
 
 /**
@@ -17,7 +18,9 @@ import { cardClasses, cx } from "@/components/ui/classes";
  * Neutral on purpose: a heading and a column of cards beside a narrower one,
  * the outline most pages share, in the surface colours every palette defines.
  * `focus` is Review's shape: no sidebar from 768px up and one centred card,
- * so the frame does not draw a chrome the page is about to take away.
+ * so the frame does not draw a chrome the page is about to take away. `full`
+ * is the studio's: the page fills the shell edge to edge (`data-layout="full"`)
+ * and passes its own outline as children.
  *
  * The status line sits beside the busy region, not in it, so a screen reader
  * announces it rather than waiting for the region to settle.
@@ -36,21 +39,32 @@ export const PAGE_ENTER = "animate-fade-in motion-reduce:animate-none";
 /** The frame's wait-then-fade, on the element carrying `data-layout`. */
 const FRAME_ENTER = "animate-fade-in-late motion-reduce:animate-none";
 
-const BLOCK = "rounded-md bg-surface2 animate-pulse motion-reduce:animate-none";
-
 export function PageLoading({
   layout = "app",
+  label = "Loading",
   children,
 }: {
-  layout?: "app" | "focus";
+  layout?: "app" | "focus" | "full";
+  /** What the status line says to a screen reader, e.g. "Opening the studio". */
+  label?: string;
   /** A page's own outline in place of the generic one, inside the same frame. */
   children?: ReactNode;
 } = {}) {
   const status = (
     <p role="status" className="sr-only">
-      Loading
+      {label}
     </p>
   );
+  if (layout === "full") {
+    return (
+      <>
+        {status}
+        <div data-layout="full" aria-busy="true" className={cx("flex min-h-0 min-w-0 flex-1 flex-col", FRAME_ENTER)}>
+          {children}
+        </div>
+      </>
+    );
+  }
   if (layout === "focus") {
     return (
       <>
@@ -60,11 +74,11 @@ export function PageLoading({
           aria-busy="true"
           className={cx("mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pt-10", FRAME_ENTER)}
         >
-          <div className={cx(BLOCK, "h-2 w-full")} />
+          <Skeleton className="h-2 w-full" />
           <div className={cardClasses({ className: "min-h-[320px]" })}>
-            <div className={cx(BLOCK, "h-5 w-2/3")} />
-            <div className={cx(BLOCK, "h-3 w-full")} />
-            <div className={cx(BLOCK, "h-3 w-5/6")} />
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-5/6" />
           </div>
         </div>
       </>
@@ -80,25 +94,25 @@ export function PageLoading({
   );
 }
 
-/** A loading block in the surface colours, pulsing unless motion is reduced: for a page's own outline. */
-export const LOADING_BLOCK = BLOCK;
+/** The kit `Skeleton`'s classes, for a page outline whose block is not a `<div>`. */
+export const LOADING_BLOCK = SKELETON;
 
 /** The outline most pages share: a heading, a column of cards beside a narrower one. */
 function AppOutline() {
   return (
     <>
-      <div className={cx(BLOCK, "mb-5 h-8 w-48")} />
+      <Skeleton className="mb-5 h-8 w-48" />
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-4">
           {[176, 132, 220].map((height) => (
             <div
               key={height}
-              className={cardClasses({ className: "flex flex-col gap-3" })}
+              className={cardClasses()}
               style={{ minHeight: height }}
             >
-              <div className={cx(BLOCK, "h-4 w-40")} />
-              <div className={cx(BLOCK, "h-3 w-3/4")} />
-              <div className={cx(BLOCK, "h-3 w-1/2")} />
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
             </div>
           ))}
         </div>
@@ -106,11 +120,11 @@ function AppOutline() {
           {[148, 196].map((height) => (
             <div
               key={height}
-              className={cardClasses({ className: "flex flex-col gap-3" })}
+              className={cardClasses()}
               style={{ minHeight: height }}
             >
-              <div className={cx(BLOCK, "h-4 w-28")} />
-              <div className={cx(BLOCK, "h-3 w-2/3")} />
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-2/3" />
             </div>
           ))}
         </div>

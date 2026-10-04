@@ -139,9 +139,10 @@ export function CourseList({
     <div className="flex flex-col">
       <h1 className={PAGE_TITLE}>Courses</h1>
 
-      {/* Each fold carries the space above it, so a shut one leaves none. */}
-      <Collapse open={continuing.length > 0} className="pt-8">
-        <section aria-labelledby="continue-learning" className="flex flex-col gap-4">
+      {/* Each fold carries the space above it inside its content, so a shut one
+          leaves none: padding on the fold's own box would stay behind. */}
+      <Collapse open={continuing.length > 0}>
+        <section aria-labelledby="continue-learning" className="flex flex-col gap-4 pt-8">
           <h2 id="continue-learning" className={SECTION_TITLE}>
             Continue learning
           </h2>
@@ -211,8 +212,8 @@ export function CourseList({
         )}
       </section>
 
-      <Collapse open={inactiveTotal > 0} className="pt-8">
-        <section aria-labelledby="inactive-courses" className="flex flex-col gap-4">
+      <Collapse open={inactiveTotal > 0}>
+        <section aria-labelledby="inactive-courses" className="flex flex-col gap-4 pt-8">
           <h2 id="inactive-courses">
             <button
               type="button"
@@ -254,7 +255,7 @@ export function CourseList({
 function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
   const next = status.next;
   return (
-    <Card as="article" className="gap-4 md:flex-row md:items-center md:gap-6">
+    <Card as="article" gap={4} className="md:flex-row md:items-center md:gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <h3 className={CARD_TITLE}>
           <Link

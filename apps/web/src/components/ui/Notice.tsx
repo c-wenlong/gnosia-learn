@@ -44,7 +44,7 @@ export function Notice({
   const Heading = `h${level}` as const;
   const lines = [...(command === undefined ? [] : [command]), ...(commands ?? [])];
   return (
-    <section role={role} className={cardClasses({ tight: dense, className: cx("items-start gap-2", className) })}>
+    <section role={role} className={cardClasses({ tight: dense, className: cx("items-start", className) })}>
       <Heading className={dense ? "text-[14px] leading-5 font-bold text-text" : CARD_TITLE}>
         {title}
       </Heading>

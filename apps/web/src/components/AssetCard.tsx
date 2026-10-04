@@ -211,7 +211,7 @@ export function AssetCard({
     </>
   );
 
-  const shell = cardClasses({ tight: true, className: "h-full w-full gap-2" });
+  const shell = cardClasses({ tight: true, className: "h-full w-full" });
 
   if (!href) {
     return <article className={shell}>{body}</article>;
