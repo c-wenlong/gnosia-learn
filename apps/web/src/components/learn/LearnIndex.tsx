@@ -111,16 +111,21 @@ export function LearnIndex({
       </div>
 
       {view === "table" ? (
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
-          <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
-          <GraphCard
-            nodes={nodes}
-            edges={edges}
-            focus={focus}
-            scope={scope}
-            onScope={setScope}
-            onSelect={setSelected}
-          />
+        // Sized by the width the page actually has, not the viewport's: the
+        // sidebar takes 60 or 260px of it, so a viewport breakpoint docked the
+        // graph beside a table with no room left for the concept titles.
+        <div className="@container">
+          <div className="grid grid-cols-1 items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+            <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
+            <GraphCard
+              nodes={nodes}
+              edges={edges}
+              focus={focus}
+              scope={scope}
+              onScope={setScope}
+              onSelect={setSelected}
+            />
+          </div>
         </div>
       ) : (
         <MapCard layout={map} nodes={nodes} focus={focus} onSelect={setSelected} />
@@ -141,18 +146,22 @@ function ConceptTable({
   total: number;
 }) {
   const th = cx("px-3 py-2.5 sm:px-4 text-left", LABEL);
+  // The columns come in by the table's own width (container queries), so the
+  // concept title keeps at least ~180px however the sidebar and the graph card
+  // share the page: the mastery bar from 32rem, Last seen from 42rem, Course
+  // from 56rem, where the title still has ~330px beside all 564px of them.
   return (
-    <div className="min-w-0 overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+    <div className="@container min-w-0 overflow-hidden rounded-[20px] border-2 border-border bg-surface">
       <div className="overflow-x-auto">
         <table className="w-full table-fixed border-collapse">
           <caption className="sr-only">Concepts, {rows.length} of {total} shown. Choose a row to show its graph.</caption>
           <thead>
             <tr className="border-b border-hair">
               <th scope="col" className={th}>Concept</th>
-              <th scope="col" className={cx(th, "w-[64px] sm:w-[236px]")}>Mastery</th>
+              <th scope="col" className={cx(th, "w-[64px] @lg:w-[236px]")}>Mastery</th>
               <th scope="col" className={cx(th, "w-[92px]")}>Due</th>
-              <th scope="col" className={cx(th, "hidden w-[112px] md:table-cell")}>Last seen</th>
-              <th scope="col" className={cx(th, "hidden w-[124px] md:table-cell")}>Course</th>
+              <th scope="col" className={cx(th, "hidden w-[112px] @2xl:table-cell")}>Last seen</th>
+              <th scope="col" className={cx(th, "hidden w-[124px] @4xl:table-cell")}>Course</th>
             </tr>
           </thead>
           <tbody>
@@ -193,7 +202,7 @@ function ConceptTable({
                     {/* The width goes on the wrapper, not the bar: the bar's own
                         w-full wins over a width passed in className, and inside
                         a flex row that left this span sized to nothing. */}
-                    <span className="hidden w-[160px] shrink-0 sm:block">
+                    <span className="hidden w-[160px] shrink-0 @lg:block">
                       <ProgressBar
                         percent={r.bucket === "untouched" ? 0 : r.pL * 100}
                         size="sm"
@@ -207,8 +216,8 @@ function ConceptTable({
                 <td className={cx("px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap", r.overdue ? "text-danger" : "text-text2")}>
                   {r.dueLabel}
                 </td>
-                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 md:table-cell">{r.lastSeenLabel}</td>
-                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 md:table-cell">{r.courseLabel ?? "–"}</td>
+                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 @2xl:table-cell">{r.lastSeenLabel}</td>
+                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 @4xl:table-cell">{r.courseLabel ?? "–"}</td>
               </tr>
             ))}
           </tbody>

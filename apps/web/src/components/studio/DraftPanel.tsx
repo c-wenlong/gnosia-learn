@@ -109,7 +109,17 @@ import {
   type VideoAvailability,
 } from "@/lib/studio-drafts";
 import { switchedTool, type VideoToolOption } from "@/lib/studio-brief-video";
-import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, OPENER_EVENT, sessionStore, takeOpener } from "@/lib/studio-extend";
+import {
+  arrivingPurpose,
+  arrivingSource,
+  EXTEND_OPENING_TURN,
+  forgetExtendKey,
+  MAKE_VIDEO_OPENING_TURN,
+  makeVideoTitle,
+  OPENER_EVENT,
+  sessionStore,
+  takeOpener,
+} from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { announceDraftChange } from "@/lib/studio-draft-list";
 import { panelHref, titleOf } from "@/lib/studio-view";
@@ -230,6 +240,9 @@ export function DraftPanel({
   const gutter = inline ? PANE_GUTTER : "px-5";
 
   const arriving = arrivingSource(draftId);
+  // Opened by Make a video of this in this tab (D86): the header and the
+  // opening turn speak of the video, not of extending the diagram.
+  const forVideo = arrivingPurpose(draftId) === "video";
 
   // The sidebar lists this conversation by its title, its first message and
   // its state, so each change to those is news to it (`ChatHistory`).
@@ -716,7 +729,7 @@ export function DraftPanel({
     const arrivingTitle = titleOf(titles, arriving) ?? arriving;
     return (
       <>
-        <DialogHeader title={`Extending ${arrivingTitle}`} />
+        <DialogHeader title={forVideo ? makeVideoTitle(arrivingTitle) : `Extending ${arrivingTitle}`} />
         <div className="flex min-h-0 flex-1 flex-col gap-5 px-5 py-5">
           <PinnedDiagram name={arriving} title={arrivingTitle} />
           <p className="text-center text-[13px] text-text3" role="status">
@@ -757,7 +770,13 @@ export function DraftPanel({
   const title =
     view.title ??
     newestTitle ??
-    (sourceTitle === null ? "New conversation" : diagramSource ? `Extending ${sourceTitle}` : `Changing ${sourceTitle}`);
+    (sourceTitle === null
+      ? "New conversation"
+      : diagramSource
+        ? forVideo
+          ? makeVideoTitle(sourceTitle)
+          : `Extending ${sourceTitle}`
+        : `Changing ${sourceTitle}`);
 
   if (mode === "job" && jobId !== null) {
     const job = jobs.find((entry) => entry.jobId === jobId) ?? null;
@@ -842,7 +861,7 @@ export function DraftPanel({
 
         {empty && (
           <TutorMessage label="Planner">
-            <p className="max-w-[60ch]">{view.source === null ? opening : diagramSource ? EXTEND_OPENING_TURN : CHANGE_OPENING_TURN}</p>
+            <p className="max-w-[60ch]">{view.source === null ? opening : diagramSource ? (forVideo ? MAKE_VIDEO_OPENING_TURN : EXTEND_OPENING_TURN) : CHANGE_OPENING_TURN}</p>
           </TutorMessage>
         )}
         {/* The corpus's topics are a way into a new diagram; an extend
