@@ -95,10 +95,10 @@ describe.skipIf(!reachable.ok)("provider_key", () => {
   });
 
   it("refuses a provider it does not know, in the function and in the table", async () => {
-    await expect(writeProviderKey(scratch.db, LOCAL_LEARNER_ID, "openai", sealed("x"))).rejects.toThrow(/not a model provider/);
+    await expect(writeProviderKey(scratch.db, LOCAL_LEARNER_ID, "not-a-provider", sealed("x"))).rejects.toThrow(/not a model provider/);
     const error = await scratch.db
       .insert(providerKey)
-      .values({ ownerId: LOCAL_LEARNER_ID, provider: "openai", ...sealed("x") })
+      .values({ ownerId: LOCAL_LEARNER_ID, provider: "not-a-provider", ...sealed("x") })
       .catch((e: unknown) => e);
     expect(sqlstate(error)).toBe("23514");
   });
