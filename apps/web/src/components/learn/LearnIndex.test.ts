@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { MapLayout } from "@/lib/concept-map";
 import type { IndexRow } from "@/lib/learn-index";
 
-import { LearnIndex } from "./LearnIndex";
+import { LearnIndex, MapPanel } from "./LearnIndex";
+import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
 
 /**
  * The Learn index's graph card fades a new concept's graph in by mounting it
@@ -119,5 +120,31 @@ describe("LearnIndex graph card", () => {
     expect(host.querySelector('svg[aria-label^="Neighbourhood graph of"]')?.getAttribute("aria-label")).toBe(
       "Neighbourhood graph of IP",
     );
+  });
+});
+
+describe("LearnIndex map details", () => {
+  it("moves focus to the newly chosen concept's name after a Needs or Leads to press", () => {
+    const node = (id: string, title: string) => ({ id, title, bucket: "learning", pL: 0.4, courses: [], domain: "networks" }) as unknown as GraphNode;
+    const nodes = [node("a", "TCP"), node("b", "UDP")];
+    const edges: GraphEdge[] = [{ from: "a", to: "b", kind: "requires" }];
+    const rows = { a: row("a", "TCP"), b: row("b", "UDP") } as Record<string, IndexRow>;
+    function Host() {
+      const [focus, setFocus] = useState("a");
+      return createElement(MapPanel, { focus: rows[focus], nodes, edges, onPick: setFocus });
+    }
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() => root.render(createElement(Host)));
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    const leadsTo = host.querySelector<HTMLButtonElement>('button[data-concept="b"]')!;
+    act(() => leadsTo.focus());
+    act(() => leadsTo.click());
+    expect(document.activeElement?.tagName).toBe("H3");
+    expect(document.activeElement?.textContent).toBe("UDP");
   });
 });

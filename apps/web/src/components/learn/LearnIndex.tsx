@@ -329,7 +329,7 @@ function MapCard({
  * how well it is known, when it is due, where it is taught, what it needs and
  * what leads on from it. Choosing one of those moves the map to it.
  */
-function MapPanel({
+export function MapPanel({
   focus,
   nodes,
   edges,
@@ -340,6 +340,17 @@ function MapPanel({
   edges: GraphEdge[];
   onPick: (id: string) => void;
 }) {
+  // A "Needs" or "Leads to" press redraws this panel for the concept it names,
+  // and the button that had focus goes with it: focus moves to the new
+  // concept's name, so a keyboard or a screen reader keeps its place.
+  const heading = useRef<HTMLHeadingElement | null>(null);
+  const picked = useRef(false);
+  const focusId = focus?.id ?? null;
+  useEffect(() => {
+    if (!picked.current) return;
+    picked.current = false;
+    heading.current?.focus({ preventScroll: true });
+  }, [focusId]);
   if (focus === null) {
     return (
       <section aria-label="Concept details" className="rounded-xl bg-surface2 p-4 text-[13px] text-text2">
@@ -360,7 +371,10 @@ function MapPanel({
               <button
                 type="button"
                 data-concept={n.id}
-                onClick={() => onPick(n.id)}
+                onClick={() => {
+                  picked.current = true;
+                  onPick(n.id);
+                }}
                 className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent"
               >
                 <MasteryDot bucket={n.bucket} size={10} className="shrink-0" />
@@ -375,7 +389,9 @@ function MapPanel({
   return (
     <section aria-label="Concept details" className="flex min-w-0 flex-col gap-3 rounded-xl bg-surface2 p-4">
       <div className="flex flex-col gap-1">
-        <h3 className="text-[15px] leading-snug font-bold text-text">{focus.title}</h3>
+        <h3 ref={heading} tabIndex={-1} className="text-[15px] leading-snug font-bold text-text outline-none">
+          {focus.title}
+        </h3>
         <p className="text-[12px] text-text2">
           {MASTERY_BUCKET_LABEL[focus.bucket]}
           {focus.leech && <span className="font-semibold text-danger"> · {LEECH_LABEL}</span>}
