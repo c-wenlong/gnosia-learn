@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { PanelLink } from "@/components/studio/PanelLink";
 import { usePanelHost } from "@/components/studio/panel-host";
+import { useSidebarCollapsed } from "@/components/studio/sidebar-collapse";
 import { cx, LABEL } from "@/components/ui/classes";
 import {
   DRAFT_CHANGED_EVENT,
@@ -36,7 +37,11 @@ import { conversationHref, relativeTime } from "@/lib/studio-view";
  * "Show older conversations", which shows one more. Every read is every page
  * shown, read again from the top (`readHistory`).
  *
- * From 768px up it is a column; below that a drawer the header's toggle
+ * From 768px up it is a column, which its toggle collapses to a 52px rail
+ * of icons, as ChatGPT's does (`useSidebarCollapsed` keeps the choice).
+ * Resting the pointer on the rail slides the whole sidebar out over the
+ * page and moving off it slides it back; the toggle, pressed then, keeps it
+ * open. Below 768px it is a drawer the header's toggle
  * opens (`SidebarToggle`), closed again by a pick, the backdrop or Escape.
  * While it is open, focus starts on New chat and Tab stays inside it (the
  * rest of the studio is inert, `PanelHost`), and closing it hands focus back
@@ -190,6 +195,49 @@ export function StudioSidebar({
     };
   }, [open, onClose]);
 
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
+  /** The collapsed sidebar slid out over the page, while the pointer is on it. */
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A short wait each way, so a pointer passing over the rail on its way
+  // somewhere else does not flash the sidebar open.
+  const peekAfter = useCallback((next: boolean, ms: number) => {
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    peekTimer.current = setTimeout(() => setPeek(next), ms);
+  }, []);
+  useEffect(
+    () => () => {
+      if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    },
+    [],
+  );
+  const peeking = collapsed && peek;
+  useEffect(() => {
+    if (!peeking) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPeek(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [peeking]);
+  function pick() {
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    setPeek(false);
+    onClose();
+  }
+  function toggleCollapsed() {
+    // Collapsed, the press keeps the sidebar open, slid out or not.
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    setPeek(false);
+    setCollapsed(!collapsed);
+  }
+  function newChat() {
+    // A hover that began just before the press must not slide it out after.
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    setPeek(false);
+    onNewChat();
+  }
+
   const rows = drafts === null ? [] : draftRows(drafts, titles);
   const unlisted = pending !== null || (active !== null && !rows.some((row) => row.draftId === active));
   const groups = historyGroups(rows, new Date());
@@ -204,6 +252,30 @@ export function StudioSidebar({
           className="fixed inset-0 z-40 bg-page/60 backdrop-blur-[2px] md:hidden"
         />
       )}
+      {/* From 768px up: the sidebar's room, 260px open and 52px as a rail. A
+          phone takes no room, since its sidebar is a drawer over the page. */}
+      <div
+        className={cx(
+          "contents md:relative md:block md:shrink-0 md:transition-[width] md:duration-200 md:ease-out motion-reduce:md:transition-none",
+          collapsed ? "md:w-[52px]" : "md:w-[260px]",
+        )}
+        onPointerEnter={(event) => {
+          if (collapsed && event.pointerType === "mouse") peekAfter(true, 120);
+        }}
+        onPointerLeave={() => {
+          if (collapsed) peekAfter(false, 200);
+        }}
+      >
+        {collapsed && (
+          <div className="hidden h-full w-[52px] flex-col items-center gap-1 border-r border-hair bg-surface py-2 md:flex">
+            <RailButton label="Open the sidebar" onClick={toggleCollapsed}>
+              <PanelIcon />
+            </RailButton>
+            <RailButton label="New chat" onClick={newChat} newChat>
+              <ComposeIcon />
+            </RailButton>
+          </div>
+        )}
       <nav
         ref={panel}
         aria-label="Conversations"
@@ -211,17 +283,27 @@ export function StudioSidebar({
         role={open ? "dialog" : undefined}
         className={cx(
           "w-[260px] shrink-0 flex-col border-r border-hair bg-surface",
-          "md:static md:flex md:h-auto",
-          open ? "fixed inset-y-0 left-0 z-50 flex w-[min(85vw,300px)] pt-[env(safe-area-inset-top)] shadow-xl" : "hidden",
+          open
+            ? "fixed inset-y-0 left-0 z-50 flex w-[min(85vw,300px)] pt-[env(safe-area-inset-top)] shadow-xl"
+            : "hidden",
+          // From 768px up the drawer's classes give way to the column's, or to
+          // the sidebar slid out over the page. One position class each, since
+          // two in one list resolve by stylesheet order, not by intent.
+          "md:w-[260px] md:pt-0",
+          collapsed
+            ? peeking
+              ? "md:absolute md:inset-y-0 md:left-0 md:z-30 md:flex md:shadow-xl"
+              : "md:hidden"
+            : "md:static md:z-auto md:flex md:h-full md:shadow-none",
         )}
       >
-        <div className="shrink-0 p-2">
+        <div className="flex shrink-0 items-center gap-1 p-2">
           <button
             type="button"
             data-studio-new=""
-            onClick={onNewChat}
+            onClick={newChat}
             className={cx(
-              "flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[14px] font-medium text-text",
+              "flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 text-left text-[14px] font-medium text-text",
               "transition-colors hover:bg-surface2",
               "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
             )}
@@ -229,6 +311,11 @@ export function StudioSidebar({
             <ComposeIcon />
             New chat
           </button>
+          <span className="hidden md:contents">
+            <RailButton label={collapsed ? "Keep the sidebar open" : "Close the sidebar"} onClick={toggleCollapsed}>
+              <PanelIcon />
+            </RailButton>
+          </span>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
@@ -247,7 +334,7 @@ export function StudioSidebar({
               <ul className="flex flex-col">
                 {group.rows.map((row) => (
                   <li key={row.draftId}>
-                    <HistoryRow row={row} href={conversationHref(path, row.draftId)} current={row.draftId === active} onPick={onClose} />
+                    <HistoryRow row={row} href={conversationHref(path, row.draftId)} current={row.draftId === active} onPick={pick} />
                   </li>
                 ))}
               </ul>
@@ -275,7 +362,38 @@ export function StudioSidebar({
           )}
         </div>
       </nav>
+      </div>
     </>
+  );
+}
+
+/** A 36px icon button: the rail's, and the toggle beside New chat. */
+function RailButton({ label, onClick, newChat = false, children }: { label: string; onClick: () => void; newChat?: boolean; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      // The rail's New chat is the one on screen while the sidebar is collapsed.
+      data-studio-new={newChat ? "" : undefined}
+      className={cx(
+        "inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-text2 transition-colors hover:bg-surface2 hover:text-text",
+        "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A window with its left pane drawn: the sidebar's own toggle, as ChatGPT draws it. */
+function PanelIcon() {
+  return (
+    <svg aria-hidden viewBox="0 0 20 20" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+      <rect x="3" y="4" width="14" height="12" rx="2.5" />
+      <path d="M8 4v12" />
+    </svg>
   );
 }
 
