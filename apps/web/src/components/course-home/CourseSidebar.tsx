@@ -56,7 +56,7 @@ export function CourseSidebar({
   const [shutting, setShutting] = useState(false);
   useEffect(() => {
     if (!shutting) return;
-    const timer = window.setTimeout(() => setShutting(false), 300);
+    const timer = window.setTimeout(() => setShutting(false), 350);
     return () => window.clearTimeout(timer);
   }, [shutting]);
   const toggle = (open: boolean, set: (open: boolean) => void) => {
