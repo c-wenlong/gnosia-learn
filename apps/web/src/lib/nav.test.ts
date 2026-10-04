@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeDestination, DESTINATIONS, STUDIO_DESTINATION } from "./nav";
+import { activeDestination, DESTINATIONS, isCurrentRow, STUDIO_DESTINATION } from "./nav";
 
 describe("activeDestination", () => {
   it("matches Home only on its own path", () => {
@@ -58,5 +58,27 @@ describe("the destination lists", () => {
 
   it("points New chat at the studio's home", () => {
     expect(STUDIO_DESTINATION).toEqual({ key: "studio", label: "Studio", href: "/studio" });
+  });
+});
+
+describe("isCurrentRow", () => {
+  it("matches a row's own page, with escapes undone on either side", () => {
+    expect(isCurrentRow("/library/video%3Aabc", "/library/video:abc")).toBe(true);
+    expect(isCurrentRow("/library/video%3Aabc", "/library/video%3Aabc")).toBe(true);
+    expect(isCurrentRow("/learn/dot-product", "/learn/dot-product?tab=notes")).toBe(true);
+    expect(isCurrentRow("/learn/dot-product", "/learn/dot-products")).toBe(false);
+  });
+
+  it("keeps a module's row current on the pages under it, and a course page's row on its own page only", () => {
+    expect(isCurrentRow("/courses/cs3230/m1", "/courses/cs3230/m1/check", true)).toBe(true);
+    expect(isCurrentRow("/courses/cs3230", "/courses/cs3230/m1")).toBe(false);
+    expect(isCurrentRow("/courses/cs3230", "/courses/cs3230")).toBe(true);
+    expect(isCurrentRow("/courses/cs3230/m1", "/courses/cs3230/m10", true)).toBe(false);
+  });
+
+  it("is never current with no path, or with a malformed escape it cannot undo", () => {
+    expect(isCurrentRow("/learn/x", null)).toBe(false);
+    expect(isCurrentRow("/learn/%E0%A4%A", "/learn/%E0%A4%A")).toBe(true);
+    expect(isCurrentRow("/learn/%E0%A4%A", "/learn/x")).toBe(false);
   });
 });

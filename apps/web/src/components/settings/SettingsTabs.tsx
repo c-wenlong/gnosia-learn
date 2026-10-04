@@ -1,12 +1,11 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
-import { Glyph, type GlyphName } from "@/components/ui/Glyph";
-import { cx } from "@/components/ui/classes";
-import { tabKeyIndex } from "@/components/ui/roving";
-import { useMediaQuery } from "@/components/ui/use-media-query";
+import type { GlyphName } from "@/components/ui/Glyph";
+import { tabIds } from "@/components/ui/roving";
+import { TabList } from "@/components/ui/TabList";
 
 import { parseSettingsTab, settingsHref, type SettingsTab } from "./tabs";
 
@@ -25,9 +24,9 @@ export type SettingsSection = { id: SettingsTab; label: string; glyph: GlyphName
  * step through tabs. The address is what decides: Next keeps
  * `useSearchParams` in step with `replaceState`, so a link to the page
  * already open (the account menu's bare `/settings` while Tutor shows)
- * changes the tab too. The tab row follows the WAI-ARIA tabs pattern: one tab
- * in the tab order, the arrows (either pair, since the row turns into a
- * column), Home and End move between them, and moving selects.
+ * changes the tab too. The tab row is the kit's `TabList` with
+ * `orientation="responsive"`: the WAI-ARIA tabs pattern, either pair of
+ * arrows (since the row turns into a column), Home and End, moving selects.
  */
 export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
   const base = useId();
@@ -41,82 +40,30 @@ export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
     setSeen(asked);
     setSelected(asked);
   }
-  const vertical = useMediaQuery(WIDE, false);
-  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
   function choose(id: SettingsTab) {
     setSelected(id);
     window.history.replaceState(null, "", settingsHref(id));
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const index = sections.findIndex((section) => section.id === selected);
-    // Either pair of arrows, since the row turns into a column at `xl`.
-    const next = tabKeyIndex(event.key, index, sections.length, "both", true);
-    if (next < 0) return;
-    event.preventDefault();
-    choose(sections[next].id);
-    buttons.current[next]?.focus();
-  }
-
   return (
     <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:gap-8">
-      <div
-        role="tablist"
-        aria-label="Settings"
-        aria-orientation={vertical ? "vertical" : "horizontal"}
-        onKeyDown={onKeyDown}
-        className={cx(
-          "flex gap-1 overflow-x-auto border-b-2 border-border [scrollbar-width:none]",
-          "xl:sticky xl:top-6 xl:w-[200px] xl:shrink-0 xl:flex-col xl:overflow-visible xl:border-b-0",
-        )}
-      >
-        {sections.map((section, i) => {
-          const active = section.id === selected;
-          return (
-            <button
-              key={section.id}
-              ref={(el) => {
-                buttons.current[i] = el;
-              }}
-              type="button"
-              role="tab"
-              id={`${base}-tab-${section.id}`}
-              aria-selected={active}
-              aria-controls={`${base}-panel-${section.id}`}
-              tabIndex={active ? 0 : -1}
-              onClick={() => choose(section.id)}
-              className={cx(
-                "relative -mb-0.5 flex shrink-0 items-center gap-2.5 border-b-2 px-3 py-3 text-[14px] whitespace-nowrap",
-                "transition-colors duration-150 motion-reduce:transition-none",
-                "focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-accent",
-                "xl:mb-0 xl:h-10 xl:rounded-lg xl:border-b-0 xl:px-2.5 xl:py-0",
-                active
-                  ? "border-accent font-semibold text-text xl:bg-surface2"
-                  : "border-transparent text-text2 hover:text-text xl:hover:bg-surface2",
-              )}
-            >
-              <Glyph name={section.glyph} size={18} className={active ? "text-text" : "text-text2"} />
-              {section.label}
-            </button>
-          );
-        })}
-      </div>
-      {sections.map((section) => (
-        <div
-          key={section.id}
-          role="tabpanel"
-          id={`${base}-panel-${section.id}`}
-          aria-labelledby={`${base}-tab-${section.id}`}
-          hidden={section.id !== selected}
-          className="settings-panel flex min-w-0 flex-1 flex-col gap-4"
-        >
-          {section.content}
-        </div>
-      ))}
+      <TabList label="Settings" items={sections} value={selected} onChange={choose} idBase={base} orientation="responsive" />
+      {sections.map((section) => {
+        const ids = tabIds(base, section.id);
+        return (
+          <div
+            key={section.id}
+            role="tabpanel"
+            id={ids.panel}
+            aria-labelledby={ids.tab}
+            hidden={section.id !== selected}
+            className="settings-panel flex min-w-0 flex-1 flex-col gap-4"
+          >
+            {section.content}
+          </div>
+        );
+      })}
     </div>
   );
 }
-
-/** The `xl` breakpoint, where the tab row becomes a column. */
-const WIDE = "(min-width: 1280px)";

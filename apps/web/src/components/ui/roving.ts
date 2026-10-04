@@ -1,7 +1,8 @@
 /**
  * Arrow-key movement through a row of options where one is in the tab order
- * and the arrows move it (WAI-ARIA's roving tabindex): the kit's `Tabs`,
- * Settings' tabs and the theme switch's radio group.
+ * and the arrows move it (WAI-ARIA's roving tabindex): the kit's `TabList`
+ * (behind `Tabs`, Settings' tabs and the workspace's panel tabs) and
+ * `SegmentedControl`'s radio group.
  *
  * React-free, as `composer-keys.ts` is, so the rule is testable on its own.
  */
@@ -34,4 +35,14 @@ export function tabKeyIndex(
   if (homeEnd && key === "Home") return 0;
   if (homeEnd && key === "End") return count - 1;
   return -1;
+}
+
+/**
+ * The ids that tie a tab to its panel (`aria-controls` one way,
+ * `aria-labelledby` the other), from one `useId` the tab row and the panels
+ * share. Here rather than in `TabList.tsx` so a caller's panels and the row
+ * cannot spell them differently.
+ */
+export function tabIds(base: string, id: string): { tab: string; panel: string } {
+  return { tab: `${base}-tab-${id}`, panel: `${base}-panel-${id}` };
 }

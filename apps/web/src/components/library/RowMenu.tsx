@@ -24,8 +24,8 @@ const DIALOG_MS = 200;
 const ICONS: Record<RowMenuItem["action"], GlyphName> = {
   open: "next",
   concept: "concepts",
-  course: "book",
-  rename: "pencil",
+  course: "open",
+  rename: "rename",
   favorite: "star",
   ask: "sparkle",
   mark: "done",

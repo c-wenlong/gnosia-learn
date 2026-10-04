@@ -144,7 +144,7 @@ async function render(params: Record<string, string> = {}): Promise<string> {
 
 /** The layout toggle's link marked current: where it points and what it says. */
 function currentLayout(html: string): { href: string; label: string } | null {
-  const nav = html.match(/<nav aria-label="Layout".*?<\/nav>/)?.[0] ?? "";
+  const nav = html.match(/<div role="group" aria-label="Layout"[^>]*>.*?<\/div>/)?.[0] ?? "";
   const link = [...nav.matchAll(/<a ([^>]*)>(.*?)<\/a>/g)].find(([, attrs]) => attrs.includes('aria-current="page"'));
   if (link === undefined) return null;
   return { href: link[1].match(/href="([^"]*)"/)?.[1] ?? "", label: link[1].match(/aria-label="([^"]*)"/)?.[1] ?? "" };

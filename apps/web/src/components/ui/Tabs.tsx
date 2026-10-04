@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
-import { cx } from "@/components/ui/classes";
-import { tabKeyIndex } from "@/components/ui/roving";
+import { cx } from "./classes";
+import { tabIds } from "./roving";
+import { TabList } from "./TabList";
 
 export type TabItem = {
   id: string;
@@ -19,9 +20,9 @@ export type TabItem = {
  *
  * Every panel stays mounted and only the chosen one is shown, so a panel with
  * state of its own (the transcript following playback, a scroll position)
- * keeps it while another tab is open. The tab row follows the WAI-ARIA tabs
- * pattern: one tab in the tab order, arrows, Home and End move between them,
- * and moving selects.
+ * keeps it while another tab is open. The tab row is the kit's `TabList`, so
+ * its keys (the WAI-ARIA tabs pattern) and its look are the ones Settings and
+ * the workspace's phone tabs have.
  *
  * A panel fades in as it is shown (`animate-fade-in`: a CSS animation runs
  * again whenever an element goes from `hidden` to shown), and the underline
@@ -30,69 +31,29 @@ export type TabItem = {
 export function Tabs({ items, label, className }: { items: TabItem[]; label: string; className?: string }) {
   const base = useId();
   const [selected, setSelected] = useState(items[0]?.id ?? "");
-  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const current = items.some((item) => item.id === selected) ? selected : (items[0]?.id ?? "");
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const index = items.findIndex((item) => item.id === current);
-    const next = tabKeyIndex(event.key, index, items.length, "horizontal", true);
-    if (next < 0) return;
-    event.preventDefault();
-    setSelected(items[next].id);
-    buttons.current[next]?.focus();
-  }
 
   return (
     <section
       className={cx("flex min-w-0 flex-col rounded-[20px] border-2 border-border bg-surface", className)}
       aria-label={label}
     >
-      <div
-        role="tablist"
-        aria-label={label}
-        onKeyDown={onKeyDown}
-        className="flex gap-1 overflow-x-auto border-b-2 border-border px-3 sm:px-4"
-      >
-        {items.map((item, i) => {
-          const active = item.id === current;
-          return (
-            <button
-              key={item.id}
-              ref={(el) => {
-                buttons.current[i] = el;
-              }}
-              type="button"
-              role="tab"
-              id={`${base}-tab-${item.id}`}
-              aria-selected={active}
-              aria-controls={`${base}-panel-${item.id}`}
-              tabIndex={active ? 0 : -1}
-              onClick={() => setSelected(item.id)}
-              className={cx(
-                "relative -mb-0.5 flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-[14px] font-semibold whitespace-nowrap transition-colors duration-100 focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-accent motion-reduce:transition-none",
-                active ? "border-accent text-text" : "border-transparent text-text2 hover:text-text",
-              )}
-            >
-              {item.label}
-              {item.count !== undefined && (
-                <span className="text-[12px] font-normal tabular-nums text-text3">{item.count}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-      {items.map((item) => (
-        <div
-          key={item.id}
-          role="tabpanel"
-          id={`${base}-panel-${item.id}`}
-          aria-labelledby={`${base}-tab-${item.id}`}
-          hidden={item.id !== current}
-          className="animate-fade-in px-3 py-4 motion-reduce:animate-none sm:px-5"
-        >
-          {item.content}
-        </div>
-      ))}
+      <TabList label={label} items={items} value={current} onChange={setSelected} idBase={base} className="px-3 sm:px-4" />
+      {items.map((item) => {
+        const ids = tabIds(base, item.id);
+        return (
+          <div
+            key={item.id}
+            role="tabpanel"
+            id={ids.panel}
+            aria-labelledby={ids.tab}
+            hidden={item.id !== current}
+            className="animate-fade-in px-3 py-4 motion-reduce:animate-none sm:px-5"
+          >
+            {item.content}
+          </div>
+        );
+      })}
     </section>
   );
 }
