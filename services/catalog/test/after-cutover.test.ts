@@ -13,8 +13,7 @@ import { runImportCommand } from "../src/commands/index-command";
 import { flip } from "../src/content/flip";
 import { addTopic } from "../src/content/topics";
 import { REPO_ROOT, SERVICE_ROOT } from "../src/env";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
 
 /**
@@ -48,8 +47,7 @@ describe.skipIf(!reachable.ok)("after the cut-over", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     // A copy of the seed, so the import root recorded is a tree this suite owns.
     tree = await mkdtemp(path.join(tmpdir(), "catalog-after-cutover-"));
     await cp(path.join(SEED, "content"), path.join(tree, "content"), { recursive: true });

@@ -1,13 +1,20 @@
 name: CI
 
-# Every push to the default branch and every pull request aimed at it.
-# This workflow only checks the code. Deployment lives in its own workflow so
-# a broken deploy never hides a broken test run, and vice versa.
+# Every pull request aimed at the default branch, and by hand from the Actions
+# tab. This workflow only checks the code; production deploys through Vercel's
+# Git integration (docs/DEPLOYMENT.md).
+#
+# A push to main does not run it. Every change reaches main through a pull
+# request that already ran this exact job, so the push run checked the same
+# code a second time. On a private repository's free minutes that was about a
+# third of all runs (2026-10-04: 12 of the last 40), most of them cancelled
+# part-way by the next merge but billed for the minutes they used. What it
+# would have caught is two pull requests that pass alone and break together;
+# run it by hand (workflow_dispatch) on main when that is a worry.
 on:
-  push:
-    branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 # Least privilege by default. Nothing here writes to the repository, so the
 # GITHUB_TOKEN only needs to read code. Coverage is uploaded with an explicit
@@ -82,6 +89,11 @@ jobs:
         # clone. (eslint.config.mjs ignores tools/** for both, so a checkout
         # would not pollute lint, but there is still no reason to pay for it.)
         uses: actions/checkout@v7
+        with:
+          # Two commits: on a pull request HEAD is GitHub's merge commit and
+          # HEAD^1 the base it merges into, so the step below can list what
+          # the pull request changed.
+          fetch-depth: 2
 
       - name: Setup Node.js
         # 22 matches the engines floor in package.json, which in turn clears
@@ -120,6 +132,25 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Choose the test files
+        id: scope
+        # scripts/flip-rehearsal.mjs is the owner's flip-day and cut-over
+        # procedure, and its suite is the slowest in the repository (133 s of
+        # 664 s on 2026-10-04): it copies, dumps and restores whole databases.
+        # A pull request runs it only when it changes the script, the lib/
+        # modules it imports, a migration (the rehearsal applies them to a
+        # copy), or the suite itself; npm test on a laptop and a manual run
+        # (workflow_dispatch) still run it every time. A change to the catalog
+        # CLI alone does not: those verbs have their own suites, and they
+        # change in most pull requests.
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] &&
+             ! git diff --name-only HEAD^1 HEAD |
+               grep -qE '^(scripts/flip-rehearsal\.mjs|scripts/lib/|services/catalog/drizzle/|services/catalog/test/flip-rehearsal\.test\.ts)'; then
+            echo "args=--exclude services/catalog/test/flip-rehearsal.test.ts" >> "$GITHUB_OUTPUT"
+            echo "The flip-rehearsal suite is skipped: nothing it covers changed."
+          fi
+
       - name: Tests with coverage
         # test:coverage rather than test, so the suite runs once and produces
         # the lcov report in the same pass instead of being executed twice.
@@ -135,7 +166,16 @@ jobs:
         # services/ and packages/ are outside that coverage scope on purpose:
         # the catalog tests need the Postgres service above, so their number
         # would move with the environment rather than with the code.
-        run: npm run test:coverage
+        #
+        # --maxWorkers=2: a private repository gets a 2-CPU runner, and vitest
+        # defaults to one worker fewer than the CPUs, so on CI every test file
+        # ran one after another (2026-10-04: 664 s of file time in an 814 s
+        # step). Four workers were tried first and were worse than they look:
+        # the step fell to 614 s, but the summed file time tripled to 1963 s
+        # and a studio test hit its 30 s timeout, because the work is CPU (the
+        # Postgres container and each file's scratch database migrations share
+        # the same two CPUs), not waiting. Two workers, one per CPU.
+        run: npm run test:coverage -- --maxWorkers=2 ${{ steps.scope.outputs.args }}
 
       - name: Production build
         # Runs on pull requests too, not only on the default branch. Next 16

@@ -412,7 +412,7 @@ passes in 21 s.
 | --- | --- |
 | Checkout | `lib/`, `src/`, `tools/`, `package.json`, `tsconfig.json` and `requirements-narration.txt` copied; `docs/CAPABILITIES.md` and `REVIDEO-API.md` copied for the agent to Read; `node_modules` and `.venv` linked to the real checkout's, read-only (open question 2: reuse) |
 | Topic | `topic.yml`, `narration.json` from the brief's lines (one chapter per scene, named `<PREFIX><n>_<Name>` as manimkc names its classes) and `revideokc new`'s stub scene, written by the runner |
-| Ports | Each job takes an even base in 47000 to 48998, the first pair free on both loopback addresses starting from where a hash of its id points, written to `jobs/<id>/ports.json` and into its profile once; the doctor takes a pair in 46990 to 46998. Below the macOS ephemeral range (49152 up), clear of 7250, 5432 and 3000, and two jobs never run at once. The wrapper checks both ports before a render and names one that is still held |
+| Ports | Each job takes an even base in 47000 to 48998, the first pair free on both loopback addresses starting from where a hash of its id points, written to `jobs/<id>/ports.json` and into its profile once; the doctor takes a pair in 46990 to 46998. Below the macOS ephemeral range (49152 up), clear of 7250, 5432 and 3000. A pair is held from setup until the job ends and the searches run one at a time, so a revideokc job and a remotionkc job running together never get one pair (open question 1). The wrapper checks both ports before a render and names one that is still held |
 | render profile | D76, with node's binary alone (the spike allowed its whole store directory) and no shell (the spike allowed `/bin/sh`, `/bin/bash` and `/usr/bin/env`; none was needed), the system ffmpeg the CLI masters and tiles with, `(deny file-link)`, and no Python: `build --no-narrate` starts none |
 | narrate profile | node, gnosia-audio's console script and interpreter in revideokc's `.venv`, kokoro's in manimkc's `.venv-tts`, the model; writes the clip cache, the staged clips, the build's work folder and the deliverable's folder (for `sidecars`). gnosia-audio runs on its own environment with `MANIMKC_HOME` at the job's `render/`, so the clip keys are a manimkc job's and the shared cache seeds a revideokc job too. The clip keys run here, since the render profile has no Python |
 | gate profile | node, ffmpeg and ffprobe; reads `candidate/` and the TypeScript package; writes the poster |
@@ -526,9 +526,63 @@ a denied file.
 
 None blocks phase 1. For later work:
 
-1. Whether two jobs of different tools may run at once. The video runner runs
-   one job at a time today (`config.ts`); a Chrome render and a ManimGL render
-   compete for the same cores, so one at a time stays until measured.
+1. Whether two jobs of different tools may run at once. **Answered
+   2026-10-04, by measurement: yes, two at once by default, never two of one
+   tool.** `videoConcurrency()` in `services/studio/src/video/config.ts` is
+   `STUDIO_VIDEO_CONCURRENCY`, 2 by default: 1 is one job at a time again, 3
+   lets one job of each tool run together. `kick` starts the oldest queued job
+   whose tool has no job running, so a revideokc job can start past a manimkc
+   job waiting behind another manimkc one. Two jobs of one tool still wait for
+   each other, since each sizes its renders for the whole machine (four
+   ManimGL scenes, two Revideo workers, Remotion at three).
+
+   Measured with no agent and nothing paid: the three accepted studio videos
+   (`dengue-infection-phases`, 124 s, manimkc; `storage-hierarchy-depth`, 61 s,
+   revideokc; `growth-rates-on-a-chart`, 64 s, remotionkc) were set up as real
+   job workspaces under a scratch `STUDIO_HOME`, by the backends' own `prepare`,
+   `scaffold` and `wrapper`, with their clips copied in, and built with each
+   job's `bin/video build`, so every render ran inside its job's Seatbelt
+   profiles exactly as an agent's call does. Builds started together, three
+   rounds (two for all three at once), on the owner's M4 Pro (12 cores,
+   24 GB) while other sessions kept the one-minute load between 17 and 86, so
+   the spread inside a row is mostly the machine. Wall seconds, median first:
+
+   | Scenario | manimkc | revideokc | remotionkc | Load before |
+   | --- | --- | --- | --- | --- |
+   | Alone | 28 (28, 43, 28) | 38 (38, 49, 36) | 63 (66, 61, 63) | 17 to 46 |
+   | manimkc + revideokc | 44 (87, 44, 43) | 43 (78, 42, 43) | | 23 to 49 |
+   | manimkc + remotionkc | 30 (32, 30, 29) | | 64 (65, 64, 63) | 28 to 86 |
+   | revideokc + remotionkc | | 43 (42, 52, 43) | 77 (77, 82, 72) | 24 to 37 |
+   | All three | 91, 75 | 77, 61 | 118, 97 | 26 to 57 |
+
+   A build beside another tool's took 1.0 to 1.6 times its time alone, and
+   the pair finished sooner than one after the other: 44 s against 66, 64
+   against 91, 77 against 100. Peak memory of one build's whole process tree
+   was 4.1 GB for manimkc and for revideokc and 1.9 GB for remotionkc, under
+   1 GB for any single process, so a pair stays under 9 GB of 24. The same
+   builds run outside the profiles, five rounds, gave the same picture (alone
+   25, 26 and 33 s; beside another tool 1.1 to 1.6 times that). All three at
+   once is where it stops paying: manimkc's build took three times as long,
+   which would carry an uncached preview (131 s at most so far) toward the
+   Bash tool's 600 s ceiling, so three is the owner's to set and not the
+   default.
+
+   What one at a time was protecting, checked: each job has its own checkout,
+   TTS cache, Vite cache, temporary directory and profiles, and the runner's
+   hang timer, cost meter and dead-tools stop are per job. The daily cap is
+   checked when a job is queued, never when it starts, so a second running
+   job changes nothing it did. The one shared thing was the port pair: a
+   pair is free to the system between a job's renders, so a second job's
+   setup could have taken it. Pairs are now held in the runner from setup
+   until the job ends, and the searches run one at a time (`jobPorts` and
+   `releaseJobPorts` in `ports.ts`). The doctors already render their
+   fixtures beside running jobs, in ranges of their own. The cost is in the
+   job, not the render: a render is a fifth to a third of a job's wall time
+   (116 of 506 s, 208 of 935 s and 191 of 587 s in the three jobs above), so
+   two jobs share the cores for a fraction of their lives, while the second
+   used to wait a whole job (ten to fifteen minutes) to start. Not yet seen:
+   two paid jobs actually running together; the first pair that does is the
+   check, and `STUDIO_VIDEO_CONCURRENCY=1` undoes this without a code change.
 2. Whether a revideokc job should reuse the checkout's `node_modules` read-only
    (the spike did) or install its own. Read-only reuse is what the spike
    measured and costs nothing; an install per job would take minutes and the

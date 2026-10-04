@@ -25,7 +25,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/TUTOR-MODELS.md](docs/TUTOR-MODELS.md) | The tutor's model chain: the owner's ordered provider and model list in `tutor_model`, edited in Settings' Models card, tried top to bottom, with the built-in defaults when there is none, a per-call limit and a turn deadline. Decisions T1 to T11 |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [docs/proposals/course-items-declare-concepts.md](docs/proposals/course-items-declare-concepts.md) | Proposal: the course file lists each item's concepts, and progress derives from mastery everywhere the path already does |
-| [docs/proposals/module-learning-path.md](docs/proposals/module-learning-path.md) | Proposal: the module page becomes one ordered path (before you start, module material, lessons of concept steps, practice, a week check) built from the concept order and prerequisite graph; readings attach to lessons, videos name concepts, and `catalog doctor` guards the order against `requires` |
+| [docs/proposals/module-learning-path.md](docs/proposals/module-learning-path.md) | Built (2026-10-04): the module page becomes one ordered path (before you start, module material, lessons of concept steps, practice, a week check) built from the concept order and prerequisite graph; readings attach to lessons, videos name concepts, and `catalog doctor` guards the order against `requires` |
 | [docs/proposals/home-page.md](docs/proposals/home-page.md) | Proposal: Home at `/home` replaces Today, built on the threads the owner last touched rather than a schedule; the streak and daily target are removed. Decisions H1 to H3 |
 | [docs/proposals/knowledge-map.md](docs/proposals/knowledge-map.md) | Proposal: `/learn` opens on a pannable, zoomable map of the prerequisite graph, one island per cluster, coloured by mastery with p(L) as an arc, and the table becomes the second view. Decisions G1 to G8 (G1 revises decision 13 of DESIGN.md), four phases |
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
@@ -828,6 +828,15 @@ not have to be worked out again.
   one run reports all of them. A skipped row is an asset that is silently
   missing from the catalog, and the audit in #27 recorded that happening once
   already.
+- **A video tool's import refuses a data root that holds none of its rows'
+  files.** Each tool's `*_HOME` falls back to its checkout when unset, and a
+  checkout holds no renders, so its report lists every video as unrendered.
+  On 2026-10-04 that pruned all 33 remotionkc rows: the main checkout's
+  `tools/remotionkc/.env` had no `REMOTIONKC_HOME` line where revideokc's had
+  one, and a worktree's submodule has no `.env` at all. `emptyDataRoot` in
+  `services/catalog/src/index/video-tool.ts` now refuses, naming the data
+  root and one file, while the data root still holds none of them; one
+  file present and the run prunes as before.
 - **The web app reads authored content from the database only, and refuses
   a type sent to files.** `apps/web/src/data/source.ts` builds the reader
   seam with no file reader: a type whose `content_source` row says `files`,
@@ -898,6 +907,17 @@ not have to be worked out again.
   `catalog flip` for topics, tags, concepts, sessions, courses and diagrams in
   that order (`scripts/lib/flip-order.mjs`; README.md, "Install"). `npm run
   e2e` builds exactly that database on its own.
+- **A suite that wants every migration takes `migratedScratchDatabase()`,
+  not `createScratchDatabase()` plus `applyMigrations`.** vitest's global
+  setup (`services/catalog/test/migrated-template.ts`) migrates one template
+  per run and each call clones it with `CREATE DATABASE ... TEMPLATE`, which
+  cut the catalog suites' summed time from 417 s to 224 s with two workers
+  (2026-10-04). `createScratchDatabase()` is still the empty database, for a
+  suite that migrates from empty or stops part-way (`partialMigrations`,
+  `BEFORE_BLOB_CONTRACT`); `schema.test.ts` migrating from empty is what
+  keeps the template honest. The template refuses connections, since
+  Postgres will not copy a database anyone is connected to, so never connect
+  to a `self_learn_test_template_*` database or point a suite at it.
 - **`catalog import` is the name; `catalog index` is the alias.** `index`
   is `import` with no directory; it still runs it and prints the new name once
   on stderr, so a `--json` reader is unaffected. A few comments still say
@@ -1088,6 +1108,10 @@ not have to be worked out again.
   the next page had read all of its data (0.5 to 2.7 s per tab under load,
   measured). A page whose shape differs a lot adds its own `loading.tsx`
   beside it, as the studio and Review (a focus page, `PageLoading layout="focus"`) do.
+  The cost is that no signed-in page works with JavaScript off: the streamed
+  content waits in a hidden `<div>` for an inline script to swap it in, so the
+  page stays on its loading frame. The `(app)` layout's `<noscript>` notice
+  says so, rather than leaving a skeleton that never fills.
 - **Every page is dynamic, and that is the point.** The root layout reads the
   theme cookie and the learner snapshot, so nothing is prerendered. Nothing
   reads the database at build time either — every read calls `connection()`

@@ -2,9 +2,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { isCallable } from "@/lib/agent/providers";
 
-import { applyMigrations } from "../../../../../../../services/catalog/src/migrations";
 import {
-  createScratchDatabase,
+  migratedScratchDatabase,
   probe,
   type Scratch,
 } from "../../../../../../../services/catalog/test/scratch-database";
@@ -77,8 +76,7 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     process.env.DATABASE_URL = scratch.url;
     process.env.AUTH_SECRET = SECRET;
     delete process.env.OPENROUTER_API_KEY;

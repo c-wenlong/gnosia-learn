@@ -14,6 +14,7 @@ import {
   freshness,
   groupDiagrams,
   panelHref,
+  browserMove,
   browserPanelMove,
   browserViewMove,
   CLOSED,
@@ -549,6 +550,15 @@ describe("a move the browser can make on its own", () => {
     expect(browserViewMove(at("?extend=graph"), "/studio?extend=graph&sort=title")).toBe(false);
     expect(browserViewMove(at("stream=off"), "/studio?sort=title")).toBe(false);
     expect(browserViewMove(at(""), "/studio/d/x?sort=title")).toBe(false);
+  });
+
+  it("is either of the two, from the address bar or from a path", () => {
+    expect(browserMove(at("kind=video"), "/studio?kind=video&play=a")).toBe(true);
+    expect(browserMove("/studio?kind=video", "/studio?kind=video&play=a")).toBe(true);
+    expect(browserMove("/studio", "/studio?kind=diagram")).toBe(true);
+    expect(browserMove("/studio?sel=x", "/studio?extend=x")).toBe(false);
+    expect(browserMove("/studio", "/library/video%3Aa?from=%2Fstudio")).toBe(false);
+    expect(browserMove("/studio/d/x", "/studio/d/x?job=j1")).toBe(true);
   });
 
   it("drops every panel from a path and keeps the filters", () => {

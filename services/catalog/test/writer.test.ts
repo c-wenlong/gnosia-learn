@@ -19,8 +19,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { IndexError } from "../src/index/errors";
 import type { Indexer, SourceRows } from "../src/index/source";
 import { writeSource } from "../src/index/writer";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
 /**
@@ -50,8 +49,7 @@ describe.skipIf(!reachable.ok)("writer", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
   }, 60_000);
 
   afterAll(async () => {

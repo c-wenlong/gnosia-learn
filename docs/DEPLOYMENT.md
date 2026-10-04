@@ -1,10 +1,13 @@
 # Deployment
 
-Production is deployed by Vercel's Git integration. The Vercel project is
-connected to the GitHub repo, so every push to the default branch builds and
-promotes a production deployment, and every pull request gets a preview
-deployment with its own URL. There is no deploy workflow in `.github/` and
-nothing to trigger by hand.
+Production deploys when a GitHub release is published, and at no other time.
+`.github/workflows/deploy.yml` runs `vercel deploy --prod` from the repository
+root on the release's tag, and Vercel builds it with the project's Production
+environment variables. Vercel's Git integration is still connected but builds
+nothing: `apps/web/vercel.json` sets `git.deploymentEnabled` to `false`, so a
+pull request gets no preview and a merge to `main` changes nothing that is
+live. Every PR and every merge used to build a deployment, and on the free
+plan's 100 deployments a day the busy days ran out (2026-10-04).
 
 - **Production alias:** https://self-learn-one.vercel.app
 - **Project:** `kaichen/self-learn`, linked to `https://github.com/c-wenlong/self-learn`
@@ -52,14 +55,24 @@ Test files are also excluded from `apps/web/tsconfig.json`, which is the config
 
 ## How a deploy happens
 
-1. A commit lands on `main` (normally a squash-merge from a pull request).
-2. Vercel's GitHub app sees the push and starts a build with the project's
-   Production environment variables.
-3. On success the deployment is promoted to the production alias. A failed
-   build leaves the previous deployment serving.
+1. Changes land on `main` through pull requests. Nothing deploys.
+2. Cut a release: `gh release create v<x.y.z> --generate-notes` (or the
+   Releases page). Publishing it starts the Deploy workflow.
+3. The workflow uploads the tree (less what `.vercelignore` leaves out:
+   `docs/`, `tools/`), Vercel builds it from the Root Directory, and on
+   success promotes it to the production alias. A failed build leaves the
+   previous deployment serving.
 
-Pull requests get the same treatment against the Preview environment, which is
-where the "Vercel: Deployment has completed" check on each PR comes from.
+The workflow needs one repository secret, `VERCEL_TOKEN`, a token from
+https://vercel.com/account/tokens (`gh secret set VERCEL_TOKEN`). Without it
+the job fails on its first step and says so. The org and project ids are in
+the workflow itself; they are identifiers, not secrets.
+
+To redeploy without a new release (a retry, or a rollback to an older tag),
+run the workflow by hand: **Actions → Deploy → Run workflow**, choosing the
+tag, or `gh workflow run deploy.yml --ref v<x.y.z>`. A manual run refuses a
+branch, a tag with no release, and a draft release. `vercel rollback` also
+works and builds nothing.
 
 To see what is live and what produced it:
 
@@ -68,10 +81,7 @@ vercel ls self-learn --prod            # recent production deployments
 vercel inspect <deployment-url>        # target, aliases, build output
 ```
 
-A deployment made by the integration reports `source: git` and carries the
-commit SHA and branch in its metadata. If production ever stops updating after
-a merge, check the project's **Settings → Git** on vercel.com first: the repo
-connection is the whole pipeline.
+A deployment made by the workflow reports `source: cli`.
 
 ## Bounding the agent routes
 
@@ -579,8 +589,8 @@ vercel link
 vercel --prod
 ```
 
-Run both from `apps/web/`, not from the repository root: `vercel` deploys the
-directory it is invoked in, and the project's Root Directory only applies to
-builds the Git integration starts. `vercel link` writes
-`apps/web/.vercel/project.json`, which is where the org and project ids come
-from. That directory is gitignored and should stay that way.
+Run both from the repository root, as the Deploy workflow does: the upload
+has to carry the workspace packages above `apps/web/`, and the project's Root
+Directory setting points the build at the app. `vercel link` writes
+`.vercel/project.json`, which is where the org and project ids come from.
+That directory is gitignored and should stay that way.

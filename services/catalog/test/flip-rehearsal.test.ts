@@ -10,10 +10,10 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { REPO_ROOT } from "../src/env";
-import { applyMigrations, journalTags } from "../src/migrations";
+import { journalTags } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { latestTag } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
 /**
@@ -273,9 +273,8 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
   let manimkc: string;
 
   beforeAll(async () => {
-    template = await createScratchDatabase();
+    template = await migratedScratchDatabase();
     // Migrated to the head, never flipped, no content rows.
-    await applyMigrations(template.db);
 
     work = await mkdtemp(path.join(tmpdir(), "catalog-flip-rehearsal-"));
     tree = path.join(work, "tree");
@@ -419,8 +418,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
   let manimkc: string;
 
   beforeAll(async () => {
-    template = await createScratchDatabase();
-    await applyMigrations(template.db);
+    template = await migratedScratchDatabase();
     // Two renders recorded, and a manimkc checkout that reports only one:
     // the import would remove the other, as a worktree without the owner's
     // untracked files would remove theirs.
@@ -473,10 +471,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
   let manimkc: string;
 
   beforeAll(async () => {
-    template = await createScratchDatabase();
+    template = await migratedScratchDatabase();
     // At the head and never flipped: what flip day can meet since the
     // cut-over unregistered 0013 (see the first suite).
-    await applyMigrations(template.db);
     work = await mkdtemp(path.join(tmpdir(), "catalog-cutover-rehearsal-"));
     tree = path.join(work, "tree");
     await seedWithManimkc(tree);
@@ -604,8 +601,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
   const kept: string[] = [];
 
   beforeAll(async () => {
-    template = await createScratchDatabase();
-    await applyMigrations(template.db);
+    template = await migratedScratchDatabase();
     work = await mkdtemp(path.join(tmpdir(), "catalog-cutover-worktree-"));
     manimkc = path.join(work, "manimkc");
     await manimkcStandIn(manimkc, randomBytes(4096));

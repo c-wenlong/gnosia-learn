@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyMigrations } from "../../../../../../../services/catalog/src/migrations";
 import {
-  createScratchDatabase,
+  migratedScratchDatabase,
   probe,
   type Scratch,
 } from "../../../../../../../services/catalog/test/scratch-database";
@@ -47,8 +46,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/watched", () => {
   let readEvents: typeof import("@self-learn/catalog/state").readEvents;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
     process.env.DATABASE_URL = scratch.url;

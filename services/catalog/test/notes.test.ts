@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { applyMigrations } from "../src/migrations";
 import { notePaths } from "../src/state";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent } from "./state-fixture";
 import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
@@ -21,8 +20,7 @@ describe.skipIf(!reachable.ok)("notePaths", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
   }, 60_000);
 

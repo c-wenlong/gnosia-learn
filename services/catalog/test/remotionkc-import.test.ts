@@ -12,8 +12,7 @@ import { openBlobStore } from "../src/content/blob";
 import { cliScope } from "../src/content/scope";
 import { listVideos } from "../src/content/videos";
 import { REPO_ROOT } from "../src/env";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
 
 /**
@@ -74,11 +73,26 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
     ],
   });
 
-  /** Rewrites the stand-in CLI to answer with these topic folders. */
-  async function answer(topics: unknown[]): Promise<void> {
+  /** The same folder as the CLI reports it from a data root holding none of its files. */
+  const unrendered = (entry: ReturnType<typeof topic>) => ({
+    ...entry,
+    sections: entry.sections.map((section) => ({
+      ...section,
+      deliverable: {
+        ...section.deliverable,
+        exists: false,
+        sidecars: Object.fromEntries(
+          Object.entries(section.deliverable.sidecars).map(([kind, sidecar]) => [kind, { ...sidecar, exists: false }]),
+        ),
+      },
+    })),
+  });
+
+  /** Rewrites the stand-in CLI to answer with these topic folders, rendered under `outRoot`. */
+  async function answer(topics: unknown[], outRoot = dataRoot): Promise<void> {
     const cli = path.join(checkout, "tools", "cli", "remotionkc.mjs");
     await mkdir(path.dirname(cli), { recursive: true });
-    const report = { outRoot: dataRoot, topics, drift: { orphans: [], unrendered: [] } };
+    const report = { outRoot, topics, drift: { orphans: [], unrendered: [] } };
     await writeFile(cli, `process.stdout.write(${JSON.stringify(JSON.stringify(report))});\n`);
   }
 
@@ -88,8 +102,7 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     work = await mkdtemp(path.join(tmpdir(), "catalog-remotionkc-"));
     checkout = path.join(work, "remotionkc");
     dataRoot = path.join(work, "remotionkc-home");
@@ -193,6 +206,25 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
     await expect(runImportCommand({ dir: SEED, only: ["remotionkc"] })).rejects.toThrow(
       /remotionkc topic "agents\/memory" declares topic "no-such-topic" in topics\/agents\/memory\/topic\.yml, which is not a topic this owner can read/,
     );
+    expect(await remotionkcRows()).toEqual(before);
+  });
+
+  it("refuses, rather than prunes, a data root that holds none of the files its rows name", async () => {
+    // What the real CLI reported on 2026-10-04 with REMOTIONKC_HOME unset: its
+    // outRoot was the checkout, which holds no renders, so every deliverable
+    // read as unrendered and the import removed all 33 rows.
+    const before = await remotionkcRows();
+    await answer(
+      [
+        unrendered(topic("loops", "loops", "agent-tool-use-and-reasoning-loops", ["transcript", "chapters", "vtt"])),
+        unrendered(topic("memory", "memory", "agent-memory-and-state", [])),
+      ],
+      checkout,
+    );
+    const refusal = runImportCommand({ dir: SEED, only: ["remotionkc"] });
+    await expect(refusal).rejects.toThrow(`remotionkc's data root ${checkout} holds none of the 5 files`);
+    await expect(refusal).rejects.toThrow(path.join(checkout, "out/agents/loops/loops.chapters.json"));
+    await expect(refusal).rejects.toThrow(/REMOTIONKC_HOME/);
     expect(await remotionkcRows()).toEqual(before);
   });
 

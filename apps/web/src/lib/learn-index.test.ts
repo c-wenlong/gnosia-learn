@@ -34,6 +34,7 @@ const row = (over: Partial<IndexRow> = {}): IndexRow => ({
   courseLabel: null,
   courses: [],
   domain: "foundations",
+  ready: false,
   ...over,
 });
 
@@ -81,7 +82,11 @@ describe("filters and search", () => {
     expect(parseFilter("leeches")).toBe("leeches");
     expect(parseFilter("bogus")).toBe("all");
     expect(parseView("graph")).toBe("graph");
-    expect(parseView(undefined)).toBe("table");
+    // G1 of docs/proposals/knowledge-map.md: the map is the default, the table one press away.
+    expect(parseView(undefined)).toBe("graph");
+    expect(parseView(null)).toBe("graph");
+    expect(parseView("table")).toBe("table");
+    expect(parseView("bogus")).toBe("graph");
     expect(parseScope("neighbourhood", "graph")).toBe("neighbourhood");
   });
 
@@ -101,16 +106,17 @@ describe("filters and search", () => {
 
   it("writes the graph view's scope into the URL every time, so a reload shows the same view", () => {
     const base = { selected: "dot", filter: "all" as const };
-    expect(indexSearch({ ...base, view: "graph", scope: "island" })).toBe("concept=dot&view=graph&scope=island");
-    expect(indexSearch({ ...base, view: "graph", scope: "course" })).toBe("concept=dot&view=graph&scope=course");
-    expect(indexSearch({ ...base, view: "graph", scope: "neighbourhood" })).toBe("concept=dot&view=graph&scope=neighbourhood");
-    // The table leaves its defaults out, as it always has.
-    expect(indexSearch({ ...base, view: "table", scope: "neighbourhood" })).toBe("concept=dot");
-    expect(indexSearch({ ...base, view: "table", scope: "course" })).toBe("concept=dot&scope=course");
-    expect(indexSearch({ selected: null, filter: "due", view: "table", scope: "neighbourhood" })).toBe("filter=due");
-    // Other parameters already in the URL are kept.
-    expect(indexSearch({ ...base, view: "graph", scope: "island" }, "utm=x&scope=course")).toBe(
-      "utm=x&scope=island&concept=dot&view=graph",
+    // The map is the default view (G1), so its URL leaves `view` out and always says its scope.
+    expect(indexSearch({ ...base, view: "graph", scope: "island" })).toBe("concept=dot&scope=island");
+    expect(indexSearch({ ...base, view: "graph", scope: "course" })).toBe("concept=dot&scope=course");
+    expect(indexSearch({ ...base, view: "graph", scope: "neighbourhood" })).toBe("concept=dot&scope=neighbourhood");
+    // The table says it is the table, and leaves its own default scope out.
+    expect(indexSearch({ ...base, view: "table", scope: "neighbourhood" })).toBe("concept=dot&view=table");
+    expect(indexSearch({ ...base, view: "table", scope: "course" })).toBe("concept=dot&view=table&scope=course");
+    expect(indexSearch({ selected: null, filter: "due", view: "table", scope: "neighbourhood" })).toBe("view=table&filter=due");
+    // Other parameters already in the URL are kept, and an old `view=graph` is dropped as the default.
+    expect(indexSearch({ ...base, view: "graph", scope: "island" }, "utm=x&view=graph&scope=course")).toBe(
+      "utm=x&scope=island&concept=dot",
     );
   });
 
@@ -144,7 +150,22 @@ describe("statusFilterOptions", () => {
       ["mastered", 1],
       ["untouched", 1],
       ["leeches", 1],
+      ["ready", 0],
+      ["nocourse", 3],
     ]);
+  });
+
+  // Phase 3 of docs/proposals/knowledge-map.md: the map adds two options and keeps every other (G5, G8).
+  it("adds Ready to learn and Not in a course after the options the table already had", () => {
+    expect(INDEX_FILTERS.map((f) => f.key)).toEqual(["all", "due", "learning", "mastered", "untouched", "leeches", "ready", "nocourse"]);
+    expect(INDEX_FILTERS.find((f) => f.key === "ready")?.label).toBe("Ready to learn");
+    expect(INDEX_FILTERS.find((f) => f.key === "nocourse")?.label).toBe("Not in a course");
+    expect(matchesFilter(row({ ready: true }), "ready")).toBe(true);
+    expect(matchesFilter(row({ ready: false }), "ready")).toBe(false);
+    expect(matchesFilter(row({ courses: [] }), "nocourse")).toBe(true);
+    expect(matchesFilter(row({ courses: ["cs3230"] }), "nocourse")).toBe(false);
+    expect(parseFilter("nocourse")).toBe("nocourse");
+    expect(parseFilter("ready")).toBe("ready");
   });
 
   it("calls a leech what it means, and keeps the key the URL carries", () => {

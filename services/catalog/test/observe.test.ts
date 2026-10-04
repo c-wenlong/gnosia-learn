@@ -2,7 +2,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { update as bktUpdate, DEFAULT_PARAMS } from "../../../scripts/learn/lib/bkt.mjs";
 import { gradeFromOutcome, newCard, review as sm2 } from "../../../scripts/learn/lib/schedule.mjs";
-import { applyMigrations } from "../src/migrations";
 import {
   closeTutorSession,
   ensureSession,
@@ -20,7 +19,7 @@ import {
   type ReviewCard,
 } from "../src/state";
 import { replayReviews } from "../src/learn/replay";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { fixtureGraph, seedContent } from "./state-fixture";
 import { collection, learner, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
@@ -50,8 +49,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
   }, 60_000);
 

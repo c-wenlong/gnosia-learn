@@ -7,9 +7,8 @@ import { and, eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runImportCommand } from "../src/commands/index-command";
-import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
 
 /**
@@ -92,8 +91,7 @@ describe.skipIf(!reachable.ok)("a video's concepts through catalog import", () =
   };
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     work = await mkdtemp(path.join(tmpdir(), "catalog-video-concepts-"));
     checkout = path.join(work, "remotionkc");
     dataRoot = path.join(work, "remotionkc-home");
