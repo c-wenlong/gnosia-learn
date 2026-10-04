@@ -645,7 +645,7 @@ kbd { font: 600 11px/1 ui-monospace, Menlo, monospace; background: var(--backgro
     <span><kbd>+</kbd> <kbd>-</kbd> zoom, with <kbd>Shift</kbd> a bigger step; arrows pan; <kbd>F</kbd> recenters.</span>
     <span><kbd>Ctrl</kbd> or <kbd>⌘</kbd> with the wheel zooms to the cursor; the plain wheel pans. The app leaves its wheel handler empty; this demo attaches it.</span>
   </div>
-  <p class="note">Where this demo departs from the engine on purpose: hit testing uses circles rather than the engine's squares, labels are ranked by dependants (the engine means to rank by citations but reads the wrong field, so every label ties), touch works as well as the mouse, a dragged node is pinned where it was dropped (the engine lets collision avoidance move it), and the frame loop stops when nothing moves rather than polling. Each is marked in the script.</p>
+  <p class="note">Where this demo departs from the engine on purpose: hit testing uses circles rather than the engine's squares, labels are ranked by dependants (the engine means to rank by citations but reads the wrong field, so every label ties), touch works as well as the mouse, dragged nodes settle in drop order and stay where they settled (the engine lets a later drop push an earlier one), and the frame loop stops when nothing moves rather than polling. Each is marked in the script.</p>
 </section>
 
 <section class="s" id="chrome">
@@ -1048,12 +1048,19 @@ const show = (t) => (t.t === 'shadow' ? t.v.map((l) => `${l.offsetX} ${l.offsetY
   // On the first overlap the node jumps just outside its blocker along the line between them,
   // then walks an outward spiral (six steps per turn at first, finer on outer rings) until it is free.
   // The notes do not give the starting radius; one ring step is assumed.
+  // Dragged nodes (pinRank >= 0, in drop order) settle first: each avoids only the ones dropped before
+  // it, so an earlier drop never moves and a later one dropped on top of it moves just clear. Every
+  // other node then avoids all nodes, dragged or not.
   function avoidCollisions(pts) {
     const k = 1 - G.tolerance;
-    for (let i = 0; i < pts.length; i++) {
+    const order = pts.map((_, i) => i).sort((a, b) => {
+      const ra = pts[a].pinRank, rb = pts[b].pinRank;
+      return (ra < 0) - (rb < 0) || (ra >= 0 && rb >= 0 ? ra - rb : a - b);
+    });
+    for (const i of order) {
       const p = pts[i];
-      if (p.pinned) continue;                                          // a dragged node stays where it was dropped
-      const blocker = () => pts.find((q, j) => j !== i && Math.hypot(q.x - p.x, q.y - p.y) < ((p.size + q.size) / 2) * k);
+      const yields = (q) => p.pinRank < 0 || (q.pinRank >= 0 && q.pinRank < p.pinRank);
+      const blocker = () => pts.find((q, j) => j !== i && yields(q) && Math.hypot(q.x - p.x, q.y - p.y) < ((p.size + q.size) / 2) * k);
       let b = blocker();
       if (!b) continue;
       let dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy);
@@ -1082,14 +1089,16 @@ const show = (t) => (t.t === 'shadow' ? t.v.map((l) => `${l.offsetX} ${l.offsetY
     const sizes = settings.size === 'fixed'
       ? nodes.map(() => (smin + smax) / 2)                            // inferred: a fixed size sits mid-range
       : remap(axisValues('dependants'), smin, smax);
+    const pinOrder = new Map([...custom.keys()].map((id, r) => [id, r]));
     const pts = nodes.map((n, i) => {
       const c = custom.get(n.id);                                     // dragged nodes keep their spot (1.7)
-      return { x: c ? c.x : xs[i], y: c ? c.y : ys[i], size: sizes[i], pinned: Boolean(c) };
+      return { x: c ? c.x : xs[i], y: c ? c.y : ys[i], size: sizes[i], pinRank: pinOrder.get(n.id) ?? -1 };
     });
-    // The engine runs collision avoidance over dragged nodes too (1.7 then 1.4), so a dropped node
-    // can be nudged away from where it was put, and a later drop can push an earlier one. Here a
-    // dragged node is pinned: it never moves, and the other nodes spiral clear of it instead.
+    // The engine runs collision avoidance over dragged nodes too (1.7 then 1.4), so a later drop can
+    // push an earlier one. Here dragged nodes settle in drop order (see avoidCollisions), and where
+    // each settled is saved, so it stays put on every later relayout.
     avoidCollisions(pts);
+    nodes.forEach((n, i) => { if (custom.has(n.id)) custom.set(n.id, { x: pts[i].x, y: pts[i].y }); });
     const now = performance.now();
     nodes.forEach((n, i) => {
       const p = pts[i];
@@ -1462,7 +1471,8 @@ const show = (t) => (t.t === 'shadow' ? t.v.map((l) => `${l.offsetX} ${l.offsetY
       } else if (d.mode !== 'pan' || e.pointerType === 'touch') ui.selected = new Set();
       applyFocus(); renderInspector();
     } else if (d.mode === 'node') {                               // a drop: the node keeps its spot
-      for (const s of d.starts) custom.set(s.n.id, { x: s.n.x, y: s.n.y });
+      // Delete first so the map's order is drop order: the latest drop settles last (avoidCollisions).
+      for (const s of d.starts) { custom.delete(s.n.id); custom.set(s.n.id, { x: s.n.x, y: s.n.y }); }
       layout(true);
     } else if (d.mode === 'box') {
       const picked = ui.boxed;
