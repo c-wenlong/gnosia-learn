@@ -434,11 +434,17 @@ export function ReviewSession({
   );
 }
 
-/** Whether the focus is on nothing a key press could reach: the page, a removed control or a disabled one. */
+/**
+ * Whether the focus is on no live control: the page, a removed or disabled
+ * control, or something only held for reading, such as the prompt a new card
+ * hands it to. Then the answer that just appeared may take it. A key that
+ * revealed the answer (Space, a number) leaves the focus on that prompt, so
+ * the prompt counts as lost as much as a Show answer that unmounted.
+ */
 function focusLost(): boolean {
   const active = document.activeElement;
   if (active === null || active === document.body || !active.isConnected) return true;
-  return active instanceof HTMLButtonElement && active.disabled;
+  return active.closest("a[href], button:not(:disabled), input, textarea, select, [contenteditable='true']") === null;
 }
 
 function newRequestId(): string {

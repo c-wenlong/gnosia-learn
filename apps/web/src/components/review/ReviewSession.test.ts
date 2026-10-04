@@ -196,6 +196,26 @@ describe("ReviewSession moving through the queue", () => {
     expect(document.activeElement).toBe(prompt);
   });
 
+  it("moves the focus from the prompt to the answer when Space reveals it on the next card", async () => {
+    const host = await mount([RECALL, card({ conceptId: "ip", prompt: "What does IP route?", answer: "Packets." })]);
+    await settle(() => button(host, "Show answer").click());
+    await settle(() => rating(host, "Good").click());
+    const prompt = host.querySelector('[data-step="1"] h1') as HTMLElement;
+    expect(document.activeElement).toBe(prompt);
+
+    // The key leaves the focus on the prompt, which is for reading, not a control: the answer takes it.
+    await settle(() => key(" "));
+    expect(document.activeElement).toBe(host.querySelector('section[aria-label="Answer"]'));
+  });
+
+  it("moves the focus from the prompt to the rating row when a number answers a check card", async () => {
+    const host = await mount([RECALL, CHECK]);
+    await settle(() => button(host, "Show answer").click());
+    await settle(() => rating(host, "Good").click());
+    await settle(() => key("1"));
+    expect(document.activeElement).toBe(host.querySelector('[role="group"][aria-label="Rate your recall"]'));
+  });
+
   it("on a check card moves the focus to the rating row, and Enter still commits the suggestion", async () => {
     const host = await mount([CHECK]);
     await settle(() => key("2"));

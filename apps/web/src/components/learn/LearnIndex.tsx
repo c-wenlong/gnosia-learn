@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConceptGraph, ConceptGraphKey } from "@/components/ConceptGraph";
 import { ConceptMap } from "@/components/learn/ConceptMap";
@@ -292,6 +292,20 @@ function GraphCard({
   const course = focus ? courseScope(nodes, edges, focus.id) : null;
   const shown = focus === null ? null : scope === "course" && course ? course : neighbourhood(nodes, edges, focus.id);
   const wider = course?.basis === "domain" ? "Folder" : "Course";
+  const graphBox = useRef<HTMLDivElement>(null);
+  /** A node was chosen from inside the graph, which its key then replaces whole. */
+  const refocus = useRef(false);
+  const select = (id: string) => {
+    refocus.current = graphBox.current?.contains(document.activeElement) ?? false;
+    onSelect(id);
+  };
+  const drawn = focus === null ? null : `${focus.id}:${scope}`;
+  // The node pressed went with the old graph; the concept it chose, ringed in the new one, takes the focus.
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    graphBox.current?.querySelector<SVGElement>('[aria-pressed="true"]')?.focus();
+  }, [drawn]);
 
   return (
     <Card
@@ -319,15 +333,15 @@ function GraphCard({
               {scope === "course" && course?.basis === "domain" && ` · no course, showing the ${focus.domain} folder`}
             </span>
           </p>
-          <div className="min-h-[300px] rounded-xl bg-surface2 p-2">
+          <div ref={graphBox} className="min-h-[300px] rounded-xl bg-surface2 p-2">
             {/* Keyed on what it draws, so a new concept's graph fades in rather than snapping into the old one's place. */}
             <ConceptGraph
-              key={`${focus.id}:${scope}`}
+              key={drawn}
               className="animate-fade-in motion-reduce:animate-none"
               nodes={shown.nodes}
               edges={shown.edges}
               focus={focus.id}
-              onSelect={onSelect}
+              onSelect={select}
               fit={scope === "neighbourhood"}
               compact
               label={`${scope === "course" ? "Course" : "Neighbourhood"} graph of ${focus.title}`}
