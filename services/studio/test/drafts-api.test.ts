@@ -494,6 +494,66 @@ describe("PUT /api/drafts/{id}/brief", () => {
     expect([...first, ...second].map((row) => row.draftId)).toEqual(started.drafts.map((row) => row.draftId));
     expect(third).toEqual([]);
   });
+
+  it("searches titles, first messages and concept titles with q, before the cursor and the limit (D87)", async () => {
+    const talk = async (text: string): Promise<string> => {
+      await fake.script([{ text: "Which one?" }]);
+      const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+      await post(`/api/drafts/${draftId}/messages`, { text });
+      await drafts.settled(draftId);
+      return draftId;
+    };
+    const ids = async (query: string): Promise<string[]> =>
+      ((await (await fetch(`${base}/api/drafts?${query}`)).json()) as { drafts: { draftId: string }[] }).drafts.map((row) => row.draftId);
+
+    const titled = await briefed(); // titled "TCP congestion window", first message "@diagram draw it"
+    const slowStart = await talk("Show how TCP slow start works");
+    const product = await talk("Explain the dot product");
+    const matrix = await talk("  explain   DOT   matrix  notation ");
+    const concept = (await (await post("/api/drafts", { concept: { slug: "cosine", title: "Cosine similarity", summary: null, body: null } })).json()) as { draftId: string };
+    const turkish = await talk("Plan the İstanbul route");
+    const greek = await talk("Η ΟΔΟΣ προς την πόλη");
+    const unrelated = await talk("Something else entirely");
+
+    // The title, and the first message of a draft with no brief, in any case.
+    expect((await ids("q=tcp")).sort()).toEqual([titled, slowStart].sort());
+    expect((await ids("q=%20TCP%20")).sort()).toEqual([titled, slowStart].sort());
+    expect(await ids("q=draw%20it")).toEqual([titled]);
+    // Spaces in the text and in the search are one space each.
+    expect(await ids("q=dot%20%20product")).toEqual([product]);
+    expect(await ids("q=DOT")).toEqual([matrix, product]);
+    // The title of the concept a hand-off opened it on, which has no turn yet.
+    expect(await ids("q=cosine")).toEqual([concept.draftId]);
+    expect(await ids("q=cosine&nonEmpty=1")).toEqual([]);
+    expect(await ids("q=nothing-says-this")).toEqual([]);
+    // A character is lower-cased on its own, as the web app marks it: "İ" is "i" and a combining dot.
+    expect(await ids("q=%C4%B0stanbul")).toEqual([turkish]);
+    expect(await ids("q=stanbul")).toEqual([turkish]);
+    // A Greek final sigma is the ordinary one to the search, whichever way it is typed.
+    expect(await ids("q=%CE%BF%CE%B4%CE%BF%CF%82")).toEqual([greek]); // οδος
+    expect(await ids("q=%CE%BF%CE%B4%CE%BF%CF%83")).toEqual([greek]); // οδοσ
+    // Blank is no search, and the other filters still apply with it.
+    expect(await ids("q=%20%20")).toEqual(await ids(""));
+    expect(await ids("q=tcp&state=briefed")).toEqual([titled]);
+
+    // Applied before the limit: the newest draft does not match, and the page is still a page of matches.
+    expect((await ids("limit=1"))[0]).toBe(unrelated);
+    expect(await ids("q=dot&limit=1")).toEqual([matrix]);
+    // And the cursor pages the matches: each page starts after the last row of the one before.
+    type Row = { draftId: string; updated: string };
+    const page = async (before?: Row) =>
+      ((await (
+        await fetch(`${base}/api/drafts?q=dot&limit=1${before === undefined ? "" : `&before=${encodeURIComponent(before.updated)}&beforeId=${before.draftId}`}`)
+      ).json()) as { drafts: Row[] }).drafts;
+    const first = await page();
+    const second = await page(first[0]);
+    expect([...first, ...second].map((row) => row.draftId)).toEqual([matrix, product]);
+    expect(await page(second[0])).toEqual([]);
+
+    const tooLong = await fetch(`${base}/api/drafts?q=${"a".repeat(201)}`);
+    expect(tooLong.status).toBe(400);
+    expect(await tooLong.json()).toMatchObject({ detail: { field: "q" } });
+  });
 });
 
 describe("resume and revise carry the draft", () => {

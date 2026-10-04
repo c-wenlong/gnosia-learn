@@ -2,7 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import type { DraftSummary } from "@/lib/studio-drafts";
 
-import { draftRows, historyGroups, listPath, readHistory, stateWords, type DraftRow } from "./studio-draft-list";
+import {
+  draftMatches,
+  draftRows,
+  historyGroups,
+  listPath,
+  matchParts,
+  readHistory,
+  searchRows,
+  searchText,
+  stateWords,
+  type DraftRow,
+} from "./studio-draft-list";
 
 /** The drafts list above the studio grid (phase 3): which rows, called what. */
 
@@ -200,5 +211,120 @@ describe("readHistory", () => {
     let calls = 0;
     const failing = async () => (calls++ === 0 ? [draft({ draftId: "a" }), draft({ draftId: "b" })] : null);
     expect(await readHistory(2, failing, 2)).toBeNull();
+  });
+});
+
+describe("the history search", () => {
+  const drafts = [
+    draft({ draftId: "titled", title: "TCP congestion window", firstMessage: "@diagram draw how a sender backs off", updated: "2026-09-29T10:00:00.000Z" }),
+    draft({ draftId: "first", firstMessage: "Show how TCP slow start works", updated: "2026-09-29T12:00:00.000Z" }),
+    draft({ draftId: "concept", firstMessage: "@diagram", concept: { slug: "cosine", title: "Cosine similarity" }, updated: "2026-09-29T11:00:00.000Z" }),
+    draft({ draftId: "other", firstMessage: "Something else entirely", updated: "2026-09-29T13:00:00.000Z" }),
+  ];
+
+  it("normalises the way the runner does: one space, trimmed, any case", () => {
+    expect(searchText("  Dot \n  PRODUCT ")).toBe("dot product");
+  });
+
+  it("matches a title, a first message or a concept title, in any case, and nothing else", () => {
+    expect(drafts.filter((d) => draftMatches(d, "tcp")).map((d) => d.draftId)).toEqual(["titled", "first"]);
+    expect(drafts.filter((d) => draftMatches(d, "  COSINE ")).map((d) => d.draftId)).toEqual(["concept"]);
+    expect(drafts.filter((d) => draftMatches(d, "backs  off")).map((d) => d.draftId)).toEqual(["titled"]);
+    expect(drafts.filter((d) => draftMatches(d, "nothing"))).toEqual([]);
+    // A blank search keeps everything; a runner that predates the field sends no first message.
+    expect(drafts.every((d) => draftMatches(d, "  "))).toBe(true);
+    expect(draftMatches(draft({ title: "TCP", firstMessage: undefined, concept: undefined }), "tcp")).toBe(true);
+  });
+
+  it("lists the hits as one run, newest first, with the words around a match the heading does not hold", () => {
+    const rows = searchRows(drafts, {}, "tcp");
+    expect(rows.map((row) => row.draftId)).toEqual(["first", "titled"]);
+    // The heading is the first message: it holds the match.
+    expect(rows[0]).toMatchObject({ heading: "Show how TCP slow start works", snippet: null });
+
+    // The heading is the brief's title, and the match is in the first message.
+    const inFirst = searchRows(drafts, {}, "sender");
+    expect(inFirst[0]).toMatchObject({ draftId: "titled", heading: "TCP congestion window", snippet: "@diagram draw how a sender backs off" });
+    // A concept's title heads a row whose first message is a bare tag, and holds the match.
+    expect(searchRows(drafts, {}, "similarity")[0]).toMatchObject({ draftId: "concept", heading: "Cosine similarity", snippet: null });
+  });
+
+  it("cuts a long snippet to start a little before the match", () => {
+    const long = draft({ draftId: "long", title: "Routing", firstMessage: `${"filler words ".repeat(8)}the needle is here` });
+    const [row] = searchRows([long], {}, "needle");
+    expect(row.snippet?.startsWith("…")).toBe(true);
+    expect(row.snippet).toContain("the needle is here");
+    expect(row.snippet!.length).toBeLessThan(long.firstMessage!.length);
+  });
+
+  it("splits a text into the parts that match, in any case, whatever the search holds", () => {
+    expect(matchParts("Show how TCP slow start tcp works", "tcp")).toEqual([
+      { text: "Show how ", hit: false },
+      { text: "TCP", hit: true },
+      { text: " slow start ", hit: false },
+      { text: "tcp", hit: true },
+      { text: " works", hit: false },
+    ]);
+    expect(matchParts("a  dot   product", "dot product")).toEqual([
+      { text: "a  ", hit: false },
+      { text: "dot   product", hit: true },
+    ]);
+    // Characters a pattern would read as syntax are text.
+    expect(matchParts("f(x) = (a+b)*c", "(a+b)*")).toEqual([
+      { text: "f(x) = ", hit: false },
+      { text: "(a+b)*", hit: true },
+      { text: "c", hit: false },
+    ]);
+    expect(matchParts("nothing here", "tcp")).toEqual([{ text: "nothing here", hit: false }]);
+    expect(matchParts("anything", " ")).toEqual([{ text: "anything", hit: false }]);
+  });
+
+  it("marks a character whose lower case is longer than itself, which the search found", () => {
+    // "İ" lower-cases to "i" and a combining dot: the search for "i" finds it, and the mark must land on it.
+    const title = "Plan de l'İstanbul";
+    expect(draftMatches(draft({ title }), "i")).toBe(true);
+    expect(matchParts("İstanbul", "i")).toEqual([
+      { text: "İ", hit: true },
+      { text: "stanbul", hit: false },
+    ]);
+    // Earlier letters that fold longer do not shift the marks that follow.
+    expect(matchParts("İİ dot product", "dot")).toEqual([
+      { text: "İİ ", hit: false },
+      { text: "dot", hit: true },
+      { text: " product", hit: false },
+    ]);
+    expect(matchParts("a  İ  b", "İ")).toEqual([
+      { text: "a  ", hit: false },
+      { text: "İ", hit: true },
+      { text: "  b", hit: false },
+    ]);
+    // A snippet starts at the match, measured in the original text.
+    const [row] = searchRows([draft({ draftId: "tr", title: "Routing", firstMessage: `${"İ".repeat(30)} needle` })], {}, "needle");
+    expect(row.snippet).toBe(`…${"İ".repeat(23)} needle`);
+  });
+
+  it("finds Greek words whichever sigma they are written with", () => {
+    // A capital sigma ends a word as "ς" when a whole string is lower-cased, and is "σ" on its own.
+    for (const q of ["ας", "ασ", "ΑΣ"]) {
+      expect(draftMatches(draft({ title: "ΑΣ" }), q)).toBe(true);
+      expect(draftMatches(draft({ title: "ας" }), q)).toBe(true);
+    }
+    expect(matchParts("η ΟΔΟΣ", "οδος")).toEqual([
+      { text: "η ", hit: false },
+      { text: "ΟΔΟΣ", hit: true },
+    ]);
+  });
+
+  it("finds exactly what the search compares, whatever the text holds", () => {
+    // Whatever matchParts marks is a place where the folded text holds the folded search.
+    const texts = ["İstanbul İZMİR", "  lead  and   trail  ", "ΑΣ ΟΔΟΣ", "tab\tsplit\nlines", "emoji 😀 and e\u0301 mark"];
+    for (const text of texts) {
+      for (const q of ["i", "i̇", "and", "ο", "σ", "e", "😀", "split lines", "z"]) {
+        const marked = matchParts(text, q).filter((part) => part.hit);
+        expect(marked.length > 0).toBe(searchText(text).includes(searchText(q)));
+        expect(matchParts(text, q).map((part) => part.text).join("")).toBe(text);
+        for (const part of marked) expect(searchText(part.text)).toContain(searchText(q));
+      }
+    }
   });
 });
