@@ -219,8 +219,21 @@ const savingAnswer = new Map<string, Record<string, unknown>>();
  */
 const saveQueue = new Map<string, Promise<void>>();
 
+/**
+ * How many times each thread's session has been closed. A save notes it when
+ * tapped; one that only gets to send after a close (it waited in the queue
+ * while the page went away) is dropped rather than opening a session nobody
+ * will close. "Start a new thread" waits for saves to finish, so in practice
+ * only leaving the page moves this under a waiting save.
+ */
+const closedTimes = new Map<string, number>();
+
+/** How long an answer's write may take before the row says so and the queue moves on. */
+const SAVE_TIMEOUT_MS = 20_000;
+
 /** Close the thread's session, if an answer opened one, and forget it. Idempotent on the server. */
 function closeSession(slug: string): void {
+  closedTimes.set(slug, (closedTimes.get(slug) ?? 0) + 1);
   const id = readSession(slug);
   if (id === null) return;
   writeSession(slug, null);
@@ -458,20 +471,26 @@ export function TutorChat({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         keepalive: true,
+        // A request that never answers would hold the queue; this one gives up, and its retry replays.
+        signal: AbortSignal.timeout(SAVE_TIMEOUT_MS),
       });
     };
     // One save at a time per thread (see `saveQueue`).
+    const closedAtTap = closedTimes.get(slug) ?? 0;
     const ahead = saveQueue.get(slug);
     let release: () => void = () => {};
     const mine = new Promise<void>((resolve) => (release = resolve));
     saveQueue.set(slug, mine);
     if (ahead) await ahead;
     try {
+      if ((closedTimes.get(slug) ?? 0) !== closedAtTap) {
+        throw new Error("The thread's session closed before this answer was sent.");
+      }
       let res = await send(session());
       let data = (await res.json().catch(() => null)) as ObserveReply | null;
       // A session closed elsewhere (another tab, `learn session close`) refuses the answer with
       // nothing written; the thread starts a fresh one and sends the same answer once more.
-      if (res.status === 400 && /session/i.test(data?.error ?? "")) {
+      if (res.status === 400 && /session/i.test(data?.error ?? "") && (closedTimes.get(slug) ?? 0) === closedAtTap) {
         writeSession(slug, null);
         res = await send(session());
         data = (await res.json().catch(() => null)) as ObserveReply | null;
@@ -490,7 +509,13 @@ export function TutorChat({
       // The page's mastery dot, Recent answers and checks read the new state.
       router.refresh();
     } catch (e) {
-      patchVerdict(requestId, { state: "failed", error: e instanceof Error ? e.message : "The answer was not recorded." });
+      const message =
+        e instanceof DOMException && e.name === "TimeoutError"
+          ? "The answer took too long to save."
+          : e instanceof Error
+            ? e.message
+            : "The answer was not recorded.";
+      patchVerdict(requestId, { state: "failed", error: message });
     } finally {
       recording.current.delete(requestId);
       if ((savingAnswer.get(slug) as { requestId?: string } | undefined)?.requestId === requestId) savingAnswer.delete(slug);
@@ -793,7 +818,7 @@ export function TutorChat({
           </div>
         )}
 
-        {turns.length > 0 && !busy && (
+        {turns.length > 0 && !busy && !turns.some((t) => t.role === "user" && t.verdict?.state === "saving") && (
           <div className="flex animate-fade-in justify-center motion-reduce:animate-none">
             <button
               type="button"
