@@ -11,6 +11,15 @@ export const SEARCH_DEBOUNCE_MS = 200;
 /** The most the field takes; the runner refuses a longer `q`. */
 export const SEARCH_MAX = 200;
 
+/**
+ * How a read ended: `landed` (it is on screen), `failed` (the runner did not
+ * answer, and no newer read has been started since), or `superseded` (a newer
+ * read, or newer words, took over, so whatever this one found or failed to
+ * find says nothing about the screen). Only the newest read's failure is a
+ * failure.
+ */
+type ReadOutcome = "landed" | "failed" | "superseded";
+
 export interface HistorySearch {
   /** What is in the field, as typed. */
   query: string;
@@ -57,20 +66,26 @@ export function useHistorySearch(): HistorySearch {
   const issued = useRef(0);
   const shownTicket = useRef(0);
 
-  const read = useCallback(async (q: string, count: number): Promise<boolean> => {
+  const read = useCallback(async (q: string, count: number): Promise<ReadOutcome> => {
     issued.current += 1;
     const ticket = issued.current;
     const result = await readHistory(count, async (before) => {
       const answer = await listDrafts({ state: LISTED_STATES, nonEmpty: true, limit: LIST_LIMIT, q, ...(before === undefined ? {} : { before }) });
       return answer.ok && Array.isArray(answer.data.drafts) ? answer.data.drafts : null;
     });
-    // Words that have moved on, or an answer older than the one shown.
-    if (current.current !== q || ticket < shownTicket.current) return result !== null;
-    if (result === null) return false;
+    // Words that have moved on: nothing here is the screen's business.
+    if (current.current !== q) return "superseded";
+    if (result === null) {
+      // A read that was not the newest failing, after a newer one began or
+      // landed, changes nothing: the newer read says how the search stands.
+      return ticket === issued.current ? "failed" : "superseded";
+    }
+    // An answer older than the one shown.
+    if (ticket < shownTicket.current) return "superseded";
     shownTicket.current = ticket;
     setFailed(null);
     setLanded({ words: q, ...result });
-    return true;
+    return "landed";
   }, []);
 
   const setQuery = useCallback((next: string) => {
@@ -88,9 +103,9 @@ export function useHistorySearch(): HistorySearch {
   useEffect(() => {
     if (words === "") return;
     const timer = setTimeout(() => {
-      void read(words, 1).then((ok) => {
-        // A read that failed says so for these words, unless they moved on.
-        if (!ok && current.current === words) setFailed(words);
+      void read(words, 1).then((outcome) => {
+        // The newest read failing says so for these words, unless they moved on.
+        if (outcome === "failed" && current.current === words) setFailed(words);
       });
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -122,9 +137,11 @@ export function useHistorySearch(): HistorySearch {
     setMoreError(null);
     const next = pages.current + 1;
     pages.current = next;
-    const ok = await read(words, next);
+    const outcome = await read(words, next);
     setLoadingMore(false);
-    if (!ok) {
+    // Only this press's own failure, with no newer read since, takes the page
+    // back: a newer read for the same words may already have loaded it.
+    if (outcome === "failed") {
       if (pages.current === next) pages.current = next - 1;
       setMoreError("More matches could not be read: the studio did not answer.");
     }

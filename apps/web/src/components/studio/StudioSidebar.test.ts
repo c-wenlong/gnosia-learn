@@ -294,4 +294,126 @@ describe("the history search", () => {
     await settle(300);
     expect(nav().className).toContain("md:absolute");
   });
+
+  it("keeps the slid-out sidebar when focus returns to the field before the close it scheduled", async () => {
+    localStorage.setItem("studio:sidebar-collapsed", "1");
+    const { nav, button, field } = mount({ initial: loaded });
+    act(() => button("Search conversations")!.click());
+    expect(document.activeElement).toBe(field());
+    // jsdom answers `:hover` from the last mouseover it saw, and an earlier test left one on the sidebar.
+    act(() => void document.body.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+
+    // Focus leaves with the pointer away: a close is scheduled. Tabbing back in time cancels it.
+    act(() => field().blur());
+    await settle(100);
+    act(() => field().focus());
+    await settle(400);
+    expect(nav().className).toContain("md:absolute");
+
+    // Left for good, it does slide back.
+    act(() => field().blur());
+    await settle(300);
+    expect(nav().className).toContain("md:hidden");
+  });
+
+  it("does not close the slid-out sidebar when focus moves from the field to a row in it", async () => {
+    runnerWith(loaded);
+    localStorage.setItem("studio:sidebar-collapsed", "1");
+    const { nav, button, field, links } = mount({ initial: loaded });
+    act(() => button("Search conversations")!.click());
+    act(() => void document.body.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    type(field(), "tcp");
+    await settle();
+    act(() => links()[0].focus());
+    await settle(400);
+    expect(nav().className).toContain("md:absolute");
+  });
+
+  describe("reads that overlap", () => {
+    const many = Array.from({ length: 50 }, (_, at) => draft({ draftId: `m${String(at).padStart(2, "0")}`, title: `Match number ${at}`, updated: new Date(Date.UTC(2026, 9, 4, 12, 0, 50 - at)).toISOString() }));
+    const rest = [draft({ draftId: "last", title: "Match last one", updated: "2026-10-03T00:00:00.000Z" })];
+    const answer = (drafts: DraftSummary[]) => ({ ok: true, status: 200, data: { drafts, note: "" } });
+    const down = { ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } };
+
+    /** Reads for "match" answer by hand: the first page at once, the second page when told. */
+    function held() {
+      const second: Array<(value: unknown) => void> = [];
+      listMock.mockImplementation((query: { q?: string; before?: unknown }) => {
+        if (query.q === undefined) return Promise.resolve(answer([]));
+        if (query.before === undefined) return Promise.resolve(answer(many));
+        return new Promise((resolve) => second.push(resolve));
+      });
+      return { second };
+    }
+    const rows = (container: HTMLElement) => container.querySelectorAll("nav li a").length;
+    const wake = () => act(async () => void window.dispatchEvent(new Event("focus")));
+
+    it("does not report a failure for an older read that fails after a newer one landed", async () => {
+      // The first search is slow and fails; a refresh for the same words lands first.
+      const first: Array<(value: unknown) => void> = [];
+      let calls = 0;
+      listMock.mockImplementation((query: { q?: string }) => {
+        if (query.q === undefined) return Promise.resolve(answer([]));
+        calls += 1;
+        return calls === 1 ? new Promise((resolve) => first.push(resolve)) : Promise.resolve(answer(rest));
+      });
+      const { field, container } = mount();
+      type(field(), "match");
+      await settle();
+      await wake();
+      expect(container.textContent).toContain("Match last one");
+      await act(async () => first[0](down));
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+      expect(container.textContent).toContain("Match last one");
+    });
+
+    it("still reports the newest read failing", async () => {
+      listMock.mockImplementation((query: { q?: string }) => Promise.resolve(query.q === undefined ? answer([]) : down));
+      const { field, container } = mount();
+      type(field(), "match");
+      await settle();
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain("did not answer");
+    });
+
+    it("keeps the page a newer read loaded when the Show more read that began it fails after", async () => {
+      const { second } = held();
+      const { field, container } = mount();
+      type(field(), "match");
+      await settle();
+      expect(rows(container)).toBe(50);
+      const more = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
+      act(() => more.click());
+      await settle(0);
+      // A refresh begins while the press is still reading its second page: both want two pages.
+      await wake();
+      expect(second).toHaveLength(2);
+      await act(async () => second[1](answer(rest)));
+      expect(rows(container)).toBe(51);
+      // The press's own read fails afterwards: nothing is reported, and nothing is taken back.
+      await act(async () => second[0](down));
+      expect(container.textContent).not.toContain("More matches could not be read");
+      expect(rows(container)).toBe(51);
+      // So a later refresh still reads two pages, and the page is still there.
+      await wake();
+      expect(second).toHaveLength(3);
+      await act(async () => second[2](answer(rest)));
+      expect(rows(container)).toBe(51);
+    });
+
+    it("takes the page back, and says so, when the Show more read is the newest and fails", async () => {
+      const { second } = held();
+      const { field, container } = mount();
+      type(field(), "match");
+      await settle();
+      const more = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
+      act(() => more.click());
+      await settle(0);
+      await act(async () => second[0](down));
+      expect(container.textContent).toContain("More matches could not be read");
+      expect(rows(container)).toBe(50);
+      // The next refresh is back to one page.
+      await wake();
+      expect(second).toHaveLength(1);
+    });
+  });
 });

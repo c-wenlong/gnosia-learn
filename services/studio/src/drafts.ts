@@ -3785,11 +3785,14 @@ export function listLine(text: string): string {
 
 /**
  * A search text as `list` compares it: whitespace runs as one space, trimmed,
- * lower-cased. A title and a first message go through the same, so a match
- * does not depend on how a person's spaces fell.
+ * each character lower-cased on its own. One at a time so the web app can
+ * trace a match back to the character it came from (a character may lower-case
+ * to more than one letter, the Turkish dotted capital I), and so the two sides
+ * agree on what matches by construction. The rule is the web app's
+ * `searchText` in `studio-draft-list.ts`.
  */
 export function searchText(text: string): string {
-  return text.replace(/\s+/g, " ").trim().toLowerCase();
+  return [...text.replace(/\s+/g, " ").trim()].map((char) => char.toLowerCase()).join("");
 }
 
 /**

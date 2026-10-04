@@ -278,4 +278,41 @@ describe("the history search", () => {
     expect(matchParts("nothing here", "tcp")).toEqual([{ text: "nothing here", hit: false }]);
     expect(matchParts("anything", " ")).toEqual([{ text: "anything", hit: false }]);
   });
+
+  it("marks a character whose lower case is longer than itself, which the search found", () => {
+    // "İ" lower-cases to "i" and a combining dot: the search for "i" finds it, and the mark must land on it.
+    const title = "Plan de l'İstanbul";
+    expect(draftMatches(draft({ title }), "i")).toBe(true);
+    expect(matchParts("İstanbul", "i")).toEqual([
+      { text: "İ", hit: true },
+      { text: "stanbul", hit: false },
+    ]);
+    // Earlier letters that fold longer do not shift the marks that follow.
+    expect(matchParts("İİ dot product", "dot")).toEqual([
+      { text: "İİ ", hit: false },
+      { text: "dot", hit: true },
+      { text: " product", hit: false },
+    ]);
+    expect(matchParts("a  İ  b", "İ")).toEqual([
+      { text: "a  ", hit: false },
+      { text: "İ", hit: true },
+      { text: "  b", hit: false },
+    ]);
+    // A snippet starts at the match, measured in the original text.
+    const [row] = searchRows([draft({ draftId: "tr", title: "Routing", firstMessage: `${"İ".repeat(30)} needle` })], {}, "needle");
+    expect(row.snippet).toBe(`…${"İ".repeat(23)} needle`);
+  });
+
+  it("finds exactly what the search compares, whatever the text holds", () => {
+    // Whatever matchParts marks is a place where the folded text holds the folded search.
+    const texts = ["İstanbul İZMİR", "  lead  and   trail  ", "ΑΣ ΟΔΟΣ", "tab\tsplit\nlines", "emoji 😀 and e\u0301 mark"];
+    for (const text of texts) {
+      for (const q of ["i", "i̇", "and", "ο", "σ", "e", "😀", "split lines", "z"]) {
+        const marked = matchParts(text, q).filter((part) => part.hit);
+        expect(marked.length > 0).toBe(searchText(text).includes(searchText(q)));
+        expect(matchParts(text, q).map((part) => part.text).join("")).toBe(text);
+        for (const part of marked) expect(searchText(part.text)).toContain(searchText(q));
+      }
+    }
+  });
 });

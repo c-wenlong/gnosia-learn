@@ -511,6 +511,7 @@ describe("PUT /api/drafts/{id}/brief", () => {
     const product = await talk("Explain the dot product");
     const matrix = await talk("  explain   DOT   matrix  notation ");
     const concept = (await (await post("/api/drafts", { concept: { slug: "cosine", title: "Cosine similarity", summary: null, body: null } })).json()) as { draftId: string };
+    const turkish = await talk("Plan the İstanbul route");
     const unrelated = await talk("Something else entirely");
 
     // The title, and the first message of a draft with no brief, in any case.
@@ -524,6 +525,9 @@ describe("PUT /api/drafts/{id}/brief", () => {
     expect(await ids("q=cosine")).toEqual([concept.draftId]);
     expect(await ids("q=cosine&nonEmpty=1")).toEqual([]);
     expect(await ids("q=nothing-says-this")).toEqual([]);
+    // A character is lower-cased on its own, as the web app marks it: "İ" is "i" and a combining dot.
+    expect(await ids("q=%C4%B0stanbul")).toEqual([turkish]);
+    expect(await ids("q=stanbul")).toEqual([turkish]);
     // Blank is no search, and the other filters still apply with it.
     expect(await ids("q=%20%20")).toEqual(await ids(""));
     expect(await ids("q=tcp&state=briefed")).toEqual([titled]);

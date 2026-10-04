@@ -1315,7 +1315,11 @@ loaded would miss exactly the old conversations a person searches for, and
 runner already holds every draft in memory and filters before it limits, so
 the cost is one more `filter` in `Drafts.list`. The web app applies the same
 rule to what comes back, so a runner that predates `q` still shows only
-matches. Gauth's Atlas has a New Topic row and a search field in that order
+matches. Text and search are folded one character at a
+time (lower case, spaces collapsed), so a match can be traced back to the
+characters it came from and marked; lower-casing the whole string would not
+say where a letter that lower-cases to two (the Turkish dotted capital I)
+stood. Gauth's Atlas has a New Topic row and a search field in that order
 (`docs/design/reference/gauth/components.md`, "Atlas sidebar").
 
 **Rejected:** filtering the loaded rows (misses the old ones); searching the

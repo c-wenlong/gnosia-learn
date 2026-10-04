@@ -118,10 +118,50 @@ export function draftRows(
 
 /**
  * A search text as the runner compares it (`searchText` in the runner's
- * `drafts.ts`): whitespace runs as one space, trimmed, lower-cased.
+ * `drafts.ts`): whitespace runs as one space, trimmed, and each character
+ * lower-cased on its own. One character at a time, so a character that
+ * lower-cases to a different number of letters (the Turkish dotted capital I)
+ * can be traced back to where it was (`foldWithMap`), which a lower-cased
+ * whole string cannot offer.
  */
 export function searchText(text: string): string {
-  return text.replace(/\s+/g, " ").trim().toLowerCase();
+  return [...text.replace(/\s+/g, " ").trim()].map((char) => char.toLowerCase()).join("");
+}
+
+/**
+ * `searchText(text)`, and for each UTF-16 unit of it where in `text` it came
+ * from: `starts[i]` and `ends[i]` bound the original character (or whitespace
+ * run) that produced unit `i`. What lets a match found in the folded text be
+ * marked in the original.
+ */
+function foldWithMap(text: string): { folded: string; starts: number[]; ends: number[] } {
+  let folded = "";
+  const starts: number[] = [];
+  const ends: number[] = [];
+  let at = 0;
+  let spaceFrom = -1;
+  const put = (piece: string, from: number, to: number) => {
+    for (let unit = 0; unit < piece.length; unit += 1) {
+      starts.push(from);
+      ends.push(to);
+    }
+    folded += piece;
+  };
+  for (const char of text) {
+    const next = at + char.length;
+    if (/\s/.test(char)) {
+      // A run of whitespace is one space, standing for the whole run; none at the start.
+      if (spaceFrom === -1 && folded !== "") spaceFrom = at;
+    } else {
+      if (spaceFrom !== -1) {
+        put(" ", spaceFrom, at);
+        spaceFrom = -1;
+      }
+      put(char.toLowerCase(), at, next);
+    }
+    at = next;
+  }
+  return { folded, starts, ends };
 }
 
 /**
@@ -173,7 +213,9 @@ export function searchRows(
 /** `text` on one line, starting a little before the first match, with an ellipsis when that cut something. */
 function excerpt(text: string, needle: string): string {
   const line = text.replace(/\s+/g, " ").trim();
-  const at = line.toLowerCase().indexOf(needle);
+  const { folded, starts } = foldWithMap(line);
+  const found = folded.indexOf(needle);
+  const at = found === -1 ? 0 : starts[found];
   return at > SNIPPET_LEAD ? `…${line.slice(at - SNIPPET_LEAD)}` : line;
 }
 
@@ -191,19 +233,20 @@ export interface TextPart {
 export function matchParts(text: string, q: string): TextPart[] {
   const needle = searchText(q);
   if (needle === "") return [{ text, hit: false }];
-  // Each space in the search is any run of whitespace in the text, as the
-  // runner's comparison treats it.
-  const source = needle
-    .split(" ")
-    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("\\s+");
+  // Found in the folded text, as the runner finds it, and marked in the
+  // original through the map: a character that folds to two units is marked
+  // whole, and a run of spaces is one space.
+  const { folded, starts, ends } = foldWithMap(text);
   const parts: TextPart[] = [];
   let from = 0;
-  for (const found of text.matchAll(new RegExp(source, "gi"))) {
-    if (found[0] === "") continue;
-    if (found.index > from) parts.push({ text: text.slice(from, found.index), hit: false });
-    parts.push({ text: found[0], hit: true });
-    from = found.index + found[0].length;
+  for (let found = folded.indexOf(needle); found !== -1; found = folded.indexOf(needle, found + needle.length)) {
+    const start = starts[found];
+    const end = ends[found + needle.length - 1];
+    // Two matches inside one character's folding are one mark.
+    if (start < from) continue;
+    if (start > from) parts.push({ text: text.slice(from, start), hit: false });
+    parts.push({ text: text.slice(start, end), hit: true });
+    from = end;
   }
   if (from < text.length) parts.push({ text: text.slice(from), hit: false });
   return parts.length === 0 ? [{ text, hit: false }] : parts;

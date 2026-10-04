@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from "react";
 
 import { useHistorySearch, SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { PanelLink } from "@/components/studio/PanelLink";
@@ -359,9 +359,13 @@ export function StudioSidebar({
           inputRef={searchField}
           onFocus={() => {
             holdPeek.current = true;
+            // Back in the field before a close it scheduled on leaving it fired.
+            if (peekTimer.current !== null) clearTimeout(peekTimer.current);
           }}
-          onBlur={() => {
+          onBlur={(event) => {
             holdPeek.current = false;
+            // Focus moving to a row or button in the sidebar is not leaving it.
+            if (event.relatedTarget instanceof Node && room.current?.contains(event.relatedTarget) === true) return;
             // The pointer left while the field was in use: nothing else will say it may slide back.
             if (collapsed && room.current?.matches(":hover") !== true) peekAfter(false, 200);
           }}
@@ -481,7 +485,7 @@ function SearchField({
   search: HistorySearch;
   inputRef: RefObject<HTMLInputElement | null>;
   onFocus: () => void;
-  onBlur: () => void;
+  onBlur: (event: FocusEvent<HTMLInputElement>) => void;
 }) {
   return (
     <div className="shrink-0 px-2 pb-2">
