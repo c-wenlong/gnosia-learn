@@ -24,7 +24,7 @@ directory being imported: an export, `seed/`, or `content-files-final`.
 | Half | Tables | Source of truth |
 | --- | --- | --- |
 | Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$SELF_LEARN_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
-| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key`, `tutor_model` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
+| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key`, `tutor_model`, `asset_name` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
 | Studio | `session`, `draft`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
 
@@ -109,6 +109,7 @@ which brief produced them.
 | `preference` | Theme, epoch, last visited, and the studio's two agent settings (`studioVideoAgent`, `studioDiagramAgent`: `{ model, effort }`, D53 of docs/STUDIO-VIDEOS.md), which the runner reads with `catalog preference get`. Key/value, because these change with the UI. |
 | `provider_key` | An owner's own model provider API keys for the tutor, one per provider, AES-256-GCM encrypted by the web app (migration `0018_provider_key`, [docs/BYOK.md](../../docs/BYOK.md)). See "Provider keys" under the state half. |
 | `tutor_model` | The tutor's model chain: an owner's ordered provider and model pairs, tried top to bottom, with `position` 0 to n-1 (migration `0020_tutor_model`, [docs/TUTOR-MODELS.md](../../docs/TUTOR-MODELS.md)). No secret. Written only by `src/state/tutor-models.ts`, which rewrites an owner's rows whole under the learner lock. |
+| `asset_name` | A learner's own name for an asset, read in place of `asset.title` by every `AssetRef` query, `catalog show`, `catalog search` and the studio's video list (migration `0024_asset_name`). State rather than a column on `asset`, because every import writes the whole asset row again and would undo an edit there; the learner's, so a name for a commons video is nobody else's. No foreign key on `asset_id`, so a name outlives a prune and comes back with an asset re-imported under the same id. Written only by `src/state/asset-names.ts`, from the library page through `POST /api/learner/asset-name`. |
 
 ### Operational
 
@@ -466,6 +467,7 @@ erDiagram
     learner ||--o{ preference : "sets"
     learner ||--o{ provider_key : "brings"
     learner ||--o{ tutor_model : "orders"
+    learner ||--o{ asset_name : "names"
     concept ||--o{ event : "may be about"
     concept ||--o{ mastery : "is tracked by"
     concept ||--o{ review : "is scheduled by"
@@ -541,6 +543,11 @@ erDiagram
         text provider PK "nvidia|gemini|openrouter"
         text model PK "printable ASCII, 1..200"
         int position "0..9, unique per owner"
+    }
+    asset_name {
+        text learner_id PK_FK
+        text asset_id PK "no FK: outlives a prune"
+        text title "cleaned, 1..200"
     }
 ```
 
