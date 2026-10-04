@@ -4,6 +4,10 @@ import {
   bucketCounts,
   INDEX_FILTERS,
   dueLabel,
+  isLegendGroup,
+  LEGEND_GROUPS,
+  legendMembers,
+  legendPress,
   lastSeenLabel,
   matchesFilter,
   matchesQuery,
@@ -171,5 +175,40 @@ describe("statusFilterOptions", () => {
     const option = statusFilterOptions([row({ id: "b", leech: true })]).find((o) => o.value === "leeches");
     expect(option?.label).toBe("Keeps slipping");
     expect(INDEX_FILTERS.some((f) => /leech/i.test(f.label))).toBe(false);
+  });
+});
+
+// D9 of docs/proposals/domain-map.md: the legend chips over a domain's picture.
+describe("the map's legend", () => {
+  it("is four groups, each a Status filter, in the order the chips are drawn", () => {
+    expect(LEGEND_GROUPS.map((g) => [g.key, g.label])).toEqual([
+      ["mastered", "Mastered"],
+      ["learning", "Learning"],
+      ["untouched", "Not started"],
+      ["ready", "Ready to learn"],
+    ]);
+    for (const g of LEGEND_GROUPS) expect(INDEX_FILTERS.some((f) => f.key === g.key)).toBe(true);
+    expect(["mastered", "learning", "untouched", "ready"].every((f) => isLegendGroup(parseFilter(f)))).toBe(true);
+    expect(["all", "due", "leeches", "nocourse"].some((f) => isLegendGroup(parseFilter(f)))).toBe(false);
+  });
+
+  it("puts each concept shown in the groups it matches, ready as well as its bucket", () => {
+    const rows = new Map(
+      [
+        row({ id: "a", bucket: "mastered" }),
+        row({ id: "b", bucket: "learning", ready: true }),
+        row({ id: "c", bucket: "untouched", ready: true }),
+        row({ id: "d", bucket: "untouched" }),
+      ].map((r) => [r.id, r]),
+    );
+    // Only the ids asked for: a concept outside the open topic is not counted, and one with no row is skipped.
+    expect(legendMembers(["a", "b", "c", "gone"], rows)).toEqual({ mastered: ["a"], learning: ["b"], untouched: ["c"], ready: ["b", "c"] });
+  });
+
+  it("commits a group on a press, and clears to all on a press of the active one", () => {
+    expect(legendPress("all", "learning")).toBe("learning");
+    expect(legendPress("due", "learning")).toBe("learning");
+    expect(legendPress("mastered", "learning")).toBe("learning");
+    expect(legendPress("learning", "learning")).toBe("all");
   });
 });
