@@ -1,22 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { RefObject } from "react";
 
 import { SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
-
-import { FADE, FADE_IN } from "./motion";
+import { Glyph } from "@/components/ui/Glyph";
+import { isCurrentRow } from "@/lib/nav";
+import type { RecentItem } from "@/lib/recent-core";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
+import { FADE, FADE_IN } from "./motion";
 import { rowClick } from "./row-click";
+import { RECENT_GLYPHS, ROW, rowFill } from "./rows";
+import { useRecentSearch } from "./use-recent";
 
 /**
- * The sidebar's conversation search (D87 of docs/STUDIO-CHAT-FIRST.md): the
- * field under New chat, and the matches that take the place of the day groups
- * while it holds words. The reads, the debounce and the paging are
- * `useHistorySearch`; this is how they are drawn.
+ * The sidebar's search (D87 of docs/STUDIO-CHAT-FIRST.md, widened by L7 of
+ * docs/proposals/library-by-type-and-day.md): the field under New chat, and
+ * the matches that take the place of Recent's day groups while it holds
+ * words. It searches everything Recent holds: the studio's conversations
+ * through the runner, which matches their first messages too
+ * (`useHistorySearch`), and every other row's title through the catalog
+ * (`useRecentSearch`); the two are merged newest first.
  *
  * What is drawn here is marked `data-peek-hold`: the folded sidebar slid out
  * over the page stays out while focus is in the field or a match, and slides
@@ -52,12 +60,12 @@ export function SearchField({
     <div
       data-peek-hold=""
       className={cx(
-        "relative flex h-10 items-center overflow-hidden rounded-lg text-text2 transition-colors duration-150 motion-reduce:transition-none",
+        "relative flex h-[var(--shell-row,36px)] items-center overflow-hidden rounded-[var(--shell-row-radius,10px)] text-text2 transition-colors duration-150 motion-reduce:transition-none",
         compact ? "bg-transparent" : "bg-surface2",
         "focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
       )}
     >
-      <SearchIcon className="pointer-events-none absolute left-2.5 size-[18px] shrink-0" />
+      <SearchIcon className="pointer-events-none absolute left-[var(--shell-row-pad,8px)] size-[18px] shrink-0" />
       <input
         ref={inputRef}
         type="search"
@@ -66,8 +74,8 @@ export function SearchField({
         maxLength={SEARCH_MAX}
         autoComplete="off"
         spellCheck={false}
-        placeholder="Search conversations"
-        aria-label="Search conversations"
+        placeholder="Search"
+        aria-label="Search recent"
         onChange={(event) => search.setQuery(event.target.value)}
         onKeyDown={(event) => {
           if (event.key !== "Escape" || search.query === "") return;
@@ -75,7 +83,7 @@ export function SearchField({
           search.clear();
         }}
         className={cx(
-          "h-full min-w-0 flex-1 appearance-none rounded-lg bg-transparent pl-9 pr-8 text-[16px] text-text outline-none md:text-[14px]",
+          "h-full min-w-0 flex-1 appearance-none bg-transparent pl-[34px] pr-8 text-[16px] text-text outline-none md:text-[14px]",
           // The words fade with the sidebar's labels; the icon beside them stays.
           FADE,
           compact ? "opacity-0" : FADE_IN,
@@ -104,66 +112,90 @@ export function SearchField({
   );
 }
 
-/** What the field found, in place of the grouped history: one flat list, or why there is none. */
+/** What the field found, in place of Recent's day groups: one flat list, newest first, or why there is none. */
 export function SearchResults({
   search,
-  titles,
+  studio,
+  names,
   path,
   active,
   navigate,
   onPick,
 }: {
   search: HistorySearch;
-  titles: Readonly<Record<string, string>>;
+  /** Whether the runner's conversations are searched too. */
+  studio: boolean;
+  /** The owner's names for conversations, by row key. */
+  names: Readonly<Record<string, string>>;
   path: string;
   active: string | null;
   /** The studio page's browser move, or null off the studio. */
   navigate: ((href: string) => boolean) | null;
   onPick: () => void;
 }) {
-  const rows = search.found === null ? [] : searchRows(search.found.drafts, titles, search.words);
-  // Fades in over the history it replaces, once, as the search starts; the
+  const recent = useRecentSearch(search.words, studio);
+  const conversations =
+    search.found === null
+      ? []
+      : searchRows(search.found.drafts, {}, search.words).map((row) =>
+          names[`draft:${row.draftId}`] === undefined ? row : { ...row, heading: names[`draft:${row.draftId}`], quoted: false },
+        );
+  const others = (recent.found ?? []).filter((item) => !(studio && item.kind === "draft"));
+  const hits: ({ type: "draft"; at: string; row: SearchRow } | { type: "item"; at: string; item: RecentItem })[] = [
+    ...conversations.map((row) => ({ type: "draft" as const, at: row.updated, row })),
+    ...others.map((item) => ({ type: "item" as const, at: item.at, item })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  const searching = (studio && search.searching) || (recent.found === null && recent.error === null);
+  const settled = !searching && (!studio || search.found !== null || search.error !== null);
+  const errors = [studio ? search.error : null, recent.error].filter((e): e is string => e !== null);
+  // Fades in over the list it replaces, once, as the search starts; the
   // words that follow redraw it in place.
   return (
     <div data-peek-hold="" className="animate-fade-in pt-1 motion-reduce:animate-none">
-      {search.error !== null && (
-        <p role="alert" className="px-2.5 pt-1 text-[13px] leading-5 text-danger">
-          {search.error}
+      {errors.map((error) => (
+        <p key={error} role="alert" className="px-2 pt-1 text-[13px] leading-5 text-danger">
+          {error}
         </p>
-      )}
-      {search.searching && (
-        <p role="status" className="px-2.5 pt-1 text-[13px] leading-5 text-text3">
+      ))}
+      {searching && hits.length === 0 && (
+        <p role="status" className="px-2 pt-1 text-[13px] leading-5 text-text3">
           Searching…
         </p>
       )}
-      {search.found !== null && rows.length === 0 && !search.found.more && (
-        <p role="status" className="px-2.5 pt-1 text-[13px] leading-5 text-text3">
-          No conversations match
+      {settled && hits.length === 0 && search.found?.more !== true && errors.length === 0 && (
+        <p role="status" className="px-2 pt-1 text-[13px] leading-5 text-text3">
+          Nothing matches
         </p>
       )}
-      {rows.length > 0 && (
+      {hits.length > 0 && (
         <>
           <p role="status" className="sr-only">
-            {rows.length} {rows.length === 1 ? "conversation matches" : "conversations match"}
+            {hits.length} {hits.length === 1 ? "row matches" : "rows match"}
           </p>
-          <ul className="flex flex-col">
-            {rows.map((row) => (
-              <li key={row.draftId}>
-                <SearchHit
-                  row={row}
-                  words={search.words}
-                  href={conversationHref(path, row.draftId)}
-                  current={row.draftId === active}
-                  navigate={navigate}
-                  onPick={onPick}
-                />
-              </li>
-            ))}
+          <ul className="flex flex-col gap-px">
+            {hits.map((hit) =>
+              hit.type === "draft" ? (
+                <li key={`draft:${hit.row.draftId}`}>
+                  <SearchHit
+                    row={hit.row}
+                    words={search.words}
+                    href={conversationHref(path, hit.row.draftId)}
+                    current={hit.row.draftId === active}
+                    navigate={navigate}
+                    onPick={onPick}
+                  />
+                </li>
+              ) : (
+                <li key={hit.item.key}>
+                  <RecentHit item={hit.item} words={search.words} onPick={onPick} />
+                </li>
+              ),
+            )}
           </ul>
         </>
       )}
-      {search.found?.more === true && (
-        <div className="px-1 pt-2">
+      {studio && search.found?.more === true && (
+        <div className="px-0.5 pt-2">
           <button
             type="button"
             onClick={search.showMore}
@@ -180,6 +212,22 @@ export function SearchResults({
         </div>
       )}
     </div>
+  );
+}
+
+/** A catalog row that matched: its glyph and its title, the words marked. */
+function RecentHit({ item, words, onPick }: { item: RecentItem; words: string; onPick: () => void }) {
+  const pathname = usePathname();
+  const current = isCurrentRow(item.href, pathname, item.kind === "module");
+  const kind = RECENT_GLYPHS[item.kind];
+  return (
+    <Link href={item.href} onClick={onPick} aria-current={current ? "page" : undefined} title={item.title} className={cx(ROW, rowFill(current))}>
+      <Glyph name={kind.glyph} size={18} className="text-text2" />
+      <span className="min-w-0 flex-1 truncate">
+        <span className="sr-only">{kind.word}: </span>
+        <Marked text={item.title} words={words} />
+      </span>
+    </Link>
   );
 }
 
@@ -202,7 +250,7 @@ function Marked({ text, words }: { text: string; words: string }) {
 
 /** A hit is two lines (the heading, and the words around the match), so it stacks where a history row centres. */
 const HIT = cx(
-  "flex min-h-9 w-full flex-col items-start justify-center rounded-lg px-2.5 py-1.5 text-[14px] text-text",
+  "flex min-h-[var(--shell-row,36px)] w-full flex-col items-start justify-center rounded-[var(--shell-row-radius,10px)] py-1.5 ps-[34px] pe-2 text-[14px] text-text",
   "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
 );
 
@@ -229,9 +277,11 @@ function SearchHit({
       aria-current={current ? "page" : undefined}
       title={`${row.heading}\n${row.state} · ${relativeTime(row.updated)}`}
       suppressHydrationWarning
-      className={cx(HIT, "transition-colors", current ? "bg-surface2 font-medium" : "hover:bg-surface2")}
+      className={cx(HIT, "relative transition-colors", rowFill(current))}
     >
+      <Glyph name="compose" size={18} className="absolute left-[var(--shell-row-pad,8px)] top-[9px] text-text2" />
       <span className={cx("block w-full min-w-0 truncate", row.quoted && !current && "text-text2")}>
+        <span className="sr-only">Conversation: </span>
         <Marked text={row.heading} words={words} />
       </span>
       {row.snippet !== null && (

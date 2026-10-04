@@ -14,17 +14,19 @@ import { isPlainClick } from "@/lib/plain-click";
 
 import mark from "../../../public/brand/mark.png";
 import { AccountMenu } from "./AccountMenu";
-import { ChatHistory } from "./ChatHistory";
 import { SearchField } from "./ChatSearch";
 import { FADE, FADE_IN } from "./motion";
 import { NavIcon } from "./NavIcon";
+import { ROW, rowFill } from "./rows";
+import { Sections } from "./Sections";
 import { useShell } from "./shell-context";
 
 /**
  * The app's one sidebar, laid out the way a chat app's is: the wordmark and
  * the fold at the top, New chat (the studio, when this deployment has one),
- * the four learning destinations, the studio's conversations, and the account
- * at the foot. It replaced the top bar, the phone tab bar and the studio's
+ * the search, the four learning destinations, then the sections (`Sections`:
+ * Courses, Pinned and Recent, L7 of
+ * docs/proposals/library-by-type-and-day.md), and the account at the foot. It replaced the top bar, the phone tab bar and the studio's
  * own conversation list, so moving between making something and learning
  * from it is one column of links.
  *
@@ -37,7 +39,7 @@ import { useShell } from "./shell-context";
  * `data-layout="focus"` page it is hidden from 768px up: focus mode draws its
  * own step bar and exit instead.
  *
- * Under New chat is a search field over the studio's conversations (D87).
+ * Under New chat is a search field over everything Recent holds (D87, widened by L7).
  * On the rail it is a search button, which slides the sidebar out with the
  * field focused; the slid-out sidebar then stays while focus is in the field
  * or a match (`data-peek-hold`), and slides back once focus and the pointer
@@ -78,7 +80,7 @@ export function AppSidebar() {
     [],
   );
   const peeking = collapsed && peek;
-  const search = useHistorySearch();
+  const search = useHistorySearch(studio);
   const searchField = useRef<HTMLInputElement | null>(null);
   const room = useRef<HTMLDivElement | null>(null);
   /** The rail's search button was pressed: the field takes focus once the sidebar is out. */
@@ -109,6 +111,12 @@ export function AppSidebar() {
   }, [peeking]);
   // Drawn as icons only: folded and not slid out. The drawer is always the full width.
   const rail = collapsed && !peeking;
+  // The rail does not scroll, so it starts at the top: New chat and the
+  // destinations, not wherever Recent had been scrolled to before the fold.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (rail && scroller.current !== null) scroller.current.scrollTop = 0;
+  }, [rail]);
 
   useEffect(() => {
     if (!drawer || closeDrawer === undefined) return;
@@ -264,11 +272,18 @@ export function AppSidebar() {
             </div>
           </div>
 
-          {/* 11px in from each side: on the 60px rail that centres a 38px item,
-              and each item's 10px left padding puts its icon in the same place
-              open or folded, so only the labels appear and go. */}
-          <div className={cx("min-h-0 flex-1 overflow-x-hidden px-[11px] pb-3", rail ? "overflow-y-hidden" : "overflow-y-auto")}>
-            <ul className="flex flex-col gap-0.5">
+          {/* 13px in from each side: on the 60px rail that leaves a 34px row,
+              and each row's 8px start padding (`ROW`) puts its 18px glyph at
+              the rail's middle, in the same place open or folded, so only the
+              labels appear and go. The section labels stick to the top of
+              this scroller (`data-sidebar-scroll`, which a row's menu measures
+              to open upwards near the bottom). */}
+          <div
+            ref={scroller}
+            data-sidebar-scroll=""
+            className={cx("min-h-0 flex-1 overflow-x-hidden px-[13px] pb-3", rail ? "overflow-y-hidden" : "overflow-y-auto")}
+          >
+            <ul className="flex flex-col gap-px">
               {studio && (
                 <li>
                   <NewChatLink onPick={pick} className={item(newChatOn)} current={newChatOn} label={rail ? "New chat" : undefined}>
@@ -277,8 +292,7 @@ export function AppSidebar() {
                   </NewChatLink>
                 </li>
               )}
-              {studio && (
-                <li className="relative">
+              <li className="relative">
                   {/* The field stays, narrowed to its icon on the rail, so it
                       widens with the sidebar rather than swapping in. On the
                       rail a button over it opens the sidebar and focuses it. */}
@@ -289,13 +303,12 @@ export function AppSidebar() {
                     <button
                       type="button"
                       onClick={openSearch}
-                      aria-label="Search conversations"
-                      title="Search conversations"
-                      className="absolute inset-0 rounded-lg transition-colors hover:bg-surface2/60 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
+                      aria-label="Search recent"
+                      title="Search recent"
+                      className="absolute inset-0 rounded-[var(--shell-row-radius,10px)] transition-colors hover:bg-surface2/60 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
                     />
                   )}
                 </li>
-              )}
               {DESTINATIONS.map((d) => {
                 const on = d.key === active;
                 return (
@@ -316,13 +329,9 @@ export function AppSidebar() {
               })}
             </ul>
 
-            {/* Hidden on the rail rather than unmounted, so it keeps reading
-                while folded and is current the moment it unfolds. */}
-            {studio && (
-              <div inert={rail} className={cx("mt-5 min-w-[238px]", FADE, rail ? "opacity-0" : FADE_IN)}>
-                <ChatHistory onPick={pick} search={search} />
-              </div>
-            )}
+            {/* Mounted on the rail too, as glyphs, so it keeps reading while
+                folded and is current the moment it unfolds. */}
+            <Sections rail={rail} onPick={pick} search={search} />
           </div>
 
           <div className="shrink-0 border-t border-hair px-[11px] py-2">
@@ -335,11 +344,7 @@ export function AppSidebar() {
 }
 
 function item(on: boolean): string {
-  return cx(
-    "flex h-10 w-full items-center gap-2.5 overflow-hidden rounded-lg px-2.5 text-[14px] text-text transition-colors",
-    "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-    on ? "bg-surface2 font-medium" : "hover:bg-surface2",
-  );
+  return cx(ROW, rowFill(on));
 }
 
 /** A destination's name: always there, faded out on the rail, where the link's own label names it. */

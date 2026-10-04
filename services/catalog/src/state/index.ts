@@ -91,7 +91,9 @@ export {
   endSession,
   ensureSession,
   readSession,
+  recentTutorSessions,
   touchSession,
+  type RecentSession,
   type SessionEndInput,
   type SessionInput,
 } from "./sessions";

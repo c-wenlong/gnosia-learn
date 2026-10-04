@@ -233,20 +233,37 @@ conversation list beside its pages.
   when `STUDIO_ENABLED` is set); the four destinations (`DESTINATIONS` in
   `lib/nav.ts`: Home, Courses, Learn, Library; Review left the list on
   2026-10-04, see DESIGN.md "Information architecture"; the current one on
-  `--surface2`); the studio's conversations under "Chats", newest first by
-  day; and the account row at the foot, showing the learner's name
+  `--surface2`); then three sections (`Sections.tsx`, L7 of
+  [the Library proposal](../proposals/library-by-type-and-day.md)): Courses,
+  the courses the owner opened, each a folder unfolding to its modules;
+  Pinned, once something is pinned; and Recent, what the owner was last in
+  (modules, half-watched videos, conversations, concepts answered on, tutor
+  sessions), newest first by day, 50 a page, each row with its 18px glyph and
+  a more button whose menu pins, renames a conversation or opens a module's
+  course. Section labels are 13px `--text3`, sticky while their section
+  scrolls; rows are 36px with a 10px radius and an 8px start padding
+  (`components/shell/rows.ts`, read from `--shell-row`, `--shell-row-radius`
+  and `--shell-row-pad`); and the account row at the foot, showing the learner's name
   (`learner.display_name`, set under Settings, Profile, through
   `/api/learner/name`; "Account" until there is one), whose menu opens
   upwards (theme, Settings, Sign out). The fold narrows it to a 60px rail of icons and is
   the `gnosia-sidebar` cookie (`lib/sidebar-cookie.ts`), read by the layout so
   the first paint has the right width. Resting the mouse on the rail slides
   the full sidebar out over the page; the fold button then keeps it open.
-- **Chats.** On `/studio` the page publishes its list, the open
-  conversation, New chat and its in-browser navigation to the sidebar
-  (`usePublishStudioChats` in `components/shell/shell-context.ts`, called by
-  `PanelHost`), so a row opens its conversation without a server render.
-  Anywhere else the sidebar reads the list itself through
-  `/studio/api/drafts`, and a row is a link to `/studio?draft=`.
+- **Recent.** One list from two reads: `GET /api/learner/recent`
+  (`lib/recent.ts`, the same query Home's "Pick up where you left off" takes
+  its first five rows from) for every kind but conversations, and the studio
+  runner for conversations, which names one from its first message before it
+  has a title (`use-conversations.ts`); `mergeStreams` in `lib/recent-core.ts`
+  holds back a row the other list's unread page could outrank. On `/studio`
+  the page publishes its list, the open conversation, New chat and its
+  in-browser navigation to the sidebar (`usePublishStudioChats` in
+  `components/shell/shell-context.ts`, called by `PanelHost`), so a row opens
+  its conversation without a server render; anywhere else a conversation row
+  is a link to `/studio?draft=`. Pins and conversation names are the
+  `pinned` and `recentNames` preferences, written by `POST
+  /api/learner/recent`. The search field searches all of Recent. On the rail
+  the labels fade and every row is its glyph.
 - **Phone**, below 768px: a 56px header with the sidebar's button, the
   wordmark and New chat; the sidebar is a drawer over the page, closed by a
   pick, the backdrop, Escape or a navigation. There is no tab bar.

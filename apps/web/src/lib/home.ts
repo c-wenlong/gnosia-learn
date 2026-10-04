@@ -1,19 +1,17 @@
 import "server-only";
 
 import { connection } from "next/server";
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
 import {
-  asLastVisited,
-  asRecentModules,
-  assetsByIds,
   dueReviews,
   readEvents,
   readKnowledgeBase,
   readLearnerSnapshot,
   readPreferences,
   recentDrafts,
+  recentTutorSessions,
   type CatalogDatabase,
   type RecentDraft,
+  type RecentSession,
   type KbConcept,
 } from "@self-learn/catalog/state";
 
@@ -26,7 +24,6 @@ import { continueHref, conceptsForTopic, itemDoneWith, itemStanding, resolveTopi
 import { activeOnly } from "@/lib/course-summary";
 import { dayKey } from "@/lib/days";
 import {
-  conceptTouches,
   coursesInProgress,
   homeThreads,
   nearThreads,
@@ -34,16 +31,12 @@ import {
   recallPicks,
   toNextUp,
   type HomeModel,
-  type ModulePlace,
-  type ModuleVisit,
   type NextUp,
   type PathCourse,
-  type VideoProgress,
 } from "@/lib/home-core";
 import { catalogDatabase } from "@/lib/learner-store";
-import { bucketOf } from "@/lib/mastery-bucket";
-import { currentOwner, currentScope } from "@/lib/owner";
-import { parsePlayback } from "@/lib/playback";
+import { currentOwner, ownerScope } from "@/lib/owner";
+import { recentSources } from "@/lib/recent";
 import { studioEnabled } from "@/lib/studio";
 import { appTimeZone } from "@/lib/time-zone";
 
@@ -60,8 +53,6 @@ import { appTimeZone } from "@/lib/time-zone";
 const THREAD_ROWS = 5;
 /** Courses the card lists; it says how many more there are. */
 const COURSE_ROWS = 4;
-
-const PLAYBACK_PREFIX = "playback:";
 
 export async function readHome(now: Date = new Date()): Promise<HomeModel> {
   const timeZone = appTimeZone();
@@ -84,7 +75,7 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
     return emptyHome(now, timeZone);
   }
 
-  const { kb, events, preferences, due, snapshot, courses, drafts, topics } = rows;
+  const { kb, events, preferences, due, snapshot, courses, drafts, sessions, topics } = rows;
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
 
   // A course set aside on the Courses page is left off the card, as it is
@@ -100,20 +91,14 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
   const standing = itemStanding(kb.concepts, courseRows.flatMap((c) => c.topicIds));
   const started = coursesInProgress(courseRows, snapshot.completed, standing);
 
-  const videos = await videoProgress(db, preferences);
-  const threads = homeThreads(
-    {
-      modules: moduleVisits(preferences),
-      place: (visit) => modulePlace(courses, visit),
-      videos,
-      drafts,
-      concepts: conceptTouches(events, (id) => {
-        const c = byId.get(id);
-        return c === undefined ? null : { title: c.title, bucket: bucketOf(c), pL: c.pL };
-      }),
-    },
-    { now, timeZone, limit: THREAD_ROWS },
+  // Recent's own sources (`recent.ts`), the list the sidebar shows too; Home
+  // takes its first rows.
+  const sources = await recentSources(
+    db,
+    { events, preferences, drafts, sessions, concepts: kb.concepts, courses },
+    ownerScope(owner),
   );
+  const threads = homeThreads(sources, { now, timeZone, limit: THREAD_ROWS });
 
   const paths: PathCourse[] = active.map((c) => ({
     slug: c.slug,
@@ -174,7 +159,7 @@ async function readAll(db: CatalogDatabase, now: Date, owner: string) {
   // render. One refused because courses are not flipped is rethrown by
   // `readHome`. Drafts are the studio's, so a deployment without one does
   // not ask for them.
-  const [kb, events, preferences, due, snapshot, courses, drafts, topics] = await Promise.all([
+  const [kb, events, preferences, due, snapshot, courses, drafts, sessions, topics] = await Promise.all([
     readKnowledgeBase(db, owner),
     readEvents(db, owner),
     readPreferences(db, owner),
@@ -182,11 +167,22 @@ async function readAll(db: CatalogDatabase, now: Date, owner: string) {
     readLearnerSnapshot(db, owner),
     getCourses(),
     studioEnabled() ? draftsOrNone(db, owner) : Promise.resolve([]),
+    sessionsOrNone(db, owner),
     // The topic vocabulary only orders a topic's concepts for its Continue
     // link; without it the order falls back to the note positions.
     getTopics().catch(() => []),
   ]);
-  return { kb, events, preferences, due, snapshot, courses, drafts, topics };
+  return { kb, events, preferences, due, snapshot, courses, drafts, sessions, topics };
+}
+
+/** The owner's tutor sessions, or none when they cannot be read: a missing row kind is no reason to empty the page. */
+async function sessionsOrNone(db: CatalogDatabase, owner: string): Promise<RecentSession[]> {
+  try {
+    return await recentTutorSessions(db, owner, THREAD_ROWS);
+  } catch (error) {
+    console.warn(`home: tutor sessions unavailable, ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
 }
 
 /**
@@ -216,61 +212,6 @@ export function emptyHome(now: Date, timeZone?: string): HomeModel {
     recall: [],
     courses: { rows: [], total: 0 },
   };
-}
-
-/**
- * The module pages to list: `recentModules`, or, for an owner with no list
- * yet, the one visit `lastVisited` holds (the route starts the list from it
- * on the next visit).
- */
-function moduleVisits(preferences: Record<string, unknown>): ModuleVisit[] {
-  const list = asRecentModules(preferences[PREFERENCE_KEYS.recentModules]);
-  if (list !== undefined) return list;
-  const last = asLastVisited(preferences[PREFERENCE_KEYS.lastVisited]);
-  return last === undefined ? [] : [last];
-}
-
-function modulePlace(courses: readonly Course[], visit: ModuleVisit): ModulePlace | null {
-  const course = courses.find((c) => c.slug === visit.courseSlug);
-  if (course === undefined) return null;
-  const found = visit.moduleSlug === undefined ? undefined : course.modules.find((m) => m.slug === visit.moduleSlug);
-  // A module that is gone is not a course page to fall back to: the visit was
-  // to the module, and its course page is one click from anywhere.
-  if (visit.moduleSlug !== undefined && found === undefined) return null;
-  return {
-    courseCode: course.code,
-    courseTitle: course.title,
-    moduleTitle: found?.title ?? null,
-    moduleOrder: found?.order ?? null,
-  };
-}
-
-/**
- * Every saved video position, with the asset's title. A failed title lookup
- * costs the video rows (an untitled row would have nothing to say), not the
- * page.
- */
-async function videoProgress(db: CatalogDatabase, preferences: Record<string, unknown>): Promise<VideoProgress[]> {
-  const saved = Object.entries(preferences)
-    .filter(([key]) => key.startsWith(PLAYBACK_PREFIX))
-    .map(([key, value]) => ({ assetId: key.slice(PLAYBACK_PREFIX.length), playback: parsePlayback(value) }))
-    .filter((v): v is { assetId: string; playback: NonNullable<typeof v.playback> } => v.playback !== null);
-  if (saved.length === 0) return [];
-  let titles: Record<string, string> = {};
-  try {
-    const rows = await assetsByIds(db, saved.map((v) => v.assetId), await currentScope());
-    titles = Object.fromEntries(rows.filter((r) => r.title !== null).map((r) => [r.id, r.title as string]));
-  } catch {
-    return [];
-  }
-  return saved.map(({ assetId, playback }) => ({
-    assetId,
-    title: titles[assetId] ?? null,
-    position: playback.position,
-    duration: playback.duration,
-    watchedAt: playback.watchedAt,
-    updatedAt: playback.updatedAt,
-  }));
 }
 
 /**

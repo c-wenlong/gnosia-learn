@@ -13,11 +13,13 @@ import type { DraftSummary } from "@/lib/studio-drafts";
  * search. The sidebar is the shell's, so every test mounts the frame.
  */
 
-const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn() }));
+const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn(), fetchRecent: vi.fn() }));
 // The account row names the learner; this suite is about the search.
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayName: null } }) }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
+// The catalog's half of Recent: empty here, so every row is the runner's.
+vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: vi.fn(async () => true) }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
@@ -40,6 +42,7 @@ beforeAll(() => {
 beforeEach(() => {
   mocks.pathname = "/home";
   listMock.mockReset().mockResolvedValue({ ok: true, status: 200, data: { drafts: [], note: "" } });
+  mocks.fetchRecent.mockReset().mockResolvedValue({ reachable: true, items: [], more: false, pinned: [], names: {}, courses: [] });
 });
 
 const mounted: Array<() => void> = [];
@@ -131,18 +134,18 @@ describe("the history search", () => {
   /** jsdom answers `:hover` from the last mouseover it saw, and an earlier test may have left one on the sidebar. */
   const pointerAway = () => act(() => void document.body.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
 
-  it("is a field under New chat, and not there without a studio", async () => {
+  it("is a field under New chat", async () => {
     runnerWith(loaded);
     const { container, field } = await mount();
     const items = [...container.querySelectorAll("nav ul > li")].map((li) => (li.querySelector("input") ? "search" : li.textContent));
     expect(items.slice(0, 3)).toEqual(["New chat", "search", "Home"]);
-    expect(field().getAttribute("aria-label")).toBe("Search conversations");
+    expect(field().getAttribute("aria-label")).toBe("Search recent");
   });
 
   it("waits for typing to rest, then asks the runner, which finds conversations that are not loaded", async () => {
     runnerWith([...loaded, unloaded], loaded);
     const { field, links, container } = await mount();
-    expect(container.querySelectorAll("nav section")).not.toHaveLength(0);
+    expect(container.querySelectorAll("nav section[aria-label]")).not.toHaveLength(0);
 
     type(field(), "t");
     type(field(), "tc");
@@ -154,8 +157,8 @@ describe("the history search", () => {
     expect(searches()).toEqual([expect.objectContaining({ q: "tcp", nonEmpty: true, limit: 50 })]);
 
     // Flat: no day headings, only the two hits, newest first, the unloaded one among them.
-    expect(container.querySelectorAll("nav section")).toHaveLength(0);
-    expect(links().map((link) => link.textContent)).toEqual(["TCP congestion window, In conversation", "Why does TCP slow start double each round?, In conversation"]);
+    expect(container.querySelectorAll("nav section[aria-label]")).toHaveLength(0);
+    expect(links().map((link) => link.textContent)).toEqual(["Conversation: TCP congestion window, In conversation", "Conversation: Why does TCP slow start double each round?, In conversation"]);
     // What matched is marked, in whichever case it was written.
     expect([...container.querySelectorAll("nav mark")].map((mark) => mark.textContent)).toEqual(["TCP", "TCP"]);
   });
@@ -192,7 +195,7 @@ describe("the history search", () => {
     const { field, links } = await mount();
     type(field(), "sender");
     await settle();
-    expect(links()[0].textContent).toBe("Congestion control@diagram how does a sender back off?, In conversation");
+    expect(links()[0].textContent).toBe("Conversation: Congestion control@diagram how does a sender back off?, In conversation");
     expect(links()[0].querySelector("mark")?.textContent).toBe("sender");
   });
 
@@ -203,22 +206,22 @@ describe("the history search", () => {
 
     type(field(), "zzz");
     await settle();
-    expect(container.textContent).toContain("No conversations match");
+    expect(container.textContent).toContain("Nothing matches");
     expect(links()).toHaveLength(0);
 
     act(() => {
       field().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
     expect(field().value).toBe("");
-    expect(container.textContent).not.toContain("No conversations match");
-    expect(container.querySelectorAll("nav section").length).toBeGreaterThan(0);
+    expect(container.textContent).not.toContain("Nothing matches");
+    expect(container.querySelectorAll("nav section[aria-label]").length).toBeGreaterThan(0);
 
     type(field(), "tcp");
     await settle();
     expect(links()).toHaveLength(2);
     act(() => button("Clear the search")!.click());
     expect(field().value).toBe("");
-    expect(container.querySelectorAll("nav section").length).toBeGreaterThan(0);
+    expect(container.querySelectorAll("nav section[aria-label]").length).toBeGreaterThan(0);
     expect(document.activeElement).toBe(field());
   });
 
@@ -244,7 +247,7 @@ describe("the history search", () => {
     type(field(), "tcp");
     await settle();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("did not answer");
-    expect(container.textContent).not.toContain("No conversations match");
+    expect(container.textContent).not.toContain("Nothing matches");
   });
 
   it("drops an answer for words that are no longer in the field", async () => {
@@ -259,17 +262,17 @@ describe("the history search", () => {
     await settle();
     type(field(), "binary");
     await settle();
-    expect(links().map((link) => link.textContent)).toEqual(["Binary search trees, In conversation"]);
+    expect(links().map((link) => link.textContent)).toEqual(["Conversation: Binary search trees, In conversation"]);
     // The slow read for "tcp" lands last and changes nothing.
     await act(async () => release({ ok: true, status: 200, data: { drafts: [loaded[1]], note: "" } }));
-    expect(links().map((link) => link.textContent)).toEqual(["Binary search trees, In conversation"]);
+    expect(links().map((link) => link.textContent)).toEqual(["Conversation: Binary search trees, In conversation"]);
   });
 
   describe("on the rail", () => {
     it("hands focus to the fold when Escape slides the sidebar back with focus inside it", async () => {
       runnerWith(loaded);
       const { nav, button, field } = await mount({ collapsed: true });
-      act(() => button("Search conversations")!.click());
+      act(() => button("Search recent")!.click());
       expect(document.activeElement).toBe(field());
       type(field(), "tcp");
       await settle();
@@ -305,7 +308,7 @@ describe("the history search", () => {
       // The field is there, narrowed to its icon and out of reach until the sidebar slides out.
       expect(container.querySelector('input[type="search"]')?.closest("[inert]")).not.toBeNull();
       expect(nav().dataset.state).toBe("rail");
-      act(() => button("Search conversations")!.click());
+      act(() => button("Search recent")!.click());
       expect(nav().dataset.state).toBe("peek");
       expect(document.activeElement).toBe(field());
 
@@ -321,7 +324,7 @@ describe("the history search", () => {
     it("keeps the slid-out sidebar when focus returns to the field before the close it scheduled", async () => {
       runnerWith(loaded);
       const { nav, button, field } = await mount({ collapsed: true });
-      act(() => button("Search conversations")!.click());
+      act(() => button("Search recent")!.click());
       expect(document.activeElement).toBe(field());
       pointerAway();
 
@@ -341,7 +344,7 @@ describe("the history search", () => {
     it("does not close the slid-out sidebar when focus moves from the field to a match, and closes it when focus leaves from there", async () => {
       runnerWith([...loaded, unloaded], loaded);
       const { nav, button, field, links } = await mount({ collapsed: true });
-      act(() => button("Search conversations")!.click());
+      act(() => button("Search recent")!.click());
       pointerAway();
       type(field(), "tcp");
       await settle();
