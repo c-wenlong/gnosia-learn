@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { DRAFT_CHANGED_EVENT, LIST_LIMIT, LISTED_STATES, readHistory } from "@/lib/studio-draft-list";
+import { LIST_LIMIT, LISTED_STATES, readHistory } from "@/lib/studio-draft-list";
 import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
+import { useDraftsWake } from "@/lib/use-drafts-wake";
 
 /** How long typing rests before the runner is asked, so each letter is not a read. */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -137,25 +138,11 @@ export function useHistorySearch(): HistorySearch {
     return () => clearTimeout(timer);
   }, [words, read]);
 
-  useEffect(() => {
-    if (words === "") return;
-    // A turn streams several changes in a breath; one read covers them.
-    let soon: ReturnType<typeof setTimeout> | null = null;
-    const wake = () => {
-      if (current.current === words) void read(words, pages.current);
-    };
-    const changed = () => {
-      if (soon !== null) clearTimeout(soon);
-      soon = setTimeout(wake, 400);
-    };
-    window.addEventListener("focus", wake);
-    window.addEventListener(DRAFT_CHANGED_EVENT, changed);
-    return () => {
-      window.removeEventListener("focus", wake);
-      window.removeEventListener(DRAFT_CHANGED_EVENT, changed);
-      if (soon !== null) clearTimeout(soon);
-    };
+  // The matches can move as the history does: read them again with it.
+  const wake = useCallback(() => {
+    if (current.current === words) void read(words, pages.current);
   }, [words, read]);
+  useDraftsWake(wake, words !== "");
 
   async function showMore() {
     if (loadingMore || words === "") return;

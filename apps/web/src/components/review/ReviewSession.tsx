@@ -14,6 +14,7 @@ import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { cx, TRACK } from "@/components/ui/classes";
 import { scrollBehavior } from "@/lib/motion";
+import { quizKey } from "@/lib/quiz-keys";
 import {
   cardEyebrow,
   cardStats,
@@ -225,16 +226,12 @@ export function ReviewSession({
   useEffect(() => {
     if (item === undefined) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || pending) return;
-      const target = event.target as HTMLElement | null;
-      if (target !== null && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-      // Space and Enter on a focused link or button belong to that control:
-      // Enter on Exit leaves, it does not record the suggested grade.
-      const onControl = target !== null && target.closest("a[href], button:not(:disabled)") !== null;
-
-      const n = Number(event.key);
-      const number = Number.isInteger(n) && n >= 1 && n <= 4 ? n - 1 : null;
-      const confirm = (event.key === " " || event.key === "Enter") && !onControl;
+      const pressed = quizKey(event, pending);
+      if (pressed === null) return;
+      // Space and Enter on a focused link or button belong to that control
+      // (`quizKey`): Enter on Exit leaves, it does not record the suggested grade.
+      const { number } = pressed;
+      const confirm = pressed.space || pressed.enter;
 
       if (item.kind === "recall" && phase === "ask" && confirm) {
         event.preventDefault();

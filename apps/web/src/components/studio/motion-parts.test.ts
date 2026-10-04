@@ -60,6 +60,17 @@ describe("Reveal", () => {
     expect(host.querySelector("button")).toBeNull();
   });
 
+  it("drops its content at once when motion is reduced", () => {
+    document.documentElement.dataset.motion = "reduce";
+    try {
+      const { host, draw } = mount(fold(true));
+      draw(fold(false));
+      expect(host.querySelector("button")).toBeNull();
+    } finally {
+      delete document.documentElement.dataset.motion;
+    }
+  });
+
   it("keeps its content when it opens again mid-fold", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { host, draw } = mount(fold(true));

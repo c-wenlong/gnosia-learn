@@ -1,6 +1,18 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
-import { COMPOSER_PLACEHOLDER, COMPOSER_TEXT, composerBoxHeight, composerHeight, composerKey, modEnterTarget } from "./composer-keys";
+import {
+  COMPOSER_PLACEHOLDER,
+  COMPOSER_TEXT,
+  composerBoxHeight,
+  composerHeight,
+  composerKey,
+  isImeKey,
+  modEnterTarget,
+} from "./composer-keys";
 import { inputClasses } from "./classes";
 
 const key = (over: Partial<Parameters<typeof composerKey>[0]> = {}) =>
@@ -18,6 +30,45 @@ describe("composerKey", () => {
   it("leaves Safari's IME commit alone: keyCode 229 with isComposing already false", () => {
     expect(key({ isComposing: false, keyCode: 229 })).toBe("none");
     expect(key({ keyCode: 13 })).toBe("send");
+  });
+});
+
+describe("isImeKey", () => {
+  it("is true while an input method composes", () => expect(isImeKey({ isComposing: true, keyCode: 13 })).toBe(true));
+  it("is true for Safari's commit, keyCode 229 with isComposing false", () =>
+    expect(isImeKey({ isComposing: false, keyCode: 229 })).toBe(true));
+  it("is false for an ordinary key, and for an event that says neither", () => {
+    expect(isImeKey({ isComposing: false, keyCode: 13 })).toBe(false);
+    expect(isImeKey({})).toBe(false);
+  });
+});
+
+describe("composerKey takes a native event whole", () => {
+  it("reads a KeyboardEvent as it comes, so no caller rebuilds it", () => {
+    const native = { key: "Enter", shiftKey: false, metaKey: true, ctrlKey: false, altKey: false, isComposing: false, keyCode: 13 };
+    expect(composerKey(native)).toBe("mod-send");
+    expect(composerKey({ ...native, keyCode: 229 })).toBe("none");
+    expect(composerKey({ ...native, metaKey: false, altKey: true })).toBe("newline");
+  });
+
+  it("is the one place the IME is asked about: no component tests isComposing or 229 itself", () => {
+    const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
+          const rel = relative(src, path);
+          if (rel === join("components", "ui", "composer-keys.ts")) continue;
+          const text = readFileSync(path, "utf8");
+          // The event's flag, not Lexical's `editor.isComposing()`.
+          if (/\.isComposing\b(?!\()|keyCode\s*===\s*229/.test(text)) offenders.push(rel);
+        }
+      }
+    };
+    walk(src);
+    expect(offenders).toEqual([]);
   });
 });
 
