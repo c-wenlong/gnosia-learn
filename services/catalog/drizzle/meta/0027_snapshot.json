@@ -1,5 +1,5 @@
 {
-  "id": "43f8af02-6804-41e1-af6d-ac8a4dbc5da2",
+  "id": "0eb348d7-696b-4c34-9b8c-e663bcde78bd",
   "prevId": "6ee09b3a-32d4-4264-849c-57e2d2fefb94",
   "version": "7",
   "dialect": "postgresql",
@@ -3161,92 +3161,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.custom_provider": {
-      "name": "custom_provider",
-      "schema": "",
-      "columns": {
-        "owner_id": {
-          "name": "owner_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "base_url": {
-          "name": "base_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "custom_provider_owner_id_learner_id_fk": {
-          "name": "custom_provider_owner_id_learner_id_fk",
-          "tableFrom": "custom_provider",
-          "tableTo": "learner",
-          "columnsFrom": [
-            "owner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "cascade"
-        }
-      },
-      "compositePrimaryKeys": {
-        "custom_provider_owner_id_id_pk": {
-          "name": "custom_provider_owner_id_id_pk",
-          "columns": [
-            "owner_id",
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "custom_provider_id_check": {
-          "name": "custom_provider_id_check",
-          "value": "id ~ '^custom-[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$'"
-        },
-        "custom_provider_label_check": {
-          "name": "custom_provider_label_check",
-          "value": "char_length(label) between 1 and 60"
-        },
-        "custom_provider_base_url_check": {
-          "name": "custom_provider_base_url_check",
-          "value": "char_length(base_url) between 1 and 300 and base_url !~ '/$' and (base_url ~ '^https://[^/@?#[:space:]]+(/[^@?#[:space:]]*)?$' or base_url ~ '^http://(localhost|127[.]0[.]0[.]1|\\[::1\\])(:[0-9]+)?(/[^@?#[:space:]]*)?$')"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.event": {
       "name": "event",
       "schema": "",
@@ -3870,7 +3784,7 @@
       "checkConstraints": {
         "provider_key_provider_check": {
           "name": "provider_key_provider_check",
-          "value": "(provider in ('nvidia', 'gemini', 'openrouter', 'openai', 'anthropic', 'deepseek', 'glm', 'qwen', 'moonshot', 'minimax', 'mimo', 'mistral', 'groq', 'xai') or provider ~ '^custom-[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$')"
+          "value": "provider in ('nvidia', 'gemini', 'openrouter', 'openai', 'anthropic', 'deepseek', 'glm', 'qwen', 'moonshot', 'minimax', 'mimo', 'mistral', 'groq', 'xai')"
         },
         "provider_key_iv_check": {
           "name": "provider_key_iv_check",
@@ -4305,7 +4219,7 @@
       "checkConstraints": {
         "tutor_model_provider_check": {
           "name": "tutor_model_provider_check",
-          "value": "(provider in ('nvidia', 'gemini', 'openrouter', 'openai', 'anthropic', 'deepseek', 'glm', 'qwen', 'moonshot', 'minimax', 'mimo', 'mistral', 'groq', 'xai') or provider ~ '^custom-[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$')"
+          "value": "provider in ('nvidia', 'gemini', 'openrouter', 'openai', 'anthropic', 'deepseek', 'glm', 'qwen', 'moonshot', 'minimax', 'mimo', 'mistral', 'groq', 'xai')"
         },
         "tutor_model_position_check": {
           "name": "tutor_model_position_check",
@@ -4503,6 +4417,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "planner_session_id": {
           "name": "planner_session_id",
           "type": "text",
@@ -4671,6 +4591,10 @@
         "draft_pending_topic_brief_check": {
           "name": "draft_pending_topic_brief_check",
           "value": "pending_topic is null or brief is not null"
+        },
+        "draft_name_check": {
+          "name": "draft_name_check",
+          "value": "name is null or char_length(name) between 1 and 200"
         },
         "draft_turns_check": {
           "name": "draft_turns_check",

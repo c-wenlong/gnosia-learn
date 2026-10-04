@@ -276,7 +276,7 @@ the built-in list does not have (a China-region host, a gateway, a local
 Ollama or LM Studio), by a name, a base URL and a key, from Add provider's
 "Custom provider" choice.
 
-- **Stored as a `custom_provider` row** (migration `0027_custom_provider`):
+- **Stored as a `custom_provider` row** (migration `0028_custom_provider`):
   owner, id `custom-<slug>` made from the name and unique among the
   owner's (`customProviderId`), name, base URL. At most ten per owner. The
   id goes in the same `provider` columns as a built-in's, whose CHECKs now

@@ -165,7 +165,7 @@ export {
   setProgress,
   type ProgressRow,
 } from "./progress";
-export { draftsByIds, recentDrafts, type RecentDraft } from "./drafts";
+export { recentDrafts, type RecentDraft } from "./drafts";
 export { clearRecap, isEmptyRecap, readRecaps, upsertRecap } from "./recap";
 export {
   importLegacyState,

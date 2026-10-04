@@ -10,6 +10,7 @@ import { MentionComposer } from "@/components/studio/StudioComposer";
 import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { DialogHeader, useStudioDialog } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { buttonClasses } from "@/components/ui/classes";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -253,35 +254,39 @@ export function ExtendStart({
             {!opening && words.more !== null && <span>{words.more}</span>}
           </div>
         ) : (
-          <div role="alert" className="flex flex-col gap-3 rounded-xl bg-warn-tint px-4 py-3.5 text-[14px] text-text">
-            <p className="font-semibold">{refused.headline}</p>
-            {refused.detail !== null && <p className="break-words text-[13px] text-text2">{refused.detail}</p>}
-            <div className="flex flex-wrap items-center gap-2">
-              {refused.actions.includes("retry") && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setStartedAt(Date.now());
-                    setNow(Date.now());
-                    void start();
-                  }}
-                >
-                  Try again
-                </Button>
-              )}
-              {refused.actions.includes("canvas") && (
-                <Link href={canvasHref(name)} className={buttonClasses({ variant: "secondary", size: "sm" })}>
-                  Open canvas
-                </Link>
-              )}
-              {refused.actions.includes("close") && (
-                <Button size="sm" variant="ghost" onClick={close}>
-                  Back to the grid
-                </Button>
-              )}
-            </div>
-          </div>
+          <Callout
+            role="alert"
+            title={refused.headline}
+            actions={
+              <>
+                {refused.actions.includes("retry") && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setStartedAt(Date.now());
+                      setNow(Date.now());
+                      void start();
+                    }}
+                  >
+                    Try again
+                  </Button>
+                )}
+                {refused.actions.includes("canvas") && (
+                  <Link href={canvasHref(name)} className={buttonClasses({ variant: "secondary", size: "sm" })}>
+                    Open canvas
+                  </Link>
+                )}
+                {refused.actions.includes("close") && (
+                  <Button size="sm" variant="ghost" onClick={close}>
+                    Back to the grid
+                  </Button>
+                )}
+              </>
+            }
+          >
+            {refused.detail}
+          </Callout>
         )}
       </div>
 

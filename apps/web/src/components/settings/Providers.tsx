@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
 import { Combobox } from "@/components/ui/Combobox";
+import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow } from "@/components/ui/FormRow";
 import { Glyph } from "@/components/ui/Glyph";
 import { Input } from "@/components/ui/Input";
@@ -78,6 +80,16 @@ export function Providers({ view }: { view: ProvidersView }) {
   // While a new key is on its way the form must stay open: the toggle would
   // shut it under a save that is still going to land.
   const [addSaving, setAddSaving] = useState(false);
+  // A deleted provider's row leaves with the refresh, and the focus it held
+  // with it: Add provider, which offers that provider again, takes it once
+  // the new rows have arrived (unless the person has put it somewhere).
+  const focusAdd = useRef(false);
+  useEffect(() => {
+    if (!focusAdd.current) return;
+    focusAdd.current = false;
+    const at = document.activeElement;
+    if (at === null || at === document.body) document.getElementById(`${base}-add`)?.focus();
+  }, [view, base]);
   const addButton = (
     <Button
       id={`${base}-add`}
@@ -101,14 +113,14 @@ export function Providers({ view }: { view: ProvidersView }) {
           : "Your model providers, their keys and their models. The tutor tries each provider's models top to bottom, then the next provider's, and skips a provider with no models."}
       </p>
       {!view.keysReachable && (
-        <p role="status" className="rounded-lg border-2 border-warn bg-warn-tint px-3.5 py-2.5 text-[14px] text-text">
+        <Callout role="status" bordered>
           Your saved keys could not be read: the database is unreachable. The server&apos;s keys still work.
-        </p>
+        </Callout>
       )}
       {!view.chainReachable && (
-        <p role="status" className="rounded-lg border-2 border-warn bg-warn-tint px-3.5 py-2.5 text-[14px] text-text">
+        <Callout role="status" bordered>
           Your models could not be read: the database is unreachable. The tutor is using the built-in defaults.
-        </p>
+        </Callout>
       )}
       <Collapse open={adding} id={`${base}-add-form`}>
         <AddProvider
@@ -139,8 +151,12 @@ export function Providers({ view }: { view: ProvidersView }) {
               usingDefaults={view.usingDefaults}
               full={view.full}
               disabled={!view.keysReachable || !view.chainReachable}
-              // A deleted row takes its own status line with it, so the card says it.
-              onDeleted={(text) => setStatus({ kind: "done", text })}
+              // A deleted row leaves with the refresh, its status line with
+              // it: the card says what happened, and Add provider takes focus.
+              onGone={(text) => {
+                focusAdd.current = true;
+                setStatus({ kind: "done", text });
+              }}
             />
           ))}
         </ul>
@@ -327,7 +343,7 @@ function ProviderRow({
   usingDefaults,
   full,
   disabled,
-  onDeleted,
+  onGone,
 }: {
   row: ProviderRowView;
   /** No provider with models above it: Move up does nothing. */
@@ -337,7 +353,8 @@ function ProviderRow({
   usingDefaults: boolean;
   full: boolean;
   disabled: boolean;
-  onDeleted: (text: string) => void;
+  /** This row was deleted and leaves with the refresh (no server key keeps it listed), with what to say. */
+  onGone: (text: string) => void;
 }) {
   const router = useRouter();
   const base = useId();
@@ -354,6 +371,7 @@ function ProviderRow({
 
   // The control to focus once the change it follows has rendered.
   const focusNext = useRef<string | null>(null);
+  const deleteButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (focusNext.current === null || busy) return;
     document.getElementById(focusNext.current)?.focus();
@@ -409,14 +427,16 @@ function ProviderRow({
   const remove = async () => {
     setStatus({ kind: "busy", text: "Deleting…" });
     const reply = await sendJson<Reply>("DELETE", "/api/learner/tutor-model/provider", { provider: row.id });
+    // Focus after either answer is the fold's (`ConfirmFold`): back to its
+    // Delete when the delete failed, to the row's Delete once it closes, and
+    // to Add provider when the row itself goes (`onGone`).
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-      focusNext.current = `${base}-confirm`;
       return setStatus({ kind: "error", text: failure("deleted", reply) });
     }
     setMode("idle");
     const text = row.server ? `Deleted ${row.label}. The server's key still applies.` : `Deleted ${row.label}.`;
     setStatus({ kind: "done", text });
-    onDeleted(text);
+    if (!row.server) onGone(text);
     router.refresh();
   };
 
@@ -448,7 +468,8 @@ function ProviderRow({
     setDraft("");
     setName(row.label);
     setUrl(row.custom?.baseUrl ?? "");
-    focusNext.current = next === "edit" ? `${base}-key` : next === "delete" ? `${base}-cancel` : `${base}-${mode === "edit" ? "edit" : "delete"}`;
+    // The delete confirm moves focus itself (`ConfirmFold`), in and out.
+    focusNext.current = next === "edit" ? `${base}-key` : next === "delete" || mode === "delete" ? null : `${base}-edit`;
     setMode(next);
   };
 
@@ -503,10 +524,12 @@ function ProviderRow({
             Edit
           </Button>
           <Button
+            ref={deleteButton}
             id={`${base}-delete`}
             variant="secondary"
             size="sm"
             aria-expanded={mode === "delete"}
+            aria-controls={`${base}-delete-fold`}
             disabled={disabled || busy || (saved === null && !hasModels && row.custom === undefined)}
             onClick={() => open(mode === "delete" ? "idle" : "delete")}
           >
@@ -599,22 +622,23 @@ function ProviderRow({
         )}
       </Collapse>
 
-      <Collapse open={mode === "delete"} className="pt-3">
-        <div role="group" aria-label={`Confirm deleting ${row.label}`} className="flex flex-col gap-3 rounded-2xl border-2 border-warn bg-warn-tint p-4">
-          <p className="text-[14px] text-text">
+      <ConfirmFold
+        open={mode === "delete"}
+        id={`${base}-delete-fold`}
+        className="pt-3"
+        label={`Confirm deleting ${row.label}`}
+        message={
+          <>
             Delete {row.label}? {row.custom !== undefined ? "It is removed with your key and its models." : goes(saved !== null, row.models.length)}
             {row.server ? " The server's key stays, so it is still listed." : ""}
-          </p>
-          <div className="flex flex-wrap gap-2.5">
-            <Button id={`${base}-confirm`} variant="warn" size="sm" disabled={busy} onClick={() => void remove()}>
-              Delete
-            </Button>
-            <Button id={`${base}-cancel`} variant="secondary" size="sm" disabled={busy} onClick={() => open("idle")}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Collapse>
+          </>
+        }
+        confirmLabel="Delete"
+        onConfirm={() => void remove()}
+        onCancel={() => open("idle")}
+        busy={busy}
+        returnFocusTo={deleteButton}
+      />
 
       <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-2.5" />
 

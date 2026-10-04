@@ -253,7 +253,7 @@ proposal.
   `review due`. The `learning` plugin parses them and nothing here changes
   one.
 - SM-2, the `review` table, `review grade` and `/review` with its four
-  ratings. `/review` is reached from "Review now" on a concept page and
+  ratings. `/review` is reached from
   All reviews on Home's recall card, whose rows and Start recall button
   open the concepts' chats since phase 3.
 - The Teach session page and the week check. They are the structured path

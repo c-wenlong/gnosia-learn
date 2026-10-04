@@ -257,6 +257,19 @@ export function parseView(value: string | null | undefined): LibraryView {
   return value === "list" ? "list" : "grid";
 }
 
+/**
+ * How the rows are grouped (L4 of docs/proposals/library-by-type-and-day.md):
+ * by the day each was made, the default, by the course and module it sits in,
+ * or by the concept it explains. URL state like the layout, so a link carries
+ * it; there is no stored preference.
+ */
+export type LibraryGroup = "day" | "course" | "concept";
+
+/** Anything but `course` or `concept` is the day, so a hand-typed `?group=` cannot break the page. */
+export function parseGroup(value: string | null | undefined): LibraryGroup {
+  return value === "course" || value === "concept" ? value : "day";
+}
+
 /** Every filter the library's URL can carry. */
 export interface LibraryFilters {
   kind?: string | null;
@@ -270,6 +283,8 @@ export interface LibraryFilters {
   view?: LibraryView | null;
   /** Only the assets the owner starred (`?favorites=1`). */
   favorites?: boolean | null;
+  /** The grouping (`?group=`); the day, the default, is never written. */
+  group?: LibraryGroup | null;
 }
 
 /**
@@ -291,22 +306,24 @@ export function libraryHref(filters: LibraryFilters): string {
   if (q) params.set("q", q);
   if (filters.sort === "title") params.set("sort", "title");
   if (filters.view === "list") params.set("view", "list");
+  if (filters.group === "course" || filters.group === "concept") params.set("group", filters.group);
   const query = params.toString();
   return query === "" ? "/library" : `/library?${query}`;
 }
 
 /** A URL parameter a library menu sets. */
-export type LibraryParam = "kind" | "course" | "topic" | "sort" | "favorites";
+export type LibraryParam = "kind" | "course" | "topic" | "sort" | "favorites" | "group";
 
 /**
  * The filters after one menu pick, every other parameter kept: what the
  * Library's toolbar pushes the `libraryHref` of. `""` is a menu's "All" and
  * clears that filter; the sort takes `parseSort`, so its default is dropped
  * from the URL like any other. Favorites is a toggle: `"1"` turns it on and
- * `""` off.
+ * `""` off. The grouping takes `parseGroup`, so `""` and `"day"` both drop it.
  */
 export function withPick(filters: LibraryFilters, param: LibraryParam, value: string): LibraryFilters {
   if (param === "sort") return { ...filters, sort: parseSort(value) };
+  if (param === "group") return { ...filters, group: parseGroup(value) };
   if (param === "favorites") return { ...filters, favorites: value === "1" || null };
   return { ...filters, [param]: value === "" ? null : value };
 }

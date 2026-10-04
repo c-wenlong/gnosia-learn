@@ -16,6 +16,7 @@ import {
   filterRows,
   libraryHref,
   withPick,
+  parseGroup,
   parseView,
   matchesAll,
   parseSort,
@@ -230,6 +231,30 @@ describe("withPick", () => {
     expect(libraryHref(withPick(first, "sort", "title"))).toBe(
       "/library?kind=video&course=cs3230&q=loop&sort=title&view=list",
     );
+  });
+});
+
+describe("the grouping (?group=)", () => {
+  it("parses course and concept, and anything else as the day", () => {
+    expect(["course", "concept", "day", "topic", "", null, undefined].map(parseGroup)).toEqual([
+      "course",
+      "concept",
+      "day",
+      "day",
+      "day",
+      "day",
+      "day",
+    ]);
+  });
+
+  it("writes a grouping into the URL, never the day, and keeps every other filter through withPick", () => {
+    const filters = { course: "cs3230", view: "list" as const, favorites: true };
+    expect(libraryHref({ ...filters, group: "day" })).toBe("/library?course=cs3230&favorites=1&view=list");
+    const grouped = withPick(filters, "group", "concept");
+    expect(libraryHref(grouped)).toBe("/library?course=cs3230&favorites=1&view=list&group=concept");
+    expect(libraryHref(withPick(grouped, "group", "course"))).toBe("/library?course=cs3230&favorites=1&view=list&group=course");
+    expect(libraryHref(withPick(grouped, "group", ""))).toBe("/library?course=cs3230&favorites=1&view=list");
+    expect(libraryHref(withPick(grouped, "kind", "video"))).toBe("/library?kind=video&course=cs3230&favorites=1&view=list&group=concept");
   });
 });
 

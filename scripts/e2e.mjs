@@ -542,12 +542,31 @@ async function run() {
     await page.waitForURL(`${base}/home`);
   });
 
-  await step('review: Recall these on Home, reveal, rate Good, move on', page, async () => {
+  await step('review: Start recall on Home opens the due concept, and All reviews rates it Good and moves on', page, async () => {
     await go('/home');
     // Home offers a few due cards, never the queue's count (H3 of
-    // docs/proposals/home-page.md); the button opens the review with just them.
-    await page.getByRole('link', { name: /^Recall these/ }).click();
-    await page.waitForURL(/\/review\?only=[^&]+$/);
+    // docs/proposals/home-page.md). Since recall-in-chat phase 3 (#381) each
+    // opens its concept, and Start recall the first, whose tutor opens on a
+    // recall question: the note's check, or one asked of the model, which
+    // with no provider key in this run fails and says so.
+    const recall = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Worth a quick recall' }) });
+    const start = recall.getByRole('link', { name: 'Start recall', exact: true });
+    const href = await start.getAttribute('href');
+    assert(href !== null && /^\/learn\/[^/?]+$/.test(href), `Start recall links to ${href}`);
+    assert((await recall.locator('li a').first().getAttribute('href')) === href, `the first due card does not link to ${href}`);
+    await clickHydrated(page, start);
+    await page.waitForURL(`${base}${href}`);
+    // The seed's due concept (tool-calling) has a check, so the tutor must open
+    // on it; a copy's due concept may have none, and then the model is asked.
+    const opening = SEED
+      ? /Its review is due, so one question before anything else/
+      : /Its review is due, so one question before anything else|This review is due, but the tutor could not open on a recall question/;
+    await main.getByText(opening).first().waitFor();
+
+    // The whole queue stays one link away, and grades as it always did.
+    await go('/home');
+    await clickHydrated(page, recall.getByRole('link', { name: 'All reviews', exact: true }));
+    await page.waitForURL(`${base}/review`);
     const bar = page.getByRole('progressbar', { name: 'Review progress' });
     await bar.waitFor();
     const before = await progressValue(bar);
@@ -573,7 +592,8 @@ async function run() {
     await done.or(show).or(options).first().waitFor();
   });
 
-  await step('review: a Recall these whose cards are no longer due says so', page, async () => {
+  // `?only=` outlived Home's old Recall these link (#381); an old link still lands somewhere honest.
+  await step('review: an ?only= link whose cards are no longer due says so', page, async () => {
     await go('/review?only=not-a-due-card');
     await main.getByRole('heading', { name: 'Already reviewed' }).waitFor();
     await main.getByRole('link', { name: 'All reviews' }).waitFor();
@@ -767,7 +787,7 @@ async function run() {
     await page.waitForFunction(() => document.querySelectorAll('svg[data-domain-graph] [data-faded="true"]').length === 0);
 
     const status = main.getByRole('button', { name: /^Status:/ });
-    const menuLabel = { mastered: 'Mastered', learning: 'Learning', untouched: 'Untouched', ready: 'Ready to learn' }[key];
+    const menuLabel = { mastered: 'Mastered', learning: 'Learning', untouched: 'Not started', ready: 'Ready to learn' }[key];
     await chip.click();
     await page.waitForFunction((k) => new URL(location.href).searchParams.get('filter') === k, key);
     assert((await chip.getAttribute('aria-pressed')) === 'true', 'the pressed chip is not pressed');
@@ -1054,7 +1074,10 @@ async function run() {
     const card = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Pick up where you left off' }) });
     await card.waitFor();
     await card.locator(`a[href^="/courses/${slug}"]`).first().waitFor();
-    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).waitFor();
+    // The concept's own row. Since #379 the session the step above walked is
+    // a row too, and one with no log opens the same concept page, so the
+    // concept is told apart by the kind a screen reader hears first.
+    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).filter({ hasText: /^Concept: / }).waitFor();
     // What the threads open up: at least one group, each a heading over links.
     const next = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Next from here' }) });
     await next.getByRole('heading', { level: 3, name: /^After / }).first().waitFor();
@@ -1076,10 +1099,10 @@ async function run() {
 
   await step('library: a type, a sort and the list layout all land in the URL', page, async () => {
     await go('/library');
-    await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
-    await page.getByRole('listbox', { name: 'Type' }).getByRole('option', { name: /^Note\b/ }).click();
+    // The types are a row of tabs since Library phase 1, links to `?kind=`.
+    await clickHydrated(page, main.getByRole('navigation', { name: 'Type' }).getByRole('link', { name: 'Notes', exact: true }));
     await page.waitForURL(/\/library\?(.*&)?kind=note/);
-    // The sort is a menu in the same toolbar: picking Title keeps the type.
+    // The sort is a bare menu in the toolbar: picking Title keeps the type.
     await clickHydrated(page, main.getByRole('button', { name: 'Sort: Newest' }));
     await page.getByRole('listbox', { name: 'Sort' }).getByRole('option', { name: /^Title\b/ }).click();
     await page.waitForURL((url) => url.searchParams.get('sort') === 'title' && url.searchParams.get('kind') === 'note');
@@ -1087,11 +1110,29 @@ async function run() {
     await main.getByRole('group', { name: 'Layout' }).getByRole('link', { name: 'List' }).click();
     await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('sort') === 'title');
     assert(new URL(page.url()).searchParams.get('kind') === 'note', `the list lost the type: ${page.url()}`);
-    const titles = await page.getByRole('list', { name: 'Assets' }).locator('li a > span:nth-child(2) > span:first-child').allTextContents();
-    assert(titles.length > 1, `the list shows ${titles.length} rows`);
+    // The rows are grouped by the day they arrived, and the sort orders the
+    // rows inside each day. A row's name follows a screen-reader-only "Note: ".
+    const days = await main.getByRole('region', { name: 'Assets' }).locator('section ul').evaluateAll((lists) =>
+      lists.map((list) =>
+        // Since Library phase 2 (#390) the name is the row's link itself, the
+        // first in the row (a source line can link too, after it).
+        [...list.querySelectorAll(':scope > li')].map((item) =>
+          [...(item.querySelector('a')?.childNodes ?? [])]
+            .filter((n) => !(n instanceof Element && n.classList.contains('sr-only')))
+            .map((n) => n.textContent)
+            .join('')
+            .trim(),
+        ),
+      ),
+    );
+    const rows = days.flat();
+    assert(rows.length > 1, `the list shows ${rows.length} rows`);
+    assert(rows.every((t) => t !== ''), 'a row has no name');
     const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
-    const sorted = [...titles].sort(collator.compare);
-    assert(titles.join('|') === sorted.join('|'), `the list is not in title order: ${titles.slice(0, 5).join(', ')}`);
+    for (const titles of days) {
+      const sorted = [...titles].sort(collator.compare);
+      assert(titles.join('|') === sorted.join('|'), `a day is not in title order: ${titles.slice(0, 5).join(', ')}`);
+    }
   });
 
   await step('ask: the box finds a concept, and a miss opens the tutor', page, async () => {
@@ -1142,11 +1183,10 @@ async function run() {
   if (SEED) skip('library: first video plays and saves its place', 'the seed has no videos (D7)');
   else await step('library: first video plays and saves its place', page, async () => {
     await go('/library');
-    // The Type menu: open it, pick Video from the listbox, and the URL is the filter.
-    await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
-    await page.getByRole('listbox', { name: 'Type' }).getByRole('option', { name: /^Video\b/ }).click();
+    // The Videos tab is a link to `?kind=video`, and the URL is the filter.
+    await clickHydrated(page, main.getByRole('navigation', { name: 'Type' }).getByRole('link', { name: 'Videos', exact: true }));
     await page.waitForURL(/\/library\?(.*&)?kind=video/);
-    await page.getByRole('list', { name: 'Assets' }).getByRole('link').first().click();
+    await main.getByRole('region', { name: 'Assets' }).getByRole('link').first().click();
     await page.waitForURL(/\/library\/[^/?]+$/);
     // No button to press: the player saves its own place. Play a moment,
     // pause, and the pause is a save the route has to accept.
@@ -1185,24 +1225,37 @@ async function run() {
   await step('provider keys: save a key, see its last four, remove it', page, async () => {
     // The keys are under Tutor (#342), which `?tab=tutor` opens.
     if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
-    // docs/BYOK.md: a key goes in once and never comes back out. The server
-    // starts with every provider key blank, so Gemini's row offers "Add your key".
-    const row = main.getByRole('listitem').filter({ has: page.getByText('Google Gemini', { exact: true }) });
-    await clickHydrated(page, row.getByRole('button', { name: 'Add your key' }));
-    const fake = 'e2e-not-a-real-gemini-key-000000000000wxyz';
-    await row.getByLabel(/Paste the key/).fill(fake);
+    // docs/BYOK.md: a key goes in once and never comes back out. The Providers
+    // card (#383) lists a provider only once it has a key or a model; the
+    // rest are offered under Add provider. From the seed that is all three,
+    // but a `--copy` may hold some already, so the step takes whichever
+    // provider the form offers first, which it chooses on its own.
+    const add = main.getByRole('button', { name: 'Add provider', expanded: false });
+    assert((await add.count()) > 0, 'every provider is listed already, so none can be added');
+    await clickHydrated(page, add);
+    const form = main.getByRole('form', { name: 'Add a provider' });
+    // A kit menu: the trigger is named "Provider: <current>".
+    const chosen = form.getByRole('button', { name: /^Provider: / });
+    await chosen.waitFor();
+    const label = (await chosen.getAttribute('aria-label'))?.replace(/^Provider: /, '') ?? '';
+    assert(label !== '', 'the provider menu names no provider');
+    const fake = 'e2e-not-a-real-provider-key-000000000000wxyz';
+    await form.getByLabel('API key', { exact: true }).fill(fake);
     const saving = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/learner/provider-key' && r.request().method() === 'POST',
     );
-    await row.getByRole('button', { name: 'Save key' }).click();
+    await form.getByRole('button', { name: 'Add provider' }).click();
     const response = await saving;
     assert(response.status() === 200, `the save answered ${response.status()}`);
     assert(!(await response.text()).includes(fake), 'the save answered with the key in it');
-    await row.getByText(/Your key, ending wxyz\./).waitFor();
+    const row = main.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
+    await row.getByText(/^Your key, ending wxyz\. Saved /).waitFor();
     assert(!(await page.content()).includes(fake), 'the page still holds the key after saving');
-    await row.getByRole('button', { name: 'Remove', exact: true }).click();
-    await row.getByRole('button', { name: 'Remove key', exact: true }).click();
-    await row.getByText('No key. The tutor skips this provider.').waitFor();
+    // Delete opens a confirm; its own Delete takes the key, and with no
+    // server key and no models the row leaves the list, as it was.
+    await row.getByRole('button', { name: 'Delete', exact: true, expanded: false }).click();
+    await row.getByRole('group', { name: `Confirm deleting ${label}` }).getByRole('button', { name: 'Delete', exact: true }).click();
+    await row.waitFor({ state: 'detached' });
   });
 
   await step('theme: Dark adds `dark` to <html>', page, async () => {

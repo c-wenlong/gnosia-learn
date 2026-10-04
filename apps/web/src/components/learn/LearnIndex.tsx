@@ -14,11 +14,13 @@ import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
+import { Callout } from "@/components/ui/Callout";
 import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
 import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
 import type { DomainMapData } from "@/lib/domain-map";
 import { domainOfConcepts, matchCounts } from "@/lib/domain-view";
 import { firstMatch } from "@/lib/map-reading";
+import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
@@ -206,7 +208,7 @@ export function LearnIndex({
           <h1 className="font-display text-[28px] leading-tight font-bold text-text">Learn</h1>
           <p className="text-[12px] text-text2">
             {rows.length} concept{rows.length === 1 ? "" : "s"} · {counts.mastered} mastered · {counts.learning} learning ·{" "}
-            {counts.untouched} untouched
+            {counts.untouched} {MASTERY_BUCKET_LABEL.untouched.toLowerCase()}
           </p>
         </div>
         <SearchField
@@ -245,9 +247,9 @@ export function LearnIndex({
       </div>
 
       {view === "graph" && foldersOnly && (
-        <p role="status" className="rounded-xl bg-warn-tint px-4 py-2 text-[13px] text-text">
+        <Callout role="status">
           Topics could not be read, so concepts are grouped by their note folders until they can.
-        </p>
+        </Callout>
       )}
 
       {view === "table" ? (

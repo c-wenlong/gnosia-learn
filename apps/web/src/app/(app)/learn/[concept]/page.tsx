@@ -28,8 +28,11 @@ import { studioEnabled } from "@/lib/studio";
 
 /**
  * The concept workspace (hi-fi 04): a concept's note and sources on the left,
- * the tutor in the middle, the things made from it on the right, and the two
- * ways out (Teach me, Review now) in the header.
+ * the tutor in the middle, the things made from it on the right, and the way
+ * out (Teach me) in the header. There is no Review now (removed 2026-10-05):
+ * it opened the whole due queue with this concept first, which read as
+ * "review this topic" and was not, and a due card's recall now happens in the
+ * tutor, which opens on it (docs/proposals/recall-in-chat.md, R3).
  *
  * When a session could ask nothing (no check in the note, no tutor model
  * configured) the header says so under Teach me, before the learner starts.
@@ -121,9 +124,6 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
             {/* No "· focus mode" suffix: the session page is the focus layout, and
                 Home's button to the same page already says "Continue teaching". */}
             Teach me
-          </Button>
-          <Button variant="secondary" href={`/review?concept=${w.slug}`}>
-            Review now
           </Button>
         </div>
         {!canAsk && (

@@ -223,6 +223,11 @@ export interface DraftView {
    */
   concept?: DraftConcept | null;
   title: string | null;
+  /**
+   * The name the owner gave the conversation (Rename), shown before `title`
+   * (`conversationTitle`). Optional: a runner from before it does not send it.
+   */
+  name?: string | null;
   transcript: TranscriptEntry[];
   brief: Brief | null;
   /** The seq of the entry carrying the brief in force. Optional: a runner from before phase 3 does not send it. */
@@ -257,6 +262,8 @@ export interface DraftSummary {
   kinds?: DraftKind[];
   state: DraftState;
   title: string | null;
+  /** The owner's name for the conversation, shown before `title`. Optional: a runner from before it does not send it. */
+  name?: string | null;
   source: string | null;
   turns: number;
   costUsd: number | null;
@@ -435,7 +442,7 @@ export function listDrafts(
     nonEmpty?: boolean;
     limit?: number;
     /**
-     * Words to find in a draft's title, first message or concept title, in
+     * Words to find in a draft's name, title, first message or concept title, in
      * any case. The runner applies them before the limit, so a page is a page
      * of matches. Blank is no search and is not sent.
      */
@@ -456,6 +463,18 @@ export function listDrafts(
   }
   const search = params.toString();
   return call<{ drafts: DraftSummary[]; note: string }>(search === "" ? BASE : `${BASE}?${search}`);
+}
+
+/**
+ * `PUT /api/drafts/{id}/name`: the owner's name for the conversation, or
+ * `null` (or a blank name) to take it off, after which the planner's title
+ * shows again. The runner keeps it on the draft, which every page reads.
+ */
+export function renameDraft(draftId: string, name: string | null) {
+  return call<{ draftId: string; name: string | null; title: string | null; changed: boolean; note: string }>(draftPath(draftId, "/name"), {
+    method: "PUT",
+    body: JSON.stringify({ name }),
+  });
 }
 
 /** `GET /api/drafts/{id}`: the whole record. 404 means pruned or never existed (E9). */

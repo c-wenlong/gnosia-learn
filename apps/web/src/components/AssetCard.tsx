@@ -10,6 +10,7 @@ import {
   familyOf,
   type AssetCardRef,
 } from "@/components/asset-meta";
+import { RowMenu } from "@/components/library/RowMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Chip } from "@/components/ui/Chip";
 import { cardClasses, cx } from "@/components/ui/classes";
@@ -17,6 +18,7 @@ import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { useAssetFailure } from "@/components/use-asset-failure";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
+import type { RowMenuSections } from "@/lib/row-menu";
 
 /**
  * One row of the catalog's asset table, as a card in the library grid
@@ -51,6 +53,14 @@ import type { MasteryBucket } from "@/lib/mastery-bucket";
  * a server component that imported `assetKindLabel` from here compiled, built
  * without a word and threw *Attempted to call assetKindLabel() from the server*
  * on the first request. The pure half belongs where both sides may call it.
+ *
+ * **The more button** (L5 of docs/proposals/library-by-type-and-day.md) sits
+ * at the right of the title's row when the Library hands over `menu`, as
+ * Manus's grid card has it, shown on the card's hover and focus (`RowMenu`).
+ * A button cannot live inside a link, so a linked card is not one link: the
+ * title is, and its `::after` is stretched over the whole card, so a press
+ * anywhere on it still opens the asset and the focus ring still rings the
+ * card; the menu sits above that layer.
  */
 
 /** The concept a card names: the first one the asset explains, and how many more. */
@@ -68,6 +78,7 @@ export function AssetCard({
   thumbnailSrc,
   thumbnailStatusHref,
   href,
+  menu,
 }: {
   asset: AssetCardRef;
   /** The first concept this asset explains, resolved against the knowledge base. */
@@ -80,6 +91,8 @@ export function AssetCard({
   thumbnailStatusHref?: string;
   /** Where clicking goes. Without one the card is a description, not a link. */
   href?: string;
+  /** The more menu's items (`rowMenuItems`); no button without them. */
+  menu?: RowMenuSections;
 }) {
   // The failure belongs to the thumbnail that failed, so a new one gets its own
   // attempt: a failed preview swaps the `<img>` out for the panel, so nothing
@@ -157,7 +170,29 @@ export function AssetCard({
         <Chip size="sm">{label}</Chip>
         {meta && <span className="min-w-0 truncate text-[12px] text-text2">{meta}</span>}
       </div>
-      <h3 className={cx("line-clamp-2 break-words text-[14px] leading-snug", nameClass)}>{name.text}</h3>
+      <div className="flex min-w-0 items-start gap-1">
+        <h3 className={cx("min-w-0 flex-1 line-clamp-2 break-words text-[14px] leading-snug", nameClass)}>
+          {href ? (
+            // `next/link`, so opening an asset is an in-app navigation: the
+            // shell stays and the loading frame shows, where a plain anchor
+            // reloaded the whole document and flashed white between pages.
+            <Link
+              href={href}
+              className={cx(
+                "outline-none after:absolute after:-inset-[2px] after:rounded-[20px] after:content-['']",
+                "focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent",
+              )}
+            >
+              {name.text}
+            </Link>
+          ) : (
+            name.text
+          )}
+        </h3>
+        {menu !== undefined && (
+          <RowMenu assetId={asset.id} title={name.text} sections={menu} className="relative z-10 -mt-1.5 -mr-1.5" />
+        )}
+      </div>
       {concept !== undefined ? (
         <p className="flex min-w-0 items-center gap-2 text-[12px] text-text2">
           {conceptIsTitle ? (
@@ -182,19 +217,14 @@ export function AssetCard({
     return <article className={shell}>{body}</article>;
   }
 
-  // `next/link`, so opening an asset is an in-app navigation: the shell
-  // stays and the loading frame shows, where a plain anchor reloaded the
-  // whole document and flashed white between the two pages.
   return (
-    <Link
-      href={href}
+    <article
       className={cx(
         shell,
-        "transition-colors duration-100 hover:border-text3",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        "group/asset relative transition-colors duration-100 hover:border-text3 has-[[aria-expanded=true]]:border-text3",
       )}
     >
       {body}
-    </Link>
+    </article>
   );
 }

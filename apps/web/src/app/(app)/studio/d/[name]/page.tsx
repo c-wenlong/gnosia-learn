@@ -10,13 +10,14 @@ import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
 import { FADE_IN } from "@/components/studio/motion";
 import { ShotView } from "@/components/studio/ShotView";
+import { Banner } from "@/components/ui/Banner";
 import { Input } from "@/components/ui/Input";
+import { Notice } from "@/components/ui/Notice";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
   Button,
   ButtonLink,
   Chip,
-  Notice,
   Spacer,
   StudioStrip,
   VerbNotice,
@@ -206,12 +207,12 @@ export default async function CanvasPage({
       <Strip diagram={diagram} path={path} uncommitted={checkout?.dirty === true} videos={videoAvailability(health.data.video).ok} />
       <JobStrip path={path} stream={panel.stream} />
       {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
-      {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
+      {staleVocabulary !== null && <Banner tone={staleVocabulary.tone}>{staleVocabulary.text}</Banner>}
       {health.data.stale && (
-        <Notice>
+        <Banner>
           The tldrawkc page bundle is older than its source, so this canvas is the previous build.
           Everything still runs.
-        </Notice>
+        </Banner>
       )}
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
@@ -386,20 +387,26 @@ function MirrorProblem({
 }) {
   return (
     <div className="flex h-full items-start justify-center p-8">
-      <div className="w-full max-w-[520px] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-        <h1 className="text-sm font-medium">{headline}</h1>
-        <p className="mt-2 text-sm text-[var(--muted-strong)]">{detail}</p>
-        <div className="mt-4 flex gap-2">
-          <form action={restartMirror}>
-            <input type="hidden" name="file" value={file} />
-            <input type="hidden" name="path" value={path} />
-            <Button type="submit" filled>
-              Restart canvas
-            </Button>
-          </form>
-          <ButtonLink href="/studio">Back to the grid</ButtonLink>
-        </div>
-      </div>
+      <Notice
+        dense
+        level={1}
+        title={headline}
+        className="w-full max-w-[520px]"
+        actions={
+          <>
+            <form action={restartMirror}>
+              <input type="hidden" name="file" value={file} />
+              <input type="hidden" name="path" value={path} />
+              <Button type="submit" filled>
+                Restart canvas
+              </Button>
+            </form>
+            <ButtonLink href="/studio">Back to the grid</ButtonLink>
+          </>
+        }
+      >
+        {detail}
+      </Notice>
     </div>
   );
 }
