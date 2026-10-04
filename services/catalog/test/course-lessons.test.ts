@@ -2,12 +2,13 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, collection, contentRevision, curriculumItem, curriculumItemAsset } from "@self-learn/schema";
+import { asset, collection, collectionItem, contentRevision, curriculumItem, curriculumItemAsset, learner } from "@self-learn/schema";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { parseCourse, VIDEO_ASSET_PREFIXES } from "@self-learn/content";
 
+import { doctor, formatDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
 import { runImportCommand } from "../src/commands/index-command";
 import { runStatus } from "../src/commands/status";
@@ -202,6 +203,65 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
     expect(await scratch.db.select().from(asset).where(eq(asset.id, VIDEO))).toEqual([]);
     const [practice] = await scratch.db.select().from(asset).where(eq(asset.id, "link:zz3000-m1-r2"));
     expect(practice?.resourceType).toBe("practice");
+  });
+
+  it("has the doctor name each listed video that resolves to no video, and each module on a shared topic listing none, counting neither", async () => {
+    const before = await doctor(scratch.db, "scratch");
+    expect(before.danglingVideos).toEqual([
+      { course: "zz3000", module: "zz3000-m1", item: null, id: VIDEO },
+      { course: "zz3000", module: "zz3000-m1", item: "zz3000-m1-t2", id: "video:a-studio-video" },
+    ]);
+    expect(before.sharedTopicWithoutVideos).toEqual([]);
+    // A third module on alpha: m1 lists videos, so only the new one is named.
+    await scratch.db.insert(collection).values({ id: "zz3000-m3", kind: "module", slug: "m3", title: "Module three", parentId: "zz3000", position: 3 });
+    await scratch.db.insert(collectionItem).values({ collectionId: "zz3000-m3", position: 0, topicSlug: "alpha" });
+    try {
+      const shared = await doctor(scratch.db, "scratch");
+      expect(shared.sharedTopicWithoutVideos).toEqual([{ course: "zz3000", module: "zz3000-m3", topic: "alpha" }]);
+      // The empty module is one module-has-item violator; the two reports add nothing.
+      const beyondRules = (r: typeof before) => r.violations - r.rules.reduce((n, rule) => n + rule.violators, 0);
+      expect(beyondRules(shared)).toBe(beyondRules(before));
+      expect(before.danglingVideos.length).toBeGreaterThan(0);
+      const text = formatDoctor(shared);
+      expect(text).toContain(`zz3000     zz3000-m1 lists ${VIDEO}, which is no video in the catalog`);
+      expect(text).toContain("zz3000     zz3000-m1-t2 (zz3000-m1) lists video:a-studio-video");
+      expect(text).toContain("zz3000     zz3000-m3 on alpha");
+    } finally {
+      await scratch.db.delete(collectionItem).where(eq(collectionItem.collectionId, "zz3000-m3"));
+      await scratch.db.delete(collection).where(eq(collection.id, "zz3000-m3"));
+    }
+  });
+
+  it("has the doctor count a topic as shared only between modules one owner can read", async () => {
+    // Another owner's course with a module on the same topic: neither owner
+    // reads the other's module or videos, so nothing falls back across them.
+    await scratch.db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
+    await scratch.db.insert(collection).values([
+      { id: "yy1000", kind: "course", slug: "yy1000", title: "Theirs", parentId: null, position: 9, ownerId: "someone-else" },
+      { id: "yy1000-m1", kind: "module", slug: "m1", title: "Their module", parentId: "yy1000", position: 1, ownerId: "someone-else" },
+    ]);
+    await scratch.db.insert(collectionItem).values({ collectionId: "yy1000-m1", position: 0, topicSlug: "alpha" });
+    try {
+      const report = await doctor(scratch.db, "scratch");
+      expect(report.sharedTopicWithoutVideos).toEqual([]);
+      // A commons module on that topic is read by every owner, so every
+      // module on the topic is its peer, and it lists no video: named.
+      await scratch.db.insert(learner).values({ id: "commons" }).onConflictDoNothing();
+      await scratch.db.insert(collection).values([
+        { id: "cc1000", kind: "course", slug: "cc1000", title: "Commons", parentId: null, position: 10, ownerId: "commons" },
+        { id: "cc1000-m1", kind: "module", slug: "m1", title: "Commons module", parentId: "cc1000", position: 1, ownerId: "commons" },
+      ]);
+      await scratch.db.insert(collectionItem).values({ collectionId: "cc1000-m1", position: 0, topicSlug: "alpha" });
+      const withCommons = await doctor(scratch.db, "scratch");
+      expect(withCommons.sharedTopicWithoutVideos).toContainEqual({ course: "cc1000", module: "cc1000-m1", topic: "alpha" });
+    } finally {
+      await scratch.db.delete(collectionItem).where(eq(collectionItem.collectionId, "cc1000-m1"));
+      await scratch.db.delete(collection).where(eq(collection.id, "cc1000-m1"));
+      await scratch.db.delete(collection).where(eq(collection.id, "cc1000"));
+      await scratch.db.delete(collectionItem).where(eq(collectionItem.collectionId, "yy1000-m1"));
+      await scratch.db.delete(collection).where(eq(collection.id, "yy1000-m1"));
+      await scratch.db.delete(collection).where(eq(collection.id, "yy1000"));
+    }
   });
 
   it("keeps the links in each item's snapshot, and leaves both keys out of an item with neither", async () => {

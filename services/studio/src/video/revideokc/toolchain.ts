@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import { REPO_ROOT } from "../../paths";
+import { scriptShells } from "../script-shells";
 import { discoverToolchain, programAt, toolchainProblems, type Program, type Toolchain } from "../toolchain";
 
 /**
@@ -29,6 +30,8 @@ export interface RevideokcTools {
   venv: string | null;
   /** `<root>/.venv/bin/python`: the interpreter gnosia-audio runs on, for `narrate`, `sidecars` and the clip keys. */
   gnosiaPython: Program | null;
+  /** The shells gnosia-audio's console script needs, resolved: none unless uv wrote it in its `#!/bin/sh` form (`../script-shells.ts`). */
+  scriptShells: string[];
   /** The Chrome binary puppeteer drives, resolved, and the app bundle (or install directory) it runs its helpers from. */
   chrome: { binary: string; bundle: string } | null;
   /** Revideo's own ffmpeg and ffprobe packages, resolved: its exporter runs them. */
@@ -139,6 +142,7 @@ export function discoverRevideokc(): RevideokcTools {
     nodeModules,
     venv,
     gnosiaPython: venv !== null && gnosiaInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
+    scriptShells: venv === null ? [] : scriptShells(path.join(venv, "bin", "gnosia-audio")),
     chrome: findChrome(),
     ffmpegInstaller: pkg("@ffmpeg-installer"),
     ffprobeInstaller: pkg("@ffprobe-installer"),
