@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { PAGE_ENTER } from "@/components/PageLoading";
 import { CourseList } from "@/components/courses/CourseList";
 import { getTags, tagsFor } from "@/data/content";
 import { getCourseCovers } from "@/data/course-covers";
@@ -37,7 +38,7 @@ export default async function CoursesPage() {
     summaries.flatMap((s) => s.topics.map((t) => t.id)),
   );
   return (
-    <div data-layout="app">
+    <div data-layout="app" className={PAGE_ENTER}>
       <CourseList summaries={summaries} tags={usedTags(tags, summaries)} standing={standing} />
     </div>
   );

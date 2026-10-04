@@ -1,9 +1,12 @@
 import { cookies } from "next/headers";
 
 import { AppShell } from "@/components/AppShell";
+import { MotionSeed } from "@/components/settings/MotionSeed";
 import { requireSignedIn } from "@/lib/auth/session";
 import { LearnerProvider } from "@/lib/learner-context";
 import { loadLearnerSnapshot } from "@/lib/learner-store";
+import { asMotionMode, MOTION_COOKIE } from "@/lib/motion";
+import { readStoredMotion } from "@/lib/motion-preference";
 import { SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
 import { studioEnabled } from "@/lib/studio";
 import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
@@ -22,6 +25,10 @@ import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
  * turned an anonymous visitor away; this is the second lock, the one that
  * still holds if a matcher edit ever lets a page through, and it also means a
  * stranger's request never reaches Postgres.
+ *
+ * A browser with no motion cookie (`@/lib/motion`) has its stored motion
+ * preference read once here, beside the snapshot, and `MotionSeed` writes the
+ * cookie, so the root layout can apply "Always reduce motion" from then on.
  */
 export default async function AppLayout({
   children,
@@ -29,7 +36,12 @@ export default async function AppLayout({
   children: React.ReactNode;
 }>) {
   await requireSignedIn();
-  const [cookieStore, { state, reachable }] = await Promise.all([cookies(), loadLearnerSnapshot()]);
+  const cookieStore = await cookies();
+  const motionKnown = asMotionMode(cookieStore.get(MOTION_COOKIE)?.value) !== null;
+  const [{ state, reachable }, storedMotion] = await Promise.all([
+    loadLearnerSnapshot(),
+    motionKnown ? Promise.resolve(null) : readStoredMotion(),
+  ]);
 
   // The cookie wins when both are present: it is what the browser last chose,
   // and it may have been chosen while the database was unreachable.
@@ -38,6 +50,7 @@ export default async function AppLayout({
 
   return (
     <LearnerProvider initialState={initialState} reachable={reachable}>
+      {storedMotion !== null && <MotionSeed mode={storedMotion} />}
       <AppShell studio={studioEnabled()} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
         {children}
       </AppShell>

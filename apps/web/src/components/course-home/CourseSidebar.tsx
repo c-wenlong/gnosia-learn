@@ -24,6 +24,13 @@ import { FOCUS_RING, ROW_HOVER } from "./rows";
  * the toggle names the module on screen, and the list opens under it. The
  * two toggles are two buttons, one per width, because which one shows is a
  * container query and the list's open state has to be separate for each.
+ *
+ * The list glides open and shut the way `Collapse` does (grid rows from 0fr
+ * to 1fr, with a fade), written out here because which of the two states
+ * applies is a container query, which `Collapse` cannot take. A shut list is
+ * `invisible` rather than `inert`, for the same reason: visibility can follow
+ * the container query, and it takes the links out of the tab order and the
+ * accessibility tree just the same, once the fold has finished.
  */
 export function CourseSidebar({
   course,
@@ -88,41 +95,47 @@ export function CourseSidebar({
           </button>
         )}
 
-        <ol
+        <div
           id={listId}
           className={cx(
-            "mt-1 flex-col gap-0.5",
-            narrowOpen ? "flex" : "hidden",
-            wideOpen ? "@3xl:flex" : "@3xl:hidden",
+            "grid transition-[grid-template-rows,opacity,visibility] duration-300 ease-soft motion-reduce:transition-none",
+            narrowOpen ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0",
+            wideOpen
+              ? "@3xl:visible @3xl:grid-rows-[1fr] @3xl:opacity-100"
+              : "@3xl:invisible @3xl:grid-rows-[0fr] @3xl:opacity-0",
           )}
         >
-          {course.modules.map((m, i) => {
-            const s = status.modules[i]!;
-            const here = i === selected;
-            return (
-              <li key={m.id}>
-                <Link
-                  href={moduleHref(course.slug, m.slug)}
-                  aria-current={here ? "page" : undefined}
-                  onClick={() => setNarrowOpen(false)}
-                  className={cx(
-                    "flex min-h-9 items-center gap-2.5 rounded-lg p-2 text-[14px] leading-5 text-text",
-                    here ? "bg-tint font-semibold" : ROW_HOVER,
-                    FOCUS_RING,
-                  )}
-                >
-                  <ModuleMarkIcon mark={moduleMark(s)} fraction={s.total === 0 ? 0 : s.done / s.total} />
-                  <span className="min-w-0 flex-1">
-                    {m.order}. {m.title}
-                  </span>
-                  <span className="shrink-0 text-[12px] font-normal tabular-nums text-text2">
-                    {s.done}/{s.total}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ol>
+          <div className="min-h-0 overflow-clip [overflow-clip-margin:4px]">
+            <ol className="flex flex-col gap-0.5 pt-1">
+              {course.modules.map((m, i) => {
+                const s = status.modules[i]!;
+                const here = i === selected;
+                return (
+                  <li key={m.id}>
+                    <Link
+                      href={moduleHref(course.slug, m.slug)}
+                      aria-current={here ? "page" : undefined}
+                      onClick={() => setNarrowOpen(false)}
+                      className={cx(
+                        "flex min-h-9 items-center gap-2.5 rounded-lg p-2 text-[14px] leading-5 text-text transition-colors duration-150 motion-reduce:transition-none",
+                        here ? "bg-tint font-semibold" : "hover:bg-tint",
+                        FOCUS_RING,
+                      )}
+                    >
+                      <ModuleMarkIcon mark={moduleMark(s)} fraction={s.total === 0 ? 0 : s.done / s.total} />
+                      <span className="min-w-0 flex-1">
+                        {m.order}. {m.title}
+                      </span>
+                      <span className="shrink-0 text-[12px] font-normal tabular-nums text-text2">
+                        {s.done}/{s.total}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </div>
       </nav>
 
       {libraryHref && (

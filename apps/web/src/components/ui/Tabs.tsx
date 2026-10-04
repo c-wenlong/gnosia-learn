@@ -21,6 +21,10 @@ export type TabItem = {
  * keeps it while another tab is open. The tab row follows the WAI-ARIA tabs
  * pattern: one tab in the tab order, arrows, Home and End move between them,
  * and moving selects.
+ *
+ * A panel fades in as it is shown (`animate-fade-in`: a CSS animation runs
+ * again whenever an element goes from `hidden` to shown), and the underline
+ * crossfades from the old tab to the new with the colours.
  */
 export function Tabs({ items, label, className }: { items: TabItem[]; label: string; className?: string }) {
   const base = useId();
@@ -87,7 +91,7 @@ export function Tabs({ items, label, className }: { items: TabItem[]; label: str
           id={`${base}-panel-${item.id}`}
           aria-labelledby={`${base}-tab-${item.id}`}
           hidden={item.id !== current}
-          className="px-3 py-4 sm:px-5"
+          className="animate-fade-in px-3 py-4 motion-reduce:animate-none sm:px-5"
         >
           {item.content}
         </div>
