@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import type { EmbedResolution } from "@/components/NoteProse";
@@ -7,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { TextLink } from "@/components/ui/TextLink";
 import { NoteAndSources } from "@/components/workspace/NoteAndSources";
 import { StudioCards, type StudioAsset } from "@/components/workspace/StudioCards";
 import { dueRecall } from "@/lib/tutor-check";
@@ -145,13 +145,9 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
         tutorAside={
           // The style the tutor is told to use (hi-fi 04's "Learning guide ·
           // concise"), linking to where it is changed.
-          <Link
-            href="/settings?tab=tutor"
-            title="Tutor style, set in Settings"
-            className="rounded-sm text-[12px] text-text3 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
+          <TextLink href="/settings?tab=tutor" title="Tutor style, set in Settings" tone="muted" size="xs" weight="normal">
             {tutorStyleLabel(style)}
-          </Link>
+          </TextLink>
         }
         tutor={
           <TutorChat

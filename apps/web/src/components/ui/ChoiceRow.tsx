@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cx } from "./classes";
+import { cx, FOCUS } from "./classes";
 
 /**
  * Kit `Option`, after Duolingo's choice row: a 56px row with a keyboard-number
@@ -22,7 +22,7 @@ import { cx } from "./classes";
 export type ChoiceState = "idle" | "selected" | "correct" | "wrong";
 
 const STATE: Record<ChoiceState, string> = {
-  idle: "border-border bg-surface text-text hover:bg-surface2",
+  idle: "border-border bg-surface text-text not-disabled:hover:bg-surface2",
   selected: "border-accent bg-tint text-text",
   correct: "border-ok-text bg-ok-tint text-ok-text",
   wrong: "border-warn-text bg-warn-tint text-warn-text",
@@ -59,7 +59,8 @@ export function ChoiceRow({
       aria-pressed={state === "selected" ? true : undefined}
       className={cx(
         "flex min-h-14 w-full items-center gap-3 rounded-xl border-2 px-3.5 py-2 text-left transition-colors duration-100",
-        "disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        "disabled:cursor-default",
+        FOCUS,
         STATE[state],
         className,
       )}

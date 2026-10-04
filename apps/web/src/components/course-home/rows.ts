@@ -23,8 +23,6 @@ export const ROW_TITLE = "block text-[16px] leading-6 text-text";
 
 export const ROW_META = "block text-[14px] leading-5 text-text2";
 
-export const FOCUS_RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-
 /**
  * A control that stretches its hit area over the whole row (an `::after` at
  * inset 0), so the row reads as one target while a button inside it, raised

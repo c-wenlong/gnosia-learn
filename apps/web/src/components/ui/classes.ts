@@ -41,7 +41,12 @@ export const LABEL = "text-[12px] font-semibold leading-4 text-text2";
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent" | "brand";
 export type ButtonSize = "md" | "sm";
 
-const FOCUS =
+/**
+ * The kit's focus ring: a 2px accent outline 2px out, shown to a keyboard
+ * only. Every control takes it from here rather than writing its own copy, so
+ * a change to the ring is one edit.
+ */
+export const FOCUS =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 /**
@@ -58,7 +63,7 @@ const DISABLED = "disabled:cursor-not-allowed disabled:opacity-50";
 
 const BUTTON_BASE = cx(
   "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full font-semibold select-none",
-  "transition-[translate,box-shadow,background-color,opacity] duration-100",
+  "transition-[translate,box-shadow,background-color,opacity] duration-100 motion-reduce:transition-none",
   DISABLED,
   FOCUS,
 );
@@ -113,24 +118,199 @@ export function buttonClasses({
 
 export type ChipSize = "md" | "sm";
 
-/** Kit `Chip`: 34px (28 small) pill, 1px border, accent fill when selected. */
+/**
+ * A chip's colours. `accent`, the default, fills a selected chip with the
+ * accent. `tint` is quieter, for a toggle that sits among other controls (the
+ * studio home's Diagram and Video in the composer's row): a selected one is
+ * the accent tint with accent text, an idle one secondary text. `overlay` is
+ * a chip laid over a picture (a course cover, a diagram), a translucent face
+ * that blurs what is under it so the label stays legible on any image.
+ */
+export type ChipTone = "accent" | "tint" | "overlay";
+
+/** Each tone's selected look, and its idle face and ink apart, so `dashed` can swap the ink alone. */
+const CHIP_TONE: Record<ChipTone, { active: string; face: string; ink: string }> = {
+  accent: { active: "border-accent bg-accent text-white", face: "border-border bg-surface", ink: "text-text" },
+  tint: { active: "border-accent bg-tint text-accent-text", face: "border-border bg-surface", ink: "text-text2" },
+  overlay: {
+    active: "border-accent bg-accent text-white",
+    face: "border-border bg-surface/90 backdrop-blur-sm",
+    ink: "text-text",
+  },
+};
+
+/**
+ * Kit `Chip`: 34px (28 small) pill, 1px border, accent fill when selected.
+ * `dashed` is the "add one" chip at the end of a list (the confirm card's Add
+ * and Add an arrow): a dashed border and secondary text until it is pressed.
+ * A disabled chip dims like a disabled button, and its hover is scoped to an
+ * enabled one so it does not react.
+ */
 export function chipClasses({
   active = false,
   size = "md",
   interactive = true,
+  dashed = false,
+  tone = "accent",
   className,
 }: {
   active?: boolean;
   size?: ChipSize;
   interactive?: boolean;
+  dashed?: boolean;
+  tone?: ChipTone;
   className?: string;
 } = {}): string {
+  const colours = CHIP_TONE[tone];
+  const ink = dashed ? "text-text2" : colours.ink;
   return cx(
     "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border font-medium transition-[color,background-color,border-color,opacity] duration-100 motion-reduce:transition-none",
     size === "md" ? "h-[34px] px-3.5 text-[13px]" : "h-7 px-2.5 text-[12px]",
-    active ? "border-accent bg-accent text-white" : "border-border bg-surface text-text",
-    interactive && !active && "hover:bg-surface2",
+    active ? colours.active : cx(colours.face, ink, dashed && "border-dashed"),
+    // Secondary ink darkens under the pointer with the face.
+    interactive && !active && cx("not-disabled:hover:bg-surface2", ink === "text-text2" && "not-disabled:hover:text-text"),
     interactive && FOCUS,
+    interactive && DISABLED,
+    className,
+  );
+}
+
+export type IconButtonSize = "xs" | "sm" | "md" | "lg" | "xl";
+export type IconButtonShape = "round" | "square";
+export type IconButtonTone = "neutral" | "muted" | "solid" | "onDark";
+
+/** Sides 24, 28, 32, 36 and 40, and how far a 44px touch target reaches past each. */
+const ICON_SIZE: Record<IconButtonSize, { box: string; touch: string }> = {
+  xs: { box: "size-6", touch: "pointer-coarse:after:-inset-2.5" },
+  sm: { box: "size-7", touch: "pointer-coarse:after:-inset-2" },
+  md: { box: "size-8", touch: "pointer-coarse:after:-inset-1.5" },
+  lg: { box: "size-9", touch: "pointer-coarse:after:-inset-1" },
+  xl: { box: "size-10", touch: "pointer-coarse:after:-inset-0.5" },
+};
+
+const ICON_TONE: Record<IconButtonTone, string> = {
+  // A toolbar's or a header's icon: secondary ink, the surface's hover face.
+  neutral: cx(
+    "text-text2 not-disabled:hover:bg-surface2 not-disabled:hover:text-text",
+    "aria-pressed:bg-surface2 aria-pressed:text-text",
+    DISABLED,
+    "focus-visible:outline-accent",
+  ),
+  // A quieter one beside something else's content: a chip's remove.
+  muted: cx(
+    "text-text3 not-disabled:hover:bg-surface2 not-disabled:hover:text-text",
+    "aria-pressed:bg-surface2 aria-pressed:text-text",
+    DISABLED,
+    "focus-visible:outline-accent",
+  ),
+  // The primary button's face: the box composer's Send. Disabled, it turns to
+  // the surface's grey rather than dimming, as Atlas's empty-box disc does.
+  solid: cx(
+    "bg-btn-face text-btn-text not-disabled:hover:opacity-90",
+    "disabled:cursor-not-allowed disabled:bg-surface2 disabled:text-text3",
+    "focus-visible:outline-accent",
+  ),
+  // Over a picture that is dark whatever the theme (the video player's
+  // controls on their black scrim), so white, and a white ring.
+  onDark: cx(
+    "text-white/90 not-disabled:hover:bg-white/15 not-disabled:hover:text-white",
+    DISABLED,
+    "focus-visible:outline-white",
+  ),
+};
+
+/**
+ * Kit icon button: a square or round box holding one glyph, named by its
+ * `aria-label` (`IconButton` sets it and the `title` from one `label`).
+ * `inset` draws the focus ring on the edge rather than 2px out, for a button
+ * against the edge of its container; `touch` reaches a 44px target under a
+ * finger while the face keeps its size.
+ */
+export function iconButtonClasses({
+  size = "lg",
+  shape = "round",
+  tone = "neutral",
+  inset = false,
+  touch = false,
+  className,
+}: {
+  size?: IconButtonSize;
+  shape?: IconButtonShape;
+  tone?: IconButtonTone;
+  inset?: boolean;
+  touch?: boolean;
+  className?: string;
+} = {}): string {
+  const s = ICON_SIZE[size];
+  return cx(
+    "inline-flex shrink-0 items-center justify-center select-none",
+    "transition-[color,background-color,opacity] duration-100 motion-reduce:transition-none",
+    s.box,
+    shape === "round" ? "rounded-full" : "rounded-lg",
+    ICON_TONE[tone],
+    "focus-visible:outline-2",
+    inset ? "focus-visible:outline-offset-0" : "focus-visible:outline-offset-2",
+    touch && cx("relative pointer-coarse:after:absolute pointer-coarse:after:content-['']", s.touch),
+    className,
+  );
+}
+
+export type LinkTone = "accent" | "muted" | "danger" | "inherit";
+export type LinkSize = "inherit" | "xs" | "sm" | "md";
+export type LinkWeight = "normal" | "medium" | "semibold";
+
+const LINK_TONE: Record<LinkTone, string> = {
+  accent: "text-accent-text not-disabled:hover:underline",
+  // Secondary ink that darkens under the pointer: "Keep it", "Exit".
+  muted: "text-text2 not-disabled:hover:text-text not-disabled:hover:underline",
+  danger: "text-danger not-disabled:hover:underline",
+  // The surrounding text's colour, so only the underline marks it as a link
+  // (the store banner's Dismiss): it is always drawn.
+  inherit: "underline",
+};
+
+const LINK_SIZE: Record<LinkSize, string | undefined> = {
+  inherit: undefined,
+  xs: "text-[12px]",
+  sm: "text-[13px]",
+  md: "text-[14px]",
+};
+
+const LINK_WEIGHT: Record<LinkWeight, string> = {
+  normal: "font-normal",
+  medium: "font-medium",
+  semibold: "font-semibold",
+};
+
+/**
+ * Kit text link: words that go somewhere or do something, inside a line or
+ * beside a heading ("See all", "Back to the module", "Show older
+ * conversations"). Underlined under the pointer, always the kit's focus ring.
+ * The same classes serve a `next/link`, an `<a>` and a `<button>`, so a
+ * button that reads as a link looks like one. A disabled one dims; one that
+ * is `pending` (disabled while what it started runs) dims less and shows the
+ * progress cursor rather than the not-allowed one.
+ */
+export function linkClasses({
+  tone = "accent",
+  size = "inherit",
+  weight = "medium",
+  pending = false,
+  className,
+}: {
+  tone?: LinkTone;
+  size?: LinkSize;
+  weight?: LinkWeight;
+  pending?: boolean;
+  className?: string;
+} = {}): string {
+  return cx(
+    "rounded-sm underline-offset-4 transition-colors duration-100 motion-reduce:transition-none",
+    LINK_TONE[tone],
+    LINK_SIZE[size],
+    LINK_WEIGHT[weight],
+    pending ? "disabled:cursor-progress disabled:opacity-70" : DISABLED,
+    FOCUS,
     className,
   );
 }

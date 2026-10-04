@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TextLink } from "@/components/ui/TextLink";
 
 export default function NotFound() {
   return (
@@ -7,12 +7,9 @@ export default function NotFound() {
       <p className="text-[var(--muted-strong)]">
         That course or module does not exist in the shortlist.
       </p>
-      <Link
-        href="/home"
-        className="inline-block text-[var(--accent-strong)] hover:underline"
-      >
+      <TextLink href="/home" className="inline-block">
         Back to Home
-      </Link>
+      </TextLink>
     </div>
   );
 }
