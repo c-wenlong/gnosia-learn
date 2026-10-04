@@ -1,5 +1,4 @@
-import { readFileSync, realpathSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 
 import type { VideoPaths } from "../paths";
@@ -77,23 +76,8 @@ export const CHROME_REGISTER = String.raw`^com\.google\.Chrome\.`;
 /** The small system programs a step starts. Python's `platform` module runs `uname` for kokoro; nothing else is needed. */
 const NARRATE_SYSTEM = ["/bin/sh", "/usr/bin/uname"];
 
-/** The ports file a job's setup writes: `{ "base": 47012 }`. Outside every profile's writes, and outside the agent's reach. */
-export function portsFile(paths: VideoPaths): string {
-  return path.join(paths.job, "ports.json");
-}
-
-export async function writePorts(paths: VideoPaths, base: number): Promise<void> {
-  await writeFile(portsFile(paths), `${JSON.stringify({ base })}\n`, "utf8");
-}
-
-/** The job's base port, from its setup. Throws when setup has not chosen one. */
-export function readPorts(paths: VideoPaths): number {
-  const parsed = JSON.parse(readFileSync(portsFile(paths), "utf8")) as { base?: unknown };
-  if (typeof parsed.base !== "number" || !Number.isInteger(parsed.base) || parsed.base < 1024 || parsed.base > 65534) {
-    throw new ProfileError(`${portsFile(paths)} names no port pair`);
-  }
-  return parsed.base;
-}
+/** The job's ports file and its pair, which every Chrome tool's setup writes the same way (`../ports.ts`). */
+export { portsFile, profilePorts, readPorts, writePorts } from "../ports";
 
 export interface RevideokcProfileInput {
   tools: RevideokcToolchain;
@@ -268,9 +252,4 @@ export function revideokcEnv(kind: ProfileKind, { tools, paths, home, voice, bas
     HF_HUB_CACHE: tools.hfHubCache,
   });
   return env;
-}
-
-/** The ports a profile allows, read back from its text: what a test holds to the job's pair. */
-export function profilePorts(text: string): number[] {
-  return [...text.matchAll(/\(local ip "localhost:(\d+)"\)/g)].map((match) => Number(match[1]));
 }

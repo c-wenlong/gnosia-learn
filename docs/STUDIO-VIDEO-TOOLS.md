@@ -7,8 +7,9 @@ stays the one approval; and the video runner gains a backend per tool, so a
 revideokc video (and later a remotionkc one) is made unattended, inside the
 same kind of per-job sandbox manimkc runs in today.
 
-**Status: proposed, 2026-09-30, and being built in phases; phases 1 to 2c
-are built (2c on 2026-10-03), the paid end-to-end job of 2c still to run.** The owner asked
+**Status: proposed, 2026-09-30, and built in phases; phases 1 to 3 are
+built (2c on 2026-10-03, 3 on 2026-10-04), the paid end-to-end jobs of 2c and
+3 still to run.** The owner asked
 for this after [VIDEO-TOOLS.md](VIDEO-TOOLS.md) (#248) wrote down what each
 tool is for and a routing procedure for agents at a terminal. The one thing
 that could have sunk it, headless Chrome inside the job sandbox, was measured
@@ -442,9 +443,59 @@ Where this differs from the decisions above, and why:
 
 The same, for remotionkc, with the remotionkc session.
 
+**As built.** `backends/remotionkc.ts` is a facade over `video/remotionkc/`,
+as revideokc's is over `video/revideokc/`. What the two TypeScript tools
+share moved out of revideokc's modules, which re-export it so their callers
+and tests are unchanged: the port scheme and the ports file
+(`video/ports.ts`), the source set and its combined hash
+(`video/source-set.ts`, parameterised by the scene file's name), the gate's
+steps 1 to 3 and 10 (`video/ts-gate.ts`, by the scene file, whether a chapter
+may `hold`, and where the sheets are), the parse and `tsc`'s output
+(`video/ts-parse.ts`), and the hostile probe (`video/hostile-probe.ts`).
+
+remotionkc needed four changes of its own first, made against its main at
+7852514, mirroring revideokc#2 and #8: `build --no-narrate` and a `sidecars`
+verb with revideokc's contract; renders made ready for a sandbox
+(`tools/render/sandbox.mjs`); and a render that removes its webpack bundle
+(about 40 MB under the temporary directory, one left per still and build
+before). Measured on the owner's M4 Pro, every allowance below by a render
+failing without it, under the default `STUDIO_HOME` (inside this repository):
+
+| Part | As built |
+| --- | --- |
+| Chrome | Remotion's Chrome Headless Shell, from `node_modules/.remotion` (`npx remotion browser ensure`, once, outside any job), never the system Chrome. It is the build Remotion pins and renders with by default, one binary with no app bundle, and needs one Mach service and its own rendezvous name where revideokc's system Chrome needs thirteen; current Chrome has also dropped the old headless mode Remotion asks a custom executable for. Remotion passes `--no-sandbox` itself |
+| Ports | The jobs' range and scheme are revideokc's (47000 to 48998, a pair per job); remotionkc's doctor takes 46980 to 46988, away from revideokc's, since the two doctors refresh on their own clocks. `REMOTIONKC_PORT` pins Remotion's HTTP server (the bundle and its media proxy) to the base and Chrome's DevTools to the next. Remotion picks a free server port from 3000 and passes `--remote-debugging-port=0` (any port), with no option for either beyond the server's `port`; remotionkc rewrites that one argument as Remotion spawns Chrome and stops a render that launched without it, so an upgrade that changes the launch fails loudly. Chrome speaks DevTools over that port, not a pipe: Remotion's launcher has no pipe mode |
+| The LAN | Remotion's server listens on every address (`::`), and a Seatbelt rule for `localhost:<port>` allows that listen and the local network's connections to it (measured from another address of this machine). No profile rule found keeps it to loopback, since a listen is checked against the port, not the address. So remotionkc listens on 127.0.0.1 itself when `REMOTIONKC_PORT` is set; measured, the job's port answers on loopback and refuses the LAN during a render. The agent's code runs only in Chrome's renderer, which opens no socket of its own |
+| render profile | node; the Headless Shell's folder; Remotion's compositor package (its own ffmpeg and ffprobe); webpack's esbuild binary; TypeScript 7's native `tsc` (the lint); the system ffmpeg and ffprobe the CLI masters and tiles with. Reads the job and remotionkc's `node_modules`. Symlinks only under `render/tmp`, where Remotion links `public/` into its bundle. No unix socket (the Headless Shell keeps no singleton), and Mach: Metal's compiler as an `xpc-service-name` (as a `global-name` the GPU process died and WebGL failed) and Chrome's rendezvous, `org.chromium.Chromium.MachPortRendezvousServer.<pid>`, looked up and registered. No Python, no shell |
+| Config searches | browserslist, which webpack asks for a target, walks up from the checkout reading every `package.json` to the root; the repository's, refused, ended the bundle with EPERM (the class of revideokc's Puppeteer bug). remotionkc bounds it with `BROWSERSLIST_ROOT_PATH` at the checkout, the same answer as before: no config. Remotion's own `package.json` lookup finds the checkout's copy first, so no `.puppeteerrc.json` analogue is needed |
+| Caches | webpack's cache moved from `node_modules/.cache/webpack` to the data root, but is off in a job (`REMOTIONKC_BUNDLE_CACHE=off`): storing it snapshots every loader's resolution, statting each directory above `node_modules` to the root, and the first refused stat drops the store after the work is spent. A bundle then takes about 6 s where a warm cache took 1.6 s. Bundles and Chrome's profile are under `render/tmp` |
+| Telemetry | none: Remotion sends a usage event only when given a license key, and remotionkc passes none; the profile blocks the network anyway |
+| narrate profile | revideokc's, for the same gnosia-audio in remotionkc's own `.venv`; `/bin/sh` and the shell macOS runs as `sh` are allowed only when uv wrote the console script in its `#!/bin/sh` form, which it does for an interpreter path too long for a shebang (measured: a checkout under the session's temporary directory got it, and narration died on "Failed to exec /bin/bash as variant for /bin/sh") |
+| gate profile | revideokc's, but the parse uses the studio's own TypeScript (6), since remotionkc's TypeScript 7 is a native compiler with no JavaScript API; the parse needs only the syntax |
+| Wrapper | `api`, `lint` (the native `tsc`, run directly), `narrate`, `still` (narrate, then `still --no-narrate`), `build` (narrate, `build --no-narrate` at remotionkc's concurrency of three, then `sidecars` in the narrate profile), with revideokc's pipes, held-port check and records |
+| Checkout | `lib/`, `src/`, `tools/`, `package.json`, `tsconfig.json`, `remotion.config.ts` and `requirements-narration.txt` copied; Remotion's markup guides (the `remotion-markup` part of the skill remotionkc vendors) copied to `docs/remotion/` for the agent; `node_modules` and `.venv` linked |
+| Topic | `topic.yml`, `narration.json` from the brief, and `remotionkc new`'s composition with its one word cue taken out (it cued "scene", which a brief's line need not say, and a cue on an unsaid word throws) |
+| Gate | Steps 1 to 3 and 10 as revideokc's, on `composition.tsx`; a chapter's `hold` is refused by name, since remotionkc holds a scene with `extraFrames` in code |
+| Manual | `remotionkc-video` and remotionkc's cue, determinism and gotcha sections rewritten for one command and no network (no `@remotion/google-fonts`, no remote media), `remotionkc api`'s listing, and the doctor's fixture as the worked composition |
+| Doctor | revideokc's checks, on a fixture of a bar chart that springs up on a word with a KaTeX formula, then a lit three.js card whose shadow turns (`@remotion/three`). Under the default `STUDIO_HOME` the whole doctor took 61 s: 19 s to voice two lines in a fresh job cache (the model load is most of it), 40 s for the build (6 s of it the bundle) |
+| Tests | `test/video-remotionkc.test.ts` (31: profiles, environment, ports, source, checkout, scaffold, permissions, wrapper, gate) and `test/video-remotionkc-sandbox.test.ts` (4, real: the probe's 18 attempts blocked, the port pair and no other, the wrapper with its streams on a refused file, and `lint`, `still`, `build` and the gate under a refused `package.json` with a browserslist key above the studio home), 46 s |
+| Catalog | `video put` takes `composition.tsx`, `narration.json`, `.ts`, `.tsx` and `topic.yml` for a brief whose `tool` is remotionkc, and requires the composition and the narration |
+
+Where this differs from the decisions above, and why:
+
+- **D76's table is revideokc's.** remotionkc's profile is narrower on
+  Mach (two rules against fourteen) and has no unix sockets, but its exec
+  list is longer (compositor, esbuild, `tsc`), and its network rule needed a
+  change in the tool rather than the profile (the LAN row).
+- **D80 said "with the remotionkc session".** The remotionkc changes were
+  made here, as commits on a branch of remotionkc for that repository's
+  review, and the submodule pointer moves once they merge (Workflow 1).
+- **A silent remotionkc brief is refused**, as revideokc's is: its build
+  refuses a video with no audio.
+
 ## Open questions
 
-None blocks phase 1. Two for later phases:
+None blocks phase 1. For later work:
 
 1. Whether two jobs of different tools may run at once. The video runner runs
    one job at a time today (`config.ts`); a Chrome render and a ManimGL render
@@ -453,3 +504,8 @@ None blocks phase 1. Two for later phases:
    (the spike did) or install its own. Read-only reuse is what the spike
    measured and costs nothing; an install per job would take minutes and the
    network the profile denies.
+3. Whether revideokc's narrate profile needs the same shells remotionkc's
+   does. It allows `/bin/sh` and not the shell `sh` runs, so a revideokc
+   checkout at a path long enough for uv to write `#!/bin/sh` console scripts
+   would fail its narration the way remotionkc's did before `scriptShells`.
+   The owner's checkout is not at such a path today.

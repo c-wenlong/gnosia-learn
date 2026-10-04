@@ -65,6 +65,21 @@ describe("the capability matrix", () => {
   });
 });
 
+/**
+ * Run `body` as if the studio had no backend for `name`: every tool has one
+ * since phase 3, so the refusal D72 describes is exercised by taking one away
+ * for the length of a test.
+ */
+function withoutBackend(name: string, body: () => void): void {
+  const info = VIDEO_TOOLS.find((tool) => tool.name === name) as { inStudio: boolean };
+  info.inStudio = false;
+  try {
+    body();
+  } finally {
+    info.inStudio = true;
+  }
+}
+
 /** A tool's strength line, as the module states it. */
 const strength = (name: string): string => VIDEO_TOOLS.find((tool) => tool.name === name)?.strength ?? "";
 
@@ -74,7 +89,7 @@ describe("the TOOLS block", () => {
     expect(block.startsWith("-----BEGIN TOOLS-----\n")).toBe(true);
     expect(block).toContain(`manimkc | available here | ${strength("manimkc")}`);
     expect(block).toContain(`revideokc | available here | ${strength("revideokc")}`);
-    expect(block).toContain("remotionkc | not in the studio yet |");
+    expect(block).toContain(`remotionkc | available here | ${strength("remotionkc")}`);
     let at = 0;
     for (const route of VIDEO_TOOL_ROUTES) {
       const next = block.indexOf(`${route.need} | ${route.tool} | ${route.why}`, at);
@@ -89,14 +104,29 @@ describe("the TOOLS block", () => {
     }
   });
 
+  it("says no studio job can be given footage, and tells the planner to ask or animate it", () => {
+    // The footage route names remotionkc, but a studio job has no way to be
+    // handed a clip, and the manual tells the agent to leave out media it
+    // cannot use: without this, a brief asking for footage loses it silently.
+    const media = VIDEO_TOOL_CAPABILITIES.find((row) => row.capability.startsWith("Footage, a screen recording"));
+    expect(media).toMatchObject({ manimkc: "no (nothing can supply it)", remotionkc: "no (nothing can supply it)", revideokc: "no (nothing can supply it)" });
+    expect(VIDEO_TOOL_ROUTES.find((route) => route.need.includes("footage"))?.why).toContain("a studio job cannot be given footage");
+    expect(toolsBlock()).toContain(`${media!.capability} | no (nothing can supply it)`);
+    const prompt = combinedPrompt(["diagram", "video"]).replace(/\s+/g, " ");
+    expect(prompt).toContain("No studio video can be given footage, a screen recording, an image or a sound from outside");
+    expect(prompt).toContain("propose no video brief and ask whether it should be drawn as an animation instead");
+    expect(prompt).toContain("draw that beat as an animation in its `show` and say so");
+  });
+
   it("is what health reports, tool for tool", () => {
     expect(toolsHealth()).toEqual([
       { name: "manimkc", strength: strength("manimkc"), available: true, reason: null },
       { name: "revideokc", strength: strength("revideokc"), available: true, reason: null },
-      { name: "remotionkc", strength: strength("remotionkc"), available: false, reason: "remotionkc is not in the studio yet" },
+      { name: "remotionkc", strength: strength("remotionkc"), available: true, reason: null },
     ]);
     expect(notInStudio("manimkc")).toBeNull();
     expect(notInStudio("revideokc")).toBeNull();
+    expect(notInStudio("remotionkc")).toBeNull();
   });
 
   it("offers a tool only on its own doctor's verdict, once health has the verdicts (D75)", () => {
@@ -108,8 +138,11 @@ describe("the TOOLS block", () => {
       available: false,
       reason: "this machine cannot make revideokc videos right now: toolchain: no Chrome or Chromium was found",
     });
+    expect(health.find((tool) => tool.name === "remotionkc")).toMatchObject({ available: false, reason: "the remotionkc doctor has not finished its first check" });
     // No backend outweighs any verdict.
-    expect(health.find((tool) => tool.name === "remotionkc")).toMatchObject({ available: false, reason: "remotionkc is not in the studio yet" });
+    withoutBackend("remotionkc", () => {
+      expect(toolsHealth({ remotionkc: passing }).find((tool) => tool.name === "remotionkc")).toMatchObject({ available: false, reason: "remotionkc is not in the studio yet" });
+    });
     // A doctor that has not answered yet offers nothing.
     expect(toolsHealth({ manimkc: passing }).find((tool) => tool.name === "revideokc")).toMatchObject({ available: false, reason: "the revideokc doctor has not finished its first check" });
   });
@@ -167,10 +200,12 @@ describe("the brief's tool", () => {
       throw new Error("expected a refusal");
     };
     expect(refusal({ ...base(), tool: "blender" })).toMatchObject({ field: "tool", message: expect.stringContaining("manimkc, remotionkc, revideokc") });
-    const later = refusal({ ...base(), tool: "remotionkc", toolReason: "Real data on a chart" });
-    expect(later.field).toBe("tool");
-    expect(later.message).toContain("remotionkc is not in the studio yet");
-    expect(later.message).toContain("name remotionkc as the runner-up in toolReason");
+    withoutBackend("remotionkc", () => {
+      const later = refusal({ ...base(), tool: "remotionkc", toolReason: "Real data on a chart" });
+      expect(later.field).toBe("tool");
+      expect(later.message).toContain("remotionkc is not in the studio yet");
+      expect(later.message).toContain("name remotionkc as the runner-up in toolReason");
+    });
   });
 
   it("takes revideokc for a narrated video, and refuses it for a silent one", () => {
@@ -181,6 +216,16 @@ describe("the brief's tool", () => {
       beats: scene.beats.map((beat) => ({ ...beat, seconds: 6 })),
     }));
     expect(() => validateVideoBrief({ ...base(), voice: "none", scenes, tool: "revideokc" }, testVocabulary())).toThrow(/revideokc makes narrated videos only/);
+  });
+
+  it("takes remotionkc for a narrated video, and refuses it for a silent one (phase 3)", () => {
+    const made = validateVideoBrief({ ...base(), tool: "remotionkc", toolReason: "Real data on a chart; runner-up manimkc" }, testVocabulary());
+    expect(made.tool).toBe("remotionkc");
+    const scenes = (base().scenes as { name: string; beats: { say: string; show: string; labels: string[] }[] }[]).map((scene) => ({
+      ...scene,
+      beats: scene.beats.map((beat) => ({ ...beat, seconds: 6 })),
+    }));
+    expect(() => validateVideoBrief({ ...base(), voice: "none", scenes, tool: "remotionkc" }, testVocabulary())).toThrow(/remotionkc makes narrated videos only/);
   });
 
   it("refuses a reason with no tool, one too long, and one on two lines", () => {

@@ -35,7 +35,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/STUDIO-MENTIONS.md](docs/STUDIO-MENTIONS.md) | Proposed: choosing what the studio's chat makes with @ tags. The menu, the inline chip and the studio's Lexical `MentionComposer`, tags as data on a message, untagged messages as conversation with one-click suggestions, one live brief per kind and Make both, the combined planner prompt, and "Add from library" as a later phase. Supersedes D51 of STUDIO-VIDEOS.md; ships with video phase 2 |
 | [docs/STUDIO-TUTOR-HANDOFF.md](docs/STUDIO-TUTOR-HANDOFF.md) | Accepted; phase 1 (the runner) and phase 2 (the web app) built, the paid and device checks still open: the concept tutor on `/learn/<concept>` gets the @ composer, and a Diagram or Video tag hands the concept to a new studio conversation (the note and the last tutor turns as data blocks, the message sent on arrival). When tags show, when Lexical loads, the runner change, D64 to D70 |
 | [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the three video tools (manimkc, remotionkc, revideokc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
-| [docs/STUDIO-VIDEO-TOOLS.md](docs/STUDIO-VIDEO-TOOLS.md) | Proposed, being built in phases: the studio picks a video tool. The planner proposes manimkc, remotionkc or revideokc in the brief with a reason (a TOOLS block pinned to VIDEO-TOOLS.md), the card shows it as a switchable chip, the runner gets a backend per tool, and headless Chrome runs inside the job's Seatbelt profile (measured). D71 to D80 |
+| [docs/STUDIO-VIDEO-TOOLS.md](docs/STUDIO-VIDEO-TOOLS.md) | Built in phases, phase 3 (remotionkc) the last: the studio picks a video tool. The planner proposes manimkc, remotionkc or revideokc in the brief with a reason (a TOOLS block pinned to VIDEO-TOOLS.md), the card shows it as a switchable chip, the runner gets a backend per tool, and headless Chrome runs inside the job's Seatbelt profile (measured). D71 to D80 |
 | [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into Postgres and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
 | [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (top bar, tab bar, `data-layout`), the habit data, `/courses`, and the screenshot tool |
@@ -545,16 +545,24 @@ Rules of engagement:
   nothing beside them, which `services/studio/test/video-sandbox.test.ts`
   proves by voicing, timing and keying lines inside the profiles.
 - **A video job runs on its brief's tool's backend** (`services/studio/src/video/backend.ts`,
-  D75 of [`docs/STUDIO-VIDEO-TOOLS.md`](docs/STUDIO-VIDEO-TOOLS.md)): manimkc's
-  or revideokc's (`video/revideokc/`), each with its own profiles, wrapper,
-  gate steps and doctor, and a tool is offered and pressed only on its own
-  doctor's verdict. A revideokc job's Chrome runs with its own sandbox off
-  inside the job profile, which opens exactly the job's two loopback ports
-  (`video/revideokc/ports.ts`); it needs `tools/revideokc` with
-  `node_modules` and `.venv` installed. `vitest.setup.ts` points
-  `REVIDEOKC_ROOT` at nothing, so the real-sandbox suite
-  (`test/video-revideokc-sandbox.test.ts`) takes the submodule, or
-  `STUDIO_TEST_REVIDEOKC_ROOT` from a worktree whose submodule has none.
+  D75 of [`docs/STUDIO-VIDEO-TOOLS.md`](docs/STUDIO-VIDEO-TOOLS.md)): manimkc's,
+  revideokc's (`video/revideokc/`) or remotionkc's (`video/remotionkc/`), each
+  with its own profiles, wrapper, gate steps and doctor, and a tool is offered
+  and pressed only on its own doctor's verdict. A Chrome tool's job runs Chrome
+  with its own sandbox off inside the job profile, which opens exactly the
+  job's two loopback ports (`video/ports.ts`); what the two TypeScript tools
+  share is `video/ports.ts`, `source-set.ts`, `ts-gate.ts`, `ts-parse.ts` and
+  `hostile-probe.ts`. revideokc needs `tools/revideokc` with `node_modules`
+  and `.venv` installed; remotionkc needs `tools/remotionkc` with
+  `node_modules`, Remotion's Chrome Headless Shell (`npx remotion browser
+  ensure` there, since a job cannot download it) and `.venv`. Neither profile
+  can keep a listen on every address off the local network (a loopback port
+  rule allows it, measured), so remotionkc's render listens on 127.0.0.1
+  itself. `vitest.setup.ts` points `REVIDEOKC_ROOT` and `REMOTIONKC_ROOT` at
+  nothing, so the real-sandbox suites
+  (`test/video-revideokc-sandbox.test.ts`, `test/video-remotionkc-sandbox.test.ts`)
+  take the submodule, or `STUDIO_TEST_REVIDEOKC_ROOT` and
+  `STUDIO_TEST_REMOTIONKC_ROOT` from a worktree whose submodule has none.
 - Read [`docs/TLDRAWKC-INTEGRATION.md`](docs/TLDRAWKC-INTEGRATION.md) for the
   design this section is shortened from: the schema, the runner's full
   constraints, the gate, and the edge cases behind each rule above.
