@@ -104,7 +104,8 @@ function usePlace(
       const root = document.documentElement;
       const minWidth = minWidthFromAnchor ? at.width : undefined;
       // The panel's own cap, min(30rem, 70vh), as MENU_PANEL's max-h has it.
-      const cap = Math.min(30 * parseFloat(getComputedStyle(root).fontSize), 0.7 * window.innerHeight);
+      const rem = parseFloat(getComputedStyle(root).fontSize) || 16;
+      const cap = Math.min(30 * rem, 0.7 * window.innerHeight);
       // The whole box: `scrollHeight` leaves out the 2px borders, which put a
       // popover opened above its anchor 4px into the gap under it.
       const height = box.scrollHeight + box.offsetHeight - box.clientHeight;

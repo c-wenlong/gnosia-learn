@@ -200,3 +200,59 @@ describe("Popover's Escape", () => {
     expect(closed).not.toHaveBeenCalled();
   });
 });
+
+describe("Popover's placement", () => {
+  it("sits under its anchor at fixed coordinates, and follows it when the anchor or the box changes size", () => {
+    let observed: (() => void) | null = null;
+    const watched: Element[] = [];
+    const original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(run: () => void) {
+        observed = run;
+      }
+      observe(target: Element) {
+        watched.push(target);
+      }
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    // A 1024 by 768 window and a box 200 wide and 150 tall, as a browser would lay them out.
+    const root = document.documentElement;
+    const sizes: Array<[object, string, number | (() => number)]> = [
+      [root, "clientWidth", 1024],
+      [root, "clientHeight", 768],
+      [HTMLElement.prototype, "offsetWidth", function (this: HTMLElement) { return this.dataset.panel ? 200 : 0; } as unknown as () => number],
+      [HTMLElement.prototype, "offsetHeight", function (this: HTMLElement) { return this.dataset.panel ? 150 : 0; } as unknown as () => number],
+      [HTMLElement.prototype, "clientHeight", function (this: HTMLElement) { return this.dataset.panel ? 146 : 0; } as unknown as () => number],
+      [HTMLElement.prototype, "scrollHeight", function (this: HTMLElement) { return this.dataset.panel ? 146 : 0; } as unknown as () => number],
+    ];
+    const saved = sizes.map(([target, key]) => [target, key, Object.getOwnPropertyDescriptor(target, key)] as const);
+    for (const [target, key, value] of sizes) {
+      Object.defineProperty(target, key, { configurable: true, get: typeof value === "function" ? value : () => value });
+    }
+    try {
+      const { anchor, panel } = mount(createElement(Menu, { name: "a", closed: () => undefined }));
+      let rect = { top: 100, bottom: 132, left: 40, right: 140, width: 100, height: 32 };
+      anchor("a").getBoundingClientRect = () => rect as DOMRect;
+      act(() => anchor("a").click());
+      const box = panel("a")!;
+      expect(watched).toEqual([box, anchor("a")]);
+      expect([box.style.top, box.style.left]).toEqual(["140px", "40px"]);
+      expect(box.className).toContain("origin-top-left");
+
+      // The anchor moves (a row above it grew): the observer places the box again.
+      rect = { top: 600, bottom: 632, left: 900, right: 1000, width: 100, height: 32 };
+      act(() => observed!());
+      // No room under it, so over it, flush: 600 - 8 - 150; and shifted left to 1024 - 16 - 200.
+      expect([box.style.top, box.style.left]).toEqual(["442px", "808px"]);
+      expect(box.dataset.side).toBe("top");
+      expect(box.className).toContain("origin-bottom-left");
+    } finally {
+      for (const [target, key, descriptor] of saved) {
+        if (descriptor === undefined) delete (target as Record<string, unknown>)[key];
+        else Object.defineProperty(target, key, descriptor);
+      }
+      globalThis.ResizeObserver = original;
+    }
+  });
+});
