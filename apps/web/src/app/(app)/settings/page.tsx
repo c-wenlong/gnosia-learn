@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { ProviderKeys } from "@/components/settings/ProviderKeys";
 import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
-import { parseSettingsTab } from "@/components/settings/tabs";
 import { TutorModels } from "@/components/settings/TutorModels";
 import { getAllTopicIds, getCourses } from "@/data/courses";
 import { currentOwner } from "@/lib/owner";
@@ -31,14 +30,9 @@ export const metadata: Metadata = { title: "Settings" };
  * holds a model.
  *
  * The cards are grouped into tabs (General, Profile, Tutor, Data) so the page
- * is one short group at a time; `?tab=` opens one.
+ * is one short group at a time; `?tab=` opens one, read by `SettingsTabs`.
  */
-export default async function SettingsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tab?: string | string[] }>;
-}) {
-  const tab = parseSettingsTab((await searchParams).tab);
+export default async function SettingsPage() {
   const owner = await currentOwner();
   const [settings, courses, keys] = await Promise.all([loadSettings(), getCourses(), loadProviderKeys(owner)]);
   const models = await loadTutorModels(owner, keys);
@@ -57,7 +51,6 @@ export default async function SettingsPage({
     <div data-layout="app" className="flex max-w-[1084px] flex-col gap-4">
       <h1 className="font-display text-[28px] leading-tight font-bold text-text">Settings</h1>
       <SettingsTabs
-        initial={tab}
         sections={[
           { id: "general", label: "General", glyph: "sliders", content: <GeneralSettings settings={settings} /> },
           { id: "profile", label: "Profile", glyph: "person", content: <ProfileSettings /> },

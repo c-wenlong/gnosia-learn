@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { SettingsTabs, type SettingsSection } from "./SettingsTabs";
 import { parseSettingsTab, settingsHref } from "./tabs";
+
+// The address as Next's router reports it, which Next keeps in step with
+// `replaceState`; here it is read straight from jsdom's location.
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(window.location.search) }));
+
+const { SettingsTabs } = await import("./SettingsTabs");
+type SettingsSection = import("./SettingsTabs").SettingsSection;
 
 /**
  * The Settings tabs: `?tab=` picks the open one, a press or an arrow moves it
@@ -13,6 +19,9 @@ import { parseSettingsTab, settingsHref } from "./tabs";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom has no matchMedia; a narrow screen, which never changes.
+  window.matchMedia = ((query: string) =>
+    ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList);
 });
 
 const SECTIONS: SettingsSection[] = [
@@ -28,11 +37,16 @@ afterEach(() => {
   window.history.replaceState(null, "", "/settings");
 });
 
+/** Mount at `/settings?tab=<initial>`; `draw(tab)` is a navigation to that tab's address while the page is open. */
 function mount(initial: SettingsSection["id"]) {
+  window.history.replaceState(null, "", settingsHref(initial));
   const container = document.createElement("div");
   document.body.append(container);
   const root: Root = createRoot(container);
-  const draw = (tab: SettingsSection["id"]) => act(() => root.render(createElement(SettingsTabs, { sections: SECTIONS, initial: tab })));
+  const draw = (tab: SettingsSection["id"]) => {
+    window.history.replaceState(null, "", settingsHref(tab));
+    act(() => root.render(createElement(SettingsTabs, { sections: SECTIONS })));
+  };
   draw(initial);
   mounted.push(() => {
     act(() => root.unmount());
@@ -97,9 +111,22 @@ describe("SettingsTabs", () => {
     expect(shown()).toEqual(["general body"]);
   });
 
-  it("follows a new tab from the server, as a link to another tab hands it", () => {
+  it("follows a link to another tab while the page is open", () => {
     const { draw, shown } = mount("general");
     draw("tutor");
     expect(shown()).toEqual(["tutor body"]);
+  });
+
+  it("goes back to General on a link to the bare path after a press chose another tab", () => {
+    const { draw, tabs, shown } = mount("general");
+    act(() => tabs()[2].click());
+    expect(shown()).toEqual(["tutor body"]);
+    draw("general");
+    expect(shown()).toEqual(["general body"]);
+  });
+
+  it("says the row is horizontal when the screen is narrow", () => {
+    const { container } = mount("general");
+    expect(container.querySelector('[role="tablist"]')?.getAttribute("aria-orientation")).toBe("horizontal");
   });
 });

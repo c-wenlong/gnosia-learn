@@ -1,11 +1,12 @@
 "use client";
 
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import { useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { cx } from "@/components/ui/classes";
 
-import { settingsHref, type SettingsTab } from "./tabs";
+import { parseSettingsTab, settingsHref, type SettingsTab } from "./tabs";
 
 export type SettingsSection = { id: SettingsTab; label: string; glyph: GlyphName; content: ReactNode };
 
@@ -19,20 +20,26 @@ export type SettingsSection = { id: SettingsTab; label: string; glyph: GlyphName
  * typed or a model list being edited survives a look at another tab. The
  * open tab is in the address (`?tab=`, General as the bare path) through
  * `replaceState`, so a reload or a link opens it and the back button does not
- * step through tabs. The tab row follows the WAI-ARIA tabs pattern: one tab
+ * step through tabs. The address is what decides: Next keeps
+ * `useSearchParams` in step with `replaceState`, so a link to the page
+ * already open (the account menu's bare `/settings` while Tutor shows)
+ * changes the tab too. The tab row follows the WAI-ARIA tabs pattern: one tab
  * in the tab order, the arrows (either pair, since the row turns into a
  * column), Home and End move between them, and moving selects.
  */
-export function SettingsTabs({ sections, initial }: { sections: SettingsSection[]; initial: SettingsTab }) {
+export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
   const base = useId();
-  const [selected, setSelected] = useState(initial);
-  // A link to another tab while the page is open (`/settings?tab=tutor` from
-  // the tutor's style link) hands a new `initial`; follow it.
-  const [seen, setSeen] = useState(initial);
-  if (initial !== seen) {
-    setSeen(initial);
-    setSelected(initial);
+  const asked = parseSettingsTab(useSearchParams()?.get("tab") ?? undefined);
+  // A press sets the tab at once rather than waiting for the address to come
+  // back round; any change of address after that (a link, the press's own
+  // `replaceState`) sets it again.
+  const [selected, setSelected] = useState(asked);
+  const [seen, setSeen] = useState(asked);
+  if (asked !== seen) {
+    setSeen(asked);
+    setSelected(asked);
   }
+  const vertical = useSyncExternalStore(onWideChange, isWide, () => false);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
   function choose(id: SettingsTab) {
@@ -58,6 +65,7 @@ export function SettingsTabs({ sections, initial }: { sections: SettingsSection[
       <div
         role="tablist"
         aria-label="Settings"
+        aria-orientation={vertical ? "vertical" : "horizontal"}
         onKeyDown={onKeyDown}
         className={cx(
           "flex gap-1 overflow-x-auto border-b-2 border-border [scrollbar-width:none]",
@@ -109,4 +117,17 @@ export function SettingsTabs({ sections, initial }: { sections: SettingsSection[
       ))}
     </div>
   );
+}
+
+/** The `xl` breakpoint, where the tab row becomes a column. */
+const WIDE = "(min-width: 1280px)";
+
+function isWide(): boolean {
+  return window.matchMedia(WIDE).matches;
+}
+
+function onWideChange(callback: () => void): () => void {
+  const query = window.matchMedia(WIDE);
+  query.addEventListener("change", callback);
+  return () => query.removeEventListener("change", callback);
 }
