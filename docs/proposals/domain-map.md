@@ -105,6 +105,29 @@ preview, so what shows after it is the filter alone, until the pointer or
 the focus comes back. The chips wrap, so a phone does not scroll sideways.
 Taken from [ResearchRabbit's legend](../design/reference/researchrabbit/graph.md).
 
+**D10. Labels keep their size on screen, and the ones that collide are
+culled.** As in [ResearchRabbit](../design/reference/researchrabbit/graph.md),
+a label is drawn at 12.5 layout units or at 11px on screen, whichever is
+larger, measured from the picture's drawn width. Labels are then placed
+greedily in priority order: the hovered concept (always drawn), the
+selected one, the ones kept lit (by the hover, a topic's title or a legend
+chip, D5 and D9), then mastered, learning and
+ready to learn, then by how many drawn edges lead from the concept, then by
+id. A label that would overlap one already placed, another concept's dot or
+a topic's title is not drawn. Its dot stays, its full title is on the hover
+plate, and its accessible name is unchanged. The edges of a culled concept
+run to its dot, and a label near the frame is pushed inside it. Labels fade
+as they come and go. With the text no longer the limit, the picture is
+drawn down to 0.35 of its layout size before it scrolls in its card. That
+is the scale where a two-line 11px label still fits between one layer and
+the next, and the owner's widest domains fit a 390px phone. Measured on
+`self_learn` on 2026-10-05: at 1440 by 900 every domain draws every label;
+at 390 wide, 36 of the 56 in algorithms, 29 of 43 in computer architecture
+and 16 of 27 in machine learning, with no domain scrolling sideways but
+computer architecture (6px). A label's width is the sum of Figtree's
+measured glyph widths, so a line of wide letters is not undercounted. Hover and drag frames held at 16.7 ms, and one
+culling pass over 60 labels takes about 20 µs.
+
 ## Phases
 
 | Phase | What ships | Done when |
