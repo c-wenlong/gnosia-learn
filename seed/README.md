@@ -21,7 +21,7 @@ own, [COURSES.md](COURSES.md).
 | --- | --- | --- |
 | Topics | 5, in 4 domains | `vector-and-linear-algebra-basics`, `transformer-architecture-and-training`, `agent-tool-use-and-reasoning-loops`, `agent-memory-and-state`, `tomasulo-algorithm` |
 | Tags | 2 | `agentic-ai`, `transformers`: the course's own |
-| Courses | 1, with 2 modules | `cp4284`, cut to `cp4284-m1` and `cp4284-m3`, the modules filed under those topics: 5 items, 4 links, 8 concept links, and its cover photo (`cp4284.cover.webp`) |
+| Courses | 1, with 2 modules | `cp4284`, cut to `cp4284-m1` and `cp4284-m3`, the modules filed under those topics: 5 items, 4 links (the ReAct paper placed on its lesson with `lessons:`, the one edit made to the cut by hand, so the export format's lesson links have a case in the seed), 8 concept links, and its cover photo (`cp4284.cover.webp`) |
 | Concept notes | 11 | every note filed under those topics, with their 13 prerequisites |
 | Session logs | 1 | `2026-08-19-react-agents` |
 | Diagrams | 1 | `vector-as-a-list-of-numbers`, its `.tldr` and its `.svg` |

@@ -15,6 +15,7 @@ import {
   conceptCurriculumItem,
   conceptPrerequisite,
   curriculumItem,
+  curriculumItemAsset,
   curriculumItemTopic,
   diagram,
   indexRun,
@@ -176,6 +177,7 @@ const LINK_ORDER = [
   "assetDerivation",
   "curriculumItemTopic",
   "conceptCurriculumItem",
+  "curriculumItemAsset",
   "mirror",
 ] as const;
 type LinkName = (typeof LINK_ORDER)[number];
@@ -202,6 +204,7 @@ const TABLES = {
   assetDerivation,
   curriculumItemTopic,
   conceptCurriculumItem,
+  curriculumItemAsset,
   topicRelation,
   manimkcTopic,
   collectionTag,
@@ -296,6 +299,12 @@ const LINK_ENDS: Record<LinkName, { parent: LinkEnd; far: LinkEnd[]; ownColumn: 
     far: [{ column: "conceptSlug", entity: "concept" }],
     ownColumn: false,
     keys: [["conceptSlug", "curriculumItemId"]],
+  },
+  curriculumItemAsset: {
+    parent: { column: "curriculumItemId", entity: "curriculumItem" },
+    far: [{ column: "assetId", entity: "asset" }],
+    ownColumn: false,
+    keys: [["curriculumItemId", "assetId"]],
   },
   mirror: { parent: { column: "assetId", entity: "asset" }, far: [], ownColumn: false, keys: [["assetId", "destination"]] },
 };

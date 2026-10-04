@@ -54,16 +54,20 @@ modules:
     title: Foundations of HCI
     order: 1
     topic: usability-and-interaction-design   # a topic slug (catalog topic ls)
+    videos:                      # optional: videos for the whole module, by asset id
+      - manimkc:out/hci/cs2111/week-01/week_01_foundations.mp4
     topics:
       - id: cs2111-m1-t1         # permanent: learner progress keys on it
         title: What HCI is
         concepts: [...]          # optional: concept note ids, in teaching order
         subtopics: [...]         # the reading list, display only
+        videos: [...]            # optional: videos for this lesson, by asset id
     resources:
       - id: cs2111-m1-r1
         title: ...
         url: https://...
-        type: book               # paper | docs | video | book | other
+        type: book               # paper | docs | video | book | other | practice
+        lessons: [cs2111-m1-t1]  # optional: the lessons of this module it goes with
 ```
 
 **Ids are permanent.** Learner progress, notes and recaps are keyed by topic id
@@ -93,6 +97,28 @@ refuses any other, so no path is ever built out of what a file says.
 `course import` of a single file carries the cover over and refuses a
 `cover:` that differs from the course's; `catalog course cover` is the one
 way to set, replace or clear it ([docs/CURRICULUM.md](../docs/CURRICULUM.md)).
+
+**`lessons:` places a reading on lessons.** It lists items (`topics[].id`)
+of the reading's own module, in any order you like; the order is kept. A
+reading with no `lessons:` is module material, read alongside the whole week.
+The reader refuses an id that is no item of the module (naming the module it
+belongs to, when it is another one's), an id listed twice, and the key
+written with nothing in it. In the catalog each entry is a
+`curriculum_item_asset` row, part of the lesson's revision, so placing a
+reading is a revision of each lesson it moved. Use `type: practice` for
+something to do rather than read (a problem set, a LeetCode link): the module
+path puts it after the lessons, not under "Read alongside".
+
+**`videos:` lists videos by catalog asset id**, on a module (the whole week)
+or on a lesson. An id is a video tool's or a studio video's: `manimkc:`,
+`remotionkc:`, `revideokc:` or `video:`, then the rest of the id as `catalog
+asset ls` shows it. Only the shape is checked at import, never that the video
+exists, because the courses import runs before the video tools and a clone may
+have none of them; a page leaves an id it cannot read off the path. A video
+may appear once per module, across the module's list and its lessons' lists,
+and a list written with nothing in it is refused. The lists are kept as
+written: a lesson's in `curriculum_item.videos`, a module's in its
+`metadata.videos`.
 
 **`concepts:` on every item.** Each item names the concept notes that teach it,
 filed under the module's topic. `npm run catalog -- doctor` lists every item
