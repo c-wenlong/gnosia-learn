@@ -174,6 +174,34 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(Buffer.from(await response.arrayBuffer()).equals(VIDEO)).toBe(true);
   });
 
+  it("saves the file under its title with ?download=1, the bytes and the other headers unchanged", async () => {
+    const response = await FILE(
+      new Request(`${ORIGIN}/api/assets/${encodeURIComponent(VIDEO_ID)}/file?download=1`),
+      { params: Promise.resolve({ id: VIDEO_ID }) },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="Demo.mp4"');
+    expect(response.headers.get("content-type")).toBe("video/mp4");
+    expect(response.headers.get("content-security-policy")).toContain("sandbox");
+    expect(Buffer.from(await response.arrayBuffer()).equals(VIDEO)).toBe(true);
+
+    // Anything but 1 is the inline answer every embed relies on.
+    const inline = await FILE(
+      new Request(`${ORIGIN}/api/assets/${encodeURIComponent(VIDEO_ID)}/file?download=yes`),
+      { params: Promise.resolve({ id: VIDEO_ID }) },
+    );
+    expect(inline.headers.get("content-disposition")).toBe('inline; filename="demo.mp4"');
+  });
+
+  it("keeps the attachment on a Range request for a download", async () => {
+    const response = await FILE(
+      new Request(`${ORIGIN}/api/assets/${encodeURIComponent(VIDEO_ID)}/file?download=1`, { headers: { range: "bytes=0-9" } }),
+      { params: Promise.resolve({ id: VIDEO_ID }) },
+    );
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="Demo.mp4"');
+  });
+
   it("answers a Range request with 206 and exactly that slice", async () => {
     const response = await call(FILE, "file", VIDEO_ID, { range: "bytes=100-199" });
     expect(response.status).toBe(206);

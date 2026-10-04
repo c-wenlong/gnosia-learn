@@ -29,6 +29,15 @@ vi.mock("@/data/courses", () => ({ getCourses: async () => [] }));
 // search form and the layout switch. Its other props (the tabs, the menus)
 // are recorded, so a test can read what the page handed it.
 const toolbar = vi.hoisted(() => vi.fn());
+// The row menu is a client component that needs the app router; a stand-in
+// records the items the page decided for each row.
+const rowMenu = vi.hoisted(() => vi.fn());
+vi.mock("@/components/library/RowMenu", () => ({
+  RowMenu: (props: { assetId: string }) => {
+    rowMenu(props);
+    return createElement("span", { "data-row-menu": props.assetId });
+  },
+}));
 vi.mock("@/components/library/LibraryToolbar", () => ({
   LibraryToolbar: (props: { heading: ReactNode; search: ReactNode; layout: ReactNode }) => {
     toolbar(props);
@@ -141,11 +150,10 @@ function currentLayout(html: string): { href: string; label: string } | null {
   return { href: link[1].match(/href="([^"]*)"/)?.[1] ?? "", label: link[1].match(/aria-label="([^"]*)"/)?.[1] ?? "" };
 }
 
-/** The headings of the day groups, in order, as "label (count)". */
-function dayHeadings(html: string): string[] {
-  return [...html.matchAll(/<h2 id="day-[^"]*"[^>]*>(.*?)<span[^>]*>\((\d+)\)<\/span><\/h2>/g)].map(
-    ([, label, n]) => `${label} (${n})`,
-  );
+/** The headings of the groups, in order, as "label (count)", a course's title after its code. */
+function dayHeadings(html: string, level: "h2" | "h3" = "h2"): string[] {
+  const heading = new RegExp(`<${level}(?: [^>]*)?>((?:(?!<${level}).)*?)<span[^>]*>\\((\\d+)\\)</span></${level}>`, "g");
+  return [...html.matchAll(heading)].map(([, label, n]) => `${label.replace(/<[^>]*>/g, "").trim()} (${n})`);
 }
 
 describe("/library", () => {
@@ -157,6 +165,7 @@ describe("/library", () => {
     vi.resetModules();
     vi.stubEnv("HABIT_TIME_ZONE", "UTC");
     toolbar.mockClear();
+    rowMenu.mockClear();
     loadLibrary.mockResolvedValue({
       rows: ROWS,
       counts: [
@@ -308,18 +317,72 @@ describe("/library", () => {
     expect(html).toContain("1 of 3 files · 1 starred companion file");
   });
 
-  it("does not read the stars when the filter is off", async () => {
+  it("reads the stars once with the filter off too, for the rows' menus", async () => {
     await render();
-    expect(loadFavorites).not.toHaveBeenCalled();
+    expect(loadFavorites).toHaveBeenCalledTimes(1);
   });
 
   it("says how to star something when nothing is starred, and says so when the stars cannot be read", async () => {
     loadFavorites.mockResolvedValueOnce(new Set());
-    expect(await render({ favorites: "1" })).toContain("Nothing is starred yet. Press Favorite on an asset");
+    expect(await render({ favorites: "1" })).toContain("Nothing is starred yet. Press Favorite in a row");
 
     loadFavorites.mockResolvedValueOnce(null);
     const down = await render({ favorites: "1" });
     expect(down).toContain("Your stars could not be read just now");
     expect(down).toContain("No assets match");
+  });
+
+  it("groups by course with ?group=course, a heading per course and its modules inside, the rest last", async () => {
+    const html = await render({ group: "course", view: "list" });
+    expect(dayHeadings(html)).toEqual(["CS2106 Operating Systems (1)", "No course (3)"]);
+    expect(dayHeadings(html, "h3")).toEqual(["Week 7: Virtual memory (1)"]);
+    // A search keeps the grouping.
+    expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="group"[^>]*value="course"/);
+    // The layout switch carries it too.
+    expect(html).toContain('href="/library?group=course"');
+  });
+
+  it("groups by concept with ?group=concept, in the prerequisite graph's order, with no concept last", async () => {
+    const html = await render({ group: "concept" });
+    expect(dayHeadings(html)).toEqual(["Paging (1)", "The TLB (1)", "No concept (2)"]);
+    // The concept heading carries its mastery dot.
+    const heading = html.match(/<h2 id="group-concept-paging".*?<\/h2>/)?.[0] ?? "";
+    expect(heading).toContain('role="img"');
+  });
+
+  it("falls back to the day for a grouping it does not know", async () => {
+    const html = await render({ group: "topic" });
+    expect(dayHeadings(html)).toEqual(["3 Oct (1)", "29 Sept (2)", "1 Sept (1)"]);
+    expect(html).not.toMatch(/name="group"/);
+  });
+
+  it("hands each row's menu the items that fit it, in the list and the grid alike", async () => {
+    await render({ view: "list" });
+    const items = (id: string) =>
+      (rowMenu.mock.calls.map(([props]) => props) as { assetId: string; sections: { action: string; label: string; href?: string }[][] }[])
+        .find((props) => props.assetId === id)
+        ?.sections.flat()
+        .map((item) => item.label);
+    expect(items("video:paging")).toEqual([
+      "Open",
+      "Open the concept",
+      "Open in course",
+      "Rename",
+      "Favorite",
+      "Mark watched",
+      "Copy link",
+    ]);
+    // Starred, not stored (so no Ask and no Download), its concept and no course.
+    expect(items("note:tlb")).toEqual(["Open", "Open the concept", "Rename", "Unfavorite", "Mark read", "Copy link"]);
+    expect(items("link:ostep")).toEqual(["Open", "Rename", "Favorite", "Mark read", "Copy link"]);
+
+    rowMenu.mockClear();
+    await render();
+    expect(rowMenu.mock.calls.map(([props]) => (props as { assetId: string }).assetId)).toEqual([
+      "video:paging",
+      "session:2026-09-29-tlb",
+      "note:tlb",
+      "link:ostep",
+    ]);
   });
 });

@@ -13,6 +13,7 @@ import {
   type AssetStored,
 } from "@/lib/asset-files";
 import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
+import { contentDisposition } from "@/lib/download-name";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -38,7 +39,7 @@ import { withLearnerStore } from "@/lib/learner-store";
  * | `Content-Type` | from a closed extension list | An unknown extension is refused, never guessed at as `application/octet-stream`. |
  * | `X-Content-Type-Options` | `nosniff` | The extension decides the type. Without it a `.json` transcript holding markup can be sniffed into a document in this origin. |
  * | `Content-Security-Policy` | see `ASSET_CSP` below | An SVG is a document, and one served from this origin could run script with this origin's storage. The sandbox drops it into an opaque origin with scripts off, which costs a video nothing. |
- * | `Content-Disposition` | `inline; filename="…"` | The point is a `<video>` and an `<img>`; `attachment` would break both. The filename is a sanitised basename so a saved file is named after itself. |
+ * | `Content-Disposition` | `inline; filename="…"` | The point is a `<video>` and an `<img>`; `attachment` would break both. The filename is a sanitised basename so a saved file is named after itself. With `?download=1` (the Library row menu's Download) it is `attachment`, named after the asset's title (`contentDisposition` in `@/lib/download-name`). |
  * | `Accept-Ranges` | `bytes` | Without it a player will not offer a scrub bar at all. |
  * | `Cache-Control` | `private, no-store` | A re-render or a commit gives the same id new bytes, and the reason to open one of these is to look at the newest one. |
  *
@@ -113,11 +114,21 @@ export const ASSET_CSP =
   "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; " +
   "font-src data:; img-src data:; sandbox";
 
+/**
+ * `?download=1`: save the file rather than show it. Anything else, or no
+ * parameter, is the inline answer every embed relies on.
+ */
+function wantsDownload(request: Request): boolean {
+  return new URL(request.url).searchParams.get("download") === "1";
+}
+
 /** The headers every successful answer carries, whole file or slice. */
-function baseHeaders(file: AssetSource): Record<string, string> {
+function baseHeaders(request: Request, file: AssetSource): Record<string, string> {
   return {
     "Content-Type": file.contentType,
-    "Content-Disposition": `inline; filename="${file.filename}"`,
+    "Content-Disposition": wantsDownload(request)
+      ? contentDisposition("attachment", file.filename, file.title)
+      : contentDisposition("inline", file.filename),
     "X-Content-Type-Options": "nosniff",
     "Content-Security-Policy": ASSET_CSP,
     "Cache-Control": "private, no-store",
@@ -168,6 +179,12 @@ function problem(p: AssetFileProblem): Response {
  * requests straight to the store. The stream is the `fs` adapter's path: the
  * size comes from `stat` in the resolver, the slice from `get`, which reports
  * the range it actually holds, and that is what `Content-Range` says.
+ *
+ * A `?download=1` that redirects is saved under whatever the store's URL
+ * says, since a redirect cannot carry this route's `Content-Disposition`. The
+ * `fs` store, the only one deployed, signs nothing and streams through here,
+ * so its downloads are named after the title; a cloud adapter that signs
+ * would need to sign the disposition into its URL.
  */
 async function serveBlob(request: Request, stored: AssetStored): Promise<Response> {
   let url: string | null;
@@ -183,7 +200,7 @@ async function serveBlob(request: Request, stored: AssetStored): Promise<Respons
     });
   }
 
-  const headers = baseHeaders(stored);
+  const headers = baseHeaders(request, stored);
   const range = parseRange(request.headers.get("range"), stored.bytes);
   if (range.kind === "unsatisfiable") {
     return new Response(null, {
@@ -226,7 +243,7 @@ async function serveBlob(request: Request, stored: AssetStored): Promise<Respons
  * nothing is gained by streaming what the database already handed over.
  */
 function serveRow(request: Request, text: AssetRowText): Response {
-  const headers = baseHeaders(text);
+  const headers = baseHeaders(request, text);
   const range = parseRange(request.headers.get("range"), text.bytes);
   if (range.kind === "unsatisfiable") {
     return new Response(null, {

@@ -79,6 +79,8 @@ const PATHS = {
     "M9 3c.5 3.3 1.7 4.5 5 5-3.3.5-4.5 1.7-5 5-.5-3.3-1.7-4.5-5-5 3.3-.5 4.5-1.7 5-5zM15 12.5c.2 1.2.6 1.6 1.8 1.8-1.2.2-1.6.6-1.8 1.8-.2-1.2-.6-1.6-1.8-1.8 1.2-.2 1.6-.6 1.8-1.8z",
   // An arrow down onto a line: save the file.
   download: "M10 3.5v9M6 8.5l4 4 4-4M4 16h12",
+  // Three dots in a row: more actions, the row and card menu's button.
+  more: "M4.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0zM9.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0zM14.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0z",
 } as const;
 
 export type GlyphName = keyof typeof PATHS;
