@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement, Fragment, useRef, useState, type ReactElement, type RefObject } from "react";
+import { act, createElement, createRef, Fragment, useState, type ComponentProps, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -57,15 +57,16 @@ interface FoldHarness {
   /** The toggle folds away while the confirm is open (a row that gives way to it). */
   togglesAway?: boolean;
   onConfirm?: (controls: { close: () => void; setBusy: (busy: boolean) => void }) => void;
-  /** Which ref the fold returns focus to, read on every render. */
-  returnTo?: (refs: { toggle: RefObject<HTMLButtonElement | null>; other: RefObject<HTMLButtonElement | null> }, open: boolean) => RefObject<HTMLButtonElement | null>;
+  /** While open, name Elsewhere as where focus returns; the closing render names the toggle. */
+  elsewhereWhileOpen?: boolean;
 }
 
-function Fold({ togglesAway = false, onConfirm, returnTo }: FoldHarness) {
+function Fold({ togglesAway = false, onConfirm, elsewhereWhileOpen = false }: FoldHarness) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const toggle = useRef<HTMLButtonElement>(null);
-  const other = useRef<HTMLButtonElement>(null);
+  // Held refs made once, which the hooks lint does not take for reads during render.
+  const [toggle] = useState(() => createRef<HTMLButtonElement>());
+  const [other] = useState(() => createRef<HTMLButtonElement>());
   const toggleButton = createElement(
     "button",
     { ref: toggle, type: "button", "aria-controls": "fold", onClick: () => setOpen((was) => !was) },
@@ -74,7 +75,7 @@ function Fold({ togglesAway = false, onConfirm, returnTo }: FoldHarness) {
   return createElement(
     Fragment,
     null,
-    togglesAway ? createElement(Collapse, { open: !open }, toggleButton) : toggleButton,
+    togglesAway ? createElement(Collapse, { open: !open } as ComponentProps<typeof Collapse>, toggleButton) : toggleButton,
     createElement("button", { ref: other, type: "button" }, "Elsewhere"),
     createElement(ConfirmFold, {
       open,
@@ -85,7 +86,7 @@ function Fold({ togglesAway = false, onConfirm, returnTo }: FoldHarness) {
       busy,
       onConfirm: () => (onConfirm ?? (({ close }) => close()))({ close: () => setOpen(false), setBusy }),
       onCancel: () => setOpen(false),
-      returnFocusTo: returnTo ? returnTo({ toggle, other }, open) : toggle,
+      returnFocusTo: elsewhereWhileOpen && open ? other : toggle,
     }),
   );
 }
@@ -125,7 +126,7 @@ describe("ConfirmFold", () => {
   });
 
   it("disables both presses while busy, and a failure gives the dropped focus back to the press", () => {
-    let controls = { close: () => undefined as void, setBusy: (_: boolean) => undefined as void };
+    let controls: { close: () => void; setBusy: (busy: boolean) => void } = { close: () => undefined, setBusy: () => undefined };
     const root = mount(createElement(Fold, { onConfirm: (given) => ((controls = given), given.setBusy(true)) }));
     press(button(root, "Reset"));
     const fold = document.getElementById("fold")!;
@@ -141,7 +142,7 @@ describe("ConfirmFold", () => {
   });
 
   it("closes on Escape from inside, unless busy", () => {
-    let controls = { close: () => undefined as void, setBusy: (_: boolean) => undefined as void };
+    let controls: { close: () => void; setBusy: (busy: boolean) => void } = { close: () => undefined, setBusy: () => undefined };
     const root = mount(createElement(Fold, { onConfirm: (given) => (controls = given) }));
     press(button(root, "Reset"));
     const fold = document.getElementById("fold")!;
@@ -157,7 +158,7 @@ describe("ConfirmFold", () => {
   });
 
   it("returns focus to the target named on the render that closes", () => {
-    const root = mount(createElement(Fold, { returnTo: ({ toggle, other }, open) => (open ? other : toggle) }));
+    const root = mount(createElement(Fold, { elsewhereWhileOpen: true }));
     press(button(root, "Reset"));
     // Open, it names Elsewhere; the closing render names Reset, and Reset wins.
     press(button(document.getElementById("fold")!, "Cancel"));

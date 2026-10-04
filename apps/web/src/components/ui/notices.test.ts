@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -12,6 +12,7 @@ import { Notice } from "./Notice";
  * in place of content, `Callout` in the flow, `Banner` across a region. The
  * confirms hold focus and are tested in a DOM (`confirm-components.test.ts`).
  */
+type BannerProps = ComponentProps<typeof Banner>;
 const html = (element: ReturnType<typeof createElement>) => renderToStaticMarkup(element);
 
 describe("Notice", () => {
@@ -96,7 +97,7 @@ describe("Banner", () => {
   });
 
   it("dismisses through a link that keeps the scroll, for a message carried in the URL", () => {
-    const out = html(createElement(Banner, { tone: "danger", dismissHref: "/studio" }, "Accept: refused"));
+    const out = html(createElement(Banner, { tone: "danger", dismissHref: "/studio" } as BannerProps, "Accept: refused"));
     expect(out).toContain('href="/studio"');
     expect(out).toContain(">Dismiss</a>");
     expect(out).toContain("bg-danger/8");
@@ -104,7 +105,11 @@ describe("Banner", () => {
 
   it("dismisses through a button, named for what goes, and can leave the announcing to its caller", () => {
     const out = html(
-      createElement(Banner, { role: "none", onDismiss: () => undefined, dismissAriaLabel: "Dismiss this message" }, "Not saved."),
+      createElement(
+        Banner,
+        { role: "none", onDismiss: () => undefined, dismissAriaLabel: "Dismiss this message" } as BannerProps,
+        "Not saved.",
+      ),
     );
     expect(out).not.toContain("role=");
     expect(out).toMatch(/<button type="button" class="[^"]*" aria-label="Dismiss this message">Dismiss<\/button>/);
