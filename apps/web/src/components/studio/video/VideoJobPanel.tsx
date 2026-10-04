@@ -543,14 +543,16 @@ function StepMark({ status, live }: { status: StepRow["status"]; live: boolean }
 /**
  * The log of what happened: one line per wrapper call and per sheet read,
  * from the runner's own records (D24), newest last, and the runner's seeding
- * of the voice before any of it.
+ * of the voice before any of it. Exported for its test.
  */
-function MakingLog({ job, events, chapters }: { job: VideoJob; events: StudioEvent[]; chapters: VideoChapter[] | null }) {
+export function MakingLog({ job, events, chapters }: { job: VideoJob; events: StudioEvent[]; chapters: VideoChapter[] | null }) {
   const labelId = useId();
   const lines = narration(events, 40);
   const box = useRef<HTMLOListElement>(null);
   // A new line follows the foot, unless the reader has scrolled up to read.
-  useFollowFoot(box, lines.length, { onlyNearFoot: true });
+  // Keyed on the newest line's `seq`, not the count: the list is capped at 40,
+  // so once it is full a new line leaves the count where it was.
+  useFollowFoot(box, lines.at(-1)?.seq ?? null, { onlyNearFoot: true });
   const seeded = job.seeded ?? null;
   return (
     <section aria-labelledby={labelId} className="min-w-0">

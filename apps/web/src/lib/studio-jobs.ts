@@ -366,18 +366,20 @@ export function formatDuration(ms: number | null): string {
 /* -------------------------------------------------------------------------- */
 
 /**
- * One line per finished check, newest last, capped at twenty.
+ * One line per finished check, newest last, capped at twenty. Each carries
+ * its event's `seq`, which names the newest line where the count cannot: a
+ * capped list stays the same length as lines arrive.
  *
  * Only `step` events, which are D24's whole point: `drew 44 shapes` comes from
  * the runner's own `inspect --json` and `exported 213 kB` from the file it
  * wrote, never from the agent's account of itself. The phase events are already
  * the list above, so repeating them here would be the same fact twice.
  */
-export function narration(events: readonly StudioEvent[], cap = 20): { at: string; note: string }[] {
+export function narration(events: readonly StudioEvent[], cap = 20): { seq: number; at: string; note: string }[] {
   return events
     .filter((event) => event.type === "step")
     .slice(-cap)
-    .map((event) => ({ at: event.at, note: event.note }));
+    .map((event) => ({ seq: event.seq, at: event.at, note: event.note }));
 }
 
 /* -------------------------------------------------------------------------- */
