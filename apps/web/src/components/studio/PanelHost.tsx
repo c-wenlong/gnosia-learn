@@ -286,7 +286,7 @@ export function PanelHost({
     dialog = null;
   } else if (view.settings) {
     dialog = (
-      <StudioDialog key="settings" closeHref={closeHref} navigate={pushUrl} label="Settings" compact>
+      <StudioDialog key="settings" closeHref={closeHref} navigate={pushUrl} label="Settings" size="compact">
         <DialogHeader title="Settings" />
         <div className="min-h-0 flex-1 overflow-y-auto">
           {settings !== null ? (
@@ -375,7 +375,7 @@ export function PanelHost({
     const slug = view.play;
     const video = videos.find((entry) => entry.slug === slug) ?? null;
     dialog = (
-      <StudioDialog key={`play:${slug}`} closeHref={closeHref} navigate={pushUrl} label={video?.title ?? slug} wide>
+      <StudioDialog key={`play:${slug}`} closeHref={closeHref} navigate={pushUrl} label={video?.title ?? slug} size="wide">
         <VideoPreview video={video} slug={slug} path={path} />
       </StudioDialog>
     );
