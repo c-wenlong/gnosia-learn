@@ -1,5 +1,6 @@
 import {
   checkModelId,
+  groupByProvider,
   isProviderId,
   type ProviderId,
   TUTOR_MODEL_LIMITS,
@@ -23,6 +24,12 @@ import { withLearnerLock } from "./learner";
  * with two UPDATEs trips the unique `(owner_id, position)` index halfway,
  * since Postgres checks a non-deferrable unique index row by row. The chain
  * is at most `TUTOR_MODEL_LIMITS.maxEntries` rows, so a rewrite is cheap.
+ *
+ * **Grouped by provider.** Settings shows each provider's models under it,
+ * so every write stores the chain grouped (`groupByProvider`): an added
+ * model goes to the end of its provider's models, a model moves within its
+ * provider, and a provider's models move together past the next provider's.
+ * A chain stored before the grouping is grouped on its next write.
  *
  * Every function takes the owner and has no default, like the provider keys
  * beside it: nothing here is ever read or written for `local` by omission.
@@ -87,8 +94,8 @@ async function rewrite(
   change: (current: StoredTutorModel[]) => TutorModelEntry[],
 ): Promise<StoredTutorModel[]> {
   return withLearnerLock(db, owner, async (tx) => {
-    const current = await readTutorModels(tx, owner);
-    const next = change(current);
+    const current = groupByProvider(await readTutorModels(tx, owner));
+    const next = groupByProvider(change(current));
     const createdAt = new Map(current.map((row) => [`${row.provider}\u0000${row.model}`, row.createdAt]));
     await tx.delete(tutorModel).where(eq(tutorModel.ownerId, owner));
     if (next.length > 0) {
@@ -106,7 +113,10 @@ async function rewrite(
   });
 }
 
-/** Add an entry at the bottom of the owner's chain. Refuses a duplicate and a full chain. */
+/**
+ * Add an entry at the end of its provider's models (the end of the chain for
+ * a provider with none yet). Refuses a duplicate and a full chain.
+ */
 export async function addTutorModel(
   db: CatalogDatabase,
   owner: string,
@@ -140,8 +150,9 @@ export async function removeTutorModel(
 }
 
 /**
- * Move an entry one place up (earlier, tried sooner) or down. Moving the top
- * entry up or the bottom one down changes nothing and is not an error.
+ * Move an entry one place up (earlier, tried sooner) or down among its
+ * provider's models. Moving the first up or the last down changes nothing
+ * and is not an error; a provider's order is `moveTutorProvider`'s.
  */
 export async function moveTutorModel(
   db: CatalogDatabase,
@@ -156,8 +167,40 @@ export async function moveTutorModel(
     if (at === -1) throw new TutorModelError("NOT_FOUND", "That model is not in the chain.");
     const to = direction === "up" ? at - 1 : at + 1;
     const next: TutorModelEntry[] = [...current];
-    if (to < 0 || to >= next.length) return next;
+    if (to < 0 || to >= next.length || next[to]!.provider !== entry.provider) return next;
     [next[at], next[to]] = [next[to]!, next[at]!];
     return next;
   });
+}
+
+/**
+ * Move a provider's models together one provider up (tried sooner) or down,
+ * past the next provider's models. A provider with no models has no place in
+ * the chain: NOT_FOUND. Moving the first up or the last down changes nothing.
+ */
+export async function moveTutorProvider(
+  db: CatalogDatabase,
+  owner: string,
+  provider: unknown,
+  direction: "up" | "down",
+): Promise<StoredTutorModel[]> {
+  if (!isProviderId(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
+  return rewrite(db, owner, (current) => {
+    const order = [...new Set(current.map((row) => row.provider))];
+    const at = order.indexOf(provider);
+    if (at === -1) throw new TutorModelError("NOT_FOUND", "That provider has no models in the chain.");
+    const to = direction === "up" ? at - 1 : at + 1;
+    if (to >= 0 && to < order.length) [order[at], order[to]] = [order[to]!, order[at]!];
+    return order.flatMap((id) => current.filter((row) => row.provider === id));
+  });
+}
+
+/** Remove every model of a provider; the chain's other models keep their order. None is not an error. */
+export async function removeTutorProvider(
+  db: CatalogDatabase,
+  owner: string,
+  provider: unknown,
+): Promise<StoredTutorModel[]> {
+  if (!isProviderId(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
+  return rewrite(db, owner, (current) => current.filter((row) => row.provider !== provider));
 }

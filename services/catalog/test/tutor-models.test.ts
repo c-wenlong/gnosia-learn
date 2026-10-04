@@ -5,8 +5,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   addTutorModel,
   moveTutorModel,
+  moveTutorProvider,
   readTutorModels,
   removeTutorModel,
+  removeTutorProvider,
   type StoredTutorModel,
   TutorModelError,
 } from "../src/state";
@@ -86,6 +88,63 @@ describe.skipIf(!reachable.ok)("tutor_model", () => {
       "2:gemini/b",
     ]);
     await expect(moveTutorModel(scratch.db, LOCAL_LEARNER_ID, "nvidia", "a", "up")).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("keeps each provider's models together: an add joins its provider, a move stays inside it", async () => {
+    await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "nvidia", "a");
+    await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "openrouter", "x");
+    const rows = await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "nvidia", "b");
+    expect(shape(rows)).toEqual(["0:nvidia/a", "1:nvidia/b", "2:openrouter/x"]);
+    // b is the last of NVIDIA's: moving it down does not cross into OpenRouter's.
+    expect(shape(await moveTutorModel(scratch.db, LOCAL_LEARNER_ID, "nvidia", "b", "down"))).toEqual([
+      "0:nvidia/a",
+      "1:nvidia/b",
+      "2:openrouter/x",
+    ]);
+    expect(shape(await moveTutorModel(scratch.db, LOCAL_LEARNER_ID, "openrouter", "x", "up"))).toEqual([
+      "0:nvidia/a",
+      "1:nvidia/b",
+      "2:openrouter/x",
+    ]);
+  });
+
+  it("groups a chain stored before the grouping on its next write", async () => {
+    await scratch.db.insert(tutorModel).values([
+      { ownerId: LOCAL_LEARNER_ID, position: 0, provider: "nvidia", model: "a" },
+      { ownerId: LOCAL_LEARNER_ID, position: 1, provider: "gemini", model: "g" },
+      { ownerId: LOCAL_LEARNER_ID, position: 2, provider: "nvidia", model: "b" },
+    ]);
+    const rows = await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "openrouter", "x");
+    expect(shape(rows)).toEqual(["0:nvidia/a", "1:nvidia/b", "2:gemini/g", "3:openrouter/x"]);
+  });
+
+  it("moves a provider's models together, and removes them together", async () => {
+    await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "nvidia", "a");
+    await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "nvidia", "b");
+    await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "openrouter", "x");
+    await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "gemini", "g");
+    expect(shape(await moveTutorProvider(scratch.db, LOCAL_LEARNER_ID, "openrouter", "up"))).toEqual([
+      "0:openrouter/x",
+      "1:nvidia/a",
+      "2:nvidia/b",
+      "3:gemini/g",
+    ]);
+    expect(shape(await moveTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia", "down"))).toEqual([
+      "0:openrouter/x",
+      "1:gemini/g",
+      "2:nvidia/a",
+      "3:nvidia/b",
+    ]);
+    // Already last: nothing changes.
+    expect(shape(await moveTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia", "down"))).toHaveLength(4);
+    expect(shape(await removeTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia"))).toEqual(["0:openrouter/x", "1:gemini/g"]);
+    // A provider with no models: removing is a no-op, moving is NOT_FOUND.
+    expect(await removeTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia")).toHaveLength(2);
+    await expect(moveTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia", "up")).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(moveTutorProvider(scratch.db, LOCAL_LEARNER_ID, "bogus", "up")).rejects.toMatchObject({ code: "INVALID" });
+    // Another owner's providers are not touched.
+    expect(await removeTutorProvider(scratch.db, OTHER, "openrouter")).toEqual([]);
+    expect(await readTutorModels(scratch.db, LOCAL_LEARNER_ID)).toHaveLength(2);
   });
 
   it("stays contiguous when many changes race", async () => {

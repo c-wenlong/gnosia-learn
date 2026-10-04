@@ -23,9 +23,10 @@ prefix T to keep them apart from BYOK's D1 to D11.
 | The order the tutor tries | `tutorSteps` and `keyFor` in `apps/web/src/lib/agent/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
 | A provider's model list | `listProviderModels` in `providers.ts`, cached by `apps/web/src/lib/tutor-models/model-list.ts` |
 | Add, remove, move | `POST`, `DELETE` and `PATCH /api/learner/tutor-model` |
+| Move or delete a whole provider | `PATCH` and `DELETE /api/learner/tutor-model/provider` (T12) |
 | Test one entry | `POST /api/learner/tutor-model/test` |
 | List a provider's models | `POST /api/learner/tutor-model/models` |
-| The Settings card | `apps/web/src/components/settings/TutorModels.tsx`, fed by `apps/web/src/lib/tutor-models/settings.ts` |
+| The Settings card | `apps/web/src/components/settings/Providers.tsx`, fed by `apps/web/src/lib/providers/view.ts` (T12) |
 
 A turn of the tutor, with and without a chain:
 
@@ -37,7 +38,9 @@ A turn of the tutor, with and without a chain:
 ## Decisions
 
 T1 to T5 were made by the lead on the owner's behalf; T6 to T9 were added
-while building it, and T10 and T11 after the independent review of #250.
+while building it, T10 and T11 after the independent review of #250, and T12
+on the owner's request of 2026-10-05. T2's Models card and the Provider keys
+card are one Providers card since T12.
 
 **T1. One ordered list per owner, in its own table.** `tutor_model`:
 `owner_id` (a foreign key to `learner`, cascading on delete and on update,
@@ -191,3 +194,36 @@ dropped from the list.
   defaults are.
 - Filtering a list to chat models. NVIDIA's list includes embedding and
   reranking models; Test tells them apart.
+
+## T12. One Providers card, and the chain grouped by provider
+
+The owner asked on 2026-10-05 for the models to live inside their provider:
+the key and the models of one provider sat on two cards, and a model could
+not be changed next to the key it calls with. Settings now has one
+Providers card (`Providers.tsx`) in place of Provider keys and Models.
+
+- **The card.** Add provider takes a provider not listed yet and its key. A
+  row shows its key's state, its model count (or the built-in default while
+  the chain is empty), Edit (replace the key), Delete, Move up and Move down,
+  and an arrow at the far right that opens it onto its models. Rows start
+  closed. Inside: each model with Test, Move up, Move down and Remove, and
+  Add model, the kit's `Combobox` over the provider's live list (T2's list,
+  fetched the first time the row opens). With no models, a row offers Test
+  the key, which sends what T9 says.
+- **Grouped.** Every write stores the chain grouped by provider
+  (`groupByProvider` in `packages/schema/src/shared.ts`): an added model goes
+  to the end of its provider's models, a model moves only among its
+  provider's, and a provider's models move together past the next
+  provider's (`moveTutorProvider`). A provider's place in the order is where
+  its models sit, so a provider with no models has none and no Move buttons.
+  Reads group too (`readChain`), so a chain stored before this, whose
+  providers could interleave, is walked and shown as its next write will
+  store it.
+- **A provider with no models is skipped** once any provider has one: T1
+  already said the chain alone is tried. Until the chain holds a model, the
+  built-in defaults apply (T3) and each row names its default.
+- **Delete** removes the provider's models, then the owner's saved key, in
+  one request, in that order: a failure between them leaves a key with no
+  models, which the tutor skips and Delete finishes, never models with no
+  key. A server key is the environment's and stays, so the row stays listed.
+

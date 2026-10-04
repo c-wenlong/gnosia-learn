@@ -55,6 +55,11 @@ const PATHS = {
     "M9 3c.5 3.3 1.7 4.5 5 5-3.3.5-4.5 1.7-5 5-.5-3.3-1.7-4.5-5-5 3.3-.5 4.5-1.7 5-5zM15 12.5c.2 1.2.6 1.6 1.8 1.8-1.2.2-1.6.6-1.8 1.8-.2-1.2-.6-1.6-1.8-1.8 1.2-.2 1.6-.6 1.8-1.8z",
   // An arrow down onto a line: save the file.
   download: "M10 3.5v9M6 8.5l4 4 4-4M4 16h12",
+  // Arrows up and down: move a row earlier or later.
+  up: "M10 15.5v-11M5.5 9L10 4.5 14.5 9",
+  down: "M10 4.5v11M5.5 11l4.5 4.5 4.5-4.5",
+  // A chevron pointing down: a row that opens below itself (turned when open).
+  expand: "M5.5 8l4.5 4.5L14.5 8",
 } as const;
 
 export type GlyphName = keyof typeof PATHS;

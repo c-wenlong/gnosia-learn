@@ -187,8 +187,10 @@ export {
 export {
   addTutorModel,
   moveTutorModel,
+  moveTutorProvider,
   readTutorModels,
   removeTutorModel,
+  removeTutorProvider,
   TutorModelError,
   tutorModelEntry,
   type StoredTutorModel,

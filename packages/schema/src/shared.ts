@@ -167,6 +167,29 @@ export function isProviderId(value: unknown): value is ProviderId {
  */
 export const TUTOR_MODEL_LIMITS = { maxEntries: 10, maxModelChars: 200 } as const;
 
+/**
+ * A model chain grouped by provider: each provider's entries together, in
+ * their order, and the providers in the order each first appears. Settings
+ * shows the chain this way (each provider's models under it) and the tutor
+ * walks it this way, so the two cannot disagree even for a chain written
+ * before the grouping, whose providers could interleave. Stable, and the
+ * identity on a chain that is already grouped.
+ */
+export function groupByProvider<T extends { provider: string }>(chain: readonly T[]): T[] {
+  const order: string[] = [];
+  const blocks = new Map<string, T[]>();
+  for (const entry of chain) {
+    let block = blocks.get(entry.provider);
+    if (block === undefined) {
+      block = [];
+      blocks.set(entry.provider, block);
+      order.push(entry.provider);
+    }
+    block.push(entry);
+  }
+  return order.flatMap((provider) => blocks.get(provider) ?? []);
+}
+
 /** Printable ASCII with no space: what a model id is made of, and all a request header or JSON body needs. */
 export const MODEL_ID_PATTERN = /^[\x21-\x7e]+$/;
 

@@ -3,16 +3,21 @@ import "server-only";
 import {
   addTutorModel,
   moveTutorModel,
+  moveTutorProvider,
   readTutorModels,
   removeTutorModel,
+  removeTutorProvider,
 } from "@self-learn/catalog/state";
+import { groupByProvider } from "@self-learn/schema/shared";
 
 import type { ChainEntry } from "@/lib/agent/providers";
 import { catalogDatabase } from "@/lib/learner-store";
 
 /**
  * The web app's side of `tutor_model` (docs/TUTOR-MODELS.md): the owner's
- * model chain, as provider and model pairs, top first.
+ * model chain, as provider and model pairs, top first, grouped by provider
+ * (`groupByProvider`) so a chain stored before the grouping is walked and
+ * shown the way its next write will store it.
  *
  * Every function takes the owner, resolved by the caller from the session
  * (`currentOwner()`), and has no default. The catalog functions filter by it,
@@ -22,7 +27,7 @@ import { catalogDatabase } from "@/lib/learner-store";
  */
 
 function entries(rows: readonly ChainEntry[]): ChainEntry[] {
-  return rows.map((row) => ({ provider: row.provider, model: row.model }));
+  return groupByProvider(rows).map((row) => ({ provider: row.provider, model: row.model }));
 }
 
 export async function readChain(owner: string): Promise<ChainEntry[]> {
@@ -44,4 +49,14 @@ export async function moveChainEntry(
   direction: "up" | "down",
 ): Promise<ChainEntry[]> {
   return entries(await moveTutorModel(await catalogDatabase(), owner, provider, model, direction));
+}
+
+/** Move a provider's models together one provider up or down. */
+export async function moveChainProvider(owner: string, provider: unknown, direction: "up" | "down"): Promise<ChainEntry[]> {
+  return entries(await moveTutorProvider(await catalogDatabase(), owner, provider, direction));
+}
+
+/** Remove every model of a provider. */
+export async function removeChainProvider(owner: string, provider: unknown): Promise<ChainEntry[]> {
+  return entries(await removeTutorProvider(await catalogDatabase(), owner, provider));
 }

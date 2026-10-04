@@ -16,6 +16,19 @@ describe("suggestionsFor", () => {
   it("suggests nothing for words no option holds", () => {
     expect(suggestionsFor(MODELS, "llama")).toEqual([]);
   });
+
+  it("matches each of several words, in the label or the detail, in any order", () => {
+    const options = [
+      { value: "a", label: "deepseek/deepseek-chat:free" },
+      { value: "b", label: "deepseek/deepseek-r1" },
+      { value: "c", label: "deepseek/deepseek-v3", detail: "free" },
+      { value: "d", label: "meta/llama-free" },
+    ];
+    expect(suggestionsFor(options, "deepseek free").map((o) => o.value)).toEqual(["a", "c"]);
+    expect(suggestionsFor(options, "free  deepseek").map((o) => o.value)).toEqual(["a", "c"]);
+    // One word reads the label only, as it always has.
+    expect(suggestionsFor(options, "free").map((o) => o.value)).toEqual(["a", "d"]);
+  });
 });
 
 describe("nextSuggestion", () => {
