@@ -32,6 +32,7 @@ import {
 } from "@/lib/studio-tile-jobs";
 import { conversationHref, panelHref } from "@/lib/studio-view";
 import { useElapsed } from "@/lib/use-elapsed";
+import { prefersReducedMotion } from "@/lib/motion";
 
 /**
  * A job, shown in the grid where its diagram is ("The job in the grid" in
@@ -522,7 +523,7 @@ function useLivePicture(
         await image.decode();
         if (controller.signal.aborted) return;
         const made = url;
-        const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const still = prefersReducedMotion();
         tag.current = etag;
         urls.current.push(made);
         adopted = true;

@@ -17,7 +17,7 @@ import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/li
 import type { MapLayout } from "@/lib/concept-map";
 import { firstMatch, relatedTo, standingLine } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
-import { scrollBehavior } from "@/lib/reduced-motion";
+import { scrollBehavior } from "@/lib/motion";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
@@ -156,6 +156,8 @@ export function LearnIndex({
           </div>
         </div>
       ) : (
+        // Fades in over the table it replaces, as the table does over it.
+        <div className="animate-fade-in motion-reduce:animate-none">
         <MapCard
           layout={map}
           nodes={nodes}
@@ -169,6 +171,7 @@ export function LearnIndex({
           marks={marks}
           fitRequest={fitRequest}
         />
+        </div>
       )}
     </div>
   );

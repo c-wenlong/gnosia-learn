@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   applyMotionToDocument,
@@ -8,6 +8,7 @@ import {
   motionAttribute,
   prefersReducedMotion,
   readMotionCookie,
+  scrollBehavior,
   writeMotionCookie,
 } from "@/lib/motion";
 
@@ -71,5 +72,60 @@ describe("globals.css", () => {
     expect(css).toMatch(/@custom-variant motion-safe \{[^]*?:not\(\[data-motion="reduce"\]\)/);
     // The safety net that finishes every transition and animation at once.
     expect(css).toMatch(/:root\[data-motion="reduce"\] \*,[^{]*\{[^}]*transition-duration: 0\.01ms !important/);
+  });
+});
+
+describe("scrollBehavior", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.motion;
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  const device = (reduce: boolean) =>
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: reduce && query === "(prefers-reduced-motion: reduce)", media: query }));
+
+  it("glides unless Settings asks for stillness", () => {
+    device(false);
+    expect(scrollBehavior()).toBe("smooth");
+    document.documentElement.dataset.motion = "reduce";
+    expect(scrollBehavior()).toBe("auto");
+  });
+
+  it("jumps when the device asks for less movement", () => {
+    device(true);
+    expect(prefersReducedMotion()).toBe(true);
+    expect(scrollBehavior()).toBe("auto");
+  });
+
+  it("glides where there is no media query to ask", () => {
+    vi.stubGlobal("matchMedia", undefined);
+    expect(prefersReducedMotion()).toBe(false);
+    expect(scrollBehavior()).toBe("smooth");
+  });
+});
+
+describe("one place asks whether to keep still", () => {
+  it("leaves no script reading the device's setting alone, which would ignore Settings' Always", async () => {
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join, relative } = await import("node:path");
+    const src = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
+          const text = readFileSync(path, "utf8");
+          const rel = relative(src, path);
+          // The query as a string anywhere, so one kept in a variable is caught too.
+          if (rel !== join("lib", "motion.ts") && /["'`]\(\s*prefers-reduced-motion/.test(text)) offenders.push(rel);
+          if (/behavior:\s*["']smooth["']/.test(text)) offenders.push(`${rel} (a hard-coded smooth scroll; use scrollBehavior())`);
+        }
+      }
+    };
+    walk(src);
+    expect(offenders).toEqual([]);
   });
 });

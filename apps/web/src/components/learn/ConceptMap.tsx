@@ -23,6 +23,7 @@ import {
 import { firstConcept, keyTarget, mapSummary } from "@/lib/map-keys";
 import { arcLength } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import { prefersReducedMotion } from "@/lib/motion";
 
 /**
  * The whole prerequisite graph as islands (docs/proposals/knowledge-map.md).
@@ -102,7 +103,8 @@ function routePath(points: readonly { x: number; y: number }[]): string {
 }
 
 const viewBoxOf = (v: View) => `${v.x} ${v.y} ${v.w} ${v.h}`;
-const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// The device's setting or Settings' "Always reduce motion".
+const reducedMotion = () => prefersReducedMotion();
 
 export function ConceptMap({
   layout,
