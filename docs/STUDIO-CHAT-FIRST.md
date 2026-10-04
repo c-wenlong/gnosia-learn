@@ -686,7 +686,7 @@ six in a row.
   cards making something new (a new diagram's job is a diagram), and the
   search box says what it searches. The topic chips still count both kinds.
 - **Preview.** Pressing a video tile opens `?play=<slug>`: a 960px dialog
-  over the grid (`StudioDialog`'s `wide`, a sheet on a phone) with the
+  over the grid (`StudioDialog` at the kit dialog's `wide` size, a sheet on a phone) with the
   video playing in the library's `VideoPlayer` from the library's own
   routes (`/api/assets/video:<slug>/file` and `/poster`), its title, Change
   (the tile's, a conversation on the video) and Open (the library page, with
