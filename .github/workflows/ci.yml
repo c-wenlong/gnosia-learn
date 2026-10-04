@@ -1,13 +1,20 @@
 name: CI
 
-# Every push to the default branch and every pull request aimed at it.
-# This workflow only checks the code. Deployment lives in its own workflow so
-# a broken deploy never hides a broken test run, and vice versa.
+# Every pull request aimed at the default branch, and by hand from the Actions
+# tab. This workflow only checks the code; production deploys through Vercel's
+# Git integration (docs/DEPLOYMENT.md).
+#
+# A push to main does not run it. Every change reaches main through a pull
+# request that already ran this exact job, so the push run checked the same
+# code a second time. On a private repository's free minutes that was about a
+# third of all runs (2026-10-04: 12 of the last 40), most of them cancelled
+# part-way by the next merge but billed for the minutes they used. What it
+# would have caught is two pull requests that pass alone and break together;
+# run it by hand (workflow_dispatch) on main when that is a worry.
 on:
-  push:
-    branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 # Least privilege by default. Nothing here writes to the repository, so the
 # GITHUB_TOKEN only needs to read code. Coverage is uploaded with an explicit
@@ -135,7 +142,15 @@ jobs:
         # services/ and packages/ are outside that coverage scope on purpose:
         # the catalog tests need the Postgres service above, so their number
         # would move with the environment rather than with the code.
-        run: npm run test:coverage
+        #
+        # --maxWorkers=4: a private repository gets a 2-CPU runner, and vitest
+        # defaults to one worker fewer than the CPUs, so on CI every test file
+        # ran one after another (2026-10-04: 664 s of file time in an 814 s
+        # step). Most of that time is spent waiting on Postgres and on spawned
+        # CLI processes rather than on the CPU, so four files at once overlap
+        # the waits. Locally vitest already runs as many files at once as the
+        # machine has cores, so the suites are known to be safe in parallel.
+        run: npm run test:coverage -- --maxWorkers=4
 
       - name: Production build
         # Runs on pull requests too, not only on the default branch. Next 16
