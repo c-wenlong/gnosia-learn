@@ -218,9 +218,11 @@ describe("Dialog in motion", () => {
     expect(dialogClasses({ size: "wide" })).toContain("lg:w-[min(960px,calc(100vw-64px))]");
     expect(dialogClasses({ size: "reading" })).toContain("md:w-[min(64rem,calc(100vw-48px))]");
     expect(dialogClasses({ size: "reading", tall: true })).toContain("md:h-[calc(100dvh-64px)]");
+    expect(dialogClasses({ size: "preview" })).toContain("md:w-[min(1200px,calc(100vw-96px))]");
+    expect(dialogClasses({ size: "preview" })).toContain("md:h-[min(820px,calc(100dvh-80px))]");
     expect(dialogClasses({ tall: true })).toContain("md:h-[calc(100dvh-96px)]");
     expect(dialogClasses({ tall: true })).not.toContain("md:h-auto");
-    for (const size of ["compact", "default", "wide", "reading"] as const) {
+    for (const size of ["compact", "default", "wide", "reading", "preview"] as const) {
       const classes = dialogClasses({ size }).split(" ");
       expect(classes).toEqual(expect.arrayContaining(["h-dvh", "w-full", "rounded-none", "md:rounded-2xl"]));
     }
