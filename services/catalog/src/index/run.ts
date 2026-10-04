@@ -493,6 +493,15 @@ export async function runIndex(
         .where(and(eq(asset.sourceRepo, sourceRepo), eq(asset.ownerId, owner), isNotNull(asset.path)));
       return rows.map((r) => r.path).filter((p): p is string => p !== null);
     },
+    recordedOutRoot: async (source) => {
+      const [row] = await db
+        .select({ metadata: indexRun.metadata })
+        .from(indexRun)
+        .where(eq(indexRun.source, source))
+        .limit(1);
+      const outRoot = (row?.metadata as { outRoot?: unknown } | null | undefined)?.outRoot;
+      return typeof outRoot === "string" && outRoot !== "" ? outRoot : null;
+    },
   };
 
   // The optional sources: their reader is a video tool's CLI (manimkc's at
