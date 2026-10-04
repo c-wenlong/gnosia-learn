@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { Banner } from "./Banner";
 import { Callout } from "./Callout";
-import { bannerClasses, calloutClasses } from "./classes";
+import { bannerClasses, calloutClasses, CARD_TITLE } from "./classes";
 import { Notice } from "./Notice";
 
 /**
@@ -30,7 +30,7 @@ describe("Notice", () => {
       ),
     );
     expect(out).toMatch(/^<section role="alert" class="[^"]*rounded-\[20px\][^"]*p-5/);
-    expect(out).toContain('<h2 class="font-bold text-text text-[16px] leading-snug">The catalog is unreachable</h2>');
+    expect(out).toContain(`<h2 class="${CARD_TITLE}">The catalog is unreachable</h2>`);
     expect(out).toContain("Nothing has been lost.");
     expect(out).toMatch(/<code class="[^"]*select-all[^"]*">npm run catalog -- status<\/code>/);
     expect(out.indexOf("<code")).toBeLessThan(out.indexOf("Try again"));
@@ -46,7 +46,7 @@ describe("Notice", () => {
   it("draws the dense form tight, at the level asked, and leaves out what it was not given", () => {
     const out = html(createElement(Notice, { title: "Blocked", dense: true, level: 1 }));
     expect(out).toContain("p-3.5");
-    expect(out).toContain('<h1 class="font-bold text-text text-[14px] leading-5">Blocked</h1>');
+    expect(out).toContain('<h1 class="text-[14px] leading-5 font-bold text-text">Blocked</h1>');
     expect(out).not.toContain("<code");
     expect(out).not.toContain("role=");
     expect(out).not.toContain("max-w-prose");

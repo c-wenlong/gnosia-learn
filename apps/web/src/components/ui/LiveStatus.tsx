@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { cx } from "./classes";
+import { cx, STATUS_TEXT } from "./classes";
 import { Collapse } from "./Collapse";
 
 export type StatusTone = "muted" | "ok" | "danger";
@@ -50,7 +50,7 @@ export function LiveStatus({
         {text ?? ""}
       </p>
       <Collapse open={text !== null}>
-        <p aria-hidden className={cx("text-[12px]", className)}>
+        <p aria-hidden className={cx(STATUS_TEXT, className)}>
           {shown !== null && (
             <span key={`${shown.tone}:${shown.text}`} className={cx(TONE[shown.tone], "animate-fade-in motion-reduce:animate-none")}>
               {shown.text}

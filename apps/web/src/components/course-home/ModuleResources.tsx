@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx, FOCUS } from "@/components/ui/classes";
+import { cx, FOCUS, STATUS_TEXT } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { Input } from "@/components/ui/Input";
 import { useLearner } from "@/lib/learner-context";
@@ -210,7 +210,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
                 Add
               </Button>
               {error && (
-                <p key={error} className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
+                <p key={error} className={cx(STATUS_TEXT, "animate-fade-in text-danger motion-reduce:animate-none")}>
                   {error}
                 </p>
               )}

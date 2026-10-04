@@ -11,7 +11,7 @@ import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
 import { Menu, MenuDivider, MenuItem } from "@/components/ui/Menu";
-import { cx, iconButtonClasses, inputClasses } from "@/components/ui/classes";
+import { CARD_TITLE, cx, iconButtonClasses, inputClasses } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
 import type { AskSubject, RowMenuItem, RowMenuSections } from "@/lib/row-menu";
 import { sendJson } from "@/lib/send-json";
@@ -317,7 +317,7 @@ function RowDialog({
       }}
     >
       <div className="flex shrink-0 items-center gap-3 py-3 pr-3 pl-5">
-        <h2 className="min-w-0 flex-1 truncate text-[16px] leading-snug font-bold text-text">{label}</h2>
+        <h2 className={cx(CARD_TITLE, "min-w-0 flex-1 truncate")}>{label}</h2>
         <IconButton label="Close" onClick={() => open && onClose()}>
           <Glyph name="close" size={16} />
         </IconButton>

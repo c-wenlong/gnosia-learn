@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx, FOCUS } from "@/components/ui/classes";
+import { COLUMN_TITLE, cx, FOCUS } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { Panel } from "@/components/ui/Panel";
 import { TextLink } from "@/components/ui/TextLink";
@@ -76,7 +76,7 @@ export function ModuleMain({
             <p className="text-[14px] leading-5 text-text2">
               Module {module.order} of {course.modules.length}
             </p>
-            <h1 className="mt-1 text-[22px] font-semibold leading-7 text-text">
+            <h1 className={cx(COLUMN_TITLE, "mt-1")}>
               {module.title}
             </h1>
           </div>

@@ -12,6 +12,7 @@ import { Spacer } from "@/components/studio/StudioChrome";
 import { DisplayMenu, KindSegments, SortMenu, StudioSearch, TopicChips } from "@/components/studio/StudioControls";
 import { SettingsLink } from "@/components/studio/StudioSettings";
 import { NewVideoJobs, VideoRow, VideoTile } from "@/components/studio/video/VideoGridJob";
+import { cx, LABEL } from "@/components/ui/classes";
 import { filterVideos, gridSections, sectionItems, sortVideos, type StudioVideo } from "@/lib/studio-video";
 import {
   displayTitle,
@@ -161,7 +162,7 @@ export function StudioGrid({
       {sections.map((section, at) => (
         <section key={section.key}>
           {section.label !== "" && (
-            <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
+            <h2 className={cx(LABEL, "mb-2")}>
               {section.label} · {section.diagrams.length + section.videos.length}
             </h2>
           )}

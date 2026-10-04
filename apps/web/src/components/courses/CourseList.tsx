@@ -9,7 +9,7 @@ import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
-import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
+import { CARD_TITLE, chipClasses, cx, FOCUS, PAGE_TITLE, SECTION_TITLE } from "@/components/ui/classes";
 import { CourseCover } from "@/components/courses/CourseCover";
 import type { ItemStanding } from "@/lib/course-path";
 import {
@@ -137,12 +137,12 @@ export function CourseList({
 
   return (
     <div className="flex flex-col">
-      <h1 className="font-display text-[28px] leading-tight font-bold text-text">Courses</h1>
+      <h1 className={PAGE_TITLE}>Courses</h1>
 
       {/* Each fold carries the space above it, so a shut one leaves none. */}
       <Collapse open={continuing.length > 0} className="pt-8">
         <section aria-labelledby="continue-learning" className="flex flex-col gap-4">
-          <h2 id="continue-learning" className="text-[20px] leading-tight font-bold text-text">
+          <h2 id="continue-learning" className={SECTION_TITLE}>
             Continue learning
           </h2>
           <ul className="flex flex-col gap-4">
@@ -159,7 +159,7 @@ export function CourseList({
         {/* The heading earns its place only beside Continue learning; alone, the page title says it. */}
         <h2
           id="all-courses"
-          className={cx("text-[20px] leading-tight font-bold text-text", continuing.length === 0 && "sr-only")}
+          className={cx(SECTION_TITLE, continuing.length === 0 && "sr-only")}
         >
           {inactiveTotal > 0 ? "Active courses" : "All courses"}
         </h2>
@@ -220,7 +220,8 @@ export function CourseList({
               aria-controls="inactive-courses-list"
               onClick={() => setInactiveOpen(!showInactive)}
               className={cx(
-                "flex items-center gap-2 rounded-sm text-[20px] leading-tight font-bold text-text",
+                "flex items-center gap-2 rounded-sm",
+                SECTION_TITLE,
                 FOCUS,
               )}
             >
@@ -255,7 +256,7 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
   return (
     <Card as="article" className="gap-4 md:flex-row md:items-center md:gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h3 className="text-[16px] leading-snug font-bold text-text">
+        <h3 className={CARD_TITLE}>
           <Link
             href={`/courses/${summary.slug}`}
             className={cx("rounded-sm underline-offset-4 hover:underline", FOCUS)}

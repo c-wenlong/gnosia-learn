@@ -141,7 +141,7 @@ export function NoteAndSources({
               resolveNote={resolveNote}
               resolveEmbed={resolveEmbed}
             />
-            <p className="mt-3 font-mono text-[11px] break-all text-text3">{w.note.path}</p>
+            <p className="mt-3 font-mono text-[12px] break-all text-text3">{w.note.path}</p>
           </NoteDisclosure>
         ) : (
           <p className="text-[13px] text-text3">
