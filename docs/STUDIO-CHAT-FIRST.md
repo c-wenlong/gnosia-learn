@@ -694,6 +694,9 @@ six in a row.
   since `PanelHost` draws it from the URL like a tile's panel. A modified
   click (cmd, ctrl, middle) on the tile is still the library link, so a new
   tab gets the full page. Opening any other panel closes it (`panelHref`).
+  A file missing from the blob store says to make the video again from the
+  studio (V17 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)), not to run an
+  upload, here and on the library page alike (`problemSource`).
 
 **The home composer** (`HomeComposer`) is the one way into a new
 conversation. It is the conversation's own `MentionComposer`, tags and all.

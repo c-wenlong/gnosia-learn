@@ -50,8 +50,14 @@ vi.mock("@/components/studio/StudioSidebar", () => ({
 }));
 // The player is the library's; what is pinned here is what the preview hands it.
 vi.mock("@/components/VideoPlayer", () => ({
-  VideoPlayer: ({ src, poster, title, seekTo }: { src: string; poster?: string; title?: string; seekTo?: { seconds: number } }) =>
-    createElement("div", { "data-player": src, "data-poster": poster ?? "", "data-title": title ?? "", "data-starts": seekTo?.seconds ?? "" }),
+  VideoPlayer: ({ src, poster, title, seekTo, sourceRepo }: { src: string; poster?: string; title?: string; seekTo?: { seconds: number }; sourceRepo?: string }) =>
+    createElement("div", {
+      "data-player": src,
+      "data-poster": poster ?? "",
+      "data-title": title ?? "",
+      "data-starts": seekTo?.seconds ?? "",
+      "data-source": sourceRepo ?? "",
+    }),
 }));
 vi.mock("next/link", () => ({
   // `scroll` and `prefetch` are the router's, not the anchor's.
@@ -424,6 +430,8 @@ describe("a video's preview (D85)", () => {
     expect(player?.getAttribute("data-poster")).toBe("/api/assets/video%3Aattention/poster");
     // Asked to jump to the start, which plays.
     expect(player?.getAttribute("data-starts")).toBe("0");
+    // A missing file is a studio video to make again, not a manimkc render to upload.
+    expect(player?.getAttribute("data-source")).toBe("studio");
     // Open is the library page, with the way back to this view (not to the preview).
     const open = container.querySelector<HTMLAnchorElement>('a[aria-label="Open Attention weights"]');
     expect(open?.getAttribute("href")).toBe("/library/video%3Aattention?from=%2Fstudio%3Fkind%3Dvideo");
@@ -461,7 +469,7 @@ describe("a video's preview (D85)", () => {
     const { container } = mount({ extra: createElement(VideoTile, { video: VIDEO, path: "/studio?kind=video" }) });
     const tile = container.querySelector<HTMLAnchorElement>('a[aria-label="Play Attention weights"]')!;
     expect(tile.getAttribute("href")).toBe("/library/video%3Aattention?from=%2Fstudio%3Fkind%3Dvideo");
-    expect(tile.textContent).toContain("Video");
+    expect(tile.parentElement?.querySelector('[data-kind-badge="video"]')?.textContent).toBe("Video");
 
     // Record whether the page kept the click, and stop jsdom from following the link.
     const prevented: boolean[] = [];

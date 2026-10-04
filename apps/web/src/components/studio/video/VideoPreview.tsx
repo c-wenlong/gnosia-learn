@@ -3,6 +3,7 @@
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { VideoChangeButton } from "@/components/studio/video/VideoGridJob";
 import { Button } from "@/components/ui/Button";
+import { STUDIO_SOURCE } from "@/lib/asset-problems";
 import { buttonClasses } from "@/components/ui/classes";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { libraryHref, posterHref, videoFileHref, videoStatusHref, type StudioVideo } from "@/lib/studio-video";
@@ -52,6 +53,8 @@ export function VideoPreview({ video, slug, path }: { video: StudioVideo | null;
           poster={video.posterAssetId === null ? undefined : posterHref(video.posterAssetId)}
           title={title}
           seekTo={PLAY_FROM_START}
+          // A missing file is made again from the studio, not uploaded.
+          sourceRepo={STUDIO_SOURCE}
         />
       </div>
       <div className="flex shrink-0 items-center justify-end gap-2 border-t border-hair px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-3">

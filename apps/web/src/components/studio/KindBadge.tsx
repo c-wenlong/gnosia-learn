@@ -8,8 +8,10 @@ import { cx } from "@/components/ui/classes";
  * mat is the light one. `inline` is the list row's, beside a thumbnail too
  * small to carry one.
  *
- * Plain text, so a diagram tile's link reads "Diagram" before its title;
- * a video tile's link has its own name, "Play …", which says as much.
+ * Drawn after a tile's job loader, as a sibling of its link rather than
+ * inside the thumbnail, so a change being drawn or rendered over an existing
+ * tile does not cover it; positioned against the tile, whose top left is the
+ * thumbnail's.
  */
 export function KindBadge({ kind, inline = false }: { kind: "diagram" | "video"; inline?: boolean }) {
   // A list row on a phone has no room for it beside the name; the

@@ -73,7 +73,6 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
             <span className="text-xs text-white/70">No poster</span>
           )}
           <PlayMark />
-          <KindBadge kind="video" />
           {video.durationSeconds !== null && (
             <span className="absolute right-2 bottom-2 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium tabular-nums text-white">
               {clockLength(video.durationSeconds)}
@@ -89,6 +88,8 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
         </div>
       </PanelLink>
       <TileVideoJob slug={slug} title={title} poster={video.posterAssetId === null ? null : posterHref(video.posterAssetId)} path={path} />
+      {/* After a change job's loader, so the job does not hide what the tile is. */}
+      <KindBadge kind="video" />
       <div className="pointer-events-none absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
         <VideoChangeButton slug={slug} title={title} path={path} className={HOVER_CONTROL} />
       </div>

@@ -103,6 +103,9 @@ export function DiagramTile({
         thumbnail={diagram.svg.exists ? thumbnailHref(diagram.name) : null}
         path={path}
       />
+      {/* After the job's loader, so a change being drawn does not hide what
+          the tile is. Over the thumbnail's top left, which is the tile's. */}
+      <KindBadge kind="diagram" />
       {/* Selecting opens the tile's panel; the two controls here go straight
           to the canvas, or to a conversation about extending the diagram.
           Separate targets, because a grid where one click does everything has
@@ -167,7 +170,6 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
           <span className="text-xs">{diagram.shapes} shapes</span>
         </div>
       )}
-      <KindBadge kind="diagram" />
       {badges.length > 0 && (
         <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
           {badges.map((badge) => (
