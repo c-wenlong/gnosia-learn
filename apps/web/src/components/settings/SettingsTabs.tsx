@@ -29,7 +29,7 @@ export type SettingsSection = { id: SettingsTab; label: string; glyph: GlyphName
  */
 export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
   const base = useId();
-  const asked = parseSettingsTab(useSearchParams()?.get("tab") ?? undefined);
+  const asked = parseSettingsTab(useSearchParams()?.getAll("tab") ?? []);
   // A press sets the tab at once rather than waiting for the address to come
   // back round; any change of address after that (a link, the press's own
   // `replaceState`) sets it again.

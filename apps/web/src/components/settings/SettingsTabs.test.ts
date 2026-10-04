@@ -59,9 +59,9 @@ function mount(initial: SettingsSection["id"]) {
 
 describe("parseSettingsTab", () => {
   it("reads a known tab and falls back to General for anything else", () => {
-    expect(parseSettingsTab("tutor")).toBe("tutor");
-    expect(parseSettingsTab(undefined)).toBe("general");
-    expect(parseSettingsTab("nope")).toBe("general");
+    expect(parseSettingsTab(["tutor"])).toBe("tutor");
+    expect(parseSettingsTab([])).toBe("general");
+    expect(parseSettingsTab(["nope"])).toBe("general");
     expect(parseSettingsTab(["tutor", "data"])).toBe("general");
   });
 
@@ -123,6 +123,20 @@ describe("SettingsTabs", () => {
     expect(shown()).toEqual(["tutor body"]);
     draw("general");
     expect(shown()).toEqual(["general body"]);
+  });
+
+  it("opens General for a repeated tab in the address", () => {
+    window.history.replaceState(null, "", "/settings?tab=tutor&tab=data");
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(createElement(SettingsTabs, { sections: SECTIONS })));
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    const shown = [...container.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter((p) => !p.hidden);
+    expect(shown.map((p) => p.textContent)).toEqual(["general body"]);
   });
 
   it("says the row is horizontal when the screen is narrow", () => {
