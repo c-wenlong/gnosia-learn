@@ -316,32 +316,6 @@ export function linkClasses({
 }
 
 /**
- * Kit `Input`: 44px, 2px border, radius 8, or a pill for search. `sm` is 36px
- * with a 12px inset, for a field that sits in a row of text rather than in a
- * form: the confirm card's inline edits, where a 44px field would push every
- * row apart the moment editing starts. `chip` is a `Chip`'s face (34px, 1px
- * border, 13px), for a field in a row of filter menus: the Library's search
- * beside its Type, Course and sort menus.
- */
-export function inputClasses({
-  pill = false,
-  size = "md",
-  className,
-}: { pill?: boolean; size?: "md" | "sm" | "chip"; className?: string } = {}): string {
-  return cx(
-    size === "md" ? "h-11 px-3.5" : size === "sm" ? "h-9 px-3" : "h-[34px] px-3.5",
-    "w-full min-w-0 border-border bg-surface text-text",
-    size === "chip" ? "border" : "border-2",
-    size === "chip" ? FIELD_TEXT.px13 : FIELD_TEXT.px14,
-    "placeholder:text-text3 outline-none transition-colors duration-100 focus:border-accent",
-    "aria-invalid:border-danger",
-    DISABLED,
-    pill ? "rounded-full" : "rounded-lg",
-    className,
-  );
-}
-
-/**
  * The text size of a form field: 16px on anything touched, and the desktop
  * size only where there is a fine pointer and at least 768px. iOS Safari zooms
  * the page when it focuses a field under 16px and leaves it zoomed, and a
@@ -357,6 +331,71 @@ export const FIELD_TEXT = {
   px14: "text-base md:pointer-fine:text-[14px]",
   px15: "text-base md:pointer-fine:text-[15px]",
 } as const;
+
+export type InputSize = "md" | "sm" | "lg" | "chip" | "compact" | "inline";
+
+/** Each size's height, inset, border and text; the face around them is shared. */
+const INPUT_SIZE: Record<InputSize, string> = {
+  md: cx("h-11 px-3.5 border-2", FIELD_TEXT.px14),
+  sm: cx("h-9 px-3 border-2", FIELD_TEXT.px14),
+  lg: cx("h-12 px-4 border-2", FIELD_TEXT.px15),
+  chip: cx("h-[34px] px-3.5 border", FIELD_TEXT.px13),
+  compact: cx("h-8 px-2.5 border", FIELD_TEXT.xs),
+  inline: cx("h-7 px-2.5 border", FIELD_TEXT.px13),
+};
+
+/**
+ * What every field shares whatever its size: the surface, the border going
+ * accent on focus and the danger colour once a check refused it, the muted
+ * placeholder, the disabled dimming.
+ */
+const FIELD_FACE = cx(
+  "border-border bg-surface text-text",
+  "placeholder:text-text3 outline-none transition-colors duration-100 focus:border-accent",
+  "aria-invalid:border-danger",
+  DISABLED,
+);
+
+/**
+ * Kit `Input`: 44px, 2px border, radius 8, or a pill for search. The other
+ * sizes are for a field that sits somewhere a 44px one would not:
+ *
+ * - `sm`, 36px with a 12px inset: in a row of text rather than a form (the
+ *   confirm card's title), where a 44px field would push every row apart the
+ *   moment editing starts.
+ * - `lg`, 48px at 15px: the one field a page is about (Home's Ask box).
+ * - `chip`, a `Chip`'s face (34px, 1px border, 13px): in a row of filter
+ *   menus, the Library's search beside its Type, Course and sort menus.
+ * - `compact`, 32px with a 1px border at 12px: the studio's strips, whose
+ *   segments and buttons are 32px and 12px.
+ * - `inline`, a small `Chip`'s 28px pill: a value inside a line of words (the
+ *   confirm card's element labels and arrow ends). It is as wide as what it
+ *   holds (`field-sizing: content`, with the `size` attribute as the fallback
+ *   for a browser without it), never the full width, and always a pill.
+ */
+export function inputClasses({
+  pill = false,
+  size = "md",
+  className,
+}: { pill?: boolean; size?: InputSize; className?: string } = {}): string {
+  return cx(
+    INPUT_SIZE[size],
+    size === "inline"
+      ? "min-w-[5ch] max-w-full rounded-full [field-sizing:content]"
+      : cx("w-full min-w-0", pill ? "rounded-full" : "rounded-lg"),
+    FIELD_FACE,
+    className,
+  );
+}
+
+/**
+ * Kit `Textarea`: the `Input` face (2px border, radius 8, 14px) with room for
+ * three lines at least, padded as a box rather than centred on one line, and
+ * resizable only in height so a long note cannot push the page sideways.
+ */
+export function textareaClasses({ className }: { className?: string } = {}): string {
+  return cx("block min-h-20 w-full min-w-0 resize-y rounded-lg border-2 px-3.5 py-2.5 leading-5", FIELD_TEXT.px14, FIELD_FACE, className);
+}
 
 /** Kit `Card`: 2px border, radius 20, padding 20 (14 when `tight`). */
 export function cardClasses({ tight = false, className }: { tight?: boolean; className?: string } = {}): string {

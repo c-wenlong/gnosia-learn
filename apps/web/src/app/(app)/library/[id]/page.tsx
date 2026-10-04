@@ -6,6 +6,7 @@ import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { DownloadButton, FavoriteButton } from "@/components/library/AssetActions";
+import { AskableTitle } from "@/components/library/AskableTitle";
 import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/library/AssetTabs";
 import { AssetTitle } from "@/components/library/AssetTitle";
 import { ExpandablePanel } from "@/components/library/ExpandablePanel";
@@ -63,7 +64,8 @@ import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/tra
  * the `watched` event itself once most of it has played. Anything else keeps
  * "Mark read" beside its title, and Details says when it was last read.
  * Every asset gets Favorite (the star) and, when it has a file to hand over,
- * Download; a video gets Ask too, an unsaved chat about it (`LibraryVideo`).
+ * Download; a video, a note and a diagram get Ask too, an unsaved chat about
+ * it (`LibraryVideo`, `AskableTitle`).
  *
  * **Four shapes, and none of them is a broken version of another.** A video
  * gets a player with its chapters on the scrub bar and its transcript beneath it. A
@@ -341,22 +343,38 @@ export default async function AssetPage({
   // read like a page: the title and "Mark read" above them, where a reader
   // starts, rather than after a long note.
   const pictureFirst = asset.kind === "diagram_svg" || asset.kind === "video";
-  const titleRow = (
-    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-      {heading}
-      <div className="flex shrink-0 flex-wrap items-start gap-2.5">
-        {/* A video tracks itself (`LibraryVideo`); one that cannot be
-            played here has nothing to mark. */}
-        {asset.kind !== "video" && (
-          // Details says when it was last read, so the button does not.
-          <MarkWatched assetId={asset.id} verb="read" lastWatchedDay={null} />
-        )}
-        <FavoriteButton assetId={asset.id} initial={favorite !== null} />
-        {servable && <DownloadButton href={fileHref} filename={downloadName} />}
-        {addToNote}
-      </div>
-    </div>
+  const leading = (
+    <>
+      {/* A video tracks itself (`LibraryVideo`); one that cannot be
+          played here has nothing to mark. */}
+      {asset.kind !== "video" && (
+        // Details says when it was last read, so the button does not.
+        <MarkWatched assetId={asset.id} verb="read" lastWatchedDay={null} />
+      )}
+      <FavoriteButton assetId={asset.id} initial={favorite !== null} />
+    </>
   );
+  const trailing = (
+    <>
+      {servable && <DownloadButton href={fileHref} filename={downloadName} />}
+      {addToNote}
+    </>
+  );
+  // A note or a diagram the page can read gets Ask, an unsaved chat about it,
+  // whose words the chat route reads on the server.
+  const askAbout = !servable ? null : asset.kind === "note" ? "note" : asset.kind === "diagram_svg" ? "diagram" : null;
+  const titleRow =
+    askAbout !== null ? (
+      <AskableTitle heading={heading} before={leading} after={trailing} assetId={asset.id} subject={askAbout} />
+    ) : (
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        {heading}
+        <div className="flex shrink-0 flex-wrap items-start gap-2.5">
+          {leading}
+          {trailing}
+        </div>
+      </div>
+    );
 
   return (
     <div data-layout="app" className={`flex flex-col gap-4 ${PAGE_ENTER}`}>

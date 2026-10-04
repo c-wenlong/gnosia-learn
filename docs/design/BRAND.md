@@ -315,7 +315,6 @@ matches.
 | `--streak-text` | `#916a23` | `#b35a00` | The streak as small text: each palette's streak hue darkened until 11px text clears 4.5:1 on the card. `.dark` keeps its `--streak`, `#ffab33`, which is already 8.83:1 |
 | `--ok-text` | `#008024` | `#009b2b` | Darkened to pass on cream and on its tint |
 | `--ok-on` | `#0b2e14` | `#ffffff` | The dark label `.dark` already uses |
-| `--warn-text` | `#8c6800` | `#b78900` | Darkened to pass on cream and on its tint |
 
 **Why the accent is not the brand teal.** Two components put opposite labels
 on `--accent`: chips and the accent button write white on it, and the close
@@ -356,8 +355,8 @@ light, for comparison; several of its pairs are still under the minimum
 | `--on-tone` (black) on `--accent` (stat tile) | 4.56 | 4.56 | 4.5 | 4.59 | 4.59 |
 | `--ok-text` on `--ok-tint` | 4.62 | 7.66 | 4.5 | 3.32 | 7.66 |
 | `--ok-text` on `--page` | 4.73 | 10.19 | 4.5 | 3.45 | 10.28 |
-| `--warn-text` on `--warn-tint` | 4.71 | 9.17 | 4.5 | 2.93 | 9.17 |
-| `--warn-text` on `--page` | 4.75 | 12.53 | 4.5 | 3.00 | 12.63 |
+| `--warn-text` on `--warn-tint` | 4.71 | 9.17 | 4.5 | 4.71 | 9.17 |
+| `--warn-text` on `--page` | 4.75 | 12.53 | 4.5 | 4.83 | 12.63 |
 | `--warn-on` on `--warn` | 5.60 | 6.31 | 4.5 | 5.60 | 6.31 |
 | `--ok-on` on `--ok` | 6.97 | 6.97 | 4.5 | 2.13 | 6.97 |
 | `--danger` on `--surface` | 5.18 | 6.97 | 4.5 | 5.26 | 7.10 |
@@ -466,7 +465,9 @@ mean the same thing in every theme, and they have to stay unmistakable beside
 teal and gold, so they are kept as saturated as the kit drew them. Only three
 labels moved, each because it was under 4.5:1: `--ok-text` and `--warn-text`
 darkened just far enough within their own hue, and `--ok-on`, the label on a
-green face, became the dark green `.dark` already uses. The `--brand-*` tokens
+green face, became the dark green `.dark` already uses. `--warn-text` has since
+moved in `:root` too ([Classic light](#classic-light)), so `.gnosia` no longer
+needs its own. The `--brand-*` tokens
 are not redefined by `.gnosia`; their `:root` values are the light ones, which
 is what this theme wants.
 
@@ -580,6 +581,21 @@ selected chip and the target bar. No pair forces them apart, since every
 nobody can tell apart. The link colour here is `--accent-text`, not
 `--m-hi` (that is `.dark`, where mastered and links share `#7491ff`), so
 the links do not change.
+
+**The warning text (2026-10-05).** `--warn-text` was `#b78900`, the lip's
+amber, and failed 4.5:1 on every light ground it sits on, its own tint
+included: a "not quite" verdict, a stale-export chip and the studio's warning
+lines were all under the minimum. It now takes `#8c6800`, the amber Gnosia
+light already chose, so both light palettes share one value and `.gnosia`
+drops its override. `--warn-lip`, the button lip, stays `#b78900`: it is a
+graphic, not text.
+
+| Pair | Was | Now | Needs |
+| --- | --- | --- | --- |
+| `--warn-text` on `--warn-tint` | 2.93 | 4.71 | 4.5 |
+| `--warn-text` on `--surface` | 3.19 | 5.13 | 4.5 |
+| `--warn-text` on `--page` | 3.00 | 4.83 | 4.5 |
+| `--warn-text` on `--surface2` | 2.87 | 4.62 | 4.5 |
 
 ### Classic dark
 

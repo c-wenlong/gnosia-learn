@@ -11,11 +11,12 @@ import { FADE_IN } from "@/components/studio/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
-import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
+import { cx, LABEL } from "@/components/ui/classes";
 import { composerKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
-import { TextLink } from "@/components/ui/TextLink";
 import { Glyph } from "@/components/ui/Glyph";
+import { Textarea } from "@/components/ui/Textarea";
+import { TextLink } from "@/components/ui/TextLink";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
@@ -993,7 +994,7 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
       <label htmlFor={fieldId} className="text-[14px] font-semibold text-text">
         What should change?
       </label>
-      <textarea
+      <Textarea
         id={fieldId}
         value={text}
         autoFocus
@@ -1017,7 +1018,6 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
             void revise();
           }
         }}
-        className={cx("min-h-20 w-full resize-y rounded-lg border-2 border-border bg-surface px-3 py-2 leading-5 text-text outline-none placeholder:text-text3 focus:border-accent aria-invalid:border-danger", FIELD_TEXT.px14)}
       />
       <p id={hintId} className="text-[12px] leading-4 text-text3">
         {changeHint(reviewing, canTalk)}

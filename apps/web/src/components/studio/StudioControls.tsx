@@ -6,7 +6,7 @@ import { MenuPopover } from "@/components/studio/MenuPopover";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { ChipLink } from "@/components/studio/StudioChrome";
-import { FIELD_TEXT } from "@/components/ui/classes";
+import { SearchField } from "@/components/ui/SearchField";
 import {
   DEFAULT_VIEW,
   KINDS,
@@ -91,8 +91,11 @@ export function KindSegments({ view }: { view: StudioView }) {
   );
 }
 
-/** 240px, the width the design gives it, and a plain form so it needs no JS. */
-export function SearchField({ view }: { view: StudioView }) {
+/**
+ * The kit's search field at the strip's 32px, 240px wide as the design gives
+ * it, in a plain form so it needs no JS.
+ */
+export function StudioSearch({ view }: { view: StudioView }) {
   const host = usePanelHost();
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     const query = String(new FormData(event.currentTarget).get("q") ?? "").trim();
@@ -101,14 +104,13 @@ export function SearchField({ view }: { view: StudioView }) {
   return (
     <form action="/studio" method="get" onSubmit={onSubmit} className="shrink-0">
       <ViewFields view={view} />
-      <input
-        type="search"
-        name="q"
+      <SearchField
+        size="compact"
         key={view.query}
         defaultValue={view.query}
         placeholder={SEARCH_WORDS[view.kind]}
-        aria-label={SEARCH_WORDS[view.kind]}
-        className={`h-8 w-40 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none sm:w-60 ${FIELD_TEXT.xs}`}
+        label={SEARCH_WORDS[view.kind]}
+        className="w-40 sm:w-60"
       />
     </form>
   );

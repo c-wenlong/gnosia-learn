@@ -178,6 +178,7 @@ export function CourseList({
             placeholder="Search courses"
             value={query}
             onChange={(e) => changeQuery(e.target.value)}
+            onClear={() => changeQuery("")}
             className="w-full max-sm:order-first sm:ml-auto sm:w-[280px]"
           />
         </div>

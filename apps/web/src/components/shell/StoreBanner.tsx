@@ -15,8 +15,9 @@ import { useLearner } from "@/lib/learner-context";
  * could not ask, and the last change the learner made did not land. Both are
  * said in words rather than left to be inferred from a bar that reads zero.
  *
- * The text is `--text`, not `--warn-text`: the yellow on its own tint is under
- * 3:1 in the light theme, fine for a two-word verdict and not for a sentence.
+ * The text is `--text`, not `--warn-text`: amber on its own tint clears 4.5:1
+ * (4.71 in both light palettes) but is still the lightest text on the page, fine
+ * for a two-word verdict and harder going for a whole sentence.
  *
  * It slides down over the page and back up (`Collapse`) rather than shoving
  * the page in a frame, keeping its last words while it folds away. A screen
