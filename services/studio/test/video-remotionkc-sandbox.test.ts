@@ -240,10 +240,16 @@ const tryPort = (port) => new Promise((resolve) => {
     // The render's server is watched from outside while the still and the build run (lan-probe.ts).
     const lan = lanAddress();
     const watch = lan === null ? null : watchPorts([readPorts(paths)], lan);
-    const still = await execFileAsync(paths.wrapper, ["still"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+    // Stopped however the two calls end, so a failed render cannot leave the watcher probing.
+    let still: unknown;
+    let built: unknown;
+    try {
+      still = await execFileAsync(paths.wrapper, ["still"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+      built = await execFileAsync(paths.wrapper, ["build"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+    } finally {
+      lanWatch = watch === null ? null : await watch.stop();
+    }
     expect((still as { code?: number }).code ?? 0, (still as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
-    const built = await execFileAsync(paths.wrapper, ["build"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
-    lanWatch = watch === null ? null : await watch.stop();
     expect((built as { code?: number }).code ?? 0, (built as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
 
     const calls = await readCalls(paths.calls);
