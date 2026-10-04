@@ -173,10 +173,20 @@ export function DomainView({
   const graphNodes = useMemo(() => new Map<string, DomainGraphNode>([...rows].map(([id, r]) => [id, r])), [rows]);
   const focus = selected === null ? null : (rows.get(selected) ?? null);
   // A pointer's hover and the list's focus are kept apart, so the mouse leaving a
-  // focused row does not take the focus's light with it; the pointer wins while it lasts.
-  const [pointerHover, setPointerHover] = useState<string | null>(null);
-  const [focusHover, setFocusHover] = useState<string | null>(null);
-  const hover = pointerHover ?? focusHover;
+  // focused row does not take the focus's light with it. Whichever moved last
+  // wins, so a row Tabbed to lights up even with the pointer resting elsewhere.
+  const [pointerHover, setPointerHoverValue] = useState<string | null>(null);
+  const [focusHover, setFocusHoverValue] = useState<string | null>(null);
+  const [lastInput, setLastInput] = useState<"pointer" | "focus">("pointer");
+  const setPointerHover = (id: string | null) => {
+    setPointerHoverValue(id);
+    if (id !== null) setLastInput("pointer");
+  };
+  const setFocusHover = (id: string | null) => {
+    setFocusHoverValue(id);
+    if (id !== null) setLastInput("focus");
+  };
+  const hover = lastInput === "focus" ? (focusHover ?? pointerHover) : (pointerHover ?? focusHover);
   const [hoverTopic, setHoverTopic] = useState<string | null>(null);
   const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
   // The pill goes as Reset starts, not when the glide home ends.

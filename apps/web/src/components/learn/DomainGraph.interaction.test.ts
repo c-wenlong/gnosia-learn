@@ -219,6 +219,17 @@ describe("domain graph interaction", () => {
     expect(state(host, "quick")).toBe("hover");
   });
 
+  it("lights whichever moved last: a row Tabbed to while the pointer rests elsewhere", () => {
+    const { host } = mount();
+    enter(concept(host, "bfs"));
+    act(() => row(host, "quick").focus());
+    expect(state(host, "quick")).toBe("hover");
+    enter(concept(host, "dfs"));
+    expect(state(host, "dfs")).toBe("hover");
+    act(() => row(host, "heap").focus());
+    expect(state(host, "heap")).toBe("hover");
+  });
+
   it("glides home on Reset without a jump, and takes no drag until it is home", () => {
     const frames: FrameRequestCallback[] = [];
     let now = 0;
