@@ -11,16 +11,15 @@ import { parseCourse, VIDEO_ASSET_PREFIXES } from "@self-learn/content";
 import { doctor, formatDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
 import { runImportCommand } from "../src/commands/index-command";
-import { runStatus } from "../src/commands/status";
+import { formatStatus, runStatus } from "../src/commands/status";
 import { CourseWriteError, exportCourse, importCourse } from "../src/content/courses";
 import { setTriggers, WRITE_GUARDS, writeGuardName } from "../src/content/rules";
 import { readCourses } from "../src/content/readers/courses";
 import { readSnapshots } from "../src/content/snapshot";
 import { VIDEO_PREFIX } from "../src/content/videos";
 import { ASSET_PREFIX } from "../src/index/source";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, sqlstate, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
 
 /**
  * Phase 2 of docs/proposals/module-learning-path.md: a reading names the
@@ -154,8 +153,7 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
     (await scratch.db.select({ n: sql<number>`coalesce(max(id), 0)::int` }).from(contentRevision))[0]?.n ?? 0;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write(
       "content/topics.yaml",
@@ -361,7 +359,22 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
       withConcepts: 3,
       readings: 3,
       readingsOnLessons: 1,
+      concepts: 3,
+      conceptsWithChecks: 0,
     });
+  });
+
+  it("says, per course, how many of the concepts its live lessons teach have a check", async () => {
+    // Live lessons teach base, derived (m1) and other (m2); lesson three,
+    // with third, was archived above. Fixture notes carry no checks.
+    const before = (await runStatus()).coverage.find((c) => c.course === "zz3000");
+    expect(before).toMatchObject({ concepts: 3, conceptsWithChecks: 0 });
+    await scratch.db.execute(
+      sql`update concept set body = body || ${"\n\n```check\nq: A question?\na: An answer.\nwhy: Catches a slip.\n```\n"} where slug = 'base'`,
+    );
+    const after = await runStatus();
+    expect(after.coverage.find((c) => c.course === "zz3000")).toMatchObject({ concepts: 3, conceptsWithChecks: 1 });
+    expect(formatStatus(after)).toMatch(/zz3000 .* 1 of +3 concepts have checks/);
   });
 
   it("guards the link table like every course table: listed under courses, refused raw when armed", async () => {

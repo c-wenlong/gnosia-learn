@@ -11,8 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
 import { COMPLETENESS_RULES, setTriggers } from "../src/content/rules";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
 
 /**
  * Phase 1 of docs/proposals/module-learning-path.md: a course may not teach a
@@ -81,8 +80,7 @@ describe.skipIf(!reachable.ok)("the course order rule, disarmed", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedCourse(scratch.db);
   }, 60_000);
 
@@ -168,8 +166,7 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedCourse(scratch.db);
     await setTriggers(scratch.db, orderRule().triggers, true);
   }, 60_000);

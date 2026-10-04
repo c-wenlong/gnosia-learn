@@ -11,10 +11,9 @@ import { renderType } from "../src/content/export";
 import { fileConceptUnderTopic } from "../src/content/topics";
 import { writeThrough } from "../src/content/write-through";
 import { runIndex } from "../src/index/run";
-import { applyMigrations } from "../src/migrations";
 import { addConceptToItem, CourseEditError } from "../src/learn/course-edit";
 import { connect } from "../src/db";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `learn concept add --topic <slug>`: the one workflow gap that made a tutoring
@@ -200,8 +199,7 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
 
     root = await mkdtemp(path.join(tmpdir(), "concept-topic-"));
     await mkdir(path.join(root, "content"), { recursive: true });

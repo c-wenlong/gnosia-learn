@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   drawDraft: vi.fn(),
   drawBoth: vi.fn(),
   push: vi.fn(),
+  focus: vi.fn(),
+  lateHandle: false,
   events: null as null | { onEvent: (event: { type: string; data: unknown }) => void },
   composer: null as null | {
     value: { text: string; mentions: unknown[] };
@@ -32,6 +34,7 @@ const mocks = vi.hoisted(() => ({
     disabledReason?: string;
     onChange: (value: { text: string; mentions: unknown[] }) => void;
     onModEnter?: () => void;
+    handleRef?: { current: unknown } | ((handle: unknown) => void) | null;
   },
 }));
 
@@ -46,6 +49,11 @@ vi.mock("next/dynamic", () => ({
   default: () =>
     function StubComposer(props: NonNullable<typeof mocks.composer>) {
       mocks.composer = props;
+      // A late handle stands in for the real composer's lazy chunk: rendered,
+      // but with nothing to focus until the test hands it over.
+      if (!mocks.lateHandle && props.handleRef && typeof props.handleRef === "object") {
+        props.handleRef.current = { focus: mocks.focus, insertMention: () => {} };
+      }
       return createElement("div", { "data-composer": JSON.stringify(props.value) });
     },
 }));
@@ -87,6 +95,8 @@ beforeAll(() => {
 beforeEach(() => {
   mocks.composer = null;
   mocks.events = null;
+  mocks.focus.mockClear();
+  mocks.lateHandle = false;
   sessionStorage.clear();
   mocks.sendMessage.mockResolvedValue({ ok: true, status: 202, data: { draftId: "d1", seq: 1, note: "" } });
   mocks.abandonDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", state: "abandoned", note: "" } });
@@ -496,5 +506,76 @@ describe("what arrives while the conversation is open", () => {
     expect(sent?.closest(".animate-enter")).not.toBeNull();
     const thinking = host.querySelector('[role="log"] [role="status"]');
     expect(thinking?.closest(".animate-enter")).not.toBeNull();
+  });
+});
+
+describe("focus on opening", () => {
+  it("goes to the composer when nobody has moved it since the panel opened", async () => {
+    await mount(pair());
+    expect(mocks.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays where the person put it while the conversation loaded, such as the sidebar's search", async () => {
+    let answer: (value: unknown) => void = () => {};
+    mocks.getDraft.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const search = document.createElement("input");
+    const host = document.createElement("div");
+    document.body.append(search, host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(DraftPanel, {
+          draftId: "d1",
+          jobId: null,
+          path: "/studio?draft=d1",
+          topics: [],
+          titles: {},
+          suggestions: [],
+          cap: null,
+          video: { ok: true, reason: null },
+          videoTitles: {},
+        }),
+      );
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+      search.remove();
+    });
+    search.focus();
+    await act(async () => answer({ ok: true, status: 200, data: pair() }));
+    await settle();
+    expect(mocks.composer).not.toBeNull();
+    expect(mocks.focus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(search);
+  });
+
+  /** Hand the stub's composer its handle, as the lazy chunk arriving would, and let the retries run. */
+  async function handOver() {
+    const ref = mocks.composer!.handleRef;
+    if (ref && typeof ref === "object") ref.current = { focus: mocks.focus, insertMention: () => {} };
+    for (let frame = 0; frame < 5; frame += 1) {
+      await act(async () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+    }
+  }
+
+  it("goes to a composer that arrives after the conversation, when nobody moved focus meanwhile", async () => {
+    mocks.lateHandle = true;
+    await mount(pair());
+    expect(mocks.focus).not.toHaveBeenCalled();
+    await handOver();
+    expect(mocks.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays where the person put it while the composer itself loaded", async () => {
+    mocks.lateHandle = true;
+    await mount(pair());
+    const search = document.createElement("input");
+    document.body.append(search);
+    mounted.push(() => search.remove());
+    search.focus();
+    await handOver();
+    expect(mocks.focus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(search);
   });
 });

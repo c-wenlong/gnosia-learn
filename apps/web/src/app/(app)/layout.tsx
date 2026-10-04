@@ -18,6 +18,11 @@ import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
  * Nothing is read at build time, so a build with no database at all still
  * succeeds; every read simply happens per request instead.
  *
+ * Every page under it streams inside a loading boundary (`loading.tsx`), and
+ * React swaps the streamed content in with an inline script. With scripts off
+ * that swap never runs and the page stays on its loading frame, so the
+ * `<noscript>` notice says why instead of leaving a skeleton that never fills.
+ *
  * `requireSignedIn` runs first and before any query. The proxy has already
  * turned an anonymous visitor away; this is the second lock, the one that
  * still holds if a matcher edit ever lets a page through, and it also means a
@@ -39,6 +44,11 @@ export default async function AppLayout({
   return (
     <LearnerProvider initialState={initialState} reachable={reachable}>
       <AppShell studio={studioEnabled()} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
+        <noscript>
+          <p className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-[14px] leading-5 text-text2">
+            Gnosia needs JavaScript. Turn it on for this site and reload the page.
+          </p>
+        </noscript>
         {children}
       </AppShell>
     </LearnerProvider>

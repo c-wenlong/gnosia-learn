@@ -14,6 +14,7 @@ import { PinnedConcept, PinnedDiagram, PinnedVideo } from "@/components/studio/P
 import { PANE_GUTTER, usePaneLayout } from "@/components/studio/pane-context";
 import { Sentence } from "@/components/studio/Sentence";
 import { useStartDraft } from "@/components/studio/useStartDraft";
+import { focusIsStill } from "@/components/studio/dialog-focus";
 import { ENTER, FADE_IN, reducedMotion } from "@/components/studio/motion";
 import { Arrive } from "@/components/studio/motion-parts";
 import { DialogHeader } from "@/components/studio/StudioDialog";
@@ -425,16 +426,25 @@ export function DraftPanel({
 
   const mode: "chat" | "job" = jobId !== null ? "job" : "chat";
 
+  // Where focus was when the panel opened. The panel is keyed by its draft,
+  // so mounting is opening.
+  const openedWith = useRef<Element | null>(null);
+  useEffect(() => {
+    openedWith.current = document.activeElement;
+  }, []);
+
   useEffect(() => {
     // Opening focuses the composer, once it exists. It loads lazily, so the
-    // first try may find nothing, and the next frames try again.
+    // first try may find nothing, and the next frames try again. By then the
+    // person may have clicked somewhere else, such as the sidebar's search,
+    // and typing there must not land in the composer.
     if (!ready || mode !== "chat" || focused.current) return;
     let frames = 0;
     let handle = 0;
     const attempt = () => {
       if (composer.current !== null) {
         focused.current = true;
-        composer.current.focus();
+        if (focusIsStill(document.activeElement, openedWith.current)) composer.current.focus();
         return;
       }
       if ((frames += 1) < 120) handle = requestAnimationFrame(attempt);

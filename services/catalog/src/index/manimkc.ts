@@ -108,11 +108,12 @@ export const manimkcIndexer: Indexer = {
   assetPrefix: MANIMKC.prefix,
   root: ({ manimkcRoot }) => manimkcRoot,
 
-  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary, blobsRequired, owner, knownConcepts }) => {
+  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary, blobsRequired, owner, knownConcepts, storedAssetPaths }) => {
     const report = await readTopicsReport(toolsRoot ?? repoRoot, manimkcRoot);
     return buildRows(report, manimkcRoot, vocabulary.byManimkcPath, vocabulary.bySlug, {
       store: blobsRequired === true,
       knownConcepts: await knownConcepts(),
+      storedPaths: await storedAssetPaths("manimkc"),
       ...(owner === undefined ? {} : { owner }),
     });
   },

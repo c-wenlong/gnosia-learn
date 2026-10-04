@@ -58,11 +58,13 @@ vi.mock("@/components/VideoPlayer", () => ({
     }),
 }));
 vi.mock("next/link", () => ({
-  // `scroll` and `prefetch` are the router's, not the anchor's.
-  default: ({ href, children, ...rest }: { href: string; children: unknown; scroll?: boolean; prefetch?: boolean }) => {
+  // `scroll` and `prefetch` are the router's, not the anchor's; a prefetch
+  // turned off is said as `data-prefetch`, for the test that pins it.
+  default: ({ href, children, ...rest }: { href: string; children: unknown; scroll?: boolean; prefetch?: boolean | null }) => {
     const attributes: Record<string, unknown> = { ...rest };
     delete attributes.scroll;
     delete attributes.prefetch;
+    if (rest.prefetch === false) attributes["data-prefetch"] = "off";
     return createElement("a", { href, ...attributes }, children as never);
   },
   useLinkStatus: () => ({ pending: false }),
@@ -77,6 +79,7 @@ const { VideoRow, VideoTile } = await import("./video/VideoGridJob");
 const { DiagramRow, DiagramTile } = await import("./DiagramTile");
 const { usePanelHost } = await import("./panel-host");
 const { CLOSE_MS } = await import("./StudioDialog");
+const { PanelLink } = await import("./PanelLink");
 
 type Controls = NonNullable<ReturnType<typeof usePanelHost>>;
 
@@ -588,6 +591,34 @@ describe("a video's preview (D85)", () => {
     expect(row?.textContent).toBe("Video: Attention weights");
     // The visible badges stay out of the reading order, so the kind is not said twice.
     for (const badge of container.querySelectorAll("[data-kind-badge]")) expect(badge.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("is not prefetched where the host opens it, and is a plain link without the host", () => {
+    const tiles = createElement(
+      "div",
+      null,
+      createElement(DiagramTile, { diagram: DIAGRAM, path: "/studio", selectHref: "/studio?sel=graph", extendHref: "/studio?extend=graph", showConcepts: false }),
+      createElement(VideoTile, { video: VIDEO, path: "/studio" }),
+      // Extend is drawn by the server, so the host hands it back and the router may prefetch it.
+      createElement(PanelLink, { href: "/studio?extend=other" }, "Extend"),
+    );
+    const { container } = mount({ extra: tiles });
+    const tile = container.querySelector<HTMLAnchorElement>('a[href="/studio?sel=graph"]')!;
+    const video = container.querySelector<HTMLAnchorElement>('a[aria-label="Play video: Attention weights"]')!;
+    const extend = container.querySelector<HTMLAnchorElement>('a[href="/studio?extend=other"]')!;
+    expect(tile.getAttribute("data-prefetch")).toBe("off");
+    // Its href is the library page, which only a modified press or a page with no script reaches.
+    expect(video.getAttribute("data-prefetch")).toBe("off");
+    expect(extend.hasAttribute("data-prefetch")).toBe(false);
+
+    // Outside the host, as on the canvas route, it is the Link it always was.
+    const bare = document.createElement("div");
+    document.body.append(bare);
+    const root = createRoot(bare);
+    act(() => root.render(createElement(VideoTile, { video: VIDEO, path: "/studio" })));
+    expect(bare.querySelector("a[aria-label]")?.hasAttribute("data-prefetch")).toBe(false);
+    act(() => root.unmount());
+    bare.remove();
   });
 
   it("is a panel the host opens and swaps in the browser", () => {

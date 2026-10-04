@@ -10,8 +10,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { auditBlobs, AUDIT_GRACE_MS } from "../src/content/blob-audit";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * What `catalog blob audit --fix` deletes, and what it must not (S13 of the
@@ -83,8 +82,7 @@ describe.skipIf(!reachable.ok)("blob audit --fix, branch by branch", () => {
     null;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     base = await mkdtemp(path.join(tmpdir(), "blob-audit-fix-"));
   }, 60_000);
 

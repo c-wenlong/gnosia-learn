@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
@@ -20,6 +20,8 @@ import {
   zoomView,
   type View,
 } from "@/lib/map-viewport";
+import { firstConcept, keyTarget, mapSummary } from "@/lib/map-keys";
+import { arcLength } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
@@ -43,6 +45,8 @@ const DOT: Record<MasteryBucket, string> = {
 };
 
 const LABEL_LINE = 14;
+/** Half the width of a concept's tap target: the dot and its label. */
+const HIT_HALF_WIDTH = 52;
 const TITLE_SIZE = 14;
 /** The shape the server draws the first frame at, before the browser can measure the box. */
 const ASSUMED = { width: 1000, height: 560 };
@@ -56,6 +60,22 @@ const SCOPES: { key: GraphScope; label: string }[] = [
 ];
 
 type Fit = GraphScope | "all" | "";
+
+/** What a concept carries on the map beyond its bucket (G4, G5). */
+export interface MapMark {
+  ready: boolean;
+  overdue: boolean;
+  leech: boolean;
+}
+
+/** A request from outside to move the map: fit a scope, or centre the selected concept at the present zoom. */
+export interface FitRequest {
+  to: GraphScope | "center";
+  /** A new number asks again, even for the same target. */
+  n: number;
+}
+
+const ARC_RADIUS = 12;
 
 const routeKey = (e: { from: string; to: string; kind: string }) => `${e.from}>${e.to}>${e.kind}`;
 
@@ -92,6 +112,9 @@ export function ConceptMap({
   onSelect,
   scope,
   onScope,
+  dimmed,
+  marks,
+  fitRequest = null,
   className,
 }: {
   layout: MapLayout;
@@ -102,9 +125,14 @@ export function ConceptMap({
   onSelect: (id: string) => void;
   scope: GraphScope;
   onScope: (scope: GraphScope) => void;
+  /** Concepts the filter or the search leaves out, drawn faint rather than removed. */
+  dimmed?: ReadonlySet<string>;
+  marks?: Readonly<Record<string, MapMark>>;
+  fitRequest?: FitRequest | null;
   className?: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const summaryId = useId();
   const boxOf = useCallback(
     (to: GraphScope | "all") => scopeBox(layout, nodes, edges, to, selected),
     [layout, nodes, edges, selected],
@@ -175,14 +203,105 @@ export function ConceptMap({
     [boxOf, animateTo, paint],
   );
 
+  const centerOn = useCallback(
+    (id: string | null) => {
+      const p = id === null ? undefined : layout.positions[id];
+      if (p === undefined) return;
+      const v = live.current;
+      setFit("");
+      animateTo({ ...v, x: p.x - v.w / 2, y: p.y - v.h / 2 });
+    },
+    [layout, animateTo],
+  );
+
+  /**
+   * Fit one island, whichever concept is selected: where Tab lands. It is the
+   * map's scope from then on, so the URL and a reload agree with the screen.
+   */
+  const fitIsland = useCallback(
+    (islandId: string) => {
+      const first = firstConcept(layout, islandId);
+      if (first === null) return;
+      setFit("island");
+      onScope("island");
+      animateTo(fitView(scopeBox(layout, nodes, edges, "island", first), aspect(), 40, widthPx()));
+    },
+    [layout, nodes, edges, animateTo, onScope],
+  );
+
+  /**
+   * Move the keyboard focus to a concept, panning only when it is off screen.
+   * Going into an island does not pan at all: the island's own fit, which may
+   * still be animating, already shows its first concept, and a pan would cut
+   * that fit short.
+   */
+  const focusConcept = useCallback(
+    (id: string, pan = true) => {
+      const el = svgRef.current?.querySelector<SVGGElement>(`[data-concept="${CSS.escape(id)}"]`);
+      el?.focus({ preventScroll: true });
+      if (!pan) return;
+      const p = layout.positions[id];
+      const v = live.current;
+      const margin = v.w * 0.08;
+      if (p && (p.x < v.x + margin || p.x > v.x + v.w - margin || p.y < v.y + margin || p.y > v.y + v.h - margin)) {
+        setFit("");
+        animateTo({ ...v, x: p.x - v.w / 2, y: p.y - v.h / 2 });
+      }
+    },
+    [layout, animateTo],
+  );
+
+  const focusIsland = (islandId: string) =>
+    svgRef.current?.querySelector<SVGGElement>(`[data-island-focus="${CSS.escape(islandId)}"]`)?.focus({ preventScroll: true });
+
+  const onConceptKey = (event: React.KeyboardEvent, id: string) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect(id);
+      return;
+    }
+    const islandId = layout.islandOf[id];
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (islandId !== undefined) focusIsland(islandId);
+      return;
+    }
+    if (event.key === "Tab") {
+      // Tab leaves the island for the next one; Shift Tab goes back to this island's title.
+      const index = layout.islands.findIndex((i) => i.id === islandId);
+      const next = event.shiftKey ? layout.islands[index] : layout.islands[index + 1];
+      if (next !== undefined) {
+        event.preventDefault();
+        focusIsland(next.id);
+      }
+      return;
+    }
+    if (event.key.startsWith("Arrow")) {
+      event.preventDefault();
+      const to = keyTarget(layout, edges, id, event.key);
+      if (to !== id) focusConcept(to);
+    }
+  };
+
   // The first frame was drawn at an assumed shape; fit again at the real one,
   // and keep the scale and centre when the box is resized.
   const fitRef = useRef(fitTo);
   const scopeRef = useRef(scope);
+  const centerRef = useRef(centerOn);
+  const selectedRef = useRef(selected);
   useEffect(() => {
     fitRef.current = fitTo;
     scopeRef.current = scope;
+    centerRef.current = centerOn;
+    selectedRef.current = selected;
   });
+  // Declared after the refs are brought up to date, so a request made with a
+  // new selection fits that selection.
+  useEffect(() => {
+    if (fitRequest === null) return;
+    if (fitRequest.to === "center") centerRef.current(selectedRef.current);
+    else fitRef.current(fitRequest.to);
+  }, [fitRequest]);
   useLayoutEffect(() => {
     const el = svgRef.current;
     if (el === null) return;
@@ -298,6 +417,13 @@ export function ConceptMap({
   const count = Object.keys(layout.positions).length;
   const scale = scaleOf(view, boxWidth);
   const selectedIsland = selected === null ? null : (layout.islandOf[selected] ?? null);
+  const related = new Set<string>();
+  if (selected !== null) {
+    for (const e of edges) {
+      if (e.from === selected) related.add(e.to);
+      if (e.to === selected) related.add(e.from);
+    }
+  }
 
   return (
     <div className={cx("flex flex-col gap-3", className)}>
@@ -318,6 +444,7 @@ export function ConceptMap({
           ref={svgRef}
           viewBox={viewBoxOf(view)}
           role="group"
+          aria-describedby={summaryId}
           aria-label={`Concept map, ${count} concept${count === 1 ? "" : "s"} in ${layout.islands.length} island${layout.islands.length === 1 ? "" : "s"}`}
           data-fit={fit}
           data-labels={labelsShown(scale) ? "shown" : "hidden"}
@@ -333,6 +460,33 @@ export function ConceptMap({
           {layout.islands.map((i) => (
             <g key={i.id} data-island={i.id}>
               <title>{i.title}</title>
+              {/* One tab stop per island (phase 4): focusing it fits the island, Enter goes in. */}
+              <g
+                data-island-focus={i.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`${i.title}, ${i.nodes.length} concept${i.nodes.length === 1 ? "" : "s"}. Enter to go in.`}
+                className="outline-none [&:focus-visible>rect]:stroke-accent"
+                onFocus={() => fitIsland(i.id)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  const first = firstConcept(layout, i.id);
+                  if (first !== null) focusConcept(first, false);
+                }}
+              >
+                <rect
+                  x={i.x - 4}
+                  y={i.y - layout.titleHeight}
+                  width={i.width + 8}
+                  height={i.height + layout.titleHeight + 4}
+                  rx={18}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={3}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </g>
               <rect x={i.x} y={i.y} width={i.width} height={i.height} rx={16} className="fill-surface stroke-hair" strokeWidth={1} />
               <text
                 data-island-title
@@ -358,12 +512,13 @@ export function ConceptMap({
             const route = layout.routes[routeKey(e)];
             if (!route) return null;
             const touches = e.from === selected || e.to === selected;
+            const faint = dimmed !== undefined && (dimmed.has(e.from) || dimmed.has(e.to));
             return (
               <path
                 key={routeKey(e)}
                 d={routePath(route)}
                 fill="none"
-                className={touches ? "stroke-accent" : "stroke-text3 opacity-60"}
+                className={touches ? "stroke-accent" : faint ? "stroke-text3 opacity-15" : "stroke-text3 opacity-60"}
                 strokeWidth={e.kind === "assumes" ? 1 : 1.5}
                 strokeDasharray={e.kind === "assumes" ? "4 4" : undefined}
               />
@@ -375,27 +530,72 @@ export function ConceptMap({
             if (n === undefined) return null;
             const isFocus = id === selected;
             const lines = labels.get(id) ?? [n.title];
-            const caption = `${n.title}, ${MASTERY_BUCKET_LABEL[n.bucket]}${n.bucket === "untouched" ? "" : `, p(L) ${n.pL.toFixed(2)}`}`;
+            const mark = marks?.[id];
+            const dim = dimmed?.has(id) ?? false;
+            const arc = arcLength(n, ARC_RADIUS);
+            const caption = [
+              n.title,
+              MASTERY_BUCKET_LABEL[n.bucket],
+              n.bucket === "untouched" ? null : `p(L) ${n.pL.toFixed(2)}`,
+              mark?.ready ? "ready to learn" : null,
+              mark?.overdue ? "review overdue" : null,
+              mark?.leech ? "keeps slipping" : null,
+            ]
+              .filter(Boolean)
+              .join(", ");
             return (
               <g
                 key={id}
                 data-concept={id}
+                data-courses={n.courses.join(",")}
+                data-dim={dim}
+                data-related={related.has(id)}
+                data-ready={mark?.ready ?? false}
+                data-overdue={mark?.overdue ?? false}
+                data-leech={mark?.leech ?? false}
                 role="button"
-                tabIndex={0}
+                // Out of the tab order: Tab moves between islands, the arrows between concepts.
+                tabIndex={-1}
                 aria-label={caption}
                 aria-pressed={isFocus}
-                className="cursor-pointer outline-none [&:focus-visible>circle:last-of-type]:stroke-accent"
+                className={cx(
+                  "cursor-pointer outline-none transition-opacity duration-150 [&:focus-visible>circle[data-dot]]:stroke-accent",
+                  dim && "opacity-20",
+                )}
                 onClick={() => onSelect(id)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onSelect(id);
-                  }
-                }}
+                onKeyDown={(event) => onConceptKey(event, id)}
               >
                 <title>{caption}</title>
-                {isFocus && <circle cx={p.x} cy={p.y} r={16} fill="none" className="stroke-accent" strokeWidth={2} />}
-                <circle cx={p.x} cy={p.y} r={isFocus ? 10 : 8} className={DOT[n.bucket]} strokeWidth={2} />
+                {/* The whole dot and label take a tap, not only the painted strokes: on a phone the
+                    gap between the dot and its words is where a thumb lands. */}
+                <rect
+                  x={p.x - HIT_HALF_WIDTH}
+                  y={p.y - 18}
+                  width={HIT_HALF_WIDTH * 2}
+                  height={18 + 22 + lines.length * LABEL_LINE}
+                  fill="transparent"
+                />
+                {mark?.ready && (
+                  <circle cx={p.x} cy={p.y} r={15} fill="none" className="stroke-accent" strokeWidth={1.5} strokeDasharray="3 2" />
+                )}
+                {mark?.leech && <circle cx={p.x} cy={p.y} r={18} fill="none" className="stroke-danger" strokeWidth={1.5} />}
+                {isFocus && <circle cx={p.x} cy={p.y} r={16} fill="none" className="stroke-accent" strokeWidth={2.5} />}
+                {arc > 0 && (
+                  <circle
+                    data-arc
+                    cx={p.x}
+                    cy={p.y}
+                    r={ARC_RADIUS}
+                    fill="none"
+                    className="stroke-m-hi"
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    strokeDasharray={`${arc} ${2 * Math.PI * ARC_RADIUS}`}
+                    transform={`rotate(-90 ${p.x} ${p.y})`}
+                  />
+                )}
+                <circle data-dot cx={p.x} cy={p.y} r={isFocus ? 9 : 8} className={DOT[n.bucket]} strokeWidth={2} />
+                {mark?.overdue && <circle cx={p.x + 9} cy={p.y - 9} r={3.5} className="fill-danger" />}
                 {lines.map((line, k) => (
                   <text
                     key={k}
@@ -413,6 +613,9 @@ export function ConceptMap({
             );
           })}
         </svg>
+        <p id={summaryId} className="sr-only">
+          {mapSummary(layout)}
+        </p>
         <div className="absolute bottom-3 left-3 flex gap-1.5">
           <Button variant="secondary" size="sm" aria-label="Zoom in" onClick={() => zoomBy(BUTTON_ZOOM)}>
             +

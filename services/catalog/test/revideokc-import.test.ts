@@ -12,8 +12,7 @@ import { openBlobStore } from "../src/content/blob";
 import { cliScope } from "../src/content/scope";
 import { listVideos } from "../src/content/videos";
 import { REPO_ROOT } from "../src/env";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
 
 /**
@@ -88,8 +87,7 @@ describe.skipIf(!reachable.ok)("revideokc through catalog import", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     work = await mkdtemp(path.join(tmpdir(), "catalog-revideokc-"));
     checkout = path.join(work, "revideokc");
     dataRoot = path.join(work, "revideokc-home");

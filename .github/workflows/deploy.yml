@@ -1,0 +1,88 @@
+name: Deploy
+
+# Production deploys when a GitHub release is published, and only then.
+# Vercel's Git integration builds nothing: apps/web/vercel.json sets
+# git.deploymentEnabled to false, so neither a pull request (preview) nor a
+# merge to main starts a deployment. Before that, every PR and every merge
+# built one, and on the free plan's 100 deployments a day the busy days ran
+# out (2026-10-04: "api-deployments-free-per-day" on every PR).
+#
+# To ship: gh release create v<x.y.z> --generate-notes
+# workflow_dispatch redeploys the release tag it is run on, for a rollback or
+# a retry without cutting a new release; it refuses a branch or an unreleased
+# tag.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A deploy in progress is never cancelled half-way through promoting. While
+# it runs, a newer request waits, and a newer one still replaces the waiting
+# one (GitHub keeps one pending run per group): the newest release wins,
+# which already contains everything the replaced one would have shipped.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  production:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Identifiers, not secrets: the same values `vercel link` writes to
+      # .vercel/project.json. The token is the only secret.
+      VERCEL_ORG_ID: team_3RwDblsQVK0MHQPOndO1vDl8
+      VERCEL_PROJECT_ID: prj_KfVuvAc4rWmQRe4NiSVgeEm5etXD
+    steps:
+      - name: Only a published release
+        # A manual run picks its ref from a menu that lists branches too.
+        # Refuse anything but the tag of a published release, so a retry or a
+        # rollback can never put unreleased code live.
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" != "tag" ]; then
+            echo "::error::Run this on a release tag, not the $REF_TYPE $REF_NAME."
+            exit 1
+          fi
+          draft=$(gh release view "$REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft) || {
+            echo "::error::$REF_NAME has no release. Publish one first: gh release create $REF_NAME"
+            exit 1
+          }
+          if [ "$draft" = "true" ]; then
+            echo "::error::The release for $REF_NAME is a draft. Publish it, which deploys it."
+            exit 1
+          fi
+
+      - name: Checkout
+        # The release's tag (GITHUB_REF on a release event). Submodules are not
+        # needed: the app imports nothing under tools/.
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Deploy
+        # The build runs on Vercel, not here, with the project's Production
+        # environment variables and its Root Directory (apps/web), so it is
+        # the same build the Git integration used to start. Run from the
+        # repository root so the upload carries the workspace packages the
+        # app imports. The CLI is pinned to an exact version because it is
+        # handed the token.
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not set. Create one at https://vercel.com/account/tokens and run: gh secret set VERCEL_TOKEN"
+            exit 1
+          fi
+          npx --yes vercel@62.2.0 deploy --prod --yes --token "$VERCEL_TOKEN"

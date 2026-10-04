@@ -35,8 +35,7 @@ import { kindUnavailable } from "@/lib/studio-cards";
 import { DRAFT_KINDS, type DraftKind, type DraftSummary } from "@/lib/studio-drafts";
 import type { StudioVideo } from "@/lib/studio-video";
 import {
-  browserPanelMove,
-  browserViewMove,
+  browserMove,
   CLOSED,
   displayTitle,
   panelHref,
@@ -202,7 +201,7 @@ export function PanelHost({
     // Read from the address bar itself, which a pushState in this same event
     // may already have moved past what this render saw.
     const from = { pathname: window.location.pathname, search: window.location.search };
-    if (!browserPanelMove(from, href) && !browserViewMove(from, href)) return false;
+    if (!browserMove(from, href)) return false;
     pushUrl(href);
     return true;
   }, []);

@@ -10,9 +10,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
 import { asset, assetDerivation, blobObject } from "@self-learn/schema";
 
-import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
 import {
-  createScratchDatabase,
+  migratedScratchDatabase,
   probe,
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
@@ -81,8 +80,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     });
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     home = await mkdtemp(path.join(tmpdir(), "asset-redirect-"));
     const store = fsStore(path.join(home, "blobs"));
     signing.store = store;

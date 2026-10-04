@@ -17,9 +17,8 @@ import { addTag } from "../src/content/tags";
 import { addTopic, type By, editTopic, mapTopic } from "../src/content/topics";
 import { writeContent } from "../src/content/write";
 import { writeThrough } from "../src/content/write-through";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { copyScratchDatabase, createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { copyScratchDatabase, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * Where a seam write puts its files (D17; `content/import-root.ts`), and what
@@ -146,8 +145,7 @@ describe.skipIf(!reachable.ok)("a copy of a database never writes into the tree 
   let before: Map<string, string>;
 
   beforeAll(async () => {
-    primary = await createScratchDatabase();
-    await applyMigrations(primary.db);
+    primary = await migratedScratchDatabase();
     template = await tree();
     own = await mkdtemp(path.join(tmpdir(), "catalog-copy-own-"));
     blobHome = await mkdtemp(path.join(tmpdir(), "catalog-copy-blobs-"));
@@ -298,8 +296,7 @@ describe.skipIf(!reachable.ok)("a file saved while a write-through is in flight"
   let fixture: Fixture;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await tree();
     await against(scratch.name, async () => {
       await runImportCommand({ dir: fixture.root });
@@ -376,8 +373,7 @@ describe.skipIf(!reachable.ok)("catalog topic map, once topics are flipped", () 
   let manimkc: string;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await tree();
     await fixture.write(
       "content/topics.yaml",

@@ -973,7 +973,9 @@ toolbar's is left out.
 | Below 768px | A full-screen sheet with the header pinned and the composer pinned above the keyboard (`100dvh`, `env(safe-area-inset-bottom)`) |
 
 Talking is the one studio task that works on a phone, even though the canvas
-does not. Opening focuses the composer; Escape, Close or a backdrop click returns
+does not. Opening focuses the composer, unless the person has moved focus
+since the panel opened (the composer loads lazily, and a click into the
+sidebar's search in that time keeps its focus, `focusIsStill`); Escape, Close or a backdrop click returns
 focus to whatever opened it, and `showModal()` traps focus meanwhile. Enter
 sends, Shift+Enter is a new line; while a turn streams, Send is disabled with
 "The planner is still answering". Cmd+Enter (Ctrl+Enter) presses a live Draw,

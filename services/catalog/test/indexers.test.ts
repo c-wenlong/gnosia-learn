@@ -1063,6 +1063,39 @@ describe("manimkc", () => {
     expect(notes.join("\n")).not.toContain("rendered output read from");
   });
 
+  it("refuses a data root that holds none of the files the stored rows name", async () => {
+    // A data root that resolved to the wrong place (an unset $MANIMKC_HOME
+    // falls back to the checkout) reports every video as unrendered, and an
+    // import that believed it would delete every row.
+    fixture = await makeFixture();
+    const checkout = `${fixture.root}/manimkc`;
+    await expect(
+      buildRows(
+        report({ sections: [] }, checkout),
+        checkout,
+        new Map([["algorithms/example", "alpha"]]),
+        new Map([["alpha", {}]]),
+        { storedPaths: ["out/algorithms/example/example.mp4", "out/algorithms/example/example.vtt"] },
+      ),
+    ).rejects.toThrow(
+      `manimkc's data root ${checkout} holds none of the 2 files this owner's manimkc rows name ` +
+        `(${checkout}/out/algorithms/example/example.mp4 is one)`,
+    );
+  });
+
+  it("prunes freely while the data root still holds one of the stored files", async () => {
+    fixture = await withDeliverables();
+    const checkout = `${fixture.root}/manimkc`;
+    const { rows } = await buildRows(
+      report({}, checkout),
+      checkout,
+      new Map([["algorithms/example", "alpha"]]),
+      new Map([["alpha", {}]]),
+      { storedPaths: ["out/algorithms/example/example.mp4", "out/algorithms/gone/gone.mp4"] },
+    );
+    expect(rows.asset).toHaveLength(3);
+  });
+
   it("passes manimkc's own orphan drift through as a note", async () => {
     fixture = await withDeliverables();
     const withOrphan = report();

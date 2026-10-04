@@ -30,10 +30,9 @@ import { archiveItem, purgeItem } from "../src/content/items";
 import { linkOwners } from "../src/content/link-owners";
 import { type By, relateTopic, renameTopic, TopicError } from "../src/content/topics";
 import { ContentWriteError, deleteContent, writeContent } from "../src/content/write";
-import { applyMigrations } from "../src/migrations";
 import { endSession, ensureLearner, ensureSession, readSession, StateError } from "../src/state";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * The write verbs the phase 4 review found going around the seam's owner
@@ -108,9 +107,8 @@ describe.skipIf(!reachable.ok)("write verbs and owners", () => {
   const courseFile = () => path.join(fixture.root, "content/courses/lc1000.yaml");
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
+    scratch = await migratedScratchDatabase();
     const db = scratch.db;
-    await applyMigrations(db);
     dir = await mkdtemp(path.join(tmpdir(), "scope-writes-"));
     fixture = await makeFixture();
     await fixture.write(
