@@ -122,9 +122,10 @@ drawn down to 0.35 of its layout size before it scrolls in its card. That
 is the scale where a two-line 11px label still fits between one layer and
 the next, and the owner's widest domains fit a 390px phone. Measured on
 `self_learn` on 2026-10-05: at 1440 by 900 every domain draws every label;
-at 390 wide, 36 of the 56 in algorithms, 28 of 43 in computer architecture
-and 15 of 27 in machine learning, with no domain scrolling sideways but
-computer architecture (6px). Hover and drag frames held at 16.7 ms, and one
+at 390 wide, 36 of the 56 in algorithms, 29 of 43 in computer architecture
+and 16 of 27 in machine learning, with no domain scrolling sideways but
+computer architecture (6px). A label's width is the sum of Figtree's
+measured glyph widths, so a line of wide letters is not undercounted. Hover and drag frames held at 16.7 ms, and one
 culling pass over 60 labels takes about 20 µs.
 
 ## Phases
