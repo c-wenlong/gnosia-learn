@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { DomainGraph, type DomainGraphNode, type MapMark } from "@/components/learn/DomainGraph";
+import { LegendChips, useLegendPreview } from "@/components/learn/LegendChips";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cx, LABEL } from "@/components/ui/classes";
@@ -11,7 +12,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
 import type { DomainLayout, DomainMapData, DomainSummary } from "@/lib/domain-map";
 import { domainTitle, movedKey, readMoved } from "@/lib/domain-view";
-import type { IndexRow } from "@/lib/learn-index";
+import { legendMembers, legendPress, type IndexFilter, type IndexRow } from "@/lib/learn-index";
 import { relatedTo, standingLine } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
@@ -146,6 +147,8 @@ export function DomainView({
   selected,
   dimmed,
   marks,
+  filter,
+  onFilter,
   onGo,
   onSelect,
   onPick,
@@ -162,6 +165,9 @@ export function DomainView({
   selected: string | null;
   dimmed: ReadonlySet<string>;
   marks: Readonly<Record<string, MapMark>>;
+  /** The Status filter, which the legend's chips commit (D9). */
+  filter: IndexFilter;
+  onFilter: (filter: IndexFilter) => void;
   onGo: (place: Place) => void;
   onSelect: (id: string) => void;
   /** A concept chosen from the panel, maybe in another domain. */
@@ -188,6 +194,13 @@ export function DomainView({
   };
   const hover = lastInput === "focus" ? (focusHover ?? pointerHover) : (pointerHover ?? focusHover);
   const [hoverTopic, setHoverTopic] = useState<string | null>(null);
+  // The legend (D9): each group's concepts among those the picture shows, and the one a chip previews.
+  const members = useMemo(
+    () => legendMembers((topic === null ? layout.groups : layout.groups.filter((g) => g.topic === topic)).flatMap((g) => g.concepts), rows),
+    [layout, topic, rows],
+  );
+  const legend = useLegendPreview();
+  const preview = useMemo(() => (legend.group === null ? null : new Set(members[legend.group])), [legend.group, members]);
   const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
   // The pill goes as Reset starts, not when the glide home ends.
   const anyMoved = Object.keys(moved).length > 0 && !gliding;
@@ -216,6 +229,17 @@ export function DomainView({
       <div className="@container">
         <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-[minmax(0,1fr)_300px]">
           <Card>
+            <LegendChips
+              counts={{
+                mastered: members.mastered.length,
+                learning: members.learning.length,
+                untouched: members.untouched.length,
+                ready: members.ready.length,
+              }}
+              filter={filter}
+              preview={legend}
+              onPress={(group) => onFilter(legendPress(filter, group))}
+            />
             <DomainGraph
               layout={layout}
               title={domain.title}
@@ -226,6 +250,7 @@ export function DomainView({
               marks={marks}
               hover={hover}
               hoverTopic={hoverTopic}
+              preview={preview}
               moved={moved}
               onSelect={onSelect}
               onTopic={(t) => {
