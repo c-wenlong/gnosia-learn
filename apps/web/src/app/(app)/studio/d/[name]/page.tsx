@@ -10,7 +10,7 @@ import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
 import { FADE_IN } from "@/components/studio/motion";
 import { ShotView } from "@/components/studio/ShotView";
-import { FIELD_TEXT } from "@/components/ui/classes";
+import { Input } from "@/components/ui/Input";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
   Button,
@@ -318,13 +318,14 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
       <form action={commitDiagram} className="flex shrink-0 items-center gap-1.5">
         <input type="hidden" name="name" value={diagram.name} />
         <input type="hidden" name="path" value={path} />
-        <input
+        <Input
+          size="compact"
           type="text"
           name="reason"
           required
           placeholder="Why this change"
           aria-label="Why this change"
-          className={`h-8 w-44 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none ${FIELD_TEXT.xs}`}
+          className="w-44"
         />
         <Button type="submit">Commit</Button>
       </form>

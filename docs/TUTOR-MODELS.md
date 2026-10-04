@@ -63,9 +63,9 @@ asked rather than spending the route's rate limit. A list that failed shows
 Try again, and switching back to its provider asks again too. A list is read at most 8 MB
 and an error body at most 64 KB, counted as the bytes arrive, whatever the
 provider declares. The
-id field is a text input with a `<datalist>` of the listed ids, so choosing
-from the list and typing an id are the same field, and a list that failed or
-is incomplete costs nothing. Test sends one minimal chat request (one token)
+id field is the kit's `Combobox` over the listed ids ("free" under the free
+ones), so choosing from the list and typing an id are the same field, and a
+list that failed or is incomplete costs nothing. Test sends one minimal chat request (one token)
 to exactly that entry and shows "works" or the provider's error, redacted the
 way the key Test is. Remove, Move up and Move down are buttons; every control
 works by keyboard, and after a move or a remove focus returns to the entry

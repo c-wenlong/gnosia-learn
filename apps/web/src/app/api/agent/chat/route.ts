@@ -11,6 +11,7 @@ import {
   buildAgentSessionContext,
   buildConceptSessionContext,
   buildOpenTutorPrompt,
+  buildPageAskPrompt,
   buildVideoAskPrompt,
   OPEN_SUBJECT_LIMIT,
   type CitationSource,
@@ -31,6 +32,7 @@ import { MAX_ASSET_ID_CHARS } from "@/app/api/learner/watched/route";
 import { assetDisplayTitle } from "@/components/asset-meta";
 import { readAssetDetail, readAssetText, withCatalog } from "@/lib/asset-library";
 import { requestOwner } from "@/lib/learner-api";
+import { svgText } from "@/lib/svg-text";
 import { parseTranscript } from "@/lib/transcript";
 import { KNOWLEDGE_LIMITS } from "@/lib/storage";
 import type { TopicKnowledge } from "@/lib/types";
@@ -42,8 +44,9 @@ export const runtime = "nodejs";
  * `courseSlug`, `moduleSlug` and `topicId`. The concept tutor (the workspace)
  * sends `conceptSlug` instead, and when it is present the three topic fields
  * are ignored. The open tutor (`/ask`, from Home's Ask box) sends `subject`,
- * the text the owner typed, and nothing else. Ask on a library video sends
- * `assetId` and, when known, `at`, the player's position in seconds. The request and response shapes are written down in
+ * the text the owner typed, and nothing else. Ask on a library video, note or
+ * diagram sends `assetId` and, for a video when known, `at`, the player's
+ * position in seconds. The request and response shapes are written down in
  * docs/design/IMPLEMENTATION.md under "The concept tutor API".
  */
 interface ChatBody {
@@ -133,7 +136,7 @@ export async function POST(req: Request) {
   }
   if (body.conceptSlug !== undefined) return conceptTurn(req, body, owner);
   if (body.subject !== undefined) return openTurn(req, body, owner);
-  if (body.assetId !== undefined) return videoTurn(req, body, owner);
+  if (body.assetId !== undefined) return assetTurn(req, body, owner);
 
   const { courseSlug, moduleSlug, topicId, messages, learnerNote, priorKnowledge } =
     body;
@@ -290,14 +293,25 @@ async function openTurn(req: Request, body: ChatBody, owner: string) {
   return completeTurn(owner, buildOpenTutorPrompt(text, { style }), messages);
 }
 
+/** The asset kinds Ask answers about, and what each is called in an error. */
+const ASKABLE: Record<string, string> = { video: "video", note: "note", diagram_svg: "diagram" };
+
 /**
- * A turn of Ask on a library video: a quick question about the video the
- * learner is watching. The video and its transcript are read on the server
- * from `assetId`, under the owner's scope, so nothing about the video is taken
- * from the browser but its id and the player's position. Nothing is recorded:
- * the thread lives in the page and goes when it closes.
+ * The most bytes of a diagram's SVG read for its labels. A tldrawkc export
+ * embeds its fonts, so one is a few hundred kilobytes, over the text preview
+ * cap; the labels themselves are a few hundred characters.
  */
-async function videoTurn(req: Request, body: ChatBody, owner: string) {
+const DIAGRAM_SVG_BYTES = 4 * 1024 * 1024;
+
+/**
+ * A turn of Ask on a library asset: a quick question about the video, note or
+ * diagram the learner has open. The asset and its words (a video's
+ * transcript, a note's markdown, a diagram's labels) are read on the server
+ * from `assetId`, under the owner's scope, so nothing about it is taken from
+ * the browser but its id and a video's position. Nothing is recorded: the
+ * thread lives in the page and goes when it closes.
+ */
+async function assetTurn(req: Request, body: ChatBody, owner: string) {
   const { assetId, at, messages } = body;
   const position = typeof at === "number" && Number.isFinite(at) && at >= 0 ? at : null;
   if (
@@ -324,15 +338,30 @@ async function videoTurn(req: Request, body: ChatBody, owner: string) {
   const rateLimited = enforceRateLimit(req, "chat", CHAT_RATE_LIMIT);
   if (rateLimited) return rateLimited;
 
-  const { asset, derivations, reachable } = await readAssetDetail(assetId);
+  const { asset, derivations, reachable, concepts: detailConcepts } = await readAssetDetail(assetId);
   if (!reachable) {
     return NextResponse.json(
-      { error: "The catalog could not be reached, so the tutor has no video to work from.", code: "ASSET_UNAVAILABLE" },
+      { error: "The catalog could not be reached, so the tutor has nothing to work from.", code: "ASSET_UNAVAILABLE" },
       { status: 503 },
     );
   }
-  if (asset === null || asset.kind !== "video") {
-    return NextResponse.json({ error: "Video not found", code: "ASSET_NOT_FOUND" }, { status: 404 });
+  if (asset === null || ASKABLE[asset.kind] === undefined) {
+    return NextResponse.json(
+      { error: "No video, note or diagram has that id", code: "ASSET_NOT_FOUND" },
+      { status: 404 },
+    );
+  }
+
+  const style = await readTutorStyle();
+  const title = assetDisplayTitle(asset).text;
+  if (asset.kind !== "video") {
+    // Unreadable words cost the prompt its text, not the turn: it says so.
+    const raw = await withCatalog((db) =>
+      readAssetText(db, asset.id, asset.kind === "diagram_svg" ? DIAGRAM_SVG_BYTES : undefined),
+    );
+    const text = raw === null ? null : asset.kind === "diagram_svg" ? svgText(raw) : raw;
+    const kind = asset.kind === "note" ? "note" : "diagram";
+    return completeTurn(owner, buildPageAskPrompt({ kind, title, text, concepts: detailConcepts ?? [] }, { style }), messages);
   }
 
   // A transcript that is missing or unreadable costs the prompt its
@@ -340,9 +369,6 @@ async function videoTurn(req: Request, body: ChatBody, owner: string) {
   const sidecar = derivations.derived.find((row) => row.kind === "transcript");
   const raw = sidecar === undefined ? null : await withCatalog((db) => readAssetText(db, sidecar.id));
   const transcript = raw === null ? null : (parseTranscript(raw)?.cues ?? null);
-
-  const style = await readTutorStyle();
-  const title = assetDisplayTitle(asset).text;
   return completeTurn(owner, buildVideoAskPrompt({ title, transcript }, position, { style }), messages);
 }
 

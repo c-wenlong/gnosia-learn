@@ -24,9 +24,10 @@ function errorFor(status: number, data: ChatReply): string {
 }
 
 /**
- * Ask on a library video: quick questions about the video, answered on the
- * spot by `/api/agent/chat` with the video's transcript and the player's
- * position (`at`) as context.
+ * Ask on a library asset: quick questions about the video, note or diagram
+ * open on the page, answered on the spot by `/api/agent/chat`, which reads
+ * the asset's words on the server (a video's transcript, a note's markdown, a
+ * diagram's labels). A video also sends the player's position (`at`).
  *
  * The thread is this component's state and nothing else. It is not saved,
  * records no mastery and appends no event, and the line above the composer
@@ -35,7 +36,17 @@ function errorFor(status: number, data: ChatReply): string {
  * leaving the page loses it. Nothing is sent until the learner asks: every
  * turn is paid for with the owner's provider keys.
  */
-export function AskPanel({ assetId, position }: { assetId: string; position: () => number | null }) {
+export function AskPanel({
+  assetId,
+  subject,
+  position,
+}: {
+  assetId: string;
+  /** What the composer names: "video", "note", "diagram". */
+  subject: string;
+  /** Where a video's player is, read as each question is sent. */
+  position?: () => number | null;
+}) {
   const [turns, setTurns] = useState<TutorTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,7 +59,7 @@ export function AskPanel({ assetId, position }: { assetId: string; position: () 
       const res = await fetch("/api/agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assetId, at: position(), messages: trimForRequest(thread) }),
+        body: JSON.stringify({ assetId, at: position?.() ?? undefined, messages: trimForRequest(thread) }),
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
       if (!res.ok || data.message === undefined) {
@@ -107,8 +118,8 @@ export function AskPanel({ assetId, position }: { assetId: string; position: () 
         value={draft}
         onChange={setDraft}
         onSubmit={ask}
-        label="Ask the tutor about this video"
-        placeholder="Ask about this video"
+        label={`Ask the tutor about this ${subject}`}
+        placeholder={`Ask about this ${subject}`}
         sendDisabled={busy}
       />
       <div className="flex flex-wrap items-center justify-between gap-2">

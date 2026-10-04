@@ -401,11 +401,11 @@ describe("POST /api/agent/chat with assetId", () => {
     expect(completeWithFallback).not.toHaveBeenCalled();
   });
 
-  it("answers 404 for a row that is missing or not a video, and 503 when the catalog is down", async () => {
+  it("answers 404 for a row that is missing or not a kind Ask reads, and 503 when the catalog is down", async () => {
     readAssetDetail.mockResolvedValueOnce({ asset: null, derivations: { sources: [], derived: [] }, reachable: true });
     expect((await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] })).status).toBe(404);
     readAssetDetail.mockResolvedValueOnce({
-      asset: { ...video, kind: "note" },
+      asset: { ...video, kind: "link" },
       derivations: { sources: [], derived: [] },
       reachable: true,
     });
@@ -449,5 +449,62 @@ describe("POST /api/agent/chat with assetId", () => {
     const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
     expect(sent[0].content).toContain("No transcript is indexed");
     expect(sent[0].content).toContain("## Where the player is\nNot known.");
+  });
+
+  it("answers about a note from its own markdown and the concepts it explains", async () => {
+    const NOTE = "note:learn/concepts/foundations/dot-product.md";
+    readAssetDetail.mockResolvedValue({
+      asset: { id: NOTE, kind: "note", title: "Dot product", path: "learn/concepts/foundations/dot-product.md", url: null },
+      derivations: { sources: [], derived: [] },
+      concepts: ["dot-product"],
+      reachable: true,
+    });
+    readAssetText.mockResolvedValue("# Dot product\nIt measures how aligned two vectors are.");
+    completeWithFallback.mockResolvedValue(reply);
+
+    const res = await call({ assetId: NOTE, messages: [{ role: "user", content: "Why cosine?" }] });
+    expect(res.status).toBe(200);
+    expect(readAssetText.mock.calls[0][1]).toBe(NOTE);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("# Self-Learn note Ask");
+    expect(sent[0].content).toContain("It measures how aligned two vectors are.");
+    expect(sent[0].content).toContain("It explains: dot-product.");
+  });
+
+  it("answers about a diagram from the labels in its SVG, read past the text preview cap", async () => {
+    const DIAGRAM = "diagram:learn/assets/vector-as-a-list-of-numbers.svg";
+    readAssetDetail.mockResolvedValue({
+      asset: { id: DIAGRAM, kind: "diagram_svg", title: "A vector as a list of numbers", path: "learn/assets/x.svg", url: null },
+      derivations: { sources: [], derived: [] },
+      concepts: [],
+      reachable: true,
+    });
+    readAssetText.mockResolvedValue(
+      "<svg><style>@font-face{src:url(data:font/woff2;base64,AAAA)}</style><text>standard axes</text><text>[ 1, 3 ]</text></svg>",
+    );
+    completeWithFallback.mockResolvedValue(reply);
+
+    const res = await call({ assetId: DIAGRAM, messages: [{ role: "user", content: "What changed?" }] });
+    expect(res.status).toBe(200);
+    expect(readAssetText.mock.calls[0][2]).toBeGreaterThan(1024 * 1024);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("# Self-Learn diagram Ask");
+    expect(sent[0].content).toContain("standard axes\n[ 1, 3 ]");
+    expect(sent[0].content).not.toContain("base64");
+    expect(sent[0].content).toContain("arrows, positions and grouping are not in them");
+  });
+
+  it("still answers about a note whose words cannot be read, and says so", async () => {
+    readAssetDetail.mockResolvedValue({
+      asset: { id: "note:x", kind: "note", title: "X", path: "x.md", url: null },
+      derivations: { sources: [], derived: [] },
+      concepts: [],
+      reachable: true,
+    });
+    readAssetText.mockResolvedValue(null);
+    completeWithFallback.mockResolvedValue(reply);
+    expect((await call({ assetId: "note:x", messages: [{ role: "user", content: "Q" }] })).status).toBe(200);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("The note's words could not be read");
   });
 });

@@ -363,6 +363,7 @@ export function TutorChat({
       // The page's mastery dot, Recent answers and checks read the new state.
       router.refresh();
     } catch (e) {
+      // `recordAnswer` names a timeout and a write dropped after a close itself.
       patchVerdict(requestId, { state: "failed", error: e instanceof Error ? e.message : "The answer was not recorded." });
     } finally {
       recording.current.delete(requestId);
@@ -663,7 +664,7 @@ export function TutorChat({
           </div>
         )}
 
-        {turns.length > 0 && !busy && (
+        {turns.length > 0 && !busy && !turns.some((t) => t.role === "user" && t.verdict?.state === "saving") && (
           <div className="flex animate-fade-in justify-center motion-reduce:animate-none">
             <button
               type="button"

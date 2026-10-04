@@ -1,0 +1,21 @@
+# label	render flags (both themes are always rendered; "full" adds a whole-page shot)
+home-dark	
+home-dark-composer-typed	
+home-dark-plus-menu	
+home-dark-model-menu	
+home-dark-user-menu	
+home-dark-chat-menu	
+home-dark-search	
+home-dark-sidebar-collapsed	
+thread-dark	
+thread-dark-table	scroll=1150
+thread-dark-followup	scroll=1780
+artifacts-dark	full
+artifacts-dark-more-menu	
+chats-dark	full
+projects-dark	
+project-dark	
+settings-dark-general	
+mobile-home-dark	
+mobile-home-dark-drawer	
+mobile-thread-dark	
