@@ -327,6 +327,11 @@ describe("the history search", () => {
     act(() => links()[0].focus());
     await settle(400);
     expect(nav().className).toContain("md:absolute");
+
+    // Focus leaving the sidebar from there, with the pointer away, does slide it back.
+    act(() => links()[0].blur());
+    await settle(300);
+    expect(nav().className).toContain("md:hidden");
   });
 
   describe("reads that overlap", () => {
@@ -398,6 +403,27 @@ describe("the history search", () => {
       expect(second).toHaveLength(3);
       await act(async () => second[2](answer(rest)));
       expect(rows(container)).toBe(51);
+    });
+
+    it("takes the page back, and says so, when the Show more read and a refresh that began under it both fail", async () => {
+      const { second } = held();
+      const { field, container } = mount();
+      type(field(), "match");
+      await settle();
+      const more = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
+      act(() => more.click());
+      await settle(0);
+      await wake();
+      expect(second).toHaveLength(2);
+      // The newest fails first: the press's read may still land the page, so nothing is said yet.
+      await act(async () => second[1](down));
+      expect(container.textContent).not.toContain("More matches could not be read");
+      await act(async () => second[0](down));
+      expect(container.textContent).toContain("More matches could not be read");
+      expect(rows(container)).toBe(50);
+      // The page is asked for again, not skipped: a refresh reads one page, as it did before the press.
+      await wake();
+      expect(second).toHaveLength(2);
     });
 
     it("takes the page back, and says so, when the Show more read is the newest and fails", async () => {

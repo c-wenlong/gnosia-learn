@@ -117,15 +117,26 @@ export function draftRows(
 }
 
 /**
+ * One character as the search compares it: lower case, with the Greek final
+ * sigma written as the ordinary one. Lower-casing a whole string makes a
+ * capital sigma at the end of a word a final one, so "ΑΣ" is "ας" there and
+ * "ασ" a character at a time; folding both to "σ" makes a search written
+ * either way find it.
+ */
+function foldChar(char: string): string {
+  return char.toLowerCase().replace("ς", "σ");
+}
+
+/**
  * A search text as the runner compares it (`searchText` in the runner's
  * `drafts.ts`): whitespace runs as one space, trimmed, and each character
- * lower-cased on its own. One character at a time, so a character that
+ * folded on its own (`foldChar`). One character at a time, so a character that
  * lower-cases to a different number of letters (the Turkish dotted capital I)
  * can be traced back to where it was (`foldWithMap`), which a lower-cased
  * whole string cannot offer.
  */
 export function searchText(text: string): string {
-  return [...text.replace(/\s+/g, " ").trim()].map((char) => char.toLowerCase()).join("");
+  return [...text.replace(/\s+/g, " ").trim()].map(foldChar).join("");
 }
 
 /**
@@ -157,7 +168,7 @@ function foldWithMap(text: string): { folded: string; starts: number[]; ends: nu
         put(" ", spaceFrom, at);
         spaceFrom = -1;
       }
-      put(char.toLowerCase(), at, next);
+      put(foldChar(char), at, next);
     }
     at = next;
   }

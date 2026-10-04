@@ -3785,14 +3785,16 @@ export function listLine(text: string): string {
 
 /**
  * A search text as `list` compares it: whitespace runs as one space, trimmed,
- * each character lower-cased on its own. One at a time so the web app can
- * trace a match back to the character it came from (a character may lower-case
- * to more than one letter, the Turkish dotted capital I), and so the two sides
+ * each character folded on its own: lower case, with the Greek final sigma
+ * written as the ordinary one (lower-casing a whole string would make "ΑΣ"
+ * "ας" and a search for "ασ" miss it). One at a time so the web app can trace
+ * a match back to the character it came from (a character may lower-case to
+ * more than one letter, the Turkish dotted capital I), and so the two sides
  * agree on what matches by construction. The rule is the web app's
  * `searchText` in `studio-draft-list.ts`.
  */
 export function searchText(text: string): string {
-  return [...text.replace(/\s+/g, " ").trim()].map((char) => char.toLowerCase()).join("");
+  return [...text.replace(/\s+/g, " ").trim()].map((char) => char.toLowerCase().replace("ς", "σ")).join("");
 }
 
 /**

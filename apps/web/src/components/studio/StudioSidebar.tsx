@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { useHistorySearch, SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { PanelLink } from "@/components/studio/PanelLink";
@@ -226,8 +226,6 @@ export function StudioSidebar({
   const peeking = collapsed && peek;
   const room = useRef<HTMLDivElement | null>(null);
   const searchField = useRef<HTMLInputElement | null>(null);
-  /** The pointer left the sidebar while the search field was in use: it stays slid out until the field is let go. */
-  const holdPeek = useRef(false);
   /** The rail's search button was pressed: the field takes focus once the sidebar is out. */
   const focusSearch = useRef(false);
   useEffect(() => {
@@ -296,7 +294,19 @@ export function StudioSidebar({
           if (collapsed && event.pointerType === "mouse") peekAfter(true, 120);
         }}
         onPointerLeave={() => {
-          if (collapsed && !holdPeek.current) peekAfter(false, 200);
+          // Not while focus is inside it (the search field, a result): the
+          // slide back waits for focus to leave too, below.
+          if (collapsed && room.current?.contains(document.activeElement) !== true) peekAfter(false, 200);
+        }}
+        onFocus={() => {
+          // Back inside before a close that leaving it scheduled has fired.
+          if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+        }}
+        onBlur={(event) => {
+          // Focus moving between things in the sidebar is not leaving it.
+          if (event.relatedTarget instanceof Node && room.current?.contains(event.relatedTarget) === true) return;
+          // Focus left it. With the pointer gone too, nothing else will say it may slide back.
+          if (collapsed && room.current?.matches(":hover") !== true) peekAfter(false, 200);
         }}
       >
         {collapsed && (
@@ -354,22 +364,7 @@ export function StudioSidebar({
           </span>
         </div>
 
-        <SearchField
-          search={search}
-          inputRef={searchField}
-          onFocus={() => {
-            holdPeek.current = true;
-            // Back in the field before a close it scheduled on leaving it fired.
-            if (peekTimer.current !== null) clearTimeout(peekTimer.current);
-          }}
-          onBlur={(event) => {
-            holdPeek.current = false;
-            // Focus moving to a row or button in the sidebar is not leaving it.
-            if (event.relatedTarget instanceof Node && room.current?.contains(event.relatedTarget) === true) return;
-            // The pointer left while the field was in use: nothing else will say it may slide back.
-            if (collapsed && room.current?.matches(":hover") !== true) peekAfter(false, 200);
-          }}
-        />
+        <SearchField search={search} inputRef={searchField} />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {search.words !== "" ? (
@@ -479,13 +474,9 @@ function SearchIcon({ className = "size-[18px]" }: { className?: string }) {
 function SearchField({
   search,
   inputRef,
-  onFocus,
-  onBlur,
 }: {
   search: HistorySearch;
   inputRef: RefObject<HTMLInputElement | null>;
-  onFocus: () => void;
-  onBlur: (event: FocusEvent<HTMLInputElement>) => void;
 }) {
   return (
     <div className="shrink-0 px-2 pb-2">
@@ -507,8 +498,6 @@ function SearchField({
           placeholder="Search conversations"
           aria-label="Search conversations"
           onChange={(event) => search.setQuery(event.target.value)}
-          onFocus={onFocus}
-          onBlur={onBlur}
           onKeyDown={(event) => {
             if (event.key !== "Escape" || search.query === "") return;
             event.stopPropagation();

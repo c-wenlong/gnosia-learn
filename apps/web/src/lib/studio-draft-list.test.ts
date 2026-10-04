@@ -303,6 +303,18 @@ describe("the history search", () => {
     expect(row.snippet).toBe(`…${"İ".repeat(23)} needle`);
   });
 
+  it("finds Greek words whichever sigma they are written with", () => {
+    // A capital sigma ends a word as "ς" when a whole string is lower-cased, and is "σ" on its own.
+    for (const q of ["ας", "ασ", "ΑΣ"]) {
+      expect(draftMatches(draft({ title: "ΑΣ" }), q)).toBe(true);
+      expect(draftMatches(draft({ title: "ας" }), q)).toBe(true);
+    }
+    expect(matchParts("η ΟΔΟΣ", "οδος")).toEqual([
+      { text: "η ", hit: false },
+      { text: "ΟΔΟΣ", hit: true },
+    ]);
+  });
+
   it("finds exactly what the search compares, whatever the text holds", () => {
     // Whatever matchParts marks is a place where the folded text holds the folded search.
     const texts = ["İstanbul İZMİR", "  lead  and   trail  ", "ΑΣ ΟΔΟΣ", "tab\tsplit\nlines", "emoji 😀 and e\u0301 mark"];

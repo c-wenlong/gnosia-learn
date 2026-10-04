@@ -512,6 +512,7 @@ describe("PUT /api/drafts/{id}/brief", () => {
     const matrix = await talk("  explain   DOT   matrix  notation ");
     const concept = (await (await post("/api/drafts", { concept: { slug: "cosine", title: "Cosine similarity", summary: null, body: null } })).json()) as { draftId: string };
     const turkish = await talk("Plan the İstanbul route");
+    const greek = await talk("Η ΟΔΟΣ προς την πόλη");
     const unrelated = await talk("Something else entirely");
 
     // The title, and the first message of a draft with no brief, in any case.
@@ -528,6 +529,9 @@ describe("PUT /api/drafts/{id}/brief", () => {
     // A character is lower-cased on its own, as the web app marks it: "İ" is "i" and a combining dot.
     expect(await ids("q=%C4%B0stanbul")).toEqual([turkish]);
     expect(await ids("q=stanbul")).toEqual([turkish]);
+    // A Greek final sigma is the ordinary one to the search, whichever way it is typed.
+    expect(await ids("q=%CE%BF%CE%B4%CE%BF%CF%82")).toEqual([greek]); // οδος
+    expect(await ids("q=%CE%BF%CE%B4%CE%BF%CF%83")).toEqual([greek]); // οδοσ
     // Blank is no search, and the other filters still apply with it.
     expect(await ids("q=%20%20")).toEqual(await ids(""));
     expect(await ids("q=tcp&state=briefed")).toEqual([titled]);

@@ -706,7 +706,8 @@ and the open conversation is marked among the matches as it is in the groups.
 Escape in a field that holds words, or its clear button, puts the groups
 back; Escape in an empty field closes the drawer or the slid-out sidebar as
 before. On the collapsed rail a search button slides the sidebar out with the
-field focused, and it stays out until the field is let go.
+field focused, and it stays out while focus is inside it, sliding back when
+focus and the pointer have both left.
 
 **The conversation** is `StudioPane`: `StudioDialog`'s controls without the
 dialog. Nothing is modal, so the sidebar stays usable, and there is no Close:
@@ -1316,7 +1317,8 @@ runner already holds every draft in memory and filters before it limits, so
 the cost is one more `filter` in `Drafts.list`. The web app applies the same
 rule to what comes back, so a runner that predates `q` still shows only
 matches. Text and search are folded one character at a
-time (lower case, spaces collapsed), so a match can be traced back to the
+time (lower case, a Greek final sigma written as the ordinary one, spaces
+collapsed), so a match can be traced back to the
 characters it came from and marked; lower-casing the whole string would not
 say where a letter that lower-cases to two (the Turkish dotted capital I)
 stood. Gauth's Atlas has a New Topic row and a search field in that order

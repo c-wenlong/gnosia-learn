@@ -61,31 +61,52 @@ export function useHistorySearch(): HistorySearch {
 
   /** The words last typed, read by an answer when it lands. */
   const current = useRef("");
-  /** How many pages of matches are shown. */
+  /** How many pages of matches reads are asked for: what is shown, and a press of "Show more matches" counted before its read. */
   const pages = useRef(1);
+  /** How many pages the matches on screen were read with. */
+  const shownPages = useRef(1);
   const issued = useRef(0);
   const shownTicket = useRef(0);
+  /** Reads started and not yet finished, for any words. */
+  const inflight = useRef(0);
 
   const read = useCallback(async (q: string, count: number): Promise<ReadOutcome> => {
     issued.current += 1;
     const ticket = issued.current;
-    const result = await readHistory(count, async (before) => {
-      const answer = await listDrafts({ state: LISTED_STATES, nonEmpty: true, limit: LIST_LIMIT, q, ...(before === undefined ? {} : { before }) });
-      return answer.ok && Array.isArray(answer.data.drafts) ? answer.data.drafts : null;
-    });
-    // Words that have moved on: nothing here is the screen's business.
-    if (current.current !== q) return "superseded";
-    if (result === null) {
-      // A read that was not the newest failing, after a newer one began or
-      // landed, changes nothing: the newer read says how the search stands.
-      return ticket === issued.current ? "failed" : "superseded";
+    /** The read itself, and what became of it. */
+    const readOnce = async (): Promise<ReadOutcome> => {
+      const result = await readHistory(count, async (before) => {
+        const answer = await listDrafts({ state: LISTED_STATES, nonEmpty: true, limit: LIST_LIMIT, q, ...(before === undefined ? {} : { before }) });
+        return answer.ok && Array.isArray(answer.data.drafts) ? answer.data.drafts : null;
+      });
+      // Words that have moved on: nothing here is the screen's business.
+      if (current.current !== q) return "superseded";
+      if (result === null) {
+        // A read that was not the newest failing, after a newer one began or
+        // landed, changes nothing: the newer read says how the search stands.
+        return ticket === issued.current ? "failed" : "superseded";
+      }
+      // An answer older than the one shown.
+      if (ticket < shownTicket.current) return "superseded";
+      shownTicket.current = ticket;
+      shownPages.current = count;
+      setFailed(null);
+      setLanded({ words: q, ...result });
+      return "landed";
+    };
+
+    inflight.current += 1;
+    const outcome = await readOnce();
+    inflight.current -= 1;
+    // With every read finished, a page that was asked for and never landed
+    // (its press, or a refresh that began under it, failed) is taken back, so
+    // the next press asks for that page again rather than the one after it,
+    // and the person is told. While a read is still out, it may yet land it.
+    if (inflight.current === 0 && current.current === q && pages.current > shownPages.current) {
+      pages.current = shownPages.current;
+      setMoreError("More matches could not be read: the studio did not answer.");
     }
-    // An answer older than the one shown.
-    if (ticket < shownTicket.current) return "superseded";
-    shownTicket.current = ticket;
-    setFailed(null);
-    setLanded({ words: q, ...result });
-    return "landed";
+    return outcome;
   }, []);
 
   const setQuery = useCallback((next: string) => {
@@ -94,6 +115,7 @@ export function useHistorySearch(): HistorySearch {
     if (trimmed !== current.current) {
       current.current = trimmed;
       pages.current = 1;
+      shownPages.current = 1;
       setMoreError(null);
       setFailed(null);
     }
@@ -137,14 +159,11 @@ export function useHistorySearch(): HistorySearch {
     setMoreError(null);
     const next = pages.current + 1;
     pages.current = next;
-    const outcome = await read(words, next);
+    // Whether the page landed, and the error when it did not, are `read`'s to
+    // say once every read has finished: a newer read for the same words may
+    // have loaded this page, and one that fails first does not undo it.
+    await read(words, next);
     setLoadingMore(false);
-    // Only this press's own failure, with no newer read since, takes the page
-    // back: a newer read for the same words may already have loaded it.
-    if (outcome === "failed") {
-      if (pages.current === next) pages.current = next - 1;
-      setMoreError("More matches could not be read: the studio did not answer.");
-    }
   }
 
   const found = words !== "" && landed !== null && landed.words === words ? { drafts: landed.drafts, more: landed.more } : null;
