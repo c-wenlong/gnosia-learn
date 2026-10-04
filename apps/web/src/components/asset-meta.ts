@@ -32,6 +32,17 @@ export interface AssetCardRef {
   sourceRepo?: string;
 }
 
+/**
+ * An asset as the Library lists it: the card's facts and the two instants a
+ * row prints, when it entered the catalog (its day group and the time at the
+ * right, "18:12") and when it last changed ("edited 2 Oct"). Both are ISO
+ * instants, `asset.created_at` and `asset.updated_at`.
+ */
+export interface AssetRowRef extends AssetCardRef {
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type Family = "video" | "diagram" | "text" | "link";
 
 /**
