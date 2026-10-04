@@ -2482,7 +2482,25 @@ export class Drafts {
           ? { jobId: newest.id, discard: false }
           : null;
     const ready: Prepared = { kind: "video", jobKey: item.jobKey, briefSeq, brief, pending, mermaid: null, parent };
-    await this.video.runner.admit(validVideo(ready, await vocabularyFor(pending)), parent?.discard === true ? parent.jobId : null);
+    try {
+      await this.video.runner.admit(validVideo(ready, await vocabularyFor(pending)), parent?.discard === true ? parent.jobId : null);
+    } catch (error) {
+      // A new video on a slug a studio video already has. The runner's own
+      // words offer a change, which this conversation cannot make when it
+      // neither opened on that video nor made it (above): a conversation
+      // opened on a diagram whose video exists already, D86 of
+      // docs/STUDIO-CHAT-FIRST.md (the #305 review). The STUDIO note this
+      // becomes steers the planner's next brief to the one way out.
+      const reason = error instanceof JobRefused ? (error.detail as { reason?: unknown } | undefined)?.reason : undefined;
+      if (reason === "slug-taken" && brief.mode === "new" && !this.videoSlugsOf(record).has(brief.slug)) {
+        throw new JobRefused(
+          409,
+          `a studio video called ${brief.slug} already exists, and this conversation did not open on it or make it, so it cannot change it: give the new video a slug no video uses`,
+          { reason: "slug-taken", slug: brief.slug, field: "slug" },
+        );
+      }
+      throw error;
+    }
     return ready;
   }
 
