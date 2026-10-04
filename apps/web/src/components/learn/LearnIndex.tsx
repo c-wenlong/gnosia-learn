@@ -19,6 +19,7 @@ import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/li
 import type { DomainMapData } from "@/lib/domain-map";
 import { domainOfConcepts, matchCounts } from "@/lib/domain-view";
 import { firstMatch } from "@/lib/map-reading";
+import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
@@ -206,7 +207,7 @@ export function LearnIndex({
           <h1 className="font-display text-[28px] leading-tight font-bold text-text">Learn</h1>
           <p className="text-[12px] text-text2">
             {rows.length} concept{rows.length === 1 ? "" : "s"} · {counts.mastered} mastered · {counts.learning} learning ·{" "}
-            {counts.untouched} untouched
+            {counts.untouched} {MASTERY_BUCKET_LABEL.untouched.toLowerCase()}
           </p>
         </div>
         <SearchField

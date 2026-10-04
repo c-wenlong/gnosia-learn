@@ -95,7 +95,7 @@ describe("/learn", () => {
     // opens on a card per domain (D2 of docs/proposals/domain-map.md). With no
     // topic row, the concept's domain is its folder (D1).
     const html = await render();
-    expect(html).toContain("1 concept · 0 mastered · 1 learning · 0 untouched");
+    expect(html).toContain("1 concept · 0 mastered · 1 learning · 0 not started");
     expect(html).toContain('data-domain-card="fixtures"');
     expect(html).not.toContain("data-domain-graph");
 
