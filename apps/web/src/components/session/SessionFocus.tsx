@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
@@ -11,6 +10,7 @@ import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { cx, TRACK } from "@/components/ui/classes";
+import { TextLink } from "@/components/ui/TextLink";
 import {
   feedbackNote,
   newSessionId,
@@ -741,13 +741,10 @@ function Frame({
           <span className="md:hidden">{short}</span>
           <span className="hidden md:inline">{label}</span>
         </p>
-        <Link
-          href={exitHref}
-          className="shrink-0 rounded-sm hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
+        <TextLink href={exitHref} tone="muted" className="shrink-0">
           <span className="md:hidden">Exit</span>
           <span className="hidden md:inline">{exitLabel}</span>
-        </Link>
+        </TextLink>
       </div>
       <div
         key={stepKey}

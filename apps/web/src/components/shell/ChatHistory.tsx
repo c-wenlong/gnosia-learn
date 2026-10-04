@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { cx, LABEL } from "@/components/ui/classes";
+import { TextLink } from "@/components/ui/TextLink";
 import {
   draftRows,
   historyGroups,
@@ -185,14 +186,9 @@ export function ChatHistory({ onPick, search }: { onPick: () => void; search: Hi
           ))}
           {list?.more === true && rows.length > 0 && (
             <div className="px-1 pt-1">
-              <button
-                type="button"
-                onClick={() => void showOlder()}
-                disabled={loadingOlder}
-                className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
-              >
+              <TextLink onClick={() => void showOlder()} pending={loadingOlder} size="sm" className="px-1.5 py-1">
                 {loadingOlder ? "Reading older conversations…" : "Show older conversations"}
-              </button>
+              </TextLink>
               {olderError !== null && (
                 <p role="alert" className="px-1.5 text-[12px] text-danger">
                   {olderError}

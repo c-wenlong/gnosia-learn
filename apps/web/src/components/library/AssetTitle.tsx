@@ -9,6 +9,7 @@ import { Collapse } from "@/components/ui/Collapse";
 import { Glyph } from "@/components/ui/Glyph";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
 import { cx, inputClasses } from "@/components/ui/classes";
+import { TextLink } from "@/components/ui/TextLink";
 
 type Status = { text: string | null; tone: StatusTone };
 
@@ -180,14 +181,9 @@ export function AssetTitle({
           {named !== null && (
             <p className="flex flex-wrap items-baseline gap-x-2 text-[13px] text-text3">
               <span className="min-w-0 break-words">Original name: {fallback}</span>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void save(null)}
-                className="rounded-sm font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
+              <TextLink pending={saving} onClick={() => void save(null)}>
                 Use it
-              </button>
+              </TextLink>
             </p>
           )}
         </form>

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useAssetFailure } from "@/components/use-asset-failure";
-import { cx } from "@/components/ui/classes";
+import { chipClasses, cx } from "@/components/ui/classes";
+import { TextLink } from "@/components/ui/TextLink";
 import { WidgetFailure } from "@/components/WidgetFailure";
 
 /**
@@ -99,14 +100,9 @@ export function DiagramView({
       {heading ? (
         <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-3">
           <h3 className="truncate text-[16px] font-bold text-text">{title}</h3>
-          <a
-            href={src}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 rounded-md px-1.5 py-0.5 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
+          <TextLink href={src} external size="sm" className="shrink-0 px-1.5 py-0.5">
             Full size
-          </a>
+          </TextLink>
         </div>
       ) : (
         // Kept when the picture fails too: opening the file itself is then
@@ -115,7 +111,7 @@ export function DiagramView({
           href={src}
           target="_blank"
           rel="noopener noreferrer"
-          className="absolute top-3 right-3 z-10 rounded-full border border-border bg-surface/90 px-2.5 py-1 text-[12px] font-medium text-accent-text shadow-sm backdrop-blur-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className={chipClasses({ size: "sm", tone: "overlay", className: "absolute top-3 right-3 z-10" })}
         >
           Full size
         </a>

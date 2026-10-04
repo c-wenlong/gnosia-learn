@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 
 import { formatTimecode } from "@/components/media";
+import { Glyph } from "@/components/ui/Glyph";
 
 /** What the playback store last said about this video, kept current as it saves. */
 export type WatchStatus = {
@@ -40,18 +41,7 @@ export function WatchProgress() {
     return (
       <span aria-live="polite">
         <span className="font-semibold text-ok-text">
-          <svg
-            viewBox="0 0 12 12"
-            aria-hidden
-            className="mr-1 inline size-3 -translate-y-px"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M2.5 6.5 5 9l4.5-6" />
-          </svg>
+          <Glyph name="tick" size={14} className="mr-1 inline -translate-y-px" />
           Watched{status.watchedDay !== null ? ` ${status.watchedDay}` : ""}
         </span>
         {` (${percent} played${resume})`}

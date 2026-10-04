@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { cx } from "./classes";
+import { Glyph } from "./Glyph";
 
 /**
  * A region that glides open and shut.
@@ -52,21 +53,13 @@ export function Collapse({
 /** The chevron a toggle for a `Collapse` carries: down when shut, up when open. */
 export function CollapseChevron({ open, className }: { open: boolean; className?: string }) {
   return (
-    <svg
-      viewBox="0 0 20 20"
+    <Glyph
+      name="chevron"
       className={cx(
         "h-5 w-5 transition-transform duration-300 ease-soft motion-reduce:transition-none",
         open && "rotate-180",
         className,
       )}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="m5 7.5 5 5 5-5" />
-    </svg>
+    />
   );
 }

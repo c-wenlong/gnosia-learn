@@ -11,6 +11,8 @@ import { Duration } from "@/components/studio/JobStrip";
 import { KindBadge, KindWord, TILE_LIFT } from "@/components/studio/KindBadge";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { Chip } from "@/components/studio/StudioChrome";
+import { linkClasses } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
 import { useSheets } from "@/components/studio/video/use-video-job";
 import { useElapsed } from "@/lib/use-elapsed";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
@@ -133,7 +135,7 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
       <span className="hidden shrink-0 text-[var(--muted)] sm:inline">{video.topic ?? ""}</span>
       <span className="w-24 shrink-0 text-right tabular-nums text-[var(--muted)]">{spokenLength(video.durationSeconds)}</span>
       <span className="relative z-10 shrink-0">
-        <VideoChangeButton slug={slug} title={title} path={path} className="rounded px-1.5 py-0.5 font-medium text-[var(--accent-strong)] hover:underline" />
+        <VideoChangeButton slug={slug} title={title} path={path} className={linkClasses({ pending: true, className: "px-1.5 py-0.5" })} />
       </span>
     </div>
   );
@@ -145,9 +147,7 @@ const HOVER_CONTROL =
 function PlayMark() {
   return (
     <span aria-hidden className="absolute flex size-10 items-center justify-center rounded-full bg-black/55 text-white opacity-90 backdrop-blur-sm">
-      <svg viewBox="0 0 24 24" className="size-5 translate-x-px">
-        <path d="M7 4.5v15l12.5-7.5z" fill="currentColor" />
-      </svg>
+      <Glyph name="play" className="size-5 translate-x-px fill-current" />
     </span>
   );
 }

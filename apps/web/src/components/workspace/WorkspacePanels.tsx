@@ -5,6 +5,7 @@ import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/classes";
 import { Panel } from "@/components/ui/Panel";
+import { TextLink } from "@/components/ui/TextLink";
 import { useMediaQuery } from "@/components/ui/use-media-query";
 
 /**
@@ -54,15 +55,17 @@ function CollapseButton({
   buttonRef: RefObject<HTMLButtonElement | null>;
 }) {
   return (
-    <button
+    <TextLink
       ref={buttonRef}
-      type="button"
       onClick={onClick}
-      className="hidden rounded-sm text-[12px] text-text3 underline-offset-4 transition-colors duration-100 hover:text-text2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none min-[900px]:inline"
+      tone="muted"
+      size="xs"
+      weight="normal"
+      className="hidden min-[900px]:inline"
       aria-label={`Collapse ${label}`}
     >
       Collapse
-    </button>
+    </TextLink>
   );
 }
 

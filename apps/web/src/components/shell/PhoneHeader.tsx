@@ -3,7 +3,9 @@
 import Link from "next/link";
 
 import { GnosiaWordmark } from "@/components/brand";
-import { cx } from "@/components/ui/classes";
+import { iconButtonClasses } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
+import { IconButton } from "@/components/ui/IconButton";
 
 import { ComposeIcon, NewChatLink } from "./AppSidebar";
 import { useShell } from "./shell-context";
@@ -17,24 +19,13 @@ import { useShell } from "./shell-context";
 export function PhoneHeader() {
   const shell = useShell();
   const studio = shell?.studio ?? false;
-  const button = cx(
-    "inline-flex size-10 shrink-0 items-center justify-center rounded-full text-text2 transition-colors hover:bg-surface2 hover:text-text",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-  );
+
   return (
     <header className="sticky top-0 z-30 border-b border-hair bg-surface pt-[env(safe-area-inset-top)] md:hidden">
       <div className="flex h-14 items-center gap-2 px-2">
-        <button
-          type="button"
-          onClick={shell?.openDrawer}
-          aria-label="Open the sidebar"
-          aria-expanded={shell?.drawer ?? false}
-          className={button}
-        >
-          <svg aria-hidden viewBox="0 0 20 20" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-            <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h8" />
-          </svg>
-        </button>
+        <IconButton label="Open the sidebar" size="xl" onClick={shell?.openDrawer} aria-expanded={shell?.drawer ?? false}>
+          <Glyph name="menu" />
+        </IconButton>
         <Link
           href={studio ? "/studio" : "/home"}
           aria-label={studio ? "Gnosia, Studio" : "Gnosia, Home"}
@@ -43,7 +34,7 @@ export function PhoneHeader() {
           <GnosiaWordmark />
         </Link>
         {studio && (
-          <NewChatLink onPick={() => undefined} className={cx(button, "ml-auto")} label="New chat">
+          <NewChatLink onPick={() => undefined} className={iconButtonClasses({ size: "xl", className: "ml-auto" })} label="New chat">
             <ComposeIcon className="size-5" />
           </NewChatLink>
         )}

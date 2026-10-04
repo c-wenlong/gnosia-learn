@@ -364,6 +364,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       sourceRepo: kind === "note" ? "self-learn" : "manimkc",
       topics: [],
       createdAt: "",
+      updatedAt: "",
     });
     const out = await library.readSearchText(
       [
