@@ -1,0 +1,7 @@
+# What `vercel deploy` from the repository root leaves out of the upload
+# (.github/workflows/deploy.yml). docs/ is most of the tree by size (design
+# references and brand art, about 120 MB) and the app reads none of it; the
+# submodules under tools/ are not imported by the app either.
+/docs
+/tools
+/coverage
