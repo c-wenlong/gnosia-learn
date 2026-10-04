@@ -24,6 +24,11 @@ export interface WriteQueue<T> {
    * called only for the most recent task on that key, so an earlier request
    * finishing late cannot overwrite the outcome of a later one.
    *
+   * A task that a newer one superseded gets `onSuperseded` instead, with its
+   * own result. That is for a caller waiting on this one write: whether it
+   * was stored is its own result, whatever the newer task's turns out to be.
+   * Exactly one of the two is called for a task that resolves.
+   *
    * Several keys make it a barrier: the task waits for all of them and then
    * holds all of them, which is what a reset needs. A reset deletes rows that
    * a note or a tick may still be queued to write, and a delayed write landing
@@ -34,6 +39,7 @@ export interface WriteQueue<T> {
     key: string | readonly string[],
     task: () => Promise<T>,
     onSettled: (result: T) => void,
+    onSuperseded?: (result: T) => void,
   ) => void;
   /** How many keys have work outstanding. For tests. */
   readonly pending: number;
@@ -43,7 +49,7 @@ export function createWriteQueue<T>(): WriteQueue<T> {
   const chains = new Map<string, Promise<unknown>>();
 
   return {
-    run(keyOrKeys, task, onSettled) {
+    run(keyOrKeys, task, onSettled, onSuperseded) {
       const keys = typeof keyOrKeys === "string" ? [keyOrKeys] : [...new Set(keyOrKeys)];
       // `allSettled`, so one failed predecessor on any key does not reject the
       // barrier and skip the task behind it.
@@ -68,6 +74,7 @@ export function createWriteQueue<T>(): WriteQueue<T> {
             current = true;
           }
           if (current) onSettled(result);
+          else onSuperseded?.(result);
         },
         // A rejection handler, even though it only tidies up. Without one
         // `next` is an unhandled rejection whenever a task throws, which in a
