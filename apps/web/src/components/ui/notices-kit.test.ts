@@ -76,17 +76,24 @@ function declares(scope: ts.Node, name: string): boolean {
 
 /**
  * The calls in a file that reach the browser's `confirm()`: through
- * `window`, `globalThis` or `self`, or bare where no scope around the call
+ * `window`, `globalThis` or `self` (or a chain ending in one), or bare where no scope around the call
  * binds a `confirm` of its own (the learner store's write confirmation is a
  * parameter by that name, and calling it is not a dialog).
  */
+const GLOBALS = ["window", "globalThis", "self"];
+
 function browserConfirms(path: string, text: string): number {
   const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   let found = 0;
   const visit = (node: ts.Node) => {
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
-      if (ts.isPropertyAccessExpression(callee) && callee.name.text === "confirm" && ts.isIdentifier(callee.expression) && ["window", "globalThis", "self"].includes(callee.expression.text)) found++;
+      // `window.confirm`, and any chain ending in a global: `globalThis.window.confirm`.
+      if (ts.isPropertyAccessExpression(callee) && callee.name.text === "confirm") {
+        const owner = callee.expression;
+        const last = ts.isIdentifier(owner) ? owner.text : ts.isPropertyAccessExpression(owner) ? owner.name.text : null;
+        if (last !== null && GLOBALS.includes(last)) found++;
+      }
       if (ts.isIdentifier(callee) && callee.text === "confirm") {
         let bound = false;
         for (let scope: ts.Node | undefined = node.parent; scope !== undefined && !bound; scope = scope.parent) bound = declares(scope, "confirm");
@@ -142,6 +149,8 @@ describe("notices and confirms", () => {
     // A local `confirm` in one function does not cover a call in another.
     expect(browserConfirms("b.ts", `${own}\nfunction drop() { if (confirm("Sure?")) return 1; }`)).toBe(1);
     expect(browserConfirms("c.tsx", "const go = () => window.confirm('Sure?');")).toBe(1);
+    expect(browserConfirms("e.ts", "globalThis.window.confirm('Sure?');")).toBe(1);
+    expect(browserConfirms("f.ts", "dialog.confirm('Sure?');")).toBe(0);
     expect(browserConfirms("d.ts", "const { confirm } = helpers; confirm(2);")).toBe(0);
   });
 
