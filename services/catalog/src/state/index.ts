@@ -221,6 +221,7 @@ export {
   type AssetWithTopics,
   type ListAssetsOptions,
 } from "./assets";
+export { assetParents, type AssetOrigin, type AssetParents, type AssetPlace } from "./asset-parents";
 export {
   domainOf,
   dueConcepts,

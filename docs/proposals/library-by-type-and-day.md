@@ -3,7 +3,11 @@
 Status: proposed, 2026-10-04, for the owner to decide. Decisions L1 to L8
 are defaults chosen from the Manus reference
 ([docs/design/reference/manus](../design/reference/manus/README.md)); each
-names what it changes and what it leaves. Nothing here is built.
+names what it changes and what it leaves. Phase 1 (L1, L2, L3, L8) is
+built: the type tabs, the day groups, the source line from `assetParents`
+(`services/catalog/src/state/asset-parents.ts`, one statement per page) and
+the three `--shell-row` tokens. Days and times are counted in the zone Home
+uses (`appTimeZone()`), not UTC. Phases 2 to 4 are not built.
 
 ## The problem
 

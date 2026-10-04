@@ -1,90 +1,147 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
-import { assetDisplayTitle, assetKindLabel, assetMetaLine, familyOf, type AssetCardRef } from "@/components/asset-meta";
-import type { CardConcept } from "@/components/AssetCard";
+import { assetDisplayTitle, assetKindLabel, familyOf, type AssetRowRef } from "@/components/asset-meta";
 import { Glyph } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { cx } from "@/components/ui/classes";
+import type { RowSource } from "@/lib/library-source";
 
 /**
- * One asset as a row of the library's list view: the same facts as
- * `AssetCard` (kind, meta line, title, the concept or topic) on one line, with
- * a glyph for the family where the card has its thumbnail, and the day the row
- * entered the catalog, which the card has no room for.
+ * One asset as a row of the Library's list view, under its day's heading
+ * (L2 and L3 of docs/proposals/library-by-type-and-day.md, Manus's
+ * `file-row`): the family's glyph, the title, and under it in grey where the
+ * asset came from (`rowSource`: the course and module, the concept with its
+ * mastery dot, the studio conversation, or the tutor session); at the right,
+ * the time it was made and, when it changed more than a day later, the day
+ * it was edited. The day itself is the heading above, so the row never
+ * repeats it.
+ *
+ * Its corner and start padding are the shell's density tokens
+ * (`--shell-row-radius`, `--shell-row-pad` in globals.css), and its height
+ * is `--shell-row` plus the second line, so the Library and the sidebar keep
+ * one rhythm. The hover fill is the whole row, rounded; the rule under it is
+ * drawn inside the padding, as Manus draws it, and a group's last row has
+ * none (its `<li>` is `group/item`).
  *
  * No thumbnail on purpose: the list is for scanning many rows, and a poster
- * per row would load the same images the grid does at a size too small to
- * read. Without one there is no image to fail, so this needs none of the
- * card's client state and renders on the server.
+ * per row would load the grid's images at a size too small to read. Without
+ * one there is no image to fail, so this needs none of the card's client
+ * state and renders on the server. On a phone the time column goes, as
+ * Manus's does at 390.
  */
 export function AssetRow({
   asset,
-  concept,
+  source,
   topic,
-  added,
+  time,
+  edited,
   href,
 }: {
-  asset: AssetCardRef;
-  concept?: CardConcept;
+  asset: AssetRowRef;
+  /** Where it came from; null names `topic` instead, or nothing. */
+  source: RowSource | null;
+  /** The topic it is filed under, as a label: the line for an asset with no parent. */
   topic?: string;
-  /** When the row entered the catalog, already formatted. */
-  added?: string | null;
+  /** "18:12", in the owner's zone. */
+  time: string | null;
+  /** "edited 2 Oct", or null. */
+  edited: string | null;
   href: string;
 }) {
   const family = familyOf(asset.kind);
   const name = assetDisplayTitle(asset);
-  const meta = assetMetaLine(asset);
-  // A note explains its own concept, so naming it again would repeat the
-  // title; the dot's label says the mastery instead, as on the card.
-  const conceptIsTitle =
-    concept !== undefined && concept.title.trim().toLowerCase() === name.text.trim().toLowerCase();
 
   const nameClass =
     name.source === "title"
-      ? "font-semibold text-text"
+      ? "font-medium text-text"
       : name.source === "none"
-        ? "font-semibold text-text2"
+        ? "font-medium text-text2"
         : "font-mono text-[13px] font-medium text-text2";
+
+  const line =
+    sourceLine(source, name.text) ?? (topic === undefined ? null : <span className="min-w-0 truncate">{topic}</span>);
 
   // `next/link`: an in-app navigation, not a reload of the whole document.
   return (
     <Link
       href={href}
       className={cx(
-        "flex min-w-0 items-center gap-3 px-3.5 py-2.5 transition-colors duration-100 hover:bg-surface2",
+        "block rounded-[var(--shell-row-radius)] px-[var(--shell-row-pad)] transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none",
         "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
       )}
     >
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface2 text-text2">
-        <Glyph name={family} size={18} />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className={cx("truncate text-[14px] leading-snug", nameClass)}>{name.text}</span>
-        <span className="truncate text-[12px] text-text2">
-          {assetKindLabel(asset.kind)}
-          {meta && ` · ${meta}`}
+      <span
+        className={cx(
+          "flex min-h-[calc(var(--shell-row)+24px)] min-w-0 items-center gap-3 border-b border-hair py-2.5",
+          "group-last/item:border-transparent",
+        )}
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface2 text-text2" aria-hidden>
+          <Glyph name={family} size={18} />
         </span>
-      </span>
-      {concept !== undefined ? (
-        <span className="hidden w-[30%] min-w-0 shrink-0 items-center gap-2 text-[12px] text-text2 md:flex">
-          {conceptIsTitle ? (
-            <MasteryDot bucket={concept.bucket} size={12} showLabel />
-          ) : (
-            <>
-              <MasteryDot bucket={concept.bucket} size={12} />
-              <span className="min-w-0 truncate">{concept.title}</span>
-            </>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className={cx("truncate text-[14px] leading-5", nameClass)}>
+            {/* The glyph is a family (a note and a session log share one), so the kind is said. */}
+            <span className="sr-only">{assetKindLabel(asset.kind)}: </span>
+            {name.text}
+          </span>
+          {line !== null && (
+            <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-text2">{line}</span>
           )}
-          {concept.more > 0 && <span className="shrink-0 text-text3">+{concept.more}</span>}
         </span>
-      ) : (
-        <span className="hidden w-[30%] min-w-0 shrink-0 truncate text-[12px] text-text2 md:block">
-          {topic ?? ""}
-        </span>
-      )}
-      <span className="hidden w-[88px] shrink-0 text-right text-[12px] text-text3 tabular-nums sm:block">
-        {added ?? ""}
+        {(time !== null || edited !== null) && (
+          <span className="hidden shrink-0 flex-col items-end text-[12px] leading-4 text-text2 tabular-nums sm:flex">
+            {time !== null && <time dateTime={asset.createdAt}>{time}</time>}
+            {edited !== null && <time dateTime={asset.updatedAt}>{edited}</time>}
+          </span>
+        )}
       </span>
     </Link>
+  );
+}
+
+/**
+ * The source line's content: "CS3230 · Week 3 · ● Master theorem", the
+ * concept alone with its dot, or a conversation's or session's title. A note
+ * explains its own concept, so a concept named exactly as the row's title is
+ * not printed again; its dot carries the mastery on its own label, as the
+ * card's does.
+ */
+function sourceLine(source: RowSource | null, title: string): ReactNode | null {
+  if (source === null) return null;
+  if (source.origin !== undefined) {
+    return (
+      <span className="min-w-0 truncate">
+        <span className="sr-only">
+          {source.origin.kind === "conversation" ? "From the studio conversation " : "From the tutor session "}
+        </span>
+        {source.origin.title}
+      </span>
+    );
+  }
+  const concept = source.concept;
+  const conceptIsTitle =
+    concept !== undefined && concept.title.trim().toLowerCase() === title.trim().toLowerCase();
+  return (
+    <>
+      {/* The place stays whole and the concept gives way, up to 60% of the line. */}
+      {source.place !== undefined && <span className="max-w-[60%] shrink-0 truncate">{source.place}</span>}
+      {source.place !== undefined && concept !== undefined && (
+        <span aria-hidden className="shrink-0">
+          ·
+        </span>
+      )}
+      {concept !== undefined &&
+        (conceptIsTitle ? (
+          <MasteryDot bucket={concept.bucket} size={12} showLabel />
+        ) : (
+          <>
+            <MasteryDot bucket={concept.bucket} size={12} />
+            <span className="min-w-0 truncate">{concept.title}</span>
+          </>
+        ))}
+      {concept !== undefined && concept.more > 0 && <span className="shrink-0 text-text3">+{concept.more}</span>}
+    </>
   );
 }

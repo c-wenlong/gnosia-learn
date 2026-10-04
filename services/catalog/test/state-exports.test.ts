@@ -56,6 +56,8 @@ const REQUIRED = [
   // Assets: everything, filtered and paged, for a library page.
   "listAssets",
   "assetCounts",
+  // Assets: where each one came from, for the Library row's source line.
+  "assetParents",
   // Assets: what this one came from, and what came out of it.
   "assetDerivations",
   "derivationSources",

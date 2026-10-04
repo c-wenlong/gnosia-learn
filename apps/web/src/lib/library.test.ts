@@ -17,12 +17,17 @@ import {
   libraryHref,
   withPick,
   parseView,
-  addedOn,
   matchesAll,
   parseSort,
   searchHits,
   searchTerms,
   sortRows,
+  filesNoun,
+  isOtherKind,
+  LIBRARY_TABS,
+  libraryTabs,
+  OTHERS_KIND,
+  tabOf,
 } from "./library";
 
 /** The catalog's real per-kind counts, which the default view is designed against. */
@@ -224,16 +229,40 @@ describe("parseView", () => {
   });
 });
 
-describe("addedOn", () => {
-  it("prints the UTC day a row entered the catalog", () => {
-    expect(addedOn("2026-10-04T09:30:00Z")).toBe("4 Oct 2026");
-    // Late in the day UTC is still that day, whatever the server's zone.
-    expect(addedOn("2026-09-30T23:59:59Z")).toBe("30 Sept 2026");
+describe("type tabs", () => {
+  it("draws the six tabs in order, and Others only while a companion file exists", () => {
+    expect(libraryTabs([{ kind: "video", count: 3 }]).map((t) => t.label)).toEqual([
+      "All",
+      "Videos",
+      "Diagrams",
+      "Notes",
+      "Sessions",
+      "Links",
+    ]);
+    const withCompanions = libraryTabs([
+      { kind: "video", count: 3 },
+      { kind: "captions", count: 3 },
+    ]);
+    expect(withCompanions.at(-1)).toEqual({ value: OTHERS_KIND, label: "Others" });
+    expect(LIBRARY_TABS.map((t) => t.value)).toEqual(["", "video", "diagram_svg", "note", "session", "link"]);
   });
 
-  it("returns null for a timestamp that does not parse", () => {
-    expect(addedOn("not a date")).toBeNull();
-    expect(addedOn("")).toBeNull();
+  it("selects the tab a `?kind=` names, and Others for a companion kind", () => {
+    expect(tabOf(null)).toBe("");
+    expect(tabOf("")).toBe("");
+    expect(tabOf("video")).toBe("video");
+    expect(tabOf("diagram_svg")).toBe("diagram_svg");
+    expect(tabOf("transcript")).toBe(OTHERS_KIND);
+    expect(tabOf("poster")).toBe(OTHERS_KIND);
+    expect(tabOf(OTHERS_KIND)).toBe(OTHERS_KIND);
+    expect(isOtherKind("captions")).toBe(true);
+    expect(isOtherKind("link")).toBe(false);
+  });
+
+  it("counts files in the header's words", () => {
+    expect(filesNoun(1)).toBe("file");
+    expect(filesNoun(0)).toBe("files");
+    expect(filesNoun(42)).toBe("files");
   });
 });
 
@@ -352,6 +381,10 @@ describe("filterRows", () => {
 
   it("shows a companion kind when it is the one asked for", () => {
     expect(ids(filterRows(rows, { ...none, kind: "transcript" }))).toEqual(["t1"]);
+  });
+
+  it("shows every companion, and nothing with a tab, under Others", () => {
+    expect(ids(filterRows(rows, { ...none, kind: OTHERS_KIND }))).toEqual(["t1"]);
   });
 
   it("narrows to a course through its modules' topics", () => {

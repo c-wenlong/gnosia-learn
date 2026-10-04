@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Form from "next/form";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { AssetCard, type CardConcept } from "@/components/AssetCard";
 import { PAGE_ENTER } from "@/components/PageLoading";
@@ -20,27 +21,34 @@ import {
   unservedRows,
 } from "@/lib/asset-library";
 import {
-  addedOn,
   assetHref,
   courseFacets,
   explainedConcepts,
+  filesNoun,
   filterRows,
   firstParam,
-  isCompanionKind,
+  isOtherKind,
   kindFacets,
   libraryHref,
+  libraryTabs,
+  OTHERS_KIND,
   parseSort,
   parseView,
   searchHits,
   searchTerms,
   sortRows,
+  tabOf,
   type LibraryCourse,
   type LibraryFilters,
   type LibraryView,
 } from "@/lib/library";
 import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
+import { dayGroups, editedLabel, timeOfDay, type DayGroup } from "@/lib/day-groups";
 import { loadKnowledgeBase } from "@/lib/learner-store";
+import { conceptOrder, rowSource } from "@/lib/library-source";
+import { bucketOf } from "@/lib/mastery-bucket";
 import { ownValue } from "@/lib/own-key";
+import { appTimeZone } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Library",
@@ -53,10 +61,19 @@ export const metadata: Metadata = {
  *
  * **The filters are the URL.** `?kind=`, `?course=`, `?topic=`, `?q=`,
  * `?sort=` and `?view=` are the whole state, so a view is linkable and the back button
- * undoes a filter. Each filter group is a `FilterMenu` (Type, Course, and
- * Topic when one is set); the page reads the filters and the options here, and
- * the small client `LibraryToolbar` pushes the `libraryHref` of a pick, so
- * the page itself stays a server component. The toolbar puts the filters on
+ * undoes a filter. The kind is a strip of type tabs under the title (All,
+ * Videos, Diagrams, Notes, Sessions, Links, and Others when there are
+ * companion files; one chip on a phone), and the course and topic are
+ * `FilterMenu`s (Course, and Topic when one is set); the page reads the
+ * filters and the options here, and the small client `LibraryToolbar` pushes
+ * the `libraryHref` of a pick, so the page itself stays a server component.
+ *
+ * **Grouped by day, newest first** (L2 of
+ * docs/proposals/library-by-type-and-day.md), in both layouts: a heading per
+ * calendar day ("4 Oct (5)", in the zone Home counts days in), 40px between
+ * groups, the sort ordering the rows inside each. A list row names where the
+ * asset came from (`rowSource`: its course and module, its concept, its
+ * studio conversation or its tutor session) and the time it was made. The toolbar puts the filters on
  * the left and how to show them on the right: the search, the sort (a bare
  * menu reading "Newest" or "Title") and an icon-only grid or list switch, all
  * at a chip's height. The search box is a GET form (`next/form`, so
@@ -71,11 +88,10 @@ export const metadata: Metadata = {
  *
  * **What the default view shows, and why it is not every row.** The companion
  * files (a caption track, a transcript and a chapter list beside each video,
- * the canvas beside each diagram) are kept out of All kinds and sit in their
- * own "Companion files" section of the Type menu, with their counts: they are
- * values of the same `?kind=`, so one menu for one parameter means the
- * trigger never contradicts the URL. `@/lib/library` holds the rule and the
- * reason.
+ * the canvas beside each diagram) are kept out of All and sit under the
+ * Others tab (`?kind=other`), where a Kind menu narrows them to one kind with
+ * its count; `?kind=transcript` is that tab narrowed, so an old link still
+ * works. `@/lib/library` holds the rule and the reason.
  *
  * **Courses, not topics, are the second facet**, because eighty topics carry
  * assets and ten courses organise them. A course's assets are the ones filed
@@ -141,13 +157,26 @@ export default async function LibraryPage({
   const inWords = (names: readonly string[]) =>
     names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
-  const filtered = kind !== null || topic !== null || course !== null || q !== null;
+  const order = conceptOrder(kb.concepts);
+  const now = new Date();
+  const timeZone = appTimeZone();
+  const tab = tabOf(kind);
+  const tabs = libraryTabs(counts);
+  // Narrowed beyond the tab: the header then says "12 of 30 files".
+  const narrowed = topic !== null || course !== null || q !== null;
   const kindLabel = (k: string) =>
-    [...facets.primary, ...facets.companion].find((f) => f.kind === k)?.label ?? k;
+    k === OTHERS_KIND
+      ? "Companion file"
+      : ([...facets.primary, ...facets.companion].find((f) => f.kind === k)?.label ?? k);
 
-  // Out of the rows this view could ever show: the standalone ones, or every
-  // row when a companion kind is chosen.
-  const universe = kind !== null && isCompanionKind(kind) ? facets.total : facets.standalone;
+  // Out of the rows the chosen tab could ever show: the standalone ones for
+  // All, the companions for Others, or the one kind's.
+  const universe =
+    kind === null
+      ? facets.standalone
+      : kind === OTHERS_KIND
+        ? counts.filter((c) => isOtherKind(c.kind)).reduce((sum, c) => sum + c.count, 0)
+        : (counts.find((c) => c.kind === kind)?.count ?? 0);
   const plural = (n: number) => (n === 1 ? "asset" : "assets");
   const conditions = [
     kind !== null && `a ${kindLabel(kind).toLowerCase()}`,
@@ -160,11 +189,11 @@ export default async function LibraryPage({
     (conditions.length > 0 ? ` is ${conditions.join(", ")}` : "") +
     (q === null ? "" : `${conditions.length > 0 ? " and" : ""} matches "${q}"`) +
     ".";
-  const hidden = facets.total - facets.standalone;
-  const count =
-    (filtered ? `${matching.length} of ${universe} ${plural(universe)}` : `${universe} ${plural(universe)}`) +
-    // Said out loud, since the companion rows are only listed inside the Type menu.
-    (hidden > 0 && kind === null ? ` · ${hidden} companion ${hidden === 1 ? "file" : "files"} not in All kinds` : "");
+  // The counts left the menu for the header (L1): "42 files", or "12 of 42
+  // files" when a course, a topic or a search narrows the tab.
+  const count = narrowed
+    ? `${matching.length} of ${universe} ${filesNoun(universe)}`
+    : `${universe} ${filesNoun(universe)}`;
 
   const listLabel = q === null ? "Assets" : `Assets matching ${q}`;
   // What a card or a row names beside the title: the first concept the asset
@@ -179,11 +208,17 @@ export default async function LibraryPage({
     };
   };
 
-  const typeOptions: LibraryMenu["options"] = [
-    { value: "", label: "All kinds", short: "All", count: facets.standalone },
-    ...facets.primary.map((f) => ({ value: f.kind, label: f.label, count: f.count })),
-    ...facets.companion.map((f) => ({ value: f.kind, label: f.label, count: f.count, section: "Companion files" })),
-  ];
+  // Where a list row came from, said on its second line (L3).
+  const sourceOf = (row: (typeof matching)[number]) =>
+    rowSource(ownValue(library.parents, row.id), {
+      course,
+      order,
+      concept: (slug) => {
+        const known = kbById.get(slug);
+        return known === undefined ? null : { title: known.title, bucket: bucketOf(known) };
+      },
+    });
+  const groups = dayGroups(matching, (row) => row.createdAt, { now, timeZone });
   const courseOptions: LibraryMenu["options"] = [
     { value: "", label: "All courses", short: "All" },
     ...courseChips.map((f) => ({ value: f.slug, label: f.code, detail: f.title, count: f.count })),
@@ -198,10 +233,24 @@ export default async function LibraryPage({
       count: 0,
     });
   }
-  const menus: LibraryMenu[] = [
-    { label: "Type", param: "kind", value: kind ?? "", options: typeOptions },
-    { label: "Course", param: "course", value: course ?? "", options: courseOptions },
-  ];
+  const menus: LibraryMenu[] = [{ label: "Course", param: "course", value: course ?? "", options: courseOptions }];
+  // Inside Others, one menu narrows the companions to a kind, with the counts
+  // the Type menu used to carry; `?kind=transcript` is this menu's pick.
+  if (tab === OTHERS_KIND) {
+    menus.unshift({
+      label: "Kind",
+      param: "kind",
+      value: kind ?? OTHERS_KIND,
+      defaultValue: OTHERS_KIND,
+      options: [
+        { value: OTHERS_KIND, label: "All companion files", short: "All" },
+        ...facets.companion.map((f) => ({ value: f.kind, label: f.label, count: f.count })),
+        ...facets.primary
+          .filter((f) => isOtherKind(f.kind))
+          .map((f) => ({ value: f.kind, label: f.label, count: f.count })),
+      ],
+    });
+  }
   if (topic !== null) {
     menus.push({
       label: "Topic",
@@ -233,11 +282,8 @@ export default async function LibraryPage({
     // The root fades in once, when the page replaces the loading frame; a
     // filter, a sort or a search is a navigation that keeps it (measured), so
     // only the rows that arrive fade then.
-    <div data-layout="app" className={cx("group/library flex flex-col gap-4", PAGE_ENTER)}>
-      <header className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <h1 className="font-display text-[28px] leading-tight font-bold text-text">Library</h1>
-        {reachable && facets.total > 0 && <p className="text-[12px] text-text2 tabular-nums">{count}</p>}
-      </header>
+    <div data-layout="app" className={cx("group/library flex flex-col gap-6", PAGE_ENTER)}>
+      {(!reachable || facets.total === 0) && <h1 className={TITLE}>Library</h1>}
 
       {!reachable ? (
         <Notice title="The catalog is unreachable" command="npm run catalog -- status">
@@ -254,12 +300,20 @@ export default async function LibraryPage({
       ) : (
         <>
           <LibraryToolbar
+            heading={
+              <>
+                <h1 className={TITLE}>Library</h1>
+                <p className="text-[13px] whitespace-nowrap text-text2 tabular-nums">{count}</p>
+              </>
+            }
             filters={filters}
+            tabs={tabs}
+            tab={tab}
             menus={menus}
             sort={sortMenu}
             layout={<ViewToggle filters={filters} view={view} />}
             search={
-              <Form action="/library" role="search" className="min-w-0 flex-1 md:min-w-[120px] md:max-w-[260px]">
+              <Form action="/library" role="search" className="min-w-0 flex-1 md:w-[260px] md:min-w-[120px] md:flex-initial">
                 {/* The other filters ride along, so a search narrows the view the
                     reader is in rather than resetting it. Only the ones that are set,
                     so an unfiltered search is a clean `?q=`. */}
@@ -324,53 +378,55 @@ export default async function LibraryPage({
                 </Link>
               </p>
             </Notice>
-          ) : view === "list" ? (
-            <ul
-              aria-label={listLabel}
-              className={cx(
-                "flex flex-col divide-y-2 divide-border overflow-hidden rounded-[20px] border-2 border-border bg-surface",
-                RESULTS_MOTION,
-              )}
-            >
-              {matching.map((row) => {
-                const { concept, topic: topicLabel } = describe(row);
-                return (
-                  <li key={row.id} className={ARRIVE}>
-                    <AssetRow
-                      asset={row}
-                      concept={concept}
-                      topic={topicLabel}
-                      added={addedOn(row.createdAt)}
-                      href={assetHref(row.id)}
-                    />
-                  </li>
-                );
-              })}
-            </ul>
           ) : (
-            <ul
+            <section
               aria-label={listLabel}
-              className={cx("grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]", RESULTS_MOTION)}
+              // A tab, a filter or a sort keeps the groups whose day is still
+              // shown and fades in the ones that arrive.
+              className={cx("flex flex-col gap-10", RESULTS_MOTION)}
             >
-              {matching.map((row) => {
-                const { concept, topic: topicLabel } = describe(row);
-                return (
-                  <li key={row.id} className={cx("flex", ARRIVE)}>
-                    <AssetCard
-                      asset={row}
-                      concept={concept}
-                      topic={topicLabel}
-                      href={assetHref(row.id)}
-                      // A diagram is its own thumbnail; a video gets a frame
-                      // cut out of it on demand; everything else gets the
-                      // labelled placeholder.
-                      thumbnailSrc={thumbnailFor(row, access)}
-                      thumbnailStatusHref={thumbnailStatusFor(row, access)}
-                    />
-                  </li>
-                );
-              })}
-            </ul>
+              {groups.map((group) => (
+                <DaySection key={group.key} group={group} inset={view === "list"}>
+                  {view === "list" ? (
+                    <ul className="flex flex-col">
+                      {group.rows.map((row) => (
+                        <li key={row.id} className={cx("group/item", ARRIVE)}>
+                          <AssetRow
+                            asset={row}
+                            source={sourceOf(row)}
+                            topic={describe(row).topic}
+                            time={timeOfDay(row.createdAt, timeZone)}
+                            edited={editedLabel(row.createdAt, row.updatedAt, { now, timeZone })}
+                            href={assetHref(row.id)}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]">
+                      {group.rows.map((row) => {
+                        const { concept, topic: topicLabel } = describe(row);
+                        return (
+                          <li key={row.id} className={cx("flex", ARRIVE)}>
+                            <AssetCard
+                              asset={row}
+                              concept={concept}
+                              topic={topicLabel}
+                              href={assetHref(row.id)}
+                              // A diagram is its own thumbnail; a video gets a frame
+                              // cut out of it on demand; everything else gets the
+                              // labelled placeholder.
+                              thumbnailSrc={thumbnailFor(row, access)}
+                              thumbnailStatusHref={thumbnailStatusFor(row, access)}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </DaySection>
+              ))}
+            </section>
           )}
 
           {truncated && (
@@ -393,6 +449,35 @@ export default async function LibraryPage({
 const RESULTS_MOTION =
   "transition-opacity duration-150 ease-out motion-reduce:transition-none group-has-[[data-pending]]/library:opacity-60";
 const ARRIVE = "animate-fade-in motion-reduce:animate-none";
+
+const TITLE = "font-display text-[28px] leading-tight font-bold text-text";
+
+/**
+ * One day's rows under its heading, Manus's `date-heading`: the day ("4 Oct",
+ * the year when it is not this one) and the count in grey, "(5)". The
+ * heading is the shell's row height (`--shell-row`); in the list it is inset
+ * by the row's start padding (`--shell-row-pad`) so it lines up with the
+ * glyphs under it, and in the grid it sits flush with the cards. A day that
+ * arrives with a tab or a filter fades in.
+ */
+function DaySection({ group, inset, children }: { group: DayGroup<unknown>; inset: boolean; children: ReactNode }) {
+  const id = `day-${group.key || "none"}`;
+  return (
+    <section aria-labelledby={id} className={cx("flex flex-col", inset ? "gap-1" : "gap-3", ARRIVE)}>
+      <h2
+        id={id}
+        className={cx(
+          "flex h-[var(--shell-row)] items-center gap-1.5 text-[14px] leading-5 font-medium text-text",
+          inset && "px-[var(--shell-row-pad)]",
+        )}
+      >
+        {group.label}
+        <span className="text-[12px] font-normal text-text2 tabular-nums">({group.rows.length})</span>
+      </h2>
+      {children}
+    </section>
+  );
+}
 
 /**
  * The grid and the list, as two icon links in one chip-high pill: each is a

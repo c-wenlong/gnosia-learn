@@ -1,6 +1,6 @@
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * `/library` in its two layouts, the grid and `?view=list`.
@@ -23,11 +23,15 @@ vi.mock("@/lib/asset-library", async (importOriginal) => ({
 vi.mock("@/lib/learner-store", () => ({ loadKnowledgeBase }));
 vi.mock("@/data/courses", () => ({ getCourses: async () => [] }));
 // The menus push through the app router, which static markup has none of, so
-// the toolbar is stood in for by its two server-built halves: the search form
-// and the layout switch. This suite is about the layouts.
+// the toolbar is stood in for by its server-built parts: the heading, the
+// search form and the layout switch. Its other props (the tabs, the menus)
+// are recorded, so a test can read what the page handed it.
+const toolbar = vi.hoisted(() => vi.fn());
 vi.mock("@/components/library/LibraryToolbar", () => ({
-  LibraryToolbar: ({ search, layout }: { search: ReactNode; layout: ReactNode }) =>
-    createElement("section", null, search, layout),
+  LibraryToolbar: (props: { heading: ReactNode; search: ReactNode; layout: ReactNode }) => {
+    toolbar(props);
+    return createElement("section", null, props.heading, props.search, props.layout);
+  },
 }));
 
 const ROWS = [
@@ -41,6 +45,7 @@ const ROWS = [
     sourceRepo: "manimkc",
     topics: ["operating-systems"],
     createdAt: "2026-10-03T08:00:00Z",
+    updatedAt: "2026-10-03T08:00:00Z",
   },
   {
     id: "note:tlb",
@@ -52,6 +57,20 @@ const ROWS = [
     sourceRepo: "self-learn",
     topics: ["operating-systems"],
     createdAt: "2026-09-29T12:00:00Z",
+    // Revised five days later: the row says so.
+    updatedAt: "2026-10-04T09:00:00Z",
+  },
+  {
+    id: "session:2026-09-29-tlb",
+    kind: "session",
+    path: "learn/sessions/2026-09-29-tlb.md",
+    url: null,
+    bytes: 1_200,
+    title: "Session log",
+    sourceRepo: "self-learn",
+    topics: [],
+    createdAt: "2026-09-29T15:30:00Z",
+    updatedAt: "2026-09-29T15:30:00Z",
   },
   {
     id: "link:ostep",
@@ -63,8 +82,47 @@ const ROWS = [
     sourceRepo: "self-learn",
     topics: ["operating-systems"],
     createdAt: "2026-09-01T00:00:00Z",
+    updatedAt: "2026-09-01T00:00:00Z",
+  },
+  {
+    id: "video:paging.vtt",
+    kind: "captions",
+    path: "out/os/paging.vtt",
+    url: null,
+    bytes: 900,
+    title: null,
+    sourceRepo: "manimkc",
+    topics: ["operating-systems"],
+    createdAt: "2026-10-03T08:00:00Z",
+    updatedAt: "2026-10-03T08:00:00Z",
   },
 ];
+
+const PARENTS = {
+  "video:paging": {
+    places: [
+      {
+        course: "cs2106",
+        code: "CS2106",
+        courseTitle: "Operating Systems",
+        module: "m7",
+        moduleTitle: "Week 7: Virtual memory",
+        position: 7,
+        via: "item",
+      },
+    ],
+    concepts: ["paging"],
+    conversations: [],
+    sessions: [],
+  },
+  "note:tlb": { places: [], concepts: ["tlb"], conversations: [], sessions: [] },
+  "session:2026-09-29-tlb": {
+    places: [],
+    concepts: [],
+    conversations: [],
+    sessions: [{ id: "2026-09-29-tlb", title: "Teach session: the TLB" }],
+  },
+};
 
 const CONCEPT = { title: "Paging", mastery: "shaky", pL: 0.4, observations: 2 };
 
@@ -81,70 +139,127 @@ function currentLayout(html: string): { href: string; label: string } | null {
   return { href: link[1].match(/href="([^"]*)"/)?.[1] ?? "", label: link[1].match(/aria-label="([^"]*)"/)?.[1] ?? "" };
 }
 
+/** The headings of the day groups, in order, as "label (count)". */
+function dayHeadings(html: string): string[] {
+  return [...html.matchAll(/<h2 id="day-[^"]*"[^>]*>(.*?)<span[^>]*>\((\d+)\)<\/span><\/h2>/g)].map(
+    ([, label, n]) => `${label} (${n})`,
+  );
+}
+
 describe("/library", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   beforeEach(() => {
     vi.resetModules();
+    vi.stubEnv("HABIT_TIME_ZONE", "UTC");
+    toolbar.mockClear();
     loadLibrary.mockResolvedValue({
       rows: ROWS,
       counts: [
         { kind: "video", count: 1 },
         { kind: "note", count: 1 },
+        { kind: "session", count: 1 },
         { kind: "link", count: 1 },
+        { kind: "captions", count: 1 },
       ],
       reachable: true,
       truncated: false,
       titles: { "operating-systems": "Operating systems" },
       concepts: { "video:paging": ["paging"], "note:tlb": ["tlb"] },
+      parents: PARENTS,
     });
     loadKnowledgeBase.mockResolvedValue({
       reachable: true,
       kb: {
         concepts: [
-          { id: "paging", ...CONCEPT },
-          { id: "tlb", ...CONCEPT, title: "The TLB" },
+          { id: "paging", requires: [], assumes: [], ...CONCEPT },
+          { id: "tlb", requires: ["paging"], assumes: [], ...CONCEPT, title: "The TLB" },
         ],
       },
     });
   });
 
-  it("renders the card grid by default, with Grid marked current", async () => {
+  it("renders the card grid by default, grouped by day, with Grid marked current", async () => {
     const html = await render();
 
     expect(html).toContain("[grid-template-columns:repeat(auto-fill");
-    expect(html).not.toContain("divide-y-2");
     expect(currentLayout(html)).toEqual({ href: "/library", label: "Grid" });
-    // The cards carry no date; that is the list's column.
-    expect(html).not.toContain("3 Oct 2026");
+    expect(dayHeadings(html)).toEqual(["3 Oct (1)", "29 Sept (2)", "1 Sept (1)"]);
+    // The cards carry no time; that is the list's column.
+    expect(html).not.toContain("08:00");
+    // The companion caption track is not in All.
+    expect(html).not.toContain("paging.vtt");
   });
 
-  it("renders one row per asset with ?view=list, in the same order as the grid", async () => {
+  it("puts the count in the header and hands the toolbar the tabs, Others included", async () => {
+    const html = await render();
+    expect(html).toContain(">4 files</p>");
+    const props = toolbar.mock.calls.at(-1)?.[0] as { tabs: { label: string }[]; tab: string; menus: { label: string }[] };
+    expect(props.tabs.map((t) => t.label)).toEqual(["All", "Videos", "Diagrams", "Notes", "Sessions", "Links", "Others"]);
+    expect(props.tab).toBe("");
+    // The kind is a tab now, not a menu.
+    expect(props.menus.map((m) => m.label)).toEqual(["Course"]);
+  });
+
+  it("lists the companions under Others, with a Kind menu that narrows them", async () => {
+    const html = await render({ kind: "other", view: "list" });
+    expect(html).toContain("paging.vtt");
+    expect(html).not.toContain("Paging, step by step");
+    expect(html).toContain(">1 file</p>");
+    const props = toolbar.mock.calls.at(-1)?.[0] as { tab: string; menus: { label: string; value: string }[] };
+    expect(props.tab).toBe("other");
+    expect(props.menus.map((m) => [m.label, m.value])).toEqual([
+      ["Kind", "other"],
+      ["Course", ""],
+    ]);
+
+    // An old `?kind=captions` link opens the same tab, narrowed.
+    await render({ kind: "captions" });
+    const narrowed = toolbar.mock.calls.at(-1)?.[0] as { tab: string; menus: { label: string; value: string }[] };
+    expect(narrowed.tab).toBe("other");
+    expect(narrowed.menus[0]).toMatchObject({ label: "Kind", value: "captions" });
+  });
+
+  it("renders one row per asset with ?view=list, under its day, newest day first", async () => {
     const html = await render({ view: "list" });
 
-    expect(html).toContain("divide-y-2");
     expect(html).not.toContain("[grid-template-columns:repeat(auto-fill");
     expect(currentLayout(html)).toEqual({ href: "/library?view=list", label: "List" });
-    // One row each, fading in as it arrives (the list's rows are the only `<li>`s that do).
-    expect(html.match(/<li class="animate-fade-in/g)).toHaveLength(3);
+    expect(dayHeadings(html)).toEqual(["3 Oct (1)", "29 Sept (2)", "1 Sept (1)"]);
+    // One row each, fading in as it arrives.
+    expect(html.match(/<li class="group\/item animate-fade-in/g)).toHaveLength(4);
 
-    const order = ["Paging, step by step", "The TLB", "OSTEP"].map((title) => html.indexOf(title));
+    // Newest first inside a day too: the log (15:30) above the note (12:00).
+    const order = ["Paging, step by step", "Session log", "The TLB", "OSTEP"].map((title) => html.indexOf(title));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
-  it("names each row's concept, its mastery, or its topic, and the day it was added", async () => {
+  it("names where each row came from, and when it was made and edited", async () => {
     const html = await render({ view: "list" });
 
-    // The video explains Paging, named beside it.
+    // The video sits in a course module and explains Paging.
+    expect(html).toContain("CS2106 · Week 7");
     expect(html).toContain(">Paging</span>");
     // The note explains itself, so its row says the mastery, not the title again.
     expect(html.split("The TLB").length - 1).toBe(1);
     expect(html).toContain("Learning");
-    // The link explains nothing and shows its topic.
+    // The session log names its session.
+    expect(html).toContain("Teach session: the TLB");
+    // The link has no parent and shows its topic.
     expect(html).toContain("Operating systems");
-    expect(html).toContain("3 Oct 2026");
-    expect(html).toContain("29 Sept 2026");
-    expect(html).toContain("Video · manim · 4.4 MB");
-    expect(html).toContain("Link · pages.cs.wisc.edu");
+    // Times in the owner's zone, and the edited day for the revised note.
+    expect(html).toContain('<time dateTime="2026-10-03T08:00:00Z">08:00</time>');
+    expect(html).toContain("edited 4 Oct");
+    expect(html.match(/edited /g)).toHaveLength(1);
+  });
+
+  it("sorts by title within each day, the days staying newest first", async () => {
+    const html = await render({ view: "list", sort: "title" });
+    expect(dayHeadings(html)).toEqual(["3 Oct (1)", "29 Sept (2)", "1 Sept (1)"]);
+    expect(html.indexOf("Session log")).toBeLessThan(html.indexOf("The TLB"));
   });
 
   it("keeps the list when a search is submitted, and the sort when the layout flips", async () => {
