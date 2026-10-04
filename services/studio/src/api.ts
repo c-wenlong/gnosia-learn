@@ -23,7 +23,7 @@ import {
   type DiagramListing,
 } from "./diagrams";
 import { studioBlobStore } from "./blobs";
-import type { Drafts, DraftStreamEvent } from "./drafts";
+import { DRAFT_SEARCH_LIMIT, type Drafts, type DraftStreamEvent } from "./drafts";
 import { MirrorRefused, type Mirrors } from "./mirrors";
 import { matchesTag, openNewestShot } from "./live-shot";
 import { diagramPathProblem } from "./diagram-guard";
@@ -1443,9 +1443,14 @@ async function draftRoutes(
       const beforeUpdated = url.searchParams.get("before");
       const beforeId = url.searchParams.get("beforeId");
       const before = beforeUpdated !== null && beforeId !== null ? { updated: beforeUpdated, id: beforeId } : undefined;
+      // Words to find in a draft's title, first message or concept title,
+      // applied before the cursor and the limit. Empty is no search.
+      const q = (url.searchParams.get("q") ?? "").trim();
+      if (q.length > DRAFT_SEARCH_LIMIT) return fail(response, 400, `"q" is at most ${DRAFT_SEARCH_LIMIT} characters`, { field: "q" });
       const list = drafts.list({
         limit,
         nonEmpty,
+        ...(q === "" ? {} : { q }),
         ...(state === undefined || state === "" ? {} : { state }),
         ...(before === undefined ? {} : { before }),
       });

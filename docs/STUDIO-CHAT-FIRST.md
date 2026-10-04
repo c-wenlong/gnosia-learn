@@ -625,7 +625,7 @@ handler as every other route. Every response carries a `note`.
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
 | `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch |
-| `GET` | `/api/drafts` | `?state=&limit=&nonEmpty=`; `state` may be a comma list (`open,briefed`); `nonEmpty=1` leaves out drafts with no person message (`turns` 0), before the limit is applied | `{ drafts: [{ draftId, kind, state, title, firstMessage, source, turns, costUsd, updated, jobId }] }`. `firstMessage` is the person's first message, whitespace collapsed and cut to 120 characters, or null before one |
+| `GET` | `/api/drafts` | `?state=&limit=&nonEmpty=&q=`; `state` may be a comma list (`open,briefed`); `nonEmpty=1` leaves out drafts with no person message (`turns` 0), before the limit is applied; *since D87:* `q` (at most 200 characters, else 400) keeps the drafts whose title, first message or concept title contains it, in any case, also before the limit and the `before` cursor | `{ drafts: [{ draftId, kind, state, title, firstMessage, source, turns, costUsd, updated, jobId }] }`. `firstMessage` is the person's first message, whitespace collapsed and cut to 120 characters, or null before one |
 | `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, transcript: [{ seq, role, text, at, brief?, edit? }], brief, briefSeq, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown. `briefSeq` is the seq of the transcript entry carrying `brief` (a planner reply, or the `studio` note of an edit, which has `edit: true`), null with no brief |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, no length cap of its own; a body over 1 MB is refused with 413 | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
 | `GET` | `/api/drafts/{id}/events` | `Last-Event-ID` | SSE: `delta` (text so far), `reply`, `brief`, `brief-invalid`, `studio`, `state`, `error` |
@@ -752,6 +752,27 @@ the last of the one before (`?before=<updated>&beforeId=<id>`, newest first,
 ties broken by id), and every refresh reads all the pages shown again from
 the top (`readHistory`), so a row pushed onto the next page, or closed with
 Start over, ends up where the runner now has it.
+
+*Since D87:* under New chat in the app's sidebar, on every page, is a search
+field, "Search conversations" (`ChatSearch`, with the reads in
+`useHistorySearch`). It asks
+the runner, not the rows already loaded, so a conversation on a page nobody
+opened is found too: `GET /api/drafts?q=` keeps the drafts whose title, first
+message (the 120 characters the list holds) or concept title contains the
+words, in any case and whatever the spacing, before the limit and the cursor,
+so a page is a page of matches and "Show more matches" pages them the way the
+history pages. Typing waits 200ms before it asks (`useHistorySearch`). The
+matches replace the day groups with one flat list, newest first, the matched
+words in bold and, when the match is in words the heading is not showing (a
+first message under a brief's title), a second line of them. Nothing matching
+reads "No conversations match", a runner that did not answer says so instead,
+and the open conversation is marked among the matches as it is in the groups.
+A match opens as a row does: on `/studio` through the page's in-browser
+navigation, elsewhere as a link to `/studio?draft=`. Escape in a field that holds words, or its clear button, puts the groups
+back; Escape in an empty field closes the drawer or the slid-out sidebar as
+before. On the collapsed rail a search button slides the sidebar out with the
+field focused, and it stays out while focus is in the field or a match,
+sliding back when focus and the pointer have both left.
 
 **The conversation** is `StudioPane`: `StudioDialog`'s controls without the
 dialog. Nothing is modal, so the sidebar stays usable, and there is no Close:
@@ -1452,6 +1473,39 @@ from the brief alone). The header and the opening turn say "video" only in
 the tab that pressed the button: the runner records no purpose, so after a
 reload the conversation reads as an Extend one until the first brief names
 it, a cost judged smaller than a schema change.
+
+### D87. The history is searched by the runner, from a field under New chat
+
+**Verdict:** the app's sidebar (D84) has a "Search conversations" field under
+New chat, on every page, and a button for it on the collapsed rail. `GET /api/drafts` takes `q`, a
+case-insensitive substring of the draft's title, first message or concept
+title, applied before the limit and the cursor. The client debounces typing by
+200ms and shows the hits as one flat list with the matched words marked; the
+grouped history comes back on Escape or the clear button. On `/studio` a match
+opens through the page's in-browser navigation, as a row does; elsewhere it
+links to `/studio?draft=`.
+
+**Why:** the history is paged 50 at a time, so a filter over the rows already
+loaded would miss exactly the old conversations a person searches for, and
+"Show older conversations" until it turns up is the problem this fixes. The
+runner already holds every draft in memory and filters before it limits, so
+the cost is one more `filter` in `Drafts.list`. The web app applies the same
+rule to what comes back, so a runner that predates `q` still shows only
+matches. Text and search are folded one character at a
+time (lower case, a Greek final sigma written as the ordinary one, spaces
+collapsed), so a match can be traced back to the
+characters it came from and marked; lower-casing the whole string would not
+say where a letter that lower-cases to two (the Turkish dotted capital I)
+stood. Gauth's Atlas has a New Topic row and a search field in that order
+(`docs/design/reference/gauth/components.md`, "Atlas sidebar").
+
+**Rejected:** filtering the loaded rows (misses the old ones); searching the
+whole transcript (a read of every draft's file per keystroke, and the
+transcripts are not in memory; the title, the 120-character first message and
+the concept are what a row shows, so they are what a person remembers a
+conversation by, and a later phase can index the rest); a separate search
+route (`list` already has the state, cursor and limit); and a modal search, as
+ChatGPT has, which hides the history while it is used.
 
 ### D88. The home composer is a box with Diagram and Video toggles
 

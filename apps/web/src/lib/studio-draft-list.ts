@@ -116,6 +116,153 @@ export function draftRows(
     });
 }
 
+/**
+ * One character as the search compares it: lower case, with the Greek final
+ * sigma written as the ordinary one. Lower-casing a whole string makes a
+ * capital sigma at the end of a word a final one, so "ΑΣ" is "ας" there and
+ * "ασ" a character at a time; folding both to "σ" makes a search written
+ * either way find it.
+ */
+function foldChar(char: string): string {
+  return char.toLowerCase().replace("ς", "σ");
+}
+
+/**
+ * A search text as the runner compares it (`searchText` in the runner's
+ * `drafts.ts`): whitespace runs as one space, trimmed, and each character
+ * folded on its own (`foldChar`). One character at a time, so a character that
+ * lower-cases to a different number of letters (the Turkish dotted capital I)
+ * can be traced back to where it was (`foldWithMap`), which a lower-cased
+ * whole string cannot offer.
+ */
+export function searchText(text: string): string {
+  return [...text.replace(/\s+/g, " ").trim()].map(foldChar).join("");
+}
+
+/**
+ * `searchText(text)`, and for each UTF-16 unit of it where in `text` it came
+ * from: `starts[i]` and `ends[i]` bound the original character (or whitespace
+ * run) that produced unit `i`. What lets a match found in the folded text be
+ * marked in the original.
+ */
+function foldWithMap(text: string): { folded: string; starts: number[]; ends: number[] } {
+  let folded = "";
+  const starts: number[] = [];
+  const ends: number[] = [];
+  let at = 0;
+  let spaceFrom = -1;
+  const put = (piece: string, from: number, to: number) => {
+    for (let unit = 0; unit < piece.length; unit += 1) {
+      starts.push(from);
+      ends.push(to);
+    }
+    folded += piece;
+  };
+  for (const char of text) {
+    const next = at + char.length;
+    if (/\s/.test(char)) {
+      // A run of whitespace is one space, standing for the whole run; none at the start.
+      if (spaceFrom === -1 && folded !== "") spaceFrom = at;
+    } else {
+      if (spaceFrom !== -1) {
+        put(" ", spaceFrom, at);
+        spaceFrom = -1;
+      }
+      put(foldChar(char), at, next);
+    }
+    at = next;
+  }
+  return { folded, starts, ends };
+}
+
+/**
+ * Whether a draft is a hit for `q`: its title, first message or concept
+ * title contains it, in any case. The runner filters by the same rule before
+ * its limit; applying it here as well means a runner that predates `q`, which
+ * ignores it, still shows only matches (of the page it sent).
+ */
+export function draftMatches(draft: Pick<DraftSummary, "title" | "firstMessage" | "concept">, q: string): boolean {
+  const needle = searchText(q);
+  if (needle === "") return true;
+  return [draft.title, draft.firstMessage, draft.concept?.title].some(
+    (field) => typeof field === "string" && searchText(field).includes(needle),
+  );
+}
+
+/** A search hit: the row, and the words around the match when its heading does not hold it. */
+export interface SearchRow extends DraftRow {
+  /** The first message or the concept's title, cut around the match, when the heading is something else. Null when the heading holds the match. */
+  snippet: string | null;
+}
+
+/** How many characters of a snippet come before the match, so a long first message shows it. */
+const SNIPPET_LEAD = 24;
+
+/**
+ * The drafts that match `q` as rows, newest first and in one run (a search
+ * has no day headings): each with a snippet when the match is in words the
+ * heading is not showing, such as a first message under a brief's title.
+ */
+export function searchRows(
+  drafts: readonly DraftSummary[],
+  titles: Readonly<Record<string, string>>,
+  q: string,
+): SearchRow[] {
+  const needle = searchText(q);
+  const hits = drafts.filter((draft) => draftMatches(draft, needle));
+  const byId = new Map(hits.map((draft) => [draft.draftId, draft]));
+  return draftRows(hits, titles).map((row) => {
+    const draft = byId.get(row.draftId);
+    if (draft === undefined || searchText(row.heading).includes(needle)) return { ...row, snippet: null };
+    const field = [draft.concept?.title, draft.firstMessage].find(
+      (text): text is string => typeof text === "string" && searchText(text).includes(needle),
+    );
+    return { ...row, snippet: field === undefined ? null : excerpt(field, needle) };
+  });
+}
+
+/** `text` on one line, starting a little before the first match, with an ellipsis when that cut something. */
+function excerpt(text: string, needle: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  const { folded, starts } = foldWithMap(line);
+  const found = folded.indexOf(needle);
+  const at = found === -1 ? 0 : starts[found];
+  return at > SNIPPET_LEAD ? `…${line.slice(at - SNIPPET_LEAD)}` : line;
+}
+
+/** A run of text, and whether it is the part that matched. */
+export interface TextPart {
+  text: string;
+  hit: boolean;
+}
+
+/**
+ * `text` cut into the parts that match `q` (in any case) and the parts that
+ * do not, in order, so a row can mark what was found. No match gives the
+ * whole text as one part that is not a hit.
+ */
+export function matchParts(text: string, q: string): TextPart[] {
+  const needle = searchText(q);
+  if (needle === "") return [{ text, hit: false }];
+  // Found in the folded text, as the runner finds it, and marked in the
+  // original through the map: a character that folds to two units is marked
+  // whole, and a run of spaces is one space.
+  const { folded, starts, ends } = foldWithMap(text);
+  const parts: TextPart[] = [];
+  let from = 0;
+  for (let found = folded.indexOf(needle); found !== -1; found = folded.indexOf(needle, found + needle.length)) {
+    const start = starts[found];
+    const end = ends[found + needle.length - 1];
+    // Two matches inside one character's folding are one mark.
+    if (start < from) continue;
+    if (start > from) parts.push({ text: text.slice(from, start), hit: false });
+    parts.push({ text: text.slice(start, end), hit: true });
+    from = end;
+  }
+  if (from < text.length) parts.push({ text: text.slice(from), hit: false });
+  return parts.length === 0 ? [{ text, hit: false }] : parts;
+}
+
 /** A run of rows under one heading: the day they were last touched. */
 export interface HistoryGroup {
   label: string;

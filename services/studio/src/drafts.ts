@@ -904,10 +904,14 @@ export class Drafts {
   /**
    * `state` may name several, comma-separated (`open,briefed`). `before` is
    * the last row of the page before, by its `updated` and id, so a history
-   * longer than one page can be read a page at a time.
+   * longer than one page can be read a page at a time. `q` keeps the drafts
+   * whose title, first message or concept title contains it (`draftMatches`),
+   * before the cursor and the limit, so a page of matches is full and the
+   * paging reads the matches and nothing else.
    */
-  list(filter: { state?: string; limit?: number; nonEmpty?: boolean; before?: { updated: string; id: string } } = {}): DraftSummaryView[] {
+  list(filter: { state?: string; limit?: number; nonEmpty?: boolean; q?: string; before?: { updated: string; id: string } } = {}): DraftSummaryView[] {
     const before = filter.before;
+    const needle = filter.q === undefined ? "" : searchText(filter.q);
     const states =
       filter.state === undefined
         ? null
@@ -917,6 +921,7 @@ export class Drafts {
       .filter((record) => states === null || states.size === 0 || states.has(record.state))
       // Before the limit, so conversations never started cannot crowd real ones out.
       .filter((record) => filter.nonEmpty !== true || record.turns > 0)
+      .filter((record) => needle === "" || draftMatches(record, needle))
       // Newest first, and by id where two share a time, so a page boundary
       // between them neither repeats a row nor drops one.
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id))
@@ -3787,10 +3792,43 @@ export function vocabularyChangeNote(told: string, now: string): string | null {
 /** How long a first message may be in the drafts list. */
 export const LIST_LINE_LIMIT = 120;
 
+/** The most characters `GET /api/drafts?q=` takes. */
+export const DRAFT_SEARCH_LIMIT = 200;
+
 /** A message as one line of the drafts list: whitespace collapsed, cut with an ellipsis. */
 export function listLine(text: string): string {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length <= LIST_LINE_LIMIT ? line : `${line.slice(0, LIST_LINE_LIMIT - 1).trimEnd()}…`;
+}
+
+/**
+ * A search text as `list` compares it: whitespace runs as one space, trimmed,
+ * each character folded on its own: lower case, with the Greek final sigma
+ * written as the ordinary one (lower-casing a whole string would make "ΑΣ"
+ * "ας" and a search for "ασ" miss it). One at a time so the web app can trace
+ * a match back to the character it came from (a character may lower-case to
+ * more than one letter, the Turkish dotted capital I), and so the two sides
+ * agree on what matches by construction. The rule is the web app's
+ * `searchText` in `studio-draft-list.ts`.
+ */
+export function searchText(text: string): string {
+  return [...text.replace(/\s+/g, " ").trim()].map((char) => char.toLowerCase().replace("ς", "σ")).join("");
+}
+
+/**
+ * Whether a draft is a hit for `needle` (already `searchText`): its title, the
+ * first message the list shows for it (cut to `LIST_LINE_LIMIT`, so a match
+ * past the cut is not found), or the title of the concept a hand-off from the
+ * tutor opened it on. The web app's `draftMatches` applies the same rule, so
+ * a runner from before this one, which ignores `q`, still shows only matches.
+ */
+export function draftMatches(
+  record: { title: string | null; firstMessage?: string | null; concept?: { title: string } | null },
+  needle: string,
+): boolean {
+  return [record.title, record.firstMessage, record.concept?.title].some(
+    (field) => typeof field === "string" && searchText(field).includes(needle),
+  );
 }
 
 function safeJson(line: string): Record<string, unknown> | null {

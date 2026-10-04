@@ -426,13 +426,20 @@ export function createDraft(input: { source?: string; sourceKind?: "diagram" | "
 /**
  * `GET /api/drafts`: the drafts list, phase 3's section above the grid.
  * Several states go as one comma list (`state=open,briefed`); `nonEmpty`
- * leaves out drafts nobody has said anything in, before the limit applies.
+ * leaves out drafts nobody has said anything in, and `q` keeps the ones that
+ * match it, both before the limit applies.
  */
 export function listDrafts(
   query: {
     state?: DraftState | readonly DraftState[];
     nonEmpty?: boolean;
     limit?: number;
+    /**
+     * Words to find in a draft's title, first message or concept title, in
+     * any case. The runner applies them before the limit, so a page is a page
+     * of matches. Blank is no search and is not sent.
+     */
+    q?: string;
     /** The last row of the page before: the next page starts after it. */
     before?: { updated: string; draftId: string };
   } = {},
@@ -441,6 +448,8 @@ export function listDrafts(
   if (query.state !== undefined) params.set("state", typeof query.state === "string" ? query.state : query.state.join(","));
   if (query.nonEmpty === true) params.set("nonEmpty", "1");
   if (query.limit !== undefined) params.set("limit", String(query.limit));
+  const q = query.q?.trim() ?? "";
+  if (q !== "") params.set("q", q);
   if (query.before !== undefined) {
     params.set("before", query.before.updated);
     params.set("beforeId", query.before.draftId);
