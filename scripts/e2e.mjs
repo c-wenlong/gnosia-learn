@@ -553,13 +553,15 @@ async function run() {
     const start = recall.getByRole('link', { name: 'Start recall', exact: true });
     const href = await start.getAttribute('href');
     assert(href !== null && /^\/learn\/[^/?]+$/.test(href), `Start recall links to ${href}`);
-    assert((await recall.locator(`li a[href="${href}"]`).count()) === 1, `the first due card does not link to ${href}`);
+    assert((await recall.locator('li a').first().getAttribute('href')) === href, `the first due card does not link to ${href}`);
     await clickHydrated(page, start);
     await page.waitForURL(`${base}${href}`);
-    await main
-      .getByText(/Its review is due, so one question before anything else|This review is due, but the tutor could not open on a recall question/)
-      .first()
-      .waitFor();
+    // The seed's due concept (tool-calling) has a check, so the tutor must open
+    // on it; a copy's due concept may have none, and then the model is asked.
+    const opening = SEED
+      ? /Its review is due, so one question before anything else/
+      : /Its review is due, so one question before anything else|This review is due, but the tutor could not open on a recall question/;
+    await main.getByText(opening).first().waitFor();
 
     // The whole queue stays one link away, and grades as it always did.
     await go('/home');
