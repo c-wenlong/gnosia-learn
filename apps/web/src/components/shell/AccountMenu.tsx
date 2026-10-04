@@ -99,9 +99,13 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
           className={cx(
             "absolute z-50 w-60 rounded-2xl border-2 border-border bg-surface p-1.5 shadow-lg",
             // `translate` and `scale` are their own properties in Tailwind 4, not `transform`.
-            "transition-[opacity,translate,scale,visibility] duration-150 ease-soft motion-reduce:transition-none",
+            // Visibility transitions only as it closes, so the opened menu is
+            // focusable from its first frame.
+            "duration-150 ease-soft motion-reduce:transition-none",
             collapsed ? "bottom-0 left-full ml-2 origin-bottom-left" : "inset-x-0 bottom-full mb-2 w-auto origin-bottom",
-            open ? "visible translate-y-0 scale-100 opacity-100" : "invisible translate-y-1 scale-[0.97] opacity-0",
+            open
+              ? "visible translate-y-0 scale-100 opacity-100 transition-[opacity,translate,scale]"
+              : "invisible translate-y-1 scale-[0.97] opacity-0 transition-[opacity,translate,scale,visibility]",
           )}
         >
           <ul className="flex flex-col gap-0.5">
