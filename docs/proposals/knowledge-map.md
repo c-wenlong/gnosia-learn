@@ -1,7 +1,8 @@
 # Proposal: the Learn page is a map of what you know
 
-Status: being built in phases, 2026-10-04. Phases 1 (the layout), 2 (the
-viewer) and 3 (reading the map) are built.
+Status: built, 2026-10-04: all four phases. Decisions G1 to G8 stand as
+written; G1 revised decision 13 of [DESIGN.md](../design/DESIGN.md), whose
+row now says so.
 
 ## The problem
 
@@ -178,10 +179,15 @@ course" leaves the 10 such concepts undimmed. On a 390 by 844 phone the page
 does not scroll sideways, and a touch drag then a pinch on the largest island
 held 16.8 ms a frame at worst.
 
-DESIGN.md's decision 13 row and the `/learn` screen row are rewritten in
-phase 4, when the default changes, not before. Until then the map is the
-Graph view, one press away, and the table stays the default, so no phase
-leaves a default view a keyboard cannot use.
+Phase 4 measured on `self_learn`, 2026-10-04: `/learn` opens on the map in
+388 ms; walking it from the first island with Tab, Enter and the right arrow
+alone reaches all 306 concepts on all 34 islands.
+
+DESIGN.md's decision 13 row and the `/learn` screen row were rewritten in
+phase 4, when the default changed, and not before: until then the map was
+the Graph view, one press away, and the table stayed the default, so no
+phase left a default view a keyboard could not use. Since phase 4, `/learn`
+opens on the map and `?view=table` opens the table.
 
 ## What stays
 
