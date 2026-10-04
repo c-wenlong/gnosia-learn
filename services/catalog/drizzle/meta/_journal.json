@@ -183,6 +183,13 @@
       "when": 1791129326723,
       "tag": "0025_visit_event",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791135011436,
+      "tag": "0026_more_providers",
+      "breakpoints": true
     }
   ]
 }

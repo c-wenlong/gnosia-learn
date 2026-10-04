@@ -66,7 +66,7 @@ chain, this is the order for an owner with no chain; an owner with one gets
 the chain's order, each entry with the key D9 names:
 [TUTOR-MODELS.md](TUTOR-MODELS.md), T1 and T3.) `currentOwner()`,
 never a default `local`. The owner's saved keys come first, in the cascade's
-order (NVIDIA, Gemini, OpenRouter); then the server's keys, in the same order,
+order (NVIDIA, Gemini, OpenRouter, then the providers of TUTOR-MODELS.md T13); then the server's keys, in the same order,
 for the providers the owner saved none for. The `providers` field of a tutor
 error says where each key came from ("gemini (your key) → nvidia (server
 key)") and nothing of the key. The missing-key message in the three tutor
