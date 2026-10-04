@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 
 import { PAGE_ENTER } from "@/components/PageLoading";
-import { ProviderKeys } from "@/components/settings/ProviderKeys";
+import { Providers } from "@/components/settings/Providers";
 import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
-import { TutorModels } from "@/components/settings/TutorModels";
 import { getAllTopicIds, getCourses } from "@/data/courses";
 import { currentOwner } from "@/lib/owner";
-import { keyTestModel } from "@/lib/agent/providers";
 import { loadProviderKeys } from "@/lib/provider-keys/settings";
 import { loadSettings } from "@/lib/settings";
+import { providersView } from "@/lib/providers/view";
 import { loadTutorModels } from "@/lib/tutor-models/settings";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -24,11 +23,11 @@ export const metadata: Metadata = { title: "Settings" };
  * parameters, which providers have a key); the cards in `SettingsForm.tsx` write through
  * `/api/learner/preference` one field at a time.
  *
- * Provider keys (docs/BYOK.md) are the owner's own, saved through
- * `/api/learner/provider-key`: the card is handed each key's last four
- * characters and date, never the key. The Models card (docs/TUTOR-MODELS.md)
- * is the owner's model chain, which replaces the built-in defaults once it
- * holds a model.
+ * The Providers card (docs/TUTOR-MODELS.md, T12) is the owner's model
+ * providers: each one's key (docs/BYOK.md, saved through
+ * `/api/learner/provider-key`, handed to the card as its last four characters
+ * and date, never the key) and its models, the chain that replaces the
+ * built-in defaults once it holds a model.
  *
  * The cards are grouped into tabs (General, Profile, Tutor, Data) so the page
  * is one short group at a time; `?tab=` opens one, read by `SettingsTabs`.
@@ -62,11 +61,7 @@ export default async function SettingsPage() {
             content: (
               <>
                 <TutorSettings settings={settings} providers={providers} chain={models.chain.length > 0} />
-                <TutorModels view={models} />
-                <ProviderKeys
-                  rows={keys.rows.map((row) => ({ ...row, test: keyTestModel(models.chain, row.id) }))}
-                  reachable={keys.reachable}
-                />
+                <Providers view={providersView(keys, models.chain, models.reachable)} />
               </>
             ),
           },
