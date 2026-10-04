@@ -19,15 +19,18 @@ export const DIALOG_CLOSE_MS = 200;
  * `compact` 560px and as tall as its content (the studio's settings),
  * `default` 720px from 1024px (a studio panel), `wide` 960px from 1024px and
  * as tall as its content (a video's preview), `reading` 64rem (a note opened
- * to read at length).
+ * to read at length), `preview` Manus's previewer, 1200 by 820 at 1440 with
+ * 120 and 40 of the page round it (the Library's previewer, L6 of
+ * docs/proposals/library-by-type-and-day.md), always that tall.
  */
-export type DialogSize = "compact" | "default" | "wide" | "reading";
+export type DialogSize = "compact" | "default" | "wide" | "reading" | "preview";
 
 const WIDTH: Record<DialogSize, string> = {
   compact: "md:w-[560px]",
   default: "md:w-[calc(100vw-32px)] lg:w-[720px]",
   wide: "md:w-[calc(100vw-32px)] lg:w-[min(960px,calc(100vw-64px))]",
   reading: "md:w-[min(64rem,calc(100vw-48px))]",
+  preview: "md:w-[min(1200px,calc(100vw-96px))]",
 };
 
 /**
@@ -40,6 +43,7 @@ const HEIGHT: Record<DialogSize, string> = {
   default: "md:h-auto md:max-h-[calc(100dvh-96px)]",
   wide: "md:h-fit md:max-h-[calc(100dvh-96px)]",
   reading: "md:h-auto md:max-h-[calc(100dvh-64px)]",
+  preview: "md:h-[min(820px,calc(100dvh-80px))] md:max-h-none",
 };
 
 /** The whole height a size allows, whatever it holds. */
@@ -48,6 +52,7 @@ const TALL: Record<DialogSize, string> = {
   default: "md:h-[calc(100dvh-96px)] md:max-h-[calc(100dvh-96px)]",
   wide: "md:h-[calc(100dvh-96px)] md:max-h-[calc(100dvh-96px)]",
   reading: "md:h-[calc(100dvh-64px)] md:max-h-[calc(100dvh-64px)]",
+  preview: "md:h-[min(820px,calc(100dvh-80px))] md:max-h-none",
 };
 
 /** The kit's classes for a modal dialog. Exported for the tests; a page renders `Dialog`. */
