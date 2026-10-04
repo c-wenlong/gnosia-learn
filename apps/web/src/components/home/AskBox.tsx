@@ -6,6 +6,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
+import { isImeKey } from "@/components/ui/composer-keys";
+import { moveActive } from "@/components/ui/mention-text";
 import { ASK_START_KEY, askTutorHref, MAX_ASK_QUERY, type AskEntry, type AskKind } from "@/lib/ask-core";
 
 /** How long typing pauses before the box asks. */
@@ -126,10 +128,10 @@ export function AskBox() {
             e.preventDefault();
             setOpen(true);
             const step = e.key === "ArrowDown" ? 1 : -1;
-            setActive((i) => (Math.min(i, options.length - 1) + step + options.length) % options.length);
+            setActive((i) => moveActive(options, Math.min(i, options.length - 1), step));
           } else if (e.key === "Enter") {
             // The Enter that confirms an input method's candidate is not a choice.
-            if (e.nativeEvent.isComposing || options.length === 0) return;
+            if (isImeKey(e.nativeEvent) || options.length === 0) return;
             e.preventDefault();
             go(activeOption ?? options[0]);
           } else if (e.key === "Escape") {

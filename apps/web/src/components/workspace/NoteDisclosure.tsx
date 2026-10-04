@@ -1,10 +1,9 @@
 "use client";
 
-import { useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 
 import { Collapse } from "@/components/ui/Collapse";
-
-const noSubscribe = () => () => undefined;
+import { useHydrated } from "@/lib/use-hydrated";
 
 const TOGGLE =
   "self-start rounded-sm text-left text-[13px] font-medium text-accent-text underline-offset-4 select-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
@@ -25,11 +24,7 @@ const TOGGLE =
  */
 export function NoteDisclosure({ children }: { children: ReactNode }) {
   // False on the server and while hydrating, so the page's `<details>` hydrates as it was sent.
-  const enhanced = useSyncExternalStore(
-    noSubscribe,
-    () => true,
-    () => false,
-  );
+  const enhanced = useHydrated();
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(false);
   /** The page's `<summary>` had the focus when the button replaced it: the button takes it on. */

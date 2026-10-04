@@ -121,7 +121,13 @@ describe("one place asks whether to keep still", () => {
           const rel = relative(src, path);
           // The query as a string anywhere, so one kept in a variable is caught too.
           if (rel !== join("lib", "motion.ts") && /["'`]\(\s*prefers-reduced-motion/.test(text)) offenders.push(rel);
-          if (/behavior:\s*["']smooth["']/.test(text)) offenders.push(`${rel} (a hard-coded smooth scroll; use scrollBehavior())`);
+          // `scrollBehavior` itself is the one place allowed to choose between the two.
+          const chooses = rel !== join("lib", "motion.ts") && /["']auto["']\s*:\s*["']smooth["']/.test(text);
+          if (/behavior:\s*["']smooth["']/.test(text) || chooses) {
+            offenders.push(`${rel} (a hard-coded smooth scroll; use scrollBehavior())`);
+          }
+          // A wrapper over prefersReducedMotion is a second name for one question.
+          if (/(?:function|const)\s+reducedMotion\b/.test(text)) offenders.push(`${rel} (a reducedMotion wrapper; call prefersReducedMotion())`);
         }
       }
     };

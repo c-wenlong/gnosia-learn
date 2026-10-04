@@ -15,7 +15,7 @@ import { PANE_GUTTER, usePaneLayout } from "@/components/studio/pane-context";
 import { Sentence } from "@/components/studio/Sentence";
 import { useStartDraft } from "@/components/studio/useStartDraft";
 import { focusIsStill } from "@/components/studio/dialog-focus";
-import { ENTER, FADE_IN, reducedMotion } from "@/components/studio/motion";
+import { ENTER, FADE_IN } from "@/components/studio/motion";
 import { Arrive } from "@/components/studio/motion-parts";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { MentionComposer } from "@/components/studio/StudioComposer";
@@ -124,6 +124,7 @@ import {
   takeOpener,
 } from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
+import { prefersReducedMotion } from "@/lib/motion";
 import { announceDraftChange } from "@/lib/studio-draft-list";
 import { panelHref, titleOf } from "@/lib/studio-view";
 
@@ -467,7 +468,7 @@ export function DraftPanel({
     // opening would be a wait.
     const box = thread.current;
     if (box === null) return;
-    const glide = scrolledBox.current === box && !reducedMotion();
+    const glide = scrolledBox.current === box && !prefersReducedMotion();
     scrolledBox.current = box;
     if (typeof box.scrollTo === "function") box.scrollTo({ top: box.scrollHeight, behavior: glide ? "smooth" : "auto" });
     else box.scrollTop = box.scrollHeight;

@@ -1,20 +1,7 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 import { elapsedMs, type Job } from "@/lib/studio-jobs";
-
-const subscribeNever = () => () => {};
-
-/**
- * Whether this render is the browser's, and the hydrating one is not.
- *
- * `false` on the server and on the browser's first pass over the server's
- * HTML (React hydrates with the server snapshot), `true` on every render after
- * that, and on a component mounted later by a client-side update, where there
- * is no server HTML to match.
- */
-function useHydrated(): boolean {
-  return useSyncExternalStore(subscribeNever, () => true, () => false);
-}
+import { useHydrated } from "@/lib/use-hydrated";
 
 /**
  * The wall clock, a second at a time, once the page has hydrated.

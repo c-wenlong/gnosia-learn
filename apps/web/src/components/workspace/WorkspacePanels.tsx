@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/classes";
 import { Panel } from "@/components/ui/Panel";
+import { useMediaQuery } from "@/components/ui/use-media-query";
 
 /**
  * The workspace's three panels (hi-fi 04): Note & sources, Tutor, Studio.
@@ -38,20 +39,9 @@ const TABS: { key: PanelKey; label: string }[] = [
 
 const WIDE = "(min-width: 900px)";
 
-function subscribeWide(onChange: () => void): () => void {
-  if (typeof window.matchMedia !== "function") return () => undefined;
-  const query = window.matchMedia(WIDE);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
 /** Whether the panels sit side by side (900px up). False on the server and the first client render. */
 function useWide(): boolean {
-  return useSyncExternalStore(
-    subscribeWide,
-    () => typeof window.matchMedia === "function" && window.matchMedia(WIDE).matches,
-    () => false,
-  );
+  return useMediaQuery(WIDE, false);
 }
 
 function CollapseButton({
