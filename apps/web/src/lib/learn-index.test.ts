@@ -9,6 +9,8 @@ import {
   matchesQuery,
   parseFilter,
   parseScope,
+  indexSearch,
+  courseGraphHref,
   parseView,
   statusFilterOptions,
   type IndexRow,
@@ -80,9 +82,43 @@ describe("filters and search", () => {
     expect(parseFilter("bogus")).toBe("all");
     expect(parseView("graph")).toBe("graph");
     expect(parseView(undefined)).toBe("table");
-    expect(parseScope(null, "graph")).toBe("course");
-    expect(parseScope(null, "table")).toBe("neighbourhood");
     expect(parseScope("neighbourhood", "graph")).toBe("neighbourhood");
+  });
+
+  // Phase 2 of docs/proposals/knowledge-map.md (G2): the map opens on the
+  // selected concept's island, and a graph URL always says its scope.
+  it("reads a missing scope as the island in the graph view and the neighbourhood in the table", () => {
+    expect(parseScope(null, "graph")).toBe("island");
+    expect(parseScope(undefined, "graph")).toBe("island");
+    expect(parseScope("bogus", "graph")).toBe("island");
+    expect(parseScope("course", "graph")).toBe("course");
+    expect(parseScope("island", "graph")).toBe("island");
+    expect(parseScope(null, "table")).toBe("neighbourhood");
+    expect(parseScope("course", "table")).toBe("course");
+    // The table's card has no island scope.
+    expect(parseScope("island", "table")).toBe("neighbourhood");
+  });
+
+  it("writes the graph view's scope into the URL every time, so a reload shows the same view", () => {
+    const base = { selected: "dot", filter: "all" as const };
+    expect(indexSearch({ ...base, view: "graph", scope: "island" })).toBe("concept=dot&view=graph&scope=island");
+    expect(indexSearch({ ...base, view: "graph", scope: "course" })).toBe("concept=dot&view=graph&scope=course");
+    expect(indexSearch({ ...base, view: "graph", scope: "neighbourhood" })).toBe("concept=dot&view=graph&scope=neighbourhood");
+    // The table leaves its defaults out, as it always has.
+    expect(indexSearch({ ...base, view: "table", scope: "neighbourhood" })).toBe("concept=dot");
+    expect(indexSearch({ ...base, view: "table", scope: "course" })).toBe("concept=dot&scope=course");
+    expect(indexSearch({ selected: null, filter: "due", view: "table", scope: "neighbourhood" })).toBe("filter=due");
+    // Other parameters already in the URL are kept.
+    expect(indexSearch({ ...base, view: "graph", scope: "island" }, "utm=x&scope=course")).toBe(
+      "utm=x&scope=island&concept=dot&view=graph",
+    );
+  });
+
+  it("links a concept's full course graph with the scope said out loud", () => {
+    expect(courseGraphHref("big-o")).toBe("/learn?concept=big-o&view=graph&scope=course");
+    // And the link round-trips to the course scope.
+    const params = new URL(courseGraphHref("big-o"), "http://x").searchParams;
+    expect(parseScope(params.get("scope"), parseView(params.get("view")))).toBe("course");
   });
 
   it("counts buckets", () => {
