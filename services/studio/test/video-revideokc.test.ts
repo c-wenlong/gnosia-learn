@@ -27,7 +27,7 @@ import { revideokcWrapperConfig, writeRevideokcWrapper } from "../src/video/revi
 import type { WrapperCall } from "../src/video/calls";
 
 import { mp4Bytes, narratedBrief } from "./video-fixture";
-import { wrapperPorts } from "./wrapper-ports";
+import { WRAPPER_PORT_RANGES, wrapperPorts } from "./wrapper-ports";
 
 /**
  * The revideokc backend (phase 2c of docs/STUDIO-VIDEO-TOOLS.md) without
@@ -272,12 +272,13 @@ describe("the job's ports", () => {
   });
 
   it("skip a pair something already listens on", async () => {
-    // In revideokc's half of the range (`wrapper-ports.ts`), so the port held here is never remotionkc's wrapper's.
-    const base = await freePair(JOB_PORTS, 47000);
+    // Inside revideokc's half of the range, so the port held here is never remotionkc's wrapper's.
+    const half = WRAPPER_PORT_RANGES.revideokc;
+    const base = await freePair(half);
     const server = createServer();
     await new Promise<void>((resolve) => server.listen(base + 1, "127.0.0.1", resolve));
     try {
-      const next = await freePair(JOB_PORTS, base);
+      const next = await freePair(half, base);
       expect(next).not.toBe(base);
       expect(next % 2).toBe(0);
     } finally {

@@ -24,13 +24,13 @@ import { freePair, JOB_PORTS } from "../src/video/ports";
  * and even then only fails if its hold falls inside the other's render.
  * A new tool's wrapper suite takes a range here, never a copy of another's.
  */
-const RANGES = {
+export const WRAPPER_PORT_RANGES = {
   revideokc: { first: JOB_PORTS.first, last: 47998 },
   remotionkc: { first: 48000, last: JOB_PORTS.last },
 } as const;
 
-export function wrapperPorts(tool: keyof typeof RANGES): Promise<number> {
-  const range = RANGES[tool];
+export function wrapperPorts(tool: keyof typeof WRAPPER_PORT_RANGES): Promise<number> {
+  const range = WRAPPER_PORT_RANGES[tool];
   const pairs = (range.last - range.first) / 2 + 1;
   return freePair(range, range.first + randomInt(pairs) * 2);
 }
