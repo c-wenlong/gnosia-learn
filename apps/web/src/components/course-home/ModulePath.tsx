@@ -9,7 +9,15 @@ import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { continueHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
-import { conceptMeta, modulePath, type ConceptStep, type PathAsset, type PathPrerequisite } from "@/lib/module-path";
+import {
+  conceptMeta,
+  modulePath,
+  weekCheckHref,
+  weekCheckMeta,
+  type ConceptStep,
+  type PathAsset,
+  type PathPrerequisite,
+} from "@/lib/module-path";
 import type { Course, Module } from "@/lib/types";
 
 import { FAMILY_GLYPH, Glyph, type GlyphName } from "./icons";
@@ -28,8 +36,10 @@ import type { ModuleData } from "./types";
  * mark from `topicDone`, its tools behind the toggle, Continue on the active
  * one) and its steps under it, each concept's note with Quiz me on the same
  * row, then its diagrams and videos, then the lesson's readings. Practice, when there is any,
- * closes the path, and the library link for everything filed under the
- * module's topic comes once, last.
+ * follows the lessons, then the week check, one row whose title says what it
+ * is and whose meta line says how big (no group heading over it to say the
+ * same again), and the library link for everything filed under the module's
+ * topic comes once, last.
  *
  * Each row carries its kind's icon and nothing that says the same thing
  * again: the group says where a row is, the icon what it is.
@@ -132,6 +142,17 @@ export function ModulePath({
             ))}
           </ol>
         </ItemGroup>
+      )}
+
+      {path.check !== null && (
+        <ol className={cx(ROW_LIST, "mt-2 border-t border-hair pt-2")}>
+          <StepRow
+            href={weekCheckHref(course.slug, module.slug)}
+            glyph="check"
+            title="Week check"
+            meta={weekCheckMeta(path.check)}
+          />
+        </ol>
       )}
 
       {!assetsReachable ? (

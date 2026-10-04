@@ -6,6 +6,8 @@ import {
   modulePath,
   pathSequence,
   quizHref,
+  weekCheckHref,
+  weekCheckMeta,
   type ModulePathAssets,
   type ModulePathInput,
   type PathAsset,
@@ -154,6 +156,7 @@ describe("modulePath: the order of the steps", () => {
       "m1-t3 note log-base",
       "m1-t3 reading r2",
       "practice reading r3",
+      "check check m1",
     ]);
   });
 
@@ -259,7 +262,9 @@ describe("modulePath: readings", () => {
     expect(path.lessons.flatMap((l) => l.readings)).toEqual([]);
     const sequence = pathSequence(path);
     expect(sequence.filter((s) => s.id === "p1")).toHaveLength(1);
-    expect(sequence.at(-1)).toEqual({ section: "practice", kind: "reading", id: "p1" });
+    // After the lessons, and before only the week check.
+    expect(sequence.at(-2)).toEqual({ section: "practice", kind: "reading", id: "p1" });
+    expect(sequence.at(-1)?.kind).toBe("check");
   });
 
   it("closes the last lesson a practice reading lists, after that lesson's other readings, and only there", () => {
@@ -378,5 +383,34 @@ describe("modulePath: a shared topic", () => {
     expect(mine.lessons.map((l) => l.item.id)).toEqual(["m1-t1", "m1-t2", "m1-t3"]);
     expect(theirs.lessons.map((l) => l.item.id)).toEqual(["m2-t1"]);
     expect(theirs.lessons[0]?.concepts.map((c) => c.slug)).toEqual(["limits"]);
+  });
+});
+
+describe("modulePath: the week check", () => {
+  it("is the last step, after practice, counting the module's concepts and up to three questions each", () => {
+    const path = modulePath(input({ module: week({ resources: [reading("r3", "practice")] }) }));
+    expect(path.check).toEqual({ concepts: 6, questions: 18 });
+    expect(pathSequence(path).at(-1)).toEqual({ section: "check", kind: "check", id: "m1" });
+    expect(weekCheckMeta(path.check!)).toBe("6 concepts · up to 18 questions");
+    expect(weekCheckHref("cs3230", "week-1")).toBe("/courses/cs3230/week-1/check");
+  });
+
+  it("counts a concept two lessons name once, and only concepts it can read", () => {
+    const mod = week({ topics: [lesson("m1-t1", ["big-o", "big-omega"]), lesson("m1-t2", ["big-o", "not-in-the-kb"])] });
+    expect(modulePath(input({ module: mod })).check).toEqual({ concepts: 2, questions: 6 });
+  });
+
+  it("stops at 24 questions however many concepts the module has", () => {
+    const slugs = Array.from({ length: 10 }, (_, i) => `c${i}`);
+    const mod = week({ topics: [lesson("m1-t1", slugs)] });
+    const path = modulePath(input({ module: mod, concepts: slugs.map((id) => concept(id, { items: ["m1-t1"] })) }));
+    expect(path.check).toEqual({ concepts: 10, questions: 24 });
+    expect(weekCheckMeta({ concepts: 1, questions: 3 })).toBe("1 concept · up to 3 questions");
+  });
+
+  it("has no week check when the module names no concept it can read", () => {
+    const path = modulePath(input({ module: week({ topics: [lesson("m1-t1", [])] }) }));
+    expect(path.check).toBeNull();
+    expect(pathSequence(path).some((s) => s.kind === "check")).toBe(false);
   });
 });

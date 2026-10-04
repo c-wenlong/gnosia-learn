@@ -33,6 +33,10 @@ import {
  * no model configured): What moved says why in place of "nothing was
  * answered", and a Quiz me that opened straight onto this screen, having
  * walked no step, is titled for what happened rather than as a closed session.
+ *
+ * A week check (`weekCheck`) closes on the same screen over its concepts:
+ * each one it asked is a row of What moved under its own title, Mastery
+ * moved is the mean move over them, and the way on is back to the module.
  */
 export function SessionClose({
   slug,
@@ -42,6 +46,7 @@ export function SessionClose({
   minutes,
   next,
   reason = null,
+  weekCheck = null,
 }: {
   slug: string;
   title: string;
@@ -51,21 +56,27 @@ export function SessionClose({
   next: { slug: string; title: string } | null;
   /** Why nothing was asked, when the server knew before the session began. */
   reason?: string | null;
+  /** A week check: each concept's title by slug, and the module page to go back to. */
+  weekCheck?: { titles: Readonly<Record<string, string>>; moduleHref: string } | null;
 }) {
   // One clock for the relative dates on this screen.
   const [now] = useState(() => new Date());
-  const totals = sessionTotals(slug, answers);
-  const moved = whatMoved(slug, title, answers);
-  const scheduled = scheduledCards(slug, title, answers);
+  const titles = weekCheck?.titles ?? {};
+  const totals = sessionTotals(weekCheck === null ? slug : Object.keys(titles), answers);
+  const moved = whatMoved(slug, title, answers, titles);
+  const scheduled = scheduledCards(slug, title, answers, titles);
   const walked = stepsWalked(plan);
+  const asked = `${answers.length} question${answers.length === 1 ? "" : "s"}`;
 
   return (
     <div className="flex flex-col gap-4 md:gap-[22px]">
       <div className="flex flex-col items-center gap-1.5 pt-2 text-center md:pt-0">
         <h1 className="font-display text-[26px] leading-tight font-bold text-text md:text-[32px]">
-          {walked === "" ? "Nothing to ask" : "Session closed"}
+          {walked === "" ? "Nothing to ask" : weekCheck === null ? "Session closed" : "Week check done"}
         </h1>
-        <p className="text-[13px] text-text2">{walked === "" ? title : `${title} · ${minutes} min · ${walked}`}</p>
+        <p className="text-[13px] text-text2">
+          {walked === "" ? title : `${title} · ${minutes} min · ${weekCheck === null ? walked : asked}`}
+        </p>
       </div>
 
       <div className="grid grid-cols-3 gap-2.5 md:flex md:gap-3.5">
@@ -131,7 +142,9 @@ export function SessionClose({
           Back to Home
         </Button>
         <span className="flex-1" />
-        {next !== null ? (
+        {weekCheck !== null ? (
+          <Button href={weekCheck.moduleHref}>Back to the module</Button>
+        ) : next !== null ? (
           <Button href={`/learn/${next.slug}/session`} className="max-w-full">
             <span className="truncate">Keep going · {next.title}</span>
           </Button>

@@ -78,7 +78,9 @@ in [`docs/LEARN.md`](../../docs/LEARN.md#the-json-shapes) and pinned by
   way `review grade` became `gradeReview`. The `--json` shape did not move. An
   observation from the page carries a `requestId` in its payload, so a retried
   request is found rather than recorded twice; one from the terminal carries
-  none, so its payload is what it always was.
+  none, so its payload is what it always was. An answer from a module's week
+  check also carries `module`, the module's id, checked to be a live module
+  the learner can read; the terminal never sends one.
 - `concept add --topic <slug>` is new, and it is the other half of that refusal.
   It checks the slug against the catalog's topics before writing anything,
   and writes the note as its row filed under the topic (its `maps.concepts`)

@@ -8,13 +8,14 @@ import {
 } from "@/lib/course-path";
 import { bucketOf, masteryCaption, type MasteryBucket } from "@/lib/mastery-bucket";
 import type { Module, Resource, Topic } from "@/lib/types";
+import { weekCheckBound } from "@/lib/week-check";
 
 /**
  * A module as one ordered path (phase 3 of
  * docs/proposals/module-learning-path.md): before you start, the module's
  * own material, one lesson per course item with a step per concept (its
  * note with Quiz me on the same row, then its diagrams and videos), then
- * practice.
+ * practice, then the week check (phase 4).
  *
  * Pure and React-free, so the client page, which owns the learner's ticks,
  * and a test can both call it. It imports nothing from the catalog; the
@@ -121,12 +122,37 @@ export interface PathLesson {
   readings: Resource[];
 }
 
+/** The week check's step: how many concepts it asks about, and the most questions it can ask. */
+export interface WeekCheckStep {
+  concepts: number;
+  questions: number;
+}
+
 export interface ModulePath {
+  /** The module's id: what the week check's step names. */
+  moduleId: string;
   before: PathPrerequisite[];
   watch: PathAsset[];
   readAlongside: Resource[];
   lessons: PathLesson[];
   practice: Resource[];
+  /**
+   * The last step: the module's concepts the knowledge base holds, as the
+   * week check page asks them. Null when there are none, since a check with
+   * nothing to ask about is no step.
+   */
+  check: WeekCheckStep | null;
+}
+
+/** `/courses/<slug>/<module>/check`: the module's week check. */
+export function weekCheckHref(courseSlug: string, moduleSlug: string): string {
+  return `/courses/${courseSlug}/${moduleSlug}/check`;
+}
+
+/** The week check row's meta line: "6 concepts · up to 18 questions". */
+export function weekCheckMeta(check: WeekCheckStep): string {
+  const concepts = `${check.concepts} concept${check.concepts === 1 ? "" : "s"}`;
+  return `${concepts} · up to ${check.questions} question${check.questions === 1 ? "" : "s"}`;
 }
 
 /** `/learn/<concept>/session?mode=check`: Quiz me, the note's checks and nothing else. */
@@ -232,14 +258,18 @@ export function modulePath(input: ModulePathInput): ModulePath {
     }
   }
 
-  return { before, watch, readAlongside, lessons, practice };
+  // The week check asks what the knowledge base holds, as its page does.
+  const checked = taught.filter((slug) => byId.has(slug)).length;
+  const check = checked === 0 ? null : { concepts: checked, questions: weekCheckBound(checked) };
+
+  return { moduleId: module.id, before, watch, readAlongside, lessons, practice, check };
 }
 
 /** One step of the path, flattened. */
 export interface PathSequenceStep {
-  /** `before`, `watch`, `read`, a lesson's item id, or `practice`. */
+  /** `before`, `watch`, `read`, a lesson's item id, `practice`, or `check`. */
   section: string;
-  kind: "prerequisite" | "video" | "reading" | "lesson" | "note" | "asset";
+  kind: "prerequisite" | "video" | "reading" | "lesson" | "note" | "asset" | "check";
   id: string;
 }
 
@@ -260,6 +290,7 @@ export function pathSequence(path: ModulePath): PathSequenceStep[] {
     for (const r of lesson.readings) out.push({ section, kind: "reading", id: r.id });
   }
   for (const r of path.practice) out.push({ section: "practice", kind: "reading", id: r.id });
+  if (path.check !== null) out.push({ section: "check", kind: "check", id: path.moduleId });
   return out;
 }
 
