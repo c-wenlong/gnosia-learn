@@ -404,6 +404,10 @@ export default async function LibraryPage({
             </p>
           )}
 
+          {/* A press on a row or a card opens it in the previewer over the
+              list (L6); `?open=` names the one open, so a reload or a link
+              reopens it, a filter that now matches nothing included. */}
+          <Previewer initial={preview} initialOpen={open}>
           {matching.length === 0 ? (
             <Notice title="No assets match">
               <p>{noMatchSentence}</p>
@@ -412,9 +416,6 @@ export default async function LibraryPage({
               </p>
             </Notice>
           ) : (
-            // A press on a row or a card opens it in the previewer over the
-            // list (L6); `?open=` names the one open, so a reload reopens it.
-            <Previewer initial={preview} initialOpen={open}>
             <section
               aria-label={listLabel}
               // A tab, a filter or a sort keeps the groups whose day is still
@@ -463,8 +464,8 @@ export default async function LibraryPage({
                 </DaySection>
               ))}
             </section>
-            </Previewer>
           )}
+          </Previewer>
 
           {truncated && (
             <p className="text-[12px] text-text3">

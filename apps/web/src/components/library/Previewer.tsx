@@ -24,9 +24,6 @@ import {
 /** How long the panel and its mask take to fade away before they are gone. */
 export const CLOSE_MS = 200;
 
-/** How many bodies the panel keeps, so stepping back with an arrow is instant. */
-const KEEP = 12;
-
 /** Marks a history entry the panel pushed, so Close knows it can go back to the list. */
 const PUSHED = "libraryPreview";
 
@@ -102,10 +99,15 @@ export function Previewer({
     typeof window === "undefined" ? initialOpen : openFromSearch(window.location.search),
   );
   const [shownId, setShownId] = useState<string | null>(openId);
-  const [answers, setAnswers] = useState<ReadonlyMap<string, Answer>>(
-    () => new Map(initial === null ? [] : [[initial.id, initial]]),
+  // Each showing of an asset is a visit, and its body is asked of the server
+  // afresh: a body is rendered with the asset's state at that moment (the
+  // star, the resume point), so one kept from an earlier visit would open on
+  // what the reader has since changed. `visit` numbers them, and an answer
+  // is shown only for the visit it was asked for.
+  const [visit, setVisit] = useState(0);
+  const [held, setHeld] = useState<{ visit: number; answer: Answer } | null>(() =>
+    initial === null ? null : { visit: 0, answer: initial },
   );
-  const [attempt, setAttempt] = useState(0);
   const { mounted, leaving } = usePresence(openId !== null, CLOSE_MS);
   // Read by the dialog's cleanup, which runs after the render that unmounts it.
   const shownIdRef = useRef(shownId);
@@ -115,38 +117,33 @@ export function Previewer({
 
   const show = useCallback((id: string | null) => {
     setOpenId(id);
-    if (id !== null) setShownId(id);
+    if (id === null) return;
+    setShownId(id);
+    setVisit((n) => n + 1);
   }, []);
 
-  // The body, asked of the server once per asset and kept for a while. An
-  // answer for an asset no longer open is still kept: stepping back to it is
-  // then instant. A request in flight is not sent twice.
-  const asking = useRef(new Set<string>());
+  // The body for this visit. An answer that lands after the reader moved on
+  // belongs to a visit no longer current and is dropped.
+  const asked = useRef(-1);
   useEffect(() => {
-    if (openId === null || answers.has(openId) || asking.current.has(openId)) return;
+    if (openId === null || held?.visit === visit || asked.current === visit) return;
+    asked.current = visit;
     const id = openId;
-    asking.current.add(id);
+    const mine = visit;
     previewAsset(id)
       .then((answer): Answer => answer)
       .catch((): Answer => ({ state: "failed", id }))
       .then((answer) => {
-        asking.current.delete(id);
         // A transition, and the body in its own Suspense boundary below: the
         // answer's client components load their code on first use, and an
         // urgent update that suspended would fall back to the nearest
         // boundary above, the page's loading frame, blanking the Library
         // under the panel and scrolling it to the top.
         startTransition(() =>
-          setAnswers((previous) => {
-            const next = new Map(previous);
-            next.set(id, answer);
-            while (next.size > KEEP) next.delete(next.keys().next().value as string);
-            return next;
-          }),
+          setHeld((previous) => (mine < (previous?.visit ?? -1) ? previous : { visit: mine, answer })),
         );
       });
-    // `attempt` asks again after a failure.
-  }, [openId, answers, attempt]);
+  }, [openId, visit, held]);
 
   // Set while a close waits for `history.back()` to land, so a second Escape
   // in that beat does not go back a second time, out of the Library.
@@ -281,7 +278,9 @@ export function Previewer({
     step(by);
   }
 
-  const answer = shownId === null ? undefined : answers.get(shownId);
+  // While the panel fades out, the visit's answer stays; a new visit shows
+  // the skeleton until its own arrives.
+  const answer = held !== null && held.visit === visit && held.answer.id === shownId ? held.answer : undefined;
   const header = answer?.state === "ok" ? answer.header : null;
 
   return (
@@ -345,12 +344,8 @@ export function Previewer({
                       answer={answer}
                       page={assetHref(shownId)}
                       retry={() => {
-                        setAnswers((previous) => {
-                          const next = new Map(previous);
-                          next.delete(shownId);
-                          return next;
-                        });
-                        setAttempt((n) => n + 1);
+                        // Another visit to the same asset asks again.
+                        setVisit((n) => n + 1);
                       }}
                     />
                   )}
