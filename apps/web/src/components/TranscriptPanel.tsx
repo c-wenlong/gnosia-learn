@@ -7,6 +7,7 @@ import {
   transcriptCounter,
   type TranscriptCue,
 } from "@/components/media";
+import { TextLink } from "@/components/ui/TextLink";
 
 /**
  * The spoken lines of a video, following playback.
@@ -111,13 +112,9 @@ export function TranscriptPanel({
               {counter}
             </span>
           ) : (
-            <button
-              type="button"
-              onClick={() => setFollowing(true)}
-              className="rounded-md px-1.5 py-0.5 text-[12px] font-semibold text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
+            <TextLink onClick={() => setFollowing(true)} size="xs" className="px-1.5 py-0.5">
               Follow along
-            </button>
+            </TextLink>
           ))}
       </div>
 

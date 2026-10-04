@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useId, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { continueHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
@@ -22,7 +22,7 @@ import type { Course, Module } from "@/lib/types";
 
 import { FAMILY_GLYPH, Glyph, type GlyphName } from "./icons";
 import { ModuleResources, ResourceRow } from "./ModuleResources";
-import { FOCUS_RING, ROW, ROW_BOX, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
+import { ROW, ROW_BOX, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 import { TopicRow } from "./TopicRow";
 import type { ModuleData } from "./types";
 
@@ -163,7 +163,7 @@ export function ModulePath({
         library &&
         library.count > 0 && (
           <div className="mt-2 border-t border-hair pt-2">
-            <Link href={library.libraryHref} className={cx(ROW, ROW_HOVER, FOCUS_RING, "min-h-[44px] text-[14px] font-semibold text-text")}>
+            <Link href={library.libraryHref} className={cx(ROW, ROW_HOVER, FOCUS, "min-h-[44px] text-[14px] font-semibold text-text")}>
               <Glyph name="assets" className="text-text2" />
               <span className="pl-1">All {library.count} in the library</span>
             </Link>
@@ -192,7 +192,7 @@ function StepRow({
 }) {
   return (
     <li>
-      <Link href={href} aria-label={label} className={cx(ROW, ROW_HOVER, FOCUS_RING)}>
+      <Link href={href} aria-label={label} className={cx(ROW, ROW_HOVER, FOCUS)}>
         <Glyph name={glyph} className="text-text2" />
         <span className="min-w-0 flex-1 pl-1">
           <span className={cx(ROW_TITLE, "break-words", mono && "font-mono text-[14px]")}>{title}</span>
@@ -280,7 +280,7 @@ function ItemGroup({ title, divided = false, children }: { title: string; divide
           className={cx(
             "flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg p-2 text-left text-[16px] leading-6 text-text",
             ROW_HOVER,
-            FOCUS_RING,
+            FOCUS,
           )}
         >
           {title}

@@ -30,6 +30,7 @@ import { PANE_GUTTER } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
 import type { MentionValue } from "@/components/ui/mention-text";
 import { UserMessage } from "@/components/ui/Message";
+import { TextLink } from "@/components/ui/TextLink";
 import type { AgentKind } from "@/lib/studio-agent-settings";
 import { kindUnavailable } from "@/lib/studio-cards";
 import { DRAFT_KINDS, type DraftKind, type DraftSummary } from "@/lib/studio-drafts";
@@ -296,9 +297,9 @@ export function PanelHost({
           ) : settingsFailed ? (
             <div role="alert" className={cx("flex flex-col items-start gap-3 p-5 text-[14px] text-text2", FADE_IN)}>
               <p>The settings could not be read: the studio did not answer.</p>
-              <button type="button" onClick={warmSettings} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+              <TextLink onClick={warmSettings} size="sm">
                 Try again
-              </button>
+              </TextLink>
             </div>
           ) : (
             <SettingsLoading />

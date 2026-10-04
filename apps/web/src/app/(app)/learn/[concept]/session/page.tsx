@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmbedImage } from "@/components/EmbedImage";
@@ -16,6 +15,7 @@ import { assetFileHref, assetStatusHref } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
 import { parseMode, teachProse } from "@/lib/session-core";
 import { loadSessionPage, type TeachAsset } from "@/lib/session-page";
+import { TextLink } from "@/components/ui/TextLink";
 
 /**
  * Session focus mode (hi-fi 05, 06 and 07, and 15 on a phone): one concept
@@ -171,12 +171,9 @@ function Unreachable({ slug }: { slug: string }) {
           The database could not be reached, so there is no note to teach from and nowhere to record an answer. Nothing
           is lost. Start Postgres and reload.
         </p>
-        <Link
-          href={`/learn/${slug}`}
-          className="text-[14px] font-medium text-accent-text underline-offset-4 hover:underline"
-        >
+        <TextLink href={`/learn/${slug}`} size="md">
           Back to the workspace
-        </Link>
+        </TextLink>
       </div>
     </div>
   );
