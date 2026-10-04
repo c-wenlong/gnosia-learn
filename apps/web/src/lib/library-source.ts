@@ -96,6 +96,17 @@ export function conceptOrder(concepts: readonly { id: string; requires: readonly
 }
 
 /**
+ * Concept slugs in the prerequisite graph's order (`conceptOrder`), a slug
+ * the graph does not hold last, by slug. The order the source line, the row
+ * menu's Open the concept and the group by concept all take, so the three
+ * name the same concept first.
+ */
+export function orderedConcepts(slugs: readonly string[], order: ReadonlyMap<string, number>): string[] {
+  const rank = (slug: string) => order.get(slug) ?? Number.MAX_SAFE_INTEGER;
+  return [...slugs].sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/**
  * What the row's second line says, or null when the asset has no parent at
  * all (the page then names its topic, as the card does).
  */
@@ -113,8 +124,7 @@ export function rowSource(
   if (parents === undefined) return null;
   const place = pickPlace(parents.places, options.course);
 
-  const rank = (slug: string) => options.order.get(slug) ?? Number.MAX_SAFE_INTEGER;
-  const slugs = [...parents.concepts].sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
+  const slugs = orderedConcepts(parents.concepts, options.order);
   const first = slugs[0];
   const known = first === undefined ? null : options.concept(first);
   const concept: SourceConcept | undefined =
