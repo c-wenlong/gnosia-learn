@@ -21,16 +21,24 @@ import { PanelLink } from "@/components/studio/PanelLink";
  */
 
 /**
- * The 40px strip under the app header. Sticky, and its height never changes.
+ * The 40px strip under the app header, 48px as the head of the home view's
+ * assets panel (`surface`). Sticky, and its height never changes.
  *
  * `min-w-0`, and the page under it too: the strip's controls do not shrink,
  * so its min-content width used to widen the whole page on a phone, and the
  * grid laid out two columns for a screen that shows one. Now the topic chips
  * give up their room first, as their overflow already allows.
  */
-export function StudioStrip({ children }: { children: ReactNode }) {
+export function StudioStrip({ children, surface = false }: { children: ReactNode; surface?: boolean }) {
   return (
-    <div className="sticky top-0 z-10 flex h-10 min-w-0 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3">
+    <div
+      className={
+        surface
+          ? // On the assets panel of the home view: its ground, inside its rounded top.
+            "sticky top-0 z-10 flex h-12 min-w-0 shrink-0 items-center gap-2 rounded-t-3xl border-b border-[var(--border)] bg-surface px-3 md:px-5"
+          : "sticky top-0 z-10 flex h-10 min-w-0 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3"
+      }
+    >
       {children}
     </div>
   );

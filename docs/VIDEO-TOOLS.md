@@ -38,7 +38,7 @@ higher up wins.
 | Real data on a chart (a series from a file, log axes, a trend line) | remotionkc | d3-style scales and SVG in React, driven by the frame; its prototype's data chart was the strongest of the three | `computer-architecture/cs4223/week-01-why-multicore-data` |
 | Words on screen that must match the voice (word-level captions, kinetic text) | remotionkc | `@remotion/captions` and whisper.cpp give paged, per-word captions; the other two have no captions pipeline | the same topic |
 | A code walkthrough in an editor and a terminal, variables changing beside it | remotionkc | CSS layout makes an editor, a variables panel and a terminal cheap; its prototype beat manimkc clearly here | `big-data/cs4225/week-02-wordcount-code` |
-| Real footage or a screen recording, transitions between shots, sound effects | remotionkc | `<Video>` with trim and effects, `TransitionSeries` with twenty presentations, `@remotion/sfx`; neither other tool composites footage well | Remotion's skills (no topic yet) |
+| Real footage or a screen recording, transitions between shots, sound effects | remotionkc | `<Video>` with trim and effects, `TransitionSeries` with twenty presentations, `@remotion/sfx`; neither other tool composites footage well. At a terminal only: a studio job cannot be given footage | Remotion's skills (no topic yet) |
 | The same composition embedded live in the web app, or many videos from one template | remotionkc | `<Player>` runs a composition in Next.js without rendering, and props make one composition a template | Remotion's skills (not wired up here) |
 | Depth and light: layers stacked in perspective, a spotlight following the story, soft shadows, glass cards | revideokc | A three.js scene inside the 2D stage, with 2D titles, code and formulas drawn over it; filters dim or blur the stage behind a panel | `computer-architecture/cache-basics/memory-hierarchy-in-depth` |
 | Code that is edited in place while the voice explains the change (a loop from `a[i]` to `a[16 * i]`), with the other lines dimmed | revideokc | `Code` reflows lines around an insert or a replace and tweens a selection; this is its strongest 2D feature | both revideokc topics |
@@ -72,14 +72,16 @@ missing or poor.
 | Footage, screen recordings, transitions, SFX | no | yes | partial (`Video`, few transitions) |
 | Springs, masks, additive light, filters | partial | yes (CSS) | yes |
 | Visuals cued on the spoken word | yes (`narration.word_times`) | yes | yes |
-| Studio can make it unattended | on macOS only | not yet | on macOS only |
+| Studio can make it unattended | on macOS only | on macOS only | on macOS only |
+| Footage, a screen recording or any media from outside, in the studio | no (nothing can supply it) | no (nothing can supply it) | no (nothing can supply it) |
 | Render speed, 1080p, measured on the owner's Mac | about 30 s for a 79 s scene, 8 scenes in parallel | 32 to 75 s for 68 to 113 s videos, concurrency 3 | about 25 s for a 62 s video with a 3D stage, 2 workers |
 
 ## Shared ground, and what it allows
 
-- **One voice.** remotionkc and revideokc call manimkc's `lib/narration.py`
-  through `MANIMKC_ROOT`, so all three sound the same and share the kokoro
-  clip cache. None of them has a narration layer of its own, on purpose.
+- **One voice.** All three narrate through gnosia-audio, each pinned in its
+  own `.venv`, with manimkc's voice settings, so all three sound the same and
+  share the kokoro clip cache. None of them has a narration layer of its own,
+  on purpose.
 - **One report.** Every tool's `topics --json` has manimkc's shape, so a
   video from any of them lands in the catalog, the library and a session log
   the same way.
@@ -96,12 +98,12 @@ missing or poor.
 - **Remotion's licence changes in 5.0**: contractors count toward the
   three-person free limit, and server renders take a licence key
   (`"free-license"` for free users). Free for this project today.
-- **manimkc is the only tool with a sandboxed, unattended path**, the
-  studio's video runner, and only on macOS: the runner's sandbox is Seatbelt,
-  so the video kind is off on Linux until a bubblewrap profile is measured
-  (`videoKindBuilt` in `services/studio/src/video/config.ts`). A video from
-  the other two, or from a Linux machine, needs an agent session with a
-  terminal.
+- **The studio makes all three unattended, and only on macOS**: the video
+  runner's sandbox is Seatbelt, one backend per tool
+  ([STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md)), so the video kind is off
+  on Linux until a bubblewrap profile is measured (`videoKindBuilt` in
+  `services/studio/src/video/config.ts`). A video from a Linux machine needs
+  an agent session with a terminal.
 
 ## The routing procedure
 
@@ -109,12 +111,13 @@ This is what the `video-router` skill does, in this order. Hard constraints
 come before preferences, so a later step can never undo an earlier one.
 
 1. **Unattended or not.** If the video has to come out of the studio with no
-   one at a terminal, only manimkc can make it, and only on macOS. If the
-   user also named another tool, or the video belongs to a series made with
-   another tool, the requests conflict: say so and ask which one gives,
-   rather than choosing silently. On Linux, say it cannot be made unattended
-   there. Otherwise it is manimkc: go to step 6, and no later step changes
-   it.
+   one at a terminal, any of the three can make it, and only on macOS. On
+   Linux, say it cannot be made unattended there, and stop. A studio job has
+   no way to be given footage, a screen recording, an image or a sound from
+   outside, and its render has no network to fetch one: when the video is
+   about such media, say so and ask; when one beat wants it, draw that beat
+   as an animation and say so. Otherwise carry on: the steps below choose
+   among the three as they would at a terminal.
 2. **The user named a tool.** Use it, and stop.
 3. **Series.** Is this a week or a part of an existing series? Use that
    series' tool, and stop.
@@ -129,10 +132,8 @@ come before preferences, so a later step can never undo an earlier one.
 
 ```mermaid
 flowchart TD
-  A[Video request] --> U{Must the studio make it unattended?}
-  U -- yes --> UC{Named tool or series says otherwise?}
-  UC -- no --> M0[manimkc, on macOS]
-  UC -- yes --> Q[Say the requests conflict and ask]
+  A[Video request] --> U{Must the studio make it unattended, on Linux?}
+  U -- yes --> Q[Say it cannot be made unattended there]
   U -- no --> N{User named a tool?}
   N -- yes --> T[That tool]
   N -- no --> B{Part of an existing series?}
@@ -148,16 +149,10 @@ flowchart TD
   D -- yes --> D2[The tool that does both, else simplify the beat]
   D -- no --> E[Record the tool, the step or row, and the runner-up, then run its skill]
   D2 --> E
-  M0 --> E
   T --> E
   S --> E
 ```
 
 ## Not built yet
 
-- **remotionkc in the studio.** The studio's video runner makes manimkc and
-  revideokc videos, the planner choosing between them by this table, each
-  inside its own sandbox profile and on its own doctor's verdict
-  ([STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md), phases 1 to 2c).
-  remotionkc's backend is phase 3 there.
 - **Joining chapters from different tools** into one deliverable.

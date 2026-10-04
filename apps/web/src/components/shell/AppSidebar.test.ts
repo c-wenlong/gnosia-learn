@@ -128,3 +128,68 @@ describe("the sidebar", () => {
     expect(nav(container).getAttribute("role")).toBeNull();
   });
 });
+
+describe("the fold", () => {
+  // Without a studio nothing is read, so the frame mounts in one act.
+  function mountFolded(collapsed: boolean) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root: Root = createRoot(container);
+    act(() => root.render(createElement(ShellFrame, { studio: false, initialCollapsed: collapsed } as ComponentProps<typeof ShellFrame>, null)));
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    const button = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    const room = () => nav(container).parentElement!;
+    return { container, button, room };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
+  });
+
+  it("folds to a rail, keeps it in the cookie, and opens again from the rail", () => {
+    const { container, button, room } = mountFolded(false);
+    expect(room().className).toContain("w-[260px]");
+    act(() => button("Collapse the sidebar")!.click());
+    expect(document.cookie).toContain("gnosia-sidebar=collapsed");
+    expect(room().className).toContain("w-[60px]");
+    // The labels are for a screen reader only on the rail.
+    expect(nav(container).querySelector('a[aria-label="Courses"]')).not.toBeNull();
+
+    act(() => button("Expand the sidebar")!.click());
+    expect(document.cookie).toContain("gnosia-sidebar=open");
+    expect(room().className).toContain("w-[260px]");
+  });
+
+  it("slides out over the page while the pointer rests on the rail, and the fold button then keeps it open", () => {
+    vi.useFakeTimers();
+    const { container, button, room } = mountFolded(true);
+    const over = () =>
+      act(() => {
+        room().dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" } as PointerEventInit));
+      });
+    over();
+    // Not at once: a pointer passing over on its way elsewhere does nothing.
+    expect(nav(container).className).not.toContain("absolute");
+    act(() => vi.advanceTimersByTime(150));
+    expect(nav(container).className).toContain("absolute");
+    // The room stays the rail's: the page does not move.
+    expect(room().className).toContain("w-[60px]");
+
+    act(() => {
+      room().dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: document.body } as PointerEventInit));
+    });
+    act(() => vi.advanceTimersByTime(250));
+    expect(nav(container).className).not.toContain("absolute");
+
+    over();
+    act(() => vi.advanceTimersByTime(150));
+    act(() => button("Keep the sidebar open")!.click());
+    expect(document.cookie).toContain("gnosia-sidebar=open");
+    expect(room().className).toContain("w-[260px]");
+    expect(nav(container).className).not.toContain("absolute");
+  });
+});

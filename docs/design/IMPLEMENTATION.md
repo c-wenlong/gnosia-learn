@@ -217,7 +217,8 @@ conversation list beside its pages.
   day; and the account row at the foot, whose menu opens upwards (theme,
   Settings, Sign out). The fold narrows it to a 60px rail of icons and is
   the `gnosia-sidebar` cookie (`lib/sidebar-cookie.ts`), read by the layout so
-  the first paint has the right width.
+  the first paint has the right width. Resting the mouse on the rail slides
+  the full sidebar out over the page; the fold button then keeps it open.
 - **Chats.** On `/studio` the page publishes its list, the open
   conversation, New chat and its in-browser navigation to the sidebar
   (`usePublishStudioChats` in `components/shell/shell-context.ts`, called by

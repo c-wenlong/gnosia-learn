@@ -23,11 +23,12 @@ export function StudioGridLoading() {
       {/* The conversations are in the app's sidebar, which is already drawn. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* The home view's heading and composer. */}
-        <div className="flex flex-col items-center gap-6 px-4 pb-10 pt-[max(2.5rem,12vh)]">
-          <div className={`h-8 w-64 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
-          <div className={`h-[52px] w-full max-w-2xl rounded-2xl bg-[var(--surface-hover)] ${PULSE}`} />
+        <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-center gap-7 px-4 py-12 md:min-h-[calc(100dvh-9rem)]">
+          <div className={`h-10 w-72 -translate-y-4 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
+          <div className={`h-[52px] w-full max-w-3xl -translate-y-4 rounded-2xl bg-[var(--surface-hover)] ${PULSE}`} />
         </div>
-        <StudioStrip>
+        <div className="mx-2 rounded-t-3xl border border-b-0 border-hair bg-surface md:mx-4">
+        <StudioStrip surface>
           <div className={`h-7 w-56 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
           <div className={`hidden h-6 w-40 rounded-full bg-[var(--surface-hover)] sm:block ${PULSE}`} />
           <Spacer />
@@ -38,7 +39,7 @@ export function StudioGridLoading() {
           Opening the studio
         </p>
         <div className="min-h-0 flex-1 overflow-hidden p-4">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
             {Array.from({ length: 8 }, (_, at) => (
               <div key={at} className="flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
                 <div className={`aspect-[16/10] bg-[var(--surface-hover)] ${PULSE}`} />
@@ -49,6 +50,7 @@ export function StudioGridLoading() {
               </div>
             ))}
           </div>
+        </div>
         </div>
       </div>
     </div>

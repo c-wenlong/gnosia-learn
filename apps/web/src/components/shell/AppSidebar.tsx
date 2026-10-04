@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 import { GnosiaWordmark } from "@/components/brand";
 import { cx } from "@/components/ui/classes";
@@ -25,7 +25,10 @@ import { useShell } from "./shell-context";
  *
  * From 768px up it is a column, 260px wide or folded to a 60px rail of icons
  * (the fold is a cookie, `SIDEBAR_COOKIE`, so the first paint has the right
- * width). It sticks to the viewport while the page scrolls under it. On a
+ * width). It sticks to the viewport while the page scrolls under it. Resting
+ * the mouse on the rail slides the whole sidebar out over the page, without
+ * moving the page, and moving off slides it back; the fold button, pressed
+ * then, keeps it open (#301 built this for the studio's own sidebar). On a
  * `data-layout="focus"` page it is hidden from 768px up: focus mode draws its
  * own step bar and exit instead.
  *
@@ -41,9 +44,39 @@ export function AppSidebar() {
   const studio = shell?.studio ?? false;
   const drawer = shell?.drawer ?? false;
   const closeDrawer = shell?.closeDrawer;
-  // The drawer is always the full width: the rail is a desktop fold.
-  const rail = (shell?.collapsed ?? false) && !drawer;
+  const collapsed = (shell?.collapsed ?? false) && !drawer;
   const active = activeDestination(pathname);
+
+  /** The folded sidebar slid out over the page, while the pointer is on it. */
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A short wait each way, so a pointer passing over the rail on its way
+  // somewhere else does not flash the sidebar open.
+  const peekAfter = useCallback((next: boolean, ms: number) => {
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    peekTimer.current = setTimeout(() => setPeek(next), ms);
+  }, []);
+  const stopPeek = useCallback(() => {
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    setPeek(false);
+  }, []);
+  useEffect(
+    () => () => {
+      if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    },
+    [],
+  );
+  const peeking = collapsed && peek;
+  useEffect(() => {
+    if (!peeking) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPeek(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [peeking]);
+  // Drawn as icons only: folded and not slid out. The drawer is always the full width.
+  const rail = collapsed && !peeking;
 
   useEffect(() => {
     if (!drawer || closeDrawer === undefined) return;
@@ -78,7 +111,10 @@ export function AppSidebar() {
     };
   }, [drawer, closeDrawer]);
 
-  const pick = () => closeDrawer?.();
+  const pick = () => {
+    stopPeek();
+    closeDrawer?.();
+  };
   const newChatOn = pathname === STUDIO_DESTINATION.href && shell?.chats?.active == null && shell?.chats?.pending == null;
 
   return (
@@ -91,80 +127,101 @@ export function AppSidebar() {
           className="fixed inset-0 z-40 bg-page/60 backdrop-blur-[2px] md:hidden"
         />
       )}
-      <nav
-        ref={panel}
-        aria-label="Primary"
-        aria-modal={drawer ? true : undefined}
-        role={drawer ? "dialog" : undefined}
+      {/* The sidebar's room beside the page, from 768px up: 260px open, 60px
+          folded, whether or not the folded one is slid out over the page. The
+          drawer takes no room; it is fixed over the page. */}
+      <div
         className={cx(
-          "shrink-0 flex-col border-r border-hair bg-surface",
           drawer
-            ? "fixed inset-y-0 left-0 z-50 flex w-[min(85vw,300px)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-xl"
-            : "sticky top-0 hidden h-dvh self-start md:flex md:group-has-[[data-layout=focus]]/shell:hidden",
-          !drawer && (rail ? "w-[60px]" : "w-[260px]"),
+            ? "contents"
+            : // z-30: a sticky box is a layer of its own, so the slid-out sidebar
+              // inside it only sits over the page if the box does.
+              "sticky top-0 z-30 hidden h-dvh shrink-0 self-start md:block md:group-has-[[data-layout=focus]]/shell:hidden",
+          !drawer && (collapsed ? "w-[60px]" : "w-[260px]"),
         )}
+        onPointerEnter={(event) => {
+          if (collapsed && event.pointerType === "mouse") peekAfter(true, 120);
+        }}
+        onPointerLeave={() => {
+          if (collapsed) peekAfter(false, 200);
+        }}
       >
-        <div className={cx("flex h-14 shrink-0 items-center px-2", rail ? "justify-center" : "justify-between pl-3.5")}>
-          {!rail && (
-            <Link
-              href={studio ? STUDIO_DESTINATION.href : "/home"}
-              onClick={pick}
-              aria-label={studio ? "Gnosia, Studio" : "Gnosia, Home"}
-              className="rounded-sm text-[15px] text-text focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
-            >
-              <GnosiaWordmark />
-            </Link>
+        <nav
+          ref={panel}
+          aria-label="Primary"
+          aria-modal={drawer ? true : undefined}
+          role={drawer ? "dialog" : undefined}
+          className={cx(
+            "flex flex-col border-r border-hair bg-surface",
+            drawer
+              ? "fixed inset-y-0 left-0 z-50 w-[min(85vw,300px)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-xl"
+              : peeking
+                ? "absolute inset-y-0 left-0 z-40 w-[260px] shadow-xl"
+                : "h-full w-full",
           )}
-          {drawer ? (
-            <IconButton label="Close the sidebar" onClick={pick}>
-              <path d="M5 5l10 10M15 5 5 15" />
-            </IconButton>
-          ) : (
-            <FoldButton rail={rail} />
-          )}
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3">
-          <ul className="flex flex-col gap-0.5">
-            {studio && (
-              <li>
-                <NewChatLink onPick={pick} className={item(newChatOn, rail)} current={newChatOn} label={rail ? "New chat" : undefined}>
-                  <ComposeIcon />
-                  <Label rail={rail}>New chat</Label>
-                </NewChatLink>
-              </li>
+        >
+          <div className={cx("flex h-14 shrink-0 items-center px-2", rail ? "justify-center" : "justify-between pl-3.5")}>
+            {!rail && (
+              <Link
+                href={studio ? STUDIO_DESTINATION.href : "/home"}
+                onClick={pick}
+                aria-label={studio ? "Gnosia, Studio" : "Gnosia, Home"}
+                className="rounded-sm text-[15px] text-text focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+              >
+                <GnosiaWordmark />
+              </Link>
             )}
-            {DESTINATIONS.map((d) => {
-              const on = d.key === active;
-              return (
-                <li key={d.key}>
-                  <Link
-                    href={d.href}
-                    onClick={pick}
-                    aria-current={on ? "page" : undefined}
-                    aria-label={rail ? d.label : undefined}
-                    title={rail ? d.label : undefined}
-                    className={item(on, rail)}
-                  >
-                    <NavIcon name={d.key} className="size-[18px] shrink-0 text-text2" />
-                    <Label rail={rail}>{d.label}</Label>
-                  </Link>
+            {drawer ? (
+              <IconButton label="Close the sidebar" onClick={pick}>
+                <path d="M5 5l10 10M15 5 5 15" />
+              </IconButton>
+            ) : (
+              <FoldButton rail={rail} peeking={peeking} onPress={stopPeek} />
+            )}
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3">
+            <ul className="flex flex-col gap-0.5">
+              {studio && (
+                <li>
+                  <NewChatLink onPick={pick} className={item(newChatOn, rail)} current={newChatOn} label={rail ? "New chat" : undefined}>
+                    <ComposeIcon />
+                    <Label rail={rail}>New chat</Label>
+                  </NewChatLink>
                 </li>
-              );
-            })}
-          </ul>
+              )}
+              {DESTINATIONS.map((d) => {
+                const on = d.key === active;
+                return (
+                  <li key={d.key}>
+                    <Link
+                      href={d.href}
+                      onClick={pick}
+                      aria-current={on ? "page" : undefined}
+                      aria-label={rail ? d.label : undefined}
+                      title={rail ? d.label : undefined}
+                      className={item(on, rail)}
+                    >
+                      <NavIcon name={d.key} className="size-[18px] shrink-0 text-text2" />
+                      <Label rail={rail}>{d.label}</Label>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
 
-          {studio && !rail && (
-            <div className="mt-5">
-              <ChatHistory onPick={pick} />
-            </div>
-          )}
-        </div>
+            {studio && !rail && (
+              <div className="mt-5">
+                <ChatHistory onPick={pick} />
+              </div>
+            )}
+          </div>
 
-        <div className="shrink-0 border-t border-hair p-2">
-          <AccountMenu collapsed={rail} onPick={pick} />
-        </div>
-      </nav>
+          <div className="shrink-0 border-t border-hair p-2">
+            <AccountMenu collapsed={rail} onPick={pick} />
+          </div>
+        </nav>
+      </div>
     </>
   );
 }
@@ -224,17 +281,23 @@ export function NewChatLink({
   );
 }
 
-/** The fold: to the rail and back. The rail's top is the mark, which unfolds on a press. */
-function FoldButton({ rail }: { rail: boolean }) {
+/**
+ * The fold: to the rail and back. The rail's top is the mark, which unfolds
+ * on a press; slid out over the page, the press keeps the sidebar open.
+ */
+function FoldButton({ rail, peeking, onPress }: { rail: boolean; peeking: boolean; onPress: () => void }) {
   const shell = useShell();
   if (shell === null) return null;
-  const label = rail ? "Expand the sidebar" : "Collapse the sidebar";
+  const label = rail ? "Expand the sidebar" : peeking ? "Keep the sidebar open" : "Collapse the sidebar";
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
-      onClick={() => shell.setCollapsed(!rail)}
+      onClick={() => {
+        onPress();
+        shell.setCollapsed(!rail && !peeking);
+      }}
       className={cx(
         "group/fold relative inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-text2 transition-colors hover:bg-surface2 hover:text-text",
         "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",

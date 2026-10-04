@@ -652,13 +652,20 @@ conversation out of the dialog; the sections after this one describe what
 came before where they say so.*
 
 `/studio` is one of two views beside the app's sidebar, the way a chat app is
-laid out (`PanelHost`). Since D83 that sidebar is the whole app's, not the
+laid out (`PanelHost`). Since D84 that sidebar is the whole app's, not the
 studio's own:
 
 | | Home (`/studio`) | A conversation (`?draft=<id>`) |
 | --- | --- | --- |
 | Sidebar | New chat, the five learning destinations, then the history | The same, the open conversation marked |
-| Main | "What shall we make?", the composer under it, then the strip, the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
+| Main | "What shall we make?" and the composer, filling the first screen, then the assets panel: the strip (search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
+
+*Since D83:* the composer has the first screen to itself, over a soft wash
+of the accent, and the assets sit in a rounded panel under it whose head
+and the top of the first row are all that show until the page scrolls, as
+Lovable lays out its projects. The strip is the panel's head, below its top
+edge. Tiles are 200px at least (they were 260px), so a laptop shows five or
+six in a row.
 
 **The home composer** (`HomeComposer`) is the one way into a new
 conversation. It is the conversation's own `MentionComposer`, tags and all.
@@ -692,6 +699,13 @@ hidden, so its scroll and anything typed in it survive the trip. A job on its
 own, a tile's panel, the settings and an Extend press are still dialogs over
 the home view, and an Extend press becomes a full-screen conversation once
 its draft exists.
+
+From 768px up the sidebar folds to a 60px rail of icons, as ChatGPT's does,
+and remembers that in a cookie (`gnosia-sidebar`, D84), so the first paint
+has the right width. Resting the mouse on the rail for a moment slides the
+whole sidebar out over the page, without moving it, and moving off slides it
+back; the fold button pressed while it is out keeps it open. (D83 built this
+on the studio's own sidebar, with the choice in `localStorage`.)
 
 Below 768px the sidebar is a drawer, opened by the button at the left of the
 app's phone header, and closed by a pick, the backdrop, Escape or a
@@ -1253,7 +1267,25 @@ on the server for every switch (the cost `PanelHost` exists to avoid), and
 hiding the sidebar inside a conversation, which is the dialog's problem
 again.
 
-### D83. The studio's sidebar is the app's sidebar
+### D83. The composer has the first screen; the sidebar folds to a rail
+
+**Verdict:** the home view's first screen is the heading and the composer;
+the assets are a rounded panel under it that only peeks in, with the search
+and filters as its head, and smaller tiles. The sidebar collapses to a
+52px rail that slides the whole sidebar out while the mouse rests on it.
+
+**Why:** the owner found the first version crowded: the grid started right
+under the composer and took most of the screen, which pulled the eye away
+from starting a conversation. Lovable's home shows a few pixels of its
+projects under a full-height prompt, and ChatGPT folds its history to a
+rail, and both were the reference given.
+
+**Rejected:** hiding the assets behind a tab or a button (one more press to
+reach a diagram, which is the studio's other main use), and a rail that
+only opens on a click (the owner asked for hover, and the click is there
+too, on the toggle).
+
+### D84. The studio's sidebar is the app's sidebar
 
 **Verdict:** the app has one sidebar, on every page: New chat (the studio's
 home), the five learning destinations, the studio's conversations, and the
@@ -1262,7 +1294,9 @@ conversation list are gone. On `/studio`, `PanelHost` publishes the open
 conversation, a pending one, New chat and its in-browser navigation to the
 sidebar (`usePublishStudioChats`), so the list behaves exactly as the
 studio's own did; elsewhere the sidebar reads the list itself and a row is a
-link to `/studio?draft=`.
+link to `/studio?draft=`. D83's fold and hover peek moved with it, and the
+fold is kept in a cookie rather than `localStorage`, since the layout reads
+it to draw the right width before anything runs in the browser.
 
 **Why:** the owner's call on 2026-10-04: the studio is the feature to refine,
 and a chat app's layout, one sidebar and one view, makes it the main page

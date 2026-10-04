@@ -41,8 +41,8 @@ export const VIDEO_TOOLS: readonly VideoToolInfo[] = [
   },
   {
     name: "remotionkc",
-    strength: "Remotion: real data on charts, word-level captions, editor and terminal walkthroughs, footage and transitions",
-    inStudio: false,
+    strength: "Remotion: real data on charts, word-level captions, editor and terminal walkthroughs, transitions (footage at a terminal only)",
+    inStudio: true,
   },
 ];
 
@@ -116,7 +116,7 @@ export const VIDEO_TOOL_ROUTES: readonly VideoToolRoute[] = [
   {
     need: "Real footage or a screen recording, transitions between shots, sound effects",
     tool: "remotionkc",
-    why: "`<Video>` with trim and effects, `TransitionSeries` with twenty presentations, `@remotion/sfx`; neither other tool composites footage well",
+    why: "`<Video>` with trim and effects, `TransitionSeries` with twenty presentations, `@remotion/sfx`; neither other tool composites footage well. At a terminal only: a studio job cannot be given footage",
   },
   {
     need: "The same composition embedded live in the web app, or many videos from one template",
@@ -207,6 +207,12 @@ export const VIDEO_TOOL_CAPABILITIES: readonly VideoToolCapability[] = [
   { capability: "Footage, screen recordings, transitions, SFX", manimkc: "no", remotionkc: "yes", revideokc: "partial (`Video`, few transitions)" },
   { capability: "Springs, masks, additive light, filters", manimkc: "partial", remotionkc: "yes (CSS)", revideokc: "yes" },
   { capability: "Visuals cued on the spoken word", manimkc: "yes (`narration.word_times`)", remotionkc: "yes", revideokc: "yes" },
-  { capability: "Studio can make it unattended", manimkc: "on macOS only", remotionkc: "not yet", revideokc: "on macOS only" },
+  { capability: "Studio can make it unattended", manimkc: "on macOS only", remotionkc: "on macOS only", revideokc: "on macOS only" },
+  {
+    capability: "Footage, a screen recording or any media from outside, in the studio",
+    manimkc: "no (nothing can supply it)",
+    remotionkc: "no (nothing can supply it)",
+    revideokc: "no (nothing can supply it)",
+  },
   { capability: "Render speed, 1080p, measured on the owner's Mac", manimkc: "about 30 s for a 79 s scene, 8 scenes in parallel", remotionkc: "32 to 75 s for 68 to 113 s videos, concurrency 3", revideokc: "about 25 s for a 62 s video with a 3D stage, 2 workers" },
 ];

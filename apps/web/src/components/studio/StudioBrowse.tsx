@@ -125,7 +125,7 @@ export function StudioGrid({
       <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />
     </>
   );
-  const frame = grid ? "grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4" : "space-y-0.5";
+  const frame = grid ? "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3" : "space-y-0.5";
 
   if (sections.length === 0) {
     return (
