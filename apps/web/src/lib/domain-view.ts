@@ -64,3 +64,84 @@ export function groupBox(points: readonly { x: number; y: number }[], minWidth =
   const y = minY - DOT_TOP - GROUP_PAD - GROUP_TITLE;
   return { x, y, width, height: maxY + LABEL_BELOW + GROUP_PAD - y };
 }
+
+/** Room kept round the picture, so a ring or a group's edge is not cut by the frame. */
+export const VIEW_PAD = 8;
+
+const padded = (b: Box): Box => ({ x: b.x - VIEW_PAD, y: b.y - VIEW_PAD, width: b.width + 2 * VIEW_PAD, height: b.height + 2 * VIEW_PAD });
+
+/**
+ * What the graph frames (D2, D3): the whole domain, or one topic's group when
+ * a topic is open, either with a margin. `moved` holds the concepts dragged
+ * from where the layout put them, so the frame keeps them in view.
+ */
+export function viewBoxFor(
+  layout: {
+    width: number;
+    height: number;
+    positions: Readonly<Record<string, { x: number; y: number }>>;
+    groups: readonly { topic: string; title: string; concepts: readonly string[] }[];
+  },
+  topic: string | null,
+  moved: Readonly<Record<string, { x: number; y: number }>> = {},
+): Box {
+  const at = (id: string) => moved[id] ?? layout.positions[id];
+  const group = topic === null ? undefined : layout.groups.find((g) => g.topic === topic);
+  if (group !== undefined) return padded(groupBox(group.concepts.map(at), titleWidth(group.title)));
+  const whole: Box = { x: 0, y: 0, width: layout.width, height: layout.height };
+  const ids = Object.keys(moved).filter((id) => id in layout.positions);
+  if (ids.length === 0) return padded(whole);
+  const reach = groupBox(ids.map(at));
+  const x = Math.min(whole.x, reach.x);
+  const y = Math.min(whole.y, reach.y);
+  return padded({
+    x,
+    y,
+    width: Math.max(whole.x + whole.width, reach.x + reach.width) - x,
+    height: Math.max(whole.y + whole.height, reach.y + reach.height) - y,
+  });
+}
+
+/** Each concept's domain, from the tree the page sent. */
+export function domainOfConcepts(tree: readonly { slug: string; concepts: readonly string[] }[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const d of tree) for (const id of d.concepts) out[id] = d.slug;
+  return out;
+}
+
+/** How many of each domain's concepts the search and the filter leave showing (D8). */
+export function matchCounts(
+  tree: readonly { slug: string; concepts: readonly string[] }[],
+  shown: ReadonlySet<string>,
+): Record<string, number> {
+  return Object.fromEntries(tree.map((d) => [d.slug, d.concepts.filter((id) => shown.has(id)).length]));
+}
+
+/** How far from a dot's centre an edge stops: past the knock-out round the dot. */
+export const DOT_GAP = 14;
+/** From a dot's centre to just under a label of `lines` lines. */
+export const labelFoot = (lines: number) => 28 + (lines - 1) * 14 + 8;
+
+/**
+ * Where an edge between two concepts starts and ends, so it never runs
+ * through a label: down from under the upper concept's label to just above
+ * the lower one's dot, and side to side between two dots on one row.
+ * `fromLines` and `toLines` are how many lines each label has.
+ */
+export function edgeEnds(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  fromLines: number,
+  toLines: number,
+): [{ x: number; y: number }, { x: number; y: number }] {
+  const dy = to.y - from.y;
+  if (Math.abs(dy) < 20) {
+    const side = Math.sign(to.x - from.x) || 1;
+    return [
+      { x: from.x + side * DOT_GAP, y: from.y },
+      { x: to.x - side * DOT_GAP, y: to.y },
+    ];
+  }
+  if (dy > 0) return [{ x: from.x, y: from.y + labelFoot(fromLines) }, { x: to.x, y: to.y - DOT_GAP }];
+  return [{ x: from.x, y: from.y - DOT_GAP }, { x: to.x, y: to.y + labelFoot(toLines) }];
+}
