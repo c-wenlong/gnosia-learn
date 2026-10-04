@@ -35,6 +35,8 @@ BEGIN
 			CASE WHEN TG_OP = 'UPDATE' THEN OLD.curriculum_item_id END
 		);
 	ELSIF TG_TABLE_NAME = 'curriculum_item' THEN
+		-- On a delete the item's links are cascaded away, and their own trigger
+		-- finds no item to name the course by; the item's row still does.
 		SELECT array_agg(DISTINCT m.parent_id) INTO courses
 		FROM public.collection m
 		WHERE m.id IN (NEW.collection_id, OLD.collection_id);
@@ -85,7 +87,7 @@ CREATE CONSTRAINT TRIGGER concept_curriculum_item_course_order
 	FOR EACH ROW EXECUTE FUNCTION catalog_check_course_order();
 --> statement-breakpoint
 CREATE CONSTRAINT TRIGGER curriculum_item_course_order
-	AFTER UPDATE OF position, collection_id, archived_at ON "curriculum_item"
+	AFTER UPDATE OF position, collection_id, archived_at OR DELETE ON "curriculum_item"
 	DEFERRABLE INITIALLY DEFERRED
 	FOR EACH ROW EXECUTE FUNCTION catalog_check_course_order();
 --> statement-breakpoint
