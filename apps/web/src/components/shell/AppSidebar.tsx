@@ -6,12 +6,14 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 import { GnosiaWordmark } from "@/components/brand";
+import { useHistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
 import { activeDestination, DESTINATIONS, STUDIO_DESTINATION } from "@/lib/nav";
 
 import mark from "../../../public/brand/mark.png";
 import { AccountMenu } from "./AccountMenu";
 import { ChatHistory } from "./ChatHistory";
+import { SearchField, SearchIcon } from "./ChatSearch";
 import { NavIcon } from "./NavIcon";
 import { useShell } from "./shell-context";
 
@@ -31,6 +33,12 @@ import { useShell } from "./shell-context";
  * then, keeps it open (#301 built this for the studio's own sidebar). On a
  * `data-layout="focus"` page it is hidden from 768px up: focus mode draws its
  * own step bar and exit instead.
+ *
+ * Under New chat is a search field over the studio's conversations (D87).
+ * On the rail it is a search button, which slides the sidebar out with the
+ * field focused; the slid-out sidebar then stays while focus is in the field
+ * or a match (`data-peek-hold`), and slides back once focus and the pointer
+ * have both left.
  *
  * Below 768px it is a drawer the phone header's button opens, closed again
  * by a pick, the backdrop, Escape or a navigation. While it is open focus
@@ -67,6 +75,21 @@ export function AppSidebar() {
     [],
   );
   const peeking = collapsed && peek;
+  const search = useHistorySearch();
+  const searchField = useRef<HTMLInputElement | null>(null);
+  const room = useRef<HTMLDivElement | null>(null);
+  /** The rail's search button was pressed: the field takes focus once the sidebar is out. */
+  const focusSearch = useRef(false);
+  useEffect(() => {
+    if (!peeking || !focusSearch.current) return;
+    focusSearch.current = false;
+    searchField.current?.focus();
+  }, [peeking]);
+  const openSearch = () => {
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    focusSearch.current = true;
+    setPeek(true);
+  };
   useEffect(() => {
     if (!peeking) return;
     const onKey = (event: KeyboardEvent) => {
@@ -131,6 +154,7 @@ export function AppSidebar() {
           folded, whether or not the folded one is slid out over the page. The
           drawer takes no room; it is fixed over the page. */}
       <div
+        ref={room}
         className={cx(
           drawer
             ? "contents"
@@ -143,7 +167,22 @@ export function AppSidebar() {
           if (collapsed && event.pointerType === "mouse") peekAfter(true, 120);
         }}
         onPointerLeave={() => {
-          if (collapsed) peekAfter(false, 200);
+          // Not while focus is in the search field or a match: the slide back
+          // waits for focus to leave too, below.
+          if (collapsed && document.activeElement?.closest("[data-peek-hold]") == null) peekAfter(false, 200);
+        }}
+        onFocus={(event) => {
+          // Back in the search before a close that leaving it scheduled has fired.
+          if (event.target instanceof Element && event.target.closest("[data-peek-hold]") !== null && peekTimer.current !== null) {
+            clearTimeout(peekTimer.current);
+          }
+        }}
+        onBlur={(event) => {
+          if (!collapsed || !(event.target instanceof Element) || event.target.closest("[data-peek-hold]") === null) return;
+          // Focus moving between things in the sidebar is not leaving it.
+          if (event.relatedTarget instanceof Node && room.current?.contains(event.relatedTarget) === true) return;
+          // Focus left it. With the pointer gone too, nothing else will say it may slide back.
+          if (room.current?.matches(":hover") !== true) peekAfter(false, 200);
         }}
       >
         <nav
@@ -190,6 +229,17 @@ export function AppSidebar() {
                   </NewChatLink>
                 </li>
               )}
+              {studio && (
+                <li>
+                  {rail ? (
+                    <button type="button" onClick={openSearch} aria-label="Search conversations" title="Search conversations" className={item(false, true)}>
+                      <SearchIcon />
+                    </button>
+                  ) : (
+                    <SearchField search={search} inputRef={searchField} />
+                  )}
+                </li>
+              )}
               {DESTINATIONS.map((d) => {
                 const on = d.key === active;
                 return (
@@ -214,7 +264,7 @@ export function AppSidebar() {
                 while folded and is current the moment it unfolds. */}
             {studio && (
               <div hidden={rail} className="mt-5">
-                <ChatHistory onPick={pick} />
+                <ChatHistory onPick={pick} search={search} />
               </div>
             )}
           </div>

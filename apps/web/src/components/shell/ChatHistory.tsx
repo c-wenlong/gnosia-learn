@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { HistorySearch } from "@/components/studio/history-search";
 import { cx, LABEL } from "@/components/ui/classes";
 import {
   DRAFT_CHANGED_EVENT,
@@ -16,6 +17,8 @@ import {
 import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
+import { SearchResults } from "./ChatSearch";
+import { rowClick } from "./row-click";
 import { useShell } from "./shell-context";
 
 /**
@@ -41,8 +44,12 @@ import { useShell } from "./shell-context";
  * The runner answers a page at a time (`LIST_LIMIT`), so a full page ends in
  * "Show older conversations", which shows one more. Every read is every page
  * shown, read again from the top (`readHistory`).
+ *
+ * While the search field holds words (`search`, D87) the matches take the
+ * place of the day groups: the runner searches every conversation, loaded
+ * here or not, and a match opens the way a row does.
  */
-export function ChatHistory({ onPick }: { onPick: () => void }) {
+export function ChatHistory({ onPick, search }: { onPick: () => void; search: HistorySearch }) {
   const shell = useShell();
   const chats = shell?.chats ?? null;
   const active = chats?.active ?? null;
@@ -159,52 +166,58 @@ export function ChatHistory({ onPick }: { onPick: () => void }) {
   return (
     <div className="flex flex-col">
       <h2 className={cx(LABEL, "px-2.5 pb-1 pt-2 text-text3")}>Chats</h2>
-      {unlisted && (
-        <ul className="mb-2 flex flex-col">
-          <li>
-            <span aria-current="page" className={cx(ROW, "bg-surface2 font-medium")}>
-              <span className="min-w-0 flex-1 truncate">{pending ?? "New conversation"}</span>
-            </span>
-          </li>
-        </ul>
-      )}
-      {groups.map((group) => (
-        <section key={group.label} className="mb-2" aria-label={group.label}>
-          <h3 className="px-2.5 pb-1 pt-2 text-[12px] leading-4 text-text3">{group.label}</h3>
-          <ul className="flex flex-col">
-            {group.rows.map((row) => (
-              <li key={row.draftId}>
-                <HistoryRow
-                  row={row}
-                  href={conversationHref(path, row.draftId)}
-                  current={row.draftId === active}
-                  navigate={chats?.navigate ?? null}
-                  onPick={onPick}
-                />
+      {search.words !== "" ? (
+        <SearchResults search={search} titles={titles} path={path} active={active} navigate={chats?.navigate ?? null} onPick={onPick} />
+      ) : (
+        <>
+          {unlisted && (
+            <ul className="mb-2 flex flex-col">
+              <li>
+                <span aria-current="page" className={cx(ROW, "bg-surface2 font-medium")}>
+                  <span className="min-w-0 flex-1 truncate">{pending ?? "New conversation"}</span>
+                </span>
               </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-      {list?.more === true && rows.length > 0 && (
-        <div className="px-1 pt-1">
-          <button
-            type="button"
-            onClick={() => void showOlder()}
-            disabled={loadingOlder}
-            className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
-          >
-            {loadingOlder ? "Reading older conversations…" : "Show older conversations"}
-          </button>
-          {olderError !== null && (
-            <p role="alert" className="px-1.5 text-[12px] text-danger">
-              {olderError}
-            </p>
+            </ul>
           )}
-        </div>
-      )}
-      {list !== null && rows.length === 0 && !unlisted && (
-        <p className="px-2.5 pt-1 text-[13px] leading-5 text-text3">Conversations you start show here.</p>
+          {groups.map((group) => (
+            <section key={group.label} className="mb-2" aria-label={group.label}>
+              <h3 className="px-2.5 pb-1 pt-2 text-[12px] leading-4 text-text3">{group.label}</h3>
+              <ul className="flex flex-col">
+                {group.rows.map((row) => (
+                  <li key={row.draftId}>
+                    <HistoryRow
+                      row={row}
+                      href={conversationHref(path, row.draftId)}
+                      current={row.draftId === active}
+                      navigate={chats?.navigate ?? null}
+                      onPick={onPick}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+          {list?.more === true && rows.length > 0 && (
+            <div className="px-1 pt-1">
+              <button
+                type="button"
+                onClick={() => void showOlder()}
+                disabled={loadingOlder}
+                className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                {loadingOlder ? "Reading older conversations…" : "Show older conversations"}
+              </button>
+              {olderError !== null && (
+                <p role="alert" className="px-1.5 text-[12px] text-danger">
+                  {olderError}
+                </p>
+              )}
+            </div>
+          )}
+          {list !== null && rows.length === 0 && !unlisted && (
+            <p className="px-2.5 pt-1 text-[13px] leading-5 text-text3">Conversations you start show here.</p>
+          )}
+        </>
       )}
     </div>
   );
@@ -233,13 +246,7 @@ function HistoryRow({
     <Link
       href={href}
       scroll={false}
-      onClick={(event) => {
-        onPick();
-        if (navigate === null) return;
-        // A modified click (new tab, new window) is the link it always was.
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        if (navigate(href)) event.preventDefault();
-      }}
+      onClick={rowClick(navigate, href, onPick)}
       aria-current={current ? "page" : undefined}
       title={`${row.heading}\n${row.state} · ${relativeTime(row.updated)}`}
       // The time is "3 minutes ago" on the server and may be "4" here.
