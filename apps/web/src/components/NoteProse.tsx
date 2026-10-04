@@ -294,7 +294,7 @@ function BlockView({
  *
  * Every level carries an `id`, so a link can drop a reader at this heading
  * instead of the top of the page, and `scroll-mt-20` on the element that
- * carries the id, not on the article around it, so the app's sticky top bar
+ * carries the id, not on the article around it, so the phone's sticky header
  * never covers what the link pointed at. `HeadingAnchor` is a second,
  * discoverable way to get that link (a small `#` a reader can copy), never
  * the only way: the id is on the heading whether or not anyone ever hovers it.

@@ -572,9 +572,10 @@ function Frame({
 }) {
   const value = Math.max(0, Math.min(100, percent));
   return (
-    // On a phone the column fills the space between the shell's header and
-    // its tab bar, so the actions sit at the bottom where a thumb is (hi-fi 15).
-    <div className="flex min-h-[calc(100dvh-3.5rem-6.5rem-env(safe-area-inset-bottom))] flex-col md:min-h-0">
+    // On a phone the column fills the space under the shell's header, less
+    // the page's bottom padding, so the actions sit at the bottom where a
+    // thumb is (hi-fi 15).
+    <div className="flex min-h-[calc(100dvh-3.5rem-2rem-env(safe-area-inset-bottom))] flex-col md:min-h-0">
       <div
         className={cx("h-2 w-full md:h-3", TRACK)}
         role="progressbar"
