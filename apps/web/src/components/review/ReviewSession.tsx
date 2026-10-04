@@ -13,7 +13,7 @@ import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { cx, TRACK } from "@/components/ui/classes";
-import { scrollBehavior } from "@/lib/reduced-motion";
+import { scrollBehavior } from "@/lib/motion";
 import {
   cardEyebrow,
   cardStats,
