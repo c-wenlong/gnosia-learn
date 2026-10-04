@@ -272,11 +272,11 @@ export function buildSessionPlan(input: {
  * and the workspace all print, so the three cannot drift apart.
  */
 export const NOTHING_TO_ASK =
-  "This note has no check the session can ask, and the tutor has no model provider key to write one. Add one in Settings, under Provider keys.";
+  "This note has no check the session can ask, and the tutor has no model provider key to write one. Add one in Settings, under Providers.";
 
 /** The week check's two reasons for asking nothing. */
 export const NOTHING_TO_ASK_MODULE =
-  "No note in this module has a check the session can ask, and the tutor has no model provider key to write one. Add one in Settings, under Provider keys.";
+  "No note in this module has a check the session can ask, and the tutor has no model provider key to write one. Add one in Settings, under Providers.";
 export const NO_CONCEPTS_TO_CHECK = "This module names no concept in your knowledge base, so there is nothing to check.";
 
 /**

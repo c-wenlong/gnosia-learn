@@ -1,8 +1,9 @@
 import {
   checkModelId,
   groupByProvider,
-  isProviderId,
-  type ProviderId,
+  isCustomProviderId,
+  isProviderName,
+  type ProviderName,
   TUTOR_MODEL_LIMITS,
   tutorModel,
 } from "@self-learn/schema";
@@ -11,6 +12,7 @@ import { asc, eq } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { StateError } from "./errors";
 import { withLearnerLock } from "./learner";
+import { removeCustomProviderRow } from "./custom-providers";
 import { deleteProviderKey, readProviderKeys } from "./provider-keys";
 
 /**
@@ -37,7 +39,7 @@ import { deleteProviderKey, readProviderKeys } from "./provider-keys";
  */
 
 export interface TutorModelEntry {
-  provider: ProviderId;
+  provider: ProviderName;
   model: string;
 }
 
@@ -61,7 +63,7 @@ export class TutorModelError extends StateError {
 
 /** The entry as the chain may hold it, or a `TutorModelError("INVALID")`. */
 export function tutorModelEntry(provider: unknown, model: unknown): TutorModelEntry {
-  if (!isProviderId(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
+  if (!isProviderName(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
   const checked = checkModelId(model);
   if (!checked.ok) throw new TutorModelError("INVALID", checked.reason);
   return { provider, model: checked.model };
@@ -79,7 +81,7 @@ export async function readTutorModels(db: CatalogDatabase, owner: string): Promi
     .where(eq(tutorModel.ownerId, owner))
     .orderBy(asc(tutorModel.position));
   return rows.flatMap((row) =>
-    isProviderId(row.provider)
+    isProviderName(row.provider)
       ? [{ provider: row.provider, model: row.model, position: row.position, createdAt: row.createdAt }]
       : [],
   );
@@ -205,7 +207,7 @@ export async function moveTutorProvider(
   provider: unknown,
   direction: "up" | "down",
 ): Promise<StoredTutorModel[]> {
-  if (!isProviderId(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
+  if (!isProviderName(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
   return rewrite(db, owner, (current) => {
     const order = [...new Set(current.map((row) => row.provider))];
     const at = order.indexOf(provider);
@@ -218,7 +220,8 @@ export async function moveTutorProvider(
 
 /**
  * A provider's Delete in Settings: every model of the provider leaves the
- * chain and the owner's saved key for it goes, in one transaction under the
+ * chain and the owner's saved key for it goes (and, for a provider the
+ * owner added, its `custom_provider` row), in one transaction under the
  * learner lock, so a concurrent add (`addTutorModel` with `requireKey`) sees
  * either both or neither. A provider with no models or no saved key is not
  * an error; `keyRemoved` says whether there was a key.
@@ -228,11 +231,13 @@ export async function deleteTutorProvider(
   owner: string,
   provider: unknown,
 ): Promise<{ chain: StoredTutorModel[]; keyRemoved: boolean }> {
-  if (!isProviderId(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
+  if (!isProviderName(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
   let keyRemoved = false;
   const chain = await rewrite(db, owner, (current) => current.filter((row) => row.provider !== provider), {
     after: async (tx) => {
       keyRemoved = await deleteProviderKey(tx, owner, provider);
+      // A provider the owner added goes whole: its name and base URL too (T14).
+      if (isCustomProviderId(provider)) await removeCustomProviderRow(tx, owner, provider);
     },
   });
   return { chain, keyRemoved };

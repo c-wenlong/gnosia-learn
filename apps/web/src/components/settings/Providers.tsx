@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDER_KEY_LIMITS, type ProviderId } from "@self-learn/schema/shared";
+import { PROVIDER_KEY_LIMITS, type ProviderName } from "@self-learn/schema/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -90,7 +90,7 @@ export function Providers({ view }: { view: ProvidersView }) {
     const at = document.activeElement;
     if (at === null || at === document.body) document.getElementById(`${base}-add`)?.focus();
   }, [view, base]);
-  const addButton = view.addable.length === 0 ? undefined : (
+  const addButton = (
     <Button
       id={`${base}-add`}
       variant="secondary"
@@ -122,7 +122,7 @@ export function Providers({ view }: { view: ProvidersView }) {
           Your models could not be read: the database is unreachable. The tutor is using the built-in defaults.
         </Callout>
       )}
-      <Collapse open={adding && view.addable.length > 0} id={`${base}-add-form`}>
+      <Collapse open={adding} id={`${base}-add-form`}>
         <AddProvider
           open={adding}
           addable={view.addable}
@@ -151,8 +151,11 @@ export function Providers({ view }: { view: ProvidersView }) {
               usingDefaults={view.usingDefaults}
               full={view.full}
               disabled={!view.keysReachable || !view.chainReachable}
-              onGone={() => {
+              // A deleted row leaves with the refresh, its status line with
+              // it: the card says what happened, and Add provider takes focus.
+              onGone={(text) => {
                 focusAdd.current = true;
+                setStatus({ kind: "done", text });
               }}
             />
           ))}
@@ -165,7 +168,14 @@ export function Providers({ view }: { view: ProvidersView }) {
   );
 }
 
-/** Add provider's form, under the card's text: a provider not listed yet, and its key. */
+/** The Add provider menu's last choice: any OpenAI-compatible endpoint (T14). */
+const CUSTOM = "custom";
+
+/**
+ * Add provider's form, under the card's text: a provider not listed yet and
+ * its key, or a custom provider (a name, a base URL and a key), which
+ * `/api/learner/custom-provider` stores whole or not at all.
+ */
 function AddProvider({
   open,
   addable,
@@ -179,31 +189,39 @@ function AddProvider({
   onClose: () => void;
   onAdded: (label: string) => void;
 }) {
-  const [provider, setProvider] = useState<ProviderId | "">(addable[0]?.id ?? "");
+  const [provider, setProvider] = useState<ProviderName | typeof CUSTOM>(addable[0]?.id ?? CUSTOM);
   const [draft, setDraft] = useState("");
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // In the page only while open, as the old key form: a password field kept
   // in the page is one a browser may fill with the sign-in password.
   const form = usePresence(open, 300);
-  const chosen = addable.find((a) => a.id === provider) ?? addable[0];
+  const custom = provider === CUSTOM || addable.length === 0;
+  const chosen = custom ? undefined : (addable.find((a) => a.id === provider) ?? addable[0]);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (chosen === undefined) return;
     const key = draft;
     setDraft("");
     setSaving(true);
     onSaving(true);
     setError(null);
-    const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen.id, key });
+    const reply = custom
+      ? await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key })
+      : await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen?.id, key });
     setSaving(false);
     onSaving(false);
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
-    onAdded(chosen.label);
+    const label = custom ? name.trim() : (chosen?.label ?? "the provider");
+    setName("");
+    setUrl("");
+    onAdded(label);
   };
 
   if (!form.mounted) return null;
+  const ready = draft.trim() !== "" && (!custom || (name.trim() !== "" && url.trim() !== ""));
   return (
     <form onSubmit={(e) => void save(e)} aria-label="Add a provider" className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
       <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
@@ -212,52 +230,92 @@ function AddProvider({
             <Select
               id={id}
               label="Provider"
-              options={addable.map((a) => ({ value: a.id, label: a.label }))}
-              value={chosen?.id ?? ""}
-              onChange={(v) => setProvider(v as ProviderId)}
+              options={[
+                ...addable.map((a) => ({ value: a.id as string, label: a.label })),
+                { value: CUSTOM, label: "Custom provider", detail: "Any OpenAI-compatible API", section: "Your own" },
+              ]}
+              value={custom ? CUSTOM : (chosen?.id ?? CUSTOM)}
+              onChange={(v) => {
+                setProvider(v as ProviderName | typeof CUSTOM);
+                setError(null);
+              }}
             />
           )}
         </FormRow>
+        {custom && (
+          <FormRow label="Name" hint="How it is listed here and named in the tutor's messages.">
+            {({ id, describedBy }) => (
+              <Input id={id} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="My gateway" aria-describedby={describedBy} />
+            )}
+          </FormRow>
+        )}
+      </div>
+      {custom && (
         <FormRow
-          label="API key"
-          hint={
-            <>
-              Sent once and stored encrypted. Only its last four characters are shown again.
-              {chosen?.keyUrl !== undefined && (
-                <>
-                  {" "}
-                  <TextLink href={chosen.keyUrl} external size="xs">
-                    Get a {chosen.label} key<span aria-hidden> ↗</span>
-                  </TextLink>
-                </>
-              )}
-            </>
-          }
-          error={error}
+          label="Base URL"
+          hint="The part before /chat/completions, as the provider documents it. https:// only, or http:// for a model server on this machine."
         >
-          {({ id, describedBy, invalid }) => (
+          {({ id, describedBy }) => (
             <Input
               id={id}
-              type="password"
-              name={`${chosen?.id ?? "provider"}-api-key`}
-              autoComplete="off"
+              type="url"
+              inputMode="url"
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
-              value={draft}
-              minLength={PROVIDER_KEY_LIMITS.minChars}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                setError(null);
-              }}
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://api.example.com/v1"
               aria-describedby={describedBy}
-              aria-invalid={invalid}
             />
           )}
         </FormRow>
-      </div>
+      )}
+      <FormRow
+        label="API key"
+        hint={
+          <>
+            Sent once and stored encrypted. Only its last four characters are shown again.
+            {custom && " For a local server that needs no key, type any 16 characters."}
+            {chosen?.keyUrl !== undefined && (
+              <>
+                {" "}
+                <TextLink href={chosen.keyUrl} external size="xs">
+                  Get a {chosen.label} key<span aria-hidden> ↗</span>
+                </TextLink>
+              </>
+            )}
+          </>
+        }
+      >
+        {({ id, describedBy, invalid }) => (
+          <Input
+            id={id}
+            type="password"
+            name={`${custom ? "custom" : (chosen?.id ?? "provider")}-api-key`}
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={draft}
+            minLength={PROVIDER_KEY_LIMITS.minChars}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setError(null);
+            }}
+            aria-describedby={describedBy}
+            aria-invalid={invalid}
+          />
+        )}
+      </FormRow>
+      {/* The refusal can be about any field (the name, the URL, the key), so it sits above the buttons, not under one of them. */}
+      {error !== null && (
+        <p role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
+          {error} {draft === "" && "Enter the key again: it is never kept after a send."}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2.5">
-        <Button type="submit" size="sm" disabled={saving || draft.trim() === ""}>
+        <Button type="submit" size="sm" disabled={saving || !ready}>
           Add provider
         </Button>
         <Button
@@ -295,14 +353,17 @@ function ProviderRow({
   usingDefaults: boolean;
   full: boolean;
   disabled: boolean;
-  /** This row was deleted and leaves with the refresh (no server key keeps it listed). */
-  onGone: () => void;
+  /** This row was deleted and leaves with the refresh (no server key keeps it listed), with what to say. */
+  onGone: (text: string) => void;
 }) {
   const router = useRouter();
   const base = useId();
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<Mode>("idle");
   const [draft, setDraft] = useState("");
+  // A custom provider's Edit also takes its name and base URL (T14).
+  const [name, setName] = useState(row.label);
+  const [url, setUrl] = useState(row.custom?.baseUrl ?? "");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const busy = status.kind === "busy";
   const keyForm = usePresence(mode === "edit", 300);
@@ -329,7 +390,7 @@ function ProviderRow({
         : `Your key, ending ${saved.last4}. Saved ${saved.savedOn}.`;
   const modelLine = hasModels
     ? `${row.models.length} ${row.models.length === 1 ? "model" : "models"}`
-    : usingDefaults && row.inUse !== null
+    : usingDefaults && row.inUse !== null && row.custom === undefined
       ? `Built-in default: ${row.model}`
       : "No models";
 
@@ -338,14 +399,28 @@ function ProviderRow({
     const key = draft;
     setDraft("");
     setStatus({ kind: "busy", text: "Saving…" });
-    const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: row.id, key });
-    if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-      focusNext.current = `${base}-key`;
-      return setStatus({ kind: "error", text: failure("saved", reply) });
+    // A custom provider's name, base URL and key go in one write, so a key
+    // that is refused leaves the name and the URL as they were.
+    const custom = row.custom;
+    const moved = custom !== undefined && (name.trim() !== row.label || url.trim() !== custom.baseUrl);
+    const typed = key.trim() !== "";
+    if (moved || (custom !== undefined && typed)) {
+      const body = { provider: row.id, label: name, baseUrl: url, ...(typed ? { key } : {}) };
+      const changed = await sendJson<Reply>("PATCH", "/api/learner/custom-provider", body);
+      if (changed === null || changed.status !== 200 || changed.data.ok !== true) {
+        focusNext.current = `${base}-key`;
+        return setStatus({ kind: "error", text: failure("saved", changed) });
+      }
+    } else if (typed) {
+      const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: row.id, key });
+      if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+        focusNext.current = `${base}-key`;
+        return setStatus({ kind: "error", text: failure("saved", reply) });
+      }
     }
     focusNext.current = `${base}-edit`;
     setMode("idle");
-    setStatus({ kind: "done", text: "Key saved." });
+    setStatus({ kind: "done", text: row.custom !== undefined ? "Saved." : "Key saved." });
     router.refresh();
   };
 
@@ -359,8 +434,9 @@ function ProviderRow({
       return setStatus({ kind: "error", text: failure("deleted", reply) });
     }
     setMode("idle");
-    setStatus({ kind: "done", text: row.server ? "Deleted. The server's key still applies." : "Deleted." });
-    if (!row.server) onGone();
+    const text = row.server ? `Deleted ${row.label}. The server's key still applies.` : `Deleted ${row.label}.`;
+    setStatus({ kind: "done", text });
+    if (!row.server) onGone(text);
     router.refresh();
   };
 
@@ -390,6 +466,8 @@ function ProviderRow({
   const open = (next: Mode) => {
     setStatus({ kind: "idle" });
     setDraft("");
+    setName(row.label);
+    setUrl(row.custom?.baseUrl ?? "");
     // The delete confirm moves focus itself (`ConfirmFold`), in and out.
     focusNext.current = next === "edit" ? `${base}-key` : next === "delete" || mode === "delete" ? null : `${base}-edit`;
     setMode(next);
@@ -402,6 +480,7 @@ function ProviderRow({
           <p id={`${base}-name`} className="text-[14px] font-medium text-text">
             {row.label}
           </p>
+          {row.custom !== undefined && <p className="font-mono text-[12px] break-all text-text2">{row.custom.baseUrl}</p>}
           <p className={cx("text-[12px]", unreadable || (row.inUse === null && hasModels) ? "text-danger" : "text-text2")}>{keyLine}</p>
           <p className="text-[12px] break-all text-text2">{modelLine}</p>
         </div>
@@ -451,7 +530,7 @@ function ProviderRow({
             size="sm"
             aria-expanded={mode === "delete"}
             aria-controls={`${base}-delete-fold`}
-            disabled={disabled || busy || (saved === null && !hasModels)}
+            disabled={disabled || busy || (saved === null && !hasModels && row.custom === undefined)}
             onClick={() => open(mode === "delete" ? "idle" : "delete")}
           >
             Delete
@@ -477,10 +556,35 @@ function ProviderRow({
       <Collapse open={mode === "edit"} className="pt-3">
         {keyForm.mounted && (
           <form onSubmit={(e) => void saveKey(e)} aria-label={`${row.label} key`} className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
+            {row.custom !== undefined && (
+              <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+                <FormRow label="Name">
+                  {({ id }) => <Input id={id} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />}
+                </FormRow>
+                <FormRow label="Base URL">
+                  {({ id }) => (
+                    <Input
+                      id={id}
+                      type="url"
+                      inputMode="url"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                    />
+                  )}
+                </FormRow>
+              </div>
+            )}
             <FormRow
               id={`${base}-key`}
               label={saved === null ? `Your ${row.label} key` : `A new ${row.label} key`}
-              hint="Sent once and stored encrypted. It replaces the key saved now."
+              hint={
+                row.custom !== undefined
+                  ? "Leave it empty to keep the key saved now. A new one is sent once and stored encrypted."
+                  : "Sent once and stored encrypted. It replaces the key saved now."
+              }
             >
               {({ id, describedBy }) => (
                 <Input
@@ -498,8 +602,17 @@ function ProviderRow({
               )}
             </FormRow>
             <div className="flex flex-wrap gap-2.5">
-              <Button type="submit" size="sm" disabled={busy || draft.trim() === ""}>
-                Save key
+              <Button
+                type="submit"
+                size="sm"
+                disabled={
+                  busy ||
+                  (row.custom === undefined
+                    ? draft.trim() === ""
+                    : draft.trim() === "" && name.trim() === row.label && url.trim() === row.custom.baseUrl)
+                }
+              >
+                {row.custom !== undefined ? "Save" : "Save key"}
               </Button>
               <Button variant="secondary" size="sm" disabled={busy} onClick={() => open("idle")}>
                 Cancel
@@ -516,7 +629,7 @@ function ProviderRow({
         label={`Confirm deleting ${row.label}`}
         message={
           <>
-            Delete {row.label}? {goes(saved !== null, row.models.length)}
+            Delete {row.label}? {row.custom !== undefined ? "It is removed with your key and its models." : goes(saved !== null, row.models.length)}
             {row.server ? " The server's key stays, so it is still listed." : ""}
           </>
         }
@@ -693,11 +806,11 @@ function Models({
       {row.models.length === 0 ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-text2">
           <p>
-            {usingDefaults && keyed
+            {usingDefaults && keyed && row.custom === undefined
               ? `No models yet. Until you add one to any provider, the tutor calls ${row.label}'s built-in default, ${row.model}.`
               : `No models yet, so the tutor skips ${row.label}.`}
           </p>
-          {keyed && (
+          {keyed && row.custom === undefined && (
             <Button id={testKeyId} variant="ghost" size="sm" disabled={disabled} onClick={onTestKey}>
               Test the key
             </Button>

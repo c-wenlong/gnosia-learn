@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readEvents, readLearnerSnapshot, readPreferences, readTutorModels } from "@self-learn/catalog/state";
+import { readCustomProviders, readEvents, readLearnerSnapshot, readPreferences, readTutorModels } from "@self-learn/catalog/state";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
@@ -37,17 +37,26 @@ export async function GET(req: Request): Promise<NextResponse> {
     learner: unknown;
     preferences: Record<string, unknown>;
     tutorModels: { provider: string; model: string }[];
+    /** The providers the owner added (T14): names and base URLs, never a key. */
+    customProviders: { id: string; label: string; baseUrl: string }[];
     events: unknown[];
   };
   try {
     body = await withLearnerStore(async (db) => {
-      const [learner, preferences, chain, events] = await Promise.all([
+      const [learner, preferences, chain, custom, events] = await Promise.all([
         readLearnerSnapshot(db, owner),
         readPreferences(db, owner),
         readTutorModels(db, owner),
+        readCustomProviders(db, owner),
         readEvents(db, owner),
       ]);
-      return { learner, preferences, tutorModels: chain.map(({ provider, model }) => ({ provider, model })), events };
+      return {
+        learner,
+        preferences,
+        tutorModels: chain.map(({ provider, model }) => ({ provider, model })),
+        customProviders: custom.map(({ id, label, baseUrl }) => ({ id, label, baseUrl })),
+        events,
+      };
     });
   } catch (error) {
     // The driver's message is logged, not returned: it is the failed SQL.

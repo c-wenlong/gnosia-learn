@@ -1,4 +1,4 @@
-import { PROVIDER_IDS, PROVIDER_LABELS, type ProviderId } from "@self-learn/schema/shared";
+import { PROVIDER_IDS, providerLabel, type ProviderName } from "@self-learn/schema/shared";
 import { NextResponse } from "next/server";
 
 import { keyFor } from "@/lib/agent/providers";
@@ -48,7 +48,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   // same rule. A key removed later leaves the entry in place, skipped (T4).
   // A saved key that cannot be read because the database is down is not "no
   // key": say so, and let the person try again.
-  let saved: Partial<Record<ProviderId, string>>;
+  let saved: Partial<Record<ProviderName, string>>;
   try {
     saved = await openSavedKeys(owner);
   } catch (error) {
@@ -56,14 +56,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     return refuse("Not added: your saved keys could not be read just now. Try again in a moment.", "STORE_UNAVAILABLE", 503);
   }
   if (keyFor(provider, saved) === null) {
-    return refuse(`There is no key for ${PROVIDER_LABELS[provider]}. Add one under Provider keys first.`, "NO_KEY");
+    return refuse(`There is no key for ${providerLabel(provider)}. Add one under Providers first.`, "NO_KEY");
   }
   // A key pasted into the model field would be stored in the clear and
   // exported (T11). `checkModelId` refuses anything shaped like a key; this
   // refuses the owner's own keys, saved or server, for every provider,
   // whatever their shape. Neither answer repeats what was sent.
   if (echoesKey(model, saved)) {
-    return refuse("That is one of your API keys, not a model id. Keys go under Provider keys.");
+    return refuse("That is one of your API keys, not a model id. Keys go in a provider's API key field.");
   }
 
   try {
@@ -74,11 +74,16 @@ export async function POST(req: Request): Promise<NextResponse> {
 }
 
 /** Whether `model` is, holds, or is a long part of any key the tutor could call with. */
-function echoesKey(model: string, saved: Partial<Record<ProviderId, string>>): boolean {
-  const keys = PROVIDER_IDS.flatMap((id) => {
-    const key = keyFor(id, saved);
-    return key === null ? [] : [key.apiKey];
-  });
+function echoesKey(model: string, saved: Partial<Record<ProviderName, string>>): boolean {
+  // The server's keys come through `keyFor`; every saved key is checked as
+  // well, a custom provider's included, which `PROVIDER_IDS` does not name.
+  const keys = [
+    ...PROVIDER_IDS.flatMap((id) => {
+      const key = keyFor(id, saved);
+      return key === null ? [] : [key.apiKey];
+    }),
+    ...Object.values(saved).filter((key): key is string => typeof key === "string" && key !== ""),
+  ];
   return keys.some((key) => model.includes(key) || (model.length >= 12 && key.includes(model)));
 }
 

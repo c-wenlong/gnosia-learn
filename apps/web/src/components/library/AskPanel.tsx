@@ -18,7 +18,7 @@ interface ChatReply {
 
 function errorFor(status: number, data: ChatReply): string {
   if (data.code === "MISSING_API_KEY") {
-    return data.error ?? "The tutor has no model provider key yet. Add one in Settings, under Provider keys.";
+    return data.error ?? "The tutor has no model provider key yet. Add one in Settings, under Providers.";
   }
   if (status === 429) return "That was a lot of questions in a minute. Wait a moment and try again.";
   return data.error ?? `The tutor did not answer (HTTP ${status}).`;
