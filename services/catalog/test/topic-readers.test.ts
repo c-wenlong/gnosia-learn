@@ -10,8 +10,7 @@ import { runParity } from "../src/commands/parity";
 import { DB_READERS } from "../src/content/flip";
 import { contentOwnership } from "../src/content/ownership";
 import { dbSource } from "../src/content/source";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
 import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
@@ -36,8 +35,7 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the seed", () => {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
     url.pathname = `/${scratch.name}`;
     process.env["DATABASE_URL"] = url.toString();

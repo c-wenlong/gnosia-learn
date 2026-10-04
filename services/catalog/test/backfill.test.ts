@@ -5,10 +5,9 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { backfill } from "../src/commands/backfill";
-import { applyMigrations } from "../src/migrations";
 import { readEvents, readReviews } from "../src/state";
 import { LEARN_ROOT_ENV } from "../src/learn/paths";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent } from "./state-fixture";
 
 /**
@@ -84,8 +83,7 @@ describe.skipIf(!reachable.ok)("backfill", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
 
     root = await mkdtemp(path.join(tmpdir(), "backfill-"));

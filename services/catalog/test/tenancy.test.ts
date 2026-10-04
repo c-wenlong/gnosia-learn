@@ -31,7 +31,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { dbSource } from "../src/content/source";
 import { ContentWriteError, writeContent } from "../src/content/write";
-import { applyMigrations } from "../src/migrations";
 import {
   assetBlobs,
   assetCounts,
@@ -57,7 +56,7 @@ import {
   topicTitles,
   videosWithStoredPoster,
 } from "../src/state";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { ASSETS, CONCEPTS, DECK_ID, ITEMS, OTHER_TOPIC_SLUG, seedAssets, seedContent, TOPIC_SLUG } from "./state-fixture";
 
 /**
@@ -171,9 +170,8 @@ describe.skipIf(!reachable.ok)("content scoped by owner", () => {
   let ids: string[];
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
+    scratch = await migratedScratchDatabase();
     const db = scratch.db;
-    await applyMigrations(db);
     await seedContent(db);
     await seedAssets(db);
     // The fixture's concepts carry no body; a reader refuses a row without one.
@@ -411,9 +409,8 @@ describe.skipIf(!reachable.ok)("links that reach another owner's rows", () => {
   const key = (owner: string, digit: string, ext: string) => `${owner}/${digit.repeat(64)}.${ext}`;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
+    scratch = await migratedScratchDatabase();
     const db = scratch.db;
-    await applyMigrations(db);
     await seedContent(db);
     await ensureLearner(db, B);
     await db.insert(topic).values({ slug: B_TOPIC, title: "B's topic", domain: "tenant", ownerId: B });
@@ -523,8 +520,7 @@ describe.skipIf(!reachable.ok)("the write seam and the owner", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await ensureLearner(scratch.db, B);
   }, 120_000);

@@ -2,9 +2,8 @@ import { asset, assetConcept, COMMONS_OWNER, concept, LOCAL_LEARNER_ID, ownerSco
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { applyMigrations } from "../src/migrations";
 import { assetsForConcepts, conceptCheckCounts, ensureLearner } from "../src/state";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 import { ASSETS, seedAssets, seedContent, TOPIC_SLUG } from "./state-fixture";
 
@@ -28,9 +27,8 @@ describe.skipIf(!reachable.ok)("module path reads", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
+    scratch = await migratedScratchDatabase();
     const db = scratch.db;
-    await applyMigrations(db);
     await seedContent(db);
     await seedAssets(db);
     await ensureLearner(db, LOCAL_LEARNER_ID);

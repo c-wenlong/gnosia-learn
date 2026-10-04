@@ -24,9 +24,8 @@ import { tagsIndexer } from "../src/index/tags";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
 import { pullVault, pushVault } from "../src/learn/vault";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `learn vault pull|push` (phase 2 of docs/CONTENT-MIGRATION.md, edge case
@@ -139,8 +138,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
   beforeAll(async () => {
     // The blob store the SVGs are pulled from, for this process and the CLI it runs.
     process.env["SELF_LEARN_HOME"] = await newVault();
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha", "beta", "gamma", "delta"] }]));
     await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
@@ -849,11 +847,10 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
 
 describe.skipIf(!reachable.ok)("learn vault before the flip", () => {
   it("refuses while the database does not own the notes and logs", async () => {
-    const scratch = await createScratchDatabase();
+    const scratch = await migratedScratchDatabase();
     const fixture = await makeFixture();
     const vault = await mkdtemp(path.join(tmpdir(), "self-learn-vault-"));
     try {
-      await applyMigrations(scratch.db);
       const result = await execFileAsync(process.execPath, ["--import", "tsx", ENTRY, "vault", "pull", "--out", vault], {
         env: { ...process.env, LEARN_ROOT: fixture.root, DATABASE_URL: scratch.url },
       }).then(

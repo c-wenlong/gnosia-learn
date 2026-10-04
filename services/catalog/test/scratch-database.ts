@@ -1,10 +1,19 @@
 import { indexRun } from "@self-learn/schema";
 import { sql } from "drizzle-orm";
 import pg from "pg";
+import { inject } from "vitest";
 
 import { databaseIdentity } from "../src/content/import-root";
 import { type CatalogDatabase, connect, type Connection } from "../src/db";
 import { databaseUrl } from "../src/env";
+import { applyMigrations } from "../src/migrations";
+
+declare module "vitest" {
+  export interface ProvidedContext {
+    /** The migrated template `migrated-template.ts` made for this run; null when it could not make one. */
+    catalogTemplate: string | null;
+  }
+}
 
 /**
  * The schema tests run against a real Postgres, because the whole point of the
@@ -78,9 +87,17 @@ export interface Scratch extends Connection {
  */
 const LINGUISTIC_COLLATION = "template template0 locale_provider icu icu_locale 'en-US'";
 
-/** Creates an empty database and returns a connection to it. */
-export async function createScratchDatabase(): Promise<Scratch> {
-  const name = `self_learn_test_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+function scratchName(kind = "test"): string {
+  return `self_learn_${kind}_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Creates an empty database and returns a connection to it. For a suite that
+ * wants every migration applied, `migratedScratchDatabase` is the same thing
+ * made faster; this one is for a suite that applies migrations itself, all of
+ * them from empty or only some.
+ */
+export async function createScratchDatabase(name = scratchName()): Promise<Scratch> {
   const admin = new pg.Client({ connectionString: maintenanceUrl() });
   await admin.connect();
   try {
@@ -100,6 +117,95 @@ export async function createScratchDatabase(): Promise<Scratch> {
   return scratchAt(name);
 }
 
+/**
+ * A scratch database with every migration applied, cloned from the template
+ * `migrated-template.ts` migrated once for this vitest run, rather than
+ * migrated again by each suite: about 70 test files want one, and on CI's two
+ * CPUs each migration competed with the tests for them. The clone carries
+ * the template's collation (the linguistic one above) and the rows 0010
+ * seeds, the `local` learner and `catalog_instance` saying `primary`, so it
+ * is the database `createScratchDatabase` plus `applyMigrations` would make.
+ * `schema.test.ts` still migrates from empty, which is what keeps that true.
+ *
+ * Without a template (no global setup ran, or it could not reach Postgres)
+ * it does exactly that instead.
+ */
+export async function migratedScratchDatabase(): Promise<Scratch> {
+  const template = providedTemplate();
+  if (template === null) {
+    const scratch = await createScratchDatabase();
+    try {
+      await applyMigrations(scratch.db);
+    } catch (error) {
+      await scratch.drop();
+      throw error;
+    }
+    return scratch;
+  }
+  const name = scratchName();
+  const admin = new pg.Client({ connectionString: maintenanceUrl() });
+  await admin.connect();
+  try {
+    await admin.query(`create database ${quoteIdentifier(name)} template ${quoteIdentifier(template)}`);
+  } finally {
+    await admin.end();
+  }
+  return scratchAt(name);
+}
+
+function providedTemplate(): string | null {
+  try {
+    return inject("catalogTemplate") ?? null;
+  } catch {
+    // Outside a vitest worker there is nothing to inject.
+    return null;
+  }
+}
+
+/**
+ * Makes the template `migratedScratchDatabase` clones: an empty scratch
+ * database, migrated, closed, and then barred from connections. Postgres
+ * refuses to copy a database anyone is connected to, so the bar is what makes
+ * a stray connection to it fail on its own rather than fail some other
+ * suite's clone. Concurrent clones of one template are fine: CREATE DATABASE
+ * reads the template without connecting to it.
+ */
+export async function createMigratedTemplate(): Promise<string> {
+  const scratch = await createScratchDatabase(scratchName("test_template"));
+  let closed = false;
+  try {
+    await applyMigrations(scratch.db);
+    await scratch.close();
+    closed = true;
+    const admin = new pg.Client({ connectionString: maintenanceUrl() });
+    await admin.connect();
+    try {
+      await admin.query(`alter database ${quoteIdentifier(scratch.name)} with allow_connections false`);
+    } finally {
+      await admin.end();
+    }
+  } catch (error) {
+    // A pool's `end` rejects the second time, so `drop` is only for one still open.
+    await (closed ? dropDatabase(scratch.name) : scratch.drop());
+    throw error;
+  }
+  return scratch.name;
+}
+
+/** Drops a scratch database or a template, whoever is still connected to it. */
+export async function dropDatabase(name: string): Promise<void> {
+  const admin = new pg.Client({ connectionString: maintenanceUrl() });
+  await admin.connect();
+  try {
+    // FORCE (Postgres 13+) terminates anything still attached. Without it a
+    // pooled connection that has not finished closing turns cleanup into a
+    // flaky "database is being accessed by other users".
+    await admin.query(`drop database if exists ${quoteIdentifier(name)} with (force)`);
+  } finally {
+    await admin.end();
+  }
+}
+
 /** A connection to a scratch database that exists, and the way to drop it. */
 function scratchAt(name: string): Scratch {
   const url = new URL(databaseUrl());
@@ -112,16 +218,7 @@ function scratchAt(name: string): Scratch {
     url: url.toString(),
     drop: async () => {
       await connection.close();
-      const cleanup = new pg.Client({ connectionString: maintenanceUrl() });
-      await cleanup.connect();
-      try {
-        // FORCE (Postgres 13+) terminates anything still attached. Without it a
-        // pooled connection that has not finished closing turns cleanup into a
-        // flaky "database is being accessed by other users".
-        await cleanup.query(`drop database if exists ${quoteIdentifier(name)} with (force)`);
-      } finally {
-        await cleanup.end();
-      }
+      await dropDatabase(name);
     },
   };
 }

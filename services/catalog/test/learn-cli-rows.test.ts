@@ -18,9 +18,8 @@ import { tagsIndexer } from "../src/index/tags";
 import { sessionsIndexer } from "../src/index/sessions";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * The `learn` CLI once the database owns the notes and the logs (Track C of
@@ -79,8 +78,7 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
       .orderBy(asc(sessionLogEntry.seq));
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha", "beta", "gamma"], courses: ["xx1000-m1"] }]));
     await fixture.write("learn/concepts/fixtures/alpha.md", note({ id: "alpha", title: "Alpha", summary: "The first one." }));

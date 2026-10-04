@@ -15,9 +15,8 @@ import { conceptsIndexer } from "../src/index/concepts";
 import { runIndex } from "../src/index/run";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
 import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
@@ -112,8 +111,7 @@ describe.skipIf(!reachable.ok)("the seed's notes and logs, imported into a scrat
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await runIndex(scratch.db, {
       repoRoot: SEED,
       only: ["topics", "tags", "concepts", "courses", "sessions"],
@@ -184,8 +182,7 @@ describe.skipIf(!reachable.ok)("importing a log", () => {
       .orderBy(asc(sessionLogEntry.seq));
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }]));
     await fixture.write("learn/concepts/testing/base.md", note({ id: "base" }));

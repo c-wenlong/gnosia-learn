@@ -8,9 +8,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
 import { blobObject, collection, learner, ownerScope } from "@self-learn/schema";
 
-import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
 import {
-  createScratchDatabase,
+  migratedScratchDatabase,
   probe,
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
@@ -121,8 +120,7 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
 
   beforeAll(async () => {
     for (const key of ["DATABASE_URL", "SELF_LEARN_HOME"]) saved[key] = process.env[key];
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     home = await mkdtemp(path.join(tmpdir(), "course-cover-route-"));
     process.env.DATABASE_URL = scratch.url;
     process.env.SELF_LEARN_HOME = home;

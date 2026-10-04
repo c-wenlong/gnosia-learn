@@ -18,9 +18,8 @@ import { readCourses } from "../src/content/readers/courses";
 import { readSnapshots } from "../src/content/snapshot";
 import { VIDEO_PREFIX } from "../src/content/videos";
 import { ASSET_PREFIX } from "../src/index/source";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, sqlstate, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
 
 /**
  * Phase 2 of docs/proposals/module-learning-path.md: a reading names the
@@ -154,8 +153,7 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
     (await scratch.db.select({ n: sql<number>`coalesce(max(id), 0)::int` }).from(contentRevision))[0]?.n ?? 0;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write(
       "content/topics.yaml",

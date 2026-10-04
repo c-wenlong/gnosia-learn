@@ -31,9 +31,8 @@ import { REPO_ROOT } from "../src/env";
 import { canvasCliPath, hasCanvasCli } from "../src/index/tldr";
 import { lockEntity } from "../src/content/revisions";
 import { cliScope } from "../src/content/scope";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
@@ -160,8 +159,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
   let restore: () => void;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await tree();
     work = await mkdtemp(path.join(tmpdir(), "catalog-diagram-work-"));
     blobHome = await mkdtemp(path.join(tmpdir(), "catalog-diagram-blobs-"));
