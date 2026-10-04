@@ -44,10 +44,12 @@ export {
   type SegmentSize,
 } from "./SegmentedControl";
 export { Select } from "./Select";
+export { Skeleton, SKELETON } from "./Skeleton";
 export { StatTile, type StatTone } from "./StatTile";
 export { TabList, type TabListItem, type TabListOrientation } from "./TabList";
 export { Textarea } from "./Textarea";
 export { TextLink, type TextLinkProps } from "./TextLink";
+export { TypingDots } from "./TypingDots";
 export {
   bannerClasses,
   buttonClasses,
@@ -67,6 +69,7 @@ export type {
   ButtonSize,
   CalloutTone,
   ButtonVariant,
+  CardGap,
   ChipSize,
   ChipTone,
   IconButtonShape,

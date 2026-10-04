@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
+import { cardClasses } from "@/components/ui/classes";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
@@ -96,7 +97,7 @@ export function ExpandablePanel({
   }, [mounted]);
 
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+    <section className={cardClasses({ flush: true })}>
       <PanelHeader title={title} action={action}>
         <IconButton ref={openerRef} label={`Expand ${label}`} onClick={expand}>
           {/* Four corners pulled outward: open it larger. Only this panel draws it. */}

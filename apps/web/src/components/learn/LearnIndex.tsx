@@ -8,7 +8,7 @@ import { DomainCards, DomainView, type Place } from "@/components/learn/DomainBr
 import type { MapMark } from "@/components/learn/DomainGraph";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cx, LABEL } from "@/components/ui/classes";
+import { cardClasses, cx, LABEL } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
@@ -325,7 +325,7 @@ function ConceptTable({
   // share the page: the mastery bar from 32rem, Last seen from 42rem, Course
   // from 56rem, where the title still has ~330px beside all 564px of them.
   return (
-    <div className="@container min-w-0 overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+    <div className={cardClasses({ flush: true, className: "@container" })}>
       <div className="overflow-x-auto">
         <table className="w-full table-fixed border-collapse">
           <caption className="sr-only">Concepts, {rows.length} of {total} shown. Choose a row to show its graph.</caption>

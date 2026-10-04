@@ -7,6 +7,7 @@ import { isImeKey } from "./composer-keys";
 import { nextSuggestion, suggestionsFor } from "./suggestions";
 import type { FilterOption } from "./filter-menu";
 import { LIST_PANEL, ListOption } from "./FilterMenu";
+import { Glyph } from "./Glyph";
 import { fieldListClasses, fieldListStyle, useFieldList } from "./use-field-list";
 import { usePresence } from "./use-presence";
 
@@ -214,18 +215,12 @@ export function Combobox<V extends string>({
             "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         >
-          <svg
-            aria-hidden
-            viewBox="0 0 16 16"
+          <Glyph
+            name="chevron"
+            size={16}
+            stroke={2.25}
             className={cx("size-4 transition-[rotate] duration-150 ease-soft motion-reduce:transition-none", showList && "rotate-180")}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m4 6 4 4 4-4" />
-          </svg>
+          />
         </button>
       )}
       {presence.mounted && (

@@ -1,6 +1,7 @@
 import type { InputHTMLAttributes, ReactNode, Ref } from "react";
 
 import { cx } from "./classes";
+import { Glyph } from "./Glyph";
 
 /**
  * Kit `Checkbox`: a 20px box in the field's face (2px `--border`, radius 6)
@@ -47,22 +48,17 @@ export function Checkbox({
           )}
           {...rest}
         />
-        <svg
-          aria-hidden
-          viewBox="0 0 16 16"
+        {/* The tick at the weight of the box's 2px border, not Glyph's hairline. */}
+        <Glyph
+          name="tick"
+          size={14}
+          stroke={2.75}
           className={cx(
             "pointer-events-none absolute inset-0 m-auto size-3.5 text-white",
             "scale-50 opacity-0 transition-[opacity,scale] duration-150 ease-soft motion-reduce:transition-none",
             "peer-checked:scale-100 peer-checked:opacity-100",
           )}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m3.5 8.5 3 3 6-7" />
-        </svg>
+        />
       </span>
       <span className="min-w-0">{children}</span>
     </label>

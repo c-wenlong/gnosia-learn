@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { PageLoading } from "@/components/PageLoading";
 import { Spacer, StudioStrip } from "@/components/studio/StudioChrome";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
  * What `/studio` and a canvas show while the server reads the runner.
@@ -12,54 +14,52 @@ import { Spacer, StudioStrip } from "@/components/studio/StudioChrome";
  * on screen in the same frame as the press.
  *
  * The shapes match the page's own strip and tiles, so nothing jumps when the
- * grid arrives. Pulsing is off under reduced motion.
+ * grid arrives. The frame is `PageLoading`'s (`layout="full"`), so it waits
+ * 120ms before it shows, as every other page's does, and a runner that answers
+ * at once never flashes it; the blocks are the kit's `Skeleton`, which stops
+ * pulsing under reduced motion.
  */
-
-const PULSE = "animate-pulse motion-reduce:animate-none";
 
 export function StudioGridLoading() {
   return (
-    <div data-layout="full" className="flex min-h-0 min-w-0 flex-1" aria-busy="true">
-      {/* The conversations are in the app's sidebar, which is already drawn. */}
+    <PageLoading layout="full" label="Opening the studio">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* The conversations are in the app's sidebar, which is already drawn. */}
         {/* The home view's heading and composer. */}
         <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-center gap-7 px-4 py-12 md:min-h-[calc(100dvh-9rem)]">
-          <div className={`h-10 w-72 -translate-y-4 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
-          <div className={`h-[52px] w-full max-w-3xl -translate-y-4 rounded-2xl bg-[var(--surface-hover)] ${PULSE}`} />
+          <Skeleton className="h-10 w-72 -translate-y-4" />
+          <Skeleton className="h-[52px] w-full max-w-3xl -translate-y-4" />
         </div>
         <div className="mx-2 rounded-t-3xl border border-b-0 border-hair bg-surface md:mx-4">
-        <StudioStrip surface>
-          <div className={`h-7 w-56 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
-          <div className={`hidden h-6 w-40 rounded-full bg-[var(--surface-hover)] sm:block ${PULSE}`} />
-          <Spacer />
-          <div className={`h-7 w-16 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
-          <div className={`h-7 w-16 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
-        </StudioStrip>
-        <p role="status" className="sr-only">
-          Opening the studio
-        </p>
-        <div className="min-h-0 flex-1 overflow-hidden p-4">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
-            {Array.from({ length: 8 }, (_, at) => (
-              <div key={at} className="flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                <div className={`aspect-[16/10] bg-[var(--surface-hover)] ${PULSE}`} />
-                <div className="flex flex-col gap-2 p-3">
-                  <div className={`h-3.5 w-3/4 rounded bg-[var(--surface-hover)] ${PULSE}`} />
-                  <div className={`h-3 w-1/3 rounded bg-[var(--surface-hover)] ${PULSE}`} />
+          <StudioStrip surface>
+            <Skeleton className="h-7 w-56" />
+            <Skeleton className="hidden h-6 w-40 sm:block" />
+            <Spacer />
+            <Skeleton className="h-7 w-16" />
+            <Skeleton className="h-7 w-16" />
+          </StudioStrip>
+          <div className="min-h-0 flex-1 overflow-hidden p-4">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+              {Array.from({ length: 8 }, (_, at) => (
+                <div key={at} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+                  <Skeleton fill className="aspect-[16/10]" />
+                  <div className="flex flex-col gap-2 p-3">
+                    <Skeleton className="h-3.5 w-3/4" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-        </div>
       </div>
-    </div>
+    </PageLoading>
   );
 }
 
 export function StudioCanvasLoading() {
   return (
-    <div data-layout="full" className="flex min-h-0 flex-1 flex-col" aria-busy="true">
+    <PageLoading layout="full" label="Opening the canvas">
       <StudioStrip>
         {/* The way back works before the canvas does. */}
         <Link
@@ -69,12 +69,9 @@ export function StudioCanvasLoading() {
         >
           ← Studio
         </Link>
-        <div className={`h-4 w-48 rounded bg-[var(--surface-hover)] ${PULSE}`} />
+        <Skeleton className="h-4 w-48" />
       </StudioStrip>
-      <p role="status" className="sr-only">
-        Opening the canvas
-      </p>
-      <div className={`min-h-0 flex-1 bg-[var(--surface-hover)] ${PULSE}`} />
-    </div>
+      <Skeleton fill className="min-h-0 flex-1" />
+    </PageLoading>
   );
 }

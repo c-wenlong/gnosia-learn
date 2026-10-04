@@ -7,6 +7,7 @@ import {
   transcriptCounter,
   type TranscriptCue,
 } from "@/components/media";
+import { cardClasses } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 
 /**
@@ -96,14 +97,8 @@ export function TranscriptPanel({
     onSeek?.(seconds);
   }
 
-  return (
-    <section
-      className={
-        bare
-          ? "flex min-w-0 flex-col gap-1.5"
-          : "flex min-w-0 flex-col gap-1.5 rounded-[20px] border-2 border-border bg-surface px-3 pt-4 pb-3 sm:px-4"
-      }
-    >
+  const content = (
+    <>
       <div className={bare ? "flex items-center justify-end gap-3 px-2 empty:hidden" : "flex items-center justify-between gap-3 px-2"}>
         {!bare && <h3 className="text-[16px] font-bold text-text">Transcript</h3>}
         {cues.length > 0 &&
@@ -173,6 +168,16 @@ export function TranscriptPanel({
           })}
         </ol>
       )}
+    </>
+  );
+
+  // In a tab, the tab's card is the frame. Alone, a flush kit card is, with
+  // the panel's own padding inside it: tighter at the sides than a card's 20,
+  // so the lines' hover fill sits close to the border.
+  if (bare) return <section className="flex min-w-0 flex-col gap-1.5">{content}</section>;
+  return (
+    <section className={cardClasses({ flush: true })}>
+      <div className="flex min-w-0 flex-col gap-1.5 px-3 pt-4 pb-3 sm:px-4">{content}</div>
     </section>
   );
 }

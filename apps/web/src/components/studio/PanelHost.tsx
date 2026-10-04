@@ -28,6 +28,7 @@ import { StudioSettings } from "@/components/studio/StudioSettings";
 import { VideoPreview } from "@/components/studio/video/VideoPreview";
 import { PANE_GUTTER } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { MentionValue } from "@/components/ui/mention-text";
 import { UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
@@ -413,7 +414,7 @@ export function PanelHost({
  * they land and the rows fade in over it. Each box is the height of what it
  * stands for, measured: the legend's 21px line and its 10px margin (a legend
  * sits outside the fieldset's gap), the label's 16px line, and the 44px
- * select (`StudioSettings`).
+ * select (`StudioSettings`). The blocks are the kit's `Skeleton`.
  */
 function SettingsLoading() {
   return (
@@ -424,15 +425,15 @@ function SettingsLoading() {
       {[0, 1].map((at) => (
         <div key={at} className="flex flex-col">
           <div className="mb-2.5 flex h-[21px] items-center">
-            <div className="h-4 w-20 rounded bg-surface2" />
+            <Skeleton className="h-4 w-20" />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[0, 1].map((menu) => (
               <div key={menu} className="flex flex-col gap-1.5">
                 <div className="flex h-4 items-center">
-                  <div className="h-3 w-12 rounded bg-surface2" />
+                  <Skeleton className="h-3 w-12" />
                 </div>
-                <div className="h-11 rounded-lg bg-surface2 animate-pulse motion-reduce:animate-none" />
+                <Skeleton className="h-11" />
               </div>
             ))}
           </div>

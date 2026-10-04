@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
+import { TypingDots } from "@/components/ui/TypingDots";
 import type { TopicOption } from "@/data/topics";
 import {
   askAgainValue,
@@ -1276,7 +1277,7 @@ function Entry({
         {retrying.map((kind) => (
           <p key={kind} className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
             Checking the {kind} brief
-            <Dots />
+            <TypingDots />
           </p>
         ))}
       </div>
@@ -1365,7 +1366,7 @@ function Streaming({ text, checking }: { text: string | null; checking: boolean 
     return (
       <p className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
         {CHECKING_BRIEF}
-        <Dots />
+        <TypingDots />
       </p>
     );
   }
@@ -1374,7 +1375,7 @@ function Streaming({ text, checking }: { text: string | null; checking: boolean 
       <TutorMessage label="Planner">
         <p className="flex items-center gap-2 text-[14px] text-text3" role="status">
           {THINKING}
-          <Dots />
+          <TypingDots />
         </p>
       </TutorMessage>
     );
@@ -1385,26 +1386,13 @@ function Streaming({ text, checking }: { text: string | null; checking: boolean 
       {reply.checking && (
         <p className="mt-3 flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
           {CHECKING_BRIEF}
-          <Dots />
+          <TypingDots />
         </p>
       )}
     </TutorMessage>
   );
 }
 
-function Dots() {
-  return (
-    <span aria-hidden className="inline-flex gap-1">
-      {[0, 1, 2].map((at) => (
-        <span
-          key={at}
-          className="h-1.5 w-1.5 animate-pulse rounded-full bg-text3 motion-reduce:animate-none"
-          style={{ animationDelay: `${at * 180}ms` }}
-        />
-      ))}
-    </span>
-  );
-}
 
 /** E1, E2 and E6: a `--warn-tint` card at the foot of the thread, with what to do. */
 function Problem({
