@@ -32,7 +32,7 @@ A turn of the tutor, with and without a chain:
 
 | The owner has | The tutor tries |
 | --- | --- |
-| No chain | The built-in defaults: each provider with a key, in the order NVIDIA, Gemini, OpenRouter, own keys first, each with its default model or `<PROVIDER>_MODEL` (BYOK D4, D9) |
+| No chain | The built-in defaults: each provider with a key, in the order NVIDIA, Gemini, OpenRouter, then the providers of T13, own keys first, each with its default model or `<PROVIDER>_MODEL` (BYOK D4, D9) |
 | A chain | The chain's entries, top to bottom, each with its own model id and its provider's key, own before server. An entry whose provider has no key is passed over and recorded. Nothing after the last entry |
 
 ## Decisions
@@ -182,8 +182,8 @@ dropped from the list.
   the environment-write row of BYOK's threat model applies to chain entries as
   it does to the defaults: whoever sets a base URL receives the keys sent to
   it. No request can set one.
-- Which providers exist. The chain chooses among NVIDIA, Gemini and
-  OpenRouter; a fourth provider is a code change, as before.
+- Which providers exist: the fourteen of T13 since 2026-10-05. Another is a
+  code change, or a custom provider.
 - The studio's agents, which run `claude` under the machine's own login.
 
 ## Out of scope
@@ -232,4 +232,36 @@ Providers card (`Providers.tsx`) in place of Provider keys and Models.
   order the built-in defaults are tried in, saved keys before the server's
   (`orderCredentials`), so the card never lists a provider ahead of one the
   tutor calls first.
+
+## T13. The common providers
+
+Added on 2026-10-05 at the owner's request, beside NVIDIA, Gemini and
+OpenRouter: OpenAI, Anthropic, DeepSeek, Zhipu GLM, Alibaba Qwen, Moonshot
+Kimi, MiniMax, Xiaomi MiMo, Mistral, Groq and xAI Grok. Each one's endpoint,
+default model, key page and list quirks were read from its own docs that
+day, and are `ADDED_PROVIDERS` in `apps/web/src/lib/agent/providers.ts`.
+
+- **All through the OpenAI-compatible chat endpoint, Bearer key.** Anthropic
+  through its OpenAI SDK compatibility layer (`https://api.anthropic.com/v1`,
+  which its docs call a testing aid), GLM through Z.ai's international
+  platform, Qwen through Model Studio's international compatible mode, so a
+  China-region key belongs under a base URL override.
+- **Server keys are opt-in under `TUTOR_<ID>_API_KEY`**, with
+  `TUTOR_<ID>_BASE_URL` and `TUTOR_<ID>_MODEL` beside them. Not the bare
+  `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`: shells export those for other
+  tools (the studio strips the first from its agents for that reason), and
+  the tutor would start spending one because the process that started the
+  app held it. NVIDIA, Gemini and OpenRouter keep their names.
+- **Model lists.** Every provider lists with `GET <base>/models` in OpenAI's
+  shape except three. Anthropic's list is paged at 20, so it is asked for
+  `?limit=1000` with `anthropic-version: 2023-06-01`. Z.ai has no list
+  endpoint, so the card offers the ids its docs name (`glm-5.3-flash`,
+  `glm-4.7-flash`, `glm-4.5-flash`) and still takes any typed id. Qwen's list
+  is Model Studio's native `api/v1/models`, read by `output.models[].model`,
+  page by page up to ten pages of 100.
+- **The cascade order** with no chain is the first three, then these in the
+  order above; a chain decides for itself (T1, T12).
+- **Add provider** links to each provider's key page.
+- The `provider` CHECKs on `provider_key` and `tutor_model` list the
+  fourteen (migration `0026_more_providers`).
 

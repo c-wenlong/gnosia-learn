@@ -180,7 +180,7 @@ describe.skipIf(!reachable.ok)("tutor_model", () => {
     await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "openrouter", "gemini-2.5-flash");
 
     for (const [provider, model] of [
-      ["openai", "gpt"],
+      ["not-a-provider", "gpt"],
       ["gemini", ""],
       ["gemini", "has space"],
       ["gemini", "tab\there"],
@@ -206,7 +206,7 @@ describe.skipIf(!reachable.ok)("tutor_model", () => {
   it("holds its shape in the table whatever a writer sends", async () => {
     const base = { ownerId: LOCAL_LEARNER_ID, position: 0, provider: "gemini", model: "ok" };
     for (const values of [
-      { ...base, provider: "openai" },
+      { ...base, provider: "not-a-provider" },
       { ...base, model: "" },
       { ...base, model: "has space" },
       { ...base, model: "x".repeat(TUTOR_MODEL_LIMITS.maxModelChars + 1) },

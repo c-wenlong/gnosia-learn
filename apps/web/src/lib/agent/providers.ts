@@ -25,6 +25,14 @@ export interface ProviderConfig {
   apiKeyEnv: string;
   /** Extra request headers (OpenRouter attribution, etc.) */
   extraHeaders?: Record<string, string>;
+  /** Where a person makes a key for this provider, for Settings' Add provider. */
+  keyUrl?: string;
+  /**
+   * How the provider lists its models, when it is not `GET <baseUrl>/models`
+   * answering OpenAI's `{ data: [{ id }] }`: another URL (absolute), another
+   * shape, or, for a provider with no list endpoint, the ids its docs name.
+   */
+  models?: { url?: string; shape?: "openai" | "dashscope"; known?: readonly string[] };
 }
 
 export interface ChatCompletionResult {
@@ -112,6 +120,20 @@ const DEFAULT_BASE_URL = {
   // OpenAI-compatible endpoint for Gemini Developer API
   gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
   openrouter: "https://openrouter.ai/api/v1",
+  openai: "https://api.openai.com/v1",
+  // Anthropic's OpenAI SDK compatibility layer, with Bearer auth.
+  anthropic: "https://api.anthropic.com/v1",
+  deepseek: "https://api.deepseek.com",
+  // The international Z.ai platform; bigmodel.cn is the China one.
+  glm: "https://api.z.ai/api/paas/v4",
+  // Model Studio's international (Singapore) compatible mode.
+  qwen: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  moonshot: "https://api.moonshot.ai/v1",
+  minimax: "https://api.minimax.io/v1",
+  mimo: "https://api.xiaomimimo.com/v1",
+  mistral: "https://api.mistral.ai/v1",
+  groq: "https://api.groq.com/openai/v1",
+  xai: "https://api.x.ai/v1",
 } as const satisfies Record<ProviderId, string>;
 
 function baseUrl(env: EnvMap, id: ProviderId, variable: string): string {
@@ -151,10 +173,76 @@ export function openRouterReferer(env: EnvMap): string {
  */
 export const DEFAULT_NVIDIA_MODEL = "google/gemma-4-31b-it";
 
+/**
+ * The providers added on 2026-10-05 (docs/TUTOR-MODELS.md, T13): each one's
+ * label, default model, where a key is made, and how it lists its models,
+ * from each provider's own docs on that day. Every one is called through its
+ * OpenAI-compatible chat endpoint with a Bearer key.
+ *
+ * Their server keys are read from `TUTOR_<ID>_API_KEY`, never the bare
+ * `<ID>_API_KEY`: `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are commonly
+ * exported for other tools (the studio strips the first from its agents for
+ * that reason), and the tutor must not start spending one because the shell
+ * that started the app happened to hold it. `TUTOR_<ID>_BASE_URL` and
+ * `TUTOR_<ID>_MODEL` override the endpoint and the default as for the first
+ * three.
+ */
+const ADDED_PROVIDERS: readonly {
+  id: Exclude<ProviderId, "nvidia" | "gemini" | "openrouter">;
+  model: string;
+  keyUrl: string;
+  models?: ProviderConfig["models"];
+  extraHeaders?: Record<string, string>;
+}[] = [
+  { id: "openai", model: "gpt-6-luna", keyUrl: "https://platform.openai.com/api-keys" },
+  {
+    id: "anthropic",
+    model: "claude-haiku-4-5",
+    keyUrl: "https://platform.claude.com/settings/keys",
+    // The list is paged, 20 by default; one page of up to 1000 holds every model.
+    models: { url: "/models?limit=1000" },
+    extraHeaders: { "anthropic-version": "2023-06-01" },
+  },
+  { id: "deepseek", model: "deepseek-flash", keyUrl: "https://platform.deepseek.com/api_keys" },
+  {
+    id: "glm",
+    model: "glm-4.7-flash",
+    keyUrl: "https://z.ai/manage-apikey/apikey-list",
+    // Z.ai has no list endpoint; these are the ids its docs and pricing page name.
+    models: { known: ["glm-5.3-flash", "glm-4.7-flash", "glm-4.5-flash"] },
+  },
+  {
+    id: "qwen",
+    model: "qwen3.8-flash",
+    keyUrl: "https://modelstudio.console.alibabacloud.com/ap-southeast-1/model/settings/api-key",
+    // The list is Model Studio's native endpoint, not under compatible-mode.
+    models: { url: "https://dashscope-intl.aliyuncs.com/api/v1/models", shape: "dashscope" },
+  },
+  { id: "moonshot", model: "kimi-k2.6", keyUrl: "https://platform.kimi.ai/console/api-keys" },
+  { id: "minimax", model: "MiniMax-M3", keyUrl: "https://platform.minimax.io/user-center/basic-information/interface-key" },
+  { id: "mimo", model: "mimo-v2.6-flash", keyUrl: "https://platform.xiaomimimo.com/#/console/api-keys" },
+  { id: "mistral", model: "mistral-small-latest", keyUrl: "https://console.mistral.ai/api-keys" },
+  { id: "groq", model: "openai/gpt-oss-20b", keyUrl: "https://console.groq.com/keys" },
+  { id: "xai", model: "grok-4.3", keyUrl: "https://console.x.ai/team/default/api-keys" },
+];
+
 /** Every provider, in the cascade's order, whether or not a key is set for it. */
 export function providerConfigs(
   env: EnvMap = process.env,
 ): ProviderConfig[] {
+  const added = ADDED_PROVIDERS.map((p): ProviderConfig => {
+    const prefix = `TUTOR_${p.id.toUpperCase()}`;
+    return {
+      id: p.id,
+      label: PROVIDER_LABELS[p.id],
+      baseUrl: baseUrl(env, p.id, `${prefix}_BASE_URL`),
+      model: env[`${prefix}_MODEL`]?.trim() || p.model,
+      apiKeyEnv: `${prefix}_API_KEY`,
+      keyUrl: p.keyUrl,
+      ...(p.models === undefined ? {} : { models: p.models }),
+      ...(p.extraHeaders === undefined ? {} : { extraHeaders: p.extraHeaders }),
+    };
+  });
   return [
     {
       id: "nvidia",
@@ -162,6 +250,7 @@ export function providerConfigs(
       baseUrl: baseUrl(env, "nvidia", "NVIDIA_BASE_URL"),
       model: env.NVIDIA_MODEL?.trim() || DEFAULT_NVIDIA_MODEL,
       apiKeyEnv: "NVIDIA_API_KEY",
+      keyUrl: "https://build.nvidia.com/explore/discover",
     },
     {
       id: "gemini",
@@ -169,6 +258,7 @@ export function providerConfigs(
       baseUrl: baseUrl(env, "gemini", "GEMINI_BASE_URL"),
       model: env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
       apiKeyEnv: "GEMINI_API_KEY",
+      keyUrl: "https://aistudio.google.com/apikey",
     },
     {
       id: "openrouter",
@@ -177,11 +267,13 @@ export function providerConfigs(
       // Auto-picks from currently available free models
       model: env.OPENROUTER_MODEL?.trim() || "openrouter/free",
       apiKeyEnv: "OPENROUTER_API_KEY",
+      keyUrl: "https://openrouter.ai/keys",
       extraHeaders: {
         "HTTP-Referer": openRouterReferer(env),
         "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Self-Learn",
       },
     },
+    ...added,
   ];
 }
 
@@ -748,10 +840,56 @@ export async function listProviderModels(
   credential: ProviderCredential,
   timeoutMs: number = MODEL_LIST_TIMEOUT_MS,
 ): Promise<ModelListResult> {
+  const { config } = credential;
+  // A provider with no list endpoint: the ids its docs name (T13).
+  if (config.models?.known !== undefined && config.models.url === undefined) {
+    return { ok: true, models: [...config.models.known].sort((a, b) => a.localeCompare(b)).map((id) => ({ id })) };
+  }
+  if (config.models?.shape === "dashscope") return listDashScopeModels(credential, timeoutMs);
+  const path = config.models?.url ?? "/models";
+  return fetchModelList(credential, path.startsWith("/") ? `${config.baseUrl}${path}` : path, timeoutMs);
+}
+
+/** The most pages read from a paged list (DashScope's), at its page size. */
+const MODEL_LIST_MAX_PAGES = 10;
+const DASHSCOPE_PAGE_SIZE = 100;
+
+/**
+ * Model Studio's native list (Alibaba Qwen, T13): `{ output: { total,
+ * models: [{ model }] } }`, paged by `page_no` and `page_size`. Read page by
+ * page until `total` is reached or `MODEL_LIST_MAX_PAGES`, each page through
+ * the same capped reader and id checks as an OpenAI-shape list.
+ */
+async function listDashScopeModels(credential: ProviderCredential, timeoutMs: number): Promise<ModelListResult> {
+  const url = credential.config.models?.url ?? `${credential.config.baseUrl}/models`;
+  const models: ListedModel[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; page <= MODEL_LIST_MAX_PAGES; page += 1) {
+    const result = await fetchModelList(credential, `${url}?page_no=${page}&page_size=${DASHSCOPE_PAGE_SIZE}`, timeoutMs, "dashscope");
+    if (!result.ok) return page === 1 ? result : { ok: true, models };
+    for (const m of result.models) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id);
+        models.push(m);
+      }
+    }
+    if (result.models.length < DASHSCOPE_PAGE_SIZE || (result.total !== undefined && models.length >= result.total)) break;
+  }
+  models.sort((a, b) => a.id.localeCompare(b.id));
+  return { ok: true, models };
+}
+
+/** One list request, read capped and checked. `total` is a paged list's own count, when it gives one. */
+async function fetchModelList(
+  credential: ProviderCredential,
+  url: string,
+  timeoutMs: number,
+  shape: "openai" | "dashscope" = "openai",
+): Promise<ModelListResult & { total?: number }> {
   const { config, apiKey } = credential;
   const secrets = [apiKey];
   try {
-    const res = await fetch(`${config.baseUrl}/models`, {
+    const res = await fetch(url, {
       method: "GET",
       headers: { Authorization: `Bearer ${apiKey}`, ...(config.extraHeaders ?? {}) },
       signal: AbortSignal.timeout(timeoutMs),
@@ -777,12 +915,14 @@ export async function listProviderModels(
     } catch {
       return { ok: false, status: res.status, message: "The provider's model list is not JSON." };
     }
-    const data = (body as { data?: unknown } | null)?.data;
+    const output = shape === "dashscope" ? (body as { output?: { models?: unknown; total?: unknown } } | null)?.output : undefined;
+    const data = shape === "dashscope" ? output?.models : (body as { data?: unknown } | null)?.data;
     if (!Array.isArray(data)) return { ok: false, status: res.status, message: "The provider's model list has no data array." };
+    const total = typeof output?.total === "number" ? output.total : undefined;
     const seen = new Set<string>();
     const models: ListedModel[] = [];
     for (const item of data.slice(0, MODEL_LIST_MAX_MODELS)) {
-      const raw = (item as { id?: unknown } | null)?.id;
+      const raw = shape === "dashscope" ? (item as { model?: unknown } | null)?.model : (item as { id?: unknown } | null)?.id;
       if (typeof raw !== "string") continue;
       const id = listedId(config.id, raw.trim());
       if (id.length === 0 || id.length > TUTOR_MODEL_LIMITS.maxModelChars || !MODEL_ID_PATTERN.test(id)) continue;
@@ -796,7 +936,7 @@ export async function listProviderModels(
       models.push(free === undefined ? { id } : { id, free });
     }
     models.sort((a, b) => a.id.localeCompare(b.id));
-    return { ok: true, models };
+    return total === undefined ? { ok: true, models } : { ok: true, models, total };
   } catch (err) {
     const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
     return {

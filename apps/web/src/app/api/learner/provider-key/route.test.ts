@@ -136,7 +136,7 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
       { provider: "openrouter", key: "short" },
       { provider: "openrouter", key: `${KEY} ${KEY}` },
       { provider: "openrouter" },
-      { provider: "openai", key: KEY },
+      { provider: "not-a-provider", key: KEY },
     ]) {
       const response = await routes.POST(request("POST", body));
       expect(response.status).toBe(400);
