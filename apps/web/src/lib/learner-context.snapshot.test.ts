@@ -41,8 +41,9 @@ function Probe() {
   useEffect(() => {
     held.learner = learner;
   });
-  const { notes, completed } = learner.state;
-  return createElement("p", null, `note=${notes.t1 ?? "none"} tick=${completed.t1 === true}`);
+  const { notes, completed, epoch } = learner.state;
+  const text = `note=${notes.t1 ?? "none"} tick=${completed.t1 === true}`;
+  return createElement("p", null, epoch > 0 ? `${text} epoch=${epoch}` : text);
 }
 
 /** The provider with every `fetch` held until answered, in order. */
@@ -130,9 +131,45 @@ describe("a snapshot during a write", () => {
     draw({ notes: { t1: "old" } });
     expect(container.textContent).toBe("note=new tick=false");
     expect(router.refresh).toHaveBeenCalledTimes(1);
-    // The database's answer after that is adopted as it is, whatever it says.
+    // A second snapshot from before the write, on its way too, is held back.
+    draw({ notes: { t1: "old" } });
+    expect(container.textContent).toBe("note=new tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(2);
+    // Then the re-read, which shows it.
+    draw({ notes: { t1: "new" } });
+    expect(container.textContent).toBe("note=new tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("adopts the database's answer once re-reading keeps disagreeing: another tab wrote since", async () => {
+    const { container, draw, answer } = setup({ notes: { t1: "old" } });
+    act(() => held.learner!.updateNote("t1", "new"));
+    await answer();
+    draw({ notes: { t1: "another tab" } });
+    draw({ notes: { t1: "another tab" } });
+    expect(container.textContent).toBe("note=new tick=false");
     draw({ notes: { t1: "another tab" } });
     expect(container.textContent).toBe("note=another tab tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(2);
+    // Confirmed and forgotten: the next snapshot is adopted with no question.
+    draw({ notes: { t1: "later" } });
+    expect(container.textContent).toBe("note=later tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks a reset by its epoch, which moves even when there was nothing to clear", async () => {
+    const { container, draw, answer } = setup({});
+    let reset: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      reset = held.learner!.resetCourse(["t1"]);
+    });
+    expect(container.textContent).toBe("note=none tick=false epoch=1");
+    await answer();
+    expect(await reset).toBe(true);
+    draw({ epoch: 0 });
+    expect(container.textContent).toBe("note=none tick=false epoch=1");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    draw({ epoch: 1 });
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 

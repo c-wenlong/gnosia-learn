@@ -103,6 +103,9 @@ interface ApiResponse {
 
 const UNREACHABLE = "Not saved: the database is unreachable.";
 
+/** How many times a snapshot that disagrees with a stored write is read again. */
+const MAX_REREADS = 2;
+
 async function post(path: string, body: unknown): Promise<ApiResponse> {
   let response: Response;
   try {
@@ -215,6 +218,8 @@ export function LearnerProvider({
   const stored = useRef(new Map<string, Stored>());
   /** A snapshot that arrived while writes were in flight, waiting for them. */
   const held = useRef<LearnerState | null>(null);
+  /** Snapshots read again since `stored` was last confirmed. */
+  const rereads = useRef(0);
 
   /**
    * The server is the authority. When a navigation or a `router.refresh()`
@@ -232,7 +237,10 @@ export function LearnerProvider({
    * when it shows every stored write it is adopted, and those writes are
    * confirmed and forgotten. When it does not, it is stale or another tab
    * wrote since, and which is newer is the database's to say, so it is read
-   * again once and the snapshot after that is adopted as it is. Asking only
+   * again. The writes stay recorded, since more than one stale snapshot can
+   * be on its way (a navigation and a refresh both started during the write).
+   * After `MAX_REREADS` that still disagree, the database's answer is adopted
+   * as it is: another tab or the terminal wrote since. Asking only
    * when a snapshot disagrees keeps it to one server render per navigation
    * in the usual case, where the last write (often `lastVisited`) landed long
    * before the next click.
@@ -247,14 +255,18 @@ export function LearnerProvider({
         return;
       }
       held.current = null;
-      const writes = [...stored.current.values()];
-      stored.current.clear();
-      if (writes.every(({ pick, value }) => sameValue(pick(snapshot), value))) {
-        current.current = snapshot;
-        setState(snapshot);
+      const shown = [...stored.current.values()].every(({ pick, value }) =>
+        sameValue(pick(snapshot), value),
+      );
+      if (!shown && rereads.current < MAX_REREADS) {
+        rereads.current += 1;
+        router.refresh();
         return;
       }
-      router.refresh();
+      stored.current.clear();
+      rereads.current = 0;
+      current.current = snapshot;
+      setState(snapshot);
     },
     [router],
   );
@@ -453,16 +465,25 @@ export function LearnerProvider({
   );
 
   const resetCourse = useCallback(
-    (topicIds: string[]) =>
-      commit(
+    (topicIds: string[]) => {
+      // The server moves the epoch up by one in the same statement, so a
+      // snapshot that shows this reset has at least the epoch it made (more
+      // if another tab reset since). A reset with nothing to clear differs
+      // from the snapshot before it only here.
+      const epoch = current.current.epoch + 1;
+      return commit(
         // A barrier over every row the reset deletes. Without it a note still
         // in flight for one of these topics could land after the delete and
         // recreate the row, while the page went on showing it as cleared.
         topicIds.flatMap((id) => [`progress:${id}`, `note:${id}`]),
         (previous) => resetCourseProgress(previous, topicIds),
         () => post("reset", { curriculumItemIds: topicIds }),
-        (state) => topicIds.map((id) => [state.completed[id] === true, state.notes[id] ?? null]),
-      ),
+        (state) => [
+          state.epoch >= epoch,
+          topicIds.map((id) => [state.completed[id] === true, state.notes[id] ?? null]),
+        ],
+      );
+    },
     [commit],
   );
 
