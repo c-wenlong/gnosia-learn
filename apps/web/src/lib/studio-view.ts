@@ -116,6 +116,15 @@ export interface StudioView {
    */
   talk: boolean;
   /**
+   * The press was Make a video of this (`&make=video`, D86 of
+   * docs/STUDIO-CHAT-FIRST.md): the conversation opens on the diagram as
+   * Extend's does, sends no opener, and its composer starts with the Video
+   * chip and a sentence the person edits and sends. In the URL for the same
+   * reason as `talk`: storage that cannot be read must not turn it into a
+   * paid opener. Meaningless without `extend`, and dropped with it.
+   */
+  makeVideo: boolean;
+  /**
    * Whether the job panel may open an event stream at all.
    *
    * `?stream=off` forces the polling fallback that a dropped connection would
@@ -162,6 +171,7 @@ export const DEFAULT_VIEW: StudioView = {
   job: null,
   extend: null,
   talk: false,
+  makeVideo: false,
   stream: true,
   shot: null,
   draft: null,
@@ -221,13 +231,14 @@ export function parseView(params: RawParams): StudioView {
  */
 export function parsePanel(
   params: RawParams,
-): Pick<StudioView, "job" | "extend" | "talk" | "stream" | "shot" | "draft"> {
+): Pick<StudioView, "job" | "extend" | "talk" | "makeVideo" | "stream" | "shot" | "draft"> {
   const shot = one(params.shot);
   const job = one(params.job);
   return {
     job,
     extend: one(params.extend),
     talk: one(params.extend) !== null && one(params.talk) === "1",
+    makeVideo: one(params.extend) !== null && one(params.make) === "video",
     stream: (one(params.stream) ?? "on") !== "off",
     // A picture belongs to a job, so `?shot=after` on its own names nothing and
     // is read as nothing rather than as a main area that cannot say whose
@@ -258,6 +269,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
   if (next.job !== null) params.set("job", next.job);
   if (next.extend !== null) params.set("extend", next.extend);
   if (next.extend !== null && next.talk) params.set("talk", "1");
+  if (next.extend !== null && next.makeVideo) params.set("make", "video");
   if (next.draft !== null) params.set("draft", next.draft);
   if (!next.stream) params.set("stream", "off");
   if (next.shot !== null && next.job !== null) params.set("shot", next.shot);
@@ -277,7 +289,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
  */
 export function panelSignature(params: RawParams): string {
   const panel = parsePanel(params);
-  return JSON.stringify([panel.draft, panel.job, panel.extend, panel.talk, panel.shot, one(params.sel), one(params.settings) === "1"]);
+  return JSON.stringify([panel.draft, panel.job, panel.extend, panel.talk, panel.makeVideo, panel.shot, one(params.sel), one(params.settings) === "1"]);
 }
 
 /** `URLSearchParams` as the page's `searchParams`, a repeated name as a list. */
@@ -291,7 +303,7 @@ export function rawParamsOf(search: URLSearchParams): RawParams {
 }
 
 /** The parameters that name a panel, and the three a verb's outcome rides on (`readOutcome`). */
-const PANEL_KEYS = new Set(["draft", "job", "extend", "talk", "sel", "shot", "settings", "v", "ok", "m"]);
+const PANEL_KEYS = new Set(["draft", "job", "extend", "talk", "make", "sel", "shot", "settings", "v", "ok", "m"]);
 
 /** Everything but the panel: the filters, the sort and the layout, as one string. */
 function viewPart(search: URLSearchParams): string {
@@ -390,6 +402,7 @@ export function panelHref(
     job?: string | null;
     extend?: string | null;
     talk?: boolean;
+    makeVideo?: boolean;
     shot?: "before" | "after" | null;
     draft?: string | null;
     selected?: string | null;
@@ -417,12 +430,19 @@ export function panelHref(
   if (patch.extend !== undefined) {
     if (patch.extend === null) params.delete("extend");
     else params.set("extend", patch.extend);
-    // A new press, or none, is not the Talk it through one unless it says so.
+    // A new press, or none, is not the Talk it through one unless it says so,
+    // nor the Make a video one.
     if (patch.talk !== true) params.delete("talk");
+    if (patch.makeVideo !== true) params.delete("make");
   }
   if (patch.talk === true && params.get("extend") !== null) params.set("talk", "1");
   if (patch.talk === false) params.delete("talk");
-  if (params.get("extend") === null) params.delete("talk");
+  if (patch.makeVideo === true && params.get("extend") !== null) params.set("make", "video");
+  if (patch.makeVideo === false) params.delete("make");
+  if (params.get("extend") === null) {
+    params.delete("talk");
+    params.delete("make");
+  }
   if (patch.shot !== undefined) {
     if (patch.shot === null) params.delete("shot");
     else params.set("shot", patch.shot);
@@ -467,12 +487,20 @@ export function conversationHref(path: string, draftId: string): string {
 /**
  * An Extend press on `name`, from wherever a person is: on `/studio` it keeps
  * the filters and swaps the panel, and from the canvas route it goes to the
- * grid, where the Extend panel lives.
+ * grid, where the Extend panel lives. `video` makes it Make a video of this
+ * (D86), the same press with the Video chip waiting in the composer.
  */
-export function extendFromHref(path: string, name: string, options: { talk?: boolean } = {}): string {
+export function extendFromHref(path: string, name: string, options: { talk?: boolean; video?: boolean } = {}): string {
   const [base] = path.split("?");
   const from = base === "/studio" ? path : "/studio";
-  return panelHref(from, { extend: name, talk: options.talk === true, draft: null, job: null, selected: null });
+  return panelHref(from, {
+    extend: name,
+    talk: options.talk === true,
+    makeVideo: options.video === true,
+    draft: null,
+    job: null,
+    selected: null,
+  });
 }
 
 /** Add or remove one topic chip, which is what clicking a chip means. */
@@ -752,10 +780,11 @@ export function readOutcome(params: RawParams): VerbReport | null {
 /**
  * Extend, from anywhere but the grid: `/studio?extend=<name>`, the panel that
  * opens a conversation on that diagram. On the grid itself the tile and its
- * panel patch the current view instead, so the filters survive.
+ * panel patch the current view instead, so the filters survive. `video` is
+ * Make a video of this (`&make=video`, D86).
  */
-export function extendHref(name: string): string {
-  return panelHref("/studio", { extend: name });
+export function extendHref(name: string, options: { video?: boolean } = {}): string {
+  return panelHref("/studio", { extend: name, makeVideo: options.video === true });
 }
 
 /**
