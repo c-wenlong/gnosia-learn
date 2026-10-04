@@ -16,9 +16,11 @@ import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
 import { diagramAvailability, videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
+import { makeVideoTitle } from "@/lib/studio-extend";
 import { readVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
+  CLOSED,
   displayTitle,
   panelHref,
   panelSignature,
@@ -204,7 +206,7 @@ export default async function StudioPage({
     topicTitles,
   );
   // Close drops every parameter the panel reads, and keeps the filters.
-  const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
+  const closeHref = panelHref(path, CLOSED);
   const titles = Object.fromEntries(listing.diagrams.map((diagram) => [diagram.name, displayTitle(diagram)]));
   // A video's title by slug, for a Change conversation's header. Its own map:
   // a diagram and a video can share a slug.
@@ -212,15 +214,26 @@ export default async function StudioPage({
   const dialog = view.shot !== null ? null : panelFor();
 
   function panelFor() {
-    // The settings, a conversation, a job and a tile are `PanelHost`'s, which
-    // opens and closes them in the browser without coming back here.
+    // The settings, a conversation, a job, a tile and a video's preview are
+    // `PanelHost`'s, which opens and closes them in the browser without
+    // coming back here.
     if (view.settings || view.draft !== null || view.job !== null) return null;
     if (view.extend !== null) {
       const title = titleOf(titles, view.extend) ?? view.extend;
       return (
-        <StudioDialog key="conversation" closeHref={closeHref} label={`Extending ${title}`} tall>
-          {/* Keyed by name: Extend on another diagram is another press, with its own post. */}
-          <ExtendStart key={view.extend} name={view.extend} title={title} path={path} listed={titleOf(titles, view.extend) !== null} talk={view.talk} video={videoState} />
+        <StudioDialog key="conversation" closeHref={closeHref} label={view.makeVideo ? makeVideoTitle(title) : `Extending ${title}`} tall>
+          {/* Keyed by name and press: Extend on another diagram, or Make a
+              video of this one, is another press, with its own post. */}
+          <ExtendStart
+            key={`${view.extend}:${view.makeVideo ? "video" : "extend"}`}
+            name={view.extend}
+            title={title}
+            path={path}
+            listed={titleOf(titles, view.extend) !== null}
+            talk={view.talk}
+            makeVideo={view.makeVideo}
+            video={videoState}
+          />
         </StudioDialog>
       );
     }
@@ -240,6 +253,7 @@ export default async function StudioPage({
         video={videoState}
         diagramAgent={diagramState}
         diagrams={listing.diagrams}
+        videos={allVideos}
         jobs={jobRows}
         drafts={drafts}
       >
@@ -258,10 +272,18 @@ export default async function StudioPage({
                 aria-hidden
                 className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_45%_at_50%_45%,color-mix(in_oklab,var(--accent)_16%,transparent),transparent)]"
               />
-              <div className="relative mx-auto flex w-full max-w-3xl -translate-y-4 flex-col items-center gap-7">
-                <h1 id="studio-home" className="text-center font-display text-[30px] font-semibold leading-tight text-text md:text-[40px]">
-                  What shall we make?
-                </h1>
+              {/* z-20: the translate makes this its own stacking context, and the
+                  composer's @ menu opens downwards out of it; without the
+                  index the assets panel after it paints over the menu. */}
+              <div className="relative z-20 mx-auto flex w-full max-w-3xl -translate-y-4 flex-col items-center gap-7">
+                <div className="flex flex-col items-center gap-2.5">
+                  <h1 id="studio-home" className="text-center font-display text-[30px] font-semibold leading-tight text-text md:text-[40px]">
+                    What shall we make?
+                  </h1>
+                  <p className="text-center font-display text-[16px] leading-snug text-text2 md:text-[19px]">
+                    Talk an idea through, then make it a diagram or a video.
+                  </p>
+                </div>
                 <HomeComposer path={path} video={videoState} />
               </div>
             </section>

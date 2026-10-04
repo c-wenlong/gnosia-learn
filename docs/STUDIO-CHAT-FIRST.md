@@ -647,7 +647,7 @@ live preview ("The job in the grid" below):
 
 ### Home and the full-screen conversation
 
-*Since 2026-10-04 (D81, D82). It replaces the plus card and moves the
+*Since 2026-10-04 (D81, D82, D83, D84, D88). It replaces the plus card and moves the
 conversation out of the dialog; the sections after this one describe what
 came before where they say so.*
 
@@ -658,7 +658,7 @@ studio's own:
 | | Home (`/studio`) | A conversation (`?draft=<id>`) |
 | --- | --- | --- |
 | Sidebar | New chat, the five learning destinations, then the history | The same, the open conversation marked |
-| Main | "What shall we make?" and the composer, filling the first screen, then the assets panel: the strip (search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
+| Main | "What shall we make?", a line under it, and the composer, filling the first screen, then the assets panel: the strip (the kind filter, search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
 
 *Since D83:* the composer has the first screen to itself, over a soft wash
 of the accent, and the assets sit in a rounded panel under it whose head
@@ -666,6 +666,38 @@ and the top of the first row are all that show until the page scrolls, as
 Lovable lays out its projects. The strip is the panel's head, below its top
 edge. Tiles are 200px at least (they were 260px), so a laptop shows five or
 six in a row.
+
+*Since D85:* every tile says what it is, and a video plays where it is.
+
+- **Kind badge.** A "Video" or "Diagram" label over the thumbnail's top
+  left, radius 8 (`KindBadge`): translucent black over a video's poster,
+  `--surface2` with a `--border` hairline over a diagram's light mat. The
+  in-progress job cards carry one too. A list row has no room over its 48px
+  thumbnail, so the label sits beside it from 640px up; on a phone the
+  thumbnail's mat (black or light) is the tell.
+- **Lift.** A tile, or a job card, rises 3px with a deeper shadow under the
+  pointer or keyboard focus (`TILE_LIFT`), and only changes colour under
+  reduced motion. Tailwind's translate and shadow, so a selected tile's ring
+  composes with it.
+- **Kind filter.** All, Diagrams and Videos, a segmented control at the
+  start of the strip. It is `?kind=diagram|video` in the URL, absent for
+  all, a view parameter like Sort: `browserViewMove` lets it redraw the grid
+  in the browser with no server render. It narrows the tiles and the job
+  cards making something new (a new diagram's job is a diagram), and the
+  search box says what it searches. The topic chips still count both kinds.
+- **Preview.** Pressing a video tile opens `?play=<slug>`: a 960px dialog
+  over the grid (`StudioDialog`'s `wide`, a sheet on a phone) with the
+  video playing in the library's `VideoPlayer` from the library's own
+  routes (`/api/assets/video:<slug>/file` and `/poster`), its title, Change
+  (the tile's, a conversation on the video) and Open (the library page, with
+  its chapters and transcript and the `from` link back to this view).
+  Escape, Close and the backdrop close it, and Back and Forward move it,
+  since `PanelHost` draws it from the URL like a tile's panel. A modified
+  click (cmd, ctrl, middle) on the tile is still the library link, so a new
+  tab gets the full page. Opening any other panel closes it (`panelHref`).
+  A file missing from the blob store says to make the video again from the
+  studio (V17 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)), not to run an
+  upload, here and on the library page alike (`problemSource`).
 
 **The home composer** (`HomeComposer`) is the one way into a new
 conversation. It is the conversation's own `MentionComposer`, tags and all.
@@ -676,6 +708,35 @@ it has read its empty record, the way an Extend press hands over its first
 message. A refusal brings the person home with the words still in the box
 and the reason under it. Nothing is made until something is sent, so New
 chat is simply the home view, its composer focused.
+
+*Since D88:* the heading has a line under it in the display serif, muted:
+"Talk an idea through, then make it a diagram or a video." The composer is a
+box, laid out as Gauth's Atlas prompt box is
+([reference](design/reference/gauth/components.md)): the field three lines
+tall on top, and a row inside the same frame under it holding the plus, a
+Diagram and a Video toggle, and a round Send at the right. It is the kit
+`MentionComposer` with `layout="box"` and the toggles as its `toolbar`; the
+conversation and the concept tutor keep the row layout, a 52px field with the
+Send pill beside it. In the box the @ menu opens under the frame, beside the
+plus that opens it.
+
+The toggles work on the message, not on a setting beside it. A press puts
+that kind's chip, and a space of its own, at the start of the message and
+focuses the field; a second press takes out exactly what the first put in,
+so toggling never eats a space the person typed. The caret, or a selection,
+stays where the person left it, moved along by the chip
+(`keepCaretThrough` on the composer's handle), rather than jumping to the
+end. Neither press ever sends. A
+toggle shows pressed (`aria-pressed`, the accent's tint) whenever its kind's
+chip is in the message, however it got there, typed with `@` or picked from
+the plus included, so the two buttons always say what Send will ask for. A
+kind `mentionOptions` gives a reason for, such as video turned off by the
+doctor, is `aria-disabled` with that reason as its description and tooltip,
+and a press adds nothing; one already in the message can still be taken out.
+The rules are `hasMention`, `withMention`, `withoutMention` and
+`toggleMention` in `mention-text.ts`. Because they change the value rather
+than the editor, the plain textarea that stands in when Lexical will not load
+is a box with the same toggles, and they still tag there.
 
 **The history** (`ChatHistory`, in the app's sidebar) lists every conversation but one closed
 with Start over: talking, briefed, drawing and done (`LISTED_STATES`), under
@@ -717,9 +778,9 @@ sliding back when focus and the pointer have both left.
 dialog. Nothing is modal, so the sidebar stays usable, and there is no Close:
 New chat or another row is the way out. The home view stays mounted under it,
 hidden, so its scroll and anything typed in it survive the trip. A job on its
-own, a tile's panel, the settings and an Extend press are still dialogs over
-the home view, and an Extend press becomes a full-screen conversation once
-its draft exists.
+own, a tile's panel, the settings, an Extend press and a video's preview
+(D85) are still dialogs over the home view, and an Extend press becomes a
+full-screen conversation once its draft exists.
 
 From 768px up the sidebar folds to a 60px rail of icons, as ChatGPT's does,
 and remembers that in a cookie (`gnosia-sidebar`, D84), so the first paint
@@ -892,6 +953,16 @@ carries it too. It creates a draft with `source`, which puts the EXTENDING
 block in the planner's prompt, and opens the chat with the diagram's thumbnail
 pinned at the top of the thread at 160px tall. The planner's first reply names
 what it sees in the diagram and asks what to add.
+
+*Since D86:* the panel carries Make a video of this beside Extend, and the
+canvas page's toolbar carries Make a video. It is the same press
+(`?extend=<name>&make=video`, the same `POST /api/drafts { source }` and the
+same panel while the diagram is read), with two differences: no opener is
+sent, and the composer starts with the Video chip and "Make a video that
+explains this diagram.", which the person edits and sends. The header and the
+studio's unpaid opening turn speak of a video in the tab that pressed it. When
+the video doctor fails, the panel's button is disabled with its reason and the
+toolbar's is left out.
 
 ### Narrow widths, keyboard and focus
 
@@ -1330,6 +1401,79 @@ would keep the studio's own component, but the list would be torn down and
 redrawn on every move between the studio and another page, and it could not
 be drawn on the server.
 
+### D85. Tiles say their kind, the grid filters by it, and a video previews in place
+
+**Verdict:** every tile carries a "Video" or "Diagram" badge over its
+thumbnail and lifts a few pixels on hover; the strip starts with an All,
+Diagrams and Videos control written to the URL as `?kind=`; and pressing a
+video tile plays it in a large dialog (`?play=<slug>`) with Open and Change
+under it, instead of leaving for the library page.
+
+**Why:** since videos joined the grid (STUDIO-VIDEOS.md) the two kinds share
+one order, and a poster on black and a diagram on its mat were the only
+tell; the owner asked for the Gauth Atlas grid's shape (its story cards,
+video badge, play disc and story preview), in our tokens. Leaving the
+studio to watch a video lost the grid, its scroll and its filters, and the
+library page took a server render to reach and another to come back. The
+preview plays from the routes the library page already uses, so nothing new
+serves video bytes, and the full page stays one press away. The filter is a
+view parameter like Sort because it changes what the grid draws of what the
+page already holds, which is what `browserViewMove` exists for. The lift's
+shadow is the one the kit's "no shadows" rule (DESIGN.md) gives way on, as
+the studio's hover controls already do; on a dark ground it barely shows,
+and the 3px rise carries the hover there.
+
+**Rejected:** a kind facet inside Display (one press more for the filter a
+mixed grid most needs, and hidden where nobody looks); a separate
+`/studio/v/<slug>` route for the preview (a server render per open, the
+cost `PanelHost` exists to avoid); playing inline in the tile (a 200px
+picture is too small to judge a video by, and a grid of autoplaying tiles
+is noise); and dropping the library link from the tile (a new tab with the
+chapters and transcript is still what a modified click should give).
+
+### D86. A video of a diagram is a Video tag in a conversation opened on it
+
+**Verdict:** Make a video of this, in a diagram's panel and on the canvas
+toolbar, opens the conversation Extend opens (a draft with `source` naming the
+diagram, so the planner has its EXTENDING block), sends nothing, and leaves
+the Video chip and "Make a video that explains this diagram." in the composer.
+The person reads it, edits it if they like, and presses Send; the planner
+answers with a new video brief (`mode: "new"`), and Make video queues it like
+any other. The runner is unchanged: a draft opened on a diagram already
+carries every kind the machine has (`plannerKinds`), the video section of
+the combined prompt, and the EXTENDING block, and `prepare` makes a new video
+from any draft. A `change` brief naming the diagram's slug is still refused
+(`change-not-in-conversation`), since the diagram is not a video the
+conversation opened on. So when a studio video already has the diagram's
+slug (a diagram and a video of one idea share one), the press's refusal no
+longer offers the change it cannot make: `prepare` rewords the runner's
+`slug-taken` refusal into "give the new video a slug no video uses", and the
+STUDIO note carries that to the planner's next brief.
+`services/studio/test/mentions.test.ts`, "a video of a diagram", holds all of
+it with the fake `claude`. The button is disabled with the
+video doctor's reason when videos cannot be made (`kindUnavailable`), and
+left out of the crowded canvas toolbar then.
+
+**Why:** the owner asked for a one-press way from a diagram to a video, after
+Gauth's story page, which puts Generate Video beside its picture
+(`docs/design/reference/gauth/components.md`). The studio already had every
+piece: a conversation opened on the diagram, a tag that orders a brief, and a
+composer an opener can fill (a video's Change does it with the same chip,
+STUDIO-MENTIONS.md 2c). Prefilling rather than sending keeps the rule every
+other hand-off follows: nothing is paid for until the person presses Send.
+
+**Rejected:** a `sourceKind` or purpose on the draft telling the planner "make
+a video of this" (a runner and prompt change for what the person's own
+sentence already says, and every extend draft's prompt is quoted and tested
+byte for byte); sending the sentence on arrival, as Extend sends its opener
+(a paid turn the person did not press, for a video they may want to shape
+first); and a separate button that queues a video job directly from the
+diagram (no brief to read, no script to approve, and the video agent draws
+from the brief alone). The header and the opening turn say "video" only in
+the tab that pressed the button: the runner records no purpose, so after a
+reload the conversation reads as an Extend one until the first brief names
+it, a cost judged smaller than a schema change.
+
 ### D87. The history is searched by the runner, from a field under New chat
 
 **Verdict:** the app's sidebar (D84) has a "Search conversations" field under
@@ -1362,6 +1506,33 @@ the concept are what a row shows, so they are what a person remembers a
 conversation by, and a later phase can index the rest); a separate search
 route (`list` already has the state, cursor and limit); and a modal search, as
 ChatGPT has, which hides the history while it is used.
+
+### D88. The home composer is a box with Diagram and Video toggles
+
+**Verdict:** the home composer is a box: the field three lines tall on top,
+and inside the frame under it the plus, a Diagram and a Video toggle, and a
+round Send. A toggle adds or removes its kind's chip in the message and never
+sends, and shows pressed whenever that chip is in the message, typed tags
+included. A muted line under the heading says what the page is for. The box
+is a `layout` option on the kit composers, so the conversation and the tutor
+keep their row.
+
+**Why:** the owner pointed at Gauth: its Atlas page opens on a tall prompt
+box with its controls inside it, and its Homework page shows the subjects as
+buttons under the prompt. A one-line field read as a search box, and the @
+menu was the only way to learn that a diagram or a video could be asked for;
+two buttons with the kinds' names say it before anything is typed. Making the
+toggle a view of the chips, rather than a mode of its own, keeps one source
+of truth for what a message asks for (D57): what is pressed is what the runner
+receives as tags, and there is no state for the two to disagree in.
+
+**Rejected:** a toggle that sets a mode outside the message (two places to say
+what to make, which could disagree with a typed `@video`); a toggle that
+sends, or starts a conversation, on its own (a bare tag gives the planner
+nothing to go on, T15); suggested prompts under the box (the owner removed
+that idea); Atlas's glow shadow (the kit has no shadows, DESIGN.md); and a
+second composer component for the home view, which would have forked the
+keys, the menu and the fallback that `MentionComposer` already has.
 
 ## Later: other kinds of asset
 

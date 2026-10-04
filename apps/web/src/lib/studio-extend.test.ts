@@ -16,7 +16,11 @@ import {
   takePrefill,
   talkItThroughText,
   talkTarget,
+  MAKE_VIDEO_WORDS,
+  makeVideoTitle,
+  makeVideoValue,
 } from "./studio-extend";
+import { openerValue } from "./studio-cards";
 import { RUNNER_DOWN } from "./studio-drafts";
 
 /** A `Storage` in memory, and one whose every call throws like a blocked one. */
@@ -316,6 +320,54 @@ describe("the opener handed to the conversation", () => {
   });
 });
 
+describe("Make a video of this (D86)", () => {
+  it("starts the composer with the Video chip and the sentence, and never a first turn", () => {
+    const value = makeVideoValue({ ok: true, reason: null });
+    expect(value).toEqual({ text: `@video ${MAKE_VIDEO_WORDS}`, mentions: [{ kind: "video", start: 0, end: 6 }] });
+    // Unknown availability reads as available, as the menu reads it.
+    expect(makeVideoValue(null)).toEqual(value);
+    // Nothing queued: the press sends nothing, whatever it holds.
+    expect(firstTurn(null, true)).toBeNull();
+    expect(makeVideoTitle("Dot product")).toBe("A video of Dot product");
+  });
+
+  it("leaves the words without a chip when the video doctor says no", () => {
+    expect(makeVideoValue({ ok: false, reason: "manimkc is not installed" })).toEqual({ text: MAKE_VIDEO_WORDS, mentions: [] });
+  });
+
+  it("reaches the conversation's composer with its chip where it was, and sends nothing", () => {
+    const store = memory();
+    const value = makeVideoValue({ ok: true, reason: null });
+    leaveOpener(store, "dv", { send: null, sendMentions: [], compose: value.text, composeMentions: value.mentions, source: "dot-product" });
+    const opener = takeOpener(store, "dv")!;
+    expect(opener.send).toBeNull();
+    expect(openerValue(opener)).toEqual(value);
+  });
+
+  it("does not take the key an Extend press on the same diagram left, nor leave it one", () => {
+    const store = memory();
+    let minted = 0;
+    const fresh = () => `k${++minted}`;
+    const extend = extendKey(store, "dot-product", fresh, 1_000);
+    const video = extendKey(store, "dot-product", fresh, 2_000, "video");
+    expect(video).not.toBe(extend);
+    // A reload of the video press finds its own draft.
+    expect(extendKey(store, "dot-product", fresh, 3_000, "video")).toBe(video);
+    // And Extend after it is its own press again.
+    expect(extendKey(store, "dot-product", fresh, 4_000)).not.toBe(video);
+  });
+
+  it("remembers that a draft was opened for a video, in this tab only", async () => {
+    const { arrivingPurpose, arrivingSource, noteArrival } = await import("./studio-extend");
+    expect(arrivingPurpose("fresh-v")).toBeNull();
+    noteArrival("dv1", "dot-product", "video");
+    noteArrival("de1", "dot-product");
+    expect(arrivingPurpose("dv1")).toBe("video");
+    expect(arrivingSource("dv1")).toBe("dot-product");
+    expect(arrivingPurpose("de1")).toBe("extend");
+  });
+});
+
 describe("the picture across the hand-off", () => {
   it("remembers which diagram a draft was just opened on, and nothing else", async () => {
     const { arrivingSource, noteArrival } = await import("./studio-extend");
@@ -345,6 +397,23 @@ describe("an Extend press run twice for the same draft", () => {
   it("keeps the earlier words when only a message was queued since", () => {
     const since = { ...rerun, send: "Show it on a graph" };
     expect(carryOpener(queued, since, true)).toMatchObject({ send: "Show it on a graph", compose: "and label it" });
+  });
+  it("never lets Make a video of this's own sentence replace words typed before a reload (#305 review)", () => {
+    // Send pressed during the read, then more typed, then a reload after the hand-off was saved.
+    const value = makeVideoValue({ ok: true, reason: null });
+    const before = { send: "@video Show the projection", sendMentions: [{ kind: "video" as const, start: 0, end: 6 }], compose: "and keep it short", composeMentions: [], source: "dot-product" };
+    const reloaded = { send: null, sendMentions: [], compose: value.text, composeMentions: value.mentions, source: "dot-product" };
+    expect(carryOpener(before, reloaded, false, { composeUntouched: true })).toMatchObject({
+      send: "@video Show the projection",
+      sendMentions: before.sendMentions,
+      compose: "and keep it short",
+    });
+    // Words the person typed over the sentence since are theirs, and win.
+    const edited = { ...reloaded, compose: "@video Only the second panel", composeMentions: [{ kind: "video" as const, start: 0, end: 6 }] };
+    expect(carryOpener(before, edited, false, { composeUntouched: false })).toMatchObject({ compose: "@video Only the second panel" });
+    // An untouched sentence over an untouched sentence stays the sentence.
+    const first = { ...reloaded };
+    expect(carryOpener(first, reloaded, false, { composeUntouched: true })).toMatchObject({ compose: value.text, composeMentions: value.mentions });
   });
 });
 

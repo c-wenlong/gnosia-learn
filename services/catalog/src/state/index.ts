@@ -86,7 +86,7 @@ export {
 } from "../poster/recipe";
 
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
-export { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";
+export { bumpEpoch, ensureLearner, readDisplayName, withLearnerLock, writeDisplayName } from "./learner";
 export {
   endSession,
   ensureSession,
@@ -208,6 +208,7 @@ export {
   assetsByIds,
   assetsForCollection,
   assetsForConcept,
+  assetsForConcepts,
   assetsForTopic,
   byKind,
   conceptsForAsset,
@@ -231,5 +232,6 @@ export {
   type KnowledgeBase,
   type MasteryLabel,
 } from "./knowledge-base";
+export { conceptCheckCounts } from "./checks";
 export { topicTitles, type TopicTitles } from "./topics";
 export { notePaths, type NotePaths } from "./notes";

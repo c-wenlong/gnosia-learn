@@ -1,4 +1,5 @@
 import { learner, LOCAL_LEARNER_ID } from "@self-learn/schema";
+import { cleanDisplayName, DISPLAY_NAME_MAX } from "@self-learn/schema/shared";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -21,6 +22,34 @@ export async function ensureLearner(
 ): Promise<string> {
   await db.insert(learner).values({ id: learnerId }).onConflictDoNothing();
   return learnerId;
+}
+
+/** The learner's name, cleaned (`cleanDisplayName`), or null when none is set. */
+export async function readDisplayName(
+  db: CatalogDatabase,
+  learnerId: string = LOCAL_LEARNER_ID,
+): Promise<string | null> {
+  const rows = await db.select({ name: learner.displayName }).from(learner).where(eq(learner.id, learnerId));
+  return cleanDisplayName(rows[0]?.name);
+}
+
+/**
+ * Set the learner's name, or clear it with null or an empty string. Stores
+ * the cleaned value, and refuses one past `DISPLAY_NAME_MAX` characters (a
+ * `RangeError`) rather than cutting it, whoever the caller is.
+ */
+export async function writeDisplayName(
+  db: CatalogDatabase,
+  name: string | null,
+  learnerId: string = LOCAL_LEARNER_ID,
+): Promise<string | null> {
+  const cleaned = cleanDisplayName(name);
+  if (cleaned !== null && cleaned.length > DISPLAY_NAME_MAX) {
+    throw new RangeError(`A name is at most ${DISPLAY_NAME_MAX} characters; this one has ${cleaned.length}.`);
+  }
+  await ensureLearner(db, learnerId);
+  await db.update(learner).set({ displayName: cleaned, updatedAt: new Date() }).where(eq(learner.id, learnerId));
+  return cleaned;
 }
 
 /**

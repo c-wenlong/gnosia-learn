@@ -1,12 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
+import { KindBadge, KindWord, TILE_LIFT } from "@/components/studio/KindBadge";
+import { usePanelHost } from "@/components/studio/panel-host";
 import { Chip } from "@/components/studio/StudioChrome";
 import { useSheets } from "@/components/studio/video/use-video-job";
 import { useElapsed } from "@/lib/use-elapsed";
@@ -37,9 +38,10 @@ import { conversationHref, gridHref, panelHref, relativeTime } from "@/lib/studi
  * STUDIO-VIDEOS.md phase 2; "The job in the grid" in STUDIO-CHAT-FIRST.md).
  *
  * A landed video is a poster tile: the poster the gate cut, contained in the
- * tile's 4:3 frame on black, its length in the corner, a link to the library
- * page that plays it with its chapters, and Change on hover, which opens a
- * conversation on it. A video being made gets the diagram loader's pattern:
+ * tile's 4:3 frame on black, its length in the corner, and Change on hover,
+ * which opens a conversation on it. Pressing it plays the video in a preview
+ * dialog over the grid (`?play=`, D85 of STUDIO-CHAT-FIRST.md); a modified
+ * click still opens the library page that plays it with its chapters. A video being made gets the diagram loader's pattern:
  * a card after the plus card, or over its own tile when it is a change, with
  * the newest contact sheet blurred under a veil as the picture, the step and
  * the time in a bar at its foot, and Cancel. The contact sheet is what the
@@ -56,8 +58,13 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
   const slug = video.slug;
   const title = video.title ?? slug;
   return (
-    <div className="group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] transition-colors hover:bg-[var(--surface-hover)]">
-      <Link href={libraryHref(slug, gridHref(path))} aria-label={`Play ${title} in the library`} className="flex min-w-0 flex-col">
+    <div className={`group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] ${TILE_LIFT}`}>
+      <PanelLink
+        href={libraryHref(slug, gridHref(path))}
+        panel={panelHref(path, { play: slug })}
+        aria-label={`Play video: ${title}`}
+        className="flex min-w-0 flex-col"
+      >
         <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-black">
           {video.posterAssetId !== null ? (
             // eslint-disable-next-line @next/next/no-img-element -- a blob behind the asset route, which the optimiser cannot resize.
@@ -79,8 +86,10 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
             {video.updated !== "" && <span className="text-xs text-[var(--muted)]">{relativeTime(video.updated)}</span>}
           </div>
         </div>
-      </Link>
+      </PanelLink>
       <TileVideoJob slug={slug} title={title} poster={video.posterAssetId === null ? null : posterHref(video.posterAssetId)} path={path} />
+      {/* After a change job's loader, so the job does not hide what the tile is. */}
+      <KindBadge kind="video" />
       <div className="pointer-events-none absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
         <VideoChangeButton slug={slug} title={title} path={path} className={HOVER_CONTROL} />
       </div>
@@ -102,12 +111,15 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
           <img src={posterHref(video.posterAssetId)} alt="" loading="lazy" className="h-full w-full object-contain" />
         )}
       </span>
-      <Link
+      <KindBadge kind="video" inline />
+      <PanelLink
         href={libraryHref(slug, gridHref(path))}
+        panel={panelHref(path, { play: slug })}
         className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
       >
+        <KindWord kind="video" />
         {title}
-      </Link>
+      </PanelLink>
       {job !== null && (
         <PanelLink
           href={panelHref(path, { job: job.jobId })}
@@ -163,6 +175,7 @@ export function VideoChangeButton({
   className?: string;
 }) {
   const router = useRouter();
+  const host = usePanelHost();
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const name = `video:${slug}`;
@@ -193,7 +206,10 @@ export function VideoChangeButton({
           }
           const draftId = outcome.draftId;
           forgetExtendKey(store, name);
-          router.push(conversationHref(path, draftId), { scroll: false });
+          // A conversation is a panel the host draws, so on /studio the
+          // address bar moves without a server render.
+          const href = conversationHref(host?.path ?? path, draftId);
+          if (host?.navigate(href) !== true) router.push(href, { scroll: false });
         }}
         className={className}
       >
@@ -234,9 +250,10 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
   const making = newVideoJobs(jobs, existing, ended, dismissed);
   return making.map((job) =>
     layout === "grid" ? (
-      <div key={job.jobId} className="relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <div key={job.jobId} className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${TILE_LIFT}`}>
         <div className="relative aspect-[4/3] overflow-hidden border-b border-[var(--border)]">
           <VideoStage job={job} title={job.title ?? "New video"} backdrop={null} path={path} isNew />
+          <KindBadge kind="video" />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5 p-3">
           <span className="line-clamp-2 text-sm font-medium">{job.title ?? "New video"}</span>
@@ -255,6 +272,7 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
         <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[var(--surface2)]">
           <Dot stage={videoTileStage(job)} />
         </span>
+        <KindBadge kind="video" inline />
         <span className="min-w-[5rem] flex-1 truncate font-medium">{job.title ?? "New video"}</span>
         <span className="flex min-w-0 max-w-[45%]">
           <RowWords job={job} />

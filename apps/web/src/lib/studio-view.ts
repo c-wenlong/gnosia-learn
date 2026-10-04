@@ -68,11 +68,14 @@ export const GROUPINGS = ["none", "topic", "domain"] as const;
 export const SORTS = ["modified", "title", "created"] as const;
 export const DIRECTIONS = ["desc", "asc"] as const;
 export const LAYOUTS = ["grid", "list"] as const;
+/** The kind filter's three segments: everything, diagrams only, videos only. */
+export const KINDS = ["all", "diagram", "video"] as const;
 
 export type Grouping = (typeof GROUPINGS)[number];
 export type Sort = (typeof SORTS)[number];
 export type Direction = (typeof DIRECTIONS)[number];
 export type Layout = (typeof LAYOUTS)[number];
+export type KindFilter = (typeof KINDS)[number];
 
 /** The chip that stands for "no topic at all". Always shown, always last. */
 export const NO_TOPIC = "none";
@@ -87,6 +90,12 @@ export interface StudioView {
   /** Display's "show concept chips". */
   chips: boolean;
   layout: Layout;
+  /**
+   * Which kind of asset the grid shows (`?kind=diagram|video`, absent for
+   * both). A view parameter like Sort: it changes what the grid draws of what
+   * the page already holds, so it moves in the browser (`browserViewMove`).
+   */
+  kind: KindFilter;
   /** The card filling the right panel, or null. */
   selected: string | null;
   /** The right panel itself. Collapsible from the strip. */
@@ -115,6 +124,15 @@ export interface StudioView {
    * for. Meaningless without `extend`, and dropped with it.
    */
   talk: boolean;
+  /**
+   * The press was Make a video of this (`&make=video`, D86 of
+   * docs/STUDIO-CHAT-FIRST.md): the conversation opens on the diagram as
+   * Extend's does, sends no opener, and its composer starts with the Video
+   * chip and a sentence the person edits and sends. In the URL for the same
+   * reason as `talk`: storage that cannot be read must not turn it into a
+   * paid opener. Meaningless without `extend`, and dropped with it.
+   */
+  makeVideo: boolean;
   /**
    * Whether the job panel may open an event stream at all.
    *
@@ -147,6 +165,12 @@ export interface StudioView {
    * (D53 of docs/STUDIO-VIDEOS.md). In the URL like every other panel.
    */
   settings: boolean;
+  /**
+   * The studio video playing in the preview dialog (`?play=<slug>`), or null
+   * (D85 of docs/STUDIO-CHAT-FIRST.md). A panel like a tile's: the URL is the
+   * state, so Back closes it and a reload brings it back.
+   */
+  play: string | null;
 }
 
 export const DEFAULT_VIEW: StudioView = {
@@ -157,15 +181,18 @@ export const DEFAULT_VIEW: StudioView = {
   direction: "desc",
   chips: false,
   layout: "grid",
+  kind: "all",
   selected: null,
   panel: true,
   job: null,
   extend: null,
   talk: false,
+  makeVideo: false,
   stream: true,
   shot: null,
   draft: null,
   settings: false,
+  play: null,
 };
 
 /** Next hands a repeated parameter as an array and a single one as a string. */
@@ -205,9 +232,11 @@ export function parseView(params: RawParams): StudioView {
     direction: member(one(params.dir), DIRECTIONS, DEFAULT_VIEW.direction),
     chips: flag(one(params.chips), DEFAULT_VIEW.chips),
     layout: member(one(params.view), LAYOUTS, DEFAULT_VIEW.layout),
+    kind: member(one(params.kind), KINDS, DEFAULT_VIEW.kind),
     selected: one(params.sel),
     panel: flag(one(params.panel), DEFAULT_VIEW.panel),
     settings: one(params.settings) === "1",
+    play: one(params.play),
     ...parsePanel(params),
   };
 }
@@ -221,13 +250,14 @@ export function parseView(params: RawParams): StudioView {
  */
 export function parsePanel(
   params: RawParams,
-): Pick<StudioView, "job" | "extend" | "talk" | "stream" | "shot" | "draft"> {
+): Pick<StudioView, "job" | "extend" | "talk" | "makeVideo" | "stream" | "shot" | "draft"> {
   const shot = one(params.shot);
   const job = one(params.job);
   return {
     job,
     extend: one(params.extend),
     talk: one(params.extend) !== null && one(params.talk) === "1",
+    makeVideo: one(params.extend) !== null && one(params.make) === "video",
     stream: (one(params.stream) ?? "on") !== "off",
     // A picture belongs to a job, so `?shot=after` on its own names nothing and
     // is read as nothing rather than as a main area that cannot say whose
@@ -253,15 +283,18 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
   if (next.direction !== DEFAULT_VIEW.direction) params.set("dir", next.direction);
   if (next.chips !== DEFAULT_VIEW.chips) params.set("chips", next.chips ? "1" : "0");
   if (next.layout !== DEFAULT_VIEW.layout) params.set("view", next.layout);
+  if (next.kind !== DEFAULT_VIEW.kind) params.set("kind", next.kind);
   if (next.selected !== null) params.set("sel", next.selected);
   if (next.panel !== DEFAULT_VIEW.panel) params.set("panel", next.panel ? "1" : "0");
   if (next.job !== null) params.set("job", next.job);
   if (next.extend !== null) params.set("extend", next.extend);
   if (next.extend !== null && next.talk) params.set("talk", "1");
+  if (next.extend !== null && next.makeVideo) params.set("make", "video");
   if (next.draft !== null) params.set("draft", next.draft);
   if (!next.stream) params.set("stream", "off");
   if (next.shot !== null && next.job !== null) params.set("shot", next.shot);
   if (next.settings) params.set("settings", "1");
+  if (next.play !== null) params.set("play", next.play);
   const query = params.toString();
   return query === "" ? "/studio" : `/studio?${query}`;
 }
@@ -277,7 +310,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
  */
 export function panelSignature(params: RawParams): string {
   const panel = parsePanel(params);
-  return JSON.stringify([panel.draft, panel.job, panel.extend, panel.talk, panel.shot, one(params.sel), one(params.settings) === "1"]);
+  return JSON.stringify([panel.draft, panel.job, panel.extend, panel.talk, panel.makeVideo, panel.shot, one(params.sel), one(params.settings) === "1", one(params.play)]);
 }
 
 /** `URLSearchParams` as the page's `searchParams`, a repeated name as a list. */
@@ -291,7 +324,7 @@ export function rawParamsOf(search: URLSearchParams): RawParams {
 }
 
 /** The parameters that name a panel, and the three a verb's outcome rides on (`readOutcome`). */
-const PANEL_KEYS = new Set(["draft", "job", "extend", "talk", "sel", "shot", "settings", "v", "ok", "m"]);
+const PANEL_KEYS = new Set(["draft", "job", "extend", "talk", "make", "sel", "shot", "settings", "play", "v", "ok", "m"]);
 
 /** Everything but the panel: the filters, the sort and the layout, as one string. */
 function viewPart(search: URLSearchParams): string {
@@ -314,7 +347,7 @@ export function withoutOutcome(path: string): string {
 /**
  * Whether going from the address bar `from` to `href` only opens, closes or
  * swaps a panel the browser draws (a conversation, a job, a tile, the
- * settings), with the grid behind it unchanged, so `PanelHost` can move the
+ * settings, a video's preview), with the grid behind it unchanged, so `PanelHost` can move the
  * URL itself.
  *
  * Everything else is the server's: another page, other filters, a picture
@@ -334,6 +367,9 @@ export function browserPanelMove(from: { pathname: string; search: string }, hre
   return next.extend === null || next.settings || next.draft !== null || next.job !== null;
 }
 
+/** The patch that closes every panel: what Close, New chat and a link away from the grid use. */
+export const CLOSED = { draft: null, job: null, extend: null, selected: null, shot: null, settings: false, play: null } as const;
+
 /**
  * The view under any panel: the path with every panel parameter and a verb's
  * outcome dropped, the filters kept. What a link away from the grid hands as
@@ -341,16 +377,17 @@ export function browserPanelMove(from: { pathname: string; search: string }, hre
  * open when the page was last drawn on the server.
  */
 export function gridHref(path: string): string {
-  return withoutOutcome(panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false }));
+  return withoutOutcome(panelHref(path, CLOSED));
 }
 
-/** The parameters Search, the topic chips, Display and Sort write. */
-const VIEW_KEYS = new Set(["topic", "q", "group", "sort", "dir", "chips", "view"]);
+/** The parameters Search, the kind filter, the topic chips, Display and Sort write. */
+const VIEW_KEYS = new Set(["topic", "q", "group", "sort", "dir", "chips", "view", "kind"]);
 const OUTCOME_KEYS = new Set(["v", "ok", "m"]);
 
 /**
  * Whether going from `from` to `href` only changes what the grid shows of
- * what the page already has (the search, the topics, Display and Sort), so
+ * what the page already has (the search, the kind, the topics, Display and
+ * Sort), so
  * `PanelHost` can move the URL itself and the grid redraw in the browser.
  *
  * Each of these used to be a server render, which reads the diagrams, the
@@ -390,14 +427,27 @@ export function panelHref(
     job?: string | null;
     extend?: string | null;
     talk?: boolean;
+    makeVideo?: boolean;
     shot?: "before" | "after" | null;
     draft?: string | null;
     selected?: string | null;
     settings?: boolean;
+    play?: string | null;
   },
 ): string {
   const [base, existing] = path.split("?");
   const params = new URLSearchParams(existing ?? "");
+  // The preview is one panel among the others, never under one: opening any
+  // other panel closes it (Change in the preview opens a conversation).
+  if (patch.play !== undefined) {
+    if (patch.play === null) params.delete("play");
+    else params.set("play", patch.play);
+  } else if (
+    patch.settings === true ||
+    [patch.draft, patch.job, patch.extend, patch.selected].some((value) => value !== undefined && value !== null)
+  ) {
+    params.delete("play");
+  }
   if (patch.settings !== undefined) {
     if (patch.settings) params.set("settings", "1");
     else params.delete("settings");
@@ -417,12 +467,19 @@ export function panelHref(
   if (patch.extend !== undefined) {
     if (patch.extend === null) params.delete("extend");
     else params.set("extend", patch.extend);
-    // A new press, or none, is not the Talk it through one unless it says so.
+    // A new press, or none, is not the Talk it through one unless it says so,
+    // nor the Make a video one.
     if (patch.talk !== true) params.delete("talk");
+    if (patch.makeVideo !== true) params.delete("make");
   }
   if (patch.talk === true && params.get("extend") !== null) params.set("talk", "1");
   if (patch.talk === false) params.delete("talk");
-  if (params.get("extend") === null) params.delete("talk");
+  if (patch.makeVideo === true && params.get("extend") !== null) params.set("make", "video");
+  if (patch.makeVideo === false) params.delete("make");
+  if (params.get("extend") === null) {
+    params.delete("talk");
+    params.delete("make");
+  }
   if (patch.shot !== undefined) {
     if (patch.shot === null) params.delete("shot");
     else params.set("shot", patch.shot);
@@ -467,12 +524,20 @@ export function conversationHref(path: string, draftId: string): string {
 /**
  * An Extend press on `name`, from wherever a person is: on `/studio` it keeps
  * the filters and swaps the panel, and from the canvas route it goes to the
- * grid, where the Extend panel lives.
+ * grid, where the Extend panel lives. `video` makes it Make a video of this
+ * (D86), the same press with the Video chip waiting in the composer.
  */
-export function extendFromHref(path: string, name: string, options: { talk?: boolean } = {}): string {
+export function extendFromHref(path: string, name: string, options: { talk?: boolean; video?: boolean } = {}): string {
   const [base] = path.split("?");
   const from = base === "/studio" ? path : "/studio";
-  return panelHref(from, { extend: name, talk: options.talk === true, draft: null, job: null, selected: null });
+  return panelHref(from, {
+    extend: name,
+    talk: options.talk === true,
+    makeVideo: options.video === true,
+    draft: null,
+    job: null,
+    selected: null,
+  });
 }
 
 /** Add or remove one topic chip, which is what clicking a chip means. */
@@ -537,7 +602,13 @@ function matchesQuery(diagram: Diagram, query: string): boolean {
   );
 }
 
-export function filterDiagrams(diagrams: readonly Diagram[], view: StudioView): Diagram[] {
+/** Whether the kind filter lets a diagram or a video through. Job cards follow it too. */
+export function showsKind(filter: KindFilter, kind: "diagram" | "video"): boolean {
+  return filter === "all" || filter === kind;
+}
+
+export function filterDiagrams(diagrams: readonly Diagram[], view: Pick<StudioView, "query" | "topics"> & { kind?: KindFilter }): Diagram[] {
+  if (!showsKind(view.kind ?? "all", "diagram")) return [];
   return diagrams.filter((diagram) => {
     if (!matchesQuery(diagram, view.query)) return false;
     if (view.topics.length === 0) return true;
@@ -752,10 +823,11 @@ export function readOutcome(params: RawParams): VerbReport | null {
 /**
  * Extend, from anywhere but the grid: `/studio?extend=<name>`, the panel that
  * opens a conversation on that diagram. On the grid itself the tile and its
- * panel patch the current view instead, so the filters survive.
+ * panel patch the current view instead, so the filters survive. `video` is
+ * Make a video of this (`&make=video`, D86).
  */
-export function extendHref(name: string): string {
-  return panelHref("/studio", { extend: name });
+export function extendHref(name: string, options: { video?: boolean } = {}): string {
+  return panelHref("/studio", { extend: name, makeVideo: options.video === true });
 }
 
 /**

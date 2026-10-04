@@ -597,6 +597,33 @@ async function run() {
     state.concept = href.slice('/learn/'.length);
   });
 
+  // Phase 1 of docs/proposals/knowledge-map.md: the Graph view draws every
+  // concept on one map, an island per connected cluster, each titled.
+  await step('learn: the Graph view draws the map, one titled island per cluster', page, async () => {
+    await go('/learn?view=graph');
+    const total = Number((await main.getByText(/^\d+ concepts? ·/).first().textContent())?.match(/^(\d+)/)?.[1]);
+    assert(total > 0, 'the header names no concept count');
+    const map = main.getByRole('group', { name: /^Concept map/ });
+    await map.waitFor();
+    const islands = map.locator('[data-island]');
+    assert((await islands.count()) >= 1, 'the map drew no island');
+    const titles = await map.locator('[data-island-title]').allTextContents();
+    for (const title of titles) assert(title.trim().length > 0, 'an island has an empty title');
+    // The seed is one course, so its one island is named after it.
+    if (SEED) assert(titles.includes('CP4284'), `the seed island is titled ${JSON.stringify(titles)}, not CP4284`);
+    const concepts = map.locator('[data-concept]');
+    assert((await concepts.count()) === total, `the map drew ${await concepts.count()} concepts of ${total}`);
+    // Choosing a concept on the map selects it and records it in the URL.
+    const other = map.locator('[data-concept][aria-pressed="false"]').first();
+    const id = await other.getAttribute('data-concept');
+    await clickHydrated(page, other);
+    await page.waitForFunction((slug) => new URL(location.href).searchParams.get('concept') === slug, id);
+    assert((await map.locator(`[data-concept="${id}"]`).getAttribute('aria-pressed')) === 'true', 'the clicked concept is not selected');
+    // A reload keeps the view and the selection.
+    await page.reload({ waitUntil: 'load' });
+    await map.locator(`[data-concept="${id}"][aria-pressed="true"]`).waitFor();
+  });
+
   await step('workspace: a concept renders three panels', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go(`/learn/${state.concept}`);
@@ -826,7 +853,10 @@ async function run() {
 
   await step('sign out: /home answers 307 afterwards', page, async () => {
     await go('/home');
-    await clickHydrated(page, page.getByRole('button', { name: 'Account and settings' }));
+    // The account row at the sidebar's foot (#308): named by its text,
+    // "Account", with the sidebar open, and "Account and settings" folded to
+    // the rail, where it is the avatar alone.
+    await clickHydrated(page, page.getByRole('button', { name: /^Account( and settings)?$/ }));
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL(`${base}/`);
     const after = await page.request.get(`${base}/home`, { maxRedirects: 0 });

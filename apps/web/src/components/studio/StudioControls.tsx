@@ -9,11 +9,13 @@ import { ChipLink } from "@/components/studio/StudioChrome";
 import { FIELD_TEXT } from "@/components/ui/classes";
 import {
   DEFAULT_VIEW,
+  KINDS,
   NO_TOPIC,
   studioHref,
   toggleTopic,
   type Direction,
   type Grouping,
+  type KindFilter,
   type Layout,
   type Sort,
   type StudioView,
@@ -21,7 +23,7 @@ import {
 } from "@/lib/studio-view";
 
 /**
- * Search, the topic chips, Display and Sort.
+ * The kind filter, Search, the topic chips, Display and Sort.
  *
  * Every control writes to the URL, which is the Linear rule the research
  * table adopted ("the set is encoded in the URL"): the back button works for
@@ -41,6 +43,7 @@ function ViewFields({ view }: { view: StudioView }) {
   if (view.direction !== DEFAULT_VIEW.direction) fields.push(["dir", view.direction]);
   if (view.chips !== DEFAULT_VIEW.chips) fields.push(["chips", view.chips ? "1" : "0"]);
   if (view.layout !== DEFAULT_VIEW.layout) fields.push(["view", view.layout]);
+  if (view.kind !== DEFAULT_VIEW.kind) fields.push(["kind", view.kind]);
   if (view.panel !== DEFAULT_VIEW.panel) fields.push(["panel", view.panel ? "1" : "0"]);
   return (
     <>
@@ -48,6 +51,43 @@ function ViewFields({ view }: { view: StudioView }) {
         <input key={name} type="hidden" name={name} value={value} />
       ))}
     </>
+  );
+}
+
+const SEARCH_WORDS: Record<KindFilter, string> = {
+  all: "Search",
+  diagram: "Search diagrams",
+  video: "Search videos",
+};
+
+/**
+ * All, Diagrams, Videos: a segmented control at the start of the strip
+ * (D85 of docs/STUDIO-CHAT-FIRST.md). Three links, like every other control
+ * here, so the choice is `?kind=` in the URL and the grid redraws in the
+ * browser. Choosing one closes a tile's panel, as a topic chip does.
+ */
+export function KindSegments({ view }: { view: StudioView }) {
+  const words: Record<KindFilter, string> = { all: "All", diagram: "Diagrams", video: "Videos" };
+  return (
+    <div role="group" aria-label="Kind" className="flex h-8 shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--surface2)] p-0.5">
+      {KINDS.map((kind) => {
+        const active = view.kind === kind;
+        return (
+          <PanelLink
+            key={kind}
+            href={studioHref(view, { kind, selected: null })}
+            aria-current={active ? "true" : undefined}
+            className={`flex h-full items-center rounded-md px-2.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] motion-reduce:transition-none ${
+              active
+                ? "bg-[var(--surface)] font-semibold text-[var(--foreground)] shadow-sm"
+                : "font-medium text-[var(--muted)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {words[kind]}
+          </PanelLink>
+        );
+      })}
+    </div>
   );
 }
 
@@ -66,8 +106,8 @@ export function SearchField({ view }: { view: StudioView }) {
         name="q"
         key={view.query}
         defaultValue={view.query}
-        placeholder="Search diagrams"
-        aria-label="Search diagrams"
+        placeholder={SEARCH_WORDS[view.kind]}
+        aria-label={SEARCH_WORDS[view.kind]}
         className={`h-8 w-40 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none sm:w-60 ${FIELD_TEXT.xs}`}
       />
     </form>

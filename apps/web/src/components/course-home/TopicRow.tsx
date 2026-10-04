@@ -7,8 +7,7 @@ import { TopicRecap } from "@/components/TopicRecap";
 import { Button } from "@/components/ui/Button";
 import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
-import { MasteryDot } from "@/components/ui/MasteryDot";
-import { conceptHref, topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
+import { topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
 import type { Course, Module, Topic } from "@/lib/types";
 
@@ -20,10 +19,11 @@ import { ROW_BOX, ROW_HOVER, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
  * meta line ("3 concepts · Learning"), and on the active topic the tint and
  * Continue at the right, where Coursera puts Resume.
  *
- * The whole row opens the topic's own tools underneath: the concepts behind
- * it with their mastery, what it covers, the done tick, the tutor chat, the
- * recap and the learner's note. Those are what the old module checklist held,
- * so nothing it had is lost. Continue sits above the row's stretched toggle
+ * The whole row opens the topic's own tools underneath: what it covers, the
+ * done tick, the tutor chat, the recap and the learner's note. Those are what
+ * the old module checklist held, so nothing it had is lost. Its concepts are
+ * the steps the module path draws under the row, so the panel does not list
+ * them again. Continue sits above the row's stretched toggle
  * and keeps its own click. On a phone it drops under the title, where the
  * row has room for it.
  */
@@ -158,22 +158,6 @@ function TopicPanel({
 
   return (
     <div id={id} className="mb-2 ml-[40px] mr-2 mt-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
-      {mastery && (
-        <section>
-          <h3 className={LABEL}>Concepts</h3>
-          <ul className="mt-2 flex flex-col gap-1.5">
-            {mastery.concepts.map((c) => (
-              <li key={c.slug} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <Link href={conceptHref(c.slug)} className="font-medium text-accent-text underline-offset-4 hover:underline">
-                  {c.title}
-                </Link>
-                <MasteryDot bucket={c.bucket} pL={c.pL} showLabel size={12} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {topic.subtopics.length > 0 && (
         <section>
           <h3 className={LABEL}>Covers</h3>

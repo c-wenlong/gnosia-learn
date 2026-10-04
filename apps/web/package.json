@@ -12,6 +12,7 @@
   },
   "//dependencies": "@self-learn/catalog and @self-learn/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
   "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
     "@lexical/clipboard": "0.52.0",
     "@lexical/history": "0.52.0",
     "@lexical/plain-text": "0.52.0",

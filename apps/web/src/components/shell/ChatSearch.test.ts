@@ -14,6 +14,8 @@ import type { DraftSummary } from "@/lib/studio-drafts";
  */
 
 const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn() }));
+// The account row names the learner; this suite is about the search.
+vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayName: null } }) }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
 vi.mock("next/image", () => ({ default: () => null }));
