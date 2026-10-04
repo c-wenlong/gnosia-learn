@@ -29,7 +29,8 @@ import { cx } from "@/components/ui/classes";
 import type { MentionValue } from "@/components/ui/mention-text";
 import { UserMessage } from "@/components/ui/Message";
 import type { AgentKind } from "@/lib/studio-agent-settings";
-import type { DraftKind, DraftSummary } from "@/lib/studio-drafts";
+import { kindUnavailable } from "@/lib/studio-cards";
+import { DRAFT_KINDS, type DraftKind, type DraftSummary } from "@/lib/studio-drafts";
 import {
   browserPanelMove,
   browserViewMove,
@@ -352,6 +353,8 @@ export function PanelHost({
             jobs={historyOf(jobs, liveJobs, diagram.tldr.path)}
             path={path}
             extendHref={panelHref(path, { extend: diagram.name, selected: null, job: null, draft: null })}
+            makeVideoHref={panelHref(path, { extend: diagram.name, makeVideo: true, selected: null, job: null, draft: null })}
+            videoBlocked={kindUnavailable("video", { plannerKinds: [...DRAFT_KINDS] }, conversation.video ?? null)}
           />
         )}
       </StudioDialog>
