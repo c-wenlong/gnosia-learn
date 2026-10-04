@@ -9,6 +9,7 @@ import {
   readKnowledgeBase,
   readLearnerSnapshot,
   readPreferences,
+  draftsByIds,
   recentDrafts,
   recentTutorSessions,
   type CatalogDatabase,
@@ -284,8 +285,23 @@ export async function readRecent(options: RecentOptions = {}): Promise<RecentMod
       orNone("tutor sessions", recentTutorSessions(db, owner, limit)),
       orNone("courses", getCourses()),
     ]);
-    const sources = await recentSources(db, { events, preferences, drafts, sessions, concepts: kb.concepts, courses }, scope);
     const names = asNames(preferences[PREFERENCE_KEYS.recentNames]);
+    // A search finds a conversation by the name the owner gave it, titled or
+    // not, even when the runner holds the rest of the conversations (whose
+    // search does not know the names); only those renamed drafts join the
+    // search's window then, so drafts cannot crowd out the other kinds.
+    const renamed =
+      q !== "" && studioEnabled()
+        ? Object.entries(names)
+            .filter(([key, name]) => titleMatches(name, q) && !drafts.some((d) => `draft:${d.id}` === key))
+            .map(([key]) => key.slice("draft:".length))
+        : [];
+    const found = renamed.length === 0 ? [] : await orNone("renamed drafts", draftsByIds(db, owner, renamed));
+    const sources = await recentSources(
+      db,
+      { events, preferences, drafts: [...drafts, ...found], sessions, concepts: kb.concepts, courses },
+      scope,
+    );
     const all = named(recentItems(sources), names);
     const page = q === "" ? recentPage(all, pages) : recentPage(all.filter((item) => titleMatches(item.title, q)), 1);
     return {

@@ -235,6 +235,7 @@ const state = vi.hoisted(() => ({
   readLearnerSnapshot: vi.fn(),
   recentDrafts: vi.fn(),
   recentTutorSessions: vi.fn(),
+  draftsByIds: vi.fn(),
   assetsByIds: vi.fn(),
   getCourses: vi.fn(),
   catalogDatabase: vi.fn(),
@@ -248,6 +249,7 @@ vi.mock("@self-learn/catalog/state", () => ({
   readLearnerSnapshot: state.readLearnerSnapshot,
   recentDrafts: state.recentDrafts,
   recentTutorSessions: state.recentTutorSessions,
+  draftsByIds: state.draftsByIds,
   assetsByIds: state.assetsByIds,
 }));
 vi.mock("@/data/courses", () => ({ getCourses: state.getCourses }));
@@ -346,6 +348,16 @@ describe("readRecent", () => {
     const { readRecent } = await import("./recent");
     const recent = await readRecent({ q: "theorem" });
     expect(recent.items.map((r) => r.key)).toEqual(["video:video:abc"]);
+  });
+
+  it("finds a renamed conversation by its name, untitled or not, while leaving the rest to the runner", async () => {
+    state.readPreferences.mockResolvedValue({ recentNames: { "draft:untitled": "Transport layer", "draft:other": "Elsewhere" } });
+    state.draftsByIds.mockResolvedValue([{ id: "untitled", kind: "diagram", state: "open", title: "", updatedAt: AT(2) }]);
+    const { readRecent } = await import("./recent");
+    const recent = await readRecent({ withoutDrafts: true, q: "transport" });
+    expect(state.recentDrafts).not.toHaveBeenCalled();
+    expect(state.draftsByIds).toHaveBeenCalledWith(expect.anything(), "local", ["untitled"]);
+    expect(recent.items.map((r) => [r.key, r.title])).toEqual([["draft:untitled", "Transport layer"]]);
   });
 
   it("falls back to the courses with a tick when none was opened, leaving a course set aside out", async () => {

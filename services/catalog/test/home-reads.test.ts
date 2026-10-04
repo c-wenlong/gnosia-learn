@@ -1,7 +1,7 @@
 import { draft, learner, LOCAL_LEARNER_ID, session } from "@self-learn/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { asRecentModules, appendEvent, readEvents, recentDrafts, recentTutorSessions, withRecentModule } from "../src/state";
+import { asRecentModules, appendEvent, draftsByIds, readEvents, recentDrafts, recentTutorSessions, withRecentModule } from "../src/state";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -84,6 +84,15 @@ describe.skipIf(!reachable.ok)("recentDrafts", () => {
       ["oldest", "diagram", "open"],
     ]);
     expect(drafts[0]?.updatedAt).toBe("2026-10-03T10:02:00.000Z");
+  });
+
+  it("reads some of one owner's drafts by id, titled or not, leaving abandoned ones and other owners' out", async () => {
+    const drafts = await draftsByIds(scratch.db, LOCAL_LEARNER_ID, ["untitled", "titled", "abandoned", "theirs", "missing"]);
+    expect(drafts.map((d) => [d.id, d.title])).toEqual([
+      ["untitled", ""],
+      ["titled", "titled"],
+    ]);
+    expect(await draftsByIds(scratch.db, LOCAL_LEARNER_ID, [])).toEqual([]);
   });
 });
 
