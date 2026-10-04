@@ -1096,6 +1096,51 @@ describe("manimkc", () => {
     expect(rows.asset).toHaveLength(3);
   });
 
+  it("refuses a data root that moved from the last import's while files are left behind in the old one", async () => {
+    // The checkout holds one stale render from before $MANIMKC_HOME was set,
+    // so the rule above lets it through; the rest are still in the data root
+    // the last import recorded, and pruning them would lose rows for files
+    // that are right there.
+    fixture = await withDeliverables();
+    const checkout = `${fixture.root}/manimkc`;
+    const recorded = `${fixture.root}/manimkc-data`;
+    await fixture.write("manimkc-data/out/algorithms/example/example.mp4", "not really an mp4");
+    await fixture.write("manimkc-data/out/algorithms/other/other.mp4", "another render");
+    await expect(
+      buildRows(
+        report({}, checkout),
+        checkout,
+        new Map([["algorithms/example", "alpha"]]),
+        new Map([["alpha", {}]]),
+        {
+          storedPaths: ["out/algorithms/example/example.mp4", "out/algorithms/other/other.mp4"],
+          recordedOutRoot: recorded,
+        },
+      ),
+    ).rejects.toThrow(
+      `manimkc's data root moved from ${recorded}, the last import's, to ${checkout}, and 1 of the files ` +
+        `this owner's manimkc rows name is under the old one and not the new ` +
+        `(${recorded}/out/algorithms/other/other.mp4 is one)`,
+    );
+  });
+
+  it("prunes past a moved data root a file that is gone from both", async () => {
+    // Moved and deleted at once: nothing is left behind, so the row goes.
+    fixture = await withDeliverables();
+    const checkout = `${fixture.root}/manimkc`;
+    const { rows } = await buildRows(
+      report({}, checkout),
+      checkout,
+      new Map([["algorithms/example", "alpha"]]),
+      new Map([["alpha", {}]]),
+      {
+        storedPaths: ["out/algorithms/example/example.mp4", "out/algorithms/gone/gone.mp4"],
+        recordedOutRoot: `${fixture.root}/manimkc-old`,
+      },
+    );
+    expect(rows.asset).toHaveLength(3);
+  });
+
   it("passes manimkc's own orphan drift through as a note", async () => {
     fixture = await withDeliverables();
     const withOrphan = report();
