@@ -94,7 +94,13 @@ export function AppSidebar() {
   useEffect(() => {
     if (!peeking) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPeek(false);
+      if (event.key !== "Escape") return;
+      // What had focus in the slid-out sidebar is about to be faded out or made
+      // inert, so focus would fall to the document: it goes to the fold, which
+      // is on the rail too.
+      const inside = room.current?.contains(document.activeElement) === true;
+      setPeek(false);
+      if (inside) requestAnimationFrame(() => room.current?.querySelector<HTMLElement>("[data-fold]")?.focus());
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -389,6 +395,7 @@ function FoldButton({ rail, peeking, onPress }: { rail: boolean; peeking: boolea
       type="button"
       aria-label={label}
       title={label}
+      data-fold=""
       onClick={() => {
         onPress();
         shell.setCollapsed(!rail && !peeking);
