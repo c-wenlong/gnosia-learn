@@ -5,13 +5,20 @@
  *
  * A tldrawkc export embeds its fonts as base64 inside `<style>` and draws
  * its labels as `<text>` or as HTML inside `<foreignObject>`, so the styles,
- * scripts and `<defs>` are dropped first, then every tag becomes a line
- * break and the entities are decoded. Attribute values (paths, data URLs)
+ * scripts and `<defs>` are dropped first, a CDATA section is kept as its
+ * text, then every tag becomes a line break and the entities are decoded. Attribute values (paths, data URLs)
  * go with their tags. No markup is interpreted, and nothing here is
  * rendered, so a hostile SVG can only contribute text.
  */
 export function svgText(svg: string): string {
-  const body = svg.replace(/<(style|script|defs)\b[\s\S]*?<\/\1\s*>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
+  const body = svg
+    .replace(/<(style|script|defs)\b[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    // A CDATA section is text, and may hold a "<" that the tag pass below
+    // would read as a tag: escape it here, and the decode gives it back.
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_, raw: string) =>
+      raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
+    );
   const text = body.replace(/<[^>]*>/g, "\n");
   return decodeEntities(text)
     .split("\n")

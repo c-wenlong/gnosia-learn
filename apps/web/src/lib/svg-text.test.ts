@@ -11,6 +11,10 @@ describe("svgText", () => {
     expect(svgText(svg)).toBe("u\nThe arrow never moved.\n[ 2√2, √2 ]\na & b < c");
   });
 
+  it("keeps the text of a CDATA section, a < inside it included", () => {
+    expect(svgText("<svg><text><![CDATA[a < b && c > d]]></text><text>e</text></svg>")).toBe("a < b && c > d\ne");
+  });
+
   it("leaves an unknown or out-of-range entity as written", () => {
     expect(svgText("<text>&bogus; &#99999999;</text>")).toBe("&bogus; &#99999999;");
   });
