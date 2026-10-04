@@ -77,6 +77,7 @@ function fixedTools(): RevideokcToolchain {
       nodeModules: `${REVIDEOKC}/node_modules`,
       venv: `${REVIDEOKC}/.venv`,
       gnosiaPython: { link: `${REVIDEOKC}/.venv/bin/python`, real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
+      scriptShells: [] as string[],
       chrome: { binary: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", bundle: "/Applications/Google Chrome.app" },
       ffmpegInstaller: `${REVIDEOKC}/node_modules/@ffmpeg-installer`,
       ffprobeInstaller: `${REVIDEOKC}/node_modules/@ffprobe-installer`,
@@ -93,8 +94,8 @@ async function jobPaths(id = "0f0f0f0f-aaaa-4bbb-8ccc-123456789abc"): Promise<Vi
   return revideokcVideoPaths(id, "two-boxes");
 }
 
-const profileFor = (kind: "render" | "narrate" | "gate", paths: VideoPaths, base = 47012): string =>
-  buildRevideokcProfile(kind, { tools: fixedTools(), paths, home: "/Users/me", studioHome: path.join(root, "home"), base });
+const profileFor = (kind: "render" | "narrate" | "gate", paths: VideoPaths, base = 47012, tools = fixedTools()): string =>
+  buildRevideokcProfile(kind, { tools, paths, home: "/Users/me", studioHome: path.join(root, "home"), base });
 
 /** A block's rules, one per line, from the line after `(head` to the line that closes it. */
 function block(text: string, head: string): string[] {
@@ -162,6 +163,37 @@ describe("the revideokc profiles", () => {
     ].map((line, i, all) => (i === all.length - 1 ? `${line})` : line)));
     expect(RENDER_SERVICES).toHaveLength(12);
     expect(text).toContain('(allow mach-register (global-name-regex #"^com\\.google\\.Chrome\\."))');
+  });
+
+  it("let the narration profile run a shell only for a console script uv wrote in its #!/bin/sh form", async () => {
+    const paths = await jobPaths();
+    const execOf = (kind: "render" | "narrate", shells: string[]) => {
+      const tools = fixedTools();
+      tools.revideokc.scriptShells = shells;
+      return block(profileFor(kind, paths, 47012, tools), "allow process-exec").join(" ");
+    };
+    // a script that names its python: no shell at all
+    expect(execOf("narrate", [])).not.toMatch(/\/bin\/(ba)?sh/);
+    // the #!/bin/sh form: /bin/sh and the shell it execs, in the narration profile only
+    const shelled = execOf("narrate", ["/bin/sh", "/bin/bash"]);
+    expect(shelled).toContain('(literal "/bin/sh")');
+    expect(shelled).toContain('(literal "/bin/bash")');
+    expect(execOf("render", ["/bin/sh", "/bin/bash"])).not.toMatch(/\/bin\/(ba)?sh/);
+  });
+
+  it("read a console script's shells from its first line", async () => {
+    const { scriptShells } = await import("../src/video/script-shells");
+    const dir = await mkdtemp(path.join(tmpdir(), "script-shells-"));
+    const named = path.join(dir, "named");
+    const shelled = path.join(dir, "shelled");
+    await writeFile(named, "#!/very/long/venv/bin/python\nimport sys\n");
+    await writeFile(shelled, '#!/bin/sh\nexec "/a/path/too/long/for/a/shebang/python" "$0" "$@"\n');
+    expect(scriptShells(named)).toEqual([]);
+    expect(scriptShells(path.join(dir, "missing"))).toEqual([]);
+    const shells = scriptShells(shelled);
+    expect(shells[0]).toBe("/bin/sh");
+    if (process.platform === "darwin") expect(shells[1]).toBe(realpathSync("/private/var/select/sh"));
+    await rm(dir, { recursive: true, force: true });
   });
 
   it("give the narration profile its two interpreters and the model, no network and no Mach service", async () => {
