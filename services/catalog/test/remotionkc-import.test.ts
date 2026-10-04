@@ -228,6 +228,28 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
     expect(await remotionkcRows()).toEqual(before);
   });
 
+  it("refuses a data root that moved from the recorded one while renders are left behind in it", async () => {
+    // A checkout with one stale render passes the rule above; the last
+    // import recorded dataRoot, where the other four files still are.
+    const before = await remotionkcRows();
+    const stale = path.join(work, "stale-checkout-out");
+    await mkdir(path.dirname(path.join(stale, VIDEO)), { recursive: true });
+    await writeFile(path.join(stale, VIDEO), "an old loops render");
+    await answer(
+      [
+        topic("loops", "loops", "agent-tool-use-and-reasoning-loops", []),
+        unrendered(topic("memory", "memory", "agent-memory-and-state", [])),
+      ],
+      stale,
+    );
+    const refusal = runImportCommand({ dir: SEED, only: ["remotionkc"] });
+    await expect(refusal).rejects.toThrow(
+      `remotionkc's data root moved from ${dataRoot}, the last import's, to ${stale}, and 4 of the files`,
+    );
+    await expect(refusal).rejects.toThrow(path.join(dataRoot, "out/agents/loops/loops.chapters.json"));
+    expect(await remotionkcRows()).toEqual(before);
+  });
+
   it("prunes a render the report no longer lists, and only its own namespace", async () => {
     await answer([topic("loops", "loops", "agent-tool-use-and-reasoning-loops", ["transcript", "chapters", "vtt"])]);
     const result = await runImportCommand({ dir: SEED, only: ["remotionkc"] });

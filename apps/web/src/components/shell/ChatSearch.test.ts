@@ -24,6 +24,7 @@ vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
 
 const { ShellFrame } = await import("./ShellFrame");
 const { usePublishStudioChats } = await import("./shell-context");
+const { SearchField } = await import("./ChatSearch");
 const listMock = mocks.listDrafts;
 
 beforeAll(() => {
@@ -74,7 +75,7 @@ async function mount(options: { collapsed?: boolean; page?: () => null } = {}) {
     container.remove();
   });
   const nav = () => container.querySelector<HTMLElement>('nav[aria-label="Primary"]')!;
-  const button = (label: string) => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
+  const button = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
   const field = () => container.querySelector<HTMLInputElement>('input[type="search"]')!;
   /** The matches, once the search holds words; the history's rows are not these. */
   const links = () => [...container.querySelectorAll<HTMLAnchorElement>("nav [data-peek-hold] a")];
@@ -265,13 +266,47 @@ describe("the history search", () => {
   });
 
   describe("on the rail", () => {
+    it("hands focus to the fold when Escape slides the sidebar back with focus inside it", async () => {
+      runnerWith(loaded);
+      const { nav, button, field } = await mount({ collapsed: true });
+      act(() => button("Search conversations")!.click());
+      expect(document.activeElement).toBe(field());
+      type(field(), "tcp");
+      await settle();
+      const clear = button("Clear the search")!;
+      act(() => clear.focus());
+      // The field's own Escape clears a query; this one comes from the clear button.
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      });
+      // Fake timers drive requestAnimationFrame too.
+      await settle(50);
+      expect(nav().dataset.state).toBe("rail");
+      expect(document.activeElement?.hasAttribute("data-fold")).toBe(true);
+    });
+
+    it("drops the clear button while folded, so it never sits on the rail's icon", () => {
+      const search = { query: "tcp", words: "tcp", setQuery: () => undefined, clear: () => undefined } as unknown as Parameters<typeof SearchField>[0]["search"];
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const ref = { current: null as HTMLInputElement | null };
+      act(() => root.render(createElement(SearchField, { search, inputRef: ref, compact: true })));
+      expect(container.querySelector('button[aria-label="Clear the search"]')).toBeNull();
+      act(() => root.render(createElement(SearchField, { search, inputRef: ref, compact: false })));
+      expect(container.querySelector('button[aria-label="Clear the search"]')).not.toBeNull();
+      act(() => root.unmount());
+      container.remove();
+    });
+
     it("is a search button, which slides the sidebar out with the field focused", async () => {
       runnerWith(loaded);
       const { nav, button, field, container } = await mount({ collapsed: true });
-      expect(container.querySelector('input[type="search"]')).toBeNull();
-      expect(nav().className).not.toContain("absolute");
+      // The field is there, narrowed to its icon and out of reach until the sidebar slides out.
+      expect(container.querySelector('input[type="search"]')?.closest("[inert]")).not.toBeNull();
+      expect(nav().dataset.state).toBe("rail");
       act(() => button("Search conversations")!.click());
-      expect(nav().className).toContain("absolute");
+      expect(nav().dataset.state).toBe("peek");
       expect(document.activeElement).toBe(field());
 
       // The pointer leaving does not take it back while the field is in use.
@@ -280,7 +315,7 @@ describe("the history search", () => {
         room.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: document.body } as PointerEventInit));
       });
       await settle(300);
-      expect(nav().className).toContain("absolute");
+      expect(nav().dataset.state).toBe("peek");
     });
 
     it("keeps the slid-out sidebar when focus returns to the field before the close it scheduled", async () => {
@@ -295,12 +330,12 @@ describe("the history search", () => {
       await settle(100);
       act(() => field().focus());
       await settle(400);
-      expect(nav().className).toContain("absolute");
+      expect(nav().dataset.state).toBe("peek");
 
       // Left for good, it does slide back.
       act(() => field().blur());
       await settle(300);
-      expect(nav().className).not.toContain("absolute");
+      expect(nav().dataset.state).toBe("rail");
     });
 
     it("does not close the slid-out sidebar when focus moves from the field to a match, and closes it when focus leaves from there", async () => {
@@ -312,11 +347,11 @@ describe("the history search", () => {
       await settle();
       act(() => links()[0].focus());
       await settle(400);
-      expect(nav().className).toContain("absolute");
+      expect(nav().dataset.state).toBe("peek");
 
       act(() => links()[0].blur());
       await settle(300);
-      expect(nav().className).not.toContain("absolute");
+      expect(nav().dataset.state).toBe("rail");
     });
   });
 
