@@ -79,8 +79,10 @@ const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9a-zA-Z_-]
 const FUNCTIONAL = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/;
 const PALETTE_NAMES =
   "slate|gray|grey|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose";
+// A shade is any palette name and step, with or without a utility before it:
+// `text-red-600`, `dark:hover:bg-amber-950/40`, and a bare "red-600" in a map.
 const PALETTE = new RegExp(
-  `(?<![\\w-])(?:[a-z]+:)*-?(?:bg|text|border|ring|outline|fill|stroke|from|via|to|divide|shadow|decoration|accent|caret|placeholder)-(?:${PALETTE_NAMES})-(?:50|100|200|300|400|500|600|700|800|900|950)(?![\\w])`,
+  `(?<![A-Za-z0-9_])(?:${PALETTE_NAMES})-(?:50|100|200|300|400|500|600|700|800|900|950)(?![A-Za-z0-9_])`,
 );
 
 function files(dir: string, out: string[] = []): string[] {
@@ -128,6 +130,8 @@ describe("theme tokens", () => {
       'className="text-red-800 dark:text-red-200"',
       'className="hover:text-red-600"',
       'className="border-amber-300/60"',
+      'const shade = "red-600";',
+      "const tones = { warn: 'amber-500' };",
       "const s = `0 0 0 rgb(0 0 0 / 0.3)`;",
       'style={{ color: "hsl(10 20% 30%)" }}',
     ]) {
