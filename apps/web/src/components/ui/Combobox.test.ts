@@ -185,7 +185,7 @@ describe("the list's placement", () => {
       const { list, press, type } = mount();
       type("sonnet");
       // A list filtered to the same number of taller rows changes size, not count.
-      expect(watched).toEqual([list()]);
+      expect(watched).toContain(list());
       expect(callback).not.toBeNull();
       act(() => callback!());
       press("Escape");

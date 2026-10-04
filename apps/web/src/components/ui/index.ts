@@ -1,6 +1,6 @@
 /**
  * The redesign's primitives. Every one is safe in a server component except
- * `FilterMenu`, `Select`, `Combobox`, `Composer`, `TabList` and `Dialog`,
+ * `FilterMenu`, `Select`, `Combobox`, `Composer`, `TabList`, `Dialog` and `Popover`,
  * client components that take an `onChange` or an `onClose` and so are
  * rendered from another client component, and `ConfirmFold` and
  * `InlineConfirm`, which own the focus of a confirm. `MentionComposer` is one
@@ -33,6 +33,7 @@ export { MasteryDot } from "./MasteryDot";
 export { Notice } from "./Notice";
 export { Panel } from "./Panel";
 export { Placeholder } from "./Placeholder";
+export { Popover, type PopoverCloseReason } from "./Popover";
 export { ProgressBar, type ProgressTone } from "./ProgressBar";
 export { RatingButton } from "./RatingButton";
 export { SearchField } from "./SearchField";
@@ -60,6 +61,10 @@ export {
   inputClasses,
   LABEL,
   linkClasses,
+  MENU_GROUP,
+  MENU_HEADING,
+  MENU_PANEL,
+  menuRowClasses,
   textareaClasses,
 } from "./classes";
 export type {
@@ -78,4 +83,5 @@ export type {
   LinkWeight,
 } from "./classes";
 export type { FilterOption } from "./filter-menu";
+export type { PopoverPlacement } from "./popover-place";
 export { tabIds, tabKeyIndex, type RovingOrientation } from "./roving";
