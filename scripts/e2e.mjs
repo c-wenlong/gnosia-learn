@@ -1147,16 +1147,21 @@ async function run() {
   await step('provider keys: save a key, see its last four, remove it', page, async () => {
     // The keys are under Tutor (#342), which `?tab=tutor` opens.
     if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
-    // docs/BYOK.md: a key goes in once and never comes back out. The server
-    // starts with every provider key blank, so the Providers card (#383)
-    // lists no Gemini row yet: Gemini is offered under Add provider.
-    await clickHydrated(page, main.getByRole('button', { name: 'Add provider', expanded: false }));
+    // docs/BYOK.md: a key goes in once and never comes back out. The Providers
+    // card (#383) lists a provider only once it has a key or a model; the
+    // rest are offered under Add provider. From the seed that is all three,
+    // but a `--copy` may hold some already, so the step takes whichever
+    // provider the form offers first, which it chooses on its own.
+    const add = main.getByRole('button', { name: 'Add provider', expanded: false });
+    assert((await add.count()) > 0, 'every provider is listed already, so none can be added');
+    await clickHydrated(page, add);
     const form = main.getByRole('form', { name: 'Add a provider' });
     // A kit menu: the trigger is named "Provider: <current>".
-    await clickHydrated(page, form.getByRole('button', { name: /^Provider:/ }));
-    await page.getByRole('listbox', { name: 'Provider' }).getByRole('option', { name: 'Google Gemini' }).click();
-    await form.getByRole('button', { name: 'Provider: Google Gemini' }).waitFor();
-    const fake = 'e2e-not-a-real-gemini-key-000000000000wxyz';
+    const chosen = form.getByRole('button', { name: /^Provider: / });
+    await chosen.waitFor();
+    const label = (await chosen.getAttribute('aria-label'))?.replace(/^Provider: /, '') ?? '';
+    assert(label !== '', 'the provider menu names no provider');
+    const fake = 'e2e-not-a-real-provider-key-000000000000wxyz';
     await form.getByLabel('API key', { exact: true }).fill(fake);
     const saving = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/learner/provider-key' && r.request().method() === 'POST',
@@ -1165,13 +1170,13 @@ async function run() {
     const response = await saving;
     assert(response.status() === 200, `the save answered ${response.status()}`);
     assert(!(await response.text()).includes(fake), 'the save answered with the key in it');
-    const row = main.getByRole('listitem').filter({ has: page.getByText('Google Gemini', { exact: true }) });
+    const row = main.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
     await row.getByText(/^Your key, ending wxyz\. Saved /).waitFor();
     assert(!(await page.content()).includes(fake), 'the page still holds the key after saving');
     // Delete opens a confirm; its own Delete takes the key, and with no
-    // server key and no models the row leaves the list.
+    // server key and no models the row leaves the list, as it was.
     await row.getByRole('button', { name: 'Delete', exact: true, expanded: false }).click();
-    await row.getByRole('group', { name: 'Confirm deleting Google Gemini' }).getByRole('button', { name: 'Delete', exact: true }).click();
+    await row.getByRole('group', { name: `Confirm deleting ${label}` }).getByRole('button', { name: 'Delete', exact: true }).click();
     await row.waitFor({ state: 'detached' });
   });
 
