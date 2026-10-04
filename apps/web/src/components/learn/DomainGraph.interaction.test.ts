@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LearnIndex } from "./LearnIndex";
 import type { GraphEdge } from "@/lib/concept-graph";
@@ -277,3 +277,91 @@ describe("domain graph interaction", () => {
     expect(concept(host, "merge").getAttribute("aria-pressed")).toBe("true");
   });
 });
+
+/**
+ * Written before the label culling (D10 of docs/proposals/domain-map.md): a
+ * label keeps 11px on screen however small the picture is drawn, and one that
+ * would overlap a higher priority label or a dot is not drawn. jsdom has no
+ * ResizeObserver, so these install one the test drives: `drawAt` reports the
+ * picture drawn at a fraction of its layout width.
+ */
+describe("domain graph label culling", () => {
+  const observers: Array<{ cb: ResizeObserverCallback; self: ResizeObserver }> = [];
+  class FakeObserver {
+    constructor(cb: ResizeObserverCallback) {
+      observers.push({ cb, self: this as unknown as ResizeObserver });
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {
+      const i = observers.findIndex((o) => o.self === (this as unknown as ResizeObserver));
+      if (i >= 0) observers.splice(i, 1);
+    }
+  }
+  beforeEach(() => {
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = FakeObserver;
+  });
+  afterEach(() => {
+    delete (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver;
+  });
+
+  function drawAt(svg: SVGSVGElement, scale: number) {
+    const view = viewBoxFor(layout, null);
+    const width = view.width * scale;
+    const height = view.height * scale;
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}) });
+    act(() => observers.forEach((o) => o.cb([], o.self)));
+  }
+  const labelOf = (host: HTMLElement, id: string) => concept(host, id).dataset.label;
+  const fontOf = (host: HTMLElement, id: string) => Number(concept(host, id).querySelector("text")?.getAttribute("font-size"));
+  const ids = ["merge", "quick", "heap", "bfs", "dfs"];
+
+  it("draws every label at the layout size when the picture is drawn full size", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 1);
+    expect(ids.map((id) => labelOf(host, id))).toEqual(ids.map(() => "shown"));
+    expect(fontOf(host, "merge")).toBe(12.5);
+  });
+
+  it("keeps a label 11px on screen on a small picture, and culls the ones that collide, keeping their names", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 0.15);
+    expect(fontOf(host, "merge") * 0.15).toBeCloseTo(11);
+    const hidden = ids.filter((id) => labelOf(host, id) === "hidden");
+    expect(hidden.length).toBeGreaterThan(0);
+    expect(hidden.length).toBeLessThan(ids.length);
+    for (const id of hidden) {
+      const g = concept(host, id);
+      // The dot stays, and the name a screen reader hears is whole.
+      expect(g.querySelector("circle[data-dot]")).not.toBeNull();
+      expect(g.getAttribute("aria-label")).toMatch(new RegExp(`^${id[0].toUpperCase()}${id.slice(1)}, Learning`));
+      expect(g.querySelector("title")?.textContent).toBe(g.getAttribute("aria-label"));
+    }
+  });
+
+  it("always shows the hovered concept's label, and its full title on the plate", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 0.15);
+    const culled = ids.find((id) => labelOf(host, id) === "hidden") as string;
+    expect(culled).toBeDefined();
+    enter(concept(host, culled));
+    expect(labelOf(host, culled)).toBe("shown");
+    expect(svg.querySelector("[data-plate]")?.textContent).toBe(culled[0].toUpperCase() + culled.slice(1));
+    leave(concept(host, culled));
+    expect(labelOf(host, culled)).toBe("hidden");
+  });
+
+  it("hides the lower priority label when a drag piles two concepts together", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 1);
+    expect(labelOf(host, "dfs")).toBe("shown");
+    // Drop dfs a few units off bfs: their labels overlap. bfs has a dependant (dfs) and dfs has none.
+    const bfs = { x: cxOf(host, "bfs"), y: Number(dotOf(host, "bfs").getAttribute("cy")) };
+    const dfs = { x: cxOf(host, "dfs"), y: Number(dotOf(host, "dfs").getAttribute("cy")) };
+    dragBy(host, svg, "dfs", bfs.x - dfs.x + 6, bfs.y - dfs.y + 4);
+    expect(labelOf(host, "bfs")).toBe("shown");
+    expect(labelOf(host, "dfs")).toBe("hidden");
+    expect(concept(host, "dfs").getAttribute("aria-label")).toMatch(/^Dfs, Learning/);
+  });
+});
+
