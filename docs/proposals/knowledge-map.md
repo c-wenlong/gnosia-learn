@@ -52,13 +52,23 @@ and the confidence colour adds to it as the owner studies.
 
 **G1. The map is the default view of `/learn`, and the table is the second
 view.** This revises decision 13. The table stays one press away, with its
-neighbourhood card, because it is the sortable and screen-reader-friendly
-view (G6). `?view=table` opens it; a link with `?view=graph` keeps working.
+neighbourhood card, because it is the list view and the screen-reader-friendly
+one (G6). `?view=table` opens it; a link with `?view=graph` keeps working.
 
 **G2. The map opens on one region, not on the whole map.** It opens fitted to
 the island of the selected concept (`?concept=`, else `defaultSelection`, as
 today). "Fit all" is one press away. That keeps what decision 13 protected:
 the first screen is a readable region, never all 306 nodes at once.
+
+`?scope=` keeps the meaning it has today. `parseScope`
+([learn-index.ts](../../apps/web/src/lib/learn-index.ts)) still reads it:
+`scope=course` fits every island that holds a concept of the selected
+concept's course, which shows the whole course however many clusters it
+spans, and `scope=neighbourhood` fits the selected concept and its
+neighbours. With no `scope`, the map fits the selected concept's island. The
+"Open full course graph" link the comments in `learn-index.ts` and
+`LearnIndex.tsx` describe is no longer on the workspace page, so no link
+changes meaning; a hand-kept URL with `scope=course` still shows the course.
 
 **G3. The layout is computed on the server, and drawn as the app's own
 SVG.** The page already reads the knowledge base on the server, so it runs
@@ -68,7 +78,7 @@ minimises crossings where today's `layoutGraph` sorts each row by title. The
 drawing stays `ConceptGraph`'s SVG and tokens, with pan and zoom written in
 the app (pointer events, wheel and pinch on the `viewBox`). No graph library
 reaches the browser bundle. The fallback, if 306 SVG nodes pan badly on the
-phone (phase 4 measures it), is React Flow with the same server layout.
+phone (phase 3 measures it), is React Flow with the same server layout.
 
 **G4. Colour stays three mastery buckets; confidence detail is an arc.**
 Mastered, learning and untouched stay the only fills, as DESIGN.md's
@@ -84,8 +94,9 @@ the courses in the `recentModules` preference (the modules Home's "pick up
 where you left off" reads) and marks the ready concepts in those courses
 only. With no recent module, nothing is highlighted.
 
-**G6. The table stays, unchanged except for its place.** It is the sortable
-view, the one a screen reader uses, and the one that shows due dates and last
+**G6. The table stays, unchanged except for its place.** It is the list
+view, ordered studied first and then by title as today (it has no sort
+control, and this proposal adds none), the one a screen reader uses, and the one that shows due dates and last
 seen at a glance. The map links to it, and it links back.
 
 **G7. One island per cluster, labelled by its courses, packed by course.**
@@ -121,11 +132,13 @@ working.
 | --- | --- | --- |
 | 1. Layout | `mapLayout` in `apps/web/src/lib/concept-map.ts`: clusters, a dagre layered layout per cluster, island packing and titles (G3, G7). Pure and tested. The existing Graph view draws it as one static SVG in a scrolling box | Tests cover clusters, packing, titles and a cycle. On the owner's database every island has a title, and the crossing count of the largest island is measured and lower than today's `layoutGraph` |
 | 2. Viewer | Pan, zoom, pinch, fit island and fit all on the Graph view; labels hide when zoomed out; it opens on the selected concept's island (G2) | `?concept=<slug>&view=graph` opens zoomed to that island. A Playwright walk times a pan across the largest island on the owner's database and finds no frame over 50 ms |
-| 3. Reading the map | Node selection with the side panel, search to zoom, filter dims, the p(L) arc and the overdue and leech marks (G4), the ready highlight (G5). The map becomes the default view (G1) | `/learn` opens on the map. Selecting "Vector as a list of numbers" shows its four dependants in the accent and the panel's "Open in workspace" lands on its page. With CS3230 in `recentModules`, only CS3230's ready concepts are highlighted |
-| 4. Phone and keyboard | Pinch and drag at 375 pixels wide; keyboard: Tab enters the map, the arrow keys move to a prerequisite or a dependant, Enter opens the panel, Escape leaves; a text summary for screen readers that points to the table | The phone walk pans and zooms the largest island without a dropped frame over 50 ms (else G3's fallback is taken, and this proposal is amended). The whole map can be walked with the keyboard alone |
+| 3. Reading the map | Node selection with the side panel, search to zoom, filter dims, the p(L) arc and the overdue and leech marks (G4), the ready highlight (G5). Pinch and drag at 375 pixels wide | Selecting "Vector as a list of numbers" shows its four dependants in the accent and the panel's "Open in workspace" lands on its page. With CS3230 in `recentModules`, only CS3230's ready concepts are highlighted. The phone walk pans and zooms the largest island without a frame over 50 ms (else G3's fallback is taken, and this proposal is amended) |
+| 4. Keyboard, then the default | Keyboard: Tab enters the map, the arrow keys move to a prerequisite or a dependant, Enter opens the panel, Escape leaves; a text summary for screen readers that names the islands and points to the table. Then, in the same PR, the map becomes the default view (G1) | The whole map, panel included, can be walked with the keyboard alone, and a screen reader announces the summary. Only then does `/learn` open on the map |
 
 DESIGN.md's decision 13 row and the `/learn` screen row are rewritten in
-phase 3, when the default changes, not before.
+phase 4, when the default changes, not before. Until then the map is the
+Graph view, one press away, and the table stays the default, so no phase
+leaves a default view a keyboard cannot use.
 
 ## What stays
 
