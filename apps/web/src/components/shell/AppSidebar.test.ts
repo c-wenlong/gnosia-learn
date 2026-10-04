@@ -171,6 +171,14 @@ describe("the sidebar", () => {
     expect(nav(container).className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
   });
 
+  it("transitions the drawer's visibility only as it closes, so focus can land as it opens", async () => {
+    const container = await mount(true);
+    expect(nav(container).className).toContain("max-md:transition-[translate,visibility,box-shadow]");
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    expect(nav(container).className).toContain("max-md:transition-[translate,box-shadow]");
+    expect(nav(container).className).not.toContain("visibility");
+  });
+
   it("closes the drawer on Back or Forward, which can change the studio's view without its path", async () => {
     const container = await mount(true);
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());

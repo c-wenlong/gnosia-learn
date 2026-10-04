@@ -82,7 +82,8 @@ export function SearchField({
           "placeholder:text-text3 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",
         )}
       />
-      {search.query !== "" && (
+      {/* Not on the folded rail: it would sit on the icon, under the rail's search button. */}
+      {search.query !== "" && !compact && (
         // Fades in with the first letter typed; it goes with the last.
         <button
           type="button"
