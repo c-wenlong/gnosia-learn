@@ -135,9 +135,13 @@ otherwise. The test for "taught something" is mechanical: a tutor turn with
 no marker. A turn that carries a marker asked (the opening recall question
 with its one-line reflection is such a turn), and does not count; a turn
 with no marker explained, answered or worked an example. The rule errs
-towards `probe`, which is the safe side, since a probe never moves mastery
-upwards but still earns the card its review slot (`recordObservation`,
-"every answered question earns a review slot, whatever the source"). Both
+towards `probe`, which is the safe side: a probe still updates p(L) from
+the answer itself (a correct answer raises it, a wrong one lowers it) and
+earns the card its review slot (`recordObservation`, "every answered
+question earns a review slot, whatever the source"), and skips only the
+learning step, the extra credit for having been taught. Mislabelling a
+taught check as a probe under-credits one step; mislabelling a recall as
+teaching credits a step that never happened. Both
 are values the route and the `--json` shapes already know; no new source is
 added, and nothing the `learning` plugin parses changes.
 
@@ -206,8 +210,8 @@ The rule is mechanical: a check is `teach` only when an earlier tutor turn
 in this thread carried no marker, which is the turn that explained rather
 than asked. An opening recall question, reflection included, is a marker
 turn and so a probe. It keeps the BKT semantics the terminal set, errs
-towards the source that cannot inflate mastery, and adds no value to
-`OBSERVE_SOURCES`.
+towards the source that cannot credit teaching that did not happen, and
+adds no value to `OBSERVE_SOURCES`.
 
 **R5. Structure in prose, judged by a second call.** The marker and the
 judge, as above. The one-call alternative, asking the tutor to also emit
