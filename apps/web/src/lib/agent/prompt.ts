@@ -430,14 +430,54 @@ function clock(seconds: number): string {
 }
 
 /**
+ * The narration the video Ask prompt carries: all of it when it fits in
+ * `VIDEO_TRANSCRIPT_LIMIT`, else a run of lines grown outward from the line
+ * playing at `at` (the latest that has started), so a question near the end
+ * of a long video still has the narration around it. With no position the
+ * run starts at the beginning. Each line costs its text plus a timecode.
+ */
+export function transcriptWindow(
+  transcript: readonly VideoLine[],
+  at: number | null,
+): { lines: VideoLine[]; from: number; cut: boolean } {
+  const cost = (line: VideoLine) => line.text.length + 12;
+  const total = transcript.reduce((sum, line) => sum + cost(line), 0);
+  if (total <= VIDEO_TRANSCRIPT_LIMIT) return { lines: [...transcript], from: 0, cut: false };
+
+  let centre = 0;
+  if (at !== null) {
+    for (let i = 0; i < transcript.length; i += 1) if (transcript[i].start <= at) centre = i;
+  }
+  let from = centre;
+  let to = centre;
+  let used = cost(transcript[centre]);
+  // Alternate after and before, so the window sits around the position, and
+  // keep growing on whichever side still has lines when the other runs out.
+  for (let grew = true; grew; ) {
+    grew = false;
+    if (to + 1 < transcript.length && used + cost(transcript[to + 1]) <= VIDEO_TRANSCRIPT_LIMIT) {
+      to += 1;
+      used += cost(transcript[to]);
+      grew = true;
+    }
+    if (from > 0 && used + cost(transcript[from - 1]) <= VIDEO_TRANSCRIPT_LIMIT) {
+      from -= 1;
+      used += cost(transcript[from]);
+      grew = true;
+    }
+  }
+  return { lines: transcript.slice(from, to + 1), from, cut: true };
+}
+
+/**
  * Ask on a library video: a quick question about the video in front of the
  * learner, answered on the spot. Unlike the other tutors it answers rather
  * than probes, since the learner asked something and is mid-watch.
  *
  * The transcript is the video's own narration, read on the server from its
  * sidecar, so it sits in a fenced block named as data; a fence inside it is
- * broken up, as the open tutor does for its subject, and it is cut at
- * `VIDEO_TRANSCRIPT_LIMIT` with the cut said out loud. `at` is where the
+ * broken up, as the open tutor does for its subject, and a long one is cut to
+ * the lines around `at` (`transcriptWindow`) with the cut said out loud. `at` is where the
  * player was when the question was sent, so "what did she just say" has an
  * answer. Nothing here is saved (the chat lives in the page), and the prompt
  * says so for the same reason the open tutor's does.
@@ -455,19 +495,12 @@ export function buildVideoAskPrompt(
   if (video.transcript === null || video.transcript.length === 0) {
     transcript = "No transcript is indexed for this video, so you do not know exactly what it says. Answer from the title and general knowledge, and say when you are guessing at what the video covers.";
   } else {
-    const lines: string[] = [];
-    let used = 0;
-    let cut = false;
-    for (const line of video.transcript) {
-      const entry = `[${clock(line.start)}] ${line.text}`;
-      if (used + entry.length + 1 > VIDEO_TRANSCRIPT_LIMIT) {
-        cut = true;
-        break;
-      }
-      lines.push(entry);
-      used += entry.length + 1;
-    }
-    transcript = `\`\`\`text\n${unfence(lines.join("\n"))}\n\`\`\`${cut ? "\nThe transcript is longer than this and was cut here; say so if a question is about a later part." : ""}`;
+    const window = transcriptWindow(video.transcript, at);
+    const lines = window.lines.map((line) => `[${clock(line.start)}] ${line.text}`);
+    const note = !window.cut
+      ? ""
+      : `\nThe transcript is longer than this, so ${window.from === 0 ? "only its start is shown" : `only the lines around the player's position are shown (from [${clock(window.lines[0].start)}])`}; say so if a question is about a part not shown.`;
+    transcript = `\`\`\`text\n${unfence(lines.join("\n"))}\n\`\`\`${note}`;
   }
 
   const position =
