@@ -99,6 +99,46 @@ describe("ExpandablePanel", () => {
     expect(document.activeElement).toBe(button(host, "Expand note.md"));
   });
 
+  it("gives focus back to the corner icon, wherever it was when the icon was pressed", () => {
+    const host = render();
+    const elsewhere = document.createElement("button");
+    document.body.append(elsewhere);
+    // Safari does not focus a button it clicks: focus stays where it was.
+    elsewhere.focus();
+    act(() => button(host, "Expand note.md").click());
+    act(() => button(host, "Close").click());
+    finishClosing();
+    expect(document.activeElement).toBe(button(host, "Expand note.md"));
+    elsewhere.remove();
+  });
+
+  it("carries the reading position into the popup and back to the card", () => {
+    // jsdom lays nothing out: every scroller is 1000px of words in a 200px window.
+    const heights = { scrollHeight: 1000, clientHeight: 200 };
+    const saved = Object.keys(heights).map((name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const);
+    for (const [name, value] of Object.entries(heights)) {
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, get: () => value });
+    }
+    try {
+      const host = render();
+      const card = host.querySelector<HTMLElement>("section > div.overflow-y-auto")!;
+      card.scrollTop = 400; // halfway down the 800px it can scroll
+      act(() => button(host, "Expand note.md").click());
+      const popup = dialog(host)!.querySelector<HTMLElement>("div.overflow-y-auto")!;
+      expect(popup.scrollTop).toBe(400);
+
+      popup.scrollTop = 200; // a quarter of the way
+      act(() => button(host, "Close").click());
+      finishClosing();
+      expect(card.scrollTop).toBe(200);
+    } finally {
+      for (const [name, descriptor] of saved) {
+        if (descriptor) Object.defineProperty(HTMLElement.prototype, name, descriptor);
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
+      }
+    }
+  });
+
   it("closes on Escape and on a click outside, but not on a click inside", () => {
     const host = render();
     act(() => button(host, "Expand note.md").click());

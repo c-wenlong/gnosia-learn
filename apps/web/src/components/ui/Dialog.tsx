@@ -94,9 +94,14 @@ export type DialogProps = DialogName & {
   /** Keep the page under it from scrolling while it is open (`<html>`'s overflow). */
   lockScroll?: boolean;
   /**
-   * Where focus goes on close when whatever had it on open is gone or hidden
-   * (`rememberFocus`), or when nothing had it: the button that opened it, say,
-   * since Safari does not focus a button it clicks.
+   * The control that opened it, which takes focus back on close while it is
+   * still in the document, whatever had focus on open: a button Safari did
+   * not focus when it was clicked, say.
+   */
+  opener?: () => HTMLElement | null;
+  /**
+   * Where focus goes on close when there is no `opener` and whatever had it
+   * on open is gone or hidden (`rememberFocus`), or nothing had it.
    */
   returnFocus?: () => HTMLElement | null;
   /** The `<dialog>` element, for a caller that closes or shows it early. */
@@ -117,7 +122,8 @@ export type DialogProps = DialogName & {
  * selection dragged out of the content does not close it. On open it
  * remembers where focus was and moves it to a `[data-autofocus]` inside, if
  * any (otherwise `showModal()` has put it on the first control); on close it
- * gives it back (`rememberFocus`, falling back to `returnFocus`).
+ * gives it to `opener` if there is one, and otherwise back where it was
+ * (`rememberFocus`, falling back to `returnFocus`).
  *
  * Motion: it rises and fades in with its backdrop (`@starting-style`), and a
  * caller closing in motion sets `closing` for `DIALOG_CLOSE_MS` before it
@@ -136,6 +142,7 @@ export function Dialog({
   size = "default",
   tall = false,
   lockScroll = false,
+  opener,
   returnFocus,
   ref,
   className,
@@ -147,9 +154,9 @@ export function Dialog({
 
   // The latest of each, for the handlers and the effect's cleanup, which
   // outlive the render that set them.
-  const latest = useRef({ onClose, closing, returnFocus });
+  const latest = useRef({ onClose, closing, opener, returnFocus });
   useEffect(() => {
-    latest.current = { onClose, closing, returnFocus };
+    latest.current = { onClose, closing, opener, returnFocus };
   });
   // Read once, on open: the lock is taken and given back by the same effect.
   const lock = useRef(lockScroll);
@@ -161,7 +168,7 @@ export function Dialog({
   useEffect(() => {
     const dialog = inner.current;
     if (dialog === null) return;
-    const opener = rememberFocus();
+    const focused = rememberFocus();
     if (!dialog.open) dialog.showModal();
     dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     const root = document.documentElement;
@@ -171,7 +178,9 @@ export function Dialog({
     return () => {
       if (locked) root.style.overflow = overflow;
       if (dialog.open) dialog.close();
-      opener.restore(() => latest.current.returnFocus?.() ?? null);
+      const named = latest.current.opener?.() ?? null;
+      if (named !== null && named.isConnected) named.focus({ preventScroll: true });
+      else focused.restore(() => latest.current.returnFocus?.() ?? null);
     };
   }, []);
 

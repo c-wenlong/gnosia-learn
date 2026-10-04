@@ -132,8 +132,9 @@ export function ExpandablePanel({
           size="reading"
           tall
           lockScroll
-          // The icon that opened it, which Safari does not focus on a click.
-          returnFocus={() => openerRef.current}
+          // Focus goes back to the icon that opened it, wherever it was on
+          // the press: Safari does not focus a button it clicks.
+          opener={() => openerRef.current}
         >
           <PanelHeader title={title} action={action}>
             <IconButton label="Close" onClick={collapse}>

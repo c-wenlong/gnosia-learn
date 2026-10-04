@@ -147,6 +147,15 @@ describe("Dialog", () => {
     expect(document.activeElement).toBe(fallback);
   });
 
+  it("gives focus to its `opener` on close, whatever had it on open", () => {
+    const opener = onScreenButton("Expand");
+    const elsewhere = onScreenButton("Raw file");
+    elsewhere.focus();
+    const { unmount } = mount(dialogOf({ opener: () => opener }));
+    unmount();
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("holds the page still while open when asked, and lets it go after", () => {
     const { container, unmount } = mount(dialogOf({ lockScroll: true }));
     expect(dialog(container).hasAttribute("open")).toBe(true);
