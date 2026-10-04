@@ -230,8 +230,9 @@ function Preview({
     <div
       aria-hidden
       className={cx(
-        "pointer-events-none absolute bottom-full mb-2 flex -translate-x-1/2 flex-col items-center gap-1.5",
-        hidden && "invisible",
+        "pointer-events-none absolute bottom-full mb-2 flex -translate-x-1/2 animate-fade-in flex-col items-center gap-1.5",
+        "transition-[opacity,visibility] duration-100 ease-out motion-reduce:animate-none motion-reduce:transition-none",
+        hidden ? "invisible opacity-0" : "opacity-100",
       )}
       style={{ left, width: PREVIEW_WIDTH }}
     >

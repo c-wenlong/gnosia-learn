@@ -38,7 +38,7 @@ export function ComposerBox({
   return (
     <div
       className={cx(
-        "flex min-w-0 flex-col",
+        "flex min-w-0 flex-col transition-[opacity,border-color] duration-150 motion-reduce:transition-none",
         COMPOSER_BOX,
         "focus-within:border-accent",
         disabled && "cursor-not-allowed opacity-60",

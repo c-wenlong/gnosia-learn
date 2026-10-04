@@ -136,7 +136,7 @@ export function Composer({
 
   const describedBy = reason === null ? undefined : reasonId;
   const reasonLine = reason !== null && (
-    <p id={reasonId} className={COMPOSER_REASON}>
+    <p id={reasonId} className={cx(COMPOSER_REASON, "animate-fade-in motion-reduce:animate-none")}>
       {reason}
     </p>
   );

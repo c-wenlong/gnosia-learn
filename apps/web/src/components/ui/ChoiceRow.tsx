@@ -73,7 +73,9 @@ export function ChoiceRow({
         </span>
       )}
       <span className="min-w-0 flex-1 text-[15px] font-medium leading-snug">{children}</span>
-      {tag !== undefined && <span className="shrink-0 text-[12px] font-medium">{tag}</span>}
+      {tag !== undefined && (
+        <span className="shrink-0 animate-fade-in text-[12px] font-medium motion-reduce:animate-none">{tag}</span>
+      )}
     </button>
   );
 }
