@@ -38,6 +38,14 @@ export function motionAttribute(mode: MotionMode | null): "reduce" | undefined {
   return mode === "always" ? "reduce" : undefined;
 }
 
+/**
+ * For a browser with no cookie yet whose stored mode is `always`: the root
+ * layout could not know, so the `(app)` layout puts this before the page in
+ * the HTML, and it marks <html> while the document is still being parsed,
+ * before anything under it paints or starts an entrance animation.
+ */
+export const MOTION_REDUCE_SCRIPT = '(function(){try{document.documentElement.dataset.motion="reduce"}catch(e){}})()';
+
 /** Set `data-motion` on <html> for a mode, from the browser. */
 export function applyMotionToDocument(mode: MotionMode): void {
   if (typeof document === "undefined") return;

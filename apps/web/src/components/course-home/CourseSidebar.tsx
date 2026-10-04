@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { CollapseChevron } from "@/components/ui/Collapse";
@@ -30,7 +30,10 @@ import { FOCUS_RING, ROW_HOVER } from "./rows";
  * applies is a container query, which `Collapse` cannot take. A shut list is
  * `invisible` rather than `inert`, for the same reason: visibility can follow
  * the container query, and it takes the links out of the tab order and the
- * accessibility tree just the same, once the fold has finished.
+ * accessibility tree just the same, once the fold has finished. For the
+ * fold's 300ms on the way shut, while visibility still says visible, the list
+ * is `inert` (`shutting`): a toggle that closes it knows the list is going,
+ * whichever width it is.
  */
 export function CourseSidebar({
   course,
@@ -49,6 +52,17 @@ export function CourseSidebar({
 }) {
   const [wideOpen, setWideOpen] = useState(true);
   const [narrowOpen, setNarrowOpen] = useState(false);
+  // True for the fold's way shut, when visibility has not yet hidden the links.
+  const [shutting, setShutting] = useState(false);
+  useEffect(() => {
+    if (!shutting) return;
+    const timer = window.setTimeout(() => setShutting(false), 300);
+    return () => window.clearTimeout(timer);
+  }, [shutting]);
+  const toggle = (open: boolean, set: (open: boolean) => void) => {
+    set(!open);
+    setShutting(open);
+  };
   const listId = useId();
   const current = course.modules[selected];
 
@@ -62,7 +76,7 @@ export function CourseSidebar({
       <nav aria-label="Course material" className="flex flex-col">
         <button
           type="button"
-          onClick={() => setWideOpen((v) => !v)}
+          onClick={() => toggle(wideOpen, setWideOpen)}
           aria-expanded={wideOpen}
           aria-controls={listId}
           className={cx(
@@ -77,7 +91,7 @@ export function CourseSidebar({
         {current && (
           <button
             type="button"
-            onClick={() => setNarrowOpen((v) => !v)}
+            onClick={() => toggle(narrowOpen, setNarrowOpen)}
             aria-expanded={narrowOpen}
             aria-controls={listId}
             className={cx(
@@ -97,6 +111,7 @@ export function CourseSidebar({
 
         <div
           id={listId}
+          inert={shutting}
           className={cx(
             "grid transition-[grid-template-rows,opacity,visibility] duration-300 ease-soft motion-reduce:transition-none",
             narrowOpen ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0",
