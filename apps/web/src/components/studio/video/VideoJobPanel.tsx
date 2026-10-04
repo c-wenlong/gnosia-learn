@@ -523,7 +523,7 @@ function StepMark({ status, live }: { status: StepRow["status"]; live: boolean }
   const base = "mt-1 flex size-3 shrink-0 items-center justify-center rounded-full";
   if (status === "done") {
     return (
-      <span aria-hidden className={cx(base, "bg-ok text-white")}>
+      <span aria-hidden className={cx(base, "bg-ok text-[var(--ok-on)]")}>
         <svg viewBox="0 0 12 12" className="size-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2.5 6.2 5 8.5 9.5 3.5" />
         </svg>

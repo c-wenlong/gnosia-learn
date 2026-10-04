@@ -55,7 +55,7 @@ export function EmbedImage({
   }
 
   return (
-    <div className={vector ? "bg-[#f7f6f3] p-3" : "bg-surface2 p-3"}>
+    <div className={vector ? "bg-diagram-matte p-3" : "bg-surface2 p-3"}>
       {/* eslint-disable-next-line @next/next/no-img-element -- the asset route
           serves these bytes as they are on disk, and the common case is an
           SVG that next/image would rasterise. */}

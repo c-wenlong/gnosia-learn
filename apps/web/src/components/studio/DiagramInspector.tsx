@@ -153,7 +153,7 @@ function SelectedDiagram({
   return (
     <>
       <div
-        className={`mb-3 flex items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[#f7f6f3] ${
+        className={`mb-3 flex items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-diagram-matte ${
           embedded ? "h-72 max-h-[40dvh]" : "aspect-[4/3]"
         }`}
       >
