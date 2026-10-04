@@ -28,12 +28,11 @@ import {
   threadKey,
   RECALL_SEED,
   requestTurns,
-  sessionKey,
   type HandoffMarker,
   type ThreadItem,
   type TutorTurn,
 } from "@/lib/tutor-thread";
-import { newSessionId, SESSION_TEXT_LIMIT } from "@/lib/session-core";
+import { chatRequestId, closeChatSession, judgeAnswer, recordAnswer } from "@/lib/chat-recall";
 import {
   CHAT_ANSWER_LIMIT,
   checkSource,
@@ -162,76 +161,11 @@ function errorFor(status: number, data: ChatReply): string {
 
 type Value = MentionValue<DraftKind>;
 
-/** A request id for one recorded answer, as the session page makes them. */
-function requestToken(): string {
-  // `randomUUID` needs a secure context; a LAN address over http is not one.
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `chat-${crypto.randomUUID().replace(/-/g, "")}`;
-  }
-  return `chat-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
-}
 
-interface ObserveReply {
-  ok?: boolean;
-  error?: string;
-  result?: { correct: boolean; pLBefore: number; pLAfter: number; card: { intervalDays: number } | null };
-}
 type Kit = typeof import("./TutorStudioKit");
 
 const EMPTY: Value = { text: "", mentions: [] };
 
-/** The thread's session id (R6), in `sessionStorage` beside the thread, with memory behind a refused store. */
-const sessionMemory = new Map<string, string | null>();
-function readSession(slug: string): string | null {
-  const k = sessionKey(slug);
-  if (sessionMemory.has(k)) return sessionMemory.get(k) ?? null;
-  try {
-    return window.sessionStorage.getItem(k);
-  } catch {
-    return null;
-  }
-}
-function writeSession(slug: string, id: string | null): void {
-  const k = sessionKey(slug);
-  sessionMemory.set(k, id);
-  try {
-    if (id === null) window.sessionStorage.removeItem(k);
-    else window.sessionStorage.setItem(k, id);
-  } catch {
-    // Memory still holds it for this page.
-  }
-}
-
-/**
- * The observe payload of an answer still saving, per concept. Its request can
- * reach the server after a close does, and the first answer is what opens the
- * session, so a close sent alone could find no session and the answer then
- * open one nobody closes. A close while an answer is saving therefore resends
- * that answer with `closeSession`: its request id makes it a replay, and the
- * answer and the close commit together, as the session page does.
- */
-const savingAnswer = new Map<string, Record<string, unknown>>();
-
-/** Close the thread's session, if an answer opened one, and forget it. Idempotent on the server. */
-function closeSession(slug: string): void {
-  const id = readSession(slug);
-  if (id === null) return;
-  writeSession(slug, null);
-  const saving = savingAnswer.get(slug);
-  const [url, body] =
-    saving !== undefined && saving.sessionId === id
-      ? ["/api/learner/observe", { ...saving, closeSession: true }]
-      : ["/api/learner/session/close", { sessionId: id }];
-  void fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    // Survives the page going away, which is when this is usually sent.
-    keepalive: true,
-  }).catch(() => {
-    // Best-effort (R6): an open session costs an honest row, and `learn session close` closes it.
-  });
-}
 
 export function TutorChat({
   slug,
@@ -390,25 +324,13 @@ export function TutorChat({
   }
 
   async function judge(verdict: Verdict, answer: string) {
-    try {
-      const res = await fetch("/api/agent/judge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conceptSlug: slug, question: verdict.question, answer: answer.slice(0, CHAT_ANSWER_LIMIT) }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { verdict?: { correct?: unknown; feedback?: unknown } };
-      if (res.ok && typeof data.verdict?.correct === "boolean") {
-        patchVerdict(verdict.requestId, {
-          judged: "ready",
-          suggested: data.verdict.correct,
-          feedback: typeof data.verdict.feedback === "string" ? data.verdict.feedback : null,
-        });
-        return;
-      }
-    } catch {
-      // Unreachable or refused: the learner still chooses, with nothing pre-selected.
-    }
-    patchVerdict(verdict.requestId, { judged: "unavailable", suggested: null });
+    const verdictNow = await judgeAnswer(slug, verdict.question, answer);
+    patchVerdict(
+      verdict.requestId,
+      verdictNow === null
+        ? { judged: "unavailable", suggested: null }
+        : { judged: "ready", suggested: verdictNow.correct, feedback: verdictNow.feedback },
+    );
   }
 
   /** Request ids with a write in flight from this page: a second tap waits on the first, whatever the store says. */
@@ -426,61 +348,24 @@ export function TutorChat({
     const correct = verdict.tapped ?? tappedNow;
     recording.current.add(requestId);
     patchVerdict(requestId, { state: "saving", tapped: correct, error: null });
-    // The thread's session (R6): the first recorded answer opens it, on the server, in its own transaction.
-    const session = () => {
-      const held = readSession(slug);
-      if (held !== null) return held;
-      const id = newSessionId(slug, new Date(), requestToken().slice(5), "chat");
-      writeSession(slug, id);
-      return id;
-    };
-    const send = (sessionId: string) => {
-      const payload = {
+    try {
+      const recorded = await recordAnswer({
+        scope: slug,
+        sessionLabel: slug,
         conceptSlug: slug,
         correct,
         source: verdict.source,
         requestId,
-        sessionId,
         question: verdict.question,
-        // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
-        chosen: turn.content.slice(0, SESSION_TEXT_LIMIT),
-      };
-      savingAnswer.set(slug, payload);
-      return fetch("/api/learner/observe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        keepalive: true,
+        answer: turn.content,
       });
-    };
-    try {
-      let res = await send(session());
-      let data = (await res.json().catch(() => null)) as ObserveReply | null;
-      // A session closed elsewhere (another tab, `learn session close`) refuses the answer with
-      // nothing written; the thread starts a fresh one and sends the same answer once more.
-      if (res.status === 400 && /session/i.test(data?.error ?? "")) {
-        writeSession(slug, null);
-        res = await send(session());
-        data = (await res.json().catch(() => null)) as ObserveReply | null;
-      }
-      if (!res.ok || !data?.ok || !data.result) {
-        throw new Error(
-          res.status === 429 ? "Too many answers in a minute." : (data?.error ?? `The answer was not recorded (HTTP ${res.status}).`),
-        );
-      }
-      const r = data.result;
-      patchVerdict(requestId, {
-        state: "recorded",
-        error: null,
-        recorded: { correct: r.correct, pLBefore: r.pLBefore, pLAfter: r.pLAfter, intervalDays: r.card?.intervalDays ?? null },
-      });
+      patchVerdict(requestId, { state: "recorded", error: null, recorded });
       // The page's mastery dot, Recent answers and checks read the new state.
       router.refresh();
     } catch (e) {
       patchVerdict(requestId, { state: "failed", error: e instanceof Error ? e.message : "The answer was not recorded." });
     } finally {
       recording.current.delete(requestId);
-      if ((savingAnswer.get(slug) as { requestId?: string } | undefined)?.requestId === requestId) savingAnswer.delete(slug);
     }
   }
 
@@ -503,11 +388,11 @@ export function TutorChat({
   // R6: the thread's session closes when the page goes away, by navigation
   // inside the app (unmount) or out of it (`pagehide`). Best-effort.
   useEffect(() => {
-    const onHide = () => closeSession(slug);
+    const onHide = () => closeChatSession(slug);
     window.addEventListener("pagehide", onHide);
     return () => {
       window.removeEventListener("pagehide", onHide);
-      closeSession(slug);
+      closeChatSession(slug);
     };
   }, [slug]);
 
@@ -581,7 +466,7 @@ export function TutorChat({
         ? {
             role: "user",
             content: text,
-            verdict: newVerdict(askedTurn.check.question, requestToken(), checkSource(history, asked as number)),
+            verdict: newVerdict(askedTurn.check.question, chatRequestId(), checkSource(history, asked as number)),
           }
         : { role: "user", content: text });
     const next: ThreadItem[] = [...history, userTurn];
@@ -784,7 +669,7 @@ export function TutorChat({
               type="button"
               onClick={() => {
                 // A new thread is a new session: the old one closes with what it recorded.
-                closeSession(slug);
+                closeChatSession(slug);
                 setTurns([]);
                 setRestored(0);
                 setError(null);

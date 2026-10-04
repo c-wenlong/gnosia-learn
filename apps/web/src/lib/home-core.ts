@@ -539,9 +539,13 @@ export function recallPicks(
     });
 }
 
-/** `/review` with only these cards, in this order. */
-export function recallHref(picks: readonly RecallPick[]): string {
-  return `/review?only=${picks.map((p) => encodeURIComponent(p.conceptId)).join(",")}`;
+/**
+ * Where recalling a pick happens: its concept's page, whose tutor opens on a
+ * recall question because the card is due (phase 3 of
+ * docs/proposals/recall-in-chat.md, R3). With no pick, the whole queue.
+ */
+export function recallHref(pick: Pick<RecallPick, "conceptId"> | undefined): string {
+  return pick === undefined ? "/review" : `/learn/${encodeURIComponent(pick.conceptId)}`;
 }
 
 /* -------------------------------------------------------------------------- */

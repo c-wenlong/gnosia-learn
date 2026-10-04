@@ -241,3 +241,20 @@ describe("transcriptWindow", () => {
     expect(transcriptWindow(long.slice(0, 10), 5)).toEqual({ lines: long.slice(0, 10), from: 0, cut: false });
   });
 });
+
+describe("the topic tutor's check rule (recall in the chat, phase 3)", () => {
+  const course = courses[0];
+  const mod = course.modules[0];
+  const topic = mod.topics[0];
+
+  it("asks for a CHECK(<concept>) line naming one of the topic's concepts", () => {
+    const prompt = buildAgentSessionContext(course, mod, { ...topic, concepts: ["dot-product", "softmax"] }).systemPrompt;
+    expect(prompt).toContain("CHECK(<concept id>): <the question, on one line>");
+    expect(prompt).toContain("   - dot-product\n   - softmax");
+    expect(prompt).toContain("one per turn");
+  });
+
+  it("asks for no marker on a topic that declares no concepts", () => {
+    expect(buildAgentSessionContext(course, mod, { ...topic, concepts: [] }).systemPrompt).not.toContain("CHECK(");
+  });
+});

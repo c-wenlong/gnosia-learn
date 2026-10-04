@@ -123,7 +123,9 @@ same graph.
 
 At most three review cards, chosen from those whose concepts are on or next
 to the threads above, then by how long since they were last seen. No count of
-the whole queue and no "overdue" wording. One button, "Recall these", opens
+the whole queue and no "overdue" wording. (Since recall-in-chat phase 3 each
+row links to its concept, whose tutor opens on a recall question, and the
+button is "Start recall" on the first; what follows is the original.) One button, "Recall these", opens
 `/review` with just those cards. `/review` takes one `?concept=` today, so
 phase 2 lets it take a short list.
 

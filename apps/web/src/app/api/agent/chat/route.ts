@@ -18,7 +18,7 @@ import {
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { readTutorStyle } from "@/lib/settings";
-import { splitCheck } from "@/lib/tutor-check";
+import { splitCheck, topicCheck } from "@/lib/tutor-check";
 import { tutorCredentials } from "@/lib/agent/credentials";
 import {
   availableProviderSummary,
@@ -169,7 +169,8 @@ export async function POST(req: Request) {
     },
   );
 
-  return completeTurn(owner, session.systemPrompt, messages);
+  // Phase 3: a check this tutor marks is kept only for a concept the topic declares.
+  return completeTurn(owner, session.systemPrompt, messages, {}, { checks: found.topic.concepts ?? [] });
 }
 
 /**
@@ -243,7 +244,7 @@ async function conceptTurn(req: Request, body: ChatBody, owner: string) {
     session.systemPrompt + note,
     messages,
     { concept: { slug: read.workspace.slug, title: read.workspace.title }, sources: session.sources },
-    { markChecks: true },
+    { checks: "concept" },
   );
 }
 
@@ -351,7 +352,17 @@ async function completeTurn(
   systemPrompt: string,
   messages: ChatMessage[],
   extra: { concept?: { slug: string; title: string }; sources?: CitationSource[] } = {},
-  { markChecks = false }: { markChecks?: boolean } = {},
+  {
+    checks = null,
+  }: {
+    /**
+     * Which tutor's marker to read: `"concept"` (the concept tutor's, on its
+     * own concept, so any id it names is ignored), a topic's concept ids (the
+     * course topic tutor's, phase 3), or null for the open tutor, whose reply
+     * is returned exactly as written.
+     */
+    checks?: "concept" | readonly string[] | null;
+  } = {},
 ) {
   // Always inject our system prompt as the authoritative first message.
   const payloadMessages: ChatMessage[] = [
@@ -386,9 +397,15 @@ async function completeTurn(
     );
   }
 
-  // Only the concept tutor's prompt asks for the marker; the other two keep
-  // the reply exactly as the model wrote it.
-  const split = markChecks ? splitCheck(outcome.result.content) : null;
+  // The concept tutor's and the topic tutor's prompts ask for the marker; the
+  // open tutor's reply is returned exactly as the model wrote it.
+  const split = checks === null ? null : splitCheck(outcome.result.content);
+  if (split !== null) {
+    split.check =
+      checks === "concept"
+        ? split.check && { question: split.check.question }
+        : topicCheck(split.check, checks as readonly string[]);
+  }
   return NextResponse.json({
     message: { role: "assistant", content: split ? split.content : outcome.result.content },
     ...(split ? { check: split.check } : {}),
