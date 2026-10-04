@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { layoutGraph, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
-import { clusters, crossings, islandTitle, mapLayout } from "@/lib/concept-map";
+import { cachedMapLayout, clusters, crossings, islandTitle, mapLayout } from "@/lib/concept-map";
 
 /**
  * Written before `concept-map.ts` (phase 1 of docs/proposals/knowledge-map.md),
@@ -195,6 +195,38 @@ describe("mapLayout", () => {
     expect(mapLayout(long, links).routes["s>c>requires"].length).toBeGreaterThan(2);
   });
 
+  it("routes a cycle's back edge upward along its own lane, keeping its bends", () => {
+    // c sits two layers below a, so the back edge c -> a has a bend to keep.
+    const l = mapLayout([node("a"), node("b"), node("c")], [req("a", "b"), req("b", "c"), req("c", "a")]);
+    const back = l.edges.find((e) => l.positions[e.from].y > l.positions[e.to].y);
+    expect(back).toBeDefined();
+    const route = l.routes[`${back!.from}>${back!.to}>${back!.kind}`];
+    expect(route.length).toBeGreaterThanOrEqual(3);
+    // It leaves above its source and arrives under its target, moving up all the way.
+    expect(route[0].y).toBeLessThan(l.positions[back!.from].y);
+    expect(route.at(-1)!.y).toBeGreaterThan(l.positions[back!.to].y);
+    for (let k = 1; k < route.length; k++) expect(route[k].y).toBeLessThanOrEqual(route[k - 1].y + 0.5);
+  });
+
+  it("makes an island at least as wide as its title, so a long title is never clipped", () => {
+    const many = [
+      ...Array.from({ length: 2 }, (_, i) => node(`a${i}`, ["cp4284"])),
+      ...Array.from({ length: 2 }, (_, i) => node(`b${i}`, ["cp4282"])),
+      ...Array.from({ length: 2 }, (_, i) => node(`c${i}`, ["cp4285"])),
+    ];
+    // A single chain: one concept wide, under a three-course title.
+    const chain = many.slice(1).map((n, i) => req(many[i].id, n.id));
+    const l = mapLayout(many, chain, { courseCodes: codes });
+    expect(l.islands).toHaveLength(1);
+    const [island] = l.islands;
+    // Equal counts, so the codes come in alphabetical order.
+    expect(island.title).toBe("CP4282, CP4284, CP4285");
+    expect(island.width).toBeGreaterThanOrEqual(island.title.length * 8.5 + 8);
+    // The concepts are centred in the wider island.
+    const xs = island.nodes.map((id) => l.positions[id].x);
+    expect(Math.abs((Math.min(...xs) + Math.max(...xs)) / 2 - (island.x + island.width / 2))).toBeLessThan(2);
+  });
+
   it("survives a cycle, which doctor reports and the map must still draw", () => {
     const l = mapLayout([node("a"), node("b"), node("c")], [req("a", "b"), req("b", "c"), req("c", "a")]);
     expect(Object.keys(l.positions)).toHaveLength(3);
@@ -235,5 +267,27 @@ describe("crossings", () => {
     const after = crossings(mapLayout(tangled, links).edges, mapLayout(tangled, links).positions);
     expect(before).toBeGreaterThan(0);
     expect(after).toBeLessThan(before);
+  });
+});
+
+describe("cachedMapLayout", () => {
+  it("lays a graph out once and hands back the same layout while the graph is unchanged", () => {
+    const first = cachedMapLayout(nodes, edges, { courseCodes: codes });
+    // Fresh arrays with the same content, and mastery that moved: the layout does not depend on it.
+    const again = cachedMapLayout(
+      nodes.map((n) => ({ ...n, bucket: "learning" as const, pL: 0.6 })),
+      edges.map((e) => ({ ...e })),
+      { courseCodes: { ...codes } },
+    );
+    expect(again).toBe(first);
+    expect(again).toEqual(layout());
+  });
+
+  it("lays out again when a concept, an edge, a course or a code changes", () => {
+    const first = cachedMapLayout(nodes, edges, { courseCodes: codes });
+    expect(cachedMapLayout(nodes, edges.slice(1), { courseCodes: codes })).not.toBe(first);
+    expect(cachedMapLayout([...nodes, node("new")], edges, { courseCodes: codes })).not.toBe(first);
+    expect(cachedMapLayout(nodes.map((n) => (n.id === "dp" ? { ...n, courses: ["cp4284"] } : n)), edges, { courseCodes: codes })).not.toBe(first);
+    expect(cachedMapLayout(nodes, edges, { courseCodes: { ...codes, cs3230: "CS3230X" } })).not.toBe(first);
   });
 });

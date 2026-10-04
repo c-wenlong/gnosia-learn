@@ -66,6 +66,9 @@ const NODE_HEIGHT = 58;
 const DOT_FROM_TOP = 12;
 const ISLAND_GAP = 48;
 const TITLE_HEIGHT = 30;
+/** About how wide a title character is at the title's size (14px, bold), for sizing islands to their titles. */
+export const TITLE_CHAR_PX = 8.5;
+const TITLE_INSET = 8;
 
 const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const edgeKey = (e: GraphEdge) => `${e.from}\u0000${e.to}\u0000${e.kind}`;
@@ -187,9 +190,12 @@ function layoutIsland(ids: string[], edges: GraphEdge[]): Omit<LaidOutIsland, "i
     const from = local.get(e.from) as { x: number; y: number };
     const to = local.get(e.to) as { x: number; y: number };
     // dagre ends a route on each box's border; pin the ends under the label and above the dot.
-    const start = { x: from.x, y: from.y + NODE_HEIGHT - DOT_FROM_TOP };
-    const end = { x: to.x, y: to.y - DOT_FROM_TOP };
-    const middle = points.slice(1, -1).filter((pt: { x: number; y: number }) => pt.y > start.y && pt.y < end.y);
+    // A cycle's back edge runs upward: it leaves above its source and arrives under its target.
+    const up = from.y > to.y;
+    const start = { x: from.x, y: up ? from.y - DOT_FROM_TOP : from.y + NODE_HEIGHT - DOT_FROM_TOP };
+    const end = { x: to.x, y: up ? to.y + NODE_HEIGHT - DOT_FROM_TOP : to.y - DOT_FROM_TOP };
+    const [low, high] = up ? [end.y, start.y] : [start.y, end.y];
+    const middle = points.slice(1, -1).filter((pt: { x: number; y: number }) => pt.y > low && pt.y < high);
     localRoutes.set(routeKey(e), [start, ...middle, end]);
   }
   const graph = g.graph();
@@ -200,6 +206,26 @@ function layoutIsland(ids: string[], edges: GraphEdge[]): Omit<LaidOutIsland, "i
     local,
     edges,
     localRoutes,
+  };
+}
+
+/**
+ * An island at least as wide as its title, its concepts centred in the extra
+ * room, so a long title (three course codes) is never clipped at the map's edge.
+ */
+function widenForTitle<T extends { width: number; local: Map<string, { x: number; y: number }>; localRoutes: Map<string, { x: number; y: number }[]> }>(
+  island: T,
+  title: string,
+): T {
+  const needed = Math.ceil(title.length * TITLE_CHAR_PX + TITLE_INSET);
+  if (island.width >= needed) return island;
+  const dx = Math.round((needed - island.width) / 2);
+  const shift = (p: { x: number; y: number }) => ({ x: p.x + dx, y: p.y });
+  return {
+    ...island,
+    width: needed,
+    local: new Map([...island.local].map(([id, p]) => [id, shift(p)])),
+    localRoutes: new Map([...island.localRoutes].map(([key, route]) => [key, route.map(shift)])),
   };
 }
 
@@ -221,7 +247,8 @@ export function mapLayout(nodes: readonly GraphNode[], edges: readonly GraphEdge
   const laidOut: LaidOutIsland[] = clusters(nodes, sortedEdges).map((ids) => {
     const members = new Set(ids);
     const own = reduceEdges(sortedEdges.filter((e) => members.has(e.from) && members.has(e.to)));
-    return { id: ids[0], ...islandTitle(ids, nodesById, courseCodes), ...layoutIsland(ids, own) };
+    const titled = islandTitle(ids, nodesById, courseCodes);
+    return { id: ids[0], ...titled, ...widenForTitle(layoutIsland(ids, own), titled.title) };
   });
 
   const groupSize = new Map<string, number>();
@@ -310,4 +337,43 @@ export function crossings(edges: readonly GraphEdge[], positions: Readonly<Recor
     }
   }
   return count;
+}
+
+/** The inputs the layout depends on: not mastery, not titles of concepts. */
+function layoutKey(nodes: readonly GraphNode[], edges: readonly GraphEdge[], options: MapOptions): string {
+  const ns = nodes
+    .map((n) => [n.id, [...n.courses].sort().join(","), n.domain ?? ""].join("\u0001"))
+    .sort(byId)
+    .join("\u0002");
+  const es = edges.map(edgeKey).sort(byId).join("\u0002");
+  const codes = Object.entries(options.courseCodes ?? {})
+    .sort(([a], [b]) => byId(a, b))
+    .map(([slug, code]) => `${slug}=${code}`)
+    .join(",");
+  return `${ns}\u0003${es}\u0003${codes}\u0003${options.maxRowWidth ?? ""}`;
+}
+
+const CACHE_SIZE = 8;
+const cache = new Map<string, MapLayout>();
+
+/**
+ * `mapLayout`, remembered per graph. The Learn page asks on every request and
+ * the graph changes only when a note or a course does, so most requests get
+ * the layout they got last time instead of paying for it again. Mastery is
+ * not part of the key: the map's colours come from the nodes the page passes
+ * to the client, never from the layout. A few graphs are kept, one per owner
+ * or per recent change.
+ */
+export function cachedMapLayout(nodes: readonly GraphNode[], edges: readonly GraphEdge[], options: MapOptions = {}): MapLayout {
+  const key = layoutKey(nodes, edges, options);
+  const hit = cache.get(key);
+  if (hit !== undefined) {
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit;
+  }
+  const fresh = mapLayout(nodes, edges, options);
+  cache.set(key, fresh);
+  if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value as string);
+  return fresh;
 }

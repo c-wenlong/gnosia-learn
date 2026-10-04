@@ -4,7 +4,7 @@ import { LearnIndex } from "@/components/learn/LearnIndex";
 import { Card } from "@/components/ui/Card";
 import { getCourses } from "@/data/courses";
 import { defaultSelection, type GraphNode } from "@/lib/concept-graph";
-import { mapLayout } from "@/lib/concept-map";
+import { cachedMapLayout } from "@/lib/concept-map";
 import { courseSlugsOf, placeOf } from "@/lib/concept-workspace";
 import { appTimeZone } from "@/lib/time-zone";
 import { loadKnowledgeBase } from "@/lib/kb/load";
@@ -77,7 +77,8 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
   const selected = asked !== null && rows.some((r) => r.id === asked) ? asked : defaultSelection(kb.concepts, kb.frontier, now);
   const view = parseView(first(params.view));
   // The map is laid out here, on the server, so dagre never reaches the
-  // browser (G3 of docs/proposals/knowledge-map.md).
+  // browser (G3 of docs/proposals/knowledge-map.md), and remembered per graph,
+  // so a request whose graph has not changed does not pay for it again.
   const graphNodes: GraphNode[] = rows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -87,7 +88,7 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
     domain: r.domain,
   }));
   const courseCodes = Object.fromEntries(courses.map((c) => [c.slug, c.code]));
-  const map = mapLayout(graphNodes, kb.edges, { courseCodes });
+  const map = cachedMapLayout(graphNodes, kb.edges, { courseCodes });
 
   return (
     <div data-layout="app">
