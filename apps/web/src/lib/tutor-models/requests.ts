@@ -30,7 +30,7 @@ export function readModel(body: Record<string, unknown>): string | NextResponse 
   return checked.ok ? checked.model : refuse(checked.reason);
 }
 
-const STATUS: Record<TutorModelError["code"], number> = { INVALID: 400, DUPLICATE: 409, FULL: 409, NOT_FOUND: 404 };
+const STATUS: Record<TutorModelError["code"], number> = { INVALID: 400, DUPLICATE: 409, FULL: 409, NOT_FOUND: 404, NO_KEY: 400 };
 
 /** A chain change that did not happen: the chain's own refusal, or a database that could not be reached. */
 export function chainFailed(what: string, error: unknown): NextResponse {
