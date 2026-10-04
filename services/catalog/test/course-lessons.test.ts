@@ -246,6 +246,7 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
       expect(report.sharedTopicWithoutVideos).toEqual([]);
       // A commons module on that topic is read by every owner, so every
       // module on the topic is its peer, and it lists no video: named.
+      await scratch.db.insert(learner).values({ id: "commons" }).onConflictDoNothing();
       await scratch.db.insert(collection).values([
         { id: "cc1000", kind: "course", slug: "cc1000", title: "Commons", parentId: null, position: 10, ownerId: "commons" },
         { id: "cc1000-m1", kind: "module", slug: "m1", title: "Commons module", parentId: "cc1000", position: 1, ownerId: "commons" },
