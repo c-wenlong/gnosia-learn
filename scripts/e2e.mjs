@@ -542,12 +542,29 @@ async function run() {
     await page.waitForURL(`${base}/home`);
   });
 
-  await step('review: Recall these on Home, reveal, rate Good, move on', page, async () => {
+  await step('review: Start recall on Home opens the due concept, and All reviews rates it Good and moves on', page, async () => {
     await go('/home');
     // Home offers a few due cards, never the queue's count (H3 of
-    // docs/proposals/home-page.md); the button opens the review with just them.
-    await page.getByRole('link', { name: /^Recall these/ }).click();
-    await page.waitForURL(/\/review\?only=[^&]+$/);
+    // docs/proposals/home-page.md). Since recall-in-chat phase 3 (#381) each
+    // opens its concept, and Start recall the first, whose tutor opens on a
+    // recall question: the note's check, or one asked of the model, which
+    // with no provider key in this run fails and says so.
+    const recall = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Worth a quick recall' }) });
+    const start = recall.getByRole('link', { name: 'Start recall', exact: true });
+    const href = await start.getAttribute('href');
+    assert(href !== null && /^\/learn\/[^/?]+$/.test(href), `Start recall links to ${href}`);
+    assert((await recall.locator(`li a[href="${href}"]`).count()) === 1, `the first due card does not link to ${href}`);
+    await clickHydrated(page, start);
+    await page.waitForURL(`${base}${href}`);
+    await main
+      .getByText(/Its review is due, so one question before anything else|This review is due, but the tutor could not open on a recall question/)
+      .first()
+      .waitFor();
+
+    // The whole queue stays one link away, and grades as it always did.
+    await go('/home');
+    await clickHydrated(page, recall.getByRole('link', { name: 'All reviews', exact: true }));
+    await page.waitForURL(`${base}/review`);
     const bar = page.getByRole('progressbar', { name: 'Review progress' });
     await bar.waitFor();
     const before = await progressValue(bar);
@@ -573,7 +590,8 @@ async function run() {
     await done.or(show).or(options).first().waitFor();
   });
 
-  await step('review: a Recall these whose cards are no longer due says so', page, async () => {
+  // `?only=` outlived Home's old Recall these link (#381); an old link still lands somewhere honest.
+  await step('review: an ?only= link whose cards are no longer due says so', page, async () => {
     await go('/review?only=not-a-due-card');
     await main.getByRole('heading', { name: 'Already reviewed' }).waitFor();
     await main.getByRole('link', { name: 'All reviews' }).waitFor();
@@ -1054,7 +1072,10 @@ async function run() {
     const card = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Pick up where you left off' }) });
     await card.waitFor();
     await card.locator(`a[href^="/courses/${slug}"]`).first().waitFor();
-    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).waitFor();
+    // The concept's own row. Since #379 the session the step above walked is
+    // a row too, and one with no log opens the same concept page, so the
+    // concept is told apart by the kind a screen reader hears first.
+    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).filter({ hasText: /^Concept: / }).waitFor();
     // What the threads open up: at least one group, each a heading over links.
     const next = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Next from here' }) });
     await next.getByRole('heading', { level: 3, name: /^After / }).first().waitFor();
@@ -1076,9 +1097,11 @@ async function run() {
 
   await step('library: a type, a sort and the list layout all land in the URL', page, async () => {
     await go('/library');
-    await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
-    await page.getByRole('listbox', { name: 'Type' }).getByRole('option', { name: /^Note\b/ }).click();
+    // The type is a strip of tabs under the title since #376 (a menu only on a phone).
+    const notes = main.getByRole('navigation', { name: 'Type' }).getByRole('link', { name: 'Notes', exact: true });
+    await clickHydrated(page, notes);
     await page.waitForURL(/\/library\?(.*&)?kind=note/);
+    assert((await notes.getAttribute('aria-current')) === 'page', 'the Notes tab is not marked current');
     // The sort is a menu in the same toolbar: picking Title keeps the type.
     await clickHydrated(page, main.getByRole('button', { name: 'Sort: Newest' }));
     await page.getByRole('listbox', { name: 'Sort' }).getByRole('option', { name: /^Title\b/ }).click();
@@ -1087,11 +1110,27 @@ async function run() {
     await main.getByRole('group', { name: 'Layout' }).getByRole('link', { name: 'List' }).click();
     await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('sort') === 'title');
     assert(new URL(page.url()).searchParams.get('kind') === 'note', `the list lost the type: ${page.url()}`);
-    const titles = await page.getByRole('list', { name: 'Assets' }).locator('li a > span:nth-child(2) > span:first-child').allTextContents();
-    assert(titles.length > 1, `the list shows ${titles.length} rows`);
+    // Rows are grouped by day since #376, one list per day, and the sort
+    // orders the rows within each. A title reads without the kind a screen
+    // reader hears before it.
+    const days = await main.getByRole('region', { name: 'Assets' }).locator('ul').evaluateAll((lists) =>
+      lists.map((list) =>
+        [...list.querySelectorAll(':scope > li a > span > span:nth-child(2) > span:first-child')].map((title) =>
+          [...title.childNodes]
+            .filter((node) => !(node instanceof Element && node.classList.contains('sr-only')))
+            .map((node) => node.textContent)
+            .join('')
+            .trim(),
+        ),
+      ),
+    );
+    const rows = days.flat().length;
+    assert(rows > 1, `the list shows ${rows} rows`);
     const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
-    const sorted = [...titles].sort(collator.compare);
-    assert(titles.join('|') === sorted.join('|'), `the list is not in title order: ${titles.slice(0, 5).join(', ')}`);
+    for (const titles of days) {
+      const sorted = [...titles].sort(collator.compare);
+      assert(titles.join('|') === sorted.join('|'), `a day is not in title order: ${titles.slice(0, 5).join(', ')}`);
+    }
   });
 
   await step('ask: the box finds a concept, and a miss opens the tutor', page, async () => {
@@ -1142,11 +1181,10 @@ async function run() {
   if (SEED) skip('library: first video plays and saves its place', 'the seed has no videos (D7)');
   else await step('library: first video plays and saves its place', page, async () => {
     await go('/library');
-    // The Type menu: open it, pick Video from the listbox, and the URL is the filter.
-    await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
-    await page.getByRole('listbox', { name: 'Type' }).getByRole('option', { name: /^Video\b/ }).click();
+    // The Videos tab, and the URL is the filter (#376).
+    await clickHydrated(page, main.getByRole('navigation', { name: 'Type' }).getByRole('link', { name: 'Videos', exact: true }));
     await page.waitForURL(/\/library\?(.*&)?kind=video/);
-    await page.getByRole('list', { name: 'Assets' }).getByRole('link').first().click();
+    await main.getByRole('region', { name: 'Assets' }).getByRole('link').first().click();
     await page.waitForURL(/\/library\/[^/?]+$/);
     // No button to press: the player saves its own place. Play a moment,
     // pause, and the pause is a save the route has to accept.
@@ -1185,24 +1223,34 @@ async function run() {
   await step('provider keys: save a key, see its last four, remove it', page, async () => {
     // The keys are under Tutor (#342), which `?tab=tutor` opens.
     if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
-    // docs/BYOK.md: a key goes in once and never comes back out. The server
-    // starts with every provider key blank, so Gemini's row offers "Add your key".
-    const row = main.getByRole('listitem').filter({ has: page.getByText('Google Gemini', { exact: true }) });
-    await clickHydrated(page, row.getByRole('button', { name: 'Add your key' }));
+    // docs/BYOK.md: a key goes in once and never comes back out. Since #383 the
+    // keys live on the Providers card, which lists only providers with a key or
+    // models; the server starts with every key blank, so Gemini comes in
+    // through Add provider and goes out through Delete.
+    const card = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Providers', exact: true }) });
+    await clickHydrated(page, card.getByRole('button', { name: 'Add provider', exact: true }));
+    const form = card.getByRole('form', { name: 'Add a provider' });
+    await clickHydrated(page, form.getByRole('button', { name: /^Provider:/ }));
+    await page.getByRole('listbox', { name: 'Provider' }).getByRole('option', { name: /^Google Gemini\b/ }).click();
+    await form.getByRole('button', { name: /^Provider: Google Gemini/ }).waitFor();
     const fake = 'e2e-not-a-real-gemini-key-000000000000wxyz';
-    await row.getByLabel(/Paste the key/).fill(fake);
+    // #368 made the advice the field's description; the label is the field's name.
+    await form.getByLabel('API key', { exact: true }).fill(fake);
     const saving = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/learner/provider-key' && r.request().method() === 'POST',
     );
-    await row.getByRole('button', { name: 'Save key' }).click();
+    await form.getByRole('button', { name: 'Add provider', exact: true }).click();
     const response = await saving;
     assert(response.status() === 200, `the save answered ${response.status()}`);
     assert(!(await response.text()).includes(fake), 'the save answered with the key in it');
+    const row = card.getByRole('listitem').filter({ has: page.getByText('Google Gemini', { exact: true }) });
     await row.getByText(/Your key, ending wxyz\./).waitFor();
     assert(!(await page.content()).includes(fake), 'the page still holds the key after saving');
-    await row.getByRole('button', { name: 'Remove', exact: true }).click();
-    await row.getByRole('button', { name: 'Remove key', exact: true }).click();
-    await row.getByText('No key. The tutor skips this provider.').waitFor();
+    // The row's Delete opens the confirm, whose own Delete is in the page, inert, until then.
+    await clickHydrated(page, row.locator('button[aria-expanded]').filter({ hasText: /^Delete$/ }));
+    await row.getByRole('group', { name: 'Confirm deleting Google Gemini' }).getByRole('button', { name: 'Delete', exact: true }).click();
+    // With no key and no models the provider is no longer listed.
+    await row.waitFor({ state: 'detached' });
   });
 
   await step('theme: Dark adds `dark` to <html>', page, async () => {
