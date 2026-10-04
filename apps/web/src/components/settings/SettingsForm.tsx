@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type ReactNode } from "react";
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
+import { DISPLAY_NAME_MAX, PREFERENCE_KEYS } from "@self-learn/schema/shared";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,8 @@ import {
 import type { SettingsSnapshot } from "@/lib/settings";
 
 /**
- * The Settings page's two cards (hi-fi 12, less the Habit card, which went
+ * The Settings page's cards: the name the sidebar shows, then the hi-fi 12's
+ * two (hi-fi 12, less the Habit card, which went
  * with the streak and the daily target: H1 of docs/proposals/home-page.md).
  * Each select saves on change through `POST /api/learner/preference` and says
  * what happened beside it. The theme is `ThemeSwitch`, which goes through the
@@ -97,6 +98,10 @@ export function SettingsForm({
 
   return (
     <>
+      <Card title="Profile">
+        <NameField />
+      </Card>
+
       <Card title="Appearance and tutor">
         <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
           {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}
@@ -156,6 +161,58 @@ export function SettingsForm({
         <DataActions topicIds={topicIds} />
       </Card>
     </>
+  );
+}
+
+/**
+ * The name at the foot of the sidebar (`learner.display_name`). Saved on
+ * Enter or when the field loses focus, through the provider, so the sidebar
+ * changes the moment it is saved; empty clears it and the row says "Account".
+ */
+function NameField() {
+  const { state, setDisplayName } = useLearner();
+  const saved = state.displayName ?? "";
+  const [draft, setDraft] = useState(saved);
+  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const latest = useRef(0);
+  const save = () => {
+    const next = draft.replace(/\s+/g, " ").trim();
+    if (next === saved) return;
+    if (next.length > DISPLAY_NAME_MAX) {
+      setStatus({ kind: "error", message: `At most ${DISPLAY_NAME_MAX} characters.` });
+      return;
+    }
+    setDraft(next);
+    setStatus({ kind: "saving" });
+    const mine = ++latest.current;
+    void setDisplayName(next).then((ok) => {
+      if (mine !== latest.current) return;
+      setStatus(ok ? { kind: "saved" } : { kind: "error", message: "Not saved: the database did not answer." });
+    });
+  };
+  return (
+    <Field label="Name" note="Shown at the foot of the sidebar. Leave it empty to show Account." status={status}>
+      {(id) => (
+        <input
+          id={id}
+          type="text"
+          value={draft}
+          maxLength={DISPLAY_NAME_MAX}
+          autoComplete="name"
+          placeholder="Your name"
+          aria-describedby={`${id}-note`}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={save}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              save();
+            }
+          }}
+          className={inputClasses()}
+        />
+      )}
+    </Field>
   );
 }
 

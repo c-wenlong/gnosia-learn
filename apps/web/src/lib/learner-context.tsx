@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { LEGACY_STORAGE_KEY } from "@self-learn/schema/shared";
+import { cleanDisplayName, LEGACY_STORAGE_KEY } from "@self-learn/schema/shared";
 
 import type {
   KnowledgeInput,
@@ -88,6 +88,8 @@ interface LearnerContextValue {
   markVisited: (courseSlug: string, moduleSlug?: string) => void;
   /** Bring a course back to the Courses page's grid, or fold it under "Inactive courses". */
   setCourseActive: (courseSlug: string, active: boolean) => void;
+  /** Set the name the sidebar shows, or clear it with "". Resolves true once stored. */
+  setDisplayName: (name: string) => Promise<boolean>;
 }
 
 const LearnerContext = createContext<LearnerContextValue | null>(null);
@@ -241,6 +243,23 @@ export function LearnerProvider({
     [commit],
   );
 
+  const setDisplayName = useCallback(
+    (name: string) => {
+      const cleaned = cleanDisplayName(name);
+      return commit(
+        "name",
+        (previous) => {
+          const next = { ...previous };
+          if (cleaned === null) delete next.displayName;
+          else next.displayName = cleaned;
+          return next;
+        },
+        () => post("name", { name: cleaned }),
+      );
+    },
+    [commit],
+  );
+
   const toggleTopicCompletion = useCallback(
     (topicId: string) => {
       commit(
@@ -382,6 +401,7 @@ export function LearnerProvider({
       resetCourse,
       markVisited,
       setCourseActive: setActive,
+      setDisplayName,
     }),
     [
       state,
@@ -397,6 +417,7 @@ export function LearnerProvider({
       resetCourse,
       markVisited,
       setActive,
+      setDisplayName,
     ],
   );
 

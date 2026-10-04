@@ -1,4 +1,5 @@
 import { learner, LOCAL_LEARNER_ID } from "@self-learn/schema";
+import { cleanDisplayName } from "@self-learn/schema/shared";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -21,6 +22,30 @@ export async function ensureLearner(
 ): Promise<string> {
   await db.insert(learner).values({ id: learnerId }).onConflictDoNothing();
   return learnerId;
+}
+
+/** The learner's name, cleaned (`cleanDisplayName`), or null when none is set. */
+export async function readDisplayName(
+  db: CatalogDatabase,
+  learnerId: string = LOCAL_LEARNER_ID,
+): Promise<string | null> {
+  const rows = await db.select({ name: learner.displayName }).from(learner).where(eq(learner.id, learnerId));
+  return cleanDisplayName(rows[0]?.name);
+}
+
+/**
+ * Set the learner's name, or clear it with null or an empty string. The
+ * caller checks the length; this stores the cleaned value.
+ */
+export async function writeDisplayName(
+  db: CatalogDatabase,
+  name: string | null,
+  learnerId: string = LOCAL_LEARNER_ID,
+): Promise<string | null> {
+  await ensureLearner(db, learnerId);
+  const cleaned = cleanDisplayName(name);
+  await db.update(learner).set({ displayName: cleaned, updatedAt: new Date() }).where(eq(learner.id, learnerId));
+  return cleaned;
 }
 
 /**
