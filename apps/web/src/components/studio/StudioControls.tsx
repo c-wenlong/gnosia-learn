@@ -113,7 +113,7 @@ export function StudioSearch({ view }: { view: StudioView }) {
 /**
  * The topic chips: what is in this directory, not the whole vocabulary.
  *
- * Past six they go into an overflow menu, because the strip's height is
+ * Past five they go into an overflow menu, because the strip's height is
  * fixed and a wrapping row of chips is the one thing that would change it.
  * The menu is in the top layer, so the row's own clipping (it never wraps)
  * cannot cut it off. `No topic` is never in the overflow: its whole job is
@@ -122,8 +122,9 @@ export function StudioSearch({ view }: { view: StudioView }) {
  * The chips scroll sideways when they have less room than they need, and
  * "+N" sits after them outside the scrolling box, so it is always on screen;
  * the row used to clip both, and on a phone "+N" sat under the search field
- * where no press could reach it. `No topic` ends the scrolling run. The
- * padding keeps a chip's focus ring inside the scrolling box, which clips.
+ * where no press could reach it. `No topic` leads the scrolling run, so it
+ * is in view before any scroll. The padding keeps a chip's focus ring inside
+ * the scrolling box, which clips.
  *
  * Each chip is the kit's small `Chip` drawn on a `PanelLink` (`chipClasses`),
  * so a press moves the URL in the browser as every control here does. A
@@ -138,6 +139,19 @@ export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioVi
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1.5">
       <div className="-mx-1 flex min-w-0 items-center gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none]">
+        {/* First, so it is on screen however many topics follow and however
+            narrow the row: its whole job is to be noticed, and it is never in
+            the overflow. At zero it would filter to nothing; shown while on,
+            so it can be turned off. */}
+        {untopiced !== undefined && (untopiced.count > 0 || view.topics.includes(NO_TOPIC)) && (
+          <TopicChip
+            href={studioHref(toggleTopic(view, NO_TOPIC), { selected: null })}
+            active={view.topics.includes(NO_TOPIC)}
+            title={`${untopiced.count} diagram${untopiced.count === 1 ? "" : "s"} with no topic`}
+          >
+            No topic ({untopiced.count})
+          </TopicChip>
+        )}
         {shown.map((chip) => (
           <TopicChip
             key={chip.slug}
@@ -148,16 +162,6 @@ export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioVi
             {chip.label}
           </TopicChip>
         ))}
-        {/* At zero it would filter to nothing; shown while on, so it can be turned off. */}
-        {untopiced !== undefined && (untopiced.count > 0 || view.topics.includes(NO_TOPIC)) && (
-          <TopicChip
-            href={studioHref(toggleTopic(view, NO_TOPIC), { selected: null })}
-            active={view.topics.includes(NO_TOPIC)}
-            title={`${untopiced.count} diagram${untopiced.count === 1 ? "" : "s"} with no topic`}
-          >
-            No topic ({untopiced.count})
-          </TopicChip>
-        )}
       </div>
       {overflow.length > 0 && (
         <StripMenu label={`+${overflow.length}`} name={`${overflow.length} more ${overflow.length === 1 ? "topic" : "topics"}`} placement="bottom-start">
