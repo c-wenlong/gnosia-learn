@@ -73,8 +73,8 @@ export const RENDER_SERVICES = [
 export const CHROME_RENDEZVOUS = String.raw`^com\.google\.Chrome\.MachPortRendezvousServer\.`;
 export const CHROME_REGISTER = String.raw`^com\.google\.Chrome\.`;
 
-/** The small system programs a step starts. Python's `platform` module runs `uname` for kokoro; nothing else is needed. */
-const NARRATE_SYSTEM = ["/bin/sh", "/usr/bin/uname"];
+/** The small system program the narration step starts: Python's `platform` runs `uname` for kokoro. The console script's shells are the toolchain's (`scriptShells`): `/bin/sh` alone was allowed before, which ran nothing, since it execs the shell `/private/var/select/sh` names. */
+const NARRATE_SYSTEM = ["/usr/bin/uname"];
 
 /** The job's ports file and its pair, which every Chrome tool's setup writes the same way (`../ports.ts`). */
 export { portsFile, profilePorts, readPorts, writePorts } from "../ports";
@@ -113,7 +113,7 @@ function execRules(kind: ProfileKind, { tools }: RevideokcProfileInput): Rule[] 
     // gnosia-audio's console script, which revideokc runs by path: a script is
     // checked at exec as well as the interpreter its first line names.
     const script = own.venv === null ? [] : [file(path.join(own.venv, "bin", "gnosia-audio"))];
-    return [...nodeRules(tools), ...script, ...program(own.gnosiaPython), ...program(tools.ttsPython), ...media, ...NARRATE_SYSTEM.map(file)];
+    return [...nodeRules(tools), ...script, ...own.scriptShells.map(file), ...program(own.gnosiaPython), ...program(tools.ttsPython), ...media, ...NARRATE_SYSTEM.map(file)];
   }
   return [
     ...nodeRules(tools),
