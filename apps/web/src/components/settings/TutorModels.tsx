@@ -9,7 +9,8 @@ import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
 import { Input } from "@/components/ui/Input";
 import { LiveStatus } from "@/components/ui/LiveStatus";
-import { cx, inputClasses, LABEL } from "@/components/ui/classes";
+import { Select } from "@/components/ui/Select";
+import { cx, LABEL } from "@/components/ui/classes";
 import type { TutorModelsView } from "@/lib/tutor-models/settings";
 
 /**
@@ -425,22 +426,16 @@ function AddModel({
             <label htmlFor={`${base}-provider`} className={LABEL}>
               Provider
             </label>
-            <select
+            <Select
               id={`${base}-provider`}
+              label="Provider"
+              options={usable.map((p) => ({ value: p.id, label: `${p.label} (${p.key === "saved" ? "your key" : "server key"})` }))}
               value={chosen?.id ?? ""}
-              onChange={(e) => {
-                const id = e.target.value as ProviderId;
-                setProvider(id);
-                void load(id);
+              onChange={(id) => {
+                setProvider(id as ProviderId);
+                void load(id as ProviderId);
               }}
-              className={inputClasses({ className: "cursor-pointer" })}
-            >
-              {usable.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} ({p.key === "saved" ? "your key" : "server key"})
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor={`${base}-model`} className={LABEL}>

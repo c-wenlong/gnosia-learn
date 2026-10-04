@@ -11,6 +11,7 @@ import { Chip } from "@/components/ui/Chip";
 import { chipClasses, cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import type { TopicOption } from "@/data/topics";
 import {
   checkEdit,
@@ -978,39 +979,24 @@ function EndSelect({
 }) {
   const value = relation[end] ?? "";
   return (
-    <span className="relative inline-flex max-w-full">
-      <select
-        data-field={`relation:${relation.id}:${end}`}
-        aria-label={`Arrow ${at + 1} ${end}`}
-        value={value}
-        aria-invalid={problem !== null || undefined}
-        aria-describedby={problem === null ? undefined : describedBy}
-        onChange={(event) => {
-          if (locked) return;
-          onChange(relation.id, { [end]: event.target.value === "" ? null : event.target.value }, end);
-        }}
-        className={cx(CHIP_FIELD, "cursor-pointer appearance-none truncate pl-2.5 pr-6")}
-      >
-        {value === "" && <option value="">Pick one</option>}
-        {edit.elements.map((element, index) => (
-          <option key={element.id} value={element.id}>
-            {element.label.trim() === "" ? `Element ${index + 1}` : element.label}
-          </option>
-        ))}
-      </select>
-      <svg
-        aria-hidden
-        viewBox="0 0 16 16"
-        className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-text3"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="m4 6 4 4 4-4" />
-      </svg>
-    </span>
+    <Select
+      dataField={`relation:${relation.id}:${end}`}
+      label={`Arrow ${at + 1} ${end}`}
+      size="chip"
+      className="inline-flex max-w-full"
+      placeholder="Pick one"
+      options={edit.elements.map((element, index) => ({
+        value: element.id,
+        label: element.label.trim() === "" ? `Element ${index + 1}` : element.label,
+      }))}
+      value={value}
+      invalid={problem !== null}
+      describedBy={problem === null ? undefined : describedBy}
+      onChange={(next) => {
+        if (locked) return;
+        onChange(relation.id, { [end]: next }, end);
+      }}
+    />
   );
 }
 
