@@ -313,8 +313,11 @@ export function LearnerProvider({
    *
    * A write that a newer one on the same key superseded resolves too, with
    * its own outcome: a stored reset was stored even when a note queued
-   * behind it is refused. Only the newest write sets `saveError`, records a
-   * confirmation and hands over a held snapshot, as before.
+   * behind it is refused. Only the newest write sets `saveError` and hands
+   * over a held snapshot, as before. A superseded write that was stored
+   * records its confirmation too, which the newer one replaces once it is
+   * stored: when the newer one is refused, the database still holds the
+   * older, and a snapshot from before it must not be adopted.
    */
   const commit = useCallback(
     (
@@ -326,21 +329,26 @@ export function LearnerProvider({
       const next = reduce(current.current);
       current.current = next;
       setState(next);
+      const record = (response: ApiResponse) => {
+        if (response.ok === false) return;
+        stored.current.set(typeof key === "string" ? key : key.join("\n"), confirm(next));
+        // A new write gets its own re-reads, whatever earlier ones used.
+        rereads.current = 0;
+      };
       return new Promise<boolean>((resolve) => {
         queue.current.run(
           key,
           () => send(next),
           (response) => {
             setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
-            if (response.ok !== false) {
-              stored.current.set(typeof key === "string" ? key : key.join("\n"), confirm(next));
-              // A new write gets its own re-reads, whatever earlier ones used.
-              rereads.current = 0;
-            }
+            record(response);
             if (queue.current.pending === 0 && held.current !== null) receive(held.current);
             resolve(response.ok !== false);
           },
-          (response) => resolve(response.ok !== false),
+          (response) => {
+            record(response);
+            resolve(response.ok !== false);
+          },
         );
       });
     },

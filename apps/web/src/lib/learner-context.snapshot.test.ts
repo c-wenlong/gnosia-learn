@@ -237,6 +237,39 @@ describe("a snapshot during a write", () => {
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("protects a stored write that a refused one superseded: the database has it", async () => {
+    const { container, draw, answer } = setup({ notes: { t1: "old" } });
+    act(() => held.learner!.updateNote("t1", "first"));
+    act(() => held.learner!.updateNote("t1", "second"));
+    draw({ notes: { t1: "old" } });
+    await answer();
+    await answer(503);
+    expect(held.learner!.saveError).toBe("Not saved.");
+    // The held snapshot predates "first", which was stored: read again.
+    expect(container.textContent).toBe("note=second tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    draw({ notes: { t1: "first" } });
+    expect(container.textContent).toBe("note=first tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("protects a stored reset when the writes queued behind it on every key are refused", async () => {
+    const { container, draw, answer } = setup({ completed: { t1: true }, notes: { t1: "old" } });
+    act(() => {
+      void held.learner!.resetCourse(["t1"]);
+      held.learner!.toggleTopicCompletion("t1");
+      held.learner!.updateNote("t1", "again");
+    });
+    draw({ completed: { t1: true }, notes: { t1: "old" } });
+    await answer();
+    await answer(503);
+    await answer(503);
+    expect(container.textContent).toBe("note=again tick=true epoch=1");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    draw({ epoch: 1 });
+    expect(container.textContent).toBe("note=none tick=false epoch=1");
+  });
+
   it("protects nothing for a refused write: the database never had it", async () => {
     const { container, draw, answer } = setup({});
     act(() => held.learner!.updateNote("t1", "three paragraphs"));
