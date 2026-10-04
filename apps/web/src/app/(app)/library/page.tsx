@@ -8,6 +8,8 @@ import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetRow } from "@/components/library/AssetRow";
 import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryToolbar";
 import { Notice } from "@/components/library/Notice";
+import { Previewer } from "@/components/library/Previewer";
+import { loadPreview } from "@/components/library/preview-content";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
@@ -48,6 +50,7 @@ import {
 import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
 import { dayGroups, editedLabel, timeOfDay, type DayGroup } from "@/lib/day-groups";
 import { loadKnowledgeBase } from "@/lib/learner-store";
+import { parseOpen } from "@/lib/library-preview";
 import { conceptOrder, rowSource } from "@/lib/library-source";
 import { bucketOf } from "@/lib/mastery-bucket";
 import { ownValue } from "@/lib/own-key";
@@ -122,13 +125,17 @@ export default async function LibraryPage({
   const view = parseView(firstParam(params.view));
   const favorites = firstParam(params.favorites) === "1";
   const filters: LibraryFilters = { kind, topic, course, q, sort, view, favorites };
+  // The asset open in the previewer (L6), when the page is loaded with one:
+  // its body is in the first paint rather than a skeleton.
+  const open = parseOpen(params.open);
 
-  const [library, { kb }, courses, starred] = await Promise.all([
+  const [library, { kb }, courses, starred, preview] = await Promise.all([
     loadLibrary(),
     loadKnowledgeBase(),
     getCourses(),
     // Read only when the filter is on: nothing else on the page draws a star.
     favorites ? loadFavorites() : Promise.resolve(null),
+    open === null ? Promise.resolve(null) : loadPreview(open),
   ]);
   // A store that could not be read filters to nothing rather than to
   // everything, and the page says why below.
@@ -405,6 +412,9 @@ export default async function LibraryPage({
               </p>
             </Notice>
           ) : (
+            // A press on a row or a card opens it in the previewer over the
+            // list (L6); `?open=` names the one open, so a reload reopens it.
+            <Previewer initial={preview} initialOpen={open}>
             <section
               aria-label={listLabel}
               // A tab, a filter or a sort keeps the groups whose day is still
@@ -453,6 +463,7 @@ export default async function LibraryPage({
                 </DaySection>
               ))}
             </section>
+            </Previewer>
           )}
 
           {truncated && (
