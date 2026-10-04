@@ -18,6 +18,7 @@ import {
   DEFAULT_AGENT_MODEL,
 } from "@/lib/agent/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
+import { scrollBehavior } from "@/lib/motion";
 
 type Role = "user" | "assistant";
 
@@ -87,7 +88,7 @@ export function AgentSession({
   const hasDialogue = messages.some((m) => m.role === "assistant");
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: scrollBehavior() });
   }, [messages, busy]);
 
   async function copy(text: string, label: string) {
