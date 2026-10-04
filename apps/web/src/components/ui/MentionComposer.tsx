@@ -8,6 +8,7 @@ import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import {
   $createParagraphNode,
+  $createRangeSelection,
   $createTextNode,
   $getNodeByKey,
   $getRoot,
@@ -46,14 +47,28 @@ import {
 
 import { Button } from "./Button";
 import { cx } from "./classes";
-import { COMPOSER_FRAME, COMPOSER_LINE_PX, COMPOSER_MAX_ROWS, COMPOSER_PLACEHOLDER, COMPOSER_REASON, COMPOSER_TEXT, composerKey } from "./composer-keys";
+import { ComposerBox, SendDisc } from "./ComposerBox";
+import {
+  COMPOSER_BOX_MIN_ROWS,
+  COMPOSER_FRAME,
+  COMPOSER_LINE_PX,
+  COMPOSER_MAX_ROWS,
+  COMPOSER_PLACEHOLDER,
+  COMPOSER_REASON,
+  COMPOSER_TEXT,
+  composerBoxFieldPx,
+  composerKey,
+} from "./composer-keys";
 import { Glyph, type GlyphName } from "./Glyph";
 import { MentionChip } from "./MentionChip";
 import {
+  caretOffset,
+  caretPoint,
   filterMentionOptions,
   firstActive,
   isEmptyValue,
   isUsable,
+  mapOffset,
   MENTION_NODE_TYPE,
   mentionQuery,
   mentionToken,
@@ -64,10 +79,12 @@ import {
   serializeMentions,
   valuePieces,
   plusMenuStays,
+  type CaretLine,
   type MentionOption,
   type MentionValue,
   type PlusAnchor,
   type SerializedNodeLike,
+  type TextEdit,
 } from "./mention-text";
 
 /**
@@ -89,6 +106,12 @@ import {
  * suggestion's prefill, a clear after Send) rebuilds the field from it.
  * `insertMention` on the handle is for the suggestion buttons.
  *
+ * `layout="box"` is the studio home's (D88 of docs/STUDIO-CHAT-FIRST.md): the
+ * field three lines tall on top, and under it, inside the same frame, the
+ * plus, the caller's `toolbar` and a round Send (`ComposerBox`). The menu then
+ * opens under the box, beside the plus that opens it. Everything else is the
+ * same field.
+ *
  * Only the studio renders it, lazily, so Lexical stays out of every other
  * route (open question 4 of the mentions doc). The React-free rules are
  * `mention-text.ts` and `composer-keys.ts`.
@@ -98,6 +121,14 @@ export interface MentionComposerHandle {
   /** Put `kind`'s chip at the caret, or at the end when the field has not been focused, and focus it. */
   insertMention: (kind: string) => void;
   focus: () => void;
+  /**
+   * Keep the caret through the next value the parent sets, when it is `next`
+   * and was made from the current one by `edit` (a toggle's chip going in or
+   * out): the field is rebuilt from the value as always, and the caret, or
+   * the selection, goes back where it was, moved by the edit, instead of to
+   * the end.
+   */
+  keepCaretThrough: (next: MentionValue, edit: TextEdit) => void;
 }
 
 export interface MentionComposerProps<K extends string = string> {
@@ -133,6 +164,12 @@ export interface MentionComposerProps<K extends string = string> {
    * in place of its "reload the page" line. Not read here.
    */
   fallbackNote?: string;
+  /** `row`, the default: Send beside the field. `box`: the field over a row of controls, in one frame. */
+  layout?: "row" | "box";
+  /** The box's controls, between the plus and Send. Not drawn in the row layout. */
+  toolbar?: ReactNode;
+  /** Lines the box's field shows when empty. */
+  minRows?: number;
 }
 
 export function MentionComposer<K extends string = string>(props: MentionComposerProps<K>) {
@@ -286,6 +323,9 @@ function Field<K extends string>({
   className,
   handleRef,
   autoFocus,
+  layout = "row",
+  toolbar,
+  minRows = COMPOSER_BOX_MIN_ROWS,
 }: MentionComposerProps<K>) {
   const [editor] = useLexicalComposerContext();
   const base = useId();
@@ -299,6 +339,13 @@ function Field<K extends string>({
   // showed a job) is built into it by the effect below rather than skipped.
   const emitted = useRef<MentionValue<K>>({ text: "", mentions: [] });
   const focusedOnce = useRef(false);
+  // A caret to put back after the next rebuild, already moved by the edit, and
+  // the text that rebuild must be to.
+  const pendingCaret = useRef<{ text: string; anchor: number; focus: number } | null>(null);
+  // The last caret the field had, as offsets into the text it had then: the
+  // editor drops its selection when focus leaves, so a toggle pressed from
+  // the keyboard would otherwise find none to keep.
+  const lastCaret = useRef<{ text: string; anchor: number; focus: number } | null>(null);
 
   // The latest props, for command handlers registered once.
   const latest = useRef({ value, onChange, onSubmit, mentions, onModEnter, disabled, sendDisabled });
@@ -329,6 +376,8 @@ function Field<K extends string>({
   useEffect(() => {
     return editor.registerUpdateListener(({ editorState, tags }) => {
       const next = serializeMentions<K>(editorState.toJSON().root as unknown as SerializedNodeLike);
+      const caret = editorState.read(() => $selectionOffsets());
+      if (caret !== null) lastCaret.current = { text: next.text, ...caret };
       if (!sameValue(next, emitted.current)) {
         emitted.current = next;
         if (!tags.has(EXTERNAL)) latest.current.onChange(next);
@@ -372,7 +421,16 @@ function Field<K extends string>({
   useEffect(() => {
     if (sameValue(value, emitted.current)) return;
     emitted.current = value;
-    const focused = editor.getRootElement() !== null && editor.getRootElement() === document.activeElement;
+    const pending = pendingCaret.current;
+    pendingCaret.current = null;
+    const keep = pending !== null && pending.text === value.text ? pending : null;
+    const rootElement = editor.getRootElement();
+    // A kept caret is for a field the caller focuses next (a toggle pressed
+    // from the keyboard has the focus on itself). Focus it first: the browser
+    // applies a selection the editor sets only to a focused field, and would
+    // otherwise put the caret back where its own was, at the end.
+    if (keep !== null && rootElement !== null && rootElement !== document.activeElement) rootElement.focus({ preventScroll: true });
+    const focused = rootElement !== null && rootElement === document.activeElement;
     editor.update(
       () => {
         const root = $getRoot();
@@ -386,6 +444,7 @@ function Field<K extends string>({
           }
           root.append(paragraph);
         }
+        if (keep !== null && $selectOffsets(keep.anchor, keep.focus)) return;
         if (focused) root.selectEnd();
         else $setSelection(null);
       },
@@ -495,7 +554,24 @@ function Field<K extends string>({
     [editor, openMenu],
   );
 
-  useImperativeHandle(handleRef, () => ({ insertMention, focus: () => editor.focus() }), [insertMention, editor]);
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      insertMention,
+      focus: () => editor.focus(),
+      keepCaretThrough: (next: MentionValue, edit: TextEdit) => {
+        // Read now, before the caller focuses the field (which, with no
+        // selection, puts one at the end): the selection the field has, else
+        // the one it had when focus left it.
+        const now = editor.getEditorState().read(() => $selectionOffsets());
+        const last = lastCaret.current;
+        const caret = now ?? (last !== null && last.text === emitted.current.text ? last : null);
+        pendingCaret.current =
+          caret === null ? null : { text: next.text, anchor: mapOffset(caret.anchor, edit), focus: mapOffset(caret.focus, edit) };
+      },
+    }),
+    [insertMention, editor],
+  );
 
   // Once, when the field mounts: the panel behind it asked for focus before
   // this chunk arrived, and the asking has to happen here.
@@ -655,13 +731,86 @@ function Field<K extends string>({
   const activeOption = menu?.options[menu.active];
   const tagged = new Set(value.mentions.map((mention) => mention.kind as string));
   const maxHeight = COMPOSER_LINE_PX * Math.max(1, maxRows) + 24;
+  const box = layout === "box";
+  const describedBy = reason === null ? undefined : reasonId;
+
+  const plus = (
+    <button
+      type="button"
+      aria-label="Tag what to make"
+      aria-haspopup="listbox"
+      aria-expanded={open && menu.mode === "plus"}
+      aria-controls={open ? listId : undefined}
+      disabled={disabled}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => (open && menu.mode === "plus" ? openMenu(null) : openFromPlus())}
+      className={cx(
+        "relative flex size-8 items-center justify-center rounded-full text-text2 transition-colors",
+        "hover:bg-surface2 hover:text-text disabled:cursor-not-allowed",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        // A 44px target under a finger, the face still 32px.
+        "pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5 pointer-coarse:after:content-['']",
+      )}
+    >
+      <Glyph name="add" size={20} />
+    </button>
+  );
+
+  const field = (
+    <div className="relative min-w-0 flex-1">
+      <PlainTextPlugin
+        contentEditable={
+          <ContentEditable
+            role="textbox"
+            aria-multiline
+            aria-label={label}
+            aria-describedby={describedBy}
+            aria-controls={open ? listId : undefined}
+            aria-activedescendant={open && activeOption !== undefined ? optionId(activeOption) : undefined}
+            aria-autocomplete="list"
+            spellCheck
+            style={
+              box
+                ? { minHeight: composerBoxFieldPx(minRows), maxHeight: composerBoxFieldPx(Math.max(minRows, maxRows)) }
+                : { maxHeight }
+            }
+            className={cx(
+              "block w-full overflow-y-auto outline-none",
+              box ? "px-4 pb-1 pt-3" : "min-h-12 py-3 pl-1 pr-4",
+              "whitespace-pre-wrap break-words",
+              COMPOSER_TEXT,
+              disabled && "cursor-not-allowed",
+            )}
+            aria-placeholder={placeholder ?? ""}
+            placeholder={
+              <div
+                aria-hidden
+                className={cx(
+                  "pointer-events-none absolute top-3",
+                  // The box has room for a placeholder that wraps; the row's is one line.
+                  box ? "left-4 right-4" : "left-1 right-4 truncate",
+                  COMPOSER_PLACEHOLDER,
+                )}
+              >
+                {placeholder}
+              </div>
+            }
+          />
+        }
+        ErrorBoundary={LexicalErrorBoundary}
+      />
+      <HistoryPlugin />
+    </div>
+  );
 
   return (
     <form onSubmit={submit} className={cx("relative flex flex-col gap-1.5", className)}>
       {open && (
         <div
           className={cx(
-            "absolute bottom-full left-0 z-20 mb-2 w-full md:max-w-[360px]",
+            "absolute left-0 z-20 w-full md:max-w-[360px]",
+            // Under the box, beside its plus; over the row, which sits at the foot of a panel.
+            box ? "top-full mt-2" : "bottom-full mb-2",
             "overflow-hidden rounded-xl border border-border bg-surface",
           )}
         >
@@ -722,74 +871,34 @@ function Field<K extends string>({
         </div>
       )}
 
-      <div className="flex items-end gap-2.5">
-        <div
-          className={cx(
-            "relative flex min-w-0 flex-1 items-end",
-            COMPOSER_FRAME,
-            "focus-within:border-accent",
-            disabled && "cursor-not-allowed opacity-60",
-          )}
-        >
-          <div className="shrink-0 p-2">
-            <button
-              type="button"
-              aria-label="Tag what to make"
-              aria-haspopup="listbox"
-              aria-expanded={open && menu.mode === "plus"}
-              aria-controls={open ? listId : undefined}
-              disabled={disabled}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => (open && menu.mode === "plus" ? openMenu(null) : openFromPlus())}
-              className={cx(
-                "relative flex size-8 items-center justify-center rounded-full text-text2 transition-colors",
-                "hover:bg-surface2 hover:text-text disabled:cursor-not-allowed",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                // A 44px target under a finger, the face still 32px.
-                "pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5 pointer-coarse:after:content-['']",
-              )}
-            >
-              <Glyph name="add" size={20} />
-            </button>
+      {box ? (
+        <ComposerBox
+          disabled={disabled}
+          field={field}
+          leading={plus}
+          toolbar={toolbar}
+          send={<SendDisc label={sendLabel} disabled={blocked} describedBy={describedBy} />}
+        />
+      ) : (
+        <div className="flex items-end gap-2.5">
+          <div
+            className={cx(
+              "relative flex min-w-0 flex-1 items-end",
+              COMPOSER_FRAME,
+              "focus-within:border-accent",
+              disabled && "cursor-not-allowed opacity-60",
+            )}
+          >
+            <div className="shrink-0 p-2">{plus}</div>
+            {field}
           </div>
-          <div className="relative min-w-0 flex-1">
-            <PlainTextPlugin
-              contentEditable={
-                <ContentEditable
-                  role="textbox"
-                  aria-multiline
-                  aria-label={label}
-                  aria-describedby={reason === null ? undefined : reasonId}
-                  aria-controls={open ? listId : undefined}
-                  aria-activedescendant={open && activeOption !== undefined ? optionId(activeOption) : undefined}
-                  aria-autocomplete="list"
-                  spellCheck
-                  style={{ maxHeight }}
-                  className={cx(
-                    "block min-h-12 w-full overflow-y-auto py-3 pl-1 pr-4 outline-none",
-                    "whitespace-pre-wrap break-words",
-                    COMPOSER_TEXT,
-                    disabled && "cursor-not-allowed",
-                  )}
-                  aria-placeholder={placeholder ?? ""}
-                  placeholder={
-                    <div aria-hidden className={cx("pointer-events-none absolute left-1 right-4 top-3 truncate", COMPOSER_PLACEHOLDER)}>
-                      {placeholder}
-                    </div>
-                  }
-                />
-              }
-              ErrorBoundary={LexicalErrorBoundary}
-            />
-            <HistoryPlugin />
+          <div className="pb-0.5">
+            <Button type="submit" disabled={blocked} aria-describedby={describedBy}>
+              {sendLabel}
+            </Button>
           </div>
         </div>
-        <div className="pb-0.5">
-          <Button type="submit" disabled={blocked} aria-describedby={reason === null ? undefined : reasonId}>
-            {sendLabel}
-          </Button>
-        </div>
-      </div>
+      )}
       {reason !== null && (
         <p id={reasonId} className={COMPOSER_REASON}>
           {reason}
@@ -821,6 +930,46 @@ function $queryAtCaret(): { nodeKey: NodeKey; offset: number; query: string } | 
   const found = mentionQuery(before);
   if (found === null || found.offset < lead.length) return null;
   return { nodeKey: node.getKey(), offset: found.offset - lead.length, query: found.query };
+}
+
+/** The field's paragraphs as plain lines, for `caretOffset` and `caretPoint`. */
+function $caretLines(): CaretLine[] {
+  return $getRoot()
+    .getChildren()
+    .map((block) => ({
+      key: block.getKey(),
+      children: $isElementNode(block)
+        ? block.getChildren().map((child) => ({
+            key: child.getKey(),
+            type: $isMentionNode(child) ? ("chip" as const) : $isLineBreakNode(child) ? ("break" as const) : ("text" as const),
+            length: child.getTextContentSize(),
+          }))
+        : [],
+    }));
+}
+
+/** The selection as offsets into the value's text, or null when there is none to keep. */
+function $selectionOffsets(): { anchor: number; focus: number } | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return null;
+  const lines = $caretLines();
+  const rootKey = $getRoot().getKey();
+  const anchor = caretOffset(lines, { key: selection.anchor.key, offset: selection.anchor.offset, type: selection.anchor.type }, rootKey);
+  const focus = caretOffset(lines, { key: selection.focus.key, offset: selection.focus.offset, type: selection.focus.type }, rootKey);
+  return anchor === null || focus === null ? null : { anchor, focus };
+}
+
+/** Select from `anchor` to `focus`, offsets into the value's text. False when the field has no lines. */
+function $selectOffsets(anchor: number, focus: number): boolean {
+  const lines = $caretLines();
+  const from = caretPoint(lines, anchor);
+  const to = caretPoint(lines, focus);
+  if (from === null || to === null) return false;
+  const selection = $createRangeSelection();
+  selection.anchor.set(from.key, from.offset, from.type);
+  selection.focus.set(to.key, to.offset, to.type);
+  $setSelection(selection);
+  return true;
 }
 
 /** After a chip: a space when the next character is not one, and the caret after it. */
