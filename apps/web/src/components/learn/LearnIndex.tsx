@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { cx, LABEL } from "@/components/ui/classes";
+import { isImeKey } from "@/components/ui/composer-keys";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -208,9 +209,11 @@ export function LearnIndex({
           placeholder="Search concepts"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onClear={() => setQuery("")}
           onKeyDown={(e) => {
             // On the map, Enter opens the best match in its domain (D8).
-            if (e.key !== "Enter" || view !== "graph") return;
+            // The Enter that confirms an input method's word is not a search.
+            if (e.key !== "Enter" || isImeKey(e.nativeEvent) || view !== "graph") return;
             // Only among the rows on screen (the filter and the search both), so Enter
             // never lands on a concept the map has dimmed.
             const id = firstMatch(visible, query);

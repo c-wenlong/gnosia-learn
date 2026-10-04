@@ -34,6 +34,7 @@ import {
   type WeekCheckPlan,
 } from "@/lib/week-check";
 import { scrollBehavior } from "@/lib/motion";
+import { quizKey } from "@/lib/quiz-keys";
 
 import { SessionClose } from "./SessionClose";
 
@@ -429,14 +430,10 @@ export function SessionFocus({
   useEffect(() => {
     if (step === undefined || step.kind === "close") return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || pending) return;
-      const target = event.target as HTMLElement | null;
-      if (target !== null && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-      // Enter on a focused link or button belongs to that control.
-      const onControl = target !== null && target.closest("a[href], button:not(:disabled)") !== null;
-      const n = Number(event.key);
-      const number = Number.isInteger(n) && n >= 1 && n <= 4 ? n - 1 : null;
-      const enter = event.key === "Enter" && !onControl;
+      const pressed = quizKey(event, pending);
+      if (pressed === null) return;
+      // Enter on a focused link or button belongs to that control (`quizKey`).
+      const { number, enter } = pressed;
 
       if (question !== null && answered === undefined) {
         if (number !== null && number < question.choices.length && !(index in sent)) {

@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
-import { activeChapterIndex, chapterSegments, formatTimecode, type VideoChapter } from "@/components/media";
+import {
+  activeChapterIndex,
+  chapterSegments,
+  formatTimecode,
+  SKIP_STEP,
+  type VideoChapter,
+} from "@/components/media";
 import { cx } from "@/components/ui/classes";
 
 /**
@@ -25,8 +31,6 @@ import { cx } from "@/components/ui/classes";
  * text names the chapter, which is how a screen reader hears where it is.
  */
 
-/** Seconds an arrow key moves. */
-const ARROW_STEP = 5;
 /** Space between two chapters on the bar, in pixels. */
 const GAP_PX = 3;
 /** The preview frame's width, in pixels. Height follows at 16:9. */
@@ -41,6 +45,7 @@ export function VideoScrubber({
   label,
   onSeek,
   onScrub,
+  onStep,
 }: {
   src: string;
   time: number;
@@ -53,6 +58,12 @@ export function VideoScrubber({
   onSeek: (seconds: number) => void;
   /** True while the pointer is held down on the bar, so the controls stay up. */
   onScrub?: (scrubbing: boolean) => void;
+  /**
+   * Takes the arrow keys over, so a press on the bar steps and flashes the
+   * way a press anywhere else in the player does. Without it an arrow moves
+   * `SKIP_STEP` seconds through `onSeek`.
+   */
+  onStep?: (direction: 1 | -1) => void;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ time: number; x: number; width: number } | null>(null);
@@ -105,12 +116,13 @@ export function VideoScrubber({
     switch (event.key) {
       case "ArrowLeft":
       case "ArrowDown":
-        target = time - ARROW_STEP;
-        break;
       case "ArrowRight":
-      case "ArrowUp":
-        target = time + ARROW_STEP;
+      case "ArrowUp": {
+        const direction = event.key === "ArrowRight" || event.key === "ArrowUp" ? 1 : -1;
+        if (onStep) onStep(direction);
+        else target = time + direction * SKIP_STEP;
         break;
+      }
       case "PageDown":
         target = starts.find((start) => start > time + 0.5) ?? null;
         break;

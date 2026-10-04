@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { readCookie } from "@/lib/client-cookie";
 import { SIDEBAR_COOKIE, writeSidebarCookie } from "@/lib/sidebar-cookie";
 
 import { AppSidebar } from "./AppSidebar";
@@ -53,7 +54,7 @@ export function ShellFrame({
   // into the cookie once, where the server can read it, and then dropped.
   useEffect(() => {
     const folded = takeLegacyFold();
-    if (folded !== null && !document.cookie.split("; ").some((part) => part.startsWith(`${SIDEBAR_COOKIE}=`))) {
+    if (folded !== null && readCookie(SIDEBAR_COOKIE) === undefined) {
       // Only readable once in the browser, so the server drew it open; this
       // happens once per browser, the first visit after the move.
       // eslint-disable-next-line react-hooks/set-state-in-effect

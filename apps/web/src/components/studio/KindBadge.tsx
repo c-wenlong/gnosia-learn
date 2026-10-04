@@ -46,10 +46,11 @@ export function KindWord({ kind }: { kind: "diagram" | "video" }) {
 }
 
 /**
- * A tile's lift: a few pixels up and a deeper shadow under the pointer or
- * keyboard focus, as Gauth's story card does, still under reduced motion.
- * Tailwind's translate and shadow, so a selected tile's ring (also a
- * box-shadow) composes with it rather than being replaced.
+ * A tile's lift: a few pixels up under the pointer or keyboard focus, as
+ * Gauth's story card does, still under reduced motion. No shadow with it: the
+ * kit has none besides the button's lip (docs/design/IMPLEMENTATION.md), and a
+ * black one does not show on a dark ground. box-shadow stays in the
+ * transition so a selected tile's ring still eases in.
  */
 export const TILE_LIFT =
-  "transition-[translate,box-shadow,background-color] duration-200 ease-out hover:-translate-y-[3px] hover:shadow-[0_16px_32px_-18px_rgb(0_0_0/0.35)] focus-within:-translate-y-[3px] focus-within:shadow-[0_16px_32px_-18px_rgb(0_0_0/0.35)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:focus-within:translate-y-0";
+  "transition-[translate,box-shadow,background-color] duration-200 ease-out hover:-translate-y-[3px] focus-within:-translate-y-[3px] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:focus-within:translate-y-0";

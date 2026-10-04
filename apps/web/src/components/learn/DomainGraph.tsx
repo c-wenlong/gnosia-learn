@@ -66,6 +66,7 @@ export function DomainGraph({
   onHoverTopic,
   onMove,
   onMoveEnd,
+  locked = false,
 }: {
   layout: DomainLayout;
   /** The domain's title, for the accessible name. */
@@ -87,6 +88,8 @@ export function DomainGraph({
   onHoverTopic: (topic: string | null) => void;
   onMove: (id: string, to: Point) => void;
   onMoveEnd: () => void;
+  /** Reset is gliding the concepts home: no drag starts until it is done. */
+  locked?: boolean;
 }) {
   const groups = topic === null ? layout.groups : layout.groups.filter((g) => g.topic === topic);
   const shown = new Set(groups.flatMap((g) => g.concepts));
@@ -146,6 +149,15 @@ export function DomainGraph({
         onPointerMove={(event) => {
           const d = drag.current;
           if (d === null) return;
+          // No button down: the press was released outside the picture, before it became a drag.
+          if (event.buttons === 0) {
+            drag.current = null;
+            if (d.moving) {
+              setFrozen(null);
+              onMoveEnd();
+            }
+            return;
+          }
           const p = pointerAt(event, d.view);
           const dx = p.x - d.from.x;
           const dy = p.y - d.from.y;
@@ -236,7 +248,7 @@ export function DomainGraph({
               }}
               onHover={onHover}
               onPointerDown={(event) => {
-                if (event.button !== 0) return;
+                if (event.button !== 0 || locked) return;
                 dragged.current = false;
                 const frame = live;
                 drag.current = { id, start: p, from: pointerAt(event, frame), moving: false, view: frame, pointer: event.pointerId };
@@ -361,6 +373,9 @@ function Concept({
       )}
       onClick={() => onSelect(n.id)}
       onMouseEnter={() => onHover(n.id)}
+      // A move inside the concept counts as the latest input too, so it takes the light back
+      // from a row Tabbed to meanwhile; with nothing changed, the state bails out of a render.
+      onMouseMove={() => onHover(n.id)}
       onMouseLeave={() => onHover(null)}
       onPointerDown={onPointerDown}
     >

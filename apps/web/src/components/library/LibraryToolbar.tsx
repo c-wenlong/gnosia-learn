@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useOptimistic, useRef, useTransition, type ReactNode } from "react";
 
 import { FilterMenu } from "@/components/ui/FilterMenu";
+import { chipClasses, cx } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { libraryHref, withPick, type LibraryFilters, type LibraryParam } from "@/lib/library";
 
@@ -25,7 +27,9 @@ export interface LibraryMenu {
  * The Library's toolbar: what to show on the left, how to show it on the
  * right.
  *
- * The left holds the filter menus (Type, Course, and Topic when one is set).
+ * The left holds the Favorites toggle (a chip with a star: on shows only the
+ * assets the owner starred) and the filter menus (Type, Course, and Topic
+ * when one is set).
  * The right holds the search, the sort and the grid or list switch, all at a
  * chip's 34px so the row reads as one set of controls. From 768px the two
  * halves share a line: the right half takes whatever the filters leave, and
@@ -75,6 +79,8 @@ export function LibraryToolbar({
     (current, pick) => ({ ...current, [pick.label]: pick.value }),
   );
 
+  const [favoritesOn, setFavoritesOn] = useOptimistic(filters.favorites === true);
+
   const latest = useRef(filters);
   useEffect(() => {
     if (!pending) latest.current = filters;
@@ -107,6 +113,16 @@ export function LibraryToolbar({
     );
   };
 
+  const toggleFavorites = () => {
+    const next = !favoritesOn;
+    latest.current = withPick(latest.current, "favorites", next ? "1" : "");
+    const href = libraryHref(latest.current);
+    startTransition(() => {
+      setFavoritesOn(next);
+      router.push(href, { scroll: false });
+    });
+  };
+
   return (
     <section aria-label="Filters" data-pending={pending || undefined} className="flex flex-wrap items-center gap-2">
       {/* From 768px it never shrinks: a squeezed group would let its pills
@@ -114,6 +130,22 @@ export function LibraryToolbar({
           right one wraps instead. It is never wider than the row, so on a
           phone its pills wrap inside it rather than scrolling the page. */}
       <div role="group" aria-label="Filter by kind and course" className="flex max-w-full flex-wrap items-center gap-2 md:shrink-0">
+        <button
+          type="button"
+          aria-pressed={favoritesOn}
+          onClick={toggleFavorites}
+          className={cx(
+            chipClasses({ active: favoritesOn }),
+            pending && favoritesOn !== (filters.favorites === true) && "opacity-60",
+          )}
+        >
+          <Glyph
+            name="star"
+            size={16}
+            className={cx("transition-[fill] duration-150 motion-reduce:transition-none", favoritesOn && "fill-current")}
+          />
+          Favorites
+        </button>
         {menus.map(menu)}
       </div>
       <div className="flex w-full min-w-0 items-center justify-end gap-2 md:w-auto md:min-w-min md:flex-1">

@@ -2,10 +2,10 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
-import { chipClasses, cx, FIELD_TEXT, inputClasses } from "./classes";
+import { chipClasses, cx, inputClasses } from "./classes";
+import { fieldListClasses, fieldListStyle, useFieldList } from "./use-field-list";
 import { usePresence } from "./use-presence";
 import {
-  fieldPlacement,
   nextIndexForKey,
   popoverShift,
   sectionsOf,
@@ -18,11 +18,15 @@ import {
 /** A pause this long between keys starts a new typeahead prefix. */
 const TYPEAHEAD_RESET_MS = 700;
 
-/** A field in a line of text: a `Chip`'s 28px pill holding a value (the confirm card's arrow ends). */
-const CHIP_FIELD = cx(
-  "h-7 min-w-[5ch] max-w-full rounded-full border border-border bg-surface pr-2 pl-2.5 text-text outline-none",
-  FIELD_TEXT.px13,
-  "transition-colors duration-100 focus-visible:border-accent",
+/**
+ * The list's box, a filter's and a field's alike, and `Combobox`'s: radius
+ * 16 and a 2px border, scrolling past min(30rem, 70vh), never wider than the
+ * screen.
+ */
+export const LIST_PANEL = cx(
+  "flex w-max flex-col gap-0.5 overflow-y-auto overscroll-contain",
+  "max-h-[min(30rem,70vh)] max-w-[min(22rem,calc(100vw-2rem))]",
+  "rounded-2xl border-2 border-border bg-surface p-1.5 outline-none",
 );
 
 /**
@@ -35,7 +39,7 @@ const CHIP_FIELD = cx(
  * the list takes focus and points at the highlighted row with
  * `aria-activedescendant`. Arrow keys, Home and End move; Enter or Space
  * picks; typing jumps to the next option starting with what was typed;
- * Escape closes with focus back on the trigger, the way `AvatarMenu` does, and
+ * Escape closes with focus back on the trigger, the way `AccountMenu` does, and
  * so does a click outside or Tab. Picking the first option ("All") is how a
  * filter is cleared, so there is no separate clear button.
  *
@@ -50,7 +54,7 @@ const CHIP_FIELD = cx(
  * `face="field"` is the same menu as a form's select: the trigger takes the
  * kit `Input`'s face with a chevron at the right, prints the value alone, is
  * never filled, and its list (at least as wide as the field) goes in the top
- * layer as a manual popover at fixed coordinates (`fieldPlacement`), since a
+ * layer as a manual popover at fixed coordinates (`useFieldList`), since a
  * field sits in cards, folds and dialogs that clip. `Select` is that face
  * with a form's props. Every dropdown in the app is one of the two, never a
  * native `<select>`, whose list the platform draws in its own style
@@ -97,8 +101,8 @@ export function FilterMenu<V extends string>({
   className?: string;
   /** `chip` for a filter, `field` for a form's select (see above). */
   face?: "chip" | "field";
-  /** A field's height: `md` is the kit `Input`, `chip` a `Chip`'s 28px for a field in a line of text. */
-  size?: "md" | "chip";
+  /** A field's height: `md` is the kit `Input`, `inline` its 28px pill for a field in a line of text. */
+  size?: "md" | "inline";
   /** The trigger's id, for a `<label htmlFor>`. */
   id?: string;
   /** What a field prints while its value is none of the options ("Pick one"). */
@@ -113,11 +117,13 @@ export function FilterMenu<V extends string>({
   // focus outline, since the list itself draws none.
   const [keyboard, setKeyboard] = useState(false);
   const [shift, setShift] = useState(0);
-  // A field's list: fixed coordinates in the top layer (`fieldPlacement`).
-  const [place, setPlace] = useState<{ top: number; left: number; above: boolean; maxHeight: number; minWidth: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  // A field's list: fixed coordinates in the top layer. Declared before the
+  // layout effect below, so the list is showing and placed by the time that
+  // effect focuses it.
+  const place = useFieldList(open && field, trigger, list);
   const typed = useRef({ buffer: "", at: 0 });
   const id = useId();
   const listId = `${id}-list`;
@@ -144,7 +150,7 @@ export function FilterMenu<V extends string>({
     if (option !== undefined && option.value !== value) onChange(option.value);
   };
 
-  // Escape and a pointer outside, the way AvatarMenu listens for them.
+  // Escape and a pointer outside, the way AccountMenu listens for them.
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: PointerEvent) => {
@@ -164,48 +170,23 @@ export function FilterMenu<V extends string>({
     };
   }, [open]);
 
-  // Opening: keep the list inside the viewport, then give it focus. A layout
-  // effect, so the list never paints at the edge before it moves. Measured
-  // again on a resize, since a narrower window narrows the list too.
+  // Opening: keep a filter's list inside the viewport, then give the list
+  // focus. A layout effect, so the list never paints at the edge before it
+  // moves. Measured again on a resize, since a narrower window narrows the
+  // list too. A field's list is placed by `useFieldList` instead.
   useLayoutEffect(() => {
     if (!open) return;
     const box = list.current;
-    // Into the top layer first: a popover that is not showing has no size.
-    // jsdom has no popovers, and showing one that is still on its way out
-    // (open again mid-exit) throws, harmlessly.
-    if (field && box !== null && typeof box.showPopover === "function") {
-      try {
-        box.showPopover();
-      } catch {
-        // Already showing.
-      }
-    }
     const measure = () => {
       const at = trigger.current?.getBoundingClientRect();
       if (at === undefined || box === null) return;
-      const root = document.documentElement;
-      if (!field) {
-        setShift(popoverShift({ triggerLeft: at.left, width: box.offsetWidth, viewport: root.clientWidth }));
-        return;
-      }
-      const width = Math.max(box.offsetWidth, at.width);
-      // The list's own cap, min(30rem, 70vh), as max-h-[min(30rem,70vh)] has it.
-      const cap = Math.min(30 * parseFloat(getComputedStyle(root).fontSize), 0.7 * window.innerHeight);
-      setPlace({
-        ...fieldPlacement({ trigger: at, width, height: box.scrollHeight, cap, viewport: { width: root.clientWidth, height: root.clientHeight } }),
-        minWidth: at.width,
-      });
+      setShift(popoverShift({ triggerLeft: at.left, width: box.offsetWidth, viewport: document.documentElement.clientWidth }));
     };
-    measure();
+    if (!field) measure();
     box?.focus({ preventScroll: true });
+    if (field) return;
     window.addEventListener("resize", measure);
-    // A field's list is fixed to the viewport, so it follows its trigger
-    // when anything around it scrolls (capture: any scroller, not only the page).
-    if (field) window.addEventListener("scroll", measure, { capture: true, passive: true });
-    return () => {
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, { capture: true });
-    };
+    return () => window.removeEventListener("resize", measure);
   }, [open, field]);
 
   // Keep the highlighted row in view in a list long enough to scroll.
@@ -282,7 +263,7 @@ export function FilterMenu<V extends string>({
         className={
           field
             ? cx(
-                size === "chip" ? CHIP_FIELD : inputClasses({ className: "pr-3" }),
+                inputClasses({ size, className: size === "inline" ? "pr-2" : "pr-3" }),
                 "flex cursor-pointer items-center justify-between gap-2 text-left",
                 busy && "opacity-70",
                 invalid && "border-danger",
@@ -301,7 +282,7 @@ export function FilterMenu<V extends string>({
           viewBox="0 0 16 16"
           className={cx(
             "shrink-0 transition-[rotate] duration-150 ease-soft motion-reduce:transition-none",
-            field ? (size === "chip" ? "size-3 text-text3" : "size-4 text-text2") : "size-3.5",
+            field ? (size === "inline" ? "size-3 text-text3" : "size-4 text-text2") : "size-3.5",
             open && "rotate-180",
           )}
           fill="none"
@@ -327,23 +308,10 @@ export function FilterMenu<V extends string>({
           onBlur={(event) => {
             if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
           }}
-          style={
-            field
-              ? // Placed by the layout effect before the first paint. Never
-                // `visibility: hidden` meanwhile: the effect focuses the list
-                // in that same pass, and a hidden element refuses focus.
-                place === null
-                ? { top: 0, left: 0 }
-                : { top: place.top, left: place.left, minWidth: place.minWidth, maxHeight: `min(30rem, 70vh, ${place.maxHeight}px)` }
-              : { left: shift }
-          }
+          style={field ? fieldListStyle(place) : { left: shift }}
           className={cx(
-            field
-              ? cx("fixed inset-auto m-0 text-text", place?.above ? "origin-bottom-left" : "origin-top-left")
-              : "absolute top-full z-40 mt-2 min-w-[13rem] origin-top-left",
-            "flex w-max flex-col gap-0.5 overflow-y-auto overscroll-contain",
-            "max-h-[min(30rem,70vh)] max-w-[min(22rem,calc(100vw-2rem))]",
-            "rounded-2xl border-2 border-border bg-surface p-1.5 outline-none",
+            field ? fieldListClasses(place) : "absolute top-full z-40 mt-2 min-w-[13rem] origin-top-left",
+            LIST_PANEL,
             presence.leaving
               ? "pointer-events-none animate-pop-out"
               : "animate-pop-in",
@@ -352,7 +320,7 @@ export function FilterMenu<V extends string>({
         >
           {sectionsOf(options).map((section) => {
             const rows = section.options.map(({ option, index }) => (
-              <Option
+              <ListOption
                 key={option.value}
                 id={optionId(index)}
                 option={option}
@@ -384,7 +352,14 @@ export function FilterMenu<V extends string>({
   );
 }
 
-function Option<V extends string>({
+/**
+ * One row of a kit list: a tick on the chosen one, the label with its count
+ * at the right, and the detail as a muted second line under it. The
+ * highlighted row takes `--surface2`, with an accent outline while the
+ * keyboard moved it there. `FilterMenu`, `Select` and `Combobox` draw the
+ * same rows.
+ */
+export function ListOption<V extends string>({
   id,
   option,
   selected,

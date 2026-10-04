@@ -103,8 +103,19 @@ const state = (host: HTMLElement, id: string) => {
 };
 const enter = (el: Element) => act(() => void el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
 const leave = (el: Element) => act(() => void el.dispatchEvent(new MouseEvent("mouseout", { bubbles: true })));
-const pointer = (el: Element, type: string, x: number, y: number) =>
-  act(() => void el.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 })));
+const pointer = (el: Element, type: string, x: number, y: number, buttons = 1) =>
+  act(() => void el.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, buttons })));
+const dotOf = (host: HTMLElement, id: string) => concept(host, id).querySelector("circle[data-dot]") as SVGCircleElement;
+const cxOf = (host: HTMLElement, id: string) => Number(dotOf(host, id).getAttribute("cx"));
+/** Drag a concept by (dx, dy) client pixels, one pixel per layout unit. */
+function dragBy(host: HTMLElement, svg: SVGSVGElement, id: string, dx: number, dy: number) {
+  const view = viewBoxFor(layout, null);
+  const x = cxOf(host, id) - view.x;
+  const y = Number(dotOf(host, id).getAttribute("cy")) - view.y;
+  pointer(concept(host, id), "pointerdown", x, y);
+  pointer(svg, "pointermove", x + dx, y + dy);
+  pointer(svg, "pointerup", x + dx, y + dy, 0);
+}
 
 describe("domain graph interaction", () => {
   it("keeps a hovered concept and its neighbours, fades the rest, and lights its edges", () => {
@@ -149,7 +160,7 @@ describe("domain graph interaction", () => {
     const from = client(start);
     pointer(concept(host, "dfs"), "pointerdown", from.x, from.y);
     pointer(svg, "pointermove", from.x - 40, from.y + 30);
-    pointer(svg, "pointerup", from.x - 40, from.y + 30);
+    pointer(svg, "pointerup", from.x - 40, from.y + 30, 0);
     // The click a drag ends with does not select.
     act(() => void concept(host, "dfs").dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(concept(host, "dfs").getAttribute("aria-pressed")).toBe("false");
@@ -171,10 +182,97 @@ describe("domain graph interaction", () => {
     expect(host.querySelector('[role="status"][data-moved]')).toBeNull();
   });
 
+  it("keeps a dragged concept where it was dropped when storage refuses the write", () => {
+    const { host, svg } = mount();
+    const before = cxOf(host, "dfs");
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("quota");
+    });
+    try {
+      dragBy(host, svg, "dfs", 30, 0);
+      expect(cxOf(host, "dfs")).toBe(before + 30);
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it("drops a press released outside the picture, so a later move does not drag", () => {
+    const { host, svg } = mount();
+    const before = cxOf(host, "dfs");
+    pointer(concept(host, "dfs"), "pointerdown", 10, 10);
+    // Released elsewhere: the next move over the picture has no button down.
+    pointer(svg, "pointermove", 80, 10, 0);
+    pointer(svg, "pointermove", 120, 10, 1);
+    expect(cxOf(host, "dfs")).toBe(before);
+  });
+
+  it("keeps a focused row lit when the mouse leaves it", () => {
+    const { host } = mount();
+    act(() => row(host, "quick").focus());
+    enter(row(host, "quick"));
+    leave(row(host, "quick"));
+    expect(state(host, "quick")).toBe("hover");
+    // A pointer hover elsewhere wins while it lasts, and focus comes back after.
+    enter(concept(host, "bfs"));
+    expect(state(host, "bfs")).toBe("hover");
+    leave(concept(host, "bfs"));
+    expect(state(host, "quick")).toBe("hover");
+  });
+
+  it("lights whichever moved last: a row Tabbed to while the pointer rests elsewhere", () => {
+    const { host } = mount();
+    enter(concept(host, "bfs"));
+    act(() => row(host, "quick").focus());
+    expect(state(host, "quick")).toBe("hover");
+    enter(concept(host, "dfs"));
+    expect(state(host, "dfs")).toBe("hover");
+    act(() => row(host, "heap").focus());
+    expect(state(host, "heap")).toBe("hover");
+    // The pointer moving inside the concept it already rests on takes the light back.
+    act(() => void concept(host, "dfs").dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
+    expect(state(host, "dfs")).toBe("hover");
+  });
+
+  it("glides home on Reset without a jump, and takes no drag until it is home", () => {
+    const frames: FrameRequestCallback[] = [];
+    let now = 0;
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => frames.push(cb));
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    const media = window.matchMedia;
+    window.matchMedia = ((query: string) => ({ matches: false, media: query })) as typeof window.matchMedia;
+    try {
+      const { host, svg } = mount();
+      const home = cxOf(host, "dfs");
+      dragBy(host, svg, "dfs", 50, 0);
+      const reset = [...host.querySelectorAll('[data-moved] button')].find((b) => b.textContent === "Reset") as HTMLButtonElement;
+      act(() => reset.click());
+      // Before the first frame it is still where it was dropped, not at home.
+      expect(cxOf(host, "dfs")).toBe(home + 50);
+      // A drag during the glide is not taken.
+      dragBy(host, svg, "bfs", 0, 40);
+      const run = (t: number) => {
+        now = t;
+        const queued = frames.splice(0);
+        act(() => queued.forEach((cb) => cb(t)));
+      };
+      run(150);
+      expect(cxOf(host, "dfs")).toBeGreaterThan(home);
+      expect(cxOf(host, "dfs")).toBeLessThan(home + 50);
+      run(400);
+      expect(cxOf(host, "dfs")).toBe(home);
+      expect(window.sessionStorage.getItem(movedKey("algorithms"))).toBeNull();
+      expect(host.querySelector("[data-moved]")).toBeNull();
+    } finally {
+      window.matchMedia = media;
+      raf.mockRestore();
+      clock.mockRestore();
+    }
+  });
+
   it("selects on a press that does not move", () => {
     const { host, svg } = mount();
     pointer(concept(host, "merge"), "pointerdown", 10, 10);
-    pointer(svg, "pointerup", 11, 10);
+    pointer(svg, "pointerup", 11, 10, 0);
     act(() => void concept(host, "merge").dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(concept(host, "merge").getAttribute("aria-pressed")).toBe("true");
   });

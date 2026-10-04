@@ -16,6 +16,14 @@ const getCourses = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
 vi.mock("@/lib/settings", () => ({ readTutorStyle }));
 vi.mock("@/data/courses", () => ({ getCourses }));
+// Ask on a video reads the asset, its sidecars and the transcript's text.
+const readAssetDetail = vi.hoisted(() => vi.fn());
+const readAssetText = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/asset-library", () => ({
+  readAssetDetail,
+  readAssetText,
+  withCatalog: async (fn: (db: unknown) => Promise<unknown>) => fn({}),
+}));
 vi.mock("@/lib/agent/providers", async (importOriginal) => ({
   // The pure helpers (the missing-key message, the skipped entries) are real.
   ...(await importOriginal<typeof import("@/lib/agent/providers")>()),
@@ -307,5 +315,151 @@ describe("POST /api/agent/chat with subject", () => {
     const block = prompt.slice(prompt.indexOf("```text"), prompt.indexOf("## What is known"));
     expect(block.match(/```/g)).toHaveLength(2);
     expect(block).toContain("` ` `");
+  });
+});
+
+describe("POST /api/agent/chat with assetId", () => {
+  const VIDEO = "manimkc:out/algorithms/dp/knapsack.mp4";
+  const TRANSCRIPT = "manimkc:out/algorithms/dp/knapsack.transcript.json";
+  const video = { id: VIDEO, kind: "video", title: "Knapsack, one row at a time", path: "out/algorithms/dp/knapsack.mp4", url: null };
+  const reply = {
+    ok: true,
+    attempts: [],
+    result: { content: "At [0:04] it fills the first row.", model: "m", provider: "gemini", providerLabel: "Gemini" },
+  };
+
+  beforeEach(() => {
+    readAssetDetail.mockReset();
+    readAssetText.mockReset();
+    completeWithFallback.mockReset();
+    tutorCredentials.mockReset();
+    tutorCredentials.mockResolvedValue(CREDENTIALS);
+    signedIn.value = true;
+    readTutorStyle.mockReset();
+    readTutorStyle.mockResolvedValue("direct");
+  });
+
+  it("refuses a malformed asset id, position or thread before any read or provider call", async () => {
+    for (const body of [
+      { assetId: "", messages: [] },
+      { assetId: 42, messages: [] },
+      { assetId: "x".repeat(513), messages: [] },
+      { assetId: VIDEO, at: -1, messages: [] },
+      { assetId: VIDEO, at: "12", messages: [] },
+      { assetId: VIDEO, messages: [{ role: "robot", content: "hi" }] },
+    ]) {
+      const { status, json } = await call(body);
+      expect(status, JSON.stringify(body).slice(0, 60)).toBe(400);
+      expect(json.code).toBe("BAD_REQUEST");
+    }
+    expect(readAssetDetail).not.toHaveBeenCalled();
+    expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for a row that is missing or not a kind Ask reads, and 503 when the catalog is down", async () => {
+    readAssetDetail.mockResolvedValueOnce({ asset: null, derivations: { sources: [], derived: [] }, reachable: true });
+    expect((await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] })).status).toBe(404);
+    readAssetDetail.mockResolvedValueOnce({
+      asset: { ...video, kind: "link" },
+      derivations: { sources: [], derived: [] },
+      reachable: true,
+    });
+    expect((await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] })).status).toBe(404);
+    readAssetDetail.mockResolvedValueOnce({ asset: null, derivations: { sources: [], derived: [] }, reachable: false });
+    const down = await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] });
+    expect(down.status).toBe(503);
+    expect(down.json.code).toBe("ASSET_UNAVAILABLE");
+    expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("builds the prompt from the video, its transcript and the position, and returns the reply", async () => {
+    readAssetDetail.mockResolvedValue({
+      asset: video,
+      derivations: { sources: [], derived: [{ id: TRANSCRIPT, kind: "transcript" }] },
+      reachable: true,
+    });
+    readAssetText.mockResolvedValue(
+      JSON.stringify({ segments: [{ start: 4, text: "We fill the first row." }, { start: 75, text: "Then the second." }] }),
+    );
+    completeWithFallback.mockResolvedValue(reply);
+
+    const res = await call({ assetId: VIDEO, at: 80.6, messages: [{ role: "user", content: "What just happened?" }] });
+    expect(res.status).toBe(200);
+    expect(res.json.message).toEqual({ role: "assistant", content: "At [0:04] it fills the first row." });
+    expect(readAssetDetail).toHaveBeenCalledWith(VIDEO);
+    expect(readAssetText.mock.calls[0][1]).toBe(TRANSCRIPT);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].role).toBe("system");
+    expect(sent[0].content).toContain("Knapsack, one row at a time");
+    expect(sent[0].content).toContain("1:20 into the video");
+    expect(sent[0].content).toContain("this chat is not stored");
+  });
+
+  it("still answers when the video has no transcript, and says so in the prompt", async () => {
+    readAssetDetail.mockResolvedValue({ asset: video, derivations: { sources: [], derived: [] }, reachable: true });
+    completeWithFallback.mockResolvedValue(reply);
+    const res = await call({ assetId: VIDEO, messages: [{ role: "user", content: "Q" }] });
+    expect(res.status).toBe(200);
+    expect(readAssetText).not.toHaveBeenCalled();
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("No transcript is indexed");
+    expect(sent[0].content).toContain("## Where the player is\nNot known.");
+  });
+
+  it("answers about a note from its own markdown and the concepts it explains", async () => {
+    const NOTE = "note:learn/concepts/foundations/dot-product.md";
+    readAssetDetail.mockResolvedValue({
+      asset: { id: NOTE, kind: "note", title: "Dot product", path: "learn/concepts/foundations/dot-product.md", url: null },
+      derivations: { sources: [], derived: [] },
+      concepts: ["dot-product"],
+      reachable: true,
+    });
+    readAssetText.mockResolvedValue("# Dot product\nIt measures how aligned two vectors are.");
+    completeWithFallback.mockResolvedValue(reply);
+
+    const res = await call({ assetId: NOTE, messages: [{ role: "user", content: "Why cosine?" }] });
+    expect(res.status).toBe(200);
+    expect(readAssetText.mock.calls[0][1]).toBe(NOTE);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("# Self-Learn note Ask");
+    expect(sent[0].content).toContain("It measures how aligned two vectors are.");
+    expect(sent[0].content).toContain("It explains: dot-product.");
+  });
+
+  it("answers about a diagram from the labels in its SVG, read past the text preview cap", async () => {
+    const DIAGRAM = "diagram:learn/assets/vector-as-a-list-of-numbers.svg";
+    readAssetDetail.mockResolvedValue({
+      asset: { id: DIAGRAM, kind: "diagram_svg", title: "A vector as a list of numbers", path: "learn/assets/x.svg", url: null },
+      derivations: { sources: [], derived: [] },
+      concepts: [],
+      reachable: true,
+    });
+    readAssetText.mockResolvedValue(
+      "<svg><style>@font-face{src:url(data:font/woff2;base64,AAAA)}</style><text>standard axes</text><text>[ 1, 3 ]</text></svg>",
+    );
+    completeWithFallback.mockResolvedValue(reply);
+
+    const res = await call({ assetId: DIAGRAM, messages: [{ role: "user", content: "What changed?" }] });
+    expect(res.status).toBe(200);
+    expect(readAssetText.mock.calls[0][2]).toBeGreaterThan(1024 * 1024);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("# Self-Learn diagram Ask");
+    expect(sent[0].content).toContain("standard axes\n[ 1, 3 ]");
+    expect(sent[0].content).not.toContain("base64");
+    expect(sent[0].content).toContain("arrows, positions and grouping are not in them");
+  });
+
+  it("still answers about a note whose words cannot be read, and says so", async () => {
+    readAssetDetail.mockResolvedValue({
+      asset: { id: "note:x", kind: "note", title: "X", path: "x.md", url: null },
+      derivations: { sources: [], derived: [] },
+      concepts: [],
+      reachable: true,
+    });
+    readAssetText.mockResolvedValue(null);
+    completeWithFallback.mockResolvedValue(reply);
+    expect((await call({ assetId: "note:x", messages: [{ role: "user", content: "Q" }] })).status).toBe(200);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("The note's words could not be read");
   });
 });

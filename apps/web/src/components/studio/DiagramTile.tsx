@@ -153,7 +153,7 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
   ].filter((badge) => badge !== null);
 
   return (
-    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-[#f7f6f3]">
+    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-diagram-matte">
       {diagram.svg.exists ? (
         /* The runner streams a file from outside the app's tree, so there is
            nothing for the image optimiser to resolve, and an SVG is not a format
@@ -211,7 +211,7 @@ export function DiagramRow({
       selectedClassName="bg-[var(--nav-active-bg)]"
       idleClassName="hover:bg-[var(--surface-hover)]"
     >
-      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[#f7f6f3]">
+      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-diagram-matte">
         {diagram.svg.exists && (
           <FadeImg
             src={thumbnailHref(diagram.name)}

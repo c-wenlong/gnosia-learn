@@ -6,7 +6,10 @@ import type { AssetRef } from "@self-learn/catalog/state";
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
 import { PAGE_ENTER } from "@/components/PageLoading";
+import { DownloadButton, FavoriteButton } from "@/components/library/AssetActions";
+import { AskableTitle } from "@/components/library/AskableTitle";
 import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/library/AssetTabs";
+import { AssetTitle } from "@/components/library/AssetTitle";
 import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
 import { WatchProgress } from "@/components/library/WatchProgress";
@@ -20,6 +23,7 @@ import { cx } from "@/components/ui/classes";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import {
   loadAssetDetail,
+  loadFavorite,
   loadLastWatched,
   loadPlayback,
   readAssetText,
@@ -59,6 +63,9 @@ import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/tra
  * the stretches that played, resumes there on the next visit, and appends
  * the `watched` event itself once most of it has played. Anything else keeps
  * "Mark read" beside its title, and Details says when it was last read.
+ * Every asset gets Favorite (the star) and, when it has a file to hand over,
+ * Download; a video, a note and a diagram get Ask too, an unsaved chat about
+ * it (`LibraryVideo`, `AskableTitle`).
  *
  * **Four shapes, and none of them is a broken version of another.** A video
  * gets a player with its chapters on the scrub bar and its transcript beneath it. A
@@ -161,13 +168,14 @@ export default async function AssetPage({
       <span aria-hidden>←</span> {back.label}
     </Link>
   );
-  const [detail, { kb }, lastWatched, playback] = await Promise.all([
+  const [detail, { kb }, lastWatched, playback, favorite] = await Promise.all([
     loadAssetDetail(id),
     loadKnowledgeBase(),
     loadLastWatched(id),
     loadPlayback(id),
+    loadFavorite(id),
   ]);
-  const { asset, derivations, related, reachable, titles, notes, concepts } = detail;
+  const { asset, derivations, related, reachable, titles, notes, concepts, naming } = detail;
 
   if (asset === null) {
     // A reachable catalog that has no such row is a 404. An unreachable one is
@@ -191,6 +199,9 @@ export default async function AssetPage({
   // What a failure names as the way back: a studio video is made again, not uploaded.
   const failureSource = problemSource(asset.id, asset.sourceRepo) ?? asset.sourceRepo;
   const statusHref = assetStatusHref(asset.id);
+  // What Download saves the file as: its own name, as the file route's
+  // `Content-Disposition` already gives it.
+  const downloadName = asset.path?.split("/").filter(Boolean).pop();
   const zone = appTimeZone();
 
   const explained = explainedConcepts(concepts, new Map(kb.concepts.map((c) => [c.id, c])));
@@ -268,17 +279,20 @@ export default async function AssetPage({
   // should have a unique key". A key satisfies that check and changes nothing
   // else.
   const heading = (
-    <h1
+    <AssetTitle
       key="heading"
-      className={cx(
+      assetId={asset.id}
+      text={name.text}
+      // What it is called with no name of the learner's, for the field's reset.
+      fallback={assetDisplayTitle({ ...asset, title: naming?.original ?? null }).text}
+      naming={naming}
+      headingClassName={cx(
         "break-words text-text",
         name.source === "title"
           ? "text-[22px] leading-snug font-bold tracking-[-0.01em] sm:text-[24px]"
           : "font-mono text-[17px] leading-snug font-semibold",
       )}
-    >
-      {name.text}
-    </h1>
+    />
   );
 
   if (asset.kind === "video" && servable) {
@@ -299,6 +313,8 @@ export default async function AssetPage({
           saved={playback}
           heading={heading}
           watchedDay={playback?.watchedAt ? dayKey(playback.watchedAt, zone) : null}
+          favorite={favorite !== null}
+          downloadName={downloadName}
           actions={addToNote ?? undefined}
           notes={
             <>
@@ -330,20 +346,38 @@ export default async function AssetPage({
   // read like a page: the title and "Mark read" above them, where a reader
   // starts, rather than after a long note.
   const pictureFirst = asset.kind === "diagram_svg" || asset.kind === "video";
-  const titleRow = (
-    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-      {heading}
-      <div className="flex shrink-0 flex-wrap items-start gap-2.5">
-        {/* A video tracks itself (`LibraryVideo`); one that cannot be
-            played here has nothing to mark. */}
-        {asset.kind !== "video" && (
-          // Details says when it was last read, so the button does not.
-          <MarkWatched assetId={asset.id} verb="read" lastWatchedDay={null} />
-        )}
-        {addToNote}
-      </div>
-    </div>
+  const leading = (
+    <>
+      {/* A video tracks itself (`LibraryVideo`); one that cannot be
+          played here has nothing to mark. */}
+      {asset.kind !== "video" && (
+        // Details says when it was last read, so the button does not.
+        <MarkWatched assetId={asset.id} verb="read" lastWatchedDay={null} />
+      )}
+      <FavoriteButton assetId={asset.id} initial={favorite !== null} />
+    </>
   );
+  const trailing = (
+    <>
+      {servable && <DownloadButton href={fileHref} filename={downloadName} />}
+      {addToNote}
+    </>
+  );
+  // A note or a diagram the page can read gets Ask, an unsaved chat about it,
+  // whose words the chat route reads on the server.
+  const askAbout = !servable ? null : asset.kind === "note" ? "note" : asset.kind === "diagram_svg" ? "diagram" : null;
+  const titleRow =
+    askAbout !== null ? (
+      <AskableTitle heading={heading} before={leading} after={trailing} assetId={asset.id} subject={askAbout} />
+    ) : (
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        {heading}
+        <div className="flex shrink-0 flex-wrap items-start gap-2.5">
+          {leading}
+          {trailing}
+        </div>
+      </div>
+    );
 
   return (
     <div data-layout="app" className={`flex flex-col gap-4 ${PAGE_ENTER}`}>
