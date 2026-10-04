@@ -8,7 +8,7 @@ import { PanelLink } from "@/components/studio/PanelLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { chipClasses, cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
+import { chipClasses, cx, LABEL } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -723,14 +723,6 @@ function RemoveIcon() {
   );
 }
 
-/** A chip's box, as a field: the same 28px pill, so nothing moves when editing starts. */
-const CHIP_FIELD = cx(
-  "h-7 min-w-[5ch] max-w-full rounded-full border border-border bg-surface text-text outline-none",
-  FIELD_TEXT.px13,
-  "transition-colors duration-100 placeholder:text-text3 focus:border-accent aria-invalid:border-danger",
-  "[field-sizing:content]",
-);
-
 const REMOVE = cx(
   "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-text3 transition-colors",
   "hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
@@ -770,14 +762,16 @@ function ElementsEditor({
           const problem = problemFor(field);
           return (
             <li key={element.id} className={cx("relative flex max-w-full items-center", !initial.has(element.id) && POP_IN)}>
-              <input
+              {/* A chip's 28px pill as a field, so nothing moves when editing starts. */}
+              <Input
+                size="inline"
                 data-field={field}
                 aria-label={`Element ${at + 1}`}
                 value={element.label}
                 placeholder="Label"
                 readOnly={locked}
                 maxLength={200}
-                size={Math.max(5, element.label.length + 1)}
+                htmlSize={Math.max(5, element.label.length + 1)}
                 aria-invalid={problem !== null || undefined}
                 aria-describedby={problem === null ? undefined : messageId(field)}
                 onChange={(event) => onLabel(element.id, event.target.value)}
@@ -791,7 +785,7 @@ function ElementsEditor({
                     onRemove(element.id);
                   }
                 }}
-                className={cx(CHIP_FIELD, "pl-2.5 pr-7")}
+                className="pr-7"
               />
               <button
                 type="button"
@@ -878,18 +872,18 @@ function RelationsEditor({
                     <Arrow />
                   </span>
                   <span className="inline-flex max-w-full items-center">
-                    <input
+                    <Input
+                      size="inline"
                       data-field={`relation:${relation.id}:label`}
                       aria-label={`Arrow ${at + 1} label`}
                       value={relation.label}
                       placeholder="No label"
                       readOnly={locked}
                       maxLength={200}
-                      size={Math.max(8, relation.label.length + 1)}
+                      htmlSize={Math.max(8, relation.label.length + 1)}
                       aria-invalid={problem("label") !== null || undefined}
                       aria-describedby={problem("label") === null ? undefined : messageId(`relation:${relation.id}:label`)}
                       onChange={(event) => onChange(relation.id, { label: event.target.value }, "label")}
-                      className={cx(CHIP_FIELD, "px-2.5")}
                     />
                     <Arrow />
                   </span>
@@ -965,7 +959,7 @@ function EndSelect({
     <Select
       dataField={`relation:${relation.id}:${end}`}
       label={`Arrow ${at + 1} ${end}`}
-      size="chip"
+      size="inline"
       className="inline-flex max-w-full"
       placeholder="Pick one"
       options={edit.elements.map((element, index) => ({

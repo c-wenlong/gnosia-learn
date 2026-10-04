@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
+import { FormRow } from "@/components/ui/FormRow";
 import { Input } from "@/components/ui/Input";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { usePresence } from "@/components/ui/use-presence";
@@ -242,22 +243,27 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
           <Collapse open={editing} className="pt-2.5">
             {form.mounted && (
               <form onSubmit={(e) => void save(e)} className="flex flex-col gap-2.5" aria-label={`${row.label} key`}>
-                <label htmlFor={`${id}-key`} className="text-[12px] text-text2">
-                  Paste the key from your {row.label} account. It is sent once and cannot be shown again.
-                </label>
-                <Input
-                  ref={keyField}
+                <FormRow
                   id={`${id}-key`}
-                  type="password"
-                  name={`${row.id}-api-key`}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="API key"
-                />
+                  label="API key"
+                  hint={`Paste the key from your ${row.label} account. It is sent once and cannot be shown again.`}
+                >
+                  {({ id: field, describedBy }) => (
+                    <Input
+                      ref={keyField}
+                      id={field}
+                      type="password"
+                      name={`${row.id}-api-key`}
+                      autoComplete="off"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      aria-describedby={describedBy}
+                    />
+                  )}
+                </FormRow>
                 <div className="flex flex-wrap gap-2.5">
                   <Button type="submit" size="sm" disabled={busy || draft.trim() === ""}>
                     Save key

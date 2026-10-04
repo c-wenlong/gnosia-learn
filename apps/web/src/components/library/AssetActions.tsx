@@ -86,7 +86,18 @@ export function DownloadButton({ href, filename }: { href: string; filename?: st
 }
 
 /** Ask: opens the unsaved chat about this asset (`AskPanel`). */
-export function AskButton({ open, onToggle, controls }: { open: boolean; onToggle: () => void; controls: string }) {
+export function AskButton({
+  open,
+  onToggle,
+  controls,
+  subject = "video",
+}: {
+  open: boolean;
+  onToggle: () => void;
+  controls: string;
+  /** What the tooltip names: "video", "note", "diagram". */
+  subject?: string;
+}) {
   return (
     <Button
       variant="secondary"
@@ -94,7 +105,7 @@ export function AskButton({ open, onToggle, controls }: { open: boolean; onToggl
       aria-expanded={open}
       aria-controls={controls}
       onClick={onToggle}
-      title="Ask the tutor a quick question about this video. Not saved."
+      title={`Ask the tutor a quick question about this ${subject}. Not saved.`}
     >
       <Glyph name="sparkle" size={18} className={open ? "text-accent-text" : "text-text2"} />
       Ask

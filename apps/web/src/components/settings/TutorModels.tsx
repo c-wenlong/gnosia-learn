@@ -2,15 +2,16 @@
 
 import { providerLabel, TUTOR_MODEL_LIMITS, type ProviderId } from "@self-learn/schema/shared";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
-import { Input } from "@/components/ui/Input";
+import { Combobox } from "@/components/ui/Combobox";
+import { FormRow } from "@/components/ui/FormRow";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
-import { cx, LABEL } from "@/components/ui/classes";
+import { cx } from "@/components/ui/classes";
 import { sendJson } from "@/lib/send-json";
 import type { TutorModelsView } from "@/lib/tutor-models/settings";
 
@@ -295,6 +296,9 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
   );
 }
 
+/** The model box's suggestions while its provider's list is not in: none, the same array each time. */
+const NO_MODELS: { value: string; label: string; detail?: string }[] = [];
+
 function AddModel({
   base,
   usable,
@@ -397,7 +401,11 @@ function AddModel({
   };
 
   const reason = usable.length === 0 ? "Add a provider key first." : full ? `The chain holds at most ${TUTOR_MODEL_LIMITS.maxEntries} models.` : undefined;
-  const listId = `${base}-models`;
+  // The listed ids as the model box's rows, "free" under the free ones.
+  const suggestions = useMemo(
+    () => (list?.state === "ready" ? list.models.map((m) => ({ value: m.id, label: m.id, detail: m.free ? "free" : undefined })) : NO_MODELS),
+    [list],
+  );
   // The button and the form take turns in one place, each in a fold, so one
   // closes as the other opens; both stay mounted, the shut one inert.
   return (
@@ -409,63 +417,56 @@ function AddModel({
       </Collapse>
       <Collapse open={open}>
         <form onSubmit={(e) => void submit(e)} aria-label="Add a model" className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={`${base}-provider`} className={LABEL}>
-              Provider
-            </label>
-            <Select
-              id={`${base}-provider`}
-              label="Provider"
-              options={usable.map((p) => ({ value: p.id, label: `${p.label} (${p.key === "saved" ? "your key" : "server key"})` }))}
-              value={chosen?.id ?? ""}
-              onChange={(id) => {
-                setProvider(id as ProviderId);
-                void load(id as ProviderId);
-              }}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={`${base}-model`} className={LABEL}>
-              Model
-            </label>
-            <Input
-              id={`${base}-model`}
-              name="model"
-              list={list?.state === "ready" ? listId : undefined}
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="Model id"
-              aria-describedby={`${base}-list-state`}
-              aria-invalid={error !== null}
-            />
-            {list?.state === "ready" && (
-              <datalist id={listId}>
-                {list.models.map((m) => (
-                  <option key={m.id} value={m.id} label={m.free ? "free" : undefined} />
-                ))}
-              </datalist>
+          <FormRow id={`${base}-provider`} label="Provider">
+            {({ id }) => (
+              <Select
+                id={id}
+                label="Provider"
+                options={usable.map((p) => ({ value: p.id, label: `${p.label} (${p.key === "saved" ? "your key" : "server key"})` }))}
+                value={chosen?.id ?? ""}
+                onChange={(id) => {
+                  setProvider(id as ProviderId);
+                  void load(id as ProviderId);
+                }}
+              />
             )}
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-              <p id={`${base}-list-state`} aria-live="polite" className="text-[12px] text-text2">
-                {list === undefined || list.state === "loading"
-                  ? `Loading ${chosen?.label ?? "the provider"}'s models…`
-                  : list.state === "ready"
-                    ? list.models.length > 0
-                      ? `${list.models.length} ${list.models.length === 1 ? "model" : "models"} from ${chosen?.label}. Start typing to pick one, or type any model id.`
-                      : `${chosen?.label} listed no models. Type a model id.`
-                    : `The list could not be loaded (${list.message}). Type a model id.`}
-              </p>
-              {list?.state === "error" && chosen !== undefined && (
-                <Button variant="ghost" size="sm" onClick={() => void load(chosen.id)}>
-                  Try again
-                </Button>
-              )}
-            </div>
-          </div>
+          </FormRow>
+          <FormRow id={`${base}-model`} label="Model">
+            {({ id }) => (
+              <>
+                <Combobox
+                  id={id}
+                  name="model"
+                  label="Model"
+                  options={suggestions}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={model}
+                  onChange={setModel}
+                  placeholder="Model id"
+                  describedBy={`${base}-list-state`}
+                  invalid={error !== null}
+                />
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <p id={`${base}-list-state`} aria-live="polite" className="text-[12px] text-text2">
+                    {list === undefined || list.state === "loading"
+                      ? `Loading ${chosen?.label ?? "the provider"}'s models…`
+                      : list.state === "ready"
+                        ? list.models.length > 0
+                          ? `${list.models.length} ${list.models.length === 1 ? "model" : "models"} from ${chosen?.label}. Start typing to pick one, or type any model id.`
+                          : `${chosen?.label} listed no models. Type a model id.`
+                        : `The list could not be loaded (${list.message}). Type a model id.`}
+                  </p>
+                  {list?.state === "error" && chosen !== undefined && (
+                    <Button variant="ghost" size="sm" onClick={() => void load(chosen.id)}>
+                      Try again
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </FormRow>
           {error !== null && (
             <p role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
               {error}
