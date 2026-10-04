@@ -134,15 +134,16 @@ describe("useImageReveal", () => {
  * `use-asset-failure` asks the opposite question, whether a complete picture
  * failed.
  *
- * Only a picture's `complete` counts: one read off an image-named element, or
- * one checked against `naturalWidth`, so a `job.complete` elsewhere is not
- * mistaken for it.
+ * Only a picture's `complete` counts: one read off an image-named element or
+ * a ref's `current`, or one checked against `naturalWidth`, so a
+ * `job.complete` elsewhere is not mistaken for it. A bare `element.complete`
+ * with neither is the one form it cannot tell from any other property.
  */
 describe("image reveal", () => {
   it("leaves no hand-written complete-before-onLoad check outside use-image-reveal", () => {
     const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
     const allowed = new Set(["components/ui/use-image-reveal.ts", "components/DiagramView.tsx", "components/use-asset-failure.ts"]);
-    const pictureComplete = /\b\w*(?:img|image|picture|poster)\w*\??\.complete\b|\.complete\b[^;]*?\bnaturalWidth\b/i;
+    const pictureComplete = /\b(?:\w*(?:img|image|picture|poster|thumb|cover|photo)\w*|current)\??\.complete\b|\.complete\b[^;]*?\bnaturalWidth\b/i;
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
