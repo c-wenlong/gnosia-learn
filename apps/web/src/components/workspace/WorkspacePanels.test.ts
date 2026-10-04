@@ -148,4 +148,35 @@ describe("WorkspacePanels tabs on a phone", () => {
     expect(cells.find((c) => c.dataset.active === "true")?.dataset.panel).toBe("note");
     expect(host.querySelector('section[aria-label="Tutor"]')).not.toBeNull();
   });
+
+  it("is the tabs pattern: each tab controls its panel, and the arrows move and choose", () => {
+    const host = panels();
+    const tabs = [...host.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="Workspace panels"] [role="tab"]')];
+    expect(tabs.map((t) => t.textContent)).toEqual(["Note & sources", "Tutor", "Studio"]);
+    for (const tab of tabs) {
+      const panel = host.querySelector(`#${CSS.escape(tab.getAttribute("aria-controls")!)}`) as HTMLElement;
+      expect(panel.getAttribute("role")).toBe("tabpanel");
+      expect(panel.getAttribute("aria-labelledby")).toBe(tab.id);
+    }
+    expect(tabs.map((t) => t.tabIndex)).toEqual([-1, 0, -1]);
+
+    act(() => tabs[1].focus());
+    act(() => {
+      tabs[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    expect(document.activeElement).toBe(tabs[2]);
+    expect((host.querySelector('[data-active="true"]') as HTMLElement).dataset.panel).toBe("studio");
+  });
+
+  it("drops the panels' tab roles from 900px up, where they sit side by side", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(min-width: 900px)",
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    const host = panels();
+    expect(host.querySelector('[role="tabpanel"]')).toBeNull();
+    expect(host.querySelectorAll("[data-panel][id]")).toHaveLength(3);
+  });
 });
