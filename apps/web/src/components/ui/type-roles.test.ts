@@ -50,13 +50,18 @@ const SOURCES = [...files(WEB_SRC)]
 const lineOf = (text: string, index: number) => text.slice(0, index).split("\n").length;
 
 /**
- * Text under 12px that stays, each with its reason. A file that loses its
- * last small size must leave this list too, so it never lets one back in.
+ * Text under 12px that stays, each the exact expression with its reason, so
+ * an entry lets that one size through and nothing else in its file. An entry
+ * that no longer matches anything is stale and fails too.
  */
-const SMALL_ALLOWED: Record<string, string> = {
-  "components/ConceptGraph.tsx":
-    "the workspace graph's SVG labels are drawn at layout size, and 11.5px is what fits a 16-character line in a 112px column; a graph label may sit at 11px on screen (D10 of docs/proposals/domain-map.md)",
-};
+const SMALL_ALLOWED: { file: string; found: string; reason: string }[] = [
+  {
+    file: "components/ConceptGraph.tsx",
+    found: "fontSize = compact ? 12 : 11.5",
+    reason:
+      "the workspace graph's SVG labels are drawn at layout size, and 11.5px is what fits a 16-character line in a 112px column; a graph label may sit at 11px on screen (D10 of docs/proposals/domain-map.md)",
+  },
+];
 
 /** Every size under 12px in a file: Tailwind's `text-[Npx]` and `text-[Nrem]`, a stylesheet's `font-size`, a literal `fontSize`. */
 function smallSizes(text: string): { line: number; found: string }[] {
@@ -65,6 +70,10 @@ function smallSizes(text: string): { line: number; found: string }[] {
     { pattern: /text-\[(\d+(?:\.\d+)?)px\]/g, px: (m) => Number(m[1]) },
     { pattern: /text-\[(\d*\.?\d+)rem\]/g, px: (m) => Number(m[1]) * 16 },
     { pattern: /font-size:\s*(\d+(?:\.\d+)?)px/g, px: (m) => Number(m[1]) },
+    // A stylesheet's rem is against the root's 16px. An `em` is against its
+    // parent and cannot be judged here: the ones in use (code at 0.85 and
+    // 0.9em, a heading's anchor at 0.8em) sit in 15 to 26px prose.
+    { pattern: /font-size:\s*(\d*\.?\d+)rem/g, px: (m) => Number(m[1]) * 16 },
     // `fontSize={11}`, `fontSize: 11` and `fontSize = cond ? 12 : 11.5`: every
     // bare number in the expression, but not a factor (`size * 0.3`).
     {
@@ -138,16 +147,17 @@ describe("type roles", () => {
 
   it("draws no text under 12px outside the allowlist", () => {
     const offenders: string[] = [];
-    const small = new Set<string>();
+    const used = new Set<(typeof SMALL_ALLOWED)[number]>();
     for (const { rel, text } of SOURCES) {
-      const hits = smallSizes(text);
-      if (hits.length > 0) small.add(rel);
-      if (rel in SMALL_ALLOWED) continue;
-      for (const hit of hits) offenders.push(`${rel}:${hit.line} ${hit.found}`);
+      for (const hit of smallSizes(text)) {
+        const entry = SMALL_ALLOWED.find((e) => e.file === rel && e.found === hit.found);
+        if (entry) used.add(entry);
+        else offenders.push(`${rel}:${hit.line} ${hit.found}`);
+      }
     }
     expect(offenders).toEqual([]);
-    // An entry whose file no longer draws small text is stale.
-    expect(Object.keys(SMALL_ALLOWED).filter((rel) => !small.has(rel))).toEqual([]);
+    // An entry that matched nothing is stale.
+    expect(SMALL_ALLOWED.filter((e) => !used.has(e)).map((e) => `${e.file}: ${e.found}`)).toEqual([]);
   });
 
   it("gives every <h1> a title role or a named exception", () => {
@@ -170,6 +180,8 @@ describe("type roles", () => {
     expect(smallSizes('<span className="md:text-[10.5px]">')).toHaveLength(1);
     expect(smallSizes('<span className="text-[0.625rem]">')).toHaveLength(1);
     expect(smallSizes("a { font-size: 11px; }")).toHaveLength(1);
+    expect(smallSizes("a { font-size: 0.625rem; }")).toHaveLength(1);
+    expect(smallSizes("a { font-size: 0.875rem; }")).toHaveLength(0);
     expect(smallSizes("<text fontSize={11} />")).toHaveLength(1);
     expect(smallSizes("const fontSize = compact ? 12 : 11.5;")).toHaveLength(1);
     expect(smallSizes('<span className="text-[12px] text-[1.0625rem] text-[0.8em]">')).toHaveLength(0);
