@@ -469,6 +469,46 @@ export interface LearnerState {
    * the sidebar's account row and set on Settings. Absent until they set one.
    */
   displayName?: string;
+  /**
+   * The learner's pixel sprite (`learner.avatar`), shown in the sidebar's
+   * account row and chosen on Settings' Profile tab. Every learner row has
+   * one, drawn at random when the row is made; absent only in the state
+   * rendered before anything is known, or with the database unreachable.
+   */
+  avatar?: AvatarId;
+}
+
+/**
+ * The pixel sprites a learner can wear, in the order the picker lists them:
+ * the library's familiars (docs/design/BRAND.md, "Avatar sprites"). The
+ * names are stored in `learner.avatar`, whose check constraint and random
+ * default are written from this list, so adding one is a migration; the
+ * pictures are `apps/web/src/components/avatar/sprites.ts`.
+ */
+export const AVATARS = [
+  "owl",
+  "cat",
+  "bookworm",
+  "fox",
+  "hedgehog",
+  "raven",
+  "frog",
+  "mouse",
+  "moth",
+  "tortoise",
+  "rabbit",
+  "bat",
+] as const;
+
+export type AvatarId = (typeof AVATARS)[number];
+
+export function isAvatar(value: unknown): value is AvatarId {
+  return typeof value === "string" && (AVATARS as readonly string[]).includes(value);
+}
+
+/** What a learner's sprite is called in words, for its picker label and a screen reader. */
+export function avatarLabel(id: AvatarId): string {
+  return id.charAt(0).toUpperCase() + id.slice(1);
 }
 
 /** The longest name `learner.display_name` takes, in characters. */

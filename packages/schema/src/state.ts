@@ -23,6 +23,7 @@ import { concept, curriculumItem } from "./content";
 // that is still in its temporal dead zone.
 import { session } from "./studio";
 import {
+  AVATARS,
   DEFAULT_P_L,
   EVENT_TYPES,
   KNOWLEDGE_LIMITS,
@@ -57,6 +58,10 @@ import {
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
 
+/** One of `values` at random, each as likely as the next: `random()` is in [0, 1), so the index is 1 to n. */
+const randomAvatar = () =>
+  sql.raw(`(array[${AVATARS.map((v) => `'${v}'`).join(", ")}])[1 + floor(random() * ${AVATARS.length})::int]`);
+
 const boundedList = (column: string) =>
   sql.raw(
     `jsonb_typeof(${column}) = 'array' and jsonb_array_length(${column}) <= ${KNOWLEDGE_LIMITS.listItems}`,
@@ -67,12 +72,25 @@ const boundedList = (column: string) =>
  * global so every state row below can carry a foreign key, which is what makes
  * a second learner a data change instead of a migration.
  */
-export const learner = pgTable("learner", {
-  id: text("id").primaryKey().default(LOCAL_LEARNER_ID),
-  displayName: text("display_name"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const learner = pgTable(
+  "learner",
+  {
+    id: text("id").primaryKey().default(LOCAL_LEARNER_ID),
+    displayName: text("display_name"),
+    /**
+     * The learner's pixel sprite, one of `AVATARS`. Drawn at random by the
+     * database when the row is made, so every way a learner row comes to
+     * exist (`ensureLearner`, migration 0010's seed, an import, a test's
+     * bare insert) gets one without the writer knowing about avatars, and
+     * the migration that added the column gave each existing row its own
+     * draw: Postgres evaluates a volatile default once per row.
+     */
+    avatar: text("avatar").notNull().default(randomAvatar()),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  () => [check("learner_avatar_check", inList("avatar", AVATARS))],
+);
 
 /**
  * Append-only. Every other state table is a projection of this one, so an
