@@ -38,12 +38,13 @@ export function isSessionToken(value: unknown): value is string {
  * `web-2026-09-26-dot-product-k3f9x2`. The date and the concept make the log
  * readable; the random tail makes two sessions on one concept in one day two
  * sessions. The CLI's ids are `<date>-<topic>`, so the prefix also says which
- * surface opened it.
+ * surface opened it: `web` for the session page, `chat` for the concept
+ * tutor's thread (docs/proposals/recall-in-chat.md, R6).
  */
-export function newSessionId(slug: string, now: Date, random: string): string {
+export function newSessionId(slug: string, now: Date, random: string, surface: "web" | "chat" = "web"): string {
   const day = now.toISOString().slice(0, 10);
   const tail = random.replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "0";
-  return `web-${day}-${slug}-${tail}`.slice(0, 128);
+  return `${surface}-${day}-${slug}-${tail}`.slice(0, 128);
 }
 
 /* -------------------------------------------------------------------------- */

@@ -5,6 +5,9 @@ import {
   citedNumbers,
   markerPieces,
   parseThread,
+  RECALL_SEED,
+  requestTurns,
+  sessionKey,
   threadKey,
   trimForRequest,
   type HandoffMarker,
@@ -138,5 +141,32 @@ describe("a thread's checks and verdicts (docs/proposals/recall-in-chat.md)", ()
       { role: "assistant", content: "Try one." },
       { role: "user", content: "An answer" },
     ]);
+  });
+});
+
+describe("a thread that opens on the tutor's recall question (R3)", () => {
+  it("sends the seed before it, so the model sees a user turn first and its own question", () => {
+    const items: ThreadItem[] = [
+      { role: "assistant", content: "Welcome back. Q?", check: { question: "Q?" } },
+      { role: "user", content: "An answer" },
+    ];
+    expect(requestTurns(items)).toEqual([
+      { role: "user", content: RECALL_SEED },
+      { role: "assistant", content: "Welcome back. Q?" },
+      { role: "user", content: "An answer" },
+    ]);
+  });
+
+  it("sends an ordinary thread as it is", () => {
+    const items: ThreadItem[] = [
+      { role: "user", content: "Q" },
+      { role: "assistant", content: "A" },
+    ];
+    expect(requestTurns(items)).toEqual(items);
+  });
+
+  it("keeps the session id beside the thread, per concept", () => {
+    expect(sessionKey("dot-product")).toBe("self-learn:tutor-session:dot-product");
+    expect(sessionKey("dot-product")).not.toBe(threadKey("dot-product"));
   });
 });

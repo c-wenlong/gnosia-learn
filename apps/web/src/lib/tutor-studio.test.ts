@@ -68,6 +68,9 @@ describe("the concept page's first load", () => {
   });
 
   it("never sends a hand-off's marker to the tutor's route", () => {
-    expect(source).toContain("trimForRequest(chatTurns(");
+    // `requestTurns` is `chatTurns` (markers out, role and words only), the
+    // recall seed, then `trimForRequest`; tutor-thread.test.ts pins each.
+    expect(source).toContain("messages: requestTurns(");
+    expect(source).not.toMatch(/messages:\s*(?:next|turns|history)\b/);
   });
 });

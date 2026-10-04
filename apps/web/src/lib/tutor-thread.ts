@@ -115,6 +115,32 @@ export function chatTurns(items: readonly ThreadItem[]): TutorTurn[] {
 }
 
 /**
+ * What the model is told the learner said before a thread that opens on the
+ * tutor's own turn (the recall opening, R3 of
+ * docs/proposals/recall-in-chat.md). A conversation sent to a model starts on
+ * a user turn, so this stands in for the visit that prompted the question,
+ * and is never shown.
+ */
+export const RECALL_SEED =
+  "I have come back to this concept and its review is due. Ask me one recall question before anything else.";
+
+/**
+ * The turns a chat request sends: the tutor's own turns, cut to role and
+ * words, with `RECALL_SEED` before a thread that opens on the tutor, then
+ * trimmed to the route's bounds.
+ */
+export function requestTurns(items: readonly ThreadItem[]): TutorTurn[] {
+  const turns = chatTurns(items);
+  const seeded = turns[0]?.role === "assistant" ? [{ role: "user" as const, content: RECALL_SEED }, ...turns] : turns;
+  return trimForRequest(seeded);
+}
+
+/** Where a thread's session id lives in `sessionStorage` (R6): beside the thread, gone with the tab. */
+export function sessionKey(slug: string): string {
+  return `self-learn:tutor-session:${slug}`;
+}
+
+/**
  * Where a concept's thread lives in `sessionStorage`. Per tab and gone when
  * the tab closes, on purpose for now: the thread is a scratchpad. What counts
  * as evidence from it is an answer the learner chose to record, which the

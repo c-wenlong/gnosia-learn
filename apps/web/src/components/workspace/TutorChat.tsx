@@ -26,17 +26,20 @@ import {
   markerPieces,
   parseThread,
   threadKey,
-  trimForRequest,
+  RECALL_SEED,
+  requestTurns,
+  sessionKey,
   type HandoffMarker,
   type ThreadItem,
   type TutorTurn,
 } from "@/lib/tutor-thread";
-import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
+import { newSessionId, SESSION_TEXT_LIMIT } from "@/lib/session-core";
 import {
   CHAT_ANSWER_LIMIT,
   checkSource,
   newVerdict,
   pendingCheck,
+  recallOpening,
   settleInterrupted,
   type TurnCheck,
   type Verdict,
@@ -81,6 +84,15 @@ import { VerdictRow } from "./VerdictRow";
  * `POST /api/learner/observe`, the session page's write, so mastery, the map
  * and the review card move. No tap, nothing written (R2). "Why?" is a
  * question about the last turn, never an answer to its check.
+ *
+ * **Recall first, and the thread is a session** (phase 2). With `recall`
+ * (the server's word that this concept's review card is due), an empty
+ * thread opens on the tutor: the note's own check when it has one, built
+ * here at no model cost, or a question the model is asked for (R3). The
+ * first answer this thread records opens a `session` row, `chat-<date>-...`,
+ * kept beside the thread in `sessionStorage`; the page closes it through
+ * `POST /api/learner/session/close` when it goes away or the thread starts
+ * over, best-effort as the session page's is (R6).
  *
  * **Motion.** A turn added here rises in (`animate-enter`); turns restored
  * from storage, which arrive in the render after hydration, only fade in, as
@@ -168,6 +180,79 @@ type Kit = typeof import("./TutorStudioKit");
 
 const EMPTY: Value = { text: "", mentions: [] };
 
+/** The thread's session id (R6), in `sessionStorage` beside the thread, with memory behind a refused store. */
+const sessionMemory = new Map<string, string | null>();
+function readSession(slug: string): string | null {
+  const k = sessionKey(slug);
+  if (sessionMemory.has(k)) return sessionMemory.get(k) ?? null;
+  try {
+    return window.sessionStorage.getItem(k);
+  } catch {
+    return null;
+  }
+}
+function writeSession(slug: string, id: string | null): void {
+  const k = sessionKey(slug);
+  sessionMemory.set(k, id);
+  try {
+    if (id === null) window.sessionStorage.removeItem(k);
+    else window.sessionStorage.setItem(k, id);
+  } catch {
+    // Memory still holds it for this page.
+  }
+}
+
+/**
+ * The observe payload of an answer still saving, per concept. Its request can
+ * reach the server after a close does, and the first answer is what opens the
+ * session, so a close sent alone could find no session and the answer then
+ * open one nobody closes. A close while an answer is saving therefore resends
+ * that answer with `closeSession`: its request id makes it a replay, and the
+ * answer and the close commit together, as the session page does.
+ */
+const savingAnswer = new Map<string, Record<string, unknown>>();
+
+/**
+ * The write in flight per concept. Saves on one thread run one at a time, so
+ * `savingAnswer` only ever holds the one in flight, and a close always resends
+ * the answer that might open the session.
+ */
+const saveQueue = new Map<string, Promise<void>>();
+
+/**
+ * How many times each thread's session has been closed. A save notes it when
+ * tapped; one that only gets to send after a close (it waited in the queue
+ * while the page went away) is dropped rather than opening a session nobody
+ * will close. "Start a new thread" waits for saves to finish, so in practice
+ * only leaving the page moves this under a waiting save.
+ */
+const closedTimes = new Map<string, number>();
+
+/** How long an answer's write may take before the row says so and the queue moves on. */
+const SAVE_TIMEOUT_MS = 20_000;
+
+/** Close the thread's session, if an answer opened one, and forget it. Idempotent on the server. */
+function closeSession(slug: string): void {
+  closedTimes.set(slug, (closedTimes.get(slug) ?? 0) + 1);
+  const id = readSession(slug);
+  if (id === null) return;
+  writeSession(slug, null);
+  const saving = savingAnswer.get(slug);
+  const [url, body] =
+    saving !== undefined && saving.sessionId === id
+      ? ["/api/learner/observe", { ...saving, closeSession: true }]
+      : ["/api/learner/session/close", { sessionId: id }];
+  void fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    // Survives the page going away, which is when this is usually sent.
+    keepalive: true,
+  }).catch(() => {
+    // Best-effort (R6): an open session costs an honest row, and `learn session close` closes it.
+  });
+}
+
 export function TutorChat({
   slug,
   title,
@@ -175,6 +260,7 @@ export function TutorChat({
   suggestions,
   initialDraft,
   studio = false,
+  recall = null,
 }: {
   slug: string;
   title: string;
@@ -184,6 +270,8 @@ export function TutorChat({
   initialDraft?: string;
   /** `studioEnabled()` on the server: whether to ask the studio at all (D67). */
   studio?: boolean;
+  /** Set when the concept's review card is due (R3): the note's first check to open on, or null to ask the model. */
+  recall?: { question: string | null } | null;
 }) {
   const router = useRouter();
   const key = threadKey(slug);
@@ -358,22 +446,61 @@ export function TutorChat({
     const correct = verdict.tapped ?? tappedNow;
     recording.current.add(requestId);
     patchVerdict(requestId, { state: "saving", tapped: correct, error: null });
-    try {
-      const res = await fetch("/api/learner/observe", {
+    // The thread's session (R6): the first recorded answer opens it, on the server, in its own transaction.
+    const session = () => {
+      const held = readSession(slug);
+      if (held !== null) return held;
+      const id = newSessionId(slug, new Date(), requestToken().slice(5), "chat");
+      writeSession(slug, id);
+      return id;
+    };
+    const send = (sessionId: string) => {
+      const payload = {
+        conceptSlug: slug,
+        correct,
+        source: verdict.source,
+        requestId,
+        sessionId,
+        question: verdict.question,
+        // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
+        chosen: turn.content.slice(0, SESSION_TEXT_LIMIT),
+      };
+      savingAnswer.set(slug, payload);
+      return fetch("/api/learner/observe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conceptSlug: slug,
-          correct,
-          source: verdict.source,
-          requestId,
-          question: verdict.question,
-          // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
-          chosen: turn.content.slice(0, SESSION_TEXT_LIMIT),
-        }),
+        body: JSON.stringify(payload),
         keepalive: true,
+        // A request that never answers would hold the queue; this one gives up, and its retry replays.
+        signal: AbortSignal.timeout(SAVE_TIMEOUT_MS),
       });
-      const data = (await res.json().catch(() => null)) as ObserveReply | null;
+    };
+    // One save at a time per thread (see `saveQueue`).
+    const closedAtTap = closedTimes.get(slug) ?? 0;
+    const ahead = saveQueue.get(slug);
+    let release: () => void = () => {};
+    const mine = new Promise<void>((resolve) => (release = resolve));
+    saveQueue.set(slug, mine);
+    if (ahead) await ahead;
+    // Whether the server answered the last send. Until it has (a timeout, a dropped connection),
+    // the answer may still be saving there, so its payload stays for a close to resend.
+    let answered = false;
+    try {
+      if ((closedTimes.get(slug) ?? 0) !== closedAtTap) {
+        throw new Error("The thread's session closed before this answer was sent.");
+      }
+      let res = await send(session());
+      let data = (await res.json().catch(() => null)) as ObserveReply | null;
+      answered = true;
+      // A session closed elsewhere (another tab, `learn session close`) refuses the answer with
+      // nothing written; the thread starts a fresh one and sends the same answer once more.
+      if (res.status === 400 && /session/i.test(data?.error ?? "") && (closedTimes.get(slug) ?? 0) === closedAtTap) {
+        writeSession(slug, null);
+        answered = false;
+        res = await send(session());
+        data = (await res.json().catch(() => null)) as ObserveReply | null;
+        answered = true;
+      }
       if (!res.ok || !data?.ok || !data.result) {
         throw new Error(
           res.status === 429 ? "Too many answers in a minute." : (data?.error ?? `The answer was not recorded (HTTP ${res.status}).`),
@@ -388,9 +515,20 @@ export function TutorChat({
       // The page's mastery dot, Recent answers and checks read the new state.
       router.refresh();
     } catch (e) {
-      patchVerdict(requestId, { state: "failed", error: e instanceof Error ? e.message : "The answer was not recorded." });
+      const message =
+        e instanceof DOMException && e.name === "TimeoutError"
+          ? "The answer took too long to save."
+          : e instanceof Error
+            ? e.message
+            : "The answer was not recorded.";
+      patchVerdict(requestId, { state: "failed", error: message });
     } finally {
       recording.current.delete(requestId);
+      if (answered && (savingAnswer.get(slug) as { requestId?: string } | undefined)?.requestId === requestId) {
+        savingAnswer.delete(slug);
+      }
+      release();
+      if (saveQueue.get(slug) === mine) saveQueue.delete(slug);
     }
   }
 
@@ -409,6 +547,71 @@ export function TutorChat({
     });
     if (changed) writeTurns(key, settled);
   }, [key]);
+
+  // R6: the thread's session closes when the page goes away, by navigation
+  // inside the app (unmount) or out of it (`pagehide`). Best-effort.
+  useEffect(() => {
+    const onHide = () => closeSession(slug);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      closeSession(slug);
+    };
+  }, [slug]);
+
+  // R3: a due concept opens on the tutor. Once per mount, after hydration,
+  // and only into an empty thread: a thread the learner already has is theirs.
+  const opened = useRef(false);
+  const [openingFailed, setOpeningFailed] = useState(false);
+  /** The model opening in flight, aborted if the page goes away so a late reply never lands in the thread. */
+  const openingRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => openingRequest.current?.abort(), []);
+
+  /** Ask the model for the opening recall question (a note with no check). Retryable from the row it leaves on failure. */
+  async function askOpening() {
+    const controller = new AbortController();
+    openingRequest.current = controller;
+    setOpeningFailed(false);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptSlug: slug, messages: [{ role: "user", content: RECALL_SEED }] }),
+        signal: controller.signal,
+      });
+      const data = (await res.json().catch(() => ({}))) as ChatReply;
+      const content = data.message?.content?.trim();
+      if (controller.signal.aborted) return;
+      // Only a reply that asked a check opens the thread, and only an empty one.
+      if (res.ok && content && data.check?.question) {
+        if (parseThread(readRaw(key)).length === 0) {
+          writeTurns(key, [{ role: "assistant", content, check: { question: data.check.question } }]);
+        }
+        return;
+      }
+      setOpeningFailed(true);
+    } catch {
+      if (!controller.signal.aborted) setOpeningFailed(true);
+    } finally {
+      if (openingRequest.current === controller) openingRequest.current = null;
+      if (!controller.signal.aborted) setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!hydrated || recall === null || opened.current) return;
+    opened.current = true;
+    if (parseThread(readRaw(key)).length > 0) return;
+    if (recall.question) {
+      writeTurns(key, [recallOpening(title, recall.question)]);
+      return;
+    }
+    // Started from a callback, so the effect itself sets no state.
+    void Promise.resolve().then(askOpening);
+    // `askOpening` reads only what these name; listing it would re-run the opening on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, recall, key, slug, title]);
 
   async function ask(
     question: string,
@@ -443,7 +646,8 @@ export function TutorChat({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Markers are the person's record of a hand-off, not the tutor's turns.
-        body: JSON.stringify({ conceptSlug: slug, messages: trimForRequest(chatTurns(next)) }),
+        // A thread that opened on the tutor's recall question is sent with the seed before it.
+        body: JSON.stringify({ conceptSlug: slug, messages: requestTurns(next) }),
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
       if (!res.ok) throw new Error(errorFor(res.status, data));
@@ -596,6 +800,16 @@ export function TutorChat({
           </p>
         )}
 
+        {!busy && openingFailed && turns.length === 0 && (
+          // R3: the model could not open on a recall question; the learner can ask again.
+          <div role="status" className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none">
+            <span className="min-w-0 flex-1">This review is due, but the tutor could not open on a recall question.</span>
+            <Button variant="secondary" size="sm" onClick={() => void askOpening()}>
+              Try again
+            </Button>
+          </div>
+        )}
+
         {!busy && (error || last?.role === "user") && (
           // An error, or a thread restored after a reload that cut a request
           // off: either way the last question has no answer, so offer it again.
@@ -612,11 +826,13 @@ export function TutorChat({
           </div>
         )}
 
-        {turns.length > 0 && !busy && (
+        {turns.length > 0 && !busy && !turns.some((t) => t.role === "user" && t.verdict?.state === "saving") && (
           <div className="flex animate-fade-in justify-center motion-reduce:animate-none">
             <button
               type="button"
               onClick={() => {
+                // A new thread is a new session: the old one closes with what it recorded.
+                closeSession(slug);
                 setTurns([]);
                 setRestored(0);
                 setError(null);
