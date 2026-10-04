@@ -56,13 +56,34 @@ and a bucket called Older is useless there. The day is `created_at`, which
 every asset carries ([content.ts:442](../../packages/schema/src/content.ts)).
 `updated_at` is shown in the row's time column when it differs from
 `created_at`, as "edited 2 Oct", since a note revised a month after it was
-written should say so.
+written should say so. The row type carries neither today
+(`AssetCardRef` in [asset-meta.ts:25](../../apps/web/src/components/asset-meta.ts)
+is id, kind, path, url, bytes and title, and the list adds `createdAt` to
+it), so phase 1 adds `createdAt` and `updatedAt` to the row type and to the
+list query.
 
 **L3. A row names where it came from.** Second line, in grey: the course and
 module for a reading, the concept for a note or diagram, the conversation for
-a studio output, the session for a log. Manus's row carries only the task
-name; ours has two possible parents (a course and a concept), so the line is
-"CS3230 · Week 3 · Master theorem" when both exist and one of them otherwise.
+a studio output, the session for a log. Each parent is a join the catalog
+already has, none of which the list reads today (it carries topic slugs and
+resolves topic and concept labels only): the course and module through
+`collection_item.asset_id` ([content.ts:575](../../packages/schema/src/content.ts)),
+the item's module collection and that collection's course, falling back to
+the asset's topic and the module whose topics include it, which is how
+`?course=` already finds an asset ([library.ts:352](../../apps/web/src/lib/library.ts));
+the concept through `asset_concept` ([content.ts:501](../../packages/schema/src/content.ts));
+the studio conversation through `asset_job` ([studio.ts:391](../../packages/schema/src/studio.ts))
+to the job and its draft; the tutor session through `session.log_asset_id`
+([studio.ts:93](../../packages/schema/src/studio.ts)). Phase 1 adds one
+query that returns these four for a page of rows. Manus's row carries only
+the task name; ours can have several parents, so the order is fixed: the
+course and module first, then the concept, "CS3230 · Week 3 · Master theorem"
+when both exist and one of them otherwise; a studio output with neither shows
+its conversation's title, a log its session's. An asset under two concepts
+shows the first in the graph's order with "+1", as the card does today
+([AssetCard.tsx:100](../../apps/web/src/components/AssetCard.tsx)); an asset
+listed in two courses shows the one the open filter names, else the first by
+code.
 The concept chip with its mastery dot, which the card shows today
 ([AssetCard.tsx:100](../../apps/web/src/components/AssetCard.tsx)), stays on
 the card and becomes the mastery dot before the concept in the row.
@@ -79,10 +100,15 @@ other surface would read one yet.
 **L5. A menu per row and per card.** The more button at the right of a row,
 and in a card's title row, opens: Open, Open the concept (when it has one),
 Open in course (when it has one), Copy link, Download (for a stored file),
-Mark watched or Mark read. These exist as actions on the asset page already
-([library/[id]/page.tsx](../../apps/web/src/app/(app)/library/[id]/page.tsx));
-the menu brings them to the list. Nothing destructive: a Library asset is
-deleted by the import that stops seeing it, not by hand.
+Mark watched or Mark read. Two of these exist on the asset page
+([library/[id]/page.tsx](../../apps/web/src/app/(app)/library/[id]/page.tsx)):
+Mark watched and Mark read are `MarkWatched`, and Open the concept is its
+concept link. The other three are new and phase 2 builds them: Copy link
+writes `/library/<id>` to the clipboard from a client component; Download
+is the file route with `?download=1`, which answers with
+`Content-Disposition: attachment` where today it serves the file inline;
+Open in course is the L3 parent's module page. Nothing destructive: a
+Library asset is deleted by the import that stops seeing it, not by hand.
 
 **L6. A previewer over the Library.** Pressing a row or a card opens the
 asset in a panel over the page (Manus's 1200 by 820 at 1440, a 48 px header
@@ -97,12 +123,19 @@ deep links. On a phone the previewer is the full screen.
 **L7. The sidebar is one column in sections.** From the top: New chat and
 the four destinations as today, with no label; then a Courses section, one
 row per course the owner has opened, each a folder that unfolds to its
-modules; then a Recent section, which is the list Home's "Pick up where you
-left off" already computes ([home-core.ts:41](../../apps/web/src/lib/home-core.ts)),
-extended from five rows to the day buckets the Chats list uses, and no
-longer limited to studio drafts: a row is a tutor session, a studio
-conversation, a module or a video, each with its kind glyph at 18 px as
-Home draws them. Section labels are 13 px grey, sticky while their section
+modules; then a Recent section: a row is a tutor session, a studio conversation, a
+module or a video, each with its kind glyph at 18 px as Home's "Pick up where
+you left off" draws them ([home-core.ts:41](../../apps/web/src/lib/home-core.ts)).
+Home's list is not the source, since it returns five rows, reads module
+visits from a preference that keeps five ([home.ts:226](../../apps/web/src/lib/home.ts))
+and has no tutor sessions. Recent is a query of its own: `draft` by
+`updated_at` for conversations, `session` by `updated_at` for tutor sessions
+(its `title`, `kind` and `log_asset_id` are there, [studio.ts:76](../../packages/schema/src/studio.ts)),
+the `watched` events for videos, and module visits, which phase 4 moves from
+the preference into a `visit` event on the append-only `event` table (course
+and module slugs, one row per visit) so a visit older than five survives;
+Home's threads read the same query from then on. The rows merge newest first
+into the day buckets the Chats list uses, 50 a page with Show older. Section labels are 13 px grey, sticky while their section
 scrolls, as Manus's are ([nav-section-header](../design/reference/manus/components.md#nav-section-header)).
 Hovering a row shows a more button; its menu has Pin, Rename (for a
 conversation), Open in course (for a module), Archive (for a conversation).
@@ -147,10 +180,10 @@ is dropped there.
 
 | Phase | What | Where | Done when |
 | --- | --- | --- | --- |
-| 1 | L1, L2, L3, L8: the tab strip, the day groups, the source line, the density tokens | `apps/web/src/app/(app)/library/`, `apps/web/src/lib/library.ts`, a shared `dayGroups` helper, the shell's tokens | The Library at `?kind=` shows the tab strip and day groups in both views; the counts are in the header; `npm test` passes with a golden of the grouping |
-| 2 | L4, L5: view options, the row and card menu | the same, plus a `RowMenu` in `apps/web/src/components/library/` | `?group=course` and `?group=concept` render; every menu action reaches the handler the asset page already has |
+| 1 | L1, L2, L3, L8: the tab strip, the day groups, `createdAt` and `updatedAt` on the row, the parent query behind the source line, the density tokens | `apps/web/src/app/(app)/library/`, `apps/web/src/lib/library.ts`, `apps/web/src/components/asset-meta.ts`, a shared `dayGroups` helper, the shell's tokens | The Library at `?kind=` shows the tab strip and day groups in both views; every row has its time and, where it differs, its edited date; the source line resolves for an asset with a course item, a concept, a studio job and a session; the counts are in the header; `npm test` passes with a golden of the grouping and of the parent precedence |
+| 2 | L4, L5: view options, the row and card menu, with Copy link, the `?download=1` file response and Open in course built | the same, plus a `RowMenu` in `apps/web/src/components/library/` and `apps/web/src/app/api/assets/[id]/file/` | `?group=course` and `?group=concept` render; each of the six menu actions works on a row and a card, the three new ones with tests |
 | 3 | L6: the previewer | `apps/web/src/components/library/Previewer.tsx`, the asset page's body factored out of `library/[id]/page.tsx` | A row opens the panel, Escape restores the scroll position, deep links still open the page |
-| 4 | L7: the sidebar sections, the Recent list and its menu | `apps/web/src/components/shell/`, `apps/web/src/lib/home-core.ts` | The sidebar shows Courses, Pinned and Recent with glyphs; the phone drawer is the same column; `AppSidebar.test.ts` covers the sections |
+| 4 | L7: the sidebar sections, the Recent query over drafts, sessions, watched events and visits, the `visit` event, the row menu | `apps/web/src/components/shell/`, `apps/web/src/lib/home.ts` and `home-core.ts`, a `recent.ts` beside them, `packages/schema/src/state.ts` for the event type | The sidebar shows Courses, Pinned and Recent with glyphs; a tutor session and a module visited six modules ago both appear; Home's threads come from the same query; the phone drawer is the same column; `AppSidebar.test.ts` covers the sections |
 
 Phases 1 and 4 are independent; 2 and 3 build on 1.
 
