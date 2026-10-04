@@ -1,6 +1,7 @@
 import type { InputHTMLAttributes, MouseEvent, Ref } from "react";
 
 import { cx, FIELD_TEXT, inputClasses } from "./classes";
+import { Glyph } from "./Glyph";
 
 type SearchSize = "md" | "lg" | "chip" | "compact";
 
@@ -90,31 +91,19 @@ export function SearchField({
         {filled ? (
           // The sidebar's glyph (its 1.7 stroke), so the field's icon reads as
           // one of the rail's when the sidebar folds the field to its icon.
-          <svg
-            aria-hidden
-            viewBox="0 0 20 20"
+          <Glyph
+            name="search"
+            size={18}
+            stroke={1.7}
             className={cx("pointer-events-none absolute top-1/2 -translate-y-1/2", ICON.filled.icon)}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-          >
-            <circle cx="9" cy="9" r="5.5" />
-            <path d="m13.2 13.2 3.3 3.3" />
-          </svg>
+          />
         ) : (
-          <svg
-            aria-hidden
-            viewBox="0 0 20 20"
+          <Glyph
+            name="search"
+            size={16}
+            stroke={2}
             className={cx("pointer-events-none absolute top-1/2 -translate-y-1/2 text-text3", ICON[key].icon)}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <circle cx="8.5" cy="8.5" r="5.5" />
-            <path d="m13 13 4 4" />
-          </svg>
+          />
         )}
         <input
           ref={ref}
@@ -155,9 +144,7 @@ export function SearchField({
             CLEAR[key].button,
           )}
         >
-          <svg aria-hidden viewBox="0 0 20 20" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-            <path d="m5.5 5.5 9 9m0-9-9 9" />
-          </svg>
+          <Glyph name="close" size={14} stroke={1.9} className="size-3.5" />
         </button>
       )}
     </div>

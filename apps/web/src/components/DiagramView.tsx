@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useAssetFailure } from "@/components/use-asset-failure";
-import { CARD_TITLE, chipClasses, cx } from "@/components/ui/classes";
+import { CARD_TITLE, cardClasses, chipClasses, cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { WidgetFailure } from "@/components/WidgetFailure";
 
@@ -96,7 +96,7 @@ export function DiagramView({
   }, [src, attempt]);
 
   return (
-    <figure className="relative overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+    <figure className={cardClasses({ flush: true, className: "relative" })}>
       {heading ? (
         <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-3">
           <h3 className={cx(CARD_TITLE, "truncate")}>{title}</h3>

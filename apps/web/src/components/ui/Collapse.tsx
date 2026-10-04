@@ -22,6 +22,11 @@ import { Glyph } from "./Glyph";
  * not a scroll container: focusing a field inside while it opens cannot
  * scroll the content up inside its own frame. A browser without
  * `overflow-clip-margin` clips at the edge, as before.
+ *
+ * **No padding on `className`.** The inner box cannot be shorter than its own
+ * padding, so a fold with `pt-4` there keeps 16px open while it is shut. The
+ * space a fold carries (the gap above it, say) goes on its content instead,
+ * which folds away with it; `collapse-padding.test.ts` holds that.
  */
 export function Collapse({
   open,
@@ -32,7 +37,7 @@ export function Collapse({
   open: boolean;
   /** For the toggle's `aria-controls`. */
   id?: string;
-  /** Classes for the inner box, which is what holds the content's layout. */
+  /** Classes for the inner box, which is what holds the content's layout. Never padding: see above. */
   className?: string;
   children: ReactNode;
 }) {
