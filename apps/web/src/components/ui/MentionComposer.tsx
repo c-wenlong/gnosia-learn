@@ -46,7 +46,7 @@ import {
 } from "react";
 
 import { Button } from "./Button";
-import { cx } from "./classes";
+import { cx, MENU_PANEL, menuRowClasses } from "./classes";
 import { ComposerBox, SendDisc } from "./ComposerBox";
 import {
   COMPOSER_BOX_MIN_ROWS,
@@ -63,6 +63,7 @@ import {
 import { Glyph, type GlyphName } from "./Glyph";
 import { IconButton } from "./IconButton";
 import { MentionChip } from "./MentionChip";
+import { usePresence } from "./use-presence";
 import {
   caretOffset,
   caretPoint,
@@ -723,6 +724,13 @@ function Field<K extends string>({
   // A disabled field shows no menu, whatever was open when it was disabled.
   const open = menu !== null && !disabled;
   const activeOption = menu?.options[menu.active];
+  // The menu last shown, kept while it leaves (`usePresence`), so it fades
+  // out with its rows rather than emptying first. Nothing points at it then:
+  // the field's `aria-controls` and `aria-activedescendant` read `open`.
+  const [kept, setKept] = useState(menu);
+  if (open && kept !== menu) setKept(menu);
+  const presence = usePresence(open, 120);
+  const drawn = open ? menu : kept;
   const tagged = new Set(value.mentions.map((mention) => mention.kind as string));
   const maxHeight = COMPOSER_LINE_PX * Math.max(1, maxRows) + 24;
   const box = layout === "box";
@@ -794,26 +802,29 @@ function Field<K extends string>({
 
   return (
     <form onSubmit={submit} className={cx("relative flex flex-col gap-1.5", className)}>
-      {open && (
+      {presence.mounted && drawn !== null && (
         <div
+          inert={presence.leaving}
           className={cx(
             "absolute left-0 z-20 w-full md:max-w-[360px]",
             // Under the box, beside its plus; over the row, which sits at the foot of a panel.
             box ? "top-full mt-2" : "bottom-full mb-2",
-            "overflow-hidden rounded-xl border border-border bg-surface",
-            // It pops in from the corner it hangs off, the plus's side. Once,
-            // as it opens: typing a query re-renders the rows, not this box.
+            MENU_PANEL,
+            // It pops in from the corner it hangs off, the plus's side, once,
+            // as it opens (typing a query re-renders the rows, not this box),
+            // and out the same way.
             box ? "origin-top-left" : "origin-bottom-left",
-            "animate-pop-in motion-reduce:animate-none",
+            presence.leaving ? "pointer-events-none animate-pop-out" : "animate-pop-in",
+            "motion-reduce:animate-none",
           )}
         >
-          <ul id={listId} role="listbox" aria-label="What to make" className="flex flex-col py-1">
-            {menu.options.length === 0 ? (
+          <ul id={presence.leaving ? undefined : listId} role="listbox" aria-label="What to make" className="flex flex-col gap-0.5">
+            {drawn.options.length === 0 ? (
               <li className="px-3 py-2.5 text-[13px] text-text2">Nothing matches</li>
             ) : (
-              menu.options.map((option, at) => {
+              drawn.options.map((option, at) => {
                 const usable = isUsable(option);
-                const active = at === menu.active;
+                const active = at === drawn.active;
                 return (
                   <li
                     key={option.id}
@@ -827,16 +838,12 @@ function Field<K extends string>({
                       if (usable && menuRef.current !== null) openMenu({ ...menuRef.current, active: at });
                     }}
                     onClick={() => pick(option)}
-                    className={cx(
-                      "mx-1 flex min-h-10 items-start gap-3 rounded-lg px-2.5 py-2 pointer-coarse:min-h-12",
-                      usable ? "cursor-pointer" : "cursor-not-allowed",
-                      active && usable && "bg-tint",
-                    )}
+                    className={menuRowClasses({ active, disabled: !usable, className: "pointer-coarse:min-h-12" })}
                   >
                     {option.icon && (
                       <Glyph
                         name={option.icon as GlyphName}
-                        className={cx("mt-0.5", !usable ? "text-text3" : active ? "text-accent-text" : "text-text2")}
+                        className={cx(!usable ? "text-text3" : active ? "text-accent-text" : "text-text2")}
                       />
                     )}
                     {/* The name over its description, always: side by side, a
@@ -844,12 +851,12 @@ function Field<K extends string>({
                         and sat beside it at another, so two rows of one menu
                         were laid out two ways. */}
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className={cx("text-[14px] font-medium leading-5", usable ? "text-text" : "text-text3")}>{option.name}</span>
-                      <span className="min-w-0 text-[13px] leading-5 text-text2">{usable ? option.description : option.disabledReason}</span>
+                      <span className={cx("leading-5", !usable && "text-text3")}>{option.name}</span>
+                      <span className="min-w-0 text-[13px] leading-5 font-normal text-text2">{usable ? option.description : option.disabledReason}</span>
                     </span>
                     {tagged.has(option.id) && (
                       <>
-                        <Glyph name="tick" size={16} className="mt-1 text-accent-text" />
+                        <Glyph name="tick" size={16} className="text-accent-text" />
                         <span className="sr-only">, already tagged</span>
                       </>
                     )}
@@ -858,7 +865,7 @@ function Field<K extends string>({
               })
             )}
           </ul>
-          {mentionHint !== undefined && <p className="px-3.5 pb-2 text-[12px] leading-4 text-text3">{mentionHint}</p>}
+          {mentionHint !== undefined && <p className="px-2 pt-1 pb-0.5 text-[12px] leading-4 text-text3">{mentionHint}</p>}
         </div>
       )}
 

@@ -8,8 +8,7 @@ import { nextSuggestion, suggestionsFor } from "./suggestions";
 import type { FilterOption } from "./filter-menu";
 import { LIST_PANEL, ListOption } from "./FilterMenu";
 import { Glyph } from "./Glyph";
-import { fieldListClasses, fieldListStyle, useFieldList } from "./use-field-list";
-import { usePresence } from "./use-presence";
+import { Popover } from "./Popover";
 
 /**
  * Kit `Combobox`: a text field with suggestions, for a value that may be one
@@ -22,14 +21,15 @@ import { usePresence } from "./use-presence";
  * highlight the field points at with `aria-activedescendant`, Enter on a
  * highlighted row takes it, and Enter with no row highlighted is the form's
  * own, so the words typed are what is submitted. Escape closes the list and
- * goes no further, so a dialog around the field stays open; with the list
- * shut it is the page's again. Tab, a blur and a click outside close it too.
+ * goes no further (the kit `Popover`'s Escape), so a dialog around the field
+ * stays open; with the list shut it is the page's again. Tab, a blur and a
+ * click outside close it too.
  * Keys an input method is composing with are left alone (`isImeKey`). The
  * chevron at the right opens the whole list for a pointer; it takes no focus.
  *
  * The rows are `FilterMenu`'s (`ListOption`: a tick on the value typed, the
- * detail as a second line), in the same top-layer list as `Select`
- * (`useFieldList`), popping in and out (`usePresence`).
+ * detail as a second line), in the same top-layer `Popover` as `Select`'s,
+ * at least as wide as the field, popping in and out.
  */
 export function Combobox<V extends string>({
   id,
@@ -72,7 +72,6 @@ export function Combobox<V extends string>({
   // focus outline, as in `FilterMenu`.
   const [keyboard, setKeyboard] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
-  const list = useRef<HTMLDivElement>(null);
   const base = useId();
   const listId = `${base}-list`;
   const optionId = (index: number) => `${base}-option-${index}`;
@@ -84,8 +83,6 @@ export function Combobox<V extends string>({
   const [kept, setKept] = useState(suggestions);
   if (showList && kept !== suggestions) setKept(suggestions);
   const rows = showList ? suggestions : kept;
-  const presence = usePresence(showList, 120);
-  const place = useFieldList(showList, anchor, list);
 
   // Keep the highlighted row in view in a list long enough to scroll.
   useEffect(() => {
@@ -150,14 +147,8 @@ export function Combobox<V extends string>({
       }
       return;
     }
-    if (event.key === "Escape" && showList) {
-      // Closes the list only. Inside a modal `<dialog>` an Escape nobody
-      // cancels is also the dialog's close request.
-      event.preventDefault();
-      event.stopPropagation();
-      close();
-      return;
-    }
+    // Escape with the list open never gets here: the `Popover` takes it
+    // first, closes the list and stops it, so a dialog around stays open.
     if (event.key === "Tab" && showList) close();
   };
 
@@ -172,7 +163,7 @@ export function Combobox<V extends string>({
         autoComplete="off"
         aria-autocomplete="list"
         aria-expanded={showList}
-        aria-controls={presence.mounted && !presence.leaving ? listId : undefined}
+        aria-controls={showList ? listId : undefined}
         aria-activedescendant={showList && active >= 0 ? optionId(active) : undefined}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
@@ -198,7 +189,7 @@ export function Combobox<V extends string>({
           tabIndex={-1}
           aria-label={`${label} suggestions`}
           aria-expanded={showList}
-          aria-controls={presence.mounted && !presence.leaving ? listId : undefined}
+          aria-controls={showList ? listId : undefined}
           disabled={disabled}
           // Keeps the focus in the field: the list is the field's.
           onMouseDown={(event) => event.preventDefault()}
@@ -223,44 +214,37 @@ export function Combobox<V extends string>({
           />
         </button>
       )}
-      {presence.mounted && (
-        <div
-          ref={list}
-          id={presence.leaving ? undefined : listId}
-          role="listbox"
-          popover="manual"
-          inert={presence.leaving}
-          aria-label={label}
-          // A press on a row would take the focus from the field, and the
-          // blur would close the list before the click could pick.
-          onMouseDown={(event) => event.preventDefault()}
-          style={fieldListStyle(place)}
-          className={cx(
-            fieldListClasses(place),
-            LIST_PANEL,
-            presence.leaving ? "pointer-events-none animate-pop-out" : "animate-pop-in",
-            "motion-reduce:animate-none",
-          )}
-        >
-          {rows.map((option, index) => (
-            <ListOption
-              key={option.value}
-              id={optionId(index)}
-              option={option}
-              selected={option.value === value}
-              active={index === active}
-              keyboard={keyboard}
-              onHover={() => {
-                if (index !== active || keyboard) {
-                  setActive(index);
-                  setKeyboard(false);
-                }
-              }}
-              onPick={() => pick(index)}
-            />
-          ))}
-        </div>
-      )}
+      <Popover
+        anchorRef={anchor}
+        open={showList}
+        onOpenChange={close}
+        minWidthFromAnchor
+        id={listId}
+        role="listbox"
+        aria-label={label}
+        // A press on a row would take the focus from the field, and the
+        // blur would close the list before the click could pick.
+        onMouseDown={(event) => event.preventDefault()}
+        className={LIST_PANEL}
+      >
+        {rows.map((option, index) => (
+          <ListOption
+            key={option.value}
+            id={optionId(index)}
+            option={option}
+            selected={option.value === value}
+            active={index === active}
+            keyboard={keyboard}
+            onHover={() => {
+              if (index !== active || keyboard) {
+                setActive(index);
+                setKeyboard(false);
+              }
+            }}
+            onPick={() => pick(index)}
+          />
+        ))}
+      </Popover>
     </div>
   );
 }
