@@ -1,0 +1,96 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { postJob } from "@/components/studio/JobsProvider";
+
+import { sendJson } from "./send-json";
+
+/**
+ * `sendJson` is the settings cards' and the library's request: the status,
+ * whether it was a 2xx, and the reply as JSON, or null with no answer at all.
+ * `postJob` is the studio's, which keeps the runner's error shape.
+ */
+
+function answer(status: number, body: string) {
+  const fetchMock = vi.fn(async () => new Response(body, { status }));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("sendJson", () => {
+  it("sends the body as JSON, uncached, and reads the reply", async () => {
+    const fetchMock = answer(200, JSON.stringify({ ok: true, chain: [] }));
+    const reply = await sendJson<{ ok?: boolean; chain?: unknown[] }>("POST", "/api/learner/tutor-model", { provider: "groq" });
+    expect(reply).toEqual({ status: 200, ok: true, data: { ok: true, chain: [] } });
+    expect(fetchMock).toHaveBeenCalledWith("/api/learner/tutor-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "groq" }),
+      cache: "no-store",
+    });
+  });
+
+  it("sends no body, and no content type, when given none", async () => {
+    const fetchMock = answer(200, "{}");
+    await sendJson("GET", "/api/x");
+    expect(fetchMock).toHaveBeenCalledWith("/api/x", { method: "GET", cache: "no-store" });
+  });
+
+  it("says a refusal's status, and reads its body", async () => {
+    answer(400, JSON.stringify({ ok: false, error: "No such provider." }));
+    expect(await sendJson("DELETE", "/api/learner/provider-key", { provider: "x" })).toEqual({
+      status: 400,
+      ok: false,
+      data: { ok: false, error: "No such provider." },
+    });
+  });
+
+  it("reads a body that is not JSON, or is JSON null, as an empty object", async () => {
+    answer(502, "<html>Bad gateway</html>");
+    expect(await sendJson("POST", "/api/x", {})).toEqual({ status: 502, ok: false, data: {} });
+    answer(200, "null");
+    expect(await sendJson("POST", "/api/x", {})).toEqual({ status: 200, ok: true, data: {} });
+  });
+
+  it("is null when nothing answered, and logs nothing: a key may be in the body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((level) => vi.spyOn(console, level).mockImplementation(() => undefined));
+    expect(await sendJson("POST", "/api/learner/provider-key", { provider: "groq", key: "gsk_secret" })).toBeNull();
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("has no console call to grow one later", () => {
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "send-json.ts"), "utf8");
+    expect(source).not.toMatch(/\bconsole\.\w+\(/);
+  });
+});
+
+describe("postJob", () => {
+  it("posts JSON (an empty object for no body) and hands the answer back as it is", async () => {
+    const fetchMock = answer(202, JSON.stringify({ jobId: "j2" }));
+    expect(await postJob("/studio/api/jobs/j1/revise")).toEqual({ ok: true, status: 202, data: { jobId: "j2" } });
+    expect(fetchMock).toHaveBeenCalledWith("/studio/api/jobs/j1/revise", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      cache: "no-store",
+    });
+  });
+
+  it("says the runner is not answering, with why, as status 0", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
+    expect(await postJob("/studio/api/jobs/j1/revise", { changes: "x" })).toEqual({
+      ok: false,
+      status: 0,
+      data: { error: "the studio runner is not answering", detail: "Failed to fetch" },
+    });
+  });
+});

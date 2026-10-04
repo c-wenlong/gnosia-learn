@@ -14,6 +14,7 @@ import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { useLearner } from "@/lib/learner-context";
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
+import { sendJson } from "@/lib/send-json";
 import {
   MOTION_MODES,
   TUTOR_STYLES,
@@ -50,18 +51,10 @@ function statusLine(status: Status | undefined, words: { saving: string; saved: 
 }
 
 async function savePreference(key: string, value: unknown): Promise<string | null> {
-  try {
-    const response = await fetch("/api/learner/preference", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, value }),
-    });
-    const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-    if (response.ok && payload.ok !== false) return null;
-    return payload.error ?? `Not saved (HTTP ${response.status}).`;
-  } catch {
-    return "Not saved: the server did not answer.";
-  }
+  const reply = await sendJson<{ ok?: boolean; error?: string }>("POST", "/api/learner/preference", { key, value });
+  if (reply === null) return "Not saved: the server did not answer.";
+  if (reply.ok && reply.data.ok !== false) return null;
+  return reply.data.error ?? `Not saved (HTTP ${reply.status}).`;
 }
 
 /**

@@ -6,7 +6,7 @@ import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "re
 import { formatTimecode, type TranscriptCue, type VideoChapter } from "@/components/media";
 import { JobLog } from "@/components/studio/JobPanel";
 import { Duration } from "@/components/studio/JobStrip";
-import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { postJob, useStudioJobs } from "@/components/studio/JobsProvider";
 import { FADE_IN } from "@/components/studio/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
@@ -956,26 +956,13 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
       return;
     }
     setBusy(true);
-    // Posted directly rather than through the provider's `post`, which reads
-    // the job list before it returns: on a job in review that list already
-    // says discarded, and the panel flashed "Discarded" before it moved on.
-    // The panel moves to the new job first and the list is read after.
-    let ok = false;
-    let status = 0;
-    let data: Record<string, unknown> = {};
-    try {
-      const response = await fetch(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/revise`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ changes: text.trim() }),
-        cache: "no-store",
-      });
-      ok = response.ok;
-      status = response.status;
-      data = ((await response.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
-    } catch (error) {
-      data = { error: `The studio runner is not answering: ${(error as Error).message}` };
-    }
+    // `postJob` rather than the provider's `post`, which reads the job list
+    // before it returns: on a job in review that list already says
+    // discarded, and the panel flashed "Discarded" before it moved on. The
+    // panel moves to the new job first and the list is read after.
+    const { ok, status, data } = await postJob(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/revise`, {
+      changes: text.trim(),
+    });
     const next = typeof data.jobId === "string" ? data.jobId : null;
     if (ok && next !== null) {
       router.push(panelHref(path, { job: next }), { scroll: false });
@@ -987,7 +974,13 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
     // A lost reply after the runner committed shows up on the next poll as
     // this job set aside with a link to its change (`childJob`).
     void refresh();
-    setProblem(typeof data.error === "string" ? data.error : `The runner answered ${status}.`);
+    setProblem(
+      status === 0
+        ? `The studio runner is not answering: ${String(data.detail)}`
+        : typeof data.error === "string"
+          ? data.error
+          : `The runner answered ${status}.`,
+    );
   };
 
   const talk = (): void => {
