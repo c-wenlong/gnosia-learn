@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ImgHTMLAttributes, type 
 
 import { ENTER, FOLD_MS, reducedMotion } from "@/components/studio/motion";
 import { Collapse } from "@/components/ui/Collapse";
+import { usePresence } from "@/components/ui/use-presence";
 import { cx } from "@/components/ui/classes";
 
 /** The studio's motion pieces that hold state; the classes are in `motion.ts`. */
@@ -51,19 +52,14 @@ export function Reveal({
   className?: string;
   children: ReactNode;
 }) {
-  const [present, setPresent] = useState(open);
-  if (open && !present) setPresent(true);
-  useEffect(() => {
-    if (open || !present) return;
-    const timer = setTimeout(() => setPresent(false), reducedMotion() ? 0 : FOLD_MS);
-    return () => clearTimeout(timer);
-  }, [open, present]);
+  // Kept for the fold's length after it shuts, and dropped at once under reduced motion.
+  const { mounted } = usePresence(open, FOLD_MS);
   return (
     // `overflow: clip` with a margin in place of the fold's `hidden`: still
     // clipped while it folds, but a focus ring on a button at its edge (Draw,
     // Save) is drawn whole rather than cut off.
     <Collapse open={open} id={id} className={cx("overflow-clip! [overflow-clip-margin:6px]", className)}>
-      {present ? children : null}
+      {mounted ? children : null}
     </Collapse>
   );
 }
