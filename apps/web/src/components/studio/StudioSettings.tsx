@@ -7,7 +7,7 @@ import type { StudioAgentPreference } from "@self-learn/schema/shared";
 import { saveStudioAgent } from "@/app/(app)/studio/actions";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { usePanelHost } from "@/components/studio/panel-host";
-import { cx } from "@/components/ui/classes";
+import { cx, iconButtonClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { FormRow } from "@/components/ui/FormRow";
@@ -172,9 +172,11 @@ function Menu({
 }
 
 /**
- * The strip's way in: a quiet icon button beside Display and Sort. A panel
- * link, so the dialog opens in the browser (`PanelHost`), and a hover or a
- * focus starts reading its rows, which are then there by the press.
+ * The strip's way in: a quiet icon button beside Display and Sort, the kit's
+ * `IconButton` face at 32px (`iconButtonClasses`, since it is drawn on a
+ * `PanelLink`), with a 44px target under a finger. A panel link, so the
+ * dialog opens in the browser (`PanelHost`), and a hover or a focus starts
+ * reading its rows, which are then there by the press.
  */
 export function SettingsLink({ href }: { href: string }) {
   const host = usePanelHost();
@@ -185,10 +187,7 @@ export function SettingsLink({ href }: { href: string }) {
       onFocus={() => host?.warmSettings()}
       aria-label="Settings"
       title="Settings"
-      className={cx(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text2 transition-colors",
-        "hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-      )}
+      className={iconButtonClasses({ size: "md", touch: true })}
     >
       {/* The kit's sliders, the mark Settings' General tab carries too. */}
       <Glyph name="sliders" size={18} />

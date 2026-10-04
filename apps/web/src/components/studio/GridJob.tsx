@@ -6,8 +6,11 @@ import { FADE_IN, POP_IN } from "@/components/studio/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
-import { KindBadge, TILE_LIFT } from "@/components/studio/KindBadge";
-import { Chip } from "@/components/studio/StudioChrome";
+import { KindBadge } from "@/components/studio/KindBadge";
+import { JOB_BAR, JOB_CONTROL, TILE, TILE_LIFT } from "@/components/studio/surfaces";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { buttonClasses, cx } from "@/components/ui/classes";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { finishedHeadline, type Job } from "@/lib/studio-jobs";
 import {
@@ -149,15 +152,15 @@ export function NewDiagramJobs({
 function NewDiagramCard({ job, path }: { job: Job; path: string }) {
   const title = job.title ?? "New diagram";
   return (
-    <div className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${TILE_LIFT} ${POP_IN}`}>
-      <div className="relative aspect-[4/3] overflow-hidden border-b border-[var(--border)]">
+    <div className={cx(TILE, TILE_LIFT, POP_IN)}>
+      <div className="relative aspect-[4/3] overflow-hidden border-b border-border">
         <JobStage job={job} title={title} thumbnail={null} path={path} isNew />
         <KindBadge kind="diagram" />
       </div>
       <div className="flex min-w-0 flex-col gap-1.5 p-3">
         <span className="line-clamp-2 text-sm font-medium">{title}</span>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <Chip>{job.topic}</Chip>
+          <Badge>{job.topic}</Badge>
         </div>
       </div>
     </div>
@@ -328,11 +331,9 @@ function Backdrop({
 }
 
 /**
- * The bar at the foot of the picture: what the job is doing and the one
- * control that belongs here.
- *
- * `pointer-events-none` on the bar and back on for its buttons, so a click on
- * the words opens the job like a click anywhere else on the picture.
+ * The bar at the foot of the picture (`JOB_BAR`): what the job is doing and
+ * the one control that belongs here, a secondary kit `Button` at `xs` with
+ * its pointer events back on.
  */
 function Status({
   job,
@@ -348,40 +349,34 @@ function Status({
   const { post, dismiss } = useStudioJobs();
   const [cancelling, setCancelling] = useState(false);
 
-  const bar =
-    "studio-glass pointer-events-none absolute inset-x-2 bottom-2 flex min-w-0 items-center gap-2 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs shadow-sm";
-  const control =
-    "pointer-events-auto inline-flex h-7 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-hover)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]";
-
   if (stage === "review") {
     return (
-      <div className={bar}>
+      <div className={JOB_BAR}>
         <Dot stage={stage} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-[var(--foreground)]">{headline}</span>
-          <span className="block truncate text-[var(--muted)]">{capitalise(finishedHeadline(job))}</span>
+          <span className="block truncate font-medium text-text">{headline}</span>
+          <span className="block truncate text-text2">{capitalise(finishedHeadline(job))}</span>
         </span>
-        <span className="inline-flex h-7 shrink-0 items-center rounded-md bg-[var(--accent)] px-2 text-xs font-medium text-white">
-          Review
-        </span>
+        {/* Not a control: the whole picture is the link to the review. */}
+        <span className={buttonClasses({ size: "xs" })}>Review</span>
       </div>
     );
   }
 
   if (stage === "failed") {
     return (
-      <div className={`${bar} flex-wrap`}>
+      <div className={cx(JOB_BAR, "flex-wrap")}>
         <Dot stage={stage} />
-        <span className="min-w-0 flex-1 truncate font-medium text-[var(--danger)]">{failureLine(job)}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-danger">{failureLine(job)}</span>
         <span className="flex w-full justify-end gap-1.5">
           {typeof job.draftId === "string" && (
-            <PanelLink href={conversationHref(path, job.draftId)} scroll={false} className={control}>
+            <PanelLink href={conversationHref(path, job.draftId)} scroll={false} className={JOB_CONTROL}>
               Talk it through
             </PanelLink>
           )}
-          <button type="button" onClick={() => dismiss(job.jobId)} className={control}>
+          <Button variant="secondary" size="xs" onClick={() => dismiss(job.jobId)} className="pointer-events-auto">
             Dismiss
-          </button>
+          </Button>
         </span>
       </div>
     );
@@ -390,31 +385,32 @@ function Status({
   const stopping = cancelling || job.cancelRequestedAt !== null;
   return (
     <>
-      <div className={bar}>
+      <div className={JOB_BAR}>
         <Dot stage={stage} />
         <span className="min-w-0 flex-1">
-          <span role="status" className="block truncate font-medium text-[var(--foreground)]">
+          <span role="status" className="block truncate font-medium text-text">
             {headline}
           </span>
           <StepAndTime job={job} />
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="xs"
           disabled={stopping}
           onClick={async () => {
             setCancelling(true);
             const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/cancel`);
             if (!result.ok) setCancelling(false);
           }}
-          className={control}
+          className="pointer-events-auto"
         >
           {stopping ? "Stopping" : "Cancel"}
-        </button>
+        </Button>
       </div>
       {/* The only motion that says "running" without the light: a strip along
           the picture's foot, indeterminate like the panel's bar (D23). */}
-      <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-[var(--chip-bg)]">
-        <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] bg-[var(--accent)]" />
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-surface2">
+        <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] bg-accent" />
       </span>
     </>
   );
