@@ -98,6 +98,15 @@ export interface IndexContext {
    */
   knownAssets: (sourceRepo: SourceRepo) => Promise<ReadonlyMap<string, string>>;
   /**
+   * The paths the owner's asset rows from one source repository name, as
+   * the database holds them when asked. A video tool's source reads it
+   * before its own write, to refuse a data root that holds none of those
+   * files rather than prune every row. Not memoised, unlike `knownAssets`:
+   * a memo filled before `manimkc` writes would hand `mirrors` the rows
+   * from before the write.
+   */
+  storedAssetPaths: (sourceRepo: SourceRepo) => Promise<readonly string[]>;
+  /**
    * Each stored diagram's SVG key and the document hash that SVG was exported
    * from, by slug. The diagrams source reads it because a file cannot say
    * which document an SVG came from and the database can: an SVG on disk whose
