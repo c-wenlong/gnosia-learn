@@ -522,16 +522,24 @@ export function firstActive(options: readonly MentionOption[]): number {
 }
 
 /**
- * Down and Up: the next usable row in that direction, wrapping, skipping a
- * disabled one. With nothing usable the active row stays where it is.
+ * Down and Up through a list's rows: the next row in that direction that
+ * `usable` accepts, wrapping, skipping one it refuses (the @ menu passes
+ * `isUsable`, so a disabled row is stepped over). Every row is usable by
+ * default, as in the home page's ask list. With nothing usable the active row
+ * stays where it is.
  */
-export function moveActive(options: readonly MentionOption[], active: number, delta: 1 | -1): number {
+export function moveActive<T>(
+  options: readonly T[],
+  active: number,
+  delta: 1 | -1,
+  usable: (option: T) => boolean = () => true,
+): number {
   const count = options.length;
   if (count === 0) return -1;
   let at = active;
   for (let step = 0; step < count; step += 1) {
     at = (((at + delta) % count) + count) % count;
-    if (isUsable(options[at]!)) return at;
+    if (usable(options[at]!)) return at;
   }
   return active;
 }

@@ -8,7 +8,9 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 import { GnosiaWordmark } from "@/components/brand";
 import { useHistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
+import { rememberFocus } from "@/lib/focus";
 import { activeDestination, DESTINATIONS, STUDIO_DESTINATION } from "@/lib/nav";
+import { isPlainClick } from "@/lib/plain-click";
 
 import mark from "../../../public/brand/mark.png";
 import { AccountMenu } from "./AccountMenu";
@@ -111,7 +113,7 @@ export function AppSidebar() {
   useEffect(() => {
     if (!drawer || closeDrawer === undefined) return;
     // Back to whatever opened the drawer when it closes, if it is still there.
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opener = rememberFocus();
     panel.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -140,7 +142,7 @@ export function AppSidebar() {
     return () => {
       window.removeEventListener("keydown", onKey);
       // Only to an opener still on screen.
-      if (opener !== null && opener.isConnected && opener.getClientRects().length > 0) opener.focus({ preventScroll: true });
+      opener.restore();
     };
   }, [drawer, closeDrawer]);
 
@@ -368,7 +370,7 @@ export function NewChatLink({
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onPick();
     if (chats === null) return;
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!isPlainClick(event)) return;
     event.preventDefault();
     chats.newChat();
   };

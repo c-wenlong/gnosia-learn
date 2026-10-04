@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { ComponentProps, ReactNode } from "react";
 
 import { usePanelHost } from "@/components/studio/panel-host";
+import { isPlainClick } from "@/lib/plain-click";
 import { browserMove } from "@/lib/studio-view";
 
 /**
@@ -46,7 +47,7 @@ export function PanelLink({
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented || host === null) return;
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (!isPlainClick(event)) return;
         if (host.navigate(panel ?? href)) event.preventDefault();
       }}
     />

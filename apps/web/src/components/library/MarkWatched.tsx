@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { sendJson } from "@/lib/send-json";
 
 type State = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
 
@@ -43,22 +44,17 @@ export function MarkWatched({
 
   async function mark() {
     setState({ kind: "saving" });
-    try {
-      const response = await fetch("/api/learner/watched", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assetId }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!response.ok || payload.ok === false) {
-        setState({ kind: "failed", message: payload.error ?? `Not saved (HTTP ${response.status}).` });
-        return;
-      }
-      setState({ kind: "saved" });
-      router.refresh();
-    } catch {
+    const reply = await sendJson<{ ok?: boolean; error?: string }>("POST", "/api/learner/watched", { assetId });
+    if (reply === null) {
       setState({ kind: "failed", message: "Not saved: the server could not be reached." });
+      return;
     }
+    if (!reply.ok || reply.data.ok === false) {
+      setState({ kind: "failed", message: reply.data.error ?? `Not saved (HTTP ${reply.status}).` });
+      return;
+    }
+    setState({ kind: "saved" });
+    router.refresh();
   }
 
   const label =

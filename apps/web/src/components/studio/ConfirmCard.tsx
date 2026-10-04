@@ -332,7 +332,7 @@ export function ConfirmCard({
     }
     // Save, not Draw: the panel's own Cmd+Enter sees this as handled. Not
     // from the open topic list, whose Enter is a pick that has not landed yet.
-    if (enterKey(event) === "mod-send" && !inList) {
+    if (composerKey(event.nativeEvent) === "mod-send" && !inList) {
       event.preventDefault();
       void save();
     }
@@ -385,7 +385,7 @@ export function ConfirmCard({
                   change((current) => ({ ...current, title: value }), ["title"]);
                 }}
                 onKeyDown={(event) => {
-                  if (enterKey(event) === "send") {
+                  if (composerKey(event.nativeEvent) === "send") {
                     event.preventDefault();
                     void save();
                   }
@@ -675,23 +675,6 @@ export function ConfirmCard({
 /* -------------------------------------------------------------------------- */
 
 /**
- * What Enter means in a card field, by the composer's own rule: nothing while
- * an input method is composing a word (Enter there confirms the word), plain
- * Enter or Cmd/Ctrl+Enter otherwise.
- */
-function enterKey(event: KeyboardEvent<HTMLElement>) {
-  return composerKey({
-    key: event.key,
-    shiftKey: event.shiftKey,
-    metaKey: event.metaKey,
-    ctrlKey: event.ctrlKey,
-    altKey: event.altKey,
-    isComposing: event.nativeEvent.isComposing,
-    keyCode: event.keyCode,
-  });
-}
-
-/**
  * A footer: a rule and its content, and the card's 14px above the rule. The
  * space is the footer's own (a margin, inside its fold) rather than a gap
  * in the card, so a footer folded shut leaves nothing behind.
@@ -799,7 +782,7 @@ function ElementsEditor({
                 aria-describedby={problem === null ? undefined : messageId(field)}
                 onChange={(event) => onLabel(element.id, event.target.value)}
                 onKeyDown={(event) => {
-                  if (enterKey(event) === "send") {
+                  if (composerKey(event.nativeEvent) === "send") {
                     // Enter is the next element, the way a list editor works.
                     event.preventDefault();
                     if (!locked) onAdd(at);

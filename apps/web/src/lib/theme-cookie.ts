@@ -11,6 +11,7 @@ import {
   type ThemePalette,
 } from "@self-learn/schema/shared";
 
+import { writeCookie } from "@/lib/client-cookie";
 import { prefersReducedMotion } from "@/lib/motion";
 
 export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_MODES, THEME_PALETTES, themeModeFor };
@@ -130,10 +131,7 @@ export function followTheme(
 
 /** Write the cookie from the browser. Called by the theme control. */
 export function writeThemeCookie(theme: ThemeMode): void {
-  if (typeof document === "undefined") return;
-  const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie =
-    `${THEME_COOKIE}=${theme}; Path=/; Max-Age=${THEME_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
+  writeCookie(THEME_COOKIE, theme, THEME_COOKIE_MAX_AGE);
 }
 
 /** How long `theme-fade` stays on <html>: the 200ms fade in `globals.css`, and a beat for the last frame. */

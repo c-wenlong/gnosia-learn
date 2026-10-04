@@ -11,6 +11,7 @@ import { LiveStatus } from "@/components/ui/LiveStatus";
 import { usePresence } from "@/components/ui/use-presence";
 import { cx } from "@/components/ui/classes";
 import type { ProviderKeyView } from "@/lib/provider-keys/settings";
+import { sendJson } from "@/lib/send-json";
 
 /**
  * A row, with the model its Test sends and whether the tutor uses this key
@@ -50,20 +51,6 @@ interface Reply {
   source?: string;
   status?: number | null;
   tested?: string;
-}
-
-async function send(method: "POST" | "DELETE", path: string, body: unknown): Promise<{ status: number; data: Reply } | null> {
-  try {
-    const response = await fetch(path, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
-    return { status: response.status, data: (await response.json().catch(() => ({}))) as Reply };
-  } catch {
-    return null;
-  }
 }
 
 export function ProviderKeys({ rows, reachable }: { rows: ProviderKeyRow[]; reachable: boolean }) {
@@ -131,7 +118,7 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
     // the one request carrying it.
     setDraft("");
     setStatus({ kind: "busy", what: "Saving…" });
-    const reply = await send("POST", "/api/learner/provider-key", { provider: row.id, key });
+    const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: row.id, key });
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
       // Save was disabled while the request was out; back to the field.
       after(keyField);
@@ -148,7 +135,7 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
 
   const remove = async () => {
     setStatus({ kind: "busy", what: "Removing…" });
-    const reply = await send("DELETE", "/api/learner/provider-key", { provider: row.id });
+    const reply = await sendJson<Reply>("DELETE", "/api/learner/provider-key", { provider: row.id });
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
       after(removeConfirm);
       return setStatus({
@@ -167,7 +154,7 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
     // Disabled while the request is out, so focus would drop; it comes back.
     after(testButton);
     setStatus({ kind: "busy", what: "Testing…" });
-    const reply = await send("POST", "/api/learner/provider-key/test", { provider: row.id });
+    const reply = await sendJson<Reply>("POST", "/api/learner/provider-key/test", { provider: row.id });
     if (reply === null) return setStatus({ kind: "error", message: "Not tested: the server did not answer." });
     const whose = reply.data.source === "server" ? "The server's key" : "Your key";
     const tested = reply.data.tested ? ` Tested with ${reply.data.tested}.` : "";

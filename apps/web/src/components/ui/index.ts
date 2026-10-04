@@ -28,3 +28,4 @@ export { StatTile, type StatTone } from "./StatTile";
 export { buttonClasses, cardClasses, chipClasses, cx, inputClasses, LABEL } from "./classes";
 export type { ButtonSize, ButtonVariant, ChipSize } from "./classes";
 export type { FilterOption } from "./filter-menu";
+export { tabKeyIndex, type RovingOrientation } from "./roving";
