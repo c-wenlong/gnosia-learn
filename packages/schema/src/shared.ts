@@ -140,7 +140,22 @@ export type RecapSource = (typeof RECAP_SOURCES)[number];
  * (`apps/web/src/lib/agent/providers.ts`), and the vocabulary of
  * `provider_key.provider` (docs/BYOK.md).
  */
-export const PROVIDER_IDS = ["nvidia", "gemini", "openrouter"] as const;
+export const PROVIDER_IDS = [
+  "nvidia",
+  "gemini",
+  "openrouter",
+  "openai",
+  "anthropic",
+  "deepseek",
+  "glm",
+  "qwen",
+  "moonshot",
+  "minimax",
+  "mimo",
+  "mistral",
+  "groq",
+  "xai",
+] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 /**
@@ -157,6 +172,17 @@ export const PROVIDER_LABELS = {
   nvidia: "NVIDIA NIM",
   gemini: "Google Gemini",
   openrouter: "OpenRouter",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  deepseek: "DeepSeek",
+  glm: "Zhipu GLM",
+  qwen: "Alibaba Qwen",
+  moonshot: "Moonshot Kimi",
+  minimax: "MiniMax",
+  mimo: "Xiaomi MiMo",
+  mistral: "Mistral",
+  groq: "Groq",
+  xai: "xAI Grok",
 } as const satisfies Record<ProviderId, string>;
 
 /** A provider's label, or the value itself when it names no provider. */
