@@ -438,7 +438,7 @@ export interface ReviewQueue {
  * summary and the four intervals its buttons would give.
  *
  * `focus` names one concept to put first whether or not it is due, which is
- * what "Review now" on a concept page means: reviewing early is allowed (SM-2
+ * what a `/review?concept=` link asks for: reviewing early is allowed (SM-2
  * simply schedules from today), and a concept that has never been scheduled
  * gets the fresh card `review grade` would make for it. A focus the catalog has
  * no concept for is dropped rather than refused, since it came from a URL.
