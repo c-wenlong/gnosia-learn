@@ -8,13 +8,13 @@ import { DomainCards, DomainView, type Place } from "@/components/learn/DomainBr
 import type { MapMark } from "@/components/learn/DomainGraph";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Chip } from "@/components/ui/Chip";
 import { cx, LABEL } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
+import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
 import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
 import type { DomainMapData } from "@/lib/domain-map";
 import { domainOfConcepts, matchCounts } from "@/lib/domain-view";
@@ -36,6 +36,11 @@ import {
 } from "@/lib/learn-index";
 
 export { MapPanel } from "@/components/learn/DomainBrowser";
+
+const VIEW_ITEMS: SegmentItem<IndexView>[] = [
+  { id: "table", label: "Table" },
+  { id: "graph", label: "Graph" },
+];
 
 /**
  * The Learn index (hi-fi 09). The map opens on a card per domain; a card
@@ -229,14 +234,14 @@ export function LearnIndex({
 
       <div className="flex flex-wrap items-center gap-2">
         <FilterMenu label="Status" options={statusOptions} value={filter} defaultValue="all" onChange={setFilter} />
-        <div className="ml-auto flex gap-2" role="group" aria-label="View">
-          <Chip active={view === "table"} onClick={() => toView("table")}>
-            Table
-          </Chip>
-          <Chip active={view === "graph"} onClick={() => toView("graph")}>
-            Graph
-          </Chip>
-        </div>
+        {/* One view of two, so a segmented radio group rather than two toggles. */}
+        <SegmentedControl
+          label="View"
+          value={view}
+          onChange={toView}
+          items={VIEW_ITEMS}
+          className="ml-auto"
+        />
       </div>
 
       {view === "graph" && foldersOnly && (
@@ -430,14 +435,15 @@ function GraphCard({
     <Card
       title="Graph"
       action={
-        <span className="flex gap-1.5" role="group" aria-label="Graph scope">
-          <Chip size="sm" active={scope === "neighbourhood"} onClick={() => onScope("neighbourhood")}>
-            Neighbourhood
-          </Chip>
-          <Chip size="sm" active={scope === "course"} onClick={() => onScope("course")}>
-            {wider}
-          </Chip>
-        </span>
+        <SegmentedControl
+          label="Graph scope"
+          value={scope}
+          onChange={onScope}
+          items={[
+            { id: "neighbourhood", label: "Neighbourhood" },
+            { id: "course", label: wider },
+          ]}
+        />
       }
     >
       {focus === null || shown === null ? (
