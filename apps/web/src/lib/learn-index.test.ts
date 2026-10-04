@@ -163,6 +163,8 @@ describe("statusFilterOptions", () => {
     expect(INDEX_FILTERS.map((f) => f.key)).toEqual(["all", "due", "learning", "mastered", "untouched", "leeches", "ready", "nocourse"]);
     expect(INDEX_FILTERS.find((f) => f.key === "ready")?.label).toBe("Ready to learn");
     expect(INDEX_FILTERS.find((f) => f.key === "nocourse")?.label).toBe("Not in a course");
+    // One name for the bucket everywhere: the Status menu says what the chips and the panel say.
+    expect(INDEX_FILTERS.find((f) => f.key === "untouched")?.label).toBe("Not started");
     expect(matchesFilter(row({ ready: true }), "ready")).toBe(true);
     expect(matchesFilter(row({ ready: false }), "ready")).toBe(false);
     expect(matchesFilter(row({ courses: [] }), "nocourse")).toBe(true);
