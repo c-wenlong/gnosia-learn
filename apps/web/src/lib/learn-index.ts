@@ -21,7 +21,13 @@ export const INDEX_FILTERS: readonly { key: IndexFilter; label: string }[] = [
 ];
 
 export type IndexView = "table" | "graph";
-export type GraphScope = "neighbourhood" | "course";
+/**
+ * What a graph shows. The table's side card has two (the neighbourhood, or the
+ * whole course); the map (docs/proposals/knowledge-map.md, G2) fits to one of
+ * three: the selected concept's island, its neighbourhood, or every island of
+ * its course.
+ */
+export type GraphScope = "neighbourhood" | "island" | "course";
 
 /** One table row, every label already worked out on the server. */
 export interface IndexRow {
@@ -67,8 +73,33 @@ export function parseView(value: string | null | undefined): IndexView {
 
 export function parseScope(value: string | null | undefined, view: IndexView): GraphScope {
   if (value === "course" || value === "neighbourhood") return value;
-  // "Open full course graph" links to `view=graph`, so the graph view opens wide.
-  return view === "graph" ? "course" : "neighbourhood";
+  if (view === "table") return "neighbourhood";
+  // The map opens on the selected concept's island (G2). A link that wants the
+  // course says `scope=course` (`courseGraphHref`).
+  return "island";
+}
+
+/**
+ * The query string for the index's state, keeping any other parameter already
+ * there. The table leaves its defaults out; the graph view always writes its
+ * scope, so a reload or a shared link shows exactly what was on the screen.
+ */
+export function indexSearch(
+  state: { selected: string | null; view: IndexView; scope: GraphScope; filter: IndexFilter },
+  current = "",
+): string {
+  const params = new URLSearchParams(current);
+  const set = (key: string, value: string | null) => (value === null ? params.delete(key) : params.set(key, value));
+  set("concept", state.selected);
+  set("view", state.view === "table" ? null : state.view);
+  set("scope", state.view === "graph" ? state.scope : state.scope === "neighbourhood" ? null : state.scope);
+  set("filter", state.filter === "all" ? null : state.filter);
+  return params.toString();
+}
+
+/** Where "Open full course graph" goes: the map, fitted to every island of the concept's course. */
+export function courseGraphHref(slug: string): string {
+  return `/learn?${new URLSearchParams({ concept: slug, view: "graph", scope: "course" }).toString()}`;
 }
 
 export function matchesFilter(row: IndexRow, filter: IndexFilter): boolean {

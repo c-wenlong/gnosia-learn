@@ -1,6 +1,7 @@
 import { Graph, layout as dagreLayout } from "@dagrejs/dagre";
 
 import { reduceEdges, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
+import { TITLE_CHAR_PX } from "@/lib/map-viewport";
 
 /**
  * The whole prerequisite graph as one map: an island per connected cluster,
@@ -55,7 +56,11 @@ export const routeKey = (e: GraphEdge) => `${e.from}>${e.to}>${e.kind}`;
 export interface MapOptions {
   /** Course slug to its code, for island titles. A slug with none is shown as it is. */
   courseCodes?: Readonly<Record<string, string>>;
-  /** Islands wrap onto a new row past this width. */
+  /**
+   * Islands wrap onto a new row past this width. By default 2,400, or the
+   * widest island's width when that is wider, so one wide island does not
+   * leave every other row half empty.
+   */
   maxRowWidth?: number;
 }
 
@@ -66,8 +71,6 @@ const NODE_HEIGHT = 58;
 const DOT_FROM_TOP = 12;
 const ISLAND_GAP = 48;
 const TITLE_HEIGHT = 30;
-/** About how wide a title character is at the title's size (14px, bold), for sizing islands to their titles. */
-export const TITLE_CHAR_PX = 8.5;
 const TITLE_INSET = 8;
 
 const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -237,7 +240,7 @@ function widenForTitle<T extends { width: number; local: Map<string, { x: number
  * its own).
  */
 export function mapLayout(nodes: readonly GraphNode[], edges: readonly GraphEdge[], options: MapOptions = {}): MapLayout {
-  const { courseCodes = {}, maxRowWidth = 2400 } = options;
+  const { courseCodes = {} } = options;
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
   const known = (e: GraphEdge) => nodesById.has(e.from) && nodesById.has(e.to) && e.from !== e.to;
   const sortedEdges = [...new Map(edges.filter(known).map((e) => [edgeKey(e), e])).values()].sort((a, b) =>
@@ -250,6 +253,8 @@ export function mapLayout(nodes: readonly GraphNode[], edges: readonly GraphEdge
     const titled = islandTitle(ids, nodesById, courseCodes);
     return { id: ids[0], ...titled, ...widenForTitle(layoutIsland(ids, own), titled.title) };
   });
+
+  const maxRowWidth = options.maxRowWidth ?? Math.max(2400, ...laidOut.map((i) => i.width));
 
   const groupSize = new Map<string, number>();
   for (const i of laidOut) groupSize.set(i.key, (groupSize.get(i.key) ?? 0) + i.nodes.length);
