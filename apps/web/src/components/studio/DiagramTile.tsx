@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { FadeImg } from "@/components/studio/motion-parts";
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { PanelLink, SelectableFrame } from "@/components/studio/PanelLink";
 import { RowJob, TileJob } from "@/components/studio/GridJob";
@@ -156,9 +157,8 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
       {diagram.svg.exists ? (
         /* The runner streams a file from outside the app's tree, so there is
            nothing for the image optimiser to resolve, and an SVG is not a format
-           it would resize anyway. */
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+           it would resize anyway. It fades in over its mat once loaded. */
+        <FadeImg
           src={thumbnailHref(diagram.name)}
           alt={displayTitle(diagram)}
           loading="lazy"
@@ -213,8 +213,7 @@ export function DiagramRow({
     >
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[#f7f6f3]">
         {diagram.svg.exists && (
-          // eslint-disable-next-line @next/next/no-img-element -- see Thumbnail.
-          <img
+          <FadeImg
             src={thumbnailHref(diagram.name)}
             alt=""
             loading="lazy"

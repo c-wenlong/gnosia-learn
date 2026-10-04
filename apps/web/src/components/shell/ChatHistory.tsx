@@ -169,7 +169,8 @@ export function ChatHistory({ onPick, search }: { onPick: () => void; search: Hi
       {search.words !== "" ? (
         <SearchResults search={search} titles={titles} path={path} active={active} navigate={chats?.navigate ?? null} onPick={onPick} />
       ) : (
-        <>
+        // The history fades back in as the search is cleared.
+        <div className="flex animate-fade-in flex-col motion-reduce:animate-none">
           {unlisted && (
             <ul className="mb-2 flex flex-col">
               <li>
@@ -217,7 +218,7 @@ export function ChatHistory({ onPick, search }: { onPick: () => void; search: Hi
           {list !== null && rows.length === 0 && !unlisted && (
             <p className="px-2.5 pt-1 text-[13px] leading-5 text-text3">Conversations you start show here.</p>
           )}
-        </>
+        </div>
       )}
     </div>
   );

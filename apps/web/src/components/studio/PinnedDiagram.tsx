@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { FadeImg } from "@/components/studio/motion-parts";
 import { Glyph } from "@/components/ui/Glyph";
 import { tutorTurnsWords, videoPosterHref } from "@/lib/studio-cards";
 import { thumbnailHref } from "@/lib/studio-view";
@@ -34,8 +35,7 @@ export function PinnedDiagram({ name, title }: { name: string; title: string }) 
         </span>
       ) : (
         // The runner streams the stored SVG; see DiagramTile.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <FadeImg
           src={thumbnailHref(name)}
           alt={title}
           onError={() => setMissing(true)}
@@ -66,8 +66,7 @@ export function PinnedVideo({ slug, title }: { slug: string; title: string }) {
         </span>
       ) : (
         // The library's asset route streams the stored JPEG.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={videoPosterHref(slug)} alt={title} onError={() => setMissing(true)} className="h-full w-full object-contain" />
+        <FadeImg src={videoPosterHref(slug)} alt={title} onError={() => setMissing(true)} className="h-full w-full object-contain" />
       )}
     </div>
   );

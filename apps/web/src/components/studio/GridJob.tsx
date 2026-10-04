@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 
+import { FADE_IN, POP_IN } from "@/components/studio/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
@@ -75,7 +76,9 @@ export function TileJob({
   const job = jobForTarget(jobs, target, ended, dismissed);
   if (job === null) return null;
   return (
-    <div className="absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-[var(--border)]">
+    // Fades in over the tile as the job starts; opacity only, since a scale
+    // would show the thumbnail round its edges for a moment.
+    <div className={`absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-[var(--border)] ${FADE_IN}`}>
       {/* Keyed by job, so a second job on the same diagram starts from its own pictures. */}
       <JobStage key={job.jobId} job={job} title={title} thumbnail={thumbnail} path={path} isNew={false} />
     </div>
@@ -143,7 +146,7 @@ export function NewDiagramJobs({
 function NewDiagramCard({ job, path }: { job: Job; path: string }) {
   const title = job.title ?? "New diagram";
   return (
-    <div className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${TILE_LIFT}`}>
+    <div className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${TILE_LIFT} ${POP_IN}`}>
       <div className="relative aspect-[4/3] overflow-hidden border-b border-[var(--border)]">
         <JobStage job={job} title={title} thumbnail={null} path={path} isNew />
         <KindBadge kind="diagram" />
@@ -163,7 +166,7 @@ function NewDiagramRow({ job, path }: { job: Job; path: string }) {
     <PanelLink
       href={panelHref(path, { job: job.jobId })}
       scroll={false}
-      className="flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)]"
+      className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)] ${FADE_IN}`}
     >
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[var(--surface2)]">
         <Dot stage={tileStage(job)} />
@@ -297,7 +300,8 @@ function Backdrop({
   // fill: the first real run added a note in the bottom corner of a nearly
   // square drawing, and a cover-cropped backdrop cut exactly that change off.
   // Framed the same, the thumbnail blurs in place when a job starts.
-  const layer = `absolute inset-0 h-full w-full object-contain p-2 ${blur}`;
+  // The blur deepens, and the veil thickens, as a job fails: a change, not a cut.
+  const layer = `absolute inset-0 h-full w-full object-contain p-2 ${blur} transition-[filter] duration-300 ease-out motion-reduce:transition-none`;
   const thumbnailShown = thumbnail !== null && showsThumbnail(live);
   return (
     <div aria-hidden className="absolute inset-0 overflow-hidden">
@@ -320,7 +324,7 @@ function Backdrop({
           className={`${layer} ${live.settled ? "" : "studio-fade-in"}`}
         />
       )}
-      <div className={`absolute inset-0 ${stage === "failed" ? "studio-veil-strong" : "studio-veil"}`} />
+      <div className={`absolute inset-0 transition-[background-color] duration-300 ease-out motion-reduce:transition-none ${stage === "failed" ? "studio-veil-strong" : "studio-veil"}`} />
       {stage === "working" && <div className="studio-shimmer absolute inset-0 overflow-hidden" />}
     </div>
   );
@@ -453,7 +457,7 @@ function RowWords({ job }: { job: Job }) {
 function Dot({ stage }: { stage: TileStage }) {
   const tone =
     stage === "failed" ? "bg-[var(--danger)]" : stage === "review" ? "bg-[var(--ok)]" : "bg-[var(--accent)] studio-breathe";
-  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${tone}`} />;
+  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone}`} />;
 }
 
 function capitalise(text: string): string {

@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
+import { FADE_IN, POP_IN } from "@/components/studio/motion";
+import { Reveal } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -132,6 +134,12 @@ export function ConfirmCard({
   const [focusNext, setFocusNext] = useState<FocusKey | null>(null);
   const [using, setUsing] = useState(false);
   const [useError, setUseError] = useState<string | null>(null);
+  /**
+   * Whether editing has started on this card: from then on a swap between
+   * the brief as read and its fields fades in. The card's first drawing does
+   * not, since its message is already rising in.
+   */
+  const [swapped, setSwapped] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
   const base = useId();
 
@@ -184,6 +192,7 @@ export function ConfirmCard({
 
   function start() {
     if (editBlock !== null) return;
+    setSwapped(true);
     setHeld(toEdit(brief));
     setProblems([]);
     setFocusNext("title");
@@ -336,16 +345,28 @@ export function ConfirmCard({
   const titleProblem = held === null ? null : problemFor("title");
   const topicProblem = held === null ? null : problemFor("topic");
   const general = problemFor("general");
+  /** On the brief as read, once it has been edited: it fades back in. */
+  const readBack = swapped ? FADE_IN : undefined;
 
   return (
     <Card
       tight
       as="article"
       aria-label={`Brief: ${brief.title}`}
-      className={cx("mt-1", !kindCardEditable(status) && !onHold && !frozen && "opacity-60")}
+      className={cx(
+        "mt-1 transition-opacity duration-200 ease-out motion-reduce:transition-none",
+        !kindCardEditable(status) && !onHold && !frozen && "opacity-60",
+      )}
     >
-      <div ref={root} onKeyDown={onKeyDown} aria-busy={saving || undefined} className="flex flex-col gap-3.5">
-        <div className={cx("flex flex-col gap-3.5", onHold && held === null && "opacity-60")}>
+      {/* No gap here: each footer below carries its own space above it, so a
+          footer folding open or shut takes its spacing with it. */}
+      <div ref={root} onKeyDown={onKeyDown} aria-busy={saving || undefined} className="flex flex-col">
+        <div
+          className={cx(
+            "flex flex-col gap-3.5 transition-opacity duration-200 ease-out motion-reduce:transition-none",
+            onHold && held === null && "opacity-60",
+          )}
+        >
         <div>
           <div className="flex min-h-9 items-center gap-3">
             {edit !== null ? (
@@ -368,10 +389,10 @@ export function ConfirmCard({
                     void save();
                   }
                 }}
-                className="flex-1 text-[16px] font-bold"
+                className={cx("flex-1 text-[16px] font-bold", FADE_IN)}
               />
             ) : (
-              <h2 className="min-w-0 flex-1 text-[16px] font-bold leading-snug text-text">{brief.title}</h2>
+              <h2 className={cx("min-w-0 flex-1 text-[16px] font-bold leading-snug text-text", readBack)}>{brief.title}</h2>
             )}
             {editable && held === null && (
               <Button
@@ -395,7 +416,7 @@ export function ConfirmCard({
 
         <Row label="Topic">
           {edit !== null ? (
-            <div data-group="topic" className="flex min-h-9 items-center">
+            <div data-group="topic" className={cx("flex min-h-9 items-center", FADE_IN)}>
               <FilterMenu
                 label="Topic"
                 bare
@@ -409,7 +430,7 @@ export function ConfirmCard({
               />
             </div>
           ) : proposed === null ? (
-            <div className="flex min-h-9 items-center">
+            <div className={cx("flex min-h-9 items-center", readBack)}>
               <Chip size="sm" title={brief.topic}>
                 {topic?.title ?? brief.topic}
               </Chip>
@@ -457,7 +478,7 @@ export function ConfirmCard({
               onRemove={removeElement}
             />
           ) : (
-            <div className="flex min-h-9 flex-wrap items-center gap-1.5">
+            <div className={cx("flex min-h-9 flex-wrap items-center gap-1.5", readBack)}>
               {brief.elements.map((element) => (
                 <Chip key={element.label} size="sm" title={element.note}>
                   {element.label}
@@ -467,51 +488,61 @@ export function ConfirmCard({
           )}
         </Row>
 
-        {(brief.relations.length > 0 || edit !== null) && (
-          <Row label="What connects">
-            {edit !== null ? (
-              <RelationsEditor
-                edit={edit}
-                locked={locked}
-                problemFor={problemFor}
-                messageId={messageId}
-                onChange={(id, patch, field) =>
-                  change(
-                    (current) => ({
-                      ...current,
-                      relations: current.relations.map((relation) => (relation.id === id ? { ...relation, ...patch } : relation)),
-                    }),
-                    [`relation:${id}:${field}`],
-                  )
-                }
-                onAdd={addRelation}
-                onRemove={removeRelation}
-              />
-            ) : (
-              <ul className="flex flex-col gap-1 pt-1 text-[14px] leading-5 text-text">
-                {brief.relations.map((relation, at) => (
-                  <li key={at} className="flex min-h-7 flex-wrap items-center break-words">
-                    {relation.from}
-                    <Arrow />
-                    {relation.label !== undefined && relation.label !== "" && (
-                      <>
-                        <span className="text-text2">{relation.label}</span>
+        {/* Folds open when editing starts on a brief with no arrows, so there
+            is a place to add one. The wrapper's negative margin takes back
+            the gap above it, which the content's own padding gives back while
+            it is open: shut, it is no height and no gap. */}
+        <div className="-mt-3.5">
+          <Reveal open={brief.relations.length > 0 || edit !== null}>
+            <div className="pt-3.5">
+              <Row label="What connects">
+                {edit !== null ? (
+                  <RelationsEditor
+                    edit={edit}
+                    locked={locked}
+                    problemFor={problemFor}
+                    messageId={messageId}
+                    onChange={(id, patch, field) =>
+                      change(
+                        (current) => ({
+                          ...current,
+                          relations: current.relations.map((relation) => (relation.id === id ? { ...relation, ...patch } : relation)),
+                        }),
+                        [`relation:${id}:${field}`],
+                      )
+                    }
+                    onAdd={addRelation}
+                    onRemove={removeRelation}
+                  />
+                ) : (
+                  <ul className={cx("flex flex-col gap-1 pt-1 text-[14px] leading-5 text-text", readBack)}>
+                    {brief.relations.map((relation, at) => (
+                      <li key={at} className="flex min-h-7 flex-wrap items-center break-words">
+                        {relation.from}
                         <Arrow />
-                      </>
-                    )}
-                    <span className="sr-only">{relation.label ? " to " : " connects to "}</span>
-                    {relation.to}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Row>
-        )}
+                        {relation.label !== undefined && relation.label !== "" && (
+                          <>
+                            <span className="text-text2">{relation.label}</span>
+                            <Arrow />
+                          </>
+                        )}
+                        <span className="sr-only">{relation.label ? " to " : " connects to "}</span>
+                        {relation.to}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Row>
+            </div>
+          </Reveal>
+        </div>
 
         </div>
 
-        {onHold && held === null && (
-          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+        {/* The footers: one at a time, each folding open and shut as the
+            card's state moves (live, editing, held, on hold, drawn). */}
+        <Reveal open={onHold && held === null}>
+          <div className={FOOTER}>
             <p className="text-[13px] leading-5 text-text">On hold: {holdReason ?? "the conversation contradicted this brief"}</p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <Button size="sm" variant="secondary" onClick={() => void takeOffHold()} disabled={using || editBlock !== null} title={editBlock ?? undefined}>
@@ -524,10 +555,10 @@ export function ConfirmCard({
               </p>
             )}
           </div>
-        )}
+        </Reveal>
 
-        {frozen && (
-          <div role="status" className="flex flex-col gap-2 border-t border-hair pt-3.5">
+        <Reveal open={frozen}>
+          <div role="status" className={FOOTER}>
             <p className="text-[13px] leading-5 text-text">
               This brief changed while you were editing it, in a planner reply or another tab. Your edits are kept
               here so nothing is lost; the newest brief is below.
@@ -543,10 +574,10 @@ export function ConfirmCard({
               </Button>
             </div>
           </div>
-        )}
+        </Reveal>
 
-        {editing && (
-          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+        <Reveal open={editing}>
+          <div className={FOOTER}>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <Button onClick={() => void save()} disabled={saving} data-field="save" aria-keyshortcuts="Meta+Enter Control+Enter">
                 {saving ? "Saving…" : live ? "Save" : "Save and use it"}
@@ -566,10 +597,10 @@ export function ConfirmCard({
               </p>
             )}
           </div>
-        )}
+        </Reveal>
 
-        {status === "held" && editable && held === null && (
-          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+        <Reveal open={status === "held" && editable && held === null}>
+          <div className={FOOTER}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Button onClick={() => void putBack()} disabled={saving || editBlock !== null} title={editBlock ?? undefined}>
                 {saving ? "Saving…" : "Use this brief"}
@@ -585,10 +616,10 @@ export function ConfirmCard({
               </p>
             )}
           </div>
-        )}
+        </Reveal>
 
-        {live && held === null && (
-          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+        <Reveal open={live && held === null}>
+          <div className={FOOTER}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Button
                 variant={paired ? "secondary" : "primary"}
@@ -624,15 +655,17 @@ export function ConfirmCard({
               </p>
             )}
           </div>
-        )}
+        </Reveal>
 
-        {status === "drawn" && jobHref !== null && (
-          <div className="border-t border-hair pt-3">
-            <PanelLink href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
-              {madeLine("diagram", jobRunning)}. Open the job
-            </PanelLink>
+        <Reveal open={status === "drawn" && jobHref !== null}>
+          <div className="mt-3.5 border-t border-hair pt-3">
+            {jobHref !== null && (
+              <PanelLink href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+                {madeLine("diagram", jobRunning)}. Open the job
+              </PanelLink>
+            )}
           </div>
-        )}
+        </Reveal>
       </div>
     </Card>
   );
@@ -656,6 +689,13 @@ function enterKey(event: KeyboardEvent<HTMLElement>) {
     keyCode: event.keyCode,
   });
 }
+
+/**
+ * A footer: a rule and its content, and the card's 14px above the rule. The
+ * space is the footer's own (a margin, inside its fold) rather than a gap
+ * in the card, so a footer folded shut leaves nothing behind.
+ */
+const FOOTER = "mt-3.5 flex flex-col gap-2 border-t border-hair pt-3.5";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -731,18 +771,21 @@ function ElementsEditor({
   onRemove: (id: string) => void;
 }) {
   const only = edit.elements.length <= 1;
+  // The elements editing started with fade in with the editor; one added
+  // since pops in where it lands.
+  const [initial] = useState(() => new Set(edit.elements.map((element) => element.id)));
   const refused = edit.elements
     .map((element, at) => ({ element, at, problem: problemFor(`element:${element.id}`) }))
     .filter((entry) => entry.problem !== null);
   const group = problemFor("elements");
   return (
-    <div data-group="elements">
+    <div data-group="elements" className={FADE_IN}>
       <ul className="flex min-h-9 flex-wrap items-center gap-1.5" aria-label="Elements">
         {edit.elements.map((element, at) => {
           const field: FieldKey = `element:${element.id}`;
           const problem = problemFor(field);
           return (
-            <li key={element.id} className="relative flex max-w-full items-center">
+            <li key={element.id} className={cx("relative flex max-w-full items-center", !initial.has(element.id) && POP_IN)}>
               <input
                 data-field={field}
                 aria-label={`Element ${at + 1}`}
@@ -822,15 +865,17 @@ function RelationsEditor({
   onRemove: (id: string) => void;
 }) {
   const group = problemFor("relations");
+  // As for the elements: an arrow added while editing pops in.
+  const [initial] = useState(() => new Set(edit.relations.map((relation) => relation.id)));
   return (
-    <div data-group="relations" className="flex flex-col gap-1 pt-1">
+    <div data-group="relations" className={cx("flex flex-col gap-1 pt-1", FADE_IN)}>
       {edit.relations.length > 0 && (
         <ul className="flex flex-col gap-2.5 sm:gap-1" aria-label="Arrows">
           {edit.relations.map((relation, at) => {
             const problem = (end: "from" | "to" | "label") => problemFor(`relation:${relation.id}:${end}`);
             const shown = (["from", "label", "to"] as const).filter((end) => problem(end) !== null);
             return (
-              <li key={relation.id} className="flex flex-col">
+              <li key={relation.id} className={cx("flex flex-col", !initial.has(relation.id) && POP_IN)}>
                 {/* Three pieces that wrap as units on a narrow screen: an end
                     and its arrow, the label and its arrow, the other end and
                     its remove. A remove never lands on a line of its own. */}
