@@ -64,7 +64,7 @@ export function StudioCards({
 
   return (
     <>
-      <Card tight className="gap-2" aria-label="Mastery">
+      <Card tight aria-label="Mastery">
         <div className="flex items-center gap-3">
           <p className="font-display text-[30px] leading-none font-bold text-accent-text tabular-nums">
             {w.pL.toFixed(2)}
@@ -93,7 +93,7 @@ export function StudioCards({
         </p>
       </Card>
 
-      <Card tight className="gap-1.5" aria-label="Checks">
+      <Card tight aria-label="Checks">
         <CardHeading>Checks · {checks.length}</CardHeading>
         {checks.length === 0 ? (
           <p id={noChecksId} className="text-[13px] text-text3">
@@ -123,7 +123,7 @@ export function StudioCards({
         </span>
       </Card>
 
-      <Card tight className="gap-1.5" aria-label="Assets">
+      <Card tight aria-label="Assets">
         <CardHeading>Assets</CardHeading>
         {assets.length === 0 ? (
           <p className="text-[13px] text-text3">No video or diagram explains this yet.</p>
@@ -146,7 +146,7 @@ export function StudioCards({
         )}
       </Card>
 
-      <Card tight className="gap-1.5" aria-label="Neighbourhood">
+      <Card tight aria-label="Neighbourhood">
         <CardHeading>Neighbourhood</CardHeading>
         <div className="rounded-xl bg-surface2 px-1 py-1">
           <ConceptGraph

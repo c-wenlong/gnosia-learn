@@ -22,6 +22,7 @@ import {
   type MentionValue,
 } from "@/components/ui/mention-text";
 import { UserMessage } from "@/components/ui/Message";
+import { TypingDots } from "@/components/ui/TypingDots";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
 import { createDraft, DRAFT_KINDS, idempotencyKey, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 import {
@@ -249,7 +250,7 @@ export function ExtendStart({
           <div role="status" className="mx-auto flex max-w-[56ch] flex-col items-center gap-1 text-center text-[13px] leading-5 text-text3">
             <span className="flex items-center gap-2">
               {opening ? "Opening the conversation" : words.lead}
-              <Dots />
+              <TypingDots />
             </span>
             {!opening && words.more !== null && <span>{words.more}</span>}
           </div>
@@ -326,19 +327,5 @@ export function ExtendStart({
         </div>
       )}
     </div>
-  );
-}
-
-function Dots() {
-  return (
-    <span aria-hidden className="inline-flex gap-1">
-      {[0, 1, 2].map((at) => (
-        <span
-          key={at}
-          className="h-1.5 w-1.5 animate-pulse rounded-full bg-text3 motion-reduce:animate-none"
-          style={{ animationDelay: `${at * 180}ms` }}
-        />
-      ))}
-    </span>
   );
 }

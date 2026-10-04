@@ -100,7 +100,24 @@ const PATHS = {
 
 export type GlyphName = keyof typeof PATHS;
 
-export function Glyph({ name, size = 20, className }: { name: GlyphName; size?: number; className?: string }) {
+/**
+ * `stroke` is in the 20-unit box, so the line thins as the mark shrinks: 1.6
+ * is 1.28px at 16px and 1.12px at 14px. A mark set small inside a field (the
+ * checkbox's tick, the search field's magnifier, a select's chevron) passes a
+ * heavier one so it keeps the weight of the field's 2px border around it.
+ */
+export function Glyph({
+  name,
+  size = 20,
+  stroke = 1.6,
+  className,
+}: {
+  name: GlyphName;
+  size?: number;
+  /** The stroke width in the 20-unit box (default 1.6). */
+  stroke?: number;
+  className?: string;
+}) {
   return (
     <svg
       aria-hidden
@@ -110,7 +127,7 @@ export function Glyph({ name, size = 20, className }: { name: GlyphName; size?: 
       className={cx("shrink-0", className)}
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth={stroke}
       strokeLinecap="round"
       strokeLinejoin="round"
     >

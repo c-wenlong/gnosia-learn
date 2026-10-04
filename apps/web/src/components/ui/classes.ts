@@ -520,11 +520,33 @@ export function menuRowClasses({
   );
 }
 
-/** Kit `Card`: 2px border, radius 20, padding 20 (14 when `tight`). */
-export function cardClasses({ tight = false, className }: { tight?: boolean; className?: string } = {}): string {
+/** The space between a card's children, in Tailwind's spacing steps. */
+export type CardGap = 0 | 1.5 | 2 | 3 | 4;
+
+const CARD_GAP: Record<CardGap, string> = { 0: "", 1.5: "gap-1.5", 2: "gap-2", 3: "gap-3", 4: "gap-4" };
+
+/**
+ * Kit `Card`: 2px border, radius 20, padding 20 (14 when `tight`), its
+ * children 12px apart (`gap`).
+ *
+ * `flush` is the shell alone: no padding, no gap, and its children clipped to
+ * the rounded corners, for a card whose rows, header strip or picture run to
+ * its edges (a table, a diagram on its mat) and pad themselves.
+ *
+ * The gap and padding are options rather than classes a caller adds, because
+ * `cx` joins classes without merging them and Tailwind orders same-property
+ * utilities by value: a `gap-2` beside the card's `gap-3` never applied.
+ */
+export function cardClasses({
+  tight = false,
+  flush = false,
+  gap,
+  className,
+}: { tight?: boolean; flush?: boolean; gap?: CardGap; className?: string } = {}): string {
   return cx(
-    "flex min-w-0 flex-col gap-3 rounded-[20px] border-2 border-border bg-surface",
-    tight ? "p-3.5" : "p-5",
+    "flex min-w-0 flex-col rounded-[20px] border-2 border-border bg-surface",
+    CARD_GAP[gap ?? (flush ? 0 : 3)],
+    flush ? "overflow-hidden" : tight ? "p-3.5" : "p-5",
     className,
   );
 }

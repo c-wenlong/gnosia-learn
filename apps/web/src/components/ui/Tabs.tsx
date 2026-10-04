@@ -2,7 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 
-import { cx } from "./classes";
+import { cardClasses } from "./classes";
 import { tabIds } from "./roving";
 import { TabList } from "./TabList";
 
@@ -35,7 +35,7 @@ export function Tabs({ items, label, className }: { items: TabItem[]; label: str
 
   return (
     <section
-      className={cx("flex min-w-0 flex-col rounded-[20px] border-2 border-border bg-surface", className)}
+      className={cardClasses({ flush: true, className })}
       aria-label={label}
     >
       <TabList label={label} items={items} value={current} onChange={setSelected} idBase={base} className="px-3 sm:px-4" />
