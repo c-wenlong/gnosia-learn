@@ -24,6 +24,7 @@ vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
 
 const { ShellFrame } = await import("./ShellFrame");
 const { usePublishStudioChats } = await import("./shell-context");
+const { SearchField } = await import("./ChatSearch");
 const listMock = mocks.listDrafts;
 
 beforeAll(() => {
@@ -265,6 +266,20 @@ describe("the history search", () => {
   });
 
   describe("on the rail", () => {
+    it("drops the clear button while folded, so it never sits on the rail's icon", () => {
+      const search = { query: "tcp", words: "tcp", setQuery: () => undefined, clear: () => undefined } as unknown as Parameters<typeof SearchField>[0]["search"];
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const ref = { current: null as HTMLInputElement | null };
+      act(() => root.render(createElement(SearchField, { search, inputRef: ref, compact: true })));
+      expect(container.querySelector('button[aria-label="Clear the search"]')).toBeNull();
+      act(() => root.render(createElement(SearchField, { search, inputRef: ref, compact: false })));
+      expect(container.querySelector('button[aria-label="Clear the search"]')).not.toBeNull();
+      act(() => root.unmount());
+      container.remove();
+    });
+
     it("is a search button, which slides the sidebar out with the field focused", async () => {
       runnerWith(loaded);
       const { nav, button, field, container } = await mount({ collapsed: true });
