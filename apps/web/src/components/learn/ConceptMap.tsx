@@ -45,6 +45,8 @@ const DOT: Record<MasteryBucket, string> = {
 };
 
 const LABEL_LINE = 14;
+/** Half the width of a concept's tap target: the dot and its label. */
+const HIT_HALF_WIDTH = 52;
 const TITLE_SIZE = 14;
 /** The shape the server draws the first frame at, before the browser can measure the box. */
 const ASSUMED = { width: 1000, height: 560 };
@@ -554,6 +556,15 @@ export function ConceptMap({
                 onKeyDown={(event) => onConceptKey(event, id)}
               >
                 <title>{caption}</title>
+                {/* The whole dot and label take a tap, not only the painted strokes: on a phone the
+                    gap between the dot and its words is where a thumb lands. */}
+                <rect
+                  x={p.x - HIT_HALF_WIDTH}
+                  y={p.y - 18}
+                  width={HIT_HALF_WIDTH * 2}
+                  height={18 + 22 + lines.length * LABEL_LINE}
+                  fill="transparent"
+                />
                 {mark?.ready && (
                   <circle cx={p.x} cy={p.y} r={15} fill="none" className="stroke-accent" strokeWidth={1.5} strokeDasharray="3 2" />
                 )}
