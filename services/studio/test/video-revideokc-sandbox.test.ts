@@ -209,15 +209,15 @@ const tryPort = (port) => new Promise((resolve) => {
     const base = readPorts(paths);
     const watch = lan === null ? null : watchPorts([base, base + 1], lan);
     // Stopped however the two calls end, so a failed render cannot leave the watcher probing.
-    let still: unknown;
     let built: unknown;
     try {
-      still = await execFileAsync(paths.wrapper, ["still"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+      const still = await execFileAsync(paths.wrapper, ["still"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+      // A failed still fails here, without a build after it; the finally still stops the watcher.
+      expect((still as { code?: number }).code ?? 0, (still as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
       built = await execFileAsync(paths.wrapper, ["build"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
     } finally {
       lanWatch = watch === null ? null : await watch.stop();
     }
-    expect((still as { code?: number }).code ?? 0, (still as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
     expect((built as { code?: number }).code ?? 0, (built as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
 
     const calls = await readCalls(paths.calls);
