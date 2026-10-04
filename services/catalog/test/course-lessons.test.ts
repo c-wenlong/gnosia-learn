@@ -11,7 +11,7 @@ import { parseCourse, VIDEO_ASSET_PREFIXES } from "@self-learn/content";
 import { doctor, formatDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
 import { runImportCommand } from "../src/commands/index-command";
-import { runStatus } from "../src/commands/status";
+import { formatStatus, runStatus } from "../src/commands/status";
 import { CourseWriteError, exportCourse, importCourse } from "../src/content/courses";
 import { setTriggers, WRITE_GUARDS, writeGuardName } from "../src/content/rules";
 import { readCourses } from "../src/content/readers/courses";
@@ -361,7 +361,22 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
       withConcepts: 3,
       readings: 3,
       readingsOnLessons: 1,
+      concepts: 3,
+      conceptsWithChecks: 0,
     });
+  });
+
+  it("says, per course, how many of the concepts its live lessons teach have a check", async () => {
+    // Live lessons teach base, derived (m1) and other (m2); lesson three,
+    // with third, was archived above. Fixture notes carry no checks.
+    const before = (await runStatus()).coverage.find((c) => c.course === "zz3000");
+    expect(before).toMatchObject({ concepts: 3, conceptsWithChecks: 0 });
+    await scratch.db.execute(
+      sql`update concept set body = body || ${"\n\n```check\nq: A question?\na: An answer.\nwhy: Catches a slip.\n```\n"} where slug = 'base'`,
+    );
+    const after = await runStatus();
+    expect(after.coverage.find((c) => c.course === "zz3000")).toMatchObject({ concepts: 3, conceptsWithChecks: 1 });
+    expect(formatStatus(after)).toMatch(/zz3000 .* 1 of +3 concepts have checks/);
   });
 
   it("guards the link table like every course table: listed under courses, refused raw when armed", async () => {
