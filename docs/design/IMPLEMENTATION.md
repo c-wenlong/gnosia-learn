@@ -274,9 +274,12 @@ conversation list beside its pages.
   in-browser navigation to the sidebar (`usePublishStudioChats` in
   `components/shell/shell-context.ts`, called by `PanelHost`), so a row opens
   its conversation without a server render; anywhere else a conversation row
-  is a link to `/studio?draft=`. Pins and conversation names are the
-  `pinned` and `recentNames` preferences, written by `POST
-  /api/learner/recent`. The search field searches all of Recent. On the rail
+  is a link to `/studio?draft=`. Pins are the `pinned` preference, written
+  by `POST /api/learner/recent`. A conversation's name is `draft.name`, set
+  through the runner (`PUT /api/drafts/{id}/name`, `renameDraft`), and every
+  page calls a conversation by `conversationTitle` (`lib/conversation-title.ts`):
+  the name, else the planner's title, else the first message. The search
+  field searches all of Recent. On the rail
   the labels fade and every row is its glyph.
 - **Phone**, below 768px: a 56px header with the sidebar's button, the
   wordmark and New chat; the sidebar is a drawer over the page, closed by a

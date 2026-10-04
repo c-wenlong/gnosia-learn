@@ -69,6 +69,13 @@ describe("draftRows", () => {
     ]);
   });
 
+  it("names a row by the name the owner gave it before anything else, as every page does", () => {
+    const [row] = draftRows([draft({ name: "Transport layer", title: "TCP vs UDP", firstMessage: "compare them", concept: { slug: "c", title: "Cosine" } })]);
+    expect(row).toMatchObject({ heading: "Transport layer", quoted: false });
+    // A name with nothing in it is no name.
+    expect(draftRows([draft({ name: "  ", title: "TCP vs UDP" })])[0]?.heading).toBe("TCP vs UDP");
+  });
+
   it("tolerates a runner that sends no first message", () => {
     const summary = draft({ draftId: "x" });
     delete summary.firstMessage;
@@ -247,6 +254,13 @@ describe("the history search", () => {
     expect(inFirst[0]).toMatchObject({ draftId: "titled", heading: "TCP congestion window", snippet: "@diagram draw how a sender backs off" });
     // A concept's title heads a row whose first message is a bare tag, and holds the match.
     expect(searchRows(drafts, {}, "similarity")[0]).toMatchObject({ draftId: "concept", heading: "Cosine similarity", snippet: null });
+  });
+
+  it("finds a conversation by its name, and shows the title its name hides when the match is there", () => {
+    const renamed = draft({ draftId: "r", name: "Transport layer", title: "TCP vs UDP", firstMessage: "compare them" });
+    expect(draftMatches(renamed, "transport")).toBe(true);
+    expect(searchRows([renamed], {}, "transport")[0]).toMatchObject({ heading: "Transport layer", snippet: null });
+    expect(searchRows([renamed], {}, "udp")[0]).toMatchObject({ heading: "Transport layer", snippet: "TCP vs UDP" });
   });
 
   it("cuts a long snippet to start a little before the match", () => {
