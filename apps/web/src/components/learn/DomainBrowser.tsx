@@ -79,7 +79,7 @@ export function DomainCards({
             </span>
             <span
               role="img"
-              aria-label={`${d.counts.mastered} mastered, ${d.counts.learning} learning, ${d.counts.untouched} untouched`}
+              aria-label={`${d.counts.mastered} mastered, ${d.counts.learning} learning, ${d.counts.untouched} ${MASTERY_BUCKET_LABEL.untouched.toLowerCase()}`}
               className="flex h-2 overflow-hidden rounded-full bg-surface2"
             >
               <span className="bg-m-hi" style={{ width: share(d.counts.mastered) }} />
