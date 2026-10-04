@@ -266,6 +266,25 @@ describe("the history search", () => {
   });
 
   describe("on the rail", () => {
+    it("hands focus to the fold when Escape slides the sidebar back with focus inside it", async () => {
+      runnerWith(loaded);
+      const { nav, button, field } = await mount({ collapsed: true });
+      act(() => button("Search conversations")!.click());
+      expect(document.activeElement).toBe(field());
+      type(field(), "tcp");
+      await settle();
+      const clear = button("Clear the search")!;
+      act(() => clear.focus());
+      // The field's own Escape clears a query; this one comes from the clear button.
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      });
+      // Fake timers drive requestAnimationFrame too.
+      await settle(50);
+      expect(nav().dataset.state).toBe("rail");
+      expect(document.activeElement?.hasAttribute("data-fold")).toBe(true);
+    });
+
     it("drops the clear button while folded, so it never sits on the rail's icon", () => {
       const search = { query: "tcp", words: "tcp", setQuery: () => undefined, clear: () => undefined } as unknown as Parameters<typeof SearchField>[0]["search"];
       const container = document.createElement("div");
