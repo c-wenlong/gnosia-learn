@@ -144,6 +144,23 @@ describe("the sidebar", () => {
     expect(nav(container).getAttribute("role")).toBeNull();
   });
 
+  it("closes the account menu on Escape and leaves the drawer around it open, until the next Escape", async () => {
+    const container = await mount(true);
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    const account = nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    act(() => account.click());
+    expect(account.getAttribute("aria-expanded")).toBe("true");
+    const escape = () =>
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      });
+    escape();
+    expect(account.getAttribute("aria-expanded")).toBe("false");
+    expect(nav(container).getAttribute("role")).toBe("dialog");
+    escape();
+    expect(nav(container).getAttribute("role")).toBeNull();
+  });
+
   it("shows the learner's name on the account row, and Account until there is one", async () => {
     const unnamed = await mount(false);
     expect(nav(unnamed).querySelector("button[aria-expanded]")?.textContent).toBe("Account");
@@ -241,14 +258,23 @@ describe("the fold", () => {
     expect(label.className).toContain("transition-opacity");
   });
 
-  it("keeps the account menu mounted, invisible and inert until opened, so it can fade", () => {
+  it("pops the account menu in as a kit Popover, and keeps it inert for its way out so it can fade", () => {
+    vi.useFakeTimers();
     const { container } = mountFolded(false);
-    const menu = nav(container).querySelector<HTMLElement>("[id]:has(> ul)")!;
+    const account = nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    expect(nav(container).querySelector("[popover]")).toBeNull();
+    act(() => account.click());
+    const menu = nav(container).querySelector<HTMLElement>("[popover]")!;
+    expect(menu.getAttribute("popover")).toBe("manual");
+    expect(menu.className).toContain("animate-pop-in");
+    expect(account.getAttribute("aria-controls")).toBe(menu.id);
+    act(() => account.click());
     expect(menu.hasAttribute("inert")).toBe(true);
-    expect(menu.className).toContain("invisible");
-    act(() => nav(container).querySelector<HTMLButtonElement>("button[aria-expanded]")!.click());
-    expect(menu.hasAttribute("inert")).toBe(false);
-    expect(menu.className).toContain("opacity-100");
+    expect(menu.className).toContain("animate-pop-out");
+    expect(account.hasAttribute("aria-controls")).toBe(false);
+    act(() => vi.advanceTimersByTime(120));
+    expect(nav(container).querySelector("[popover]")).toBeNull();
+    vi.useRealTimers();
   });
 
   it("carries the studio sidebar's saved fold into the cookie once", () => {

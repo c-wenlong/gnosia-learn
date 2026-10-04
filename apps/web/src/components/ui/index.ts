@@ -1,6 +1,6 @@
 /**
  * The redesign's primitives. Every one is safe in a server component except
- * `FilterMenu`, `Select`, `Combobox` and `Composer`, client components that
+ * `FilterMenu`, `Select`, `Combobox`, `Composer` and `Popover`, client components that
  * take an `onChange` and so are rendered from another client component
  * (`MentionComposer` is one too, and deliberately not exported here: it
  * carries Lexical, which only `/studio` should load); the contract (names and
@@ -24,6 +24,7 @@ export { Input } from "./Input";
 export { MasteryDot } from "./MasteryDot";
 export { Panel } from "./Panel";
 export { Placeholder } from "./Placeholder";
+export { Popover, type PopoverCloseReason } from "./Popover";
 export { ProgressBar, type ProgressTone } from "./ProgressBar";
 export { RatingButton } from "./RatingButton";
 export { SearchField } from "./SearchField";
@@ -41,6 +42,10 @@ export {
   inputClasses,
   LABEL,
   linkClasses,
+  MENU_GROUP,
+  MENU_HEADING,
+  MENU_PANEL,
+  menuRowClasses,
   textareaClasses,
 } from "./classes";
 export type {
@@ -57,4 +62,5 @@ export type {
   LinkWeight,
 } from "./classes";
 export type { FilterOption } from "./filter-menu";
+export type { PopoverPlacement } from "./popover-place";
 export { tabKeyIndex, type RovingOrientation } from "./roving";

@@ -1,0 +1,202 @@
+// @vitest-environment jsdom
+import { act, createElement, Fragment, useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { Popover, type PopoverCloseReason } from "./Popover";
+
+/**
+ * The kit `Popover`: shown in the top layer, closed by a press outside, by
+ * the focus leaving, and by Escape one layer at a time (the innermost only,
+ * the press cancelled and stopped so nothing around it closes too), the focus
+ * going back to what opened it, and kept inert for its way out.
+ */
+
+beforeAll(() => {
+  (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+const shown: Element[] = [];
+beforeEach(() => {
+  vi.useFakeTimers();
+  shown.length = 0;
+  HTMLElement.prototype.showPopover = function (this: HTMLElement) {
+    shown.push(this);
+  };
+});
+
+const mounted: Array<() => void> = [];
+afterEach(() => {
+  while (mounted.length) mounted.pop()?.();
+  vi.useRealTimers();
+  delete document.documentElement.dataset.motion;
+});
+
+/** A button that toggles a popover holding one row and whatever else is passed. */
+function Menu({ name, closed, children }: { name: string; closed: (reason: PopoverCloseReason) => void; children?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  // The anchor through state rather than `useRef`, which the hooks lint
+  // refuses to see handed to `createElement` during render.
+  const [button, setButton] = useState<HTMLButtonElement | null>(null);
+  const anchor = useMemo(() => ({ current: button }), [button]);
+  return createElement(
+    Fragment,
+    null,
+    createElement("button", { ref: setButton, type: "button", "data-anchor": name, onClick: () => setOpen((was) => !was) }, name),
+    createElement(
+      Popover,
+      {
+        anchorRef: anchor,
+        open,
+        onOpenChange: (_open: boolean, reason: PopoverCloseReason) => {
+          closed(reason);
+          setOpen(false);
+        },
+        id: `${name}-panel`,
+        "aria-activedescendant": `${name}-row`,
+        "data-panel": name,
+      } as ComponentProps<typeof Popover>,
+      createElement("button", { type: "button", id: `${name}-row`, "data-row": name }, `${name} row`),
+      children,
+    ),
+  );
+}
+
+function mount(element: ReactNode) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const outside = document.createElement("button");
+  outside.textContent = "outside";
+  document.body.append(outside);
+  const root: Root = createRoot(container);
+  act(() => root.render(element));
+  mounted.push(() => {
+    act(() => root.unmount());
+    container.remove();
+    outside.remove();
+  });
+  const q = <T extends HTMLElement>(selector: string) => container.querySelector<T>(selector);
+  const anchor = (name: string) => q<HTMLButtonElement>(`[data-anchor="${name}"]`)!;
+  const panel = (name: string) => q<HTMLElement>(`[data-panel="${name}"]`);
+  const escape = (init: KeyboardEventInit = {}) => {
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true, ...init });
+    act(() => void (document.activeElement ?? document.body).dispatchEvent(event));
+    return event;
+  };
+  return { anchor, panel, outside, escape };
+}
+
+describe("Popover", () => {
+  it("shows its box in the top layer, fixed, popping in, and leaves the focus where it was", () => {
+    const { anchor, panel } = mount(createElement(Menu, { name: "a", closed: () => undefined }));
+    expect(panel("a")).toBeNull();
+    anchor("a").focus();
+    act(() => anchor("a").click());
+    const box = panel("a")!;
+    expect(box.getAttribute("popover")).toBe("manual");
+    expect(box.className).toContain("fixed");
+    expect(box.className).toContain("animate-pop-in");
+    expect(box.getAttribute("tabindex")).toBe("-1");
+    expect(box.dataset.side).toBe("bottom");
+    expect(shown).toContain(box);
+    expect(document.activeElement).toBe(anchor("a"));
+  });
+
+  it("closes on a press outside, but not on its anchor or inside it", () => {
+    const closed = vi.fn();
+    const { anchor, panel, outside } = mount(createElement(Menu, { name: "a", closed }));
+    act(() => anchor("a").click());
+    act(() => void panel("a")!.querySelector("button")!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+    act(() => void anchor("a").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+    expect(closed).not.toHaveBeenCalled();
+    act(() => void outside.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+    expect(closed).toHaveBeenCalledWith("outside");
+  });
+
+  it("closes when the focus leaves both it and its anchor, and not as it moves between them", () => {
+    const closed = vi.fn();
+    const { anchor, panel, outside } = mount(createElement(Menu, { name: "a", closed }));
+    act(() => anchor("a").click());
+    act(() => panel("a")!.querySelector<HTMLButtonElement>("button")!.focus());
+    act(() => anchor("a").focus());
+    expect(closed).not.toHaveBeenCalled();
+    act(() => outside.focus());
+    expect(closed).toHaveBeenCalledWith("blur");
+  });
+
+  it("is inert on its way out, pointed at by nothing, and gone once the exit has run", () => {
+    const { anchor, panel } = mount(createElement(Menu, { name: "a", closed: () => undefined }));
+    act(() => anchor("a").click());
+    const box = panel("a")!;
+    expect(box.id).toBe("a-panel");
+    expect(box.getAttribute("aria-activedescendant")).toBe("a-row");
+    act(() => anchor("a").click());
+    expect(panel("a")).toBe(box);
+    expect(box.hasAttribute("inert")).toBe(true);
+    expect(box.className).toContain("animate-pop-out");
+    expect(box.hasAttribute("id")).toBe(false);
+    expect(box.hasAttribute("aria-activedescendant")).toBe(false);
+    act(() => vi.advanceTimersByTime(120));
+    expect(panel("a")).toBeNull();
+  });
+
+  it("goes at once when motion is reduced", () => {
+    document.documentElement.dataset.motion = "reduce";
+    const { anchor, panel } = mount(createElement(Menu, { name: "a", closed: () => undefined }));
+    act(() => anchor("a").click());
+    act(() => anchor("a").click());
+    expect(panel("a")).toBeNull();
+  });
+});
+
+describe("Popover's Escape", () => {
+  it("closes the innermost layer only, with the focus back on its anchor, and lets nothing around it hear", () => {
+    const closed = vi.fn();
+    const heard = vi.fn();
+    window.addEventListener("keydown", heard);
+    try {
+      const { anchor, panel, escape } = mount(
+        createElement(Menu, { name: "outer", closed }, createElement(Menu, { name: "inner", closed })),
+      );
+      act(() => anchor("outer").click());
+      act(() => anchor("inner").click());
+      act(() => panel("inner")!.querySelector<HTMLButtonElement>("button")!.focus());
+
+      // Cancelled, as a modal <dialog>'s close request would be, and stopped
+      // before the drawer's window listener.
+      expect(escape().defaultPrevented).toBe(true);
+      expect(closed).toHaveBeenCalledTimes(1);
+      expect(panel("inner")!.hasAttribute("inert")).toBe(true);
+      expect(panel("outer")!.hasAttribute("inert")).toBe(false);
+      expect(document.activeElement).toBe(anchor("inner"));
+      expect(heard).not.toHaveBeenCalled();
+
+      expect(escape().defaultPrevented).toBe(true);
+      expect(closed).toHaveBeenCalledTimes(2);
+      expect(panel("outer")!.hasAttribute("inert")).toBe(true);
+      expect(heard).not.toHaveBeenCalled();
+
+      // Nothing open: the press is the page's again.
+      expect(escape().defaultPrevented).toBe(false);
+      expect(heard).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("keydown", heard);
+    }
+  });
+
+  it("leaves the focus where it was when it was outside the box, as in a field that kept it", () => {
+    const { anchor, escape } = mount(createElement(Menu, { name: "a", closed: () => undefined }));
+    act(() => anchor("a").click());
+    anchor("a").focus();
+    escape();
+    expect(document.activeElement).toBe(anchor("a"));
+  });
+
+  it("leaves a press an input method is composing with alone", () => {
+    const closed = vi.fn();
+    const { anchor, escape } = mount(createElement(Menu, { name: "a", closed }));
+    act(() => anchor("a").click());
+    expect(escape({ isComposing: true }).defaultPrevented).toBe(false);
+    expect(closed).not.toHaveBeenCalled();
+  });
+});
