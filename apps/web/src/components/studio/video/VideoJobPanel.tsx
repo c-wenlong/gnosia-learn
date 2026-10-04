@@ -470,7 +470,7 @@ function SheetStrip({
                     className="h-full w-full object-contain"
                   />
                   {sheet.round > 1 && (
-                    <span className="absolute top-1.5 right-1.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[11px] font-medium text-white">
+                    <span className="absolute top-1.5 right-1.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[12px] font-medium text-white">
                       Round {sheet.round}
                     </span>
                   )}
@@ -731,7 +731,7 @@ function Chapters({
                 {scene.lines.map((line, at) => (
                   <li key={at} className="text-[13px] leading-5 text-text2">
                     {line.changed && (
-                      <span className="mr-1.5 inline-block rounded-sm bg-warn-tint px-1 text-[11px] font-semibold text-warn-text">Changed</span>
+                      <span className="mr-1.5 inline-block rounded-sm bg-warn-tint px-1 text-[12px] font-semibold text-warn-text">Changed</span>
                     )}
                     {line.text}
                   </li>

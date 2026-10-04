@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import { cx } from "@/components/ui/classes";
+import { cx, STATUS_TEXT } from "@/components/ui/classes";
 import { formatInterval } from "@/lib/review-core";
 import { recordedLine, type Verdict } from "@/lib/tutor-check";
 
@@ -120,7 +120,7 @@ export function VerdictRow({
         </span>
       </div>
       {verdict.state === "failed" && verdict.error && (
-        <p role="alert" className="text-[12px] text-warn-text">
+        <p role="alert" className={cx(STATUS_TEXT, "text-warn-text")}>
           {verdict.error} A retry is never recorded twice.
         </p>
       )}

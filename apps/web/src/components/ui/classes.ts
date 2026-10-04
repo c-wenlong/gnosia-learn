@@ -38,6 +38,73 @@ export const TRACK = "bg-track inset-ring inset-ring-border";
  */
 export const LABEL = "text-[12px] font-semibold leading-4 text-text2";
 
+/*
+ * The type roles: one class string for each kind of text that recurs from
+ * page to page, so a page title is the same size on every page. The sizes
+ * are DESIGN.md's (the hi-fi and what changed on top of it); the table, with
+ * the exceptions and their reasons, is "Type roles" in IMPLEMENTATION.md.
+ * `type-roles.test.ts` fails an `<h1>` that takes none of the title roles
+ * and is not one of its named exceptions, and any text under 12px, the floor.
+ *
+ * Each is a whole class string (family, size, weight, leading and, for the
+ * titles and the note, colour), so a call site adds only its own spacing,
+ * truncation or `sr-only`, never a second size.
+ */
+
+/** A page's `<h1>`: Georgia 28/700 (hi-fi: Courses, Learn, Library, Settings). */
+export const PAGE_TITLE = "font-display text-[28px] leading-tight font-bold text-text";
+
+/**
+ * A concept's title where the concept is what the page or card is about: the
+ * workspace's `<h1>` and Home's Next up. Georgia 26/700, as hi-fi 04 and 01
+ * draw it (DESIGN.md: concept titles 26 to 32).
+ */
+export const CONCEPT_TITLE = "font-display text-[26px] leading-tight font-bold text-text";
+
+/**
+ * The title of a focus page's close screen (a session's, Review's end of the
+ * queue): the page title on a phone and 32 from 768px, as hi-fi 07 draws the
+ * session close. Review's close is built from the session close's parts, so
+ * the two share it.
+ */
+export const CLOSE_TITLE = "font-display text-[28px] leading-tight font-bold text-text md:text-[32px]";
+
+/** A heading that splits a page into sections (Courses' Continue learning): Figtree 20/700. */
+export const SECTION_TITLE = "font-sans text-[20px] leading-tight font-bold text-text";
+
+/** A card's title: 16/700, the kit `Card`'s, and a dialog or sheet that reads as a card. */
+export const CARD_TITLE = "font-sans text-[16px] leading-snug font-bold text-text";
+
+/**
+ * The name in a 48px header bar with a hairline under it: the kit `Panel`'s
+ * (NotebookLM's column header) and the studio dialog's. 14/600, quieter than
+ * a card title, since the bar is chrome around the content rather than a
+ * heading inside it.
+ */
+export const PANEL_TITLE = "font-sans text-[14px] leading-5 font-semibold text-text";
+
+/**
+ * The course home's title, which sits in Coursera's column rather than over
+ * the page: Figtree 22/600, not Georgia (IMPLEMENTATION.md, "Course home,
+ * type"). The module's `<h1>`, and the course's when it has no modules.
+ */
+export const COLUMN_TITLE = "font-sans text-[22px] leading-7 font-semibold text-text";
+
+/**
+ * The muted line under or beside a heading: a page's count ("135 assets"),
+ * a subtitle, why a button is off. 12/400 in `--text2`, the hi-fi's count
+ * line on Learn and Library.
+ */
+export const NOTE = "font-sans text-[12px] leading-4 font-normal text-text2";
+
+/**
+ * A status or an error line ("Saving…", "Nothing matches", why a save
+ * failed): 12/400, the size `LiveStatus` and `FormRow`'s error always had.
+ * No colour: the caller adds its tone (`text-text3`, `text-danger`,
+ * `text-ok-text`).
+ */
+export const STATUS_TEXT = "font-sans text-[12px] leading-4 font-normal";
+
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent" | "brand";
 export type ButtonSize = "md" | "sm";
 
@@ -395,6 +462,62 @@ export function inputClasses({
  */
 export function textareaClasses({ className }: { className?: string } = {}): string {
   return cx("block min-h-20 w-full min-w-0 resize-y rounded-lg border-2 px-3.5 py-2.5 leading-5", FIELD_TEXT.px14, FIELD_FACE, className);
+}
+
+/**
+ * The box of every menu and list that opens over the page: radius 16, a 2px
+ * border on the surface, 6px inside, rows 2px apart, scrolling past
+ * min(30rem, 70vh). No shadow: the kit draws its layers with the border, as
+ * a `Card` does. The kit `Popover` draws it for a filter, a field, the
+ * account menu and the studio's menus; a list that keeps the focus in its own
+ * field (Home's Ask box, the @ menu) takes it as well. Width is the caller's:
+ * a list as wide as its words (`w-max`), a field's list as wide as the field,
+ * a suggestion list as wide as its box. `menu-kit.test.ts` fails a second
+ * copy drawn by hand.
+ */
+export const MENU_PANEL = cx(
+  "flex flex-col gap-0.5 overflow-y-auto overscroll-contain max-h-[min(30rem,70vh)]",
+  "rounded-2xl border-2 border-border bg-surface p-1.5 text-text outline-none",
+);
+
+/** A run of a menu's rows under a heading, a hairline above all but the first. */
+export const MENU_GROUP =
+  "mt-1 flex flex-col gap-0.5 border-t border-hair pt-1.5 first:mt-0 first:border-t-0 first:pt-0";
+
+/** A menu group's heading: the `LABEL` size, inset to line up with the rows' text. */
+export const MENU_HEADING = "px-3 pt-1 pb-0.5 text-[12px] font-semibold text-text2";
+
+/**
+ * One row of a menu: 40px at least, radius 12, 14px medium text, the
+ * `--surface2` face under the highlight.
+ *
+ * Two kinds of row. One the list points at with `aria-activedescendant`
+ * while the focus stays on the list or its field (`FilterMenu`, `Combobox`,
+ * the Ask box, the @ menu) is told: `active` puts the face on it, and
+ * `keyboard`, while the keys moved the highlight there, adds the accent
+ * outline the list itself does not draw. A row that takes the focus itself (a
+ * link, a button: the account menu, the studio's menus) leaves both out and
+ * highlights under the pointer and outlines under the keyboard on its own.
+ * `disabled` is a row that cannot be picked (an @ menu entry with a reason):
+ * no face, the not-allowed cursor.
+ */
+export function menuRowClasses({
+  active,
+  keyboard = false,
+  disabled = false,
+  className,
+}: { active?: boolean; keyboard?: boolean; disabled?: boolean; className?: string } = {}): string {
+  const focusable = active === undefined;
+  return cx(
+    "flex min-h-10 w-full items-center gap-2.5 rounded-xl py-1.5 pr-3 pl-2 text-left text-[14px] font-medium text-text select-none",
+    "transition-colors duration-100 motion-reduce:transition-none",
+    disabled ? "cursor-not-allowed" : "cursor-pointer",
+    focusable && !disabled && "hover:bg-surface2 focus-visible:bg-surface2",
+    focusable && "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
+    active === true && !disabled && "bg-surface2",
+    active === true && keyboard && !disabled && "outline-2 -outline-offset-2 outline-accent",
+    className,
+  );
 }
 
 /** Kit `Card`: 2px border, radius 20, padding 20 (14 when `tight`). */

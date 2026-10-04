@@ -13,7 +13,7 @@ export function TagChip({
   tag: TagMeta;
   size?: "sm" | "md";
 }) {
-  const pad = size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-xs";
+  const pad = size === "sm" ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs";
   return (
     <span
       className={`inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--chip-bg)] font-medium text-[var(--muted-strong)] ${pad}`}

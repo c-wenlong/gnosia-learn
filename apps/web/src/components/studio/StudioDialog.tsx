@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 
 import { ENTER } from "@/components/studio/motion";
 import { PaneContext, usePaneLayout } from "@/components/studio/pane-context";
-import { cx } from "@/components/ui/classes";
+import { cx, PANEL_TITLE } from "@/components/ui/classes";
 import { Dialog, DIALOG_CLOSE_MS, type DialogSize } from "@/components/ui/Dialog";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
@@ -262,7 +262,7 @@ export function DialogHeader({ title, meta, children }: { title: ReactNode; meta
     return (
       <div className="flex h-12 shrink-0 items-center gap-2 px-3 md:px-5">
         {leading}
-        <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text">{title}</h2>
+        <h2 className={cx(PANEL_TITLE, "min-w-0 flex-1 truncate")}>{title}</h2>
         {meta !== undefined && meta !== null && <span className="shrink-0 text-[12px] tabular-nums text-text3">{meta}</span>}
         {children}
       </div>
@@ -270,7 +270,7 @@ export function DialogHeader({ title, meta, children }: { title: ReactNode; meta
   }
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 border-b border-hair pl-5 pr-2 pt-[env(safe-area-inset-top)] md:pt-0">
-      <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text">{title}</h2>
+      <h2 className={cx(PANEL_TITLE, "min-w-0 flex-1 truncate")}>{title}</h2>
       {meta !== undefined && meta !== null && <span className="shrink-0 text-[12px] tabular-nums text-text3">{meta}</span>}
       {children}
       <IconButton label="Close" onClick={close} data-dialog-close="">

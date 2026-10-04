@@ -1,13 +1,17 @@
 "use client";
 
-import type { FormEvent, ReactNode } from "react";
+import { useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 
-import { MenuPopover } from "@/components/studio/MenuPopover";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { ChipLink } from "@/components/studio/StudioChrome";
+import { cx, FOCUS, MENU_GROUP, MENU_HEADING, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
+import { Popover } from "@/components/ui/Popover";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import type { PopoverPlacement } from "@/components/ui/popover-place";
+import { isPlainClick } from "@/lib/plain-click";
 import {
   DEFAULT_VIEW,
   KINDS,
@@ -109,9 +113,11 @@ export function StudioSearch({ view }: { view: StudioView }) {
 /**
  * The topic chips: what is in this directory, not the whole vocabulary.
  *
- * Past six they go into an overflow popover, because the strip's height is
+ * Past six they go into an overflow menu, because the strip's height is
  * fixed and a wrapping row of chips is the one thing that would change it.
- * `No topic` is never in the overflow: its whole job is to be noticed.
+ * The menu is in the top layer, so the row's own clipping (it never wraps)
+ * cannot cut it off. `No topic` is never in the overflow: its whole job is
+ * to be noticed.
  */
 export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioView }) {
   const named = chips.filter((chip) => chip.slug !== NO_TOPIC);
@@ -132,20 +138,20 @@ export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioVi
         </ChipLink>
       ))}
       {overflow.length > 0 && (
-        <MenuPopover label={`+${overflow.length}`}>
-          <MenuSection title="More topics">
+        <StripMenu label={`+${overflow.length}`} name={`${overflow.length} more ${overflow.length === 1 ? "topic" : "topics"}`} placement="bottom-start">
+          <MenuGroup title="More topics">
             {overflow.map((chip) => (
-              <MenuLink
+              <MenuRow
                 key={chip.slug}
                 href={studioHref(toggleTopic(view, chip.slug), { selected: null })}
-                active={view.topics.includes(chip.slug)}
+                on={view.topics.includes(chip.slug)}
+                count={chip.count}
               >
-                <span className="min-w-0 flex-1 truncate">{chip.label}</span>
-                <span className="text-[var(--muted)]">{chip.count}</span>
-              </MenuLink>
+                {chip.label}
+              </MenuRow>
             ))}
-          </MenuSection>
-        </MenuPopover>
+          </MenuGroup>
+        </StripMenu>
       )}
       {/* At zero it would filter to nothing; shown while on, so it can be turned off. */}
       {untopiced !== undefined && (untopiced.count > 0 || view.topics.includes(NO_TOPIC)) && (
@@ -173,27 +179,28 @@ export function DisplayMenu({ view }: { view: StudioView }) {
     ["list", "List"],
   ];
   return (
-    <MenuPopover label="Display">
-      <MenuSection title="Group by">
+    <StripMenu label="Display">
+      <MenuGroup title="Group by">
         {groups.map(([value, label]) => (
-          <MenuLink key={value} href={studioHref(view, { group: value })} active={view.group === value}>
+          <MenuRow key={value} href={studioHref(view, { group: value })} on={view.group === value}>
             {label}
-          </MenuLink>
+          </MenuRow>
         ))}
-      </MenuSection>
-      <MenuSection title="Layout">
+      </MenuGroup>
+      <MenuGroup title="Layout">
         {layouts.map(([value, label]) => (
-          <MenuLink key={value} href={studioHref(view, { layout: value })} active={view.layout === value}>
+          <MenuRow key={value} href={studioHref(view, { layout: value })} on={view.layout === value}>
             {label}
-          </MenuLink>
+          </MenuRow>
         ))}
-      </MenuSection>
-      <MenuSection title="Fields">
-        <MenuLink href={studioHref(view, { chips: !view.chips })} active={view.chips}>
+      </MenuGroup>
+      <MenuGroup title="Fields">
+        {/* A toggle among choices: checked while the chips show, and pressing it flips them. */}
+        <MenuRow href={studioHref(view, { chips: !view.chips })} on={view.chips}>
           Concept chips
-        </MenuLink>
-      </MenuSection>
-    </MenuPopover>
+        </MenuRow>
+      </MenuGroup>
+    </StripMenu>
   );
 }
 
@@ -216,39 +223,104 @@ export function SortMenu({ view }: { view: StudioView }) {
     ["asc", view.sort === "title" ? "A to Z" : "Oldest first"],
   ];
   return (
-    <MenuPopover label="Sort">
-      <MenuSection title="Sort by">
+    <StripMenu label="Sort">
+      <MenuGroup title="Sort by">
         {sorts.map(([value, label, direction]) => (
-          <MenuLink
-            key={value}
-            href={studioHref(view, { sort: value, direction })}
-            active={view.sort === value}
-          >
+          <MenuRow key={value} href={studioHref(view, { sort: value, direction })} on={view.sort === value}>
             {label}
-          </MenuLink>
+          </MenuRow>
         ))}
-      </MenuSection>
-      <MenuSection title="Order">
+      </MenuGroup>
+      <MenuGroup title="Order">
         {directions.map(([value, label]) => (
-          <MenuLink
-            key={value}
-            href={studioHref(view, { direction: value })}
-            active={view.direction === value}
-          >
+          <MenuRow key={value} href={studioHref(view, { direction: value })} on={view.direction === value}>
             {label}
-          </MenuLink>
+          </MenuRow>
         ))}
-      </MenuSection>
-    </MenuPopover>
+      </MenuGroup>
+    </StripMenu>
   );
 }
 
 /* -------------------------------------------------------------------------- */
 
-function MenuSection({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * One of the strip's menus: a 32px button and a kit `Popover` of links under
+ * it, the account menu's disclosure pattern (Tab walks from the button into
+ * the rows; no arrow keys are promised). A row is a `PanelLink`, so a plain
+ * click moves the URL in the browser and a modified one opens a new tab.
+ *
+ * A plain click on a row closes the menu with the focus back on the button.
+ * Choosing one is a client navigation and React keeps the menu, so before
+ * this it stayed open over the grid it had just changed, which read as
+ * nothing having happened. A modified click keeps it open. One is open at a
+ * time: pressing another's button is a press outside this one.
+ */
+function StripMenu({
+  label,
+  name,
+  placement = "bottom-end",
+  children,
+}: {
+  label: string;
+  /** The button's accessible name, where `label` alone says too little ("+5"). */
+  name?: string;
+  placement?: PopoverPlacement;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const id = useId();
+
+  function onChoose(event: MouseEvent<HTMLDivElement>) {
+    if (!isPlainClick(event) || (event.target as Element).closest("a") === null) return;
+    setOpen(false);
+    trigger.current?.focus();
+  }
+
   return (
-    <div className="mb-1 last:mb-0">
-      <p className="px-2 py-1 text-xs font-semibold text-[var(--muted-strong)]">
+    <div className="relative shrink-0">
+      <button
+        ref={trigger}
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        aria-label={name}
+        onClick={() => setOpen((was) => !was)}
+        className={cx(
+          "inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-surface pr-2 pl-2.5 text-xs font-medium text-text",
+          "transition-colors duration-100 hover:bg-surface2 aria-expanded:bg-surface2 motion-reduce:transition-none",
+          FOCUS,
+        )}
+      >
+        {label}
+        <Glyph
+          name="chevron"
+          size={14}
+          className={cx("text-text3 transition-[rotate] duration-150 ease-soft motion-reduce:transition-none", open && "rotate-180")}
+        />
+      </button>
+      <Popover
+        anchorRef={trigger}
+        open={open}
+        onOpenChange={() => setOpen(false)}
+        placement={placement}
+        id={id}
+        onClick={onChoose}
+        className={cx(MENU_PANEL, "w-max min-w-[13rem] max-w-[min(22rem,calc(100vw-2rem))]")}
+      >
+        {children}
+      </Popover>
+    </div>
+  );
+}
+
+/** A run of rows under a heading that names it to a screen reader too. */
+function MenuGroup({ title, children }: { title: string; children: ReactNode }) {
+  const heading = useId();
+  return (
+    <div role="group" aria-labelledby={heading} className={MENU_GROUP}>
+      <p id={heading} className={MENU_HEADING}>
         {title}
       </p>
       {children}
@@ -256,28 +328,18 @@ function MenuSection({ title, children }: { title: string; children: ReactNode }
   );
 }
 
-function MenuLink({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: ReactNode;
-}) {
+/**
+ * One row: a tick on the choice in force, the label, and a count at the
+ * right for a topic. The chosen one is `aria-current`, as the kind segments'
+ * link is: a link cannot be `aria-pressed`, which ARIA allows on a button
+ * only, and these stay links so they open in a new tab.
+ */
+function MenuRow({ href, on, count, children }: { href: string; on: boolean; count?: number; children: ReactNode }) {
   return (
-    <PanelLink
-      href={href}
-      className={`flex h-8 items-center gap-2 rounded-md px-2 text-xs transition-colors ${
-        active
-          ? "bg-[var(--nav-active-bg)] font-medium text-[var(--accent-strong)]"
-          : "hover:bg-[var(--surface-hover)]"
-      }`}
-    >
-      <span aria-hidden className="w-3 shrink-0">
-        {active ? "✓" : ""}
-      </span>
-      {children}
+    <PanelLink href={href} aria-current={on ? "true" : undefined} className={menuRowClasses()}>
+      <Glyph name="tick" size={16} className={cx("shrink-0 text-accent-text", !on && "invisible")} />
+      <span className={cx("min-w-0 flex-1 truncate", on && "font-semibold")}>{children}</span>
+      {count !== undefined && <span className="shrink-0 text-[12px] text-text3 tabular-nums">{count}</span>}
     </PanelLink>
   );
 }

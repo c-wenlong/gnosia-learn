@@ -6,7 +6,7 @@ import { DomainGraph, type DomainGraphNode, type MapMark } from "@/components/le
 import { LegendChips, useLegendPreview } from "@/components/learn/LegendChips";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cx, LABEL } from "@/components/ui/classes";
+import { CARD_TITLE, cx, LABEL } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
@@ -90,7 +90,7 @@ export function DomainCards({
               {ready > 0 && ` · ${ready} ready`}
               {due > 0 && <span className="text-danger"> · {due} due</span>}
             </span>
-            {links.length > 0 && <span className="truncate text-[11px] text-text3">Links to {links.join(", ")}</span>}
+            {links.length > 0 && <span className="truncate text-[12px] text-text3">Links to {links.join(", ")}</span>}
           </button>
         );
       })}
@@ -282,7 +282,7 @@ export function DomainView({
                 ))}
               </p>
             )}
-            <p className="text-[11px] leading-4 text-text3">
+            <p className="text-[12px] leading-4 text-text3">
               Prerequisites sit above. Solid: required. Dashed: background. The arc round a dot is its p(L); a dashed ring is
               ready to learn; a red dot is a review overdue, a red ring keeps slipping.
             </p>
@@ -503,7 +503,7 @@ function ConceptList({
                   >
                     <MasteryDot bucket={r.bucket} size={10} className="shrink-0" />
                     <span className="min-w-0 truncate">{r.title}</span>
-                    {r.leech && <span className="shrink-0 text-[11px] font-semibold text-danger">{LEECH_LABEL}</span>}
+                    {r.leech && <span className="shrink-0 text-[12px] font-semibold text-danger">{LEECH_LABEL}</span>}
                   </button>
                 </li>
               );
@@ -595,7 +595,7 @@ export function MapPanel({
                 >
                   <MasteryDot bucket={n.bucket} size={10} className="shrink-0" />
                   <span className="min-w-0 truncate">{n.title}</span>
-                  {elsewhere !== null && <span className="ml-auto shrink-0 text-[11px] text-text3">{domainTitle(elsewhere)}</span>}
+                  {elsewhere !== null && <span className="ml-auto shrink-0 text-[12px] text-text3">{domainTitle(elsewhere)}</span>}
                 </button>
               </li>
             );
@@ -607,7 +607,7 @@ export function MapPanel({
   return (
     <section aria-label="Concept details" className="flex min-w-0 flex-col gap-3 rounded-xl bg-surface2 p-4">
       <div className="flex flex-col gap-1">
-        <h3 ref={heading} tabIndex={-1} className="text-[15px] leading-snug font-bold text-text outline-none">
+        <h3 ref={heading} tabIndex={-1} className={cx(CARD_TITLE, "outline-none")}>
           {focus.title}
         </h3>
         <p className="text-[12px] text-text2">
