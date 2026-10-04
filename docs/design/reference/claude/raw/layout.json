@@ -1,0 +1,4133 @@
+{
+ "artifacts-dark@1440": {
+  "label": "artifacts-dark",
+  "url": "https://claude.ai/artifacts",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "h1": {
+   "text": "Artifacts",
+   "font": "500 24px/32px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 384,
+   "y": 56,
+   "w": 100.1,
+   "h": 32
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.px-md",
+    "max": "1024px",
+    "padL": "32px",
+    "padR": "32px",
+    "x": 352,
+    "y": 48,
+    "w": 1024,
+    "h": 120
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 693.719px 198.281px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 551,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 559,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 703.891px 188.109px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 603,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 611,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 693.719px 198.281px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 655,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 663,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 712.203px 179.797px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 707,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 715,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 712.203px 179.797px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 759,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 767,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 712.203px 179.797px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 811,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 819,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 712.203px 179.797px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 863,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 871,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.bg-page",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 120
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.dframe-pane-scroller.flex-1.min-h-0",
+    "x": 288,
+    "y": 48,
+    "w": 1152,
+    "h": 852,
+    "scrollHeight": 3668,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "page": {
+   "header": {
+    "x": 384,
+    "y": 48,
+    "w": 960,
+    "h": 96
+   },
+   "column": {
+    "x": 352,
+    "y": 48,
+    "w": 1024,
+    "h": 120
+   },
+   "title": {
+    "x": 384,
+    "y": 56,
+    "w": 100.1,
+    "h": 32
+   }
+  },
+  "listRow": {
+   "el": "li.group/cdsrow.relative",
+   "first": {
+    "x": 372,
+    "y": 551,
+    "w": 984,
+    "h": 52
+   },
+   "pitch": 52,
+   "count": 7
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "artifacts-dark-more-menu@1440": {
+  "label": "artifacts-dark-more-menu",
+  "url": "https://claude.ai/artifacts",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "h1": {
+   "text": "Artifacts",
+   "font": "500 24px/32px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 384,
+   "y": 56,
+   "w": 100.1,
+   "h": 32
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.px-md",
+    "max": "1024px",
+    "padL": "32px",
+    "padR": "32px",
+    "x": 352,
+    "y": 48,
+    "w": 1024,
+    "h": 120
+   },
+   {
+    "el": "div[data-cds=Menu].cds-reset.draggable-none.group/menu-popup",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 283.5,
+    "y": 153,
+    "w": 149.8,
+    "h": 178
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 693.719px 198.281px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 551,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 559,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 703.891px 188.109px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 603,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 611,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 693.719px 198.281px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 655,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 663,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 712.203px 179.797px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 707,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 715,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 712.203px 179.797px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 759,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 767,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 712.203px 179.797px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 811,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 819,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.grid.items-center.gap-x-md",
+    "cols": "36px 712.203px 179.797px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 372,
+    "y": 863,
+    "w": 984,
+    "h": 52,
+    "firstChild": {
+     "x": 384,
+     "y": 871,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.bg-page",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 120
+   }
+  ],
+  "dialogs": [],
+  "menus": [
+   {
+    "el": "div[data-cds=Menu].cds-reset.draggable-none.group/menu-popup",
+    "x": 283.5,
+    "y": 153,
+    "w": 149.8,
+    "h": 178,
+    "radius": "12px",
+    "items": 5,
+    "firstItem": {
+     "x": 287.5,
+     "y": 157,
+     "w": 141.8,
+     "h": 32
+    }
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.dframe-pane-scroller.flex-1.min-h-0",
+    "x": 288,
+    "y": 48,
+    "w": 1152,
+    "h": 852,
+    "scrollHeight": 3668,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "page": {
+   "header": {
+    "x": 384,
+    "y": 48,
+    "w": 960,
+    "h": 96
+   },
+   "column": {
+    "x": 352,
+    "y": 48,
+    "w": 1024,
+    "h": 120
+   },
+   "title": {
+    "x": 384,
+    "y": 56,
+    "w": 100.1,
+    "h": 32
+   }
+  },
+  "listRow": {
+   "el": "li.group/cdsrow.relative",
+   "first": {
+    "x": 372,
+    "y": 551,
+    "w": 984,
+    "h": 52
+   },
+   "pitch": 52,
+   "count": 7
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "chats-dark@1440": {
+  "label": "chats-dark",
+  "url": "https://claude.ai/chats",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "h1": {
+   "text": "Chats and tasks",
+   "font": "500 24px/32px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 384,
+   "y": 56,
+   "w": 178.4,
+   "h": 32
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.px-md",
+    "max": "1024px",
+    "padL": "32px",
+    "padR": "32px",
+    "x": 352,
+    "y": 48,
+    "w": 1024,
+    "h": 64
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.bg-page",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 64
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.dframe-pane-scroller.flex-1.min-h-0",
+    "x": 288,
+    "y": 48,
+    "w": 1152,
+    "h": 852,
+    "scrollHeight": 1740,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "page": {
+   "header": {
+    "x": 384,
+    "y": 48,
+    "w": 960,
+    "h": 64
+   },
+   "column": {
+    "x": 352,
+    "y": 48,
+    "w": 1024,
+    "h": 64
+   },
+   "title": {
+    "x": 384,
+    "y": 56,
+    "w": 178.4,
+    "h": 32
+   }
+  },
+  "listRow": {
+   "el": "tr.relative.text-body.font-normal",
+   "first": {
+    "x": 372,
+    "y": 120,
+    "w": 984,
+    "h": 53
+   },
+   "pitch": 53,
+   "count": 15
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "home-dark@1440": {
+  "label": "home-dark",
+  "url": "https://claude.ai/new",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 712.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 708,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 528,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 549,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 543,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 545,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1153,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 528,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   }
+  ],
+  "grids": [],
+  "fixed": [],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "home-dark-chat-menu@1440": {
+  "label": "home-dark-chat-menu",
+  "url": "https://claude.ai/new",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 712.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 708,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 528,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 549,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 543,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 545,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1153,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 528,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   },
+   {
+    "el": "div[data-cds=Menu].cds-reset.draggable-none.group/menu-popup",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 105,
+    "y": 498,
+    "w": 170.6,
+    "h": 178
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [],
+  "menus": [
+   {
+    "el": "div[data-cds=Menu].cds-reset.draggable-none.group/menu-popup",
+    "x": 105,
+    "y": 498,
+    "w": 170.6,
+    "h": 178,
+    "radius": "12px",
+    "items": 5,
+    "firstItem": {
+     "x": 109,
+     "y": 502,
+     "w": 162.6,
+     "h": 32
+    }
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "home-dark-composer-typed@1440": {
+  "label": "home-dark-composer-typed",
+  "url": "https://claude.ai/new",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 712.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 708,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 528,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 549,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 543,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 545,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1153,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 528,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "home-dark-model-menu@1440": {
+  "label": "home-dark-model-menu",
+  "url": "https://claude.ai/new",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 712.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 708,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 528,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 549,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 543,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 545,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1153,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 528,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   },
+   {
+    "el": "div[data-cds=ModelSelector].cds-reset.draggable-none.group/menu-popup",
+    "max": "416px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 810.5,
+    "y": 477.5,
+    "w": 294.6,
+    "h": 291
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [],
+  "menus": [
+   {
+    "el": "div[data-cds=ModelSelector].cds-reset.draggable-none.group/menu-popup",
+    "x": 810.5,
+    "y": 477.5,
+    "w": 294.6,
+    "h": 291,
+    "radius": "12px",
+    "items": 6,
+    "firstItem": {
+     "x": 814.5,
+     "y": 481.5,
+     "w": 286.6,
+     "h": 50
+    }
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "home-dark-plus-menu@1440": {
+  "label": "home-dark-plus-menu",
+  "url": "https://claude.ai/new",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 712.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 708,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 528,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 549,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 543,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 545,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1153,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 528,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   },
+   {
+    "el": "div[data-cds=Menu].cds-reset.draggable-none.group/menu-popup",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 545,
+    "y": 477.5,
+    "w": 228.3,
+    "h": 379
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [],
+  "menus": [
+   {
+    "el": "div[data-cds=Menu].cds-reset.draggable-none.group/menu-popup",
+    "x": 545,
+    "y": 477.5,
+    "w": 228.3,
+    "h": 379,
+    "radius": "12px",
+    "items": 11,
+    "firstItem": {
+     "x": 549,
+     "y": 481.5,
+     "w": 220.3,
+     "h": 32
+    }
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "home-dark-search@1440": {
+  "label": "home-dark-search",
+  "url": "https://claude.ai/new",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 712.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 708,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 528,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 549,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 543,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 545,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1153,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 528,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   },
+   {
+    "el": "div[data-cds=Dialog].draggable-none.fixed.left-1/2",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 384,
+    "y": 225,
+    "w": 672,
+    "h": 506.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div.draggable-none.fixed.inset-0",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div[data-cds=Dialog].draggable-none.fixed.left-1/2",
+    "pos": "fixed",
+    "top": "225px",
+    "bottom": "168.516px",
+    "z": "auto",
+    "x": 384,
+    "y": 225,
+    "w": 672,
+    "h": 506.5
+   },
+   {
+    "el": "div.pointer-events-none.sticky.-top-2.5",
+    "pos": "sticky",
+    "top": "-10px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 385,
+    "y": 290.5,
+    "w": 670,
+    "h": 10
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div[data-cds=Dialog].draggable-none.fixed.left-1/2",
+    "x": 384,
+    "y": 225,
+    "w": 672,
+    "h": 506.5,
+    "radius": "12px",
+    "bg": "rgb(32, 32, 31)"
+   }
+  ],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.p-2.5.min-h-0.overflow-y-auto",
+    "x": 385,
+    "y": 290.5,
+    "w": 670,
+    "h": 440,
+    "scrollHeight": 920,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "home-dark-sidebar-collapsed@1440": {
+  "label": "home-dark-sidebar-collapsed",
+  "url": "https://claude.ai/new",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 8,
+   "y": 8,
+   "w": 32,
+   "h": 32,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "sidebarBody": null,
+  "pane": {
+   "x": 8,
+   "y": 0,
+   "w": 1424,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 8,
+   "y": 0,
+   "w": 1424,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 568.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 564,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 384,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 405,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 399,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 401,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1009,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 80,
+    "y": 48,
+    "w": 1280,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 384,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   }
+  ],
+  "grids": [],
+  "fixed": [],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  }
+ },
+ "home-dark-user-menu@1440": {
+  "label": "home-dark-user-menu",
+  "url": "https://claude.ai/new",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 712.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 708,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 528,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 549,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 543,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 545,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1153,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 528,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   },
+   {
+    "el": "div[data-cds=Menu].cds-reset.draggable-none.group/menu-popup",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 8,
+    "y": 487,
+    "w": 272,
+    "h": 367
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [],
+  "menus": [
+   {
+    "el": "div[data-cds=Menu].cds-reset.draggable-none.group/menu-popup",
+    "x": 8,
+    "y": 487,
+    "w": 272,
+    "h": 367,
+    "radius": "12px",
+    "items": 9,
+    "firstItem": {
+     "x": 12,
+     "y": 516,
+     "w": 264,
+     "h": 32
+    }
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "mobile-home-dark@390": {
+  "label": "mobile-home-dark",
+  "url": "https://claude.ai/new",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": 8,
+   "y": 8,
+   "w": 32,
+   "h": 32,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "sidebarBody": null,
+  "pane": {
+   "x": 8,
+   "y": 0,
+   "w": 374,
+   "h": 844,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 8,
+   "y": 0,
+   "w": 374,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 30px/37.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 59.2,
+   "y": 381,
+   "w": 271.6,
+   "h": 37.5,
+   "mark": {
+    "x": 59.2,
+    "y": 384.8,
+    "w": 28.8,
+    "h": 28.8
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 704,
+    "w": 358,
+    "h": 100
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 37,
+    "y": 725,
+    "w": 322,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 31,
+    "y": 757,
+    "w": 112,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 33,
+    "y": 757,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 327,
+    "y": 757,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "4px",
+    "padR": "4px",
+    "x": 8,
+    "y": 48,
+    "w": 374,
+    "h": 796
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 12,
+    "y": 365,
+    "w": 366,
+    "h": 53.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 8,
+    "y": 704,
+    "w": 374,
+    "h": 140
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  }
+ },
+ "mobile-home-dark-drawer@390": {
+  "label": "mobile-home-dark-drawer",
+  "url": "https://claude.ai/new",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": 8,
+   "y": 8,
+   "w": 32,
+   "h": 32,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "role": "dialog",
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "pane": {
+   "x": 8,
+   "y": 0,
+   "w": 374,
+   "h": 844,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 8,
+   "y": 0,
+   "w": 374,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 30px/37.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 59.2,
+   "y": 381,
+   "w": 271.6,
+   "h": 37.5,
+   "mark": {
+    "x": 59.2,
+    "y": 384.8,
+    "w": 28.8,
+    "h": 28.8
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 704,
+    "w": 358,
+    "h": 100
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 37,
+    "y": 725,
+    "w": 322,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 31,
+    "y": 757,
+    "w": 112,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 33,
+    "y": 757,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 327,
+    "y": 757,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "4px",
+    "padR": "4px",
+    "x": 8,
+    "y": 48,
+    "w": 374,
+    "h": 796
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 12,
+    "y": 365,
+    "w": 366,
+    "h": 53.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.dframe-sidebar-body.flex.flex-col",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 844
+   },
+   {
+    "el": "div",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 8,
+    "y": 704,
+    "w": 374,
+    "h": 140
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div.dframe-sidebar-body.flex.flex-col",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 844,
+    "radius": "0px",
+    "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+   }
+  ],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 184.5,
+    "w": 386,
+    "h": 609.5,
+    "scrollHeight": 1414,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 140,
+    "w": 374,
+    "h": 44
+   },
+   "second": {
+    "x": 8,
+    "y": 184.5,
+    "w": 374,
+    "h": 44
+   },
+   "pitch": 158,
+   "pills": {
+    "x": 8,
+    "y": 96,
+    "w": 374,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 794,
+    "w": 390,
+    "h": 48
+   }
+  }
+ },
+ "mobile-thread-dark@390": {
+  "label": "mobile-thread-dark",
+  "url": "https://claude.ai/chat/<id>",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": 8,
+   "y": 8,
+   "w": 32,
+   "h": 32,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "sidebarBody": null,
+  "pane": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "div.dframe-header.group/title-row.absolute",
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 48
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 696,
+    "w": 358,
+    "h": 100
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 37,
+    "y": 717,
+    "w": 322,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 31,
+    "y": 749,
+    "w": 34,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 33,
+    "y": 749,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 327,
+    "y": 749,
+    "w": 32,
+    "h": 32
+   },
+   "dock": {
+    "x": 8,
+    "y": 696,
+    "w": 374,
+    "h": 100
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "808px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 8,
+    "y": 56,
+    "w": 374,
+    "h": 3926.5
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "768px",
+    "padL": "20px",
+    "padR": "20px",
+    "x": 8,
+    "y": 56,
+    "w": 374,
+    "h": 3754.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.sticky.bottom-0.mx-auto",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "5",
+    "x": 8,
+    "y": 672,
+    "w": 374,
+    "h": 172
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.overflow-y-auto.overflow-x-hidden.pt-2",
+    "x": 0,
+    "y": 48,
+    "w": 390,
+    "h": 796,
+    "scrollHeight": 3935,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "thread": {
+   "column": {
+    "x": 8,
+    "y": 56,
+    "w": 374,
+    "h": 3926.5
+   },
+   "list": {
+    "x": 8,
+    "y": 56,
+    "w": 374,
+    "h": 3754.5
+   },
+   "feed": {
+    "x": 28,
+    "y": 60,
+    "w": 334,
+    "h": 3631.5
+   },
+   "userBubble": {
+    "x": 79,
+    "y": 84,
+    "w": 283,
+    "h": 256
+   },
+   "userBubbleRadius": "12px",
+   "prose": {
+    "x": 28,
+    "y": 420,
+    "w": 334,
+    "h": 1861.5
+   },
+   "code": {
+    "x": 28,
+    "y": 420,
+    "w": 334,
+    "h": 834.5
+   },
+   "table": {
+    "x": 28,
+    "y": 1302.5,
+    "w": 346.8,
+    "h": 835
+   }
+  }
+ },
+ "project-dark@1440": {
+  "label": "project-dark",
+  "url": "https://claude.ai/project/<id>",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": null,
+  "h1": {
+   "text": "Startup Ideation",
+   "font": "500 24px/31.2px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 320,
+   "y": 72.4,
+   "w": 185.1,
+   "h": 31.2
+  },
+  "composer": {
+   "box": {
+    "x": 320,
+    "y": 164,
+    "w": 680,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 341,
+    "y": 185,
+    "w": 644,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 335,
+    "y": 237,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 337,
+    "y": 237,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 953,
+    "y": 237,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.text-secondary.flex.min-w-0",
+    "max": "480px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 312,
+    "y": 10,
+    "w": 199.5,
+    "h": 28
+   },
+   {
+    "el": "div.mx-auto.w-full.px-6",
+    "max": "1176px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 699.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.flex-shrink-0.w-96",
+    "pos": "sticky",
+    "top": "48px",
+    "bottom": "auto",
+    "z": "auto",
+    "x": 1024,
+    "y": 164,
+    "w": 384,
+    "h": 559.5
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "listRow": {
+   "el": "tr.relative.text-body.font-normal",
+   "first": {
+    "x": 308,
+    "y": 320,
+    "w": 704,
+    "h": 54
+   },
+   "pitch": 54,
+   "count": 3
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "projects-dark@1440": {
+  "label": "projects-dark",
+  "url": "https://claude.ai/cowork/projects",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "h1": {
+   "text": "Projects",
+   "font": "500 24px/32px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 384,
+   "y": 56,
+   "w": 91.3,
+   "h": 32
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.px-md",
+    "max": "1024px",
+    "padL": "32px",
+    "padR": "32px",
+    "x": 352,
+    "y": 48,
+    "w": 1024,
+    "h": 88
+   }
+  ],
+  "grids": [
+   {
+    "el": "ul.mb-3.grid.grid-cols-1",
+    "cols": "468px 468px",
+    "colGap": "24px",
+    "rowGap": "24px",
+    "x": 384,
+    "y": 140,
+    "w": 960,
+    "h": 161,
+    "firstChild": {
+     "x": 384,
+     "y": 140,
+     "w": 468,
+     "h": 161
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.bg-page",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 88
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "page": {
+   "header": {
+    "x": 384,
+    "y": 48,
+    "w": 960,
+    "h": 64
+   },
+   "column": {
+    "x": 352,
+    "y": 48,
+    "w": 1024,
+    "h": 88
+   },
+   "title": {
+    "x": 384,
+    "y": 56,
+    "w": 91.3,
+    "h": 32
+   }
+  },
+  "listRow": {
+   "el": "li.h-full",
+   "first": {
+    "x": 384,
+    "y": 140,
+    "w": 468,
+    "h": 161
+   },
+   "pitch": 0,
+   "count": 2
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "settings-dark-general@1440": {
+  "label": "settings-dark-general",
+  "url": "https://claude.ai/new#settings/general",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "header.dframe-header.h-12.shrink-0",
+   "x": 296,
+   "y": 0,
+   "w": 1136,
+   "h": 48
+  },
+  "greeting": {
+   "text": "Hello, night owl",
+   "font": "300 38px/47.5px anthropic-serif, \"Anthropic Serif Fallback Georgia\"",
+   "x": 712.5,
+   "y": 285,
+   "w": 303,
+   "h": 47.5,
+   "mark": {
+    "x": 708,
+    "y": 290.1,
+    "w": 36.5,
+    "h": 36.5
+   }
+  },
+  "composer": {
+   "box": {
+    "x": 528,
+    "y": 368.5,
+    "w": 672,
+    "h": 120
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 549,
+    "y": 389.5,
+    "w": 636,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 543,
+    "y": 441.5,
+    "w": 161.2,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 545,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1153,
+    "y": 441.5,
+    "w": 32,
+    "h": 32
+   },
+   "dock": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.mt-4.w-full",
+    "max": "1280px",
+    "padL": "56px",
+    "padR": "56px",
+    "x": 296,
+    "y": 48,
+    "w": 1136,
+    "h": 852
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "672px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 528,
+    "y": 285,
+    "w": 672,
+    "h": 47.5
+   },
+   {
+    "el": "div[data-cds=Dialog].draggable-none.fixed.inset-0",
+    "max": "1024px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 208,
+    "y": 50,
+    "w": 1024,
+    "h": 800
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "120",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div.draggable-none.fixed.inset-0",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div[data-cds=Dialog].draggable-none.fixed.inset-0",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 208,
+    "y": 50,
+    "w": 1024,
+    "h": 800
+   },
+   {
+    "el": "div.pointer-events-none.sticky.-top-2",
+    "pos": "sticky",
+    "top": "-8px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 385,
+    "y": 103,
+    "w": 862,
+    "h": 8
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div[data-cds=Dialog].draggable-none.fixed.inset-0",
+    "x": 208,
+    "y": 50,
+    "w": 1024,
+    "h": 800,
+    "radius": "12px",
+    "bg": "rgb(26, 26, 25)"
+   }
+  ],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.relative.min-h-0.flex-1",
+    "x": 401,
+    "y": 103,
+    "w": 830,
+    "h": 746,
+    "scrollHeight": 977,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "settings": {
+   "nav": {
+    "x": 209,
+    "y": 51,
+    "w": 192,
+    "h": 798
+   },
+   "firstItem": {
+    "x": 221,
+    "y": 148,
+    "w": 167,
+    "h": 32
+   },
+   "row": {
+    "x": 425,
+    "y": 147,
+    "w": 782,
+    "h": 56
+   },
+   "content": {
+    "x": 425,
+    "y": 147,
+    "w": 782,
+    "h": 182
+   }
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "thread-dark@1440": {
+  "label": "thread-dark",
+  "url": "https://claude.ai/chat/<id>",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1144,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "div.dframe-header.group/title-row.absolute",
+   "x": 296,
+   "y": 0,
+   "w": 1144,
+   "h": 48
+  },
+  "composer": {
+   "box": {
+    "x": 484,
+    "y": 768,
+    "w": 768,
+    "h": 100
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 505,
+    "y": 789,
+    "w": 732,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 821,
+    "w": 34,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 501,
+    "y": 821,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1205,
+    "y": 821,
+    "w": 32,
+    "h": 32
+   },
+   "dock": {
+    "x": 484,
+    "y": 768,
+    "w": 768,
+    "h": 100
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "808px",
+    "padL": "20px",
+    "padR": "20px",
+    "x": 464,
+    "y": 56,
+    "w": 808,
+    "h": 3318.5
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "768px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 484,
+    "y": 56,
+    "w": 768,
+    "h": 3162.5
+   },
+   {
+    "el": "div.relative.flex.min-w-0",
+    "max": "623px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 613,
+    "y": 84,
+    "w": 623,
+    "h": 308
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.sticky.bottom-0.mx-auto",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "5",
+    "x": 484,
+    "y": 744,
+    "w": 768,
+    "h": 156
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.overflow-y-auto.overflow-x-hidden.pt-2",
+    "x": 296,
+    "y": 48,
+    "w": 1144,
+    "h": 852,
+    "scrollHeight": 3327,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "thread": {
+   "column": {
+    "x": 464,
+    "y": 56,
+    "w": 808,
+    "h": 3318.5
+   },
+   "list": {
+    "x": 484,
+    "y": 56,
+    "w": 768,
+    "h": 3162.5
+   },
+   "feed": {
+    "x": 500,
+    "y": 60,
+    "w": 736,
+    "h": 3039.5
+   },
+   "userBubble": {
+    "x": 613,
+    "y": 84,
+    "w": 623,
+    "h": 308
+   },
+   "userBubbleRadius": "12px",
+   "prose": {
+    "x": 500,
+    "y": 472,
+    "w": 736,
+    "h": 1309.5
+   },
+   "code": {
+    "x": 500,
+    "y": 472,
+    "w": 736,
+    "h": 834.5
+   },
+   "table": {
+    "x": 500,
+    "y": 1354.5,
+    "w": 728,
+    "h": 355
+   }
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "thread-dark-followup@1440": {
+  "label": "thread-dark-followup",
+  "url": "https://claude.ai/chat/<id>",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1144,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "div.dframe-header.group/title-row.absolute",
+   "x": 296,
+   "y": 0,
+   "w": 1144,
+   "h": 48
+  },
+  "composer": {
+   "box": {
+    "x": 484,
+    "y": 768,
+    "w": 768,
+    "h": 100
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 505,
+    "y": 789,
+    "w": 732,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 821,
+    "w": 34,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 501,
+    "y": 821,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1205,
+    "y": 821,
+    "w": 32,
+    "h": 32
+   },
+   "dock": {
+    "x": 484,
+    "y": 768,
+    "w": 768,
+    "h": 100
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "808px",
+    "padL": "20px",
+    "padR": "20px",
+    "x": 464,
+    "y": -1724,
+    "w": 808,
+    "h": 3318.5
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "768px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 484,
+    "y": -1724,
+    "w": 768,
+    "h": 3162.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.sticky.bottom-0.mx-auto",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "5",
+    "x": 484,
+    "y": 744,
+    "w": 768,
+    "h": 156
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.overflow-y-auto.overflow-x-hidden.pt-2",
+    "x": 296,
+    "y": 48,
+    "w": 1144,
+    "h": 852,
+    "scrollHeight": 3327,
+    "scrollTop": 1780
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "thread": {
+   "column": {
+    "x": 464,
+    "y": -1724,
+    "w": 808,
+    "h": 3318.5
+   },
+   "list": {
+    "x": 484,
+    "y": -1724,
+    "w": 768,
+    "h": 3162.5
+   },
+   "feed": {
+    "x": 500,
+    "y": -1720,
+    "w": 736,
+    "h": 3039.5
+   },
+   "userBubble": {
+    "x": 613,
+    "y": -1696,
+    "w": 623,
+    "h": 308
+   },
+   "userBubbleRadius": "12px",
+   "prose": {
+    "x": 500,
+    "y": -1308,
+    "w": 736,
+    "h": 1309.5
+   },
+   "code": {
+    "x": 500,
+    "y": -1308,
+    "w": 736,
+    "h": 834.5
+   },
+   "table": {
+    "x": 500,
+    "y": -425.5,
+    "w": 728,
+    "h": 355
+   }
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ },
+ "thread-dark-table@1440": {
+  "label": "thread-dark-table",
+  "url": "https://claude.ai/chat/<id>",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 288,
+   "h": 900,
+   "bg": "color(srgb 0.0658824 0.0658824 0.0658824)"
+  },
+  "sidebarBody": {
+   "x": 0,
+   "y": 44,
+   "w": 287,
+   "h": 856,
+   "role": null,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "pane": {
+   "x": 296,
+   "y": 0,
+   "w": 1144,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "radius": "0px",
+   "shadow": "none"
+  },
+  "ground": "rgba(0, 0, 0, 0)",
+  "header": {
+   "el": "div.dframe-header.group/title-row.absolute",
+   "x": 296,
+   "y": 0,
+   "w": 1144,
+   "h": 48
+  },
+  "composer": {
+   "box": {
+    "x": 484,
+    "y": 768,
+    "w": 768,
+    "h": 100
+   },
+   "radius": "20px",
+   "editor": {
+    "x": 505,
+    "y": 789,
+    "w": 732,
+    "h": 20
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 821,
+    "w": 34,
+    "h": 32
+   },
+   "firstButton": {
+    "x": 501,
+    "y": 821,
+    "w": 32,
+    "h": 32
+   },
+   "lastButton": {
+    "x": 1205,
+    "y": 821,
+    "w": 32,
+    "h": 32
+   },
+   "dock": {
+    "x": 484,
+    "y": 768,
+    "w": 768,
+    "h": 100
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "808px",
+    "padL": "20px",
+    "padR": "20px",
+    "x": 464,
+    "y": -1094,
+    "w": 808,
+    "h": 3318.5
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "768px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 484,
+    "y": -1094,
+    "w": 768,
+    "h": 3162.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.sticky.bottom-0.mx-auto",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "5",
+    "x": 484,
+    "y": 744,
+    "w": 768,
+    "h": 156
+   }
+  ],
+  "dialogs": [],
+  "menus": [],
+  "scrollers": [
+   {
+    "el": "div.dframe-nav-scroll.relative.flex",
+    "x": 4,
+    "y": 120.5,
+    "w": 283,
+    "h": 731.5,
+    "scrollHeight": 1054,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.overflow-y-auto.overflow-x-hidden.pt-2",
+    "x": 296,
+    "y": 48,
+    "w": 1144,
+    "h": 852,
+    "scrollHeight": 3327,
+    "scrollTop": 1150
+   }
+  ],
+  "body": {
+   "font": "anthropic-sans, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, \"PingFang SC\", \"PingFang TC\", \"Hiragino Sans\", \"Apple S",
+   "size": "16px",
+   "bg": "rgb(21, 21, 21)",
+   "color": "rgb(240, 239, 236)"
+  },
+  "thread": {
+   "column": {
+    "x": 464,
+    "y": -1094,
+    "w": 808,
+    "h": 3318.5
+   },
+   "list": {
+    "x": 484,
+    "y": -1094,
+    "w": 768,
+    "h": 3162.5
+   },
+   "feed": {
+    "x": 500,
+    "y": -1090,
+    "w": 736,
+    "h": 3039.5
+   },
+   "userBubble": {
+    "x": 613,
+    "y": -1066,
+    "w": 623,
+    "h": 308
+   },
+   "userBubbleRadius": "12px",
+   "prose": {
+    "x": 500,
+    "y": -678,
+    "w": 736,
+    "h": 1309.5
+   },
+   "code": {
+    "x": 500,
+    "y": -678,
+    "w": 736,
+    "h": 834.5
+   },
+   "table": {
+    "x": 500,
+    "y": 204.5,
+    "w": 728,
+    "h": 355
+   }
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 8,
+    "y": 88,
+    "w": 271,
+    "h": 32
+   },
+   "second": {
+    "x": 8,
+    "y": 120.5,
+    "w": 271,
+    "h": 32
+   },
+   "pitch": 122,
+   "pills": {
+    "x": 8,
+    "y": 44,
+    "w": 271,
+    "h": 32
+   },
+   "footer": {
+    "x": 0,
+    "y": 852,
+    "w": 287,
+    "h": 48
+   }
+  }
+ }
+}
