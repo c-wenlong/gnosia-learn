@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -40,9 +41,62 @@ const NOT_YET: Record<string, string> = {
     "the tutor chat's recorded verdict, ok or warn, which Callout has no ok tone for; settled with the tutor chat's own work",
 };
 
-/** The source without its comments, so a doc line naming `confirm()` is not a call. */
+/** The source without its comments, so a doc line naming a class is not one. */
 function code(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+}
+
+/** The names a binding declares: `confirm`, or each name inside `{ confirm, ...rest }`. */
+function boundNames(name: ts.BindingName): string[] {
+  if (ts.isIdentifier(name)) return [name.text];
+  return name.elements.flatMap((element) => (ts.isOmittedExpression(element) ? [] : boundNames(element.name)));
+}
+
+/** Whether `scope` itself declares `name`: a parameter, a variable, a function, a class or an import. */
+function declares(scope: ts.Node, name: string): boolean {
+  if (ts.isFunctionLike(scope) && scope.parameters.some((parameter) => boundNames(parameter.name).includes(name))) return true;
+  if (ts.isCatchClause(scope) && scope.variableDeclaration !== undefined) return boundNames(scope.variableDeclaration.name).includes(name);
+  if ((ts.isForStatement(scope) || ts.isForInStatement(scope) || ts.isForOfStatement(scope)) && scope.initializer !== undefined && ts.isVariableDeclarationList(scope.initializer)) {
+    if (scope.initializer.declarations.some((declaration) => boundNames(declaration.name).includes(name))) return true;
+  }
+  if (!(ts.isSourceFile(scope) || ts.isBlock(scope) || ts.isModuleBlock(scope) || ts.isCaseClause(scope) || ts.isDefaultClause(scope))) return false;
+  return scope.statements.some((statement) => {
+    if (ts.isVariableStatement(statement)) return statement.declarationList.declarations.some((d) => boundNames(d.name).includes(name));
+    if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) return statement.name?.text === name;
+    if (ts.isImportDeclaration(statement)) {
+      const clause = statement.importClause;
+      if (clause?.name?.text === name) return true;
+      const bindings = clause?.namedBindings;
+      if (bindings !== undefined && ts.isNamespaceImport(bindings)) return bindings.name.text === name;
+      return bindings?.elements.some((element) => element.name.text === name) ?? false;
+    }
+    return false;
+  });
+}
+
+/**
+ * The calls in a file that reach the browser's `confirm()`: through
+ * `window`, `globalThis` or `self`, or bare where no scope around the call
+ * binds a `confirm` of its own (the learner store's write confirmation is a
+ * parameter by that name, and calling it is not a dialog).
+ */
+function browserConfirms(path: string, text: string): number {
+  const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  let found = 0;
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (ts.isPropertyAccessExpression(callee) && callee.name.text === "confirm" && ts.isIdentifier(callee.expression) && ["window", "globalThis", "self"].includes(callee.expression.text)) found++;
+      if (ts.isIdentifier(callee) && callee.text === "confirm") {
+        let bound = false;
+        for (let scope: ts.Node | undefined = node.parent; scope !== undefined && !bound; scope = scope.parent) bound = declares(scope, "confirm");
+        if (!bound) found++;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return found;
 }
 
 /**
@@ -76,18 +130,19 @@ const handBuiltBox = (classes: string) => WARN_TINT.test(classes) && BOX_RADIUS.
 
 describe("notices and confirms", () => {
   it("asks in place, never through the browser's confirm()", () => {
-    // `confirm(` bare too, unless the file binds a `confirm` of its own (the
-    // learner store's write confirmation is a parameter by that name).
     const offenders = sources()
-      .map(({ path, text }) => ({ path, text: code(text) }))
-      .filter(({ text }) => {
-        if (/\b(?:window|globalThis|self)\.confirm\s*\(/.test(text)) return true;
-        const bare = /(^|[^.\w$])confirm\s*\(/.test(text);
-        const bound = /function\s+confirm\b|\b(?:const|let|var)\s+confirm\b|[(,{]\s*confirm\s*[:,)=}]/.test(text);
-        return bare && !bound;
-      })
+      .filter(({ path, text }) => browserConfirms(path, text) > 0)
       .map(({ path }) => path);
     expect(offenders).toEqual([]);
+  });
+
+  it("tells the browser's confirm() from a confirm of the file's own, scope by scope", () => {
+    const own = "function save(confirm: (x: number) => boolean) { return confirm(1); }";
+    expect(browserConfirms("a.ts", own)).toBe(0);
+    // A local `confirm` in one function does not cover a call in another.
+    expect(browserConfirms("b.ts", `${own}\nfunction drop() { if (confirm("Sure?")) return 1; }`)).toBe(1);
+    expect(browserConfirms("c.tsx", "const go = () => window.confirm('Sure?');")).toBe(1);
+    expect(browserConfirms("d.ts", "const { confirm } = helpers; confirm(2);")).toBe(0);
   });
 
   it("draws a warn-tinted box with Callout, not by hand", () => {
