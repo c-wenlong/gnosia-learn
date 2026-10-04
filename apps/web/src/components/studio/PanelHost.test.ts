@@ -9,7 +9,7 @@ import { panelSignature, type Diagram } from "@/lib/studio-view";
  * The conversation opens and closes in the browser: the address bar moves
  * with `history.pushState` and the page is not drawn on the server again,
  * which was 2 to 3 seconds each way. These pin that, that a conversation
- * takes the frame beside the sidebar in place of the home view, that a panel
+ * takes the frame in place of the home view, that a panel
  * the server drew only shows while the URL still names it, and that the
  * conversation opens at the press, with the person's words, before the
  * runner has made the draft.
@@ -37,15 +37,13 @@ vi.mock("@/components/studio/JobsProvider", () => ({ useStudioJobs: () => ({ job
 vi.mock("@/components/studio/JobPanel", () => ({
   JobPanel: ({ jobId, path }: { jobId: string; path: string }) => createElement("div", { "data-job": jobId, "data-path": path }),
 }));
-// The sidebar reads the runner; what is pinned here is what the host hands it.
-vi.mock("@/components/studio/StudioSidebar", () => ({
-  StudioSidebar: ({ active, pending, onNewChat }: { active: string | null; pending: string | null; onNewChat: () => void }) =>
-    createElement(
-      "nav",
-      { "data-sidebar": true, "data-active": active ?? "", "data-pending": pending ?? "" },
-      createElement("button", { type: "button", "data-studio-new": true, onClick: onNewChat }, "New chat"),
-    ),
-  SidebarToggle: () => null,
+// The app's sidebar reads the runner; what is pinned here is what the host
+// publishes to it.
+const published = vi.hoisted(() => ({ chats: null as null | { active: string | null; pending: string | null; newChat: () => void } }));
+vi.mock("@/components/shell/shell-context", () => ({
+  usePublishStudioChats: (chats: { active: string | null; pending: string | null; newChat: () => void }) => {
+    published.chats = chats;
+  },
 }));
 vi.mock("@/components/studio/DiagramInspector", () => ({
   DiagramPanelBody: ({ diagram, jobs, extendHref }: { diagram: { name: string }; jobs: { jobId: string }[]; extendHref: string }) =>
@@ -156,8 +154,8 @@ function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
 const close = (container: HTMLElement) =>
   act(() => container.querySelector<HTMLButtonElement>("[data-dialog-close]")!.click());
 
-const newChat = (container: HTMLElement) =>
-  act(() => container.querySelector<HTMLButtonElement>("[data-studio-new]")!.click());
+// The sidebar's New chat, which calls what the host published.
+const newChat = () => act(() => published.chats!.newChat());
 /** The home view's wrapper: hidden while a conversation has the frame. */
 const home = (container: HTMLElement) => container.querySelector("[data-home]")!.parentElement!;
 const pane = (container: HTMLElement) => container.querySelector('section[aria-label="Conversation"]');
@@ -175,9 +173,9 @@ describe("the conversation", () => {
     expect(container.querySelector("dialog")).toBeNull();
     expect(container.querySelector("[data-dialog-close]")).toBeNull();
     expect(home(container).hidden).toBe(true);
-    expect(container.querySelector("[data-sidebar]")?.getAttribute("data-active")).toBe("d1");
+    expect(published.chats?.active).toBe("d1");
 
-    newChat(container);
+    newChat();
     expect(pushState).toHaveBeenCalledWith(null, "", "/studio?topic=graphs");
     expect(mocks.push).not.toHaveBeenCalled();
     go("topic=graphs");
@@ -202,7 +200,7 @@ describe("the conversation", () => {
     expect(pane(container)?.textContent).toContain("Opening the conversation");
     expect(pane(container)?.textContent).toContain(FIRST.text);
     expect(home(container).hidden).toBe(true);
-    expect(container.querySelector("[data-sidebar]")?.getAttribute("data-pending")).toBe(FIRST.text);
+    expect(published.chats?.pending).toBe(FIRST.text);
 
     let went = false;
     act(() => {
@@ -218,7 +216,7 @@ describe("the conversation", () => {
     expect(container.textContent).not.toContain("Opening the conversation");
 
     // And leaving it does not bring the placeholder back.
-    newChat(container);
+    newChat();
     go("");
     expect(pane(container)).toBeNull();
   });
@@ -245,7 +243,7 @@ describe("the conversation", () => {
     act(() => {
       token = grabbed.controls!.begin(FIRST);
     });
-    newChat(container);
+    newChat();
     expect(pane(container)).toBeNull();
     let went = true;
     act(() => {
@@ -282,7 +280,7 @@ describe("Start over in a conversation", () => {
     act(() => {
       token = grabbed.controls!.begin(null);
     });
-    newChat(container);
+    newChat();
     expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio");
     go("");
     act(() => {
