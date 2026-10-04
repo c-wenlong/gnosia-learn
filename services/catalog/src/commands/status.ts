@@ -63,6 +63,10 @@ export interface CourseCoverage {
   course: string;
   items: number;
   withConcepts: number;
+  /** Curated links on the course's live modules (0022: docs/proposals/module-learning-path.md). */
+  readings: number;
+  /** How many of those name at least one live lesson in `lessons:`; the rest are module material. */
+  readingsOnLessons: number;
 }
 
 export interface StatusResult {
@@ -237,7 +241,35 @@ async function courseCoverage(db: Db): Promise<CourseCoverage[]> {
     .where(and(eq(course.kind, "course"), isNull(course.archivedAt)))
     .groupBy(course.id, course.position)
     .orderBy(asc(course.position), asc(bytewise(course.id)));
-  return rows;
+  const placed = await readingCoverage(db);
+  return rows.map((row) => ({ ...row, readings: 0, readingsOnLessons: 0, ...placed.get(row.course) }));
+}
+
+/**
+ * Per course, its readings (the curated links its live modules hold) and how
+ * many of them a `lessons:` list places on a live lesson. A database before
+ * 0022 has no lesson links, and counts every reading as unplaced.
+ */
+async function readingCoverage(db: Db): Promise<Map<string, { readings: number; readingsOnLessons: number }>> {
+  const { rows: present } = await db.execute<{ present: boolean }>(
+    sql`select to_regclass('public.curriculum_item_asset') is not null as present`,
+  );
+  const lessons = present[0]?.present === true;
+  const { rows } = await db.execute<{ course: string; readings: number; placed: number }>(sql`
+    select m.parent_id as course, count(distinct r.asset_id)::int as readings,
+      ${
+        lessons
+          ? sql`count(distinct r.asset_id) filter (where exists (
+              select 1 from curriculum_item_asset l
+              join curriculum_item i on i.id = l.curriculum_item_id
+              where l.asset_id = r.asset_id and i.collection_id = m.id and i.archived_at is null))::int`
+          : sql`0`
+      } as placed
+    from collection m
+    join collection_item r on r.collection_id = m.id and starts_with(r.asset_id, 'link:')
+    where m.kind = 'module' and m.archived_at is null and m.parent_id is not null
+    group by m.parent_id`);
+  return new Map(rows.map((row) => [row.course, { readings: row.readings, readingsOnLessons: row.placed }]));
 }
 
 type Db = Parameters<Parameters<typeof withDatabase<StatusResult>>[0]>[0]["db"];
@@ -387,7 +419,8 @@ export function formatStatus(result: StatusResult): string {
   for (const c of result.coverage) {
     lines.push(
       `  ${c.course.padEnd(courseWidth)}  ${String(c.withConcepts).padStart(3)} of ` +
-        `${String(c.items).padStart(3)} items have concepts`,
+        `${String(c.items).padStart(3)} items have concepts, ` +
+        `${String(c.readingsOnLessons).padStart(3)} of ${String(c.readings).padStart(3)} readings are on a lesson`,
     );
   }
   return lines.join("\n");

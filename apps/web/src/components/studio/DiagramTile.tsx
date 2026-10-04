@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { PanelLink, SelectableFrame } from "@/components/studio/PanelLink";
 import { RowJob, TileJob } from "@/components/studio/GridJob";
-import { KindBadge, TILE_LIFT } from "@/components/studio/KindBadge";
+import { KindBadge, KindWord, TILE_LIFT } from "@/components/studio/KindBadge";
 import { Chip } from "@/components/studio/StudioChrome";
 import {
   canvasHref,
@@ -65,6 +65,7 @@ export function DiagramTile({
       idleClassName="hover:bg-[var(--surface-hover)]"
     >
       <PanelLink href={selectHref} className="flex min-w-0 flex-col">
+        <KindWord kind="diagram" />
         <Thumbnail diagram={diagram} />
         <div className="flex min-w-0 flex-col gap-1.5 p-3">
           <span className="line-clamp-2 text-sm font-medium">{displayTitle(diagram)}</span>
@@ -226,6 +227,7 @@ export function DiagramRow({
         href={selectHref}
         className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
       >
+        <KindWord kind="diagram" />
         {displayTitle(diagram)}
       </PanelLink>
       <RowJob target={diagram.tldr.path} title={displayTitle(diagram)} path={path} />

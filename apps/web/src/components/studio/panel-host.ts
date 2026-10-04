@@ -20,8 +20,6 @@ export interface HostControls {
    * again. True when it went to `href`; false when the person had moved on.
    */
   settle: (token: number, href: string | null) => boolean;
-  /** Open the sidebar, on a phone, where it is a drawer. */
-  openSidebar: () => void;
   /**
    * Go to `href` without a server render when it only opens, closes or swaps
    * a panel the browser draws (`browserPanelMove`). False when it does not,

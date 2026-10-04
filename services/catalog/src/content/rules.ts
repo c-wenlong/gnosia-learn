@@ -31,6 +31,7 @@ export const WRITE_GUARDS: Readonly<Record<ContentType, readonly string[]>> = {
     "curriculum_item",
     "curriculum_item_topic",
     "concept_curriculum_item",
+    "curriculum_item_asset",
   ],
   concepts: ["concept", "concept_prerequisite"],
   sessions: [],

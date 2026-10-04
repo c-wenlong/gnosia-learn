@@ -422,16 +422,15 @@ export function TutorChat({
         ))}
       </div>
 
-      {/* Under 768px the page scrolls and the tab bar (68px, plus the home
-          indicator) is fixed over its bottom edge. The composer sticks just
-          above it, so a field that grows while the page is scrolled cannot
-          end up under the bar with Send half hidden. The surface fill and the
-          panel's 16px side padding keep what scrolls past from showing at
-          its edges. From 768px there is no tab bar and it sits in the flow. */}
+      {/* Under 768px the page scrolls, and the composer sticks to the bottom
+          edge, above the home indicator, so a field that grows while the page
+          is scrolled cannot end up below the screen with Send half hidden.
+          The surface fill and the panel's 16px side padding keep what scrolls
+          past from showing at its edges. From 768px it sits in the flow. */}
       <div
         onFocus={onFieldFocus}
         onBlur={onFieldBlur}
-        className="flex flex-col gap-1.5 max-md:sticky max-md:bottom-[calc(68px+env(safe-area-inset-bottom))] max-md:z-10 max-md:-mx-4 max-md:bg-surface max-md:px-4 max-md:pt-1.5 max-md:pb-2"
+        className="flex flex-col gap-1.5 max-md:sticky max-md:bottom-[env(safe-area-inset-bottom)] max-md:z-10 max-md:-mx-4 max-md:bg-surface max-md:px-4 max-md:pt-1.5 max-md:pb-2"
       >
         {kit !== null && swapped ? (
           <kit.TutorMentionField

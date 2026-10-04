@@ -301,9 +301,17 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
   );
   const modules = groupBy(
     kept(
-      await rows<{ id: string; parent_id: string; slug: string; title: string; position: number; topic: string | null }>(
+      await rows<{
+        id: string;
+        parent_id: string;
+        slug: string;
+        title: string;
+        position: number;
+        topic: string | null;
+        metadata: Record<string, unknown> | null;
+      }>(
         db,
-        sql`select c.id, c.parent_id, c.slug, c.title, c.position,
+        sql`select c.id, c.parent_id, c.slug, c.title, c.position, c.metadata,
                    (select m.topic_slug from collection_item m
                     where m.collection_id = c.id and m.topic_slug is not null
                     order by m.position limit 1) as topic
@@ -317,9 +325,9 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
     (r) => r.parent_id,
   );
   const items = groupBy(
-    await rows<{ id: string; collection_id: string; title: string; subtopics: unknown }>(
+    await rows<{ id: string; collection_id: string; title: string; subtopics: unknown; videos: unknown }>(
       db,
-      sql`select id, collection_id, title, subtopics from curriculum_item
+      sql`select id, collection_id, title, subtopics, videos from curriculum_item
           where archived_at is null order by collection_id collate "C", position, id collate "C"`,
     ),
     (r) => r.collection_id,
@@ -331,6 +339,18 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
           order by curriculum_item_id collate "C", position, concept_slug collate "C"`,
     ),
     (r) => r.curriculum_item_id,
+  );
+  // A reading's `lessons:`, to live items of its own module only, in the
+  // order the list was written (the link's position).
+  const lessons = groupBy(
+    await rows<{ asset_id: string; curriculum_item_id: string; collection_id: string }>(
+      db,
+      sql`select l.asset_id, l.curriculum_item_id, i.collection_id
+          from curriculum_item_asset l join curriculum_item i on i.id = l.curriculum_item_id
+          where i.archived_at is null
+          order by l.asset_id collate "C", l.position, l.curriculum_item_id collate "C"`,
+    ),
+    (r) => r.asset_id,
   );
   const resources = groupBy(
     await rows<{ collection_id: string; id: string; title: string | null; url: string | null; resource_type: string | null }>(
@@ -402,6 +422,11 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
       lines.push(`${pad(4)}order: ${mod.position}`);
       if (mod.topic === null) problems.push(`module "${mod.id}" has no topic row`);
       else lines.push(`${pad(4)}topic: ${blockScalar(mod.topic)}`);
+      const moduleVideos = stringArray(mod.metadata?.["videos"]);
+      if (moduleVideos.length > 0) {
+        lines.push(`${pad(4)}videos:`);
+        for (const id of moduleVideos) lines.push(`${pad(6)}- ${blockScalar(id)}`);
+      }
       lines.push(`${pad(4)}topics:`);
       for (const item of items.get(mod.id) ?? []) {
         lines.push(`${pad(6)}- id: ${blockScalar(item.id)}`);
@@ -418,6 +443,11 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
           lines.push(`${pad(8)}subtopics:`);
           for (const subtopic of subtopics) lines.push(`${pad(10)}- ${blockScalar(subtopic)}`);
         }
+        const itemVideos = stringArray(item.videos);
+        if (itemVideos.length > 0) {
+          lines.push(`${pad(8)}videos:`);
+          for (const id of itemVideos) lines.push(`${pad(10)}- ${blockScalar(id)}`);
+        }
       }
       const links = resources.get(mod.id) ?? [];
       if (links.length === 0) {
@@ -432,6 +462,8 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
           lines.push(`${pad(8)}title: ${blockScalar(link.title ?? "")}`);
           lines.push(`${pad(8)}url: ${blockScalar(link.url ?? "")}`);
           lines.push(`${pad(8)}type: ${blockScalar(link.resource_type ?? "")}`);
+          const placed = (lessons.get(link.id) ?? []).filter((l) => l.collection_id === mod.id);
+          if (placed.length > 0) lines.push(`${pad(8)}lessons: ${flowList(placed.map((l) => l.curriculum_item_id))}`);
         }
       }
     }

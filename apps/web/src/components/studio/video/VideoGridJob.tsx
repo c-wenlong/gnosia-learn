@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
-import { KindBadge, TILE_LIFT } from "@/components/studio/KindBadge";
+import { KindBadge, KindWord, TILE_LIFT } from "@/components/studio/KindBadge";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { Chip } from "@/components/studio/StudioChrome";
 import { useSheets } from "@/components/studio/video/use-video-job";
@@ -62,7 +62,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
       <PanelLink
         href={libraryHref(slug, gridHref(path))}
         panel={panelHref(path, { play: slug })}
-        aria-label={`Play ${title}`}
+        aria-label={`Play video: ${title}`}
         className="flex min-w-0 flex-col"
       >
         <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-black">
@@ -117,6 +117,7 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
         panel={panelHref(path, { play: slug })}
         className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
       >
+        <KindWord kind="video" />
         {title}
       </PanelLink>
       {job !== null && (

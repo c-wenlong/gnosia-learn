@@ -12,12 +12,17 @@ import { cx } from "@/components/ui/classes";
  * inside the thumbnail, so a change being drawn or rendered over an existing
  * tile does not cover it; positioned against the tile, whose top left is the
  * thumbnail's.
+ *
+ * Hidden from a screen reader, since it sits outside the tile's link: the
+ * link says the kind itself (`KindWord`), so a list of links still tells
+ * the diagrams from the videos.
  */
 export function KindBadge({ kind, inline = false }: { kind: "diagram" | "video"; inline?: boolean }) {
   // A list row on a phone has no room for it beside the name; the
   // thumbnail's mat (black or light) still tells the two apart there.
   return (
     <span
+      aria-hidden
       data-kind-badge={kind}
       className={cx(
         "pointer-events-none shrink-0 items-center rounded-lg font-semibold",
@@ -33,6 +38,11 @@ export function KindBadge({ kind, inline = false }: { kind: "diagram" | "video";
       {kind === "video" ? "Video" : "Diagram"}
     </span>
   );
+}
+
+/** The kind, first in a tile's or a row's link, for a screen reader only: "Diagram: The dot product". */
+export function KindWord({ kind }: { kind: "diagram" | "video" }) {
+  return <span className="sr-only">{kind === "video" ? "Video: " : "Diagram: "}</span>;
 }
 
 /**

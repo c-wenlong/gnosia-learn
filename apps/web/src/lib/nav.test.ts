@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeDestination, DESTINATIONS, STUDIO_DESTINATION, topBarDestinations } from "./nav";
+import { activeDestination, DESTINATIONS, STUDIO_DESTINATION } from "./nav";
 
 describe("activeDestination", () => {
   it("matches Home only on its own path", () => {
@@ -44,26 +44,13 @@ describe("activeDestination", () => {
 });
 
 describe("the destination lists", () => {
-  it("keeps Studio out of the phone tab bar's list", () => {
+  it("keeps Studio out of the five learning destinations", () => {
     expect(DESTINATIONS).toHaveLength(5);
     expect(DESTINATIONS.map((d) => d.key)).toEqual(["home", "courses", "learn", "library", "review"]);
     expect(DESTINATIONS.some((d) => d.href.startsWith("/studio"))).toBe(false);
   });
 
-  it("lists only the five in the top bar when the studio is off", () => {
-    expect(topBarDestinations(false)).toEqual(DESTINATIONS);
-  });
-
-  it("adds Studio last in the top bar when the studio is on", () => {
-    const list = topBarDestinations(true);
-    expect(list).toHaveLength(6);
-    expect(list.slice(0, 5)).toEqual(DESTINATIONS);
-    expect(list[5]).toBe(STUDIO_DESTINATION);
-    expect(list[5]).toEqual({ key: "studio", label: "Studio", href: "/studio" });
-  });
-
-  it("does not mutate the tab bar's list", () => {
-    topBarDestinations(true);
-    expect(DESTINATIONS).toHaveLength(5);
+  it("points New chat at the studio's home", () => {
+    expect(STUDIO_DESTINATION).toEqual({ key: "studio", label: "Studio", href: "/studio" });
   });
 });
