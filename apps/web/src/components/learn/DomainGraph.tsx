@@ -59,6 +59,7 @@ export function DomainGraph({
   marks,
   hover,
   hoverTopic,
+  preview = null,
   moved,
   onSelect,
   onTopic,
@@ -80,6 +81,8 @@ export function DomainGraph({
   /** The concept under the pointer or the list's focus (D5), and the topic whose title is. */
   hover: string | null;
   hoverTopic: string | null;
+  /** The concepts a legend chip previews (D9), kept lit as a topic's group is. */
+  preview?: ReadonlySet<string> | null;
   /** Concepts dragged from where the layout put them (D6). */
   moved: Readonly<Record<string, Point>>;
   onSelect: (id: string) => void;
@@ -108,13 +111,13 @@ export function DomainGraph({
   const at = (id: string) => moved[id] ?? layout.positions[id];
   const topicOf = new Map(groups.flatMap((g) => g.concepts.map((id) => [id, g.topic] as const)));
   const lines = (id: string) => wrapLabel(nodes.get(id)?.title ?? id, LABEL_CHARS).length;
-  // What stays lit (D5): a concept and its neighbours, or a topic's group.
+  // What stays lit (D5, D9): a concept and its neighbours, a topic's group, or a legend chip's.
   const keep =
     hover !== null && shown.has(hover)
       ? neighbours(edges, hover)
       : hoverTopic !== null
         ? new Set(groups.find((g) => g.topic === hoverTopic)?.concepts ?? [])
-        : null;
+        : preview;
   const hot = (e: GraphEdge) => hover !== null && (e.from === hover || e.to === hover);
   const plate = hover !== null && shown.has(hover) ? nodes.get(hover) : undefined;
 

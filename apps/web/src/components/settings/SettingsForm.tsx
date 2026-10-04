@@ -236,7 +236,7 @@ export function AvatarPicker() {
 
 /**
  * The top of the Tutor tab: how the tutor talks, and the models it tries in
- * order, read-only. The Models and Provider keys cards follow it on the tab.
+ * order, read-only. The Providers card follows it on the tab.
  */
 export function TutorSettings({
   settings,
@@ -272,8 +272,8 @@ export function TutorSettings({
         label="Model providers"
         note={
           chain
-            ? "Your models, tried in this order. Change them under Models below."
-            : "The built-in defaults, tried in this order: your own keys first, then the server's. Choose your own under Models below."
+            ? "Your models, tried in this order. Change them under Providers below."
+            : "The built-in defaults, tried in this order: your own keys first, then the server's. Choose your own under Providers below."
         }
       >
         {(field) => (
@@ -281,7 +281,7 @@ export function TutorSettings({
             {providers.length === 0
               ? chain
                 ? "None: no model in your list has a key"
-                : "None yet: add a key under Provider keys below"
+                : "None yet: add a provider below"
               : providers.map((p) => `${p.id} (${p.source === "saved" ? "yours" : "server"})`).join(" → ")}
           </ReadOnly>
         )}

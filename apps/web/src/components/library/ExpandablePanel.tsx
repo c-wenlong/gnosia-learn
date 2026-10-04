@@ -2,13 +2,13 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { cx } from "@/components/ui/classes";
+import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
 import { usePresence } from "@/components/ui/use-presence";
 
-/** How long the popup takes to fade and shrink away before it is gone. */
-export const CLOSE_MS = 200;
+/** How long the popup takes to fade away before it is gone: the kit dialog's beat. */
+export const CLOSE_MS = DIALOG_CLOSE_MS;
 
 /**
  * A card of words at a fixed height that scrolls, with an icon in its top
@@ -19,13 +19,13 @@ export const CLOSE_MS = 200;
  * the asset page) a screen or more down. Here the page keeps its shape and
  * the note scrolls inside its card; the popup is for reading it at length.
  *
- * The popup is a `<dialog>` opened with `showModal()`, as the studio's is:
- * the platform puts it in the top layer, makes the page inert and traps
- * focus. Escape, the close button (in the same corner as the icon that
- * opened it) and a click outside all close it, and focus goes back to that
- * icon. A click only counts as outside when the press started there too, so
- * a text selection dragged out of the note does not close it. The page under
- * it does not scroll while it is open.
+ * The popup is the kit `Dialog` at its reading size, as the studio's panels
+ * are: the top layer, the page inert, focus kept inside. Escape, the close
+ * button (in the same corner as the icon that opened it) and a click outside
+ * all close it, and focus goes back to that icon. A click only counts as
+ * outside when the press started there too, so a text selection dragged out
+ * of the note does not close it. The page under it does not scroll while it
+ * is open (`lockScroll`).
  *
  * The content lives in one place at a time: in the card, or, while the popup
  * is open, in the popup. Two copies at once would give a note's headings the
@@ -35,11 +35,11 @@ export const CLOSE_MS = 200;
  * the place the card was scrolled to, and closing puts the card at the place
  * the popup was, each as a share of the way down.
  *
- * It opens with a fade and a slight growth (`@starting-style`), its backdrop
- * fading in with it, and closes the same way backwards: `usePresence` keeps
- * the popup mounted for `CLOSE_MS` while it fades (`leaving`), and only then
- * is it gone and the words back in the card. A second Escape or click in
- * that beat does nothing. Under reduced motion there is no beat.
+ * It opens with the kit's rise and fade, its backdrop fading in with it, and
+ * closes the same way backwards: `usePresence` keeps the popup mounted for
+ * `CLOSE_MS` while it fades (`leaving`, the dialog's `closing`), and only
+ * then is it gone and the words back in the card. A second Escape or click
+ * in that beat does nothing. Under reduced motion there is no beat.
  */
 export function ExpandablePanel({
   title,
@@ -58,9 +58,7 @@ export function ExpandablePanel({
   const [open, setOpen] = useState(false);
   // The popup is drawn while `mounted`, which outlasts `open` by the fade.
   const { mounted, leaving } = usePresence(open, CLOSE_MS);
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const openerRef = useRef<HTMLButtonElement | null>(null);
-  const pressedOnBackdrop = useRef(false);
   const cardBodyRef = useRef<HTMLDivElement | null>(null);
   // The card's height when the popup opened, held while its words are away.
   const [heldHeight, setHeldHeight] = useState<number | null>(null);
@@ -91,24 +89,10 @@ export function ExpandablePanel({
     if (!mounted && cardBodyRef.current) scrollToShare(cardBodyRef.current, readAt.current);
   }, [mounted]);
 
-  // Keyed on `mounted`, not `open`: the dialog stays open, in the top layer,
-  // while it fades, and closes when it unmounts.
+  // The popup opens at the place the card was scrolled to. After the kit
+  // dialog's own effect has shown it, since it has no height until it is open.
   useEffect(() => {
-    if (!mounted) return;
-    const dialog = dialogRef.current;
-    if (dialog === null) return;
-    // The icon that opened it, to give focus back to on close.
-    const opener = openerRef.current;
-    if (!dialog.open) dialog.showModal();
-    if (dialogBodyRef.current) scrollToShare(dialogBodyRef.current, readAt.current);
-    const root = document.documentElement;
-    const overflow = root.style.overflow;
-    root.style.overflow = "hidden";
-    return () => {
-      root.style.overflow = overflow;
-      if (dialog.open) dialog.close();
-      opener?.focus({ preventScroll: true });
-    };
+    if (mounted && dialogBodyRef.current) scrollToShare(dialogBodyRef.current, readAt.current);
   }, [mounted]);
 
   return (
@@ -141,35 +125,16 @@ export function ExpandablePanel({
       </div>
 
       {mounted && (
-        <dialog
-          ref={dialogRef}
-          aria-label={label}
-          onCancel={(event) => {
-            // Escape: closed through state, so the two cannot disagree.
-            event.preventDefault();
-            collapse();
-          }}
-          onPointerDown={(event) => {
-            pressedOnBackdrop.current = event.target === event.currentTarget;
-          }}
-          onClick={(event) => {
-            // The backdrop is the dialog element itself; everything inside is
-            // the panel's own content, which fills it.
-            const started = pressedOnBackdrop.current;
-            pressedOnBackdrop.current = false;
-            if (started && event.target === event.currentTarget) collapse();
-          }}
-          className={cx(
-            "m-auto flex-col overflow-hidden bg-surface p-0 text-text open:flex",
-            "backdrop:bg-page/70 backdrop:backdrop-blur-[2px]",
-            // A phone gets the whole screen; anything wider a large card.
-            "h-dvh max-h-none w-full max-w-none rounded-none",
-            "md:h-[calc(100dvh-64px)] md:w-[min(64rem,calc(100vw-48px))] md:rounded-[20px] md:border-2 md:border-border",
-            "transition-[opacity,scale] duration-200 ease-soft starting:open:scale-[0.98] starting:open:opacity-0",
-            "backdrop:transition-opacity backdrop:duration-200 backdrop:ease-out starting:open:backdrop:opacity-0",
-            leaving && "pointer-events-none scale-[0.98] opacity-0 backdrop:opacity-0",
-            "motion-reduce:transition-none motion-reduce:backdrop:transition-none",
-          )}
+        <Dialog
+          label={label}
+          onClose={collapse}
+          closing={leaving}
+          size="reading"
+          tall
+          lockScroll
+          // Focus goes back to the icon that opened it, wherever it was on
+          // the press: Safari does not focus a button it clicks.
+          opener={() => openerRef.current}
         >
           <PanelHeader title={title} action={action}>
             <IconButton label="Close" onClick={collapse}>
@@ -179,7 +144,7 @@ export function ExpandablePanel({
           <div ref={dialogBodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-6 md:px-8">
             {children}
           </div>
-        </dialog>
+        </Dialog>
       )}
     </section>
   );

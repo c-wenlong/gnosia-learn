@@ -104,8 +104,18 @@ export const STUDIO_OWNER_HEADER = "x-self-learn-owner";
  * `watched` is study for the streak (`STUDY_EVENT_TYPES` in
  * `apps/web/src/lib/habit-core.ts`) and is not evidence: both replays,
  * `replayMastery` and `replayReviews`, read only `observation` and `review`,
- * so watching a video never moves p(L) or schedules a card. Adding a type here
- * also changes the `event_type_check` constraint, so it needs a migration.
+ * so watching a video never moves p(L) or schedules a card.
+ *
+ * `visit` is written by the web app each time the owner opens a course or
+ * module page (payload `{ course, module? }`, no concept, no session), by
+ * `POST /api/learner/preference` beside the `lastVisited` it keeps. It is
+ * neither study nor evidence: the sidebar's Recent and Home's "Pick up where
+ * you left off" read it (`apps/web/src/lib/recent.ts`), so a visit older than
+ * the five the `recentModules` preference keeps still shows (L7 of
+ * docs/proposals/library-by-type-and-day.md).
+ *
+ * Adding a type here also changes the `event_type_check` constraint, so it
+ * needs a migration (`0008` for `watched`, `0025` for `visit`).
  */
 export const EVENT_TYPES = [
   "session-start",
@@ -114,6 +124,7 @@ export const EVENT_TYPES = [
   "session-close",
   "void",
   "watched",
+  "visit",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -166,6 +177,29 @@ export function isProviderId(value: unknown): value is ProviderId {
  * real id (OpenRouter's longest are about 60 characters). A CHECK repeats both.
  */
 export const TUTOR_MODEL_LIMITS = { maxEntries: 10, maxModelChars: 200 } as const;
+
+/**
+ * A model chain grouped by provider: each provider's entries together, in
+ * their order, and the providers in the order each first appears. Settings
+ * shows the chain this way (each provider's models under it) and the tutor
+ * walks it this way, so the two cannot disagree even for a chain written
+ * before the grouping, whose providers could interleave. Stable, and the
+ * identity on a chain that is already grouped.
+ */
+export function groupByProvider<T extends { provider: string }>(chain: readonly T[]): T[] {
+  const order: string[] = [];
+  const blocks = new Map<string, T[]>();
+  for (const entry of chain) {
+    let block = blocks.get(entry.provider);
+    if (block === undefined) {
+      block = [];
+      blocks.set(entry.provider, block);
+      order.push(entry.provider);
+    }
+    block.push(entry);
+  }
+  return order.flatMap((provider) => blocks.get(provider) ?? []);
+}
 
 /** Printable ASCII with no space: what a model id is made of, and all a request header or JSON body needs. */
 export const MODEL_ID_PATTERN = /^[\x21-\x7e]+$/;
@@ -276,6 +310,22 @@ export const PREFERENCE_KEYS = {
   studioVideoAgent: "studioVideoAgent",
   /** The same for the studio's diagram agent. Absent means today's `sonnet`, the runner's default. */
   studioDiagramAgent: "studioDiagramAgent",
+  /**
+   * `{ key, kind, title, href, at }[]`, newest pin first: the rows the owner
+   * pinned in the sidebar's Recent (L7 of
+   * docs/proposals/library-by-type-and-day.md), each a copy of the row as it
+   * was pinned, so a pin outlives the row leaving Recent. Written by
+   * `POST /api/learner/recent`, never through the preference route.
+   */
+  pinned: "pinned",
+  /**
+   * `Record<key, string>`: the names the owner gave studio conversations
+   * from the sidebar's Rename, by row key (`draft:<id>`). A conversation's
+   * own title is its latest brief's and moves with every brief, so a name
+   * lives here rather than on the `draft` row. Written by
+   * `POST /api/learner/recent`.
+   */
+  recentNames: "recentNames",
 } as const;
 
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[keyof typeof PREFERENCE_KEYS];

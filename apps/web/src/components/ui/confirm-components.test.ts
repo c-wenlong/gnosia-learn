@@ -92,7 +92,7 @@ function Fold({ togglesAway = false, onConfirm, elsewhereWhileOpen = false }: Fo
 }
 
 describe("ConfirmFold", () => {
-  it("folds open under a toggle that stays, leaving focus on it, and Cancel gives focus back", () => {
+  it("folds open under its toggle with focus on Cancel, and Cancel gives focus back", () => {
     const root = mount(createElement(Fold));
     const fold = document.getElementById("fold")!;
     expect(fold.hasAttribute("inert")).toBe(true);
@@ -100,11 +100,38 @@ describe("ConfirmFold", () => {
 
     press(button(root, "Reset"));
     expect(fold.hasAttribute("inert")).toBe(false);
-    expect(document.activeElement).toBe(button(root, "Reset"));
+    expect(document.activeElement).toBe(button(fold, "Cancel"));
 
     press(button(fold, "Cancel"));
     expect(fold.hasAttribute("inert")).toBe(true);
     expect(document.activeElement).toBe(button(root, "Reset"));
+  });
+
+  it("leaves focus where the person put it when the fold opens from elsewhere", () => {
+    function Remote() {
+      const [open, setOpen] = useState(false);
+      const [toggle] = useState(() => createRef<HTMLButtonElement>());
+      return createElement(
+        Fragment,
+        null,
+        createElement("button", { ref: toggle, type: "button" }, "Reset"),
+        createElement("button", { type: "button", onClick: () => setOpen(true) }, "Open from here"),
+        createElement(ConfirmFold, {
+          open,
+          id: "remote",
+          label: "Confirm",
+          message: "Sure?",
+          confirmLabel: "Yes",
+          onConfirm: () => undefined,
+          onCancel: () => setOpen(false),
+          returnFocusTo: toggle,
+        }),
+      );
+    }
+    const root = mount(createElement(Remote));
+    press(button(root, "Open from here"));
+    expect(document.getElementById("remote")!.hasAttribute("inert")).toBe(false);
+    expect(document.activeElement).toBe(button(root, "Open from here"));
   });
 
   it("puts focus on Cancel when the toggle folded away as it opened", () => {

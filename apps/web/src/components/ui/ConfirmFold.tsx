@@ -8,7 +8,7 @@ import { Collapse } from "./Collapse";
 
 /**
  * Kit `ConfirmFold`: the question that folds open under a destructive button
- * (Settings' Reset progress, a course's Reset, removing a provider key), in
+ * (Settings' Reset progress, a course's Reset, deleting a provider), in
  * place of the browser's `confirm()`, which froze the page in a box the app
  * could not style or animate. A warn `Callout` in a `Collapse`, with the
  * destructive press first and Cancel beside it. The caller holds `open`, and
@@ -16,16 +16,15 @@ import { Collapse } from "./Collapse";
  *
  * Focus is the part that matters, so the fold owns it:
  *
- * - Opening leaves focus on the toggle when the toggle is still there (the
- *   next Tab lands in the fold, which follows it). When the toggle folded
+ * - Opening moves focus into the fold, onto Cancel, the press that loses
+ *   nothing: from the toggle (`returnFocusTo`), from a toggle that folded
  *   away as this opened (a row of buttons that gives way to the confirm), or
- *   focus was dropped, it goes to Cancel, the press that loses nothing.
+ *   when focus was dropped. Focus somewhere else entirely stays put.
  * - Closing gives focus to `returnFocusTo` only when focus was inside the
  *   fold, or was dropped (a button that went disabled while `busy` drops it):
  *   never pulled back from somewhere the person moved it meanwhile. The
  *   target is read on the render that closes, so a caller can name a
- *   different one after a success (the button that adds a key, once the one
- *   that removed it is gone).
+ *   different one after a success.
  * - While `busy` both presses are disabled, since closing cannot take back a
  *   write that has left; when `busy` ends with the fold still open (the write
  *   failed), focus dropped by the disabled press goes back to it.
@@ -71,9 +70,9 @@ export function ConfirmFold({
     const at = document.activeElement;
     const dropped = at === null || at === document.body;
     if (open && !before.open) {
-      // The toggle is gone (inside a region that went inert as this opened),
-      // or nothing has focus: the safe press takes it.
-      if (dropped || at.closest("[inert]") !== null) cancel.current?.focus();
+      // From the toggle, from a toggle that went inert as this opened, or
+      // from nowhere: the safe press takes it.
+      if (dropped || at === returnFocusTo.current || at.closest("[inert]") !== null) cancel.current?.focus();
     } else if (!open && before.open) {
       if (dropped || panel.current?.contains(at)) returnFocusTo.current?.focus();
     } else if (open && before.busy && !busy) {

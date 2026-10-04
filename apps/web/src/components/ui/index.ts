@@ -1,11 +1,13 @@
 /**
  * The redesign's primitives. Every one is safe in a server component except
- * `FilterMenu`, `Select`, `Combobox` and `Composer`, client components that
- * take an `onChange` and so are rendered from another client component, and
- * `ConfirmFold` and `InlineConfirm`, which own the focus of a confirm
- * (`MentionComposer` is one too, and deliberately not exported here: it
- * carries Lexical, which only `/studio` should load); the contract (names and
- * props) is written down in docs/design/IMPLEMENTATION.md.
+ * `FilterMenu`, `Select`, `Combobox`, `Composer`, `TabList` and `Dialog`,
+ * client components that take an `onChange` or an `onClose` and so are
+ * rendered from another client component, and `ConfirmFold` and
+ * `InlineConfirm`, which own the focus of a confirm. `MentionComposer` is one
+ * too, and deliberately not exported here: it carries Lexical, which only
+ * `/studio` should load. `SegmentedControl` is a client component a server
+ * page may render in its `links` mode, where no function crosses. The
+ * contract (names and props) is written down in docs/design/IMPLEMENTATION.md.
  */
 export { Banner } from "./Banner";
 export { Button, type ButtonProps } from "./Button";
@@ -15,6 +17,7 @@ export { Checkbox } from "./Checkbox";
 export { Chip } from "./Chip";
 export { ChoiceRow, type ChoiceState } from "./ChoiceRow";
 export { Combobox } from "./Combobox";
+export { Dialog, DIALOG_CLOSE_MS, type DialogProps, type DialogSize } from "./Dialog";
 export { Composer } from "./Composer";
 export { ConfirmFold } from "./ConfirmFold";
 export { Divider } from "./Divider";
@@ -33,8 +36,16 @@ export { Placeholder } from "./Placeholder";
 export { ProgressBar, type ProgressTone } from "./ProgressBar";
 export { RatingButton } from "./RatingButton";
 export { SearchField } from "./SearchField";
+export {
+  SegmentedControl,
+  type SegmentedControlProps,
+  type SegmentItem,
+  type SegmentLink,
+  type SegmentSize,
+} from "./SegmentedControl";
 export { Select } from "./Select";
 export { StatTile, type StatTone } from "./StatTile";
+export { TabList, type TabListItem, type TabListOrientation } from "./TabList";
 export { Textarea } from "./Textarea";
 export { TextLink, type TextLinkProps } from "./TextLink";
 export {
@@ -67,4 +78,4 @@ export type {
   LinkWeight,
 } from "./classes";
 export type { FilterOption } from "./filter-menu";
-export { tabKeyIndex, type RovingOrientation } from "./roving";
+export { tabIds, tabKeyIndex, type RovingOrientation } from "./roving";

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Form from "next/form";
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { AssetCard, type CardConcept } from "@/components/AssetCard";
@@ -8,8 +7,8 @@ import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetRow } from "@/components/library/AssetRow";
 import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryToolbar";
 import { Notice } from "@/components/ui/Notice";
-import { Glyph } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { getCourses } from "@/data/courses";
@@ -503,38 +502,22 @@ function DaySection({ group, inset, children }: { group: DayGroup<unknown>; inse
 }
 
 /**
- * The grid and the list, as two icon links in one chip-high pill: each is a
- * URL, like every other choice on this page, and the one in use is marked
- * `aria-current`. Icons only, since the tiles and the lines say which is
- * which; each link is named for a screen reader and titled for a hover.
+ * The grid and the list, as the kit's segmented control in its links mode:
+ * each is a URL, like every other choice on this page, and the one in use is
+ * marked `aria-current`. Icons only, since the tiles and the lines say which
+ * is which; each link is named for a screen reader and titled for a hover.
  */
 function ViewToggle({ filters, view }: { filters: LibraryFilters; view: LibraryView }) {
-  const options: { value: LibraryView; label: string; glyph: "assets" | "topics" }[] = [
-    { value: "grid", label: "Grid", glyph: "assets" },
-    { value: "list", label: "List", glyph: "topics" },
-  ];
   return (
-    <nav aria-label="Layout" className="flex h-[34px] shrink-0 items-center rounded-full border border-border bg-surface p-[3px]">
-      {options.map((option) => {
-        const current = option.value === view;
-        return (
-          <Link
-            key={option.value}
-            href={libraryHref({ ...filters, view: option.value })}
-            aria-current={current ? "page" : undefined}
-            aria-label={option.label}
-            title={option.label}
-            scroll={false}
-            className={cx(
-              "inline-flex h-full w-[34px] items-center justify-center rounded-full transition-colors duration-100",
-              current ? "bg-surface2 text-text" : "text-text2 hover:text-text",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-            )}
-          >
-            <Glyph name={option.glyph} size={16} />
-          </Link>
-        );
-      })}
-    </nav>
+    <SegmentedControl
+      mode="links"
+      label="Layout"
+      iconOnly
+      value={view}
+      items={[
+        { id: "grid", label: "Grid", icon: "assets", href: libraryHref({ ...filters, view: "grid" }) },
+        { id: "list", label: "List", icon: "topics", href: libraryHref({ ...filters, view: "list" }) },
+      ]}
+    />
   );
 }
