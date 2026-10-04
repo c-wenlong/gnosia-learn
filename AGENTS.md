@@ -681,6 +681,28 @@ that is a merge with no review at all. Check `gh pr view <n> --json reviews`
 before merging. An empty list minutes after opening means the review has not
 happened yet, not that the PR is clean.
 
+### Workflow 6: merging while CI is out of credits
+
+When GitHub Actions is blocked by billing, a red "Lint, test, and build" is
+not a verdict on the code, and it does not hold the merge (owner's call,
+2026-10-04). Tell the two failures apart before relying on this: a billing
+block fails in single-digit seconds with zero steps run and the annotation
+"recent account payments have failed or your spending limit needs to be
+increased" (`gh run view <id>` prints it). A run that executed steps and
+failed is a real failure, and is fixed like any other.
+
+On a billing block, merge when all three hold:
+
+1. The local gate passes in the PR's worktree, scoped to what changed at the
+   least: `npm run lint`, `npm run typecheck`, the tests that touch the
+   change, and `npm run build` for anything under `apps/web`. Say in the PR
+   body which of these ran.
+2. Greptile has posted its review (Workflow 5).
+3. Every review thread is resolved, each with a reply saying what changed or
+   why not.
+
+Say in the merge report that CI did not run and why.
+
 ### Where a submodule's commit lives
 
 | Where | What it holds | How to read it |
@@ -1222,6 +1244,7 @@ not have to be worked out again.
   that fails in single-digit seconds with zero steps run, on `main` as well
   as on a PR, annotated "recent account payments have failed or your spending
   limit needs to be increased"; it is the account, not the code.
+  Merging through such a block is Workflow 6.
 - **A `next.config.ts` rewrite does not strip the browser's `Origin` header;
   only a route handler can.** Measured in phase 2 (PR #60): proxying
   `/studio/api/*` to the runner through `rewrites()` forwards `Origin`
