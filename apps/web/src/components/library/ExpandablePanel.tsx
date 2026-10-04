@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
+import { CARD_TITLE, cx } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
 
 /** How long the popup takes to fade away before it is gone: the kit dialog's beat. */
@@ -163,7 +164,7 @@ function scrollToShare(element: HTMLElement, share: number) {
 function PanelHeader({ title, action, children }: { title: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex shrink-0 items-center gap-3 py-3 pr-3 pl-5">
-      <h2 className="min-w-0 flex-1 truncate text-[16px] font-bold leading-snug text-text">{title}</h2>
+      <h2 className={cx(CARD_TITLE, "min-w-0 flex-1 truncate")}>{title}</h2>
       {action}
       {children}
     </div>

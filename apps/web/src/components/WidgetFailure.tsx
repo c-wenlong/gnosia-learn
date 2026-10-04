@@ -73,14 +73,14 @@ export function WidgetFailure({
         className={`flex animate-fade-in flex-col items-center justify-center gap-1 px-3 py-2 text-center motion-reduce:animate-none ${className}`}
       >
         <BrokenGlyph className="h-5 w-5 text-text3" />
-        <p className="text-[11px] font-medium text-text">{headline}</p>
-        <p key={code ?? "checking"} className="animate-fade-in text-[11px] leading-snug text-text2 motion-reduce:animate-none" title={problem?.reason}>
+        <p className="text-[12px] font-medium text-text">{headline}</p>
+        <p key={code ?? "checking"} className="animate-fade-in text-[12px] leading-snug text-text2 motion-reduce:animate-none" title={problem?.reason}>
           {problem === null ? "Checking why…" : problem.label}
         </p>
         {(fix?.kind === "command" || fix?.kind === "env") && (
           <code
             title={fix.text}
-            className="max-w-full truncate rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-text2"
+            className="max-w-full truncate rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[12px] text-text2"
           >
             {fix.text}
           </code>
@@ -108,7 +108,7 @@ export function WidgetFailure({
       </p>
       {(fix?.kind === "command" || fix?.kind === "env") && (
         <div className="mt-1 flex max-w-full flex-col items-center gap-1">
-          <span className="text-[11px] text-text3">
+          <span className="text-[12px] text-text3">
             {fix.kind === "env" ? "To fix it, start the server with" : "To fix it, run"}
           </span>
           <code className="max-w-full overflow-x-auto whitespace-nowrap rounded-md border border-border bg-surface px-2.5 py-1 font-mono text-xs text-text select-all">

@@ -6,7 +6,7 @@ import type { RefObject } from "react";
 
 import { SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
-import { cx } from "@/components/ui/classes";
+import { cx, STATUS_TEXT } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField as KitSearchField } from "@/components/ui/SearchField";
 import { isCurrentRow } from "@/lib/nav";
@@ -125,17 +125,17 @@ export function SearchResults({
   return (
     <div data-peek-hold="" className="animate-fade-in pt-1 motion-reduce:animate-none">
       {errors.map((error) => (
-        <p key={error} role="alert" className="px-2 pt-1 text-[13px] leading-5 text-danger">
+        <p key={error} role="alert" className={cx(STATUS_TEXT, "px-2 pt-1 text-danger")}>
           {error}
         </p>
       ))}
       {searching && hits.length === 0 && (
-        <p role="status" className="px-2 pt-1 text-[13px] leading-5 text-text3">
+        <p role="status" className={cx(STATUS_TEXT, "px-2 pt-1 text-text3")}>
           Searching…
         </p>
       )}
       {settled && hits.length === 0 && search.found?.more !== true && errors.length === 0 && (
-        <p role="status" className="px-2 pt-1 text-[13px] leading-5 text-text3">
+        <p role="status" className={cx(STATUS_TEXT, "px-2 pt-1 text-text3")}>
           Nothing matches
         </p>
       )}
@@ -172,7 +172,7 @@ export function SearchResults({
             {search.loadingMore ? "Reading more matches…" : "Show more matches"}
           </TextLink>
           {search.moreError !== null && (
-            <p role="alert" className="px-1.5 text-[12px] text-danger">
+            <p role="alert" className={cx(STATUS_TEXT, "px-1.5 text-danger")}>
               {search.moreError}
             </p>
           )}

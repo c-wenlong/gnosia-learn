@@ -5,13 +5,14 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
+import { Cite } from "@/components/ui/Cite";
 import { Collapse } from "@/components/ui/Collapse";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
-import { cx, TRACK } from "@/components/ui/classes";
+import { CLOSE_TITLE, cx, TRACK } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
@@ -31,7 +32,6 @@ import {
   type ReviewSessionData,
 } from "@/lib/review-core";
 
-import { CitePill } from "./CitePill";
 
 /**
  * The review session (hi-fi 08, and 14 on a phone): one card at a time, the
@@ -579,7 +579,7 @@ function Links({
   const hasAny = item.source !== null || item.why !== null;
   return (
     <div className={cx("flex flex-wrap items-center gap-2 pt-1", !hasAny && "hidden md:flex")}>
-      {item.source !== null && <CitePill n={1} label={item.source} />}
+      {item.source !== null && <Cite n={1} label={item.source} />}
       {item.why !== null && (
         <Button variant="ghost" size="sm" onClick={onWhy} aria-expanded={whyOpen} aria-controls={whyId}>
           Why?
@@ -642,7 +642,7 @@ function CheckBody({
           note={`Counts as ${RATING_LABEL[suggested]}, next in ${formatInterval(item.intervals[suggested] ?? 1)}.`}
           actions={
             <>
-              {item.source !== null && <CitePill n={1} label={item.source} />}
+              {item.source !== null && <Cite n={1} label={item.source} />}
               <Button variant={right ? "ok" : "warn"} onClick={onContinue} disabled={pending}>
                 Continue
               </Button>
@@ -659,7 +659,7 @@ function Closing({ title, lead, children }: { title: string; lead: string; child
   return (
     <div className="flex flex-col items-center gap-6 pt-6 text-center md:pt-10">
       <div className="flex flex-col items-center gap-1.5">
-        <h1 tabIndex={-1} className="font-display text-[28px] font-bold text-text outline-none md:text-[32px]">
+        <h1 tabIndex={-1} className={cx(CLOSE_TITLE, "outline-none")}>
           {title}
         </h1>
         <p className="max-w-[480px] text-[14px] text-text2">{lead}</p>

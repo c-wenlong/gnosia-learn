@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cardClasses, cx } from "./classes";
+import { CARD_TITLE, cardClasses, cx } from "./classes";
 
 /**
  * Kit `Notice`: a state a page or a region says once, in place of the content
@@ -45,7 +45,7 @@ export function Notice({
   const lines = [...(command === undefined ? [] : [command]), ...(commands ?? [])];
   return (
     <section role={role} className={cardClasses({ tight: dense, className: cx("items-start gap-2", className) })}>
-      <Heading className={cx("font-bold text-text", dense ? "text-[14px] leading-5" : "text-[16px] leading-snug")}>
+      <Heading className={dense ? "text-[14px] leading-5 font-bold text-text" : CARD_TITLE}>
         {title}
       </Heading>
       {children !== undefined && children !== null && children !== false && (
