@@ -12,12 +12,13 @@ import type { DraftSummary } from "@/lib/studio-drafts";
  * when the studio page published a way to.
  */
 
-const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn() }));
+const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn(), displayName: undefined as string | undefined }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
+vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayName: mocks.displayName } }) }));
 
 const { ShellFrame } = await import("./ShellFrame");
 const { usePublishStudioChats } = await import("./shell-context");
@@ -46,6 +47,7 @@ const DRAFT: DraftSummary = {
 
 beforeEach(() => {
   mocks.pathname = "/home";
+  mocks.displayName = undefined;
   mocks.listDrafts.mockReset().mockResolvedValue({ ok: true, data: { drafts: [DRAFT], note: "" } });
 });
 
@@ -126,6 +128,14 @@ describe("the sidebar", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
     expect(nav(container).getAttribute("role")).toBeNull();
+  });
+
+  it("shows the learner's name on the account row, and Account until there is one", async () => {
+    const unnamed = await mount(false);
+    expect(nav(unnamed).querySelector("button[aria-expanded]")?.textContent).toBe("Account");
+    mocks.displayName = "Ada Lovelace";
+    const named = await mount(false);
+    expect(nav(named).querySelector("button[aria-expanded]")?.textContent).toBe("Ada Lovelace");
   });
 
   it("closes the drawer on Back or Forward, which can change the studio's view without its path", async () => {
