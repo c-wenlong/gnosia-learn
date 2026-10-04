@@ -628,9 +628,14 @@ them. Never stage a submodule or a file you did not intend to change;
 `git status` in a shared checkout routinely shows someone else's work in
 progress.
 
-Remove a finished worktree with `git worktree remove --force <dir>` (or
-delete the directory, then `git worktree prune`), and never run
-`git submodule deinit` in one to make that work. The `submodule.<name>.*`
+Remove only a worktree you made and whose branch has merged, and look first:
+`git -C <dir> status --porcelain` and
+`git -C <dir> submodule foreach --quiet 'git status --porcelain'` must both
+print nothing, since another session's uncommitted work lives in its own
+worktree and a forced removal deletes it for good. Then
+`git worktree remove --force <dir>` (or delete the directory, then
+`git worktree prune`), and never run `git submodule deinit` in one to make
+that work. The `submodule.<name>.*`
 settings live in the `.git/config` every worktree shares, so a deinit in any
 of them unregisters all four submodules in the main checkout and in every
 other session's worktree: their files stay, but `git submodule status`
