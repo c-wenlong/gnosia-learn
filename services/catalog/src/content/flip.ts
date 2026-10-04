@@ -75,6 +75,15 @@ export interface FlipOptions {
    * track has built a reader.
    */
   readers?: ReadonlySet<ContentType>;
+  /**
+   * For a type the database already owns: arm its guards and, with
+   * `strict`, its rules, without reading the tree it was last imported from.
+   * That tree is a past copy once the database owns the type, so parity
+   * against it means nothing, and a rule added by a later migration could
+   * otherwise only be armed by importing stale files over the database's own
+   * edits. Refused for a type still on files.
+   */
+  rearm?: boolean;
 }
 
 export interface FlipResult {
@@ -82,8 +91,10 @@ export interface FlipResult {
   source: "db";
   /** It was already `db`; the guards and rules were (re)armed and nothing else changed. */
   already: boolean;
+  /** `--rearm`: armed without reading a tree, so `parity` is null and no export hash was recorded. */
+  rearmed: boolean;
   flippedAt: string;
-  parity: ParityRecord;
+  parity: ParityRecord | null;
   guardsArmed: string[];
   rulesArmed: string[];
   waivers: (Waiver & { at: string })[];
@@ -141,6 +152,15 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
   return db.transaction(async (tx) => {
     await lockTypes(tx, LOCKS[type]);
     const [row] = await tx.select().from(contentSource).where(eq(contentSource.type, type)).for("update");
+    if (options.rearm === true) {
+      if (row?.source !== "db") {
+        throw new FlipRefused(
+          `--rearm is for a type the database already owns, and ${type} is not owned yet: flip it without --rearm, ` +
+            `which checks parity against the files it was imported from first.`,
+        );
+      }
+      return arm(tx, { type, strict: options.strict === true, waive, rules, row, rearmed: true, parity: null });
+    }
     const recorded = await recordedRoot(tx, type);
     if (recorded === null) {
       throw new FlipRefused(
@@ -187,13 +207,37 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
       );
     }
 
+    return arm(tx, { type, strict: options.strict === true, waive, rules, row, rearmed: false, parity: report, disk });
+  });
+}
+
+interface ArmInput {
+  type: ExportType;
+  strict: boolean;
+  waive: readonly Waiver[];
+  rules: typeof COMPLETENESS_RULES;
+  row: typeof contentSource.$inferSelect | undefined;
+  rearmed: boolean;
+  /** The parity the flip just checked; null for a re-arm, which checks none. */
+  parity: ParityRecord | null;
+  /** The tree's files parity read, whose hash the flip records; absent for a re-arm. */
+  disk?: Awaited<ReturnType<typeof readTypeFiles>>;
+}
+
+/**
+ * The second half of a flip, inside its transaction: arm the guards and the
+ * rules, count the violators, write the row. Shared by a flip, which reached
+ * here through parity, and by `--rearm`, which skipped it.
+ */
+async function arm(tx: CatalogDatabase, input: ArmInput): Promise<FlipResult> {
+  const { type, strict, waive, rules, row, rearmed, parity: report, disk } = input;
     // Arm first: each ALTER takes its table's lock, so the counts below cannot
     // go stale before this commits. A refusal rolls the arming back with it.
     const guards = WRITE_GUARDS[type].map((table) => [table, writeGuardName(table)] as const);
     await setTriggers(tx, guards, true);
 
     const waived = new Set(waive.map((w) => w.rule));
-    const armedRules = options.strict === true ? rules.filter((rule) => !waived.has(rule.name)) : [];
+    const armedRules = strict ? rules.filter((rule) => !waived.has(rule.name)) : [];
     await setTriggers(tx, armedRules.flatMap((rule) => rule.triggers), true);
     // A rule an earlier strict flip armed and this one waives goes off: a
     // waiver on record for a rule still refusing writes would be a lie.
@@ -229,16 +273,22 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
     // export into the tree. They may differ from a fresh export in bytes only
     // (a `.tldr` in tldrawkc's key order, a comment): those are listed, and
     // the next export into the tree rewrites them.
-    const rendered = new Map((await renderType(tx, type)).map((f) => [f.path, f.bytes]));
-    const rewrites = [...new Set([...disk.map((f) => f.path), ...rendered.keys()])]
-      .filter((p) => {
-        const want = rendered.get(p);
-        const got = disk.find((f) => f.path === p)?.bytes;
-        return want === undefined || got === undefined || !want.equals(got);
-      })
-      .sort();
-    const hash = exportHash(disk);
-    const exportRecorded = await mayRecord(tx);
+    // A re-arm read no tree, so it has no export to record.
+    let rewrites: string[] = [];
+    let hash = "";
+    let exportRecorded = false;
+    if (disk !== undefined) {
+      const rendered = new Map((await renderType(tx, type)).map((f) => [f.path, f.bytes]));
+      rewrites = [...new Set([...disk.map((f) => f.path), ...rendered.keys()])]
+        .filter((p) => {
+          const want = rendered.get(p);
+          const got = disk.find((f) => f.path === p)?.bytes;
+          return want === undefined || got === undefined || !want.equals(got);
+        })
+        .sort();
+      hash = exportHash(disk);
+      exportRecorded = await mayRecord(tx);
+    }
 
     const already = row?.source === "db";
     const [written] = await tx
@@ -248,7 +298,8 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
         target: contentSource.type,
         set: {
           source: "db",
-          parityReport: report,
+          // A re-arm checked nothing, so the last flip's parity report stays.
+          ...(rearmed ? {} : { parityReport: report }),
           // A second flip re-arms; it is not a new moment of ownership.
           flippedAt: sql`coalesce(${contentSource.flippedAt}, now())`,
           waivers,
@@ -262,6 +313,7 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
       type,
       source: "db",
       already,
+      rearmed,
       flippedAt: (written?.flippedAt ?? new Date()).toISOString(),
       parity: report,
       guardsArmed: guards.map(([table]) => table),
@@ -269,5 +321,4 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
       waivers,
       export: { hash, recorded: exportRecorded, rewrites },
     };
-  });
 }

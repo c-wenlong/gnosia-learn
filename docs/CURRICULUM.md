@@ -89,7 +89,10 @@ When writing the file itself:
 5. List each item's concept notes under `concepts:`, in teaching order. Every
    item needs at least one before `catalog flip courses --strict` can arm the
    rule that says so; `npm run catalog -- doctor` lists every item still
-   without one.
+   without one. Order them so no concept comes before one it `requires`
+   (each concept counts at its first appearance in the course): the
+   `course-order-respects-requires` rule refuses that once armed, and the
+   doctor warns about an `assumes` edge taught the wrong way round.
 6. Run the import with `--dry-run` first. It applies every rule the reader and
    the database have (unique ids across every course, every module topic and
    tag resolving, every item concept filed under its module's topic) and lists
@@ -139,7 +142,7 @@ The item verbs do the same one item at a time, each with a reason:
 
 | Command | What it does |
 | --- | --- |
-| `catalog item archive <id> --reason ...` | Takes the item off its course path. Refuses a module's last live item: a module needs at least one |
+| `catalog item archive <id> --reason ...` | Takes the item off its course path, and its readings' links to it with it (the file cannot list an archived item in `lessons:`). Refuses a module's last live item: a module needs at least one |
 | `catalog item restore <id> --reason ...` | Puts an archived item back, with the concept links it had when it was last live. Also undoes a purge, learner rows included |
 | `catalog item purge <id> --reason ...` | Deletes an archived item. Refuses while any `progress` or `recap` row names it |
 | `catalog item purge <id> --with-learner-data --reason ...` | Copies those rows into the purge's revision, then deletes them with the item |
@@ -157,7 +160,11 @@ rendering something wrong:
 | A missing `id`, `slug`, `code`, `title`, `credits`, `order`, `capstone` | A route that 404s, or a page with a hole in it |
 | `inferred` absent, or written as a string | A reconstructed syllabus presented as an official one |
 | Two courses claiming one `order` | An ambiguous order on the Courses page |
-| A resource `type` outside paper/docs/video/book/other | A chip the UI has no styling for |
+| A resource `type` outside paper/docs/video/book/other/practice | A chip the UI has no styling for |
+| A reading's `lessons:` naming an id that is no item of its own module (the message names the module when the id is another module's item) | A reading placed on a lesson of another week, or on nothing; a reading belongs to its module |
+| A `lessons:` id listed twice, or `lessons:` written with nothing in it | Each entry is one `curriculum_item_asset` row; an empty key is an author who meant to list something |
+| A `videos:` id with no video asset prefix (`manimkc:`, `remotionkc:`, `revideokc:`, `video:`), or `videos:` written with nothing in it | An id that can never resolve to a video; only the shape is checked, since the video tools import after the courses |
+| One video listed twice in a module, across the module's `videos:` and its lessons' | The module path places a video once per module |
 | A tag that is not a known tag | The chip shows the raw id, and the course drops out of the related-course list for the theme it meant |
 | A module with no `topics:` | A page with an empty section and nothing to tick |
 | An item's `concepts:` left empty, or written as anything but a list of strings | The tempting `Array.isArray(x) ? x : []` would index the item as if the author had meant to remove its concepts |
@@ -165,8 +172,9 @@ rendering something wrong:
 | A concept listed on an item whose module topic does not name it in `maps.concepts` | The course and the vocabulary disagreeing about which topic a concept belongs to, with neither knowably right |
 | `modules:`, `topics:` or `resources:` written as anything but a list of mappings | The tempting `Array.isArray(x) ? x : []` would render and index the module as if the author had meant to delete its content |
 
-Unresolved topics are collected and reported together, so one run names all of
-them instead of the first.
+Unresolved topics, and `lessons:` ids that are no item of the reading's
+module, are collected and reported together, so one run names all of them
+instead of the first.
 
 ## Rules worth keeping
 

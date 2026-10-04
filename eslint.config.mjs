@@ -42,6 +42,11 @@ const eslintConfig = defineConfig([
     // every one of them (9,400 findings in one run) for code that is not this
     // checkout's; each worktree lints itself.
     ".claude/worktrees/**",
+    // The studio runner's home when STUDIO_HOME is the default: every video
+    // job and doctor run there holds a synthetic checkout of a video tool
+    // (revideokc's and remotionkc's lib/, src/ and tools/ copies), which is
+    // the submodules' code, not this checkout's.
+    ".studio/**",
     // apps/**, packages/** and services/** are deliberately NOT here. They are
     // npm workspaces in this repo, written in the same TypeScript by the same
     // people, so this config lints them correctly and should. (Their tsconfigs

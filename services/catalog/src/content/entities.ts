@@ -10,6 +10,7 @@ import {
   conceptCurriculumItem,
   conceptPrerequisite,
   curriculumItem,
+  curriculumItemAsset,
   curriculumItemTopic,
   diagram,
   manimkcTopic,
@@ -80,6 +81,9 @@ export const ENTITIES: Readonly<Record<RevisionEntityType, EntitySpec>> = {
     links: [
       link(curriculumItemTopic, "curriculumItemId"),
       link(conceptCurriculumItem, "curriculumItemId"),
+      // A reading's `lessons:` (0022): the reading names the item, and the
+      // item owns the link, so placing a reading is a revision of the lesson.
+      link(curriculumItemAsset, "curriculumItemId"),
     ],
   },
   concept: {
@@ -133,6 +137,7 @@ export const LINK_FAR_ENDS: Readonly<Record<string, readonly FarEnd[]>> = {
   ],
   curriculum_item_topic: [{ column: "topicSlug", target: "topic" }],
   concept_curriculum_item: [{ column: "conceptSlug", target: "concept" }],
+  curriculum_item_asset: [{ column: "assetId", target: "asset" }],
   concept_prerequisite: [{ column: "prerequisiteSlug", target: "concept" }],
   asset_topic: [{ column: "topicSlug", target: "topic" }],
   asset_concept: [{ column: "conceptSlug", target: "concept" }],
@@ -177,6 +182,22 @@ const NOT_CONTENT_IN = new Map<string, ReadonlySet<string>>([["collection_item",
 export const OMITTED_WHEN_NULL: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["collection", new Set(["cover_blob_key"])],
 ]);
+
+/**
+ * The same for content added after its entities had revisions with an empty
+ * default rather than a null one: a jsonb column left out of a snapshot while
+ * it holds `[]`, by SQL table and column name, and an owned link table left
+ * out of `snapshot.links` while the entity has no row in it, by the link's
+ * SQL name. Either way an entity that does not use the new thing snapshots
+ * exactly as it did before the migration, and an import of an unchanged tree
+ * appends no revision for it.
+ *
+ * `curriculum_item.videos` and `curriculum_item_asset` came with 0022.
+ */
+export const OMITTED_WHEN_EMPTY: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["curriculum_item", new Set(["videos"])],
+]);
+export const LINKS_OMITTED_WHEN_EMPTY: ReadonlySet<string> = new Set(["curriculum_item_asset"]);
 
 /** One column off a table, by its TypeScript key. Throws rather than passing undefined on. */
 export function column(table: PgTable, key: string): PgColumn {

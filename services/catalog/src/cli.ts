@@ -147,6 +147,9 @@ Commands:
                            also arms its completeness rules, refused while
                            doctor lists a violator; --waive <rule> --reason
                            <why> leaves one disarmed, on the record.
+                           --rearm, for a type the database already owns,
+                           arms without reading its old tree: how a rule a
+                           later migration added gets armed.
   backfill                 One-off: move learn/state/*.json into the state
                            tables, then assert the rebuilt mastery equals
                            model.json and the cards equal reviews.json.
@@ -556,6 +559,7 @@ export async function main(argv: string[]): Promise<number> {
         "agent-session": { type: "string" },
         out: { type: "string" },
         strict: { type: "boolean", default: false },
+        rearm: { type: "boolean", default: false },
         waive: { type: "string", multiple: true },
         reason: { type: "string", multiple: true },
         topic: { type: "string", multiple: true },
@@ -692,6 +696,7 @@ export async function main(argv: string[]): Promise<number> {
         const result = await runFlip({
           type: type as ContentType,
           strict: values.strict,
+          rearm: values.rearm,
           waive: waive.map((rule, i) => ({ rule, reason: reasons[i] ?? "" })),
         });
         emit(result, formatFlip(result));

@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { requireSignedIn } from "@/lib/auth/session";
 import { LearnerProvider } from "@/lib/learner-context";
 import { loadLearnerSnapshot } from "@/lib/learner-store";
+import { SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
 import { studioEnabled } from "@/lib/studio";
 import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
 
@@ -37,7 +38,7 @@ export default async function AppLayout({
 
   return (
     <LearnerProvider initialState={initialState} reachable={reachable}>
-      <AppShell studio={studioEnabled()}>
+      <AppShell studio={studioEnabled()} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
         {children}
       </AppShell>
     </LearnerProvider>

@@ -7,7 +7,6 @@ import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { RenewLists } from "@/components/studio/RenewLists";
 import { StudioDialog } from "@/components/studio/StudioDialog";
-import { SidebarToggle } from "@/components/studio/StudioSidebar";
 import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import { Notice, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
@@ -39,8 +38,8 @@ import {
  *
  * The home view (docs/STUDIO-CHAT-FIRST.md, "Home and the full-screen
  * conversation"): a heading and the composer in the middle, then the
- * diagrams and videos, with the conversations down the sidebar `PanelHost`
- * draws beside it. Sending opens the conversation full screen.
+ * diagrams and videos, with the conversations down the app's sidebar beside
+ * it (`PanelHost` tells it which one is open). Sending opens the conversation full screen.
  *
  * Reads the directory through the runner, never the `asset` table. That is the
  * whole reason this screen is not a second view of `/library`: the diagram
@@ -263,14 +262,13 @@ export default async function StudioPage({
           {shot === null && (
             <section
               aria-labelledby="studio-home"
-              className="relative flex min-h-[calc(100dvh-12rem)] flex-col justify-center px-4 py-12 md:min-h-[calc(100dvh-13rem)]"
+              className="relative flex min-h-[calc(100dvh-12rem)] flex-col justify-center px-4 py-12 md:min-h-[calc(100dvh-9rem)]"
             >
               {/* A soft wash of the accent behind the heading, in tokens, so every theme has its own. */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_45%_at_50%_45%,color-mix(in_oklab,var(--accent)_16%,transparent),transparent)]"
               />
-              <SidebarToggle className="absolute left-2 top-2" />
               <div className="relative mx-auto flex w-full max-w-3xl -translate-y-4 flex-col items-center gap-7">
                 <h1 id="studio-home" className="text-center font-display text-[30px] font-semibold leading-tight text-text md:text-[40px]">
                   What shall we make?
@@ -282,8 +280,6 @@ export default async function StudioPage({
 
           <div className={shot === null ? "relative mx-2 min-h-full rounded-t-3xl border border-b-0 border-hair bg-surface md:mx-4" : undefined}>
             <StudioStrip surface={shot === null}>
-              {/* The picture has no home view above it, so the phone's toggle is here. */}
-              {shot !== null && <SidebarToggle />}
               <StudioToolbar chips={chips} />
             </StudioStrip>
 

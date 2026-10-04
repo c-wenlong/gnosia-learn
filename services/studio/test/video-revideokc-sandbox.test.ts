@@ -16,6 +16,7 @@ import { runVideoGate } from "../src/video/gate";
 import { HOSTILE_PROBE_JS } from "../src/video/revideokc/doctor";
 import { revideokcPaths } from "../src/video/revideokc/paths";
 import { readPorts, revideokcEnv } from "../src/video/revideokc/sandbox";
+import { lanAddress, watchPorts } from "./lan-probe";
 import { discoverRevideokcToolchain, revideokcProblems, type RevideokcToolchain } from "../src/video/revideokc/toolchain";
 
 /**
@@ -42,6 +43,8 @@ let tools: RevideokcToolchain;
 let root: string;
 let job: BackendJob;
 let classes: string[];
+/** What the still and build case saw of the Vite servers from outside: null until it ran, or when there is no LAN address. */
+let lanWatch: { loopbackUp: number; lanReached: number[] } | null = null;
 const saved = { STUDIO_HOME: process.env.STUDIO_HOME, REVIDEOKC_ROOT: process.env.REVIDEOKC_ROOT };
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -201,9 +204,20 @@ const tryPort = (port) => new Promise((resolve) => {
     const startedAtMs = Date.now() - 1_000;
     const before = snapshot(paths.job);
     const env = { PATH: "/usr/bin:/bin", HOME: job.home, NODE_OPTIONS: "--require /nowhere.js", ANTHROPIC_API_KEY: "sk-not-for-the-job" };
-    const still = await execFileAsync(paths.wrapper, ["still"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
-    expect((still as { code?: number }).code ?? 0, (still as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
-    const built = await execFileAsync(paths.wrapper, ["build"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+    // The Vite servers (one per worker, the pair) are watched from outside while the still and the build run (lan-probe.ts).
+    const lan = lanAddress();
+    const base = readPorts(paths);
+    const watch = lan === null ? null : watchPorts([base, base + 1], lan);
+    // Stopped however the two calls end, so a failed render cannot leave the watcher probing.
+    let built: unknown;
+    try {
+      const still = await execFileAsync(paths.wrapper, ["still"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+      // A failed still fails here, without a build after it; the finally still stops the watcher.
+      expect((still as { code?: number }).code ?? 0, (still as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
+      built = await execFileAsync(paths.wrapper, ["build"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+    } finally {
+      lanWatch = watch === null ? null : await watch.stop();
+    }
     expect((built as { code?: number }).code ?? 0, (built as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
 
     const calls = await readCalls(paths.calls);
@@ -241,4 +255,14 @@ const tryPort = (port) => new Promise((resolve) => {
     await backendFor("revideokc").keepClips(job);
     expect((await readdir(paths.clips)).filter((name) => name.endsWith(".wav"))).toHaveLength(2);
   }, 900_000);
+
+  it("never lets a Vite server be reached on the machine's LAN address, only on loopback", (context) => {
+    if (skip !== "") return context.skip(skip);
+    if (lanAddress() === null) return context.skip("this machine has no non-loopback IPv4 address to try the Vite servers on");
+    // Revideo starts Vite on "localhost"; this holds it to that, since the
+    // profile's localhost rule does not stop a LAN connection to a wildcard listen.
+    expect(lanWatch, "the still and build case did not run").not.toBeNull();
+    expect(lanWatch!.loopbackUp, "no Vite server ever answered on loopback, so the LAN check proves nothing").toBeGreaterThan(0);
+    expect(lanWatch!.lanReached).toEqual([]);
+  });
 });

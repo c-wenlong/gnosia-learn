@@ -85,6 +85,7 @@ which brief produced them.
 | `asset_derivation` | This asset was produced from that one: a transcript from a video, an SVG from a `.tldr`. |
 | `curriculum_item_topic` | This checklist row covers this topic. How a course reaches the assets. |
 | `concept_curriculum_item` | This note contributes to this checklist row, at this position. Written by the courses source from `topics[].concepts`. |
+| `curriculum_item_asset` | This reading goes with this lesson (0022): a curated `link` asset to a curriculum item of the same module, at the item's place in the reading's `lessons:` list. Written by the courses source and `course import` only. See "Readings on lessons and listed videos" below. |
 | `tag` | A cross-course theme (`content/tags.yaml` in the export layout), at its position in the list. Since 0010, filled by the `tags` source since 0.5, and written by `catalog tag` since Track A. |
 | `collection_tag` | This course carries this tag, at its place in the course's `tags:`. Makes a stale tag a `23503` instead of a string in jsonb. |
 | `topic_relation` | A typed edge between two topics: `broader`, `related` (symmetric, stored once with the slugs in "C" order), `precedes`. Read from a topic's `relations:` list, at its position there. |
@@ -207,7 +208,8 @@ use.
 
 Issue #21 said `edge`. It is eleven columns across seven tables instead:
 `asset_topic`, `asset_concept`, `concept_prerequisite`, `collection_item`,
-`asset_derivation`, `curriculum_item_topic`, `concept_curriculum_item`.
+`asset_derivation`, `curriculum_item_topic`, `concept_curriculum_item`, and
+since 0022 `curriculum_item_asset`.
 
 A generic `edge(from_type, from_id, to_type, to_id)` cannot have foreign keys,
 because `from_id` would have to reference five different tables depending on a
@@ -288,6 +290,38 @@ no check constraint: testing each element needs `jsonb_array_elements_text`,
 which is a subquery, and a `CHECK` cannot contain one. That clamp stays in
 application code, where it already is.
 
+### Readings on lessons and listed videos
+
+Phase 2 of
+[docs/proposals/module-learning-path.md](../../docs/proposals/module-learning-path.md)
+(0022). A reading's `lessons:` is `curriculum_item_asset`, a typed link with
+a foreign key at both ends, for the reason every link here has one: a reading
+named onto an item that does not exist is a `23503`, not a row that joins to
+nothing. Both ends cascade, as `concept_curriculum_item`'s do: a pruned link
+asset or a purged item takes its rows with it. It carries no `owner_id`; a
+link belongs to its parent's owner (D24), and the item is the parent, so
+placing a reading is a revision of the lesson, and the item's snapshot lists
+the rows. `position` is the item's place in the reading's list, so the export
+writes `lessons:` back in the order it was written; the readings of one lesson
+are ordered by the module's `resources:`. That the item and the reading are in
+the same module is the reader's check, not a constraint: both writers build
+the rows from a parsed file, and the export keeps only same-module rows to
+live items. `collection_item` stays the module's own list, so a reading is on
+its module whether or not it names lessons.
+
+A lesson's `videos:` is `curriculum_item.videos` and a module's is
+`collection.metadata.videos`: asset ids kept as data, deliberately not foreign
+keys. The courses source indexes before the video tools, and a clone may have
+none of them, so a course naming a manimkc video would otherwise be refused on
+a fresh catalog. The reader checks only the shape; a page resolves the id
+when it reads it.
+
+Neither is in a snapshot while empty (`OMITTED_WHEN_EMPTY` and
+`LINKS_OMITTED_WHEN_EMPTY` in `src/content/entities.ts`, the way 0016's
+`cover_blob_key` is left out while null), so an item that uses neither hashes
+exactly as it did before 0022, and the first import after the migration
+appends no revision for it. `asset_resource_type_check` gained `practice`.
+
 ### Two things called "topic"
 
 The course data calls `cs4263-m1-t1` a topic, and the plan calls the shared
@@ -332,6 +366,8 @@ erDiagram
     topic ||--o{ curriculum_item_topic : "is covered by"
     concept ||--o{ concept_curriculum_item : "contributes to"
     curriculum_item ||--o{ concept_curriculum_item : "is served by"
+    asset ||--o{ curriculum_item_asset : "is read with"
+    curriculum_item ||--o{ curriculum_item_asset : "is read with"
 
     topic {
         text slug PK
@@ -364,6 +400,7 @@ erDiagram
         int position
         text title
         jsonb subtopics
+        jsonb videos "asset ids, not foreign keys (0022)"
     }
     asset {
         text id PK
@@ -409,6 +446,11 @@ erDiagram
         text concept_slug PK_FK
         text curriculum_item_id PK_FK
         int position "teaching order, from the course file"
+    }
+    curriculum_item_asset {
+        text curriculum_item_id PK_FK
+        text asset_id PK_FK
+        int position "place in the reading's lessons list"
     }
 ```
 
@@ -968,7 +1010,7 @@ they cannot snapshot the same entity two ways.
 | --- | --- |
 | `topic` | `topic_relation` (as `from`), `manimkc_topic` |
 | `collection` | `collection_tag`, `collection_item` |
-| `curriculum_item` | `curriculum_item_topic`, `concept_curriculum_item` |
+| `curriculum_item` | `curriculum_item_topic`, `concept_curriculum_item`, `curriculum_item_asset` (0022) |
 | `concept` | `concept_prerequisite` |
 | `asset` | `asset_topic`, `asset_concept`, `asset_derivation` |
 | `tag`, `diagram`, `video` | none |
@@ -1097,6 +1139,16 @@ the count and the commit; a refusal rolls the arming back with everything
 else. A waived rule is disarmed even if an earlier strict flip armed it.
 `manimkc` cannot be flipped until Track E gives videos a parity.
 
+`catalog flip <type> --strict --rearm` is for a type the database already
+owns, and a rule a later migration added (0021's
+`course-order-respects-requires` was the first). A plain re-flip would run
+parity against the tree the type was last imported from, which the database
+has moved past since it took ownership, and its hint, importing those files,
+would undo the database's own edits. `--rearm` reads no tree: it arms the
+guards and, with `--strict`, every rule of the type that is not waived,
+counts the violators the same way, keeps the last flip's parity report and
+records no export hash. It refuses a type still on files.
+
 ### Export, import and parity
 
 `catalog import` with no directory reads the repository root, and with one
@@ -1151,10 +1203,11 @@ cannot point them elsewhere.
 | `content_revision_no_update`, `content_revision_no_delete` | `content_revision` | before, per row | on | Append-only, `catalog_append_only()` |
 | `session_log_entry_no_update`, `session_log_entry_no_delete` | `session_log_entry` | before, per row | on | Append-only, same function, its own hint |
 | `video_write_guard` | `video` | before, per row | on | The same guard, armed by 0015 itself: `video` has had no writer outside the seam, so there was nothing to wait for |
-| `<table>_write_guard` | the 17 tables in `WRITE_GUARDS` (`src/content/rules.ts`) | before, per row | **off** | Refuses a write unless the transaction set `self_learn.revision_id` (D4). Armed per type by `catalog flip`; `asset`'s arms with `diagrams` (or `manimkc`), the last writers outside the seam being gone since Track D retired `assert-output` |
+| `<table>_write_guard` | the 18 tables in `WRITE_GUARDS` (`src/content/rules.ts`); `curriculum_item_asset`'s since 0022, created off like the rest, and armed on a database that already owns courses by `catalog flip courses --rearm` | before, per row | **off** | Refuses a write unless the transaction set `self_learn.revision_id` (D4). Armed per type by `catalog flip`; `asset`'s arms with `diagrams` (or `manimkc`), the last writers outside the seam being gone since Track D retired `assert-output` |
 | `collection_module_has_item`, `curriculum_item_module_has_item` | `collection`, `curriculum_item` | constraint, deferred | **off** | Rule `module-has-item` |
 | `curriculum_item_item_has_concept`, `concept_curriculum_item_item_has_concept` | `curriculum_item`, `concept_curriculum_item` | constraint, deferred | **off** | Rule `item-has-concept`; nine courses fail it today |
 | `concept_curriculum_item_concept_topic`, `concept_concept_topic`, `curriculum_item_concept_topic`, `collection_item_concept_topic` | the four tables that can move either side | constraint, deferred | **off** | Rule `item-concept-in-module-topic` |
+| `concept_prerequisite_course_order`, `concept_curriculum_item_course_order`, `curriculum_item_course_order`, `collection_course_order` | the four tables that can change a course's order or a `requires` edge (0021) | constraint, deferred | **off** | Rule `course-order-respects-requires`: a course teaches no concept before a concept it `requires`, judged by each concept's first appearance (module, item, position). `assumes` out of order is a doctor warning, never refused |
 | `<table>_copy_guard` | every table but `catalog_instance` | before, per statement, including `TRUNCATE` | on | Refuses a write when `catalog_instance.role = 'copy'`, naming `primary_host`, unless the connection set `self_learn.copy_ok = on` |
 
 Why each is shaped the way it is:

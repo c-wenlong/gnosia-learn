@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 
 import {
   COMPLETENESS_RULES,
+  outOfOrder,
   triggerStates,
   WRITE_GUARDED_TABLES,
   writeGuardName,
@@ -75,6 +76,12 @@ export interface DoctorResult {
   /** Courses where no live item names a concept. */
   conceptlessCourses: string[];
   /**
+   * `assumes` edges a course teaches out of order: the prerequisite after
+   * the concept. Soft, so warned about and never counted; the `requires`
+   * case is the course-order-respects-requires rule.
+   */
+  orderWarnings: { course: string; concept: string; prerequisite: string }[];
+  /**
    * Concepts with no topic, archived ones included. Not a trigger: the
    * column is `NOT NULL` from Track C's contract migration (0012), which
    * refuses to run while this is not empty and makes it empty for good.
@@ -134,6 +141,7 @@ export async function doctor(
     unsettled: [],
     courses: [],
     conceptlessCourses: [],
+    orderWarnings: [],
     conceptsWithoutTopic: [],
     conceptTopicRequired: false,
     blobContract: { inForce: false, unstored: [], unkeyed: [] },
@@ -210,6 +218,8 @@ export async function doctor(
     withoutConcept: row.without,
   }));
 
+  const soft = await db.execute<{ id: string; concept: string; prerequisite: string }>(outOfOrder("assumes"));
+
   // Archived concepts too: the column's `NOT NULL` binds every row, and
   // migration 0012 refuses while any row, archived or not, has a null.
   const orphans = await db.execute<{ slug: string }>(
@@ -267,6 +277,7 @@ export async function doctor(
     conceptlessCourses: courseRows
       .filter((row) => row.items > 0 && row.withoutConcept === row.items)
       .map((row) => row.course),
+    orderWarnings: soft.rows.map((row) => ({ course: row.id, concept: row.concept, prerequisite: row.prerequisite })),
     conceptsWithoutTopic: orphans.rows.map((row) => row.slug),
     conceptTopicRequired: topicColumn?.nullable === "NO",
     blobContract,
@@ -329,6 +340,13 @@ export function formatDoctor(result: DoctorResult): string {
       "",
       "courses with some items missing a concept:",
       ...partial.map((row) => `  ${row.course.padEnd(10)} ${row.withoutConcept} of ${row.items} items`),
+    );
+  }
+  if (result.orderWarnings.length > 0) {
+    lines.push(
+      "",
+      `assumes edges taught out of order (${result.orderWarnings.length}, warnings only):`,
+      ...result.orderWarnings.map((w) => `  ${w.course.padEnd(10)} ${w.concept} before ${w.prerequisite}, which it assumes`),
     );
   }
   lines.push(

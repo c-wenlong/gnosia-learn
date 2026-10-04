@@ -31,6 +31,7 @@ export const WRITE_GUARDS: Readonly<Record<ContentType, readonly string[]>> = {
     "curriculum_item",
     "curriculum_item_topic",
     "concept_curriculum_item",
+    "curriculum_item_asset",
   ],
   concepts: ["concept", "concept_prerequisite"],
   sessions: [],
@@ -118,7 +119,49 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
         )
       order by l.curriculum_item_id collate "C", l.concept_slug collate "C"`,
   },
+  {
+    name: "course-order-respects-requires",
+    says: "a course teaches no concept before a concept it requires",
+    type: "courses",
+    triggers: [
+      ["concept_prerequisite", "concept_prerequisite_course_order"],
+      ["concept_curriculum_item", "concept_curriculum_item_course_order"],
+      ["curriculum_item", "curriculum_item_course_order"],
+      ["collection", "collection_course_order"],
+    ],
+    violators: outOfOrder("requires"),
+  },
 ];
+
+/**
+ * Every edge of `kind` whose prerequisite a course teaches after the concept
+ * that needs it, one row per course and edge: `id` the course, `detail`
+ * "<concept> before <prerequisite>". A concept's place is its first
+ * appearance in the course, by module, item and position in the item, live
+ * rows only: the same order migration 0021's trigger checks.
+ */
+export function outOfOrder(kind: "requires" | "assumes"): SQL {
+  return sql`
+    with taught as (
+      select distinct on (m.parent_id, l.concept_slug)
+        m.parent_id as course, l.concept_slug as concept,
+        m.position as module_position, i.position as item_position, l.position as link_position
+      from concept_curriculum_item l
+      join curriculum_item i on i.id = l.curriculum_item_id and i.archived_at is null
+      join collection m on m.id = i.collection_id and m.kind = 'module' and m.archived_at is null
+      join collection c on c.id = m.parent_id and c.archived_at is null
+      order by m.parent_id, l.concept_slug, m.position, i.position, l.position
+    )
+    select a.course as id, a.concept || ' before ' || b.concept as detail,
+           a.concept as concept, b.concept as prerequisite
+    from concept_prerequisite e
+    join taught a on a.concept = e.concept_slug
+    join taught b on b.concept = e.prerequisite_slug and b.course = a.course
+    where e.kind = ${kind}
+      and (b.module_position, b.item_position, b.link_position)
+        > (a.module_position, a.item_position, a.link_position)
+    order by a.course collate "C", a.concept collate "C", b.concept collate "C"`;
+}
 
 /**
  * Whether each named trigger is enabled, from `pg_trigger`. `O` is enabled

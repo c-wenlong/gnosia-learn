@@ -47,13 +47,29 @@ export const COURSES_DIR = "content/courses";
 /** What a course code may be: it names the file, `<code>.yaml` in lowercase. */
 const COURSE_CODE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
 
-const RESOURCE_TYPES: readonly ResourceType[] = ["paper", "docs", "video", "book", "other"];
+const RESOURCE_TYPES: readonly ResourceType[] = ["paper", "docs", "video", "book", "other", "practice"];
+
+/**
+ * The asset id prefixes a listed video may carry: the three video tools'
+ * (`manimkc:`, `remotionkc:`, `revideokc:`, the catalog's `ASSET_PREFIX`) and
+ * a studio video's (`video:`, the catalog's `VIDEO_PREFIX`). A course's
+ * `videos:` is checked for this shape only, never against the catalog: the
+ * courses source indexes before the video tools, and a clone may have none of
+ * them (docs/proposals/module-learning-path.md, "Videos name their
+ * concepts"). `test/course-lessons.test.ts` in the catalog holds the two
+ * lists together.
+ */
+export const VIDEO_ASSET_PREFIXES = ["manimkc:", "remotionkc:", "revideokc:", "video:"] as const;
+
+/** A prefix, then the rest of the id: at least one character and no whitespace. */
+const VIDEO_ASSET_ID = new RegExp(`^(?:${VIDEO_ASSET_PREFIXES.join("|")})\\S+$`);
 
 interface RawResource {
   id?: unknown;
   title?: unknown;
   url?: unknown;
   type?: unknown;
+  lessons?: unknown;
 }
 
 interface RawTopic {
@@ -61,6 +77,7 @@ interface RawTopic {
   title?: unknown;
   concepts?: unknown;
   subtopics?: unknown;
+  videos?: unknown;
 }
 
 interface RawModule {
@@ -71,6 +88,7 @@ interface RawModule {
   topic?: unknown;
   topics?: unknown;
   resources?: unknown;
+  videos?: unknown;
 }
 
 interface RawCover {
@@ -232,6 +250,41 @@ function claim(seen: Map<string, string>, kind: string, id: string, where: strin
   seen.set(id, where);
 }
 
+/**
+ * An optional list of ids, read in the order written: absent is undefined,
+ * and a key written with nothing in it is refused rather than read as no
+ * list, since an author who wrote the key meant to list something. An id
+ * named twice is refused too: the catalog stores one row, or one place, per
+ * entry.
+ */
+function idList(value: unknown, at: string, field: string, what: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || (Array.isArray(value) && value.length === 0)) {
+    throw new ContentError(`${at}: ${field} is present but empty. List the ${what}, or delete the key.`);
+  }
+  const ids = stringList(value, at, field);
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) throw new ContentError(`${at}: ${field} lists "${id}" twice`);
+    seen.add(id);
+  }
+  return ids;
+}
+
+/** A `videos:` list: `idList`, each id with a video asset prefix. */
+function videoList(value: unknown, at: string): string[] | undefined {
+  const ids = idList(value, at, "videos", "video asset ids");
+  for (const id of ids ?? []) {
+    if (!VIDEO_ASSET_ID.test(id)) {
+      throw new ContentError(
+        `${at}: videos lists ${JSON.stringify(id)}, which is not a video asset id: ` +
+          `${VIDEO_ASSET_PREFIXES.join(", ")} followed by the rest of the id, with no spaces`,
+      );
+    }
+  }
+  return ids;
+}
+
 function readResource(raw: RawResource, where: string): Resource {
   const id = requireText(raw.id, where, "resources[].id");
   const at = `${where} resource "${id}"`;
@@ -241,12 +294,17 @@ function readResource(raw: RawResource, where: string): Resource {
       `${at}: type "${type}" is not one of ${RESOURCE_TYPES.join(", ")}`,
     );
   }
-  return {
+  const resource: Resource = {
     id,
     title: requireText(raw.title, at, "title"),
     url: requireText(raw.url, at, "url"),
     type: type as ResourceType,
   };
+  // Last and only when listed, so a reading with none is the object it was
+  // before the key existed, and the database reader builds the same one.
+  const lessons = idList(raw.lessons, at, "lessons", "item ids of this module");
+  if (lessons !== undefined) resource.lessons = lessons;
+  return resource;
 }
 
 function readTopic(raw: RawTopic, where: string): Topic {
@@ -270,12 +328,63 @@ function readTopic(raw: RawTopic, where: string): Topic {
     }
     seen.add(concept);
   }
-  return {
+  const topic: Topic = {
     id,
     title: requireText(raw.title, at, "title"),
     concepts,
     subtopics: stringList(raw.subtopics, at, "subtopics"),
   };
+  const videos = videoList(raw.videos, at);
+  if (videos !== undefined) topic.videos = videos;
+  return topic;
+}
+
+/**
+ * What a module's lists say about each other, once its items are read: each
+ * reading's `lessons:` names items of this module (one that names another
+ * module's item, or none, is an unresolved reference, collected so a read
+ * reports every one), and no video is listed twice across the module's list
+ * and its lessons' lists, since the path places a video once per module.
+ */
+function checkModuleLists(
+  at: string,
+  moduleId: string,
+  topics: readonly Topic[],
+  resources: readonly Resource[],
+  moduleVideos: readonly string[] | undefined,
+  itemModules: ReadonlyMap<string, string>,
+  problems: Problems,
+): void {
+  const items = new Set(topics.map((t) => t.id));
+  for (const resource of resources) {
+    for (const lesson of resource.lessons ?? []) {
+      if (items.has(lesson)) continue;
+      const elsewhere = itemModules.get(lesson);
+      problems.add(
+        elsewhere === undefined
+          ? `${at} resource "${resource.id}": lessons names "${lesson}", which is not an item of module "${moduleId}"`
+          : `${at} resource "${resource.id}": lessons names "${lesson}", an item of module "${elsewhere}", ` +
+              `not of module "${moduleId}". A reading goes with lessons of its own module.`,
+      );
+    }
+  }
+  const listedOn = new Map<string, string>();
+  const lists: [string, readonly string[]][] = [
+    ["the module", moduleVideos ?? []],
+    ...topics.map((t): [string, readonly string[]] => [`item "${t.id}"`, t.videos ?? []]),
+  ];
+  for (const [where, videos] of lists) {
+    for (const video of videos) {
+      const first = listedOn.get(video);
+      if (first !== undefined) {
+        throw new ContentError(
+          `${at}: module "${moduleId}" lists video "${video}" twice: on ${first} and on ${where}. ` +
+            `A video is placed once per module; keep the one list it belongs to.`,
+        );
+      }
+      listedOn.set(video, where);
+    }
+  }
 }
 
 /**
@@ -354,6 +463,8 @@ function readCourse(
   const modules: Module[] = [];
   /** Module slugs are the second URL segment, so they collide per course, not globally. */
   const moduleSlugs = new Map<string, string>();
+  /** Where each module was read, for the lessons check after the loop. */
+  const moduleAt = new Map<string, string>();
   for (const [i, rawModule] of rawModules.entries()) {
     const mod = rawModule as RawModule;
     const at = `${where} module[${i}]`;
@@ -411,7 +522,7 @@ function readCourse(
     const moduleSlug = requireText(mod.slug, at, "slug");
     claim(moduleSlugs, "module slug", moduleSlug, at);
 
-    modules.push({
+    const read: Module = {
       id: moduleId,
       slug: moduleSlug,
       title: requireText(mod.title, at, "title"),
@@ -419,7 +530,18 @@ function readCourse(
       topic: topicSlug ?? "",
       topics,
       resources,
-    });
+    };
+    const videos = videoList(mod.videos, at);
+    if (videos !== undefined) read.videos = videos;
+    modules.push(read);
+    moduleAt.set(moduleId, at);
+  }
+
+  // Lessons are checked once every module is read, so a reading naming an
+  // item of a later module of the course is told which module that is.
+  const itemModules = new Map(modules.flatMap((m) => m.topics.map((t) => [t.id, m.id] as const)));
+  for (const mod of modules) {
+    checkModuleLists(moduleAt.get(mod.id) ?? where, mod.id, mod.topics, mod.resources, mod.videos, itemModules, problems);
   }
 
   const code = requireText(parsed.code, where, "code");
