@@ -73,7 +73,9 @@ reason for each and the contrast table are in
 | Habit | `--streak` (the fill: discs, rings, the dot, the big number), `--streak-text` (the streak as small text, at 4.5:1 on the card) |
 | Primary button | `--btn-face`, `--btn-lip`, `--btn-text` |
 | Mastery | `--m-hi` (mastered), `--m-mid` (learning), `--m-lo` (untouched), `--lip-shade` (under an untouched path node) |
-| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in every palette), `--streak-on`, `--m-hi-on` (the check on a done streak day and the mark on a mastered path node: white in the light palettes, the page colour in the dark ones) |
+| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in every palette), `--streak-on`, `--m-hi-on` (the check on a done streak day and the mark on a mastered path node: white in the light palettes, the page colour in the dark ones), `--diagram-matte` (the ground behind an exported diagram, `bg-diagram-matte`: the same light grey in all four palettes, since diagrams are drawn for a light ground) |
+
+Colours are tokens only: `components/ui/theme-tokens.test.ts` fails on a hex, `rgb(`-style or raw Tailwind palette colour (`red-600`) in `components/` or `app/`, bar the public `(site)` pages and the avatar sprites. `black` and `white` stay for video chrome over a picture.
 
 **Every token is also a Tailwind colour of the same name**, so write
 `bg-surface2 text-text2 border-border`, not `bg-[var(--surface2)]`. The

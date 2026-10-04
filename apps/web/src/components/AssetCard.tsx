@@ -126,7 +126,7 @@ export function AssetCard({
           "flex h-[110px] shrink-0 items-center justify-center overflow-hidden rounded-xl",
           // The diagram's own ground, held constant in both themes; see
           // DiagramView for why an exported drawing is never recoloured.
-          showThumb && family === "diagram" ? "bg-[#f7f6f3]" : "bg-surface2",
+          showThumb && family === "diagram" ? "bg-diagram-matte" : "bg-surface2",
         )}
       >
         {showThumb ? (

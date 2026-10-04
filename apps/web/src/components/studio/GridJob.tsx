@@ -238,7 +238,7 @@ function JobStage({
  * diagram is drawn for a light page, so without the mat a dark palette showed
  * its strokes on charcoal until the first live picture came in.
  */
-const MAT = "absolute inset-0 bg-[#f7f6f3]";
+const MAT = "absolute inset-0 bg-diagram-matte";
 
 function Backdrop({
   job,
