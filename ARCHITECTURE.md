@@ -888,7 +888,8 @@ with the command made for it (`learn concept show`, `catalog course export`).
     hash.
 11. **The web app never writes the *content* half.** It reads the content
     through the seam, from the database only, reads `concept`, `mastery` and `review` through
-    the store, and writes `progress`, `recap` and `preference`. `event`,
+    the store, and writes `progress`, `recap`, `preference` and `asset_name` (the
+    learner's own name for an asset, read in place of its source's title). `event`,
     `mastery` and `review` are written only through the store's own evidence
     functions, never assembled by a caller: the CLI's commands, and the two
     page-facing evidence writes, `POST /api/review/grade`, which calls the same

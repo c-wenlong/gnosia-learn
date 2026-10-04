@@ -94,8 +94,9 @@ button beside the grid/list switch opens a small menu with Group by: Day
 course gives a heading per course with its module order inside; by concept,
 a heading per concept in the order of the prerequisite graph. The choice is
 `?group=`, not a stored preference, so a link carries it. Favourites, which
-Manus has here, are not added: there is no favourite on an asset and no
-other surface would read one yet.
+Manus has here, were added on the owner's request after this was written: a
+star on every asset page (#364) and a Favorites toggle in the toolbar,
+`?favorites=1`, beside the filter menus.
 
 **L5. A menu per row and per card.** The more button at the right of a row,
 and in a card's title row, opens: Open, Open the concept (when it has one),
@@ -217,7 +218,6 @@ Phases 1 and 4 are independent; 2 and 3 build on 1.
 
 ## Out of scope
 
-- Favourites on assets (L4 says why).
 - Deleting or renaming an asset from the Library; the import owns asset rows.
 - A bottom tab bar on the phone. The drawer stays.
 - Manus's model picker, plan chip and credits in the top bar; the app has no top bar and the tutor's model chain is in Settings.

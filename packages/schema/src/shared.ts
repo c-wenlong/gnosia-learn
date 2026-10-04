@@ -526,6 +526,18 @@ export function cleanDisplayName(value: unknown): string | null {
   return cleaned === "" ? null : cleaned;
 }
 
+/** The longest name `asset_name.title` takes, in characters. */
+export const ASSET_NAME_MAX = 200;
+
+/**
+ * An asset's name as the learner typed it, stored the way `cleanDisplayName`
+ * stores theirs: trimmed, whitespace runs as one space, null when nothing is
+ * left. Null means "no name of mine", so the source's title shows again.
+ */
+export function cleanAssetName(value: unknown): string | null {
+  return cleanDisplayName(value);
+}
+
 /**
  * What the app renders before anything is known: a fresh learner, and also the
  * honest answer when the database is unreachable. Nothing distinguishes the

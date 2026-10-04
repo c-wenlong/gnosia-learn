@@ -13,6 +13,7 @@ import { sql } from "drizzle-orm";
 import type { CatalogDatabase } from "../../db";
 import { ASSET_PREFIX } from "../../index/source";
 import { keyParts, storedCredit } from "../cover-image";
+import { assetNamesExist } from "../../state/assets";
 import { andOwnedBy, type Owners } from "../scope";
 import type { TypeReader } from "./reader";
 
@@ -108,11 +109,13 @@ function optional(value: unknown): string | undefined {
  * owners hold, a link only when the entity at its far end (a tag, a concept,
  * a resource) is theirs too. Omitted, every owner is read.
  */
-export async function readCourses(db: CatalogDatabase, owners?: Owners): Promise<Course[]> {
-  return db.transaction((tx) => readTree(tx, owners), { isolationLevel: "repeatable read", accessMode: "read only" });
+export async function readCourses(db: CatalogDatabase, owners?: Owners, namer?: string): Promise<Course[]> {
+  // Asked before the transaction: a failed check inside it would abort it.
+  const names = namer !== undefined && (await assetNamesExist(db));
+  return db.transaction((tx) => readTree(tx, owners, names ? namer : undefined), { isolationLevel: "repeatable read", accessMode: "read only" });
 }
 
-async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> {
+async function readTree(db: CatalogDatabase, owners: Owners, namer: string | undefined): Promise<Course[]> {
   const courses = await rows<CourseRow>(
     db,
     sql`select c.id, c.slug, c.title, c.position, c.metadata, to_jsonb(c) ->> 'cover_blob_key' as cover_blob_key
@@ -175,7 +178,10 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
   const resources = groupBy(
     await rows<{ collection_id: string; id: string; title: string | null; url: string | null; resource_type: string | null }>(
       db,
-      sql`select m.collection_id, a.id, a.title, a.url, a.resource_type
+      // A reader's own name for a link (asset_name), as the library shows it.
+      sql`select m.collection_id, a.id,
+            ${namer === undefined ? sql`a.title` : sql`coalesce((select n.title from asset_name n where n.asset_id = a.id and n.learner_id = ${namer}), a.title)`} as title,
+            a.url, a.resource_type
           from collection_item m join asset a on a.id = m.asset_id
           where a.kind = 'link' and starts_with(a.id, ${ASSET_PREFIX.courses})${andOwnedBy(sql`a.owner_id`, owners)}
           order by m.collection_id collate "C", m.position, a.id collate "C"`,
@@ -280,5 +286,5 @@ async function lessonLinks(
 
 export const reader: TypeReader<"courses"> = {
   ready: true,
-  read: (db, scope) => () => readCourses(db, scope.readable),
+  read: (db, scope) => () => readCourses(db, scope.readable, scope.owner),
 };

@@ -54,7 +54,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
     await seedContent(scratch.db);
     process.env.DATABASE_URL = scratch.url;
 
-    const [progress, note, reset, recap, preference, importRoute, name, avatar, state] = await Promise.all([
+    const [progress, note, reset, recap, preference, importRoute, name, avatar, assetName, state] = await Promise.all([
       import("./progress/route"),
       import("./note/route"),
       import("./reset/route"),
@@ -63,6 +63,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       import("./import/route"),
       import("./name/route"),
       import("./avatar/route"),
+      import("./asset-name/route"),
       import("@self-learn/catalog/state"),
     ]);
     routes = {
@@ -74,6 +75,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       import: importRoute.POST,
       name: name.POST,
       avatar: avatar.POST,
+      assetName: assetName.POST,
     };
     readLearnerSnapshot = state.readLearnerSnapshot;
   }, 60_000);
@@ -291,6 +293,32 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       });
       expect(status).toBe(400);
       expect(String(body.error)).toContain("http(s)");
+    });
+  });
+
+  describe("asset-name", () => {
+    const ID = "link:route-asset";
+
+    beforeAll(async () => {
+      await scratch.db.execute(
+        `insert into asset (id, kind, url, title, source_repo, owner_id) values ('${ID}', 'link', 'https://example.com/r', 'lec03 v2 final', 'self-learn', 'local') on conflict do nothing`,
+      );
+    });
+
+    it("names an asset, answers with both names, and clears it with null", async () => {
+      const set = await call("assetName", { assetId: ID, name: "  Master   theorem " });
+      expect(set.status).toBe(200);
+      expect(set.body.result).toEqual({ title: "Master theorem", name: "Master theorem", original: "lec03 v2 final" });
+
+      const cleared = await call("assetName", { assetId: ID, name: null });
+      expect(cleared.body.result).toEqual({ title: "lec03 v2 final", name: null, original: "lec03 v2 final" });
+    });
+
+    it("refuses an unknown asset, a long name and a missing id with a 400", async () => {
+      expect((await call("assetName", { assetId: "link:nowhere", name: "x" })).status).toBe(400);
+      expect((await call("assetName", { assetId: ID, name: "x".repeat(201) })).status).toBe(400);
+      expect((await call("assetName", { name: "x" })).status).toBe(400);
+      expect((await call("assetName", { assetId: ID, name: 42 })).status).toBe(400);
     });
   });
 

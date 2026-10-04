@@ -7,11 +7,14 @@ import {
   conceptsForAssets,
   derivationSources,
   listAssets,
+  readAssetNaming,
   readEvents,
   readPreference,
+  readPreferencesWithPrefix,
   topicTitles,
   type AssetDerivations,
   type AssetKindCount,
+  type AssetNaming,
   type AssetRef,
   type TopicTitles,
   type AssetWithTopics,
@@ -29,7 +32,7 @@ import {
   isCompanionKind,
 } from "@/lib/library";
 import { currentOwner, currentScope } from "@/lib/owner";
-import { favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
+import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
 import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
 import { parseTranscript } from "@/lib/transcript";
 
@@ -208,6 +211,12 @@ export interface AssetDetail {
   notes: Record<string, string>;
   /** Concept slugs this asset explains, from `asset_concept`, sorted. Empty when it explains none. */
   concepts: string[];
+  /**
+   * The learner's own name for it and the source's title, for the rename
+   * field. Null when there is no row, or the read failed: the page then shows
+   * the title without the field.
+   */
+  naming: AssetNaming | null;
 }
 
 const EMPTY_DETAIL: AssetDetail = {
@@ -218,6 +227,7 @@ const EMPTY_DETAIL: AssetDetail = {
   titles: {},
   notes: {},
   concepts: [],
+  naming: null,
 };
 
 /** How many siblings the detail page offers before it stops listing them. */
@@ -279,6 +289,7 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
         titles: {},
         notes: {},
         concepts: [],
+        naming: null,
       };
     }
 
@@ -316,9 +327,10 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     // Every slug this page will draw a chip for: the asset's own, plus those
     // of the related cards beside it. Asked once for all of them rather than
     // once per section, so the two cannot disagree about one topic's name.
-    const [titles, concepts] = await Promise.all([
+    const [titles, concepts, naming] = await Promise.all([
       optionalTitles(db, [asset, ...related]),
       optionalConcepts(db, [id]),
+      optionalNaming(db, id),
     ]);
 
     return {
@@ -329,6 +341,7 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
       titles,
       notes,
       concepts: concepts[id] ?? [],
+      naming,
     };
   } catch (error) {
     warn(`asset ${id}`, error);
@@ -429,6 +442,16 @@ async function optionalConcepts(
   } catch (error) {
     warn("concept links", error);
     return {};
+  }
+}
+
+/** The rename field's data, or none. A failure costs the field, never the page. */
+async function optionalNaming(db: CatalogDatabase, id: string): Promise<AssetNaming | null> {
+  try {
+    return await readAssetNaming(db, id, await currentOwner());
+  } catch (error) {
+    warn("asset name", error);
+    return null;
   }
 }
 
@@ -753,6 +776,27 @@ export async function loadFavorite(id: string): Promise<Favorite | null> {
     return parseFavorite(await readPreference(await catalogDatabase(), favoriteKey(id), owner));
   } catch (error) {
     warn("favorite", error);
+    return null;
+  }
+}
+
+/**
+ * Every asset the owner starred, by id, for the Library's Favorites filter:
+ * the `favorite:` preferences and nothing else. Null when the store could not be read, which the page
+ * says rather than showing an empty list as though nothing were starred.
+ */
+export async function loadFavorites(): Promise<Set<string> | null> {
+  await connection();
+  const owner = await currentOwner();
+  try {
+    const all = await readPreferencesWithPrefix(await catalogDatabase(), FAVORITE_PREFIX, owner);
+    const ids = new Set<string>();
+    for (const [key, value] of Object.entries(all)) {
+      if (key.startsWith(FAVORITE_PREFIX) && parseFavorite(value) !== null) ids.add(key.slice(FAVORITE_PREFIX.length));
+    }
+    return ids;
+  } catch (error) {
+    warn("favorites", error);
     return null;
   }
 }
