@@ -11,8 +11,7 @@ import { DB_READERS } from "../src/content/flip";
 import { readCourses } from "../src/content/readers/courses";
 import { dbSource } from "../src/content/source";
 import { runIndex } from "../src/index/run";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
 import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
@@ -36,8 +35,7 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await runIndex(scratch.db, {
       repoRoot: SEED,
       only: ["topics", "tags", "concepts", "courses"],
