@@ -639,7 +639,7 @@ reading, a pencil for practice. The concepts left the topic panel, since the ste
 | Phone header | the page title | the wordmark | the shell cannot know a page's title; the page prints its own under the header |
 | Tab bar | grey discs as icons | outline glyphs | the discs were placeholders |
 | Avatar | a plain disc | a disc with a person glyph | a bare disc does not read as a button |
-| Store banner | not drawn | `--text` on `--warn-tint` with a `--warn` rule | `--warn-text` on `--warn-tint` is under 3:1 in light, too low for a sentence |
+| Store banner | not drawn | `--text` on `--warn-tint` with a `--warn` rule | `--warn-text` on `--warn-tint` was under 3:1 in Classic light when this was built; it passes since 2026-10-05 (BRAND.md, Classic light), and a whole sentence still reads best in `--text` |
 | Preference key | DESIGN.md's API table said `streakLeewayPerWeek` | `dailyLeeway` | the name the phase-0 brief set; DESIGN.md now matches |
 | Stat tile label | white on the coloured strip in light | black (`--on-tone`) in both themes | white on the streak orange is about 2:1, and under 4.5:1 on the other three; black is at least 4.8:1 on all four |
 | Path nodes (now topic rows) | one node per concept | one node per course topic, coloured by the concepts whose notes name it (all mastered is mastered, none observed is untouched, anything else learning; p(L) is the minimum) | the phase-1b brief; a course's topics are the unit of progress everywhere else. `content/topics.yaml` maps modules, not topics, so the per-topic link is the note's `topics:` frontmatter (`KbConcept.topics`) and `maps.concepts` only orders them |
