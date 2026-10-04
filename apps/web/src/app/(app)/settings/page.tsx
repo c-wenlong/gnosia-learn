@@ -4,6 +4,7 @@ import { PAGE_ENTER } from "@/components/PageLoading";
 import { Providers } from "@/components/settings/Providers";
 import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
+import { PAGE_TITLE } from "@/components/ui/classes";
 import { getAllTopicIds, getCourses } from "@/data/courses";
 import { currentOwner } from "@/lib/owner";
 import { loadProviderKeys } from "@/lib/provider-keys/settings";
@@ -49,7 +50,7 @@ export default async function SettingsPage() {
       : keys.order.map((p) => ({ id: p.id, label: p.label, source: p.source }));
   return (
     <div data-layout="app" className={`flex max-w-[1084px] flex-col gap-4 ${PAGE_ENTER}`}>
-      <h1 className="font-display text-[28px] leading-tight font-bold text-text">Settings</h1>
+      <h1 className={PAGE_TITLE}>Settings</h1>
       <SettingsTabs
         sections={[
           { id: "general", label: "General", glyph: "sliders", content: <GeneralSettings settings={settings} /> },

@@ -89,6 +89,47 @@ at 15px/1.5. `font-display` is Georgia from the system: page titles at
 `components/ui/classes.ts`), button labels 15/600, dense rows 14, lesson
 prose 17. `font-mono` is still Geist Mono, for code.
 
+**Type roles.** Each kind of text that recurs from page to page has one class
+string in [classes.ts](../../apps/web/src/components/ui/classes.ts), with its
+family, size, weight and leading, so a page title is the same on every page; a
+call site adds only its own spacing, truncation or `sr-only`. Built on
+2026-10-05 (#359), when the audit found the page title in five sizes and the
+card title in four.
+
+| Role | Constant | Type | Where |
+| --- | --- | --- | --- |
+| Page title | `PAGE_TITLE` | Georgia 28/700, leading 1.25 | every page's `<h1>`: Home (phone), Courses, Learn, Library, Settings, Ask, the session and week check's "cannot start", the module's agent session |
+| Concept title | `CONCEPT_TITLE` | Georgia 26/700 | the concept workspace's `<h1>` and Home's Next up (20 on a phone, as hi-fi 13 draws it); DESIGN.md's "concept titles 26 to 32" |
+| Close title | `CLOSE_TITLE` | Georgia 28/700, 32 from 768px | a focus page's close screen: the session close and Review's end of the queue, which was built from the session close's parts and drifted to no leading |
+| Column title | `COLUMN_TITLE` | Figtree 22/600, 28 leading | the course home's `<h1>` (the module's, or the course's with no modules), since it sits in Coursera's column (Deviations, "Course home, type") |
+| Section title | `SECTION_TITLE` | Figtree 20/700 | a heading that splits a page into sections: Courses' Continue learning, Active courses, Inactive courses |
+| Card title | `CARD_TITLE` | Figtree 16/700, leading 1.375 | the kit `Card` and `Notice`, and what reads as a card: the expanded panel and the row menu's sheet, the studio's confirm cards, a diagram's and a transcript's frame, the Learn map's concept details, Courses' Continue learning cards |
+| Panel title | `PANEL_TITLE` | Figtree 14/600 | the name in a 48px header bar with a hairline: the kit `Panel` (NotebookLM's column) and the studio dialog's header. Quieter than a card title on purpose: the bar is chrome around the content |
+| Label | `LABEL` | Figtree 12/600, `--text2` | a small label over a group, a list or a value (Sentence case, above); the studio's group headings and the agent session's box headings moved onto it from their legacy 12 and 14px `--muted-strong` |
+| Note | `NOTE` | Figtree 12/400, `--text2` | the muted line under or beside a heading: a page's count, the Ask page's subtitle, why a button or a composer is off (`Button`'s `disabledReason`, `COMPOSER_REASON`) |
+| Status | `STATUS_TEXT` | Figtree 12/400, the caller's tone | a status or error line: `LiveStatus`, `FormRow`'s error, the sidebar search's lines, a failed save beside a button |
+
+**Exceptions, each on purpose.** The studio home's "What shall we make?" is a
+hero, 30 and 40px. The session step's title (20, 28 from 768px; hi-fi 05 and
+15) and Review's question (20, 24 from 768px; hi-fi 08 and 14) are focus
+titles of their own, longer and changing every step. The asset page's title
+is the watch page's, in the sans at 22 and 24 (#168). A heading inside a
+note's own Markdown is the prose's (`NoteProse`). The course home's rail and
+cover cards keep Coursera's 600 weights, the workspace panels' section
+headings the hi-fi's 13/700, and a `dense` `Notice` its 14px heading.
+
+**The floor is 12px.** No text in the app is drawn smaller: the 11/700 eyebrow
+went with the capitals on 2026-09-29, and the studio set the same floor in D22
+of [TLDRAWKC-INTEGRATION.md](../TLDRAWKC-INTEGRATION.md). The badges, captions
+and the citation's number that were 10 and 11px are 12 since 2026-10-05.
+`type-roles.test.ts` fails a size under 12px (a `text-[Npx]` class, a
+stylesheet's `font-size` or a literal `fontSize`) outside its allowlist, whose
+one entry is the workspace graph's SVG labels: drawn at layout size, 11.5px is
+what fits a 16-character line in a 112px column, and a graph label may sit at
+11px on screen (D10 of [domain-map.md](../proposals/domain-map.md)). The same
+test fails an `<h1>` that takes none of the title roles and is not one of the
+exceptions above.
+
 **Sentence case, everywhere.** No `uppercase`, no tracked-out label, no
 title, badge, table head or button typed in capitals; an acronym stays one.
 Until 2026-09-29 the eyebrows were 11/700 uppercase tracked and the stat
@@ -223,13 +264,10 @@ Pass `observations`; a missing count reads as zero.
 
 `PathNode` and `UnitHeader` shipped with 1b and were deleted with the course path on 2026-09-29: the course home draws Coursera's item rows instead, from its own `components/course-home/`, and nothing else used either.
 
-Not built yet, because one phase each needs them and none of the others do:
-the tutor message and the citation pill (1c). Build them in
-`components/ui/` from the kit function of the same name, with the same rules.
-The choice row and the feedback footer are built (1e needed them for check
-cards, as `ChoiceRow` and `FeedbackBar`), so 1d uses those rather than drawing
-its own. The review page carries a small local `CitePill` in
-`components/review/` until 1c's citation pill exists.
+The tutor message and the citation pill came with 1c (`TutorMessage` and
+`Cite`, below under phase 1c), and the choice row and the feedback footer with
+1e (`ChoiceRow` and `FeedbackBar`). The review page drew its own copy of the
+citation pill, `CitePill`, until 2026-10-05; its answer now takes `Cite`.
 
 ## The shell
 
@@ -428,7 +466,7 @@ What 1c shipped, and the contract 1d (session focus mode) builds on.
 | [`@/lib/concept-workspace`](../../apps/web/src/lib/concept-workspace.ts) | Server. `readConceptWorkspace(slug)` (and `loadConceptWorkspace` for pages) does the reads: the knowledge base, the note, the event log, the review card, the asset links. The page, `GET /api/concepts/[slug]` and the tutor all go through it |
 | [`@/lib/concept-graph`](../../apps/web/src/lib/concept-graph.ts) | Pure. `neighbourhood`, `courseScope` (course, or the note's folder when it is in no course, with the transitive reduction applied), `dependantsOf`, `backlinksOf`, `defaultSelection`, `layoutGraph` |
 | [`ConceptGraph`](../../apps/web/src/components/ConceptGraph.tsx) | The graph drawing, rewritten: mastery-bucket dots, prerequisites above, the selected concept ringed, its own edges in the accent. Nodes are links (`hrefFor`, server) or buttons (`onSelect`, client) |
-| [`Cite`](../../apps/web/src/components/ui/Cite.tsx), [`TutorMessage`, `UserMessage`](../../apps/web/src/components/ui/Message.tsx) | The kit's citation chip and chat turns, server-safe, imported from their files. `TutorMessage`'s `label` ("Tutor", "Planner") names the turn for a screen reader only; the visible eyebrow over each reply went on 2026-09-29, since the turn's shape already says who is speaking |
+| [`Cite`](../../apps/web/src/components/ui/Cite.tsx), [`TutorMessage`, `UserMessage`](../../apps/web/src/components/ui/Message.tsx) | The kit's citation chip (under a tutor turn and under a review answer; the name truncates and is the pill's tooltip) and chat turns, server-safe, imported from their files. `TutorMessage`'s `label` ("Tutor", "Planner") names the turn for a screen reader only; the visible eyebrow over each reply went on 2026-09-29, since the turn's shape already says who is speaking |
 
 **Backlinks** are the concepts whose `requires` or `assumes` names this one;
 **dependants** ("Leads to") are the `requires` half only. **Check status** in

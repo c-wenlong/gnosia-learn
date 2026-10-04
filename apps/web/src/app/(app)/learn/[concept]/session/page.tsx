@@ -16,6 +16,7 @@ import { embedTargets } from "@/lib/note-embeds";
 import { parseMode, teachProse } from "@/lib/session-core";
 import { loadSessionPage, type TeachAsset } from "@/lib/session-page";
 import { TextLink } from "@/components/ui/TextLink";
+import { PAGE_TITLE } from "@/components/ui/classes";
 
 /**
  * Session focus mode (hi-fi 05, 06 and 07, and 15 on a phone): one concept
@@ -166,7 +167,7 @@ function Unreachable({ slug }: { slug: string }) {
   return (
     <div data-layout="focus">
       <div className="mx-auto flex max-w-[720px] flex-col items-center gap-4 px-4 pt-16 text-center">
-        <h1 className="font-display text-[28px] font-bold text-text">The session cannot start</h1>
+        <h1 className={PAGE_TITLE}>The session cannot start</h1>
         <p className="text-[14px] text-text2">
           The database could not be reached, so there is no note to teach from and nowhere to record an answer. Nothing
           is lost. Start Postgres and reload.

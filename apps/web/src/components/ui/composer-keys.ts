@@ -6,7 +6,7 @@
  * worth a test.
  */
 
-import { FIELD_TEXT } from "./classes";
+import { FIELD_TEXT, NOTE } from "./classes";
 
 /**
  * The composer's frame, shared by `Composer` (a textarea) and
@@ -30,8 +30,8 @@ export const COMPOSER_FRAME = "rounded-2xl border-2 border-border bg-surface tra
 export const COMPOSER_TEXT = `${FIELD_TEXT.px15} leading-6 text-text`;
 /** The placeholder, which has to match the text it stands in for. */
 export const COMPOSER_PLACEHOLDER = `${FIELD_TEXT.px15} leading-6 text-text3`;
-/** The 12px line under a composer saying why it, or Send, is disabled. */
-export const COMPOSER_REASON = "px-1 text-[12px] leading-4 text-text2";
+/** The line under a composer saying why it, or Send, is disabled: the `NOTE` role. */
+export const COMPOSER_REASON = `px-1 ${NOTE}`;
 
 /** 15px text on a 24px line, as the tutor's input always had. */
 export const COMPOSER_LINE_PX = 24;

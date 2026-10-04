@@ -87,7 +87,7 @@ export function RecapCard({
         <p className="text-xs font-semibold text-[var(--accent-strong)]">
           {title}
         </p>
-        <p className="text-[11px] text-[var(--muted)]">
+        <p className="text-[12px] text-[var(--muted)]">
           {knowledge.sessions} session{knowledge.sessions === 1 ? "" : "s"} ·{" "}
           {formatDate(knowledge.updatedAt)} ·{" "}
           {knowledge.source === "agent" ? "agent recap" : "written by hand"}

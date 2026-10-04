@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 
-import { cx, LABEL } from "./classes";
+import { cx, LABEL, STATUS_TEXT } from "./classes";
 import { LiveStatus, type StatusTone } from "./LiveStatus";
 
 /** What a row's control is handed: the ids that tie it to the row's words. */
@@ -77,7 +77,7 @@ export function FormRow({
     </p>
   );
   const errorLine = error !== null && (
-    <p id={errorId} role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
+    <p id={errorId} role="alert" className={cx(STATUS_TEXT, "animate-fade-in text-danger motion-reduce:animate-none")}>
       {error}
     </p>
   );

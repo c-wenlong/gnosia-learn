@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { providerLabel } from "@self-learn/schema/shared";
 import { MathText } from "@/components/Math";
-import { FIELD_TEXT } from "@/components/ui/classes";
+import { FIELD_TEXT, LABEL, PAGE_TITLE } from "@/components/ui/classes";
 import type {
   Course,
   KnowledgeInput,
@@ -393,7 +393,7 @@ export function AgentSession({
         <p className="text-sm font-medium text-[var(--accent-strong)]">
           Micro-learning · {DEFAULT_AGENT_MODEL}
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className={PAGE_TITLE}>
           {topic.title}
         </h1>
         <p className="text-sm text-[var(--muted-strong)]">
@@ -419,7 +419,7 @@ export function AgentSession({
       )}
 
       <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <h2 className="text-sm font-semibold text-[var(--muted-strong)]">
+        <h2 className={LABEL}>
           By the end you should be able to
         </h2>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-[var(--muted-strong)]">
@@ -563,7 +563,7 @@ export function AgentSession({
 
       <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <div>
-          <h2 className="text-sm font-semibold text-[var(--muted-strong)]">
+          <h2 className={LABEL}>
             Keep this session
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-strong)]">

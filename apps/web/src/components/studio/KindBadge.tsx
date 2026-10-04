@@ -26,7 +26,7 @@ export function KindBadge({ kind, inline = false }: { kind: "diagram" | "video";
       data-kind-badge={kind}
       className={cx(
         "pointer-events-none shrink-0 items-center rounded-lg font-semibold",
-        inline ? "hidden h-5 px-1.5 text-[11px] sm:inline-flex" : "absolute top-2 left-2 inline-flex h-6 px-2 text-xs",
+        inline ? "hidden h-5 px-1.5 text-xs sm:inline-flex" : "absolute top-2 left-2 inline-flex h-6 px-2 text-xs",
         kind === "video"
           ? // Off the poster, on the page's own ground, it needs more ink to keep its white text legible.
             inline

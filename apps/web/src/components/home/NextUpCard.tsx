@@ -2,12 +2,14 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { CONCEPT_TITLE, cx } from "@/components/ui/classes";
 import type { NextUp } from "@/lib/home-core";
 
 /**
  * Next up (hi-fi 01, top left; 13, first card): the first concept on the
  * frontier, where it sits, how well it is known, and the two ways in. On a
- * phone the card is tighter, the eyebrow shorter, and only Continue remains.
+ * phone the card is tighter, the eyebrow shorter, the title 20px rather than
+ * the concept title's 26 (as hi-fi 13 draws it), and only Continue remains.
  */
 export function NextUpCard({
   nextUp,
@@ -28,7 +30,7 @@ export function NextUpCard({
             <span className="md:hidden">{nextUp.eyebrowShort}</span>
             <span className="max-md:hidden">{nextUp.eyebrow}</span>
           </Eyebrow>
-          <h2 className="font-display text-[20px] leading-tight font-bold text-text md:text-[26px]">{nextUp.title}</h2>
+          <h2 className={cx(CONCEPT_TITLE, "max-md:text-[20px]")}>{nextUp.title}</h2>
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-text2">
             <MasteryDot bucket={nextUp.bucket} pL={nextUp.pL} showLabel />
             {nextUp.lastSeen !== null && <span className="max-md:hidden">· last seen {nextUp.lastSeen}</span>}
@@ -71,7 +73,7 @@ function EmptyNextUp({ conceptCount, reachable }: { conceptCount: number; reacha
   return (
     <Card aria-label="Next up" className="items-start max-md:gap-2 max-md:p-3.5">
       <Eyebrow>Next on your path</Eyebrow>
-      <h2 className="font-display text-[20px] leading-tight font-bold text-text md:text-[26px]">{title}</h2>
+      <h2 className={cx(CONCEPT_TITLE, "max-md:text-[20px]")}>{title}</h2>
       <p className="max-w-prose text-[14px] text-text2">{body}</p>
       <Button href={action.href} variant="secondary" size="sm">
         {action.label}

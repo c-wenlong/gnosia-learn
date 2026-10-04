@@ -8,7 +8,7 @@ import { PanelLink } from "@/components/studio/PanelLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { chipClasses, cx, LABEL, linkClasses } from "@/components/ui/classes";
+import { CARD_TITLE, chipClasses, cx, LABEL, linkClasses } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
@@ -395,7 +395,7 @@ export function ConfirmCard({
                 className={cx("flex-1 text-[16px] font-bold", FADE_IN)}
               />
             ) : (
-              <h2 className={cx("min-w-0 flex-1 text-[16px] font-bold leading-snug text-text", readBack)}>{brief.title}</h2>
+              <h2 className={cx(CARD_TITLE, "min-w-0 flex-1", readBack)}>{brief.title}</h2>
             )}
             {editable && held === null && (
               <Button
