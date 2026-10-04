@@ -78,18 +78,30 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
   const active = chats?.active ?? null;
   const pending = chats?.pending ?? null;
 
-  // Names given here that the runner's list may not carry yet, by draft id.
-  const [renames, setRenames] = useState<Readonly<Record<string, string>>>({});
-  async function rename(draftId: string, typed: string) {
-    const name = cleanTitle(typed);
-    if (name === null) return;
+  // Names given here that the runner's list may not carry yet, by draft id;
+  // null is a name taken off. Each goes once a list carries it, or at once
+  // when the runner refused it.
+  const [renames, setRenames] = useState<Readonly<Record<string, string | null>>>({});
+  const drop = (draftId: string) => setRenames((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== draftId)));
+  async function rename(draftId: string, typed: string | null) {
+    // A field left blank takes the name off, and the planner's title shows again.
+    const name = typed === null ? null : cleanTitle(typed);
     setRenames((current) => ({ ...current, [draftId]: name }));
     const saved = await renameDraft(draftId, name);
     // Read back either way: a refused rename puts the row back as the runner has it.
-    await conversations.refresh();
-    setRenames((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== draftId)));
+    const read = await conversations.refresh();
+    // A saved name stays shown until a read carries it, so a read that failed
+    // does not put the old name back over one the runner kept.
+    if (!saved.ok || read) drop(draftId);
     // An open conversation hears it from its own stream; Home and the rest of the shell from this.
     if (saved.ok) announceDraftChange(draftId);
+  }
+  // Dropped while rendering, as `useConversations` adopts a page's list: the
+  // render that sees the list carry a name is the one that lets it go.
+  const listed = conversations.list;
+  const carried = Object.entries(renames).filter(([id, name]) => listed?.drafts.some((d) => d.draftId === id && (d.name ?? null) === name) === true);
+  if (carried.length > 0) {
+    setRenames((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !carried.some(([gone]) => gone === id))));
   }
 
   // The runner's conversations as Recent's rows, called as `conversationTitle` calls them.
@@ -97,7 +109,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
     conversations.list === null
       ? null
       : draftRows(
-          conversations.list.drafts.map((draft) => (renames[draft.draftId] === undefined ? draft : { ...draft, name: renames[draft.draftId] })),
+          conversations.list.drafts.map((draft) => (draft.draftId in renames ? { ...draft, name: renames[draft.draftId] } : draft)),
           conversations.titles,
         ).map(
           (row): RecentItem => ({
@@ -419,8 +431,8 @@ function RecentRow({
   courseHref: string | null;
   onClick: (event: React.MouseEvent<HTMLAnchorElement>) => void;
   onChange: (change: RecentChange) => Promise<boolean>;
-  /** A conversation's Rename; null for every other kind. */
-  onRename: ((name: string) => void) | null;
+  /** A conversation's Rename: a name, or null to take the name off. Null for every other kind. */
+  onRename: ((name: string | null) => void) | null;
 }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -434,7 +446,9 @@ function RecentRow({
         onDone={(name) => {
           setRenaming(false);
           requestAnimationFrame(() => more.current?.focus());
-          if (name !== null && name !== item.title) onRename?.(name);
+          // Undefined is Escape. A blank field takes the name off; an unchanged one writes nothing.
+          if (name === undefined || name === item.title) return;
+          onRename?.(name);
         }}
       />
     );
@@ -626,14 +640,18 @@ function MenuItem({ glyph, href, onSelect, children }: { glyph: GlyphName; href?
   );
 }
 
-/** Rename in place: Enter keeps the name, Escape keeps the old one, and leaving the field keeps what was typed. */
-function RenameField({ title, onDone }: { title: string; onDone: (name: string | null) => void }) {
+/**
+ * Rename in place: Enter keeps the name, Escape keeps the old one, and leaving
+ * the field keeps what was typed. A field emptied and kept takes the name off
+ * (`null`), so the planner's title shows again; Escape is `undefined`.
+ */
+function RenameField({ title, onDone }: { title: string; onDone: (name: string | null | undefined) => void }) {
   const [value, setValue] = useState(title);
   const done = useRef(false);
-  const finish = (name: string | null) => {
+  const finish = (name: string | undefined) => {
     if (done.current) return;
     done.current = true;
-    onDone(name === null ? null : name.trim() === "" ? null : name);
+    onDone(name === undefined ? undefined : name.trim() === "" ? null : name);
   };
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" && !isImeKey(event.nativeEvent)) {
@@ -642,7 +660,7 @@ function RenameField({ title, onDone }: { title: string; onDone: (name: string |
     } else if (event.key === "Escape") {
       // The field's Escape, not the drawer's.
       event.stopPropagation();
-      finish(null);
+      finish(undefined);
     }
   };
   return (

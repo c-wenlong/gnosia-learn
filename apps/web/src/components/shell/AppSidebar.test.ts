@@ -526,6 +526,45 @@ describe("the sections", () => {
     expect(recentRows(container)).not.toContain("Conversation: TCP vs UDP");
   });
 
+  it("takes a name off when the field is emptied, and the planner's title shows again", async () => {
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [{ ...DRAFT, name: "Transport layer" }], note: "" } });
+    const container = await mount(true);
+    expect(recentRows(container)).toContain("Conversation: Transport layer");
+    act(() => moreFor(container, "Transport layer").click());
+    const rename = [...moreFor(container, "Transport layer").parentElement!.querySelectorAll("ul button")].find((b) => b.textContent === "Rename")!;
+    act(() => (rename as HTMLButtonElement).click());
+    const field = nav(container).querySelector<HTMLInputElement>('input[aria-label="Name this conversation"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "   ");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [DRAFT], note: "" } });
+    await act(async () => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.renameDraft).toHaveBeenCalledWith("d1", null);
+    expect(recentRows(container)).toContain("Conversation: TCP vs UDP");
+  });
+
+  it("keeps a saved name shown when the read after it fails, rather than the old title", async () => {
+    const container = await mount(true);
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    mocks.renameDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", name: "Transport layer", title: "TCP vs UDP", changed: true, note: "" } });
+    await renameTo(container, "Transport layer");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(recentRows(container)).toContain("Conversation: Transport layer");
+    // And once a read carries it, the list's own name is what shows.
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [{ ...DRAFT, name: "Transport layer" }], note: "" } });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(recentRows(container)).toContain("Conversation: Transport layer");
+  });
+
   it("puts the old title back when the runner refuses the rename", async () => {
     mocks.renameDraft.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
     const container = await mount(true);
