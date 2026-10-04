@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboard
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
-import { cx, FIELD_TEXT } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, STATUS_TEXT } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
@@ -232,7 +232,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
                   {loadingOlder ? "Reading older rows…" : "Show older"}
                 </TextLink>
                 {olderError !== null && (
-                  <p role="alert" className="px-1.5 text-[12px] text-danger">
+                  <p role="alert" className={cx(STATUS_TEXT, "px-1.5 text-danger")}>
                     {olderError}
                   </p>
                 )}

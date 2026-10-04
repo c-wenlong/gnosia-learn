@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { FilterMenu } from "@/components/ui/FilterMenu";
-import { cx, linkClasses } from "@/components/ui/classes";
+import { CARD_TITLE, cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { Callout } from "@/components/ui/Callout";
 import type { TopicOption } from "@/data/topics";
@@ -147,7 +147,7 @@ export function ConfirmCardVideo({
           <div>
             <div className="flex items-center gap-2">
               <Glyph name="video" size={18} className="text-text2" />
-              <h2 className="min-w-0 flex-1 text-[16px] font-bold leading-snug text-text">{brief.title}</h2>
+              <h2 className={cx(CARD_TITLE, "min-w-0 flex-1")}>{brief.title}</h2>
             </div>
             {status === "stale" && <p className="mt-0.5 text-[12px] text-text3">An earlier brief. The newest one is below.</p>}
           </div>

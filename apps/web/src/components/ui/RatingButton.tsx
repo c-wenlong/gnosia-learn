@@ -51,7 +51,7 @@ export function RatingButton({
       )}
     >
       <span className="text-[14px] font-bold leading-5 text-text md:text-[15px]">{label}</span>
-      <span className="text-[11px] leading-4 text-text3 tabular-nums md:text-[12px]">
+      <span className="text-[12px] leading-4 text-text3 tabular-nums">
         <span className="md:hidden">{short ?? interval}</span>
         <span className="hidden md:inline">{interval}</span>
       </span>

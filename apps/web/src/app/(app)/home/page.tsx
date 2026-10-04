@@ -8,6 +8,7 @@ import { NextCard } from "@/components/home/NextCard";
 import { RecallCard } from "@/components/home/RecallCard";
 import { RefreshOnReturn } from "@/components/home/RefreshOnReturn";
 import { ThreadsCard } from "@/components/home/ThreadsCard";
+import { cx, PAGE_TITLE } from "@/components/ui/classes";
 import { loadHome } from "@/lib/home";
 
 export const metadata: Metadata = { title: "Home" };
@@ -29,7 +30,7 @@ export default async function HomePage() {
   return (
     <div data-layout="app" className={PAGE_ENTER}>
       <RefreshOnReturn asOf={home.asOf} />
-      <h1 className="mb-3 font-display text-[28px] leading-tight font-bold text-text md:sr-only">Home</h1>
+      <h1 className={cx(PAGE_TITLE, "mb-3 md:sr-only")}>Home</h1>
       <div className="mb-5">
         <AskBox />
       </div>

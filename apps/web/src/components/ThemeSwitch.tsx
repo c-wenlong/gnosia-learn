@@ -108,7 +108,7 @@ function Segments<T extends string>({
   const captionId = useId();
   return (
     <div className="flex flex-col gap-1">
-      <span id={captionId} className={cx("font-medium text-text2", small ? "px-0.5 text-[11px]" : "text-[12px]")}>
+      <span id={captionId} className={cx("font-medium text-text2", "text-[12px]", small && "px-0.5")}>
         {label}
       </span>
       <SegmentedControl

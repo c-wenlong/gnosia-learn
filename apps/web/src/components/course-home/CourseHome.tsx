@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Panel } from "@/components/ui/Panel";
 import { VisitTracker } from "@/components/VisitTracker";
+import { COLUMN_TITLE, cx } from "@/components/ui/classes";
 import { continueHref, defaultModuleIndex, pathStatus, type TopicMastery } from "@/lib/course-path";
 import { libraryHref } from "@/lib/library";
 import { useLearner } from "@/lib/learner-context";
@@ -129,7 +130,7 @@ export function CourseHome({
         />
       ) : (
         <Panel as="section" className="@3xl:col-start-2">
-          <h1 className="px-4 py-2 text-[22px] font-semibold text-text">{course.title}</h1>
+          <h1 className={cx(COLUMN_TITLE, "px-4 py-2")}>{course.title}</h1>
           <p className="px-4 text-[14px] text-text2">This course has no modules yet.</p>
         </Panel>
       )}
