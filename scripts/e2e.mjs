@@ -720,6 +720,85 @@ async function run() {
     assert((await graph.locator('[data-concept="softmax"]').getAttribute('aria-pressed')) === 'true', 'a plain press did not select');
   });
 
+  // D9: a legend chip previews its group on hover, writing nothing; a press
+  // commits it as the Status filter and a second press clears it, and the
+  // chips wrap on a phone.
+  await step('learn: a legend chip previews its group on hover, and a press filters by it', page, async () => {
+    // Each concept's groups: its bucket from its row's dot in the list, ready from the picture.
+    const read = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('svg[data-domain-graph] [data-concept]')].map((el) => {
+          const id = el.getAttribute('data-concept');
+          const bucket = document.querySelector(`[data-list-concept="${id}"] [role="img"]`)?.getAttribute('aria-label');
+          return {
+            groups: { mastered: bucket === 'Mastered', learning: bucket === 'Learning', untouched: bucket === 'Not started', ready: el.getAttribute('data-ready') === 'true' },
+            faded: el.getAttribute('data-faded') === 'true',
+            dim: el.getAttribute('data-dim') === 'true',
+          };
+        }),
+      );
+    // A domain and a group with some concepts in it and some out, so a preview has something to fade.
+    let found = null;
+    for (const slug of ['machine-learning', 'foundations', 'agentic-ai']) {
+      await go(`/learn?domain=${slug}`);
+      await hydrated(page, main.locator('[data-legend-chip="mastered"]'));
+      const concepts = await read();
+      for (const key of ['learning', 'mastered', 'ready', 'untouched']) {
+        const n = concepts.filter((c) => c.groups[key]).length;
+        if (n > 0 && n < concepts.length) found ??= { slug, key, n };
+      }
+      if (found !== null) break;
+    }
+    assert(found !== null, 'no seed domain has a group with some concepts in it and some out');
+    // The loop stopped on the domain it found, so the page is already there.
+    const { key, n } = found;
+    const legend = main.getByRole('group', { name: 'Show on the map' });
+    const chip = legend.locator(`[data-legend-chip="${key}"]`);
+    await hydrated(page, chip);
+    const label = (await chip.getAttribute('aria-label')) ?? '';
+    assert(label.endsWith(`, ${n}`), `the chip says "${label}", the picture has ${n} in ${key}`);
+
+    await chip.hover();
+    await page.waitForFunction(() => document.querySelectorAll('svg[data-domain-graph] [data-faded="true"]').length > 0);
+    assert((await read()).every((c) => c.faded === !c.groups[key]), 'the hover faded the wrong concepts');
+    assert(!new URL(page.url()).searchParams.has('filter'), 'a hover wrote the filter');
+    assert((await chip.getAttribute('aria-pressed')) === 'false', 'a hover pressed the chip');
+    await page.mouse.move(2, 2);
+    await page.waitForFunction(() => document.querySelectorAll('svg[data-domain-graph] [data-faded="true"]').length === 0);
+
+    const status = main.getByRole('button', { name: /^Status:/ });
+    const menuLabel = { mastered: 'Mastered', learning: 'Learning', untouched: 'Untouched', ready: 'Ready to learn' }[key];
+    await chip.click();
+    await page.waitForFunction((k) => new URL(location.href).searchParams.get('filter') === k, key);
+    assert((await chip.getAttribute('aria-pressed')) === 'true', 'the pressed chip is not pressed');
+    assert(((await status.textContent()) ?? '').startsWith(`Status: ${menuLabel}`), `the Status menu reads ${await status.textContent()}`);
+    assert((await read()).every((c) => c.dim === !c.groups[key] && !c.faded), 'the committed filter dimmed the wrong concepts, or the preview stayed');
+    await chip.click();
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has('filter'));
+    assert((await chip.getAttribute('aria-pressed')) === 'false', 'a second press did not clear the chip');
+
+    // A group chosen in the menu shows its chip pressed; a filter with no chip leaves none.
+    await clickHydrated(page, status);
+    await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^Ready to learn/ }).click();
+    await page.waitForFunction(() => document.querySelector('[data-legend-chip="ready"]')?.getAttribute('aria-pressed') === 'true');
+    await status.click();
+    await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^Due/ }).click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('filter') === 'due');
+    assert((await legend.locator('[aria-pressed="true"]').count()) === 0, 'a filter with no chip left one pressed');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await go('/learn?domain=machine-learning');
+      await hydrated(page, legend.locator('[data-legend-chip="ready"]'));
+      const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
+      assert(overflow <= 0, `the page scrolls sideways by ${overflow}px on a phone with the legend`);
+      const rights = await legend.locator('[data-legend-chip]').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right));
+      assert(rights.every((r) => r <= 390), `a chip runs off a phone's screen: ${rights}`);
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   // D7: every concept in a domain is a button in the list, reached by Tab.
   await step('learn: a domain can be walked with the keyboard alone', page, async () => {
     await go('/learn?domain=machine-learning');

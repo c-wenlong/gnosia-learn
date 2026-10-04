@@ -287,6 +287,8 @@ export function LearnIndex({
             selected={selected}
             dimmed={dimmed}
             marks={marks}
+            filter={filter}
+            onFilter={setFilter}
             onGo={(next) => go(next)}
             onSelect={setSelected}
             onPick={pick}
