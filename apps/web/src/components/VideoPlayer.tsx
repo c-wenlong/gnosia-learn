@@ -248,16 +248,25 @@ export function VideoPlayer({
 
   /** One arrow press: five seconds either way, and the flash that says so. */
   function step(direction: 1 | -1) {
-    const from = videoRef.current?.currentTime ?? time;
+    // A seek still held for this load is where the playhead is going, so
+    // presses before the metadata add up rather than each restarting from 0.
+    const pending = pendingSeek.current;
+    const from =
+      pending !== null && pending.load === source.load
+        ? pending.seconds
+        : (videoRef.current?.currentTime ?? time);
     const end = Number.isFinite(duration) ? duration : Number.POSITIVE_INFINITY;
-    seek(Math.min(from + direction * SKIP_STEP, end));
+    const target = Math.min(Math.max(from + direction * SKIP_STEP, 0), end);
+    seek(target);
+    wake();
+    // At either end nothing moved, so the flash neither appears nor grows.
+    if (target === from) return;
     setSkip((prev) => nextSkip(prev, direction));
     if (skipTimer.current) clearTimeout(skipTimer.current);
     skipTimer.current = setTimeout(
       () => setSkip((prev) => (prev === null ? null : { ...prev, shown: false })),
       SKIP_FLASH_MS,
     );
-    wake();
   }
 
   function applyPendingSeek(video: HTMLVideoElement) {

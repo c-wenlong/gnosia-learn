@@ -459,8 +459,45 @@ describe("VideoPlayer", () => {
     expect(host.querySelector("[data-skip]")).toBeNull();
   });
 
-  it("takes focus on a click, so the keys answer after a click on the picture", () => {
+  it("adds up presses made before the metadata, and flashes nothing when it cannot move", () => {
     const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
-    expect(video(host).parentElement?.tabIndex).toBe(-1);
+    const el = video(host);
+    let stored = 0;
+    let ready = false;
+    Object.defineProperty(el, "currentTime", {
+      get: () => stored,
+      set: (value: number) => {
+        if (!ready) throw new Error("The element has not loaded metadata yet.");
+        stored = value;
+      },
+      configurable: true,
+    });
+    const frame = el.parentElement as HTMLElement;
+    press(frame, "ArrowRight");
+    press(frame, "ArrowRight");
+    press(frame, "ArrowRight");
+    expect(host.querySelector("[data-skip]")?.textContent).toBe("+ 15");
+    ready = true;
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    expect(stored).toBe(15);
+
+    // From the start, back goes nowhere and says nothing.
+    const fresh = mount(createElement(VideoPlayer, { src: "/w.mp4", chapters }));
+    press(video(fresh).parentElement as HTMLElement, "ArrowLeft");
+    expect(fresh.querySelector("[data-skip]")).toBeNull();
+  });
+
+  it("keeps focus in the player, so the keys answer after a click", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const frame = video(host).parentElement as HTMLElement;
+    // A click on the picture focuses the nearest focusable ancestor, which is
+    // the browser's doing (jsdom does not model it); this is what it needs.
+    expect(frame.tabIndex).toBe(-1);
+    // The big play button goes inert as play starts, so it hands focus on.
+    const play = host.querySelector("[data-big-play]") as HTMLButtonElement;
+    act(() => play.click());
+    expect(document.activeElement).toBe(frame);
+    press(document.activeElement as HTMLElement, "ArrowRight");
+    expect(video(host).currentTime).toBe(5);
   });
 });
