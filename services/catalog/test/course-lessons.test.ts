@@ -244,7 +244,19 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
     try {
       const report = await doctor(scratch.db, "scratch");
       expect(report.sharedTopicWithoutVideos).toEqual([]);
+      // A commons module on that topic is read by every owner, so every
+      // module on the topic is its peer, and it lists no video: named.
+      await scratch.db.insert(collection).values([
+        { id: "cc1000", kind: "course", slug: "cc1000", title: "Commons", parentId: null, position: 10, ownerId: "commons" },
+        { id: "cc1000-m1", kind: "module", slug: "m1", title: "Commons module", parentId: "cc1000", position: 1, ownerId: "commons" },
+      ]);
+      await scratch.db.insert(collectionItem).values({ collectionId: "cc1000-m1", position: 0, topicSlug: "alpha" });
+      const withCommons = await doctor(scratch.db, "scratch");
+      expect(withCommons.sharedTopicWithoutVideos).toContainEqual({ course: "cc1000", module: "cc1000-m1", topic: "alpha" });
     } finally {
+      await scratch.db.delete(collectionItem).where(eq(collectionItem.collectionId, "cc1000-m1"));
+      await scratch.db.delete(collection).where(eq(collection.id, "cc1000-m1"));
+      await scratch.db.delete(collection).where(eq(collection.id, "cc1000"));
       await scratch.db.delete(collectionItem).where(eq(collectionItem.collectionId, "yy1000-m1"));
       await scratch.db.delete(collection).where(eq(collection.id, "yy1000-m1"));
       await scratch.db.delete(collection).where(eq(collection.id, "yy1000"));

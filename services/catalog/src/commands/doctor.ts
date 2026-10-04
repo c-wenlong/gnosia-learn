@@ -352,12 +352,13 @@ async function listedVideos(db: CatalogDatabase): Promise<{
       where m.kind = 'module' and m.archived_at is null
     )
     select course, module, topic from module_topic mt
-    -- Shared only with a module this module's owner can read: their own or
-    -- the commons'. Two owners on one commons topic never see each other's.
+    -- Shared only between modules one owner can read together: two of
+    -- theirs, or one of theirs and one of the commons, which every owner
+    -- reads. Two owners on one commons topic never see each other's.
     where exists (
       select 1 from module_topic o
       where o.topic = mt.topic and o.module <> mt.module
-        and (o.owner_id = mt.owner_id or o.owner_id = ${COMMONS_OWNER})
+        and (o.owner_id = mt.owner_id or o.owner_id = ${COMMONS_OWNER} or mt.owner_id = ${COMMONS_OWNER})
     )
       and not exists (select 1 from listed l where l.module = mt.module)
     order by course collate "C", module collate "C"
