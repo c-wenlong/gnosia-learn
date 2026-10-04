@@ -482,18 +482,24 @@ export function TutorChat({
     const mine = new Promise<void>((resolve) => (release = resolve));
     saveQueue.set(slug, mine);
     if (ahead) await ahead;
+    // Whether the server answered the last send. Until it has (a timeout, a dropped connection),
+    // the answer may still be saving there, so its payload stays for a close to resend.
+    let answered = false;
     try {
       if ((closedTimes.get(slug) ?? 0) !== closedAtTap) {
         throw new Error("The thread's session closed before this answer was sent.");
       }
       let res = await send(session());
       let data = (await res.json().catch(() => null)) as ObserveReply | null;
+      answered = true;
       // A session closed elsewhere (another tab, `learn session close`) refuses the answer with
       // nothing written; the thread starts a fresh one and sends the same answer once more.
       if (res.status === 400 && /session/i.test(data?.error ?? "") && (closedTimes.get(slug) ?? 0) === closedAtTap) {
         writeSession(slug, null);
+        answered = false;
         res = await send(session());
         data = (await res.json().catch(() => null)) as ObserveReply | null;
+        answered = true;
       }
       if (!res.ok || !data?.ok || !data.result) {
         throw new Error(
@@ -518,7 +524,9 @@ export function TutorChat({
       patchVerdict(requestId, { state: "failed", error: message });
     } finally {
       recording.current.delete(requestId);
-      if ((savingAnswer.get(slug) as { requestId?: string } | undefined)?.requestId === requestId) savingAnswer.delete(slug);
+      if (answered && (savingAnswer.get(slug) as { requestId?: string } | undefined)?.requestId === requestId) {
+        savingAnswer.delete(slug);
+      }
       release();
       if (saveQueue.get(slug) === mine) saveQueue.delete(slug);
     }
