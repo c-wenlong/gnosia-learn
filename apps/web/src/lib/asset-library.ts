@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import {
   assetCounts,
   assetDerivations,
+  assetParents,
   conceptsForAssets,
   derivationSources,
   listAssets,
@@ -15,6 +16,7 @@ import {
   type AssetDerivations,
   type AssetKindCount,
   type AssetNaming,
+  type AssetParents,
   type AssetRef,
   type TopicTitles,
   type AssetWithTopics,
@@ -31,7 +33,7 @@ import {
   compareByKindThenId,
   isCompanionKind,
 } from "@/lib/library";
-import { currentOwner, currentScope } from "@/lib/owner";
+import { currentOwner, currentScope, type OwnerScope } from "@/lib/owner";
 import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
 import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
 import { parseTranscript } from "@/lib/transcript";
@@ -105,6 +107,13 @@ export interface LibrarySnapshot {
    * and never the rows.
    */
   concepts: Record<string, string[]>;
+  /**
+   * Where each row came from (`assetParents`): its course and module, its
+   * concepts, the studio conversation and the tutor session, for the list
+   * row's source line. A row with none is absent. Optional like `concepts`,
+   * which it is read with: a row without a source line is still a row.
+   */
+  parents: Record<string, AssetParents>;
 }
 
 const EMPTY_LIBRARY: LibrarySnapshot = {
@@ -114,6 +123,7 @@ const EMPTY_LIBRARY: LibrarySnapshot = {
   truncated: false,
   titles: {},
   concepts: {},
+  parents: {},
 };
 
 /**
@@ -149,13 +159,20 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
     // outer `catch` a failing title query would have discarded rows that were
     // already in hand and rendered the library unreachable, which is the exact
     // opposite of the fallback the chips are written for.
-    const [titles, concepts] = await Promise.all([
+    //
+    // The parents are one statement for the whole page (`assetParents`), and
+    // the concepts a card names come out of the same answer, so this costs
+    // what the concept read alone did.
+    const [titles, parents] = await Promise.all([
       optionalTitles(db, rows),
-      optionalConcepts(
+      optionalParents(
         db,
         rows.map((row) => row.id),
+        scope,
       ),
     ]);
+    const concepts: Record<string, string[]> = {};
+    for (const [id, of] of Object.entries(parents)) if (of.concepts.length > 0) concepts[id] = of.concepts;
     return {
       rows: [...rows].sort(compareByKindThenId),
       counts,
@@ -163,6 +180,7 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
       truncated: rows.length >= LIBRARY_ROW_CAP,
       titles,
       concepts,
+      parents,
     };
   } catch (error) {
     warn("asset library", error);
@@ -428,6 +446,23 @@ async function optionalTitles(
     return await topicTitles(db, distinctTopics(rows), await currentScope());
   } catch (error) {
     warn("topic titles", error);
+    return {};
+  }
+}
+
+/**
+ * Where each of these assets came from, or nothing. See `optionalTitles` for
+ * why this cannot throw: a row without its source line is still a row.
+ */
+async function optionalParents(
+  db: CatalogDatabase,
+  ids: readonly string[],
+  scope: OwnerScope,
+): Promise<Record<string, AssetParents>> {
+  try {
+    return await assetParents(db, ids, scope);
+  } catch (error) {
+    warn("asset parents", error);
     return {};
   }
 }

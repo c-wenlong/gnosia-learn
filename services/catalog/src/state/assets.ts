@@ -489,6 +489,12 @@ export interface AssetWithTopics extends AssetRef {
    * for it.
    */
   createdAt: string;
+  /**
+   * When the row last changed, as an ISO instant: `asset.updated_at`, which
+   * every upsert sets (`updateSet` in `../content/upsert.ts`). The Library
+   * row says "edited" when it is more than a day after `createdAt`.
+   */
+  updatedAt: string;
 }
 
 /**
@@ -595,6 +601,7 @@ async function listScoped(
     .select({
       ...assetColumns(learnerId, names),
       createdAt: asset.createdAt,
+      updatedAt: asset.updatedAt,
       // Only chips for topics the reader may read (phase 4).
       topics: sql<string[]>`(
         select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug} collate "C"), '{}')
@@ -625,6 +632,7 @@ async function listScoped(
     ...row,
     topics: row.topics ?? [],
     createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   }));
 }
 
