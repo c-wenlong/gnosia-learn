@@ -10,8 +10,13 @@ import { isSessionToken, OBSERVE_SOURCES, SESSION_TEXT_LIMIT, type ObserveSource
  * evidence.
  *
  * ```ts
- * { conceptSlug, correct, source: "probe" | "teach", requestId, sessionId?, question?, answer?, chosen?, closeSession?, module? }
+ * { conceptSlug, correct, source: "probe" | "teach", requestId, sessionId?, question?, answer?, chosen?, closeSession?, module?, sessionTitle?, sessionGoal? }
  * ```
+ *
+ * `sessionTitle` and `sessionGoal` name the session the answer opens, and are
+ * read only then: the course topic tutor's chat (recall in the chat, phase 3)
+ * records answers on several concepts in one session, which is the topic's,
+ * not its first concept's. Without them a session is named after the concept.
  *
  * `module` is set by a module's week check (docs/proposals/module-learning-path.md,
  * "The week check"): a live module id the owner can read, written into the
@@ -66,6 +71,9 @@ interface ObserveRequest {
   closeSession: boolean;
   /** The module whose week check asked, or null. */
   module: string | null;
+  /** The title and goal of the session this answer opens, when not the concept's. */
+  sessionTitle: string | null;
+  sessionGoal: string | null;
 }
 
 /** A collection id as the course files write them: lowercase letters, digits and hyphens. */
@@ -117,7 +125,27 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
     chosen: optionalText(body, "chosen"),
     closeSession: optionalBoolean(body, "closeSession", false),
     module: typeof moduleId === "string" ? moduleId : null,
+    sessionTitle: sessionTitleOf(body),
+    sessionGoal: sessionGoalOf(body),
   };
+}
+
+/** A session's title: a short line of text. */
+function sessionTitleOf(body: Record<string, unknown>): string | null {
+  const value = body.sessionTitle;
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.trim() === "" || value.length > 200) {
+    throw new BadRequest(`"sessionTitle" must be 1 to 200 characters.`);
+  }
+  return value.trim();
+}
+
+/** A session's goal: an id, as the module and concept goals are. */
+function sessionGoalOf(body: Record<string, unknown>): string | null {
+  const value = body.sessionGoal;
+  if (value === undefined || value === null) return null;
+  if (!isSessionToken(value)) throw new BadRequest(`"sessionGoal" must be a short id of letters, digits, "-" and "_".`);
+  return value;
 }
 
 export const POST = handler("observe", parseObserve, async (db, input: ObserveRequest, owner) => {
@@ -145,7 +173,7 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
       input.sessionId === null
         ? undefined
         : input.module === null
-          ? { title: titleOf(input.conceptSlug), goal: input.conceptSlug }
+          ? { title: input.sessionTitle ?? titleOf(input.conceptSlug), goal: input.sessionGoal ?? input.conceptSlug }
           : { goal: input.module },
     module: input.module,
     requestId: input.requestId,

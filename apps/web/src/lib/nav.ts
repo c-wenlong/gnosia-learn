@@ -11,7 +11,7 @@
  * foot of the sidebar (docs/design/DESIGN.md, "Information architecture").
  *
  * Review is not a destination either (2026-10-04). `/review` still exists,
- * reached from a concept page's Review now and Home's Recall these, but the
+ * reached from a concept page's Review now and Home's All reviews, but the
  * sidebar does not offer the whole queue: the chat, the studio and the
  * videos never make a review card, so a top-level Review was a window onto
  * something the product's main surfaces cannot fill

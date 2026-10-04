@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ASSET_NAME_MAX, cleanAssetName } from "@self-learn/schema/shared";
 
 import { AskPanel } from "@/components/library/AskPanel";
 import { Button } from "@/components/ui/Button";
+import { Dialog, DIALOG_CLOSE_MS, type DialogSize } from "@/components/ui/Dialog";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
@@ -17,9 +18,6 @@ import { sendJson } from "@/lib/send-json";
 
 /** How long a confirmation ("Copied") stays beside the button. */
 const NOTICE_MS = 1800;
-
-/** The dialog's fade, in and out. */
-const DIALOG_MS = 200;
 
 const ICONS: Record<RowMenuItem["action"], GlyphName> = {
   open: "next",
@@ -89,7 +87,7 @@ export function RowMenu({
 
   // `at` counts the notices, so the same words twice still restart the timer.
   const say = (text: string, tone: StatusTone = "ok") => setNotice((held) => ({ text, tone, at: (held?.at ?? 0) + 1 }));
-  const refocus = () => root.current?.querySelector<HTMLButtonElement>("button[aria-haspopup]")?.focus({ preventScroll: true });
+  const moreButton = useCallback(() => root.current?.querySelector<HTMLButtonElement>("button[aria-haspopup]") ?? null, []);
 
   const favorite = async (on: boolean) => {
     setStarred(on);
@@ -180,8 +178,8 @@ export function RowMenu({
     }
   };
 
-  // Focus goes back to the button once the dialog has left the top layer:
-  // while it fades it is still modal, and would keep the focus.
+  // Focus goes back to the button once the dialog has left the top layer
+  // (`RowDialog`): while it fades it is still modal, and would keep it.
   const closeDialog = () => setDialog(null);
 
   return (
@@ -227,7 +225,7 @@ export function RowMenu({
             </MenuSection>
           ))}
       </Menu>
-      <RowDialog open={dialog === "rename"} label={`Rename ${title}`} wide={false} onClose={closeDialog} onClosed={refocus}>
+      <RowDialog open={dialog === "rename"} label={`Rename ${title}`} size="compact" button={moreButton} onClose={closeDialog}>
         {dialog === "rename" && (
           <RenameForm
             assetId={assetId}
@@ -242,9 +240,7 @@ export function RowMenu({
         )}
       </RowDialog>
       {asked !== null && (
-        // Kept once opened, as the asset page keeps its Ask panel: closing
-        // hides the thread, leaving the Library loses it.
-        <RowDialog open={dialog === "ask"} label={`Ask about ${title}`} wide keep onClose={closeDialog} onClosed={refocus}>
+        <RowDialog open={dialog === "ask"} label={`Ask about ${title}`} size="default" keep button={moreButton} onClose={closeDialog}>
           <AskPanel assetId={assetId} subject={asked} />
         </RowDialog>
       )}
@@ -262,90 +258,72 @@ function MenuSection({ divider, children }: { divider: boolean; children: ReactN
 }
 
 /**
- * A small modal dialog over the Library for Rename and Ask: `showModal()`,
- * so the page behind is inert and focus is trapped; Escape, Close and a press
- * on the backdrop close it, and focus goes back to the more button. It fades
- * and grows in and fades out (`usePresence`), at once under reduced motion.
+ * Rename's and Ask's dialog over the Library: the kit `Dialog` (modal, Escape
+ * and a press on the backdrop close it, focus kept inside and handed back to
+ * the more button), with a header holding its name and Close. It fades out
+ * for `DIALOG_CLOSE_MS` before it goes, at once under reduced motion.
+ *
+ * `keep` is Ask's: once opened it stays in the page, closed by hand rather
+ * than unmounted (the kit `Dialog` opens on mount and closes on unmount), so
+ * the thread `AskPanel` holds in its state, and a reply still on its way, are
+ * there when it is opened again, as the asset page's `Collapse` keeps them.
  */
 function RowDialog({
   open,
   label,
-  wide,
+  size,
   keep = false,
+  button,
   onClose,
-  onClosed,
   children,
 }: {
   open: boolean;
   label: string;
-  wide: boolean;
-  /** Stay in the page while closed (hidden, as a closed `<dialog>` is), so what it holds keeps its state. */
+  size: DialogSize;
   keep?: boolean;
+  /** The more button, which takes focus back when it closes. */
+  button: () => HTMLElement | null;
   onClose: () => void;
-  /** It has left the top layer: where focus goes back. */
-  onClosed: () => void;
   children: ReactNode;
 }) {
-  const closed = useRef(onClosed);
-  useEffect(() => {
-    closed.current = onClosed;
-  });
-  const { mounted, leaving } = usePresence(open, DIALOG_MS);
-  const ref = useRef<HTMLDialogElement>(null);
-  const pressedOnBackdrop = useRef(false);
-  // The last words shown, so the dialog keeps its title while it fades out.
-  const [shown, setShown] = useState({ label, wide });
-  if (open && (shown.label !== label || shown.wide !== wide)) setShown({ label, wide });
+  const { mounted, leaving } = usePresence(open, DIALOG_CLOSE_MS);
+  const ref = useRef<HTMLDialogElement | null>(null);
+  const [kept, setKept] = useState(false);
+  if (keep && open && !kept) setKept(true);
 
+  // A kept dialog is shown and hidden here; the first showing is the kit's.
   useEffect(() => {
     const dialog = ref.current;
-    if (!mounted || dialog === null) return;
-    if (!dialog.open) dialog.showModal();
-    // The field to type in, not the Close button `showModal` would pick:
-    // the rename field, or Ask's composer.
-    dialog.querySelector<HTMLElement>("[data-autofocus], textarea")?.focus();
-    return () => {
-      if (dialog.open) dialog.close();
-      closed.current();
-    };
-  }, [mounted]);
+    if (!keep || dialog === null) return;
+    if (mounted) {
+      if (!dialog.open) dialog.showModal();
+      dialog.querySelector<HTMLElement>("[data-autofocus], textarea")?.focus();
+    } else if (dialog.open) {
+      dialog.close();
+      button()?.focus({ preventScroll: true });
+    }
+  }, [keep, mounted, button]);
 
-  if (!mounted && !keep) return null;
+  if (!(keep ? kept : mounted)) return null;
   return (
-    <dialog
+    <Dialog
       ref={ref}
-      aria-label={shown.label}
-      onCancel={(event) => {
-        event.preventDefault();
+      label={label}
+      size={size}
+      closing={leaving}
+      opener={button}
+      onClose={() => {
         if (open) onClose();
       }}
-      onPointerDown={(event) => {
-        pressedOnBackdrop.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        const started = pressedOnBackdrop.current;
-        pressedOnBackdrop.current = false;
-        if (started && event.target === event.currentTarget && open) onClose();
-      }}
-      className={cx(
-        "m-auto flex-col overflow-hidden rounded-[20px] border-2 border-border bg-surface p-0 text-text open:flex",
-        "max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)]",
-        shown.wide ? "max-w-[40rem]" : "max-w-[28rem]",
-        "backdrop:bg-page/70 backdrop:backdrop-blur-[2px]",
-        "transition-[opacity,scale] duration-200 ease-soft starting:open:scale-[0.98] starting:open:opacity-0",
-        "backdrop:transition-opacity backdrop:duration-200 backdrop:ease-out starting:open:backdrop:opacity-0",
-        leaving && "pointer-events-none scale-[0.98] opacity-0 backdrop:opacity-0",
-        "motion-reduce:transition-none motion-reduce:backdrop:transition-none",
-      )}
     >
       <div className="flex shrink-0 items-center gap-3 py-3 pr-3 pl-5">
-        <h2 className="min-w-0 flex-1 truncate text-[16px] leading-snug font-bold text-text">{shown.label}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-[16px] leading-snug font-bold text-text">{label}</h2>
         <IconButton label="Close" onClick={() => open && onClose()}>
           <Glyph name="close" size={16} />
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-5">{children}</div>
-    </dialog>
+    </Dialog>
   );
 }
 

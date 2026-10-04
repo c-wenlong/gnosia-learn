@@ -30,6 +30,18 @@ export function buildAgentSessionContext(
 ): AgentSessionContext {
   const model = options?.model ?? DEFAULT_AGENT_MODEL;
   const objectives = buildLearningObjectives(course, module, topic);
+  // Phase 3 of docs/proposals/recall-in-chat.md: a check here is evidence on
+  // one of the concepts this topic declares, so the tutor names the concept
+  // it tests. A topic that declares none gets no rule, and its checks stay
+  // conversation.
+  const concepts = topic.concepts ?? [];
+  const checkRule =
+    concepts.length === 0
+      ? ""
+      : `10. A check is a question with a definite answer, asked so the learner answers from memory; the exit-ticket questions are checks. When a turn asks one, end the turn with a last line of exactly \`CHECK(<concept id>): <the question, on one line>\`, where the concept id is the one, from this list, that the question tests:
+${concepts.map((c) => `   - ${c}`).join("\n")}
+   The learner never sees that line; it is what lets their answer be recorded against that concept. At most one per turn. Leave it off every other turn, and off any question that tests none of these concepts.
+`;
   const angle = buildSessionAngle(course, module, topic);
   const noteBlock =
     options?.learnerNote && options.learnerNote.trim()
@@ -99,10 +111,10 @@ ${objectives.map((o, i) => `${i + 1}. ${o}`).join("\n")}
 4. After each learner reply: (a) brief feedback, (b) correct misconceptions, (c) one next question or a tiny exercise.
 5. Use the learner's own wording when possible; push for precision without being pedantic.
 6. If they are stuck: give a scaffolded hint, not the full answer.
-7. When most objectives look met, run a quick oral "exit ticket" (2–3 questions) and then summarize remaining gaps.
+7. When most objectives look met, run a quick oral "exit ticket" (2–3 questions, one per turn) and then summarize remaining gaps.
 8. Stay on this topic. Adjacent material only if needed for understanding.
 9. Never invent course policy or grading claims. If the syllabus is inferred, say so.
-
+${checkRule}
 ## Output style
 - Clear, conversational prose.
 - Use bullet points sparingly for checklists or exit tickets.
