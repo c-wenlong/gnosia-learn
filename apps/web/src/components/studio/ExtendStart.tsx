@@ -28,6 +28,8 @@ import {
   extendKey,
   extendRefusal,
   leaveOpener,
+  makeVideoTitle,
+  makeVideoValue,
   noteArrival,
   readingWords,
   sessionStore,
@@ -57,6 +59,11 @@ type Value = MentionValue<DraftKind>;
  * unsent words go into the conversation's composer with their chips where they
  * were typed (`ExtendOpener`).
  *
+ * Make a video of this (`&make=video`, D86 of docs/STUDIO-CHAT-FIRST.md) is
+ * the same press with a different start: the composer opens holding the
+ * Video chip and a sentence, and nothing is sent until the person presses
+ * Send, here or in the conversation.
+ *
  * A refusal stays in this panel, where the press was, with what to do about
  * it (`extendRefusal`). Once the draft exists the composer closes and says
  * so, and what it holds goes with the hand-off: a message sent here as the
@@ -68,6 +75,7 @@ export function ExtendStart({
   path,
   listed,
   talk = false,
+  makeVideo = false,
   video = null,
 }: {
   name: string;
@@ -77,6 +85,8 @@ export function ExtendStart({
   listed: boolean;
   /** From Talk it through (`&talk=1`): no opener is sent, prefill or not. */
   talk?: boolean;
+  /** From Make a video of this (`&make=video`): no opener is sent, and the composer starts with the Video chip and a sentence. */
+  makeVideo?: boolean;
   /** The video doctor, as the conversation's menu reads it: whether Video can be tagged. Unknown reads as available. */
   video?: VideoAvailability | null;
 }) {
@@ -87,13 +97,15 @@ export function ExtendStart({
   const [opening, setOpening] = useState(false);
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
-  const [value, setValueState] = useState<Value>(EMPTY_MENTION_VALUE);
+  // Make a video of this starts with its words in place; every other press starts empty.
+  const [initial] = useState<Value>(() => (makeVideo ? makeVideoValue(video) : EMPTY_MENTION_VALUE));
+  const [value, setValueState] = useState<Value>(initial);
   const [queued, setQueuedState] = useState<Value | null>(null);
   // What the post's continuation hands over. Written with the state, in the
   // same handler, rather than by an effect after the render: a keystroke
   // made just before the post resolved is in these, where an effect would
   // not have run yet.
-  const typed = useRef<{ value: Value; queued: Value | null }>({ value: EMPTY_MENTION_VALUE, queued: null });
+  const typed = useRef<{ value: Value; queued: Value | null }>({ value: initial, queued: null });
   const setValue = useCallback((next: Value) => {
     typed.current.value = next;
     setValueState(next);
@@ -119,7 +131,10 @@ export function ExtendStart({
     running.current = true;
     setRefused(null);
     const store = sessionStore();
-    const key = extendKey(store, name, () => idempotencyKey("extend"));
+    // Its own print, so an Extend press on the same diagram a moment ago
+    // (closed mid-read, its opener still waiting) is not the draft this one
+    // opens, and its opener is never sent from here.
+    const key = extendKey(store, name, () => idempotencyKey(makeVideo ? "make-video" : "extend"), Date.now(), makeVideo ? "video" : undefined);
     const result = await createDraft({ source: name, idempotencyKey: key });
     running.current = false;
     // Closed meanwhile. A draft that was made keeps its key for a while, so
@@ -142,9 +157,11 @@ export function ExtendStart({
     // everything there is to carry: a message sent goes as the first turn,
     // and whatever is left unsent lands in the conversation's composer.
     setOpening(true);
-    noteArrival(result.data.draftId, name);
+    noteArrival(result.data.draftId, name, makeVideo ? "video" : "extend");
     const { value: unsent, queued: waiting } = typed.current;
-    const first = firstTurn(waiting, talk);
+    // Make a video of this never sends on its own: what it starts with is in
+    // the composer, for the person to read and send.
+    const first = firstTurn(waiting, talk || makeVideo);
     // A reload before the navigation below landed runs this press again with
     // only what was typed since, and gets the same draft: the opener it left
     // first keeps the message that was waiting unless another was queued
@@ -162,7 +179,7 @@ export function ExtendStart({
       }, waiting !== null),
     );
     router.replace(panelHref(path, { extend: null, draft: result.data.draftId }), { scroll: false });
-  }, [name, title, path, talk, router, isClosing, setQueued, setValue]);
+  }, [name, title, path, talk, makeVideo, router, isClosing, setQueued, setValue]);
 
   useEffect(() => {
     // The post runs from an effect because this panel is what a link opens:
@@ -209,7 +226,7 @@ export function ExtendStart({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <DialogHeader title={`Extending ${title}`} />
+      <DialogHeader title={makeVideo ? makeVideoTitle(title) : `Extending ${title}`} />
 
       <div
         role="log"
@@ -282,8 +299,8 @@ export function ExtendStart({
               setQueued(body);
               setValue(EMPTY_MENTION_VALUE);
             }}
-            label="Tell the planner what to add to this diagram"
-            placeholder="What should it gain?"
+            label={makeVideo ? "Tell the planner what the video should explain" : "Tell the planner what to add to this diagram"}
+            placeholder={makeVideo ? "What should the video explain?" : "What should it gain?"}
             mentions={options}
             mentionHint={MENTION_HINT}
             // Focus once it has loaded, unless the person has gone elsewhere.

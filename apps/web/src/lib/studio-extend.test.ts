@@ -16,7 +16,11 @@ import {
   takePrefill,
   talkItThroughText,
   talkTarget,
+  MAKE_VIDEO_WORDS,
+  makeVideoTitle,
+  makeVideoValue,
 } from "./studio-extend";
+import { openerValue } from "./studio-cards";
 import { RUNNER_DOWN } from "./studio-drafts";
 
 /** A `Storage` in memory, and one whose every call throws like a blocked one. */
@@ -313,6 +317,54 @@ describe("the opener handed to the conversation", () => {
     const forgetful = { getItem: () => null, setItem: () => {}, removeItem: () => {} } as unknown as Storage;
     leaveOpener(forgetful, "held-2", opener);
     expect(takeOpener(forgetful, "held-2")).toMatchObject({ send: "@video" });
+  });
+});
+
+describe("Make a video of this (D86)", () => {
+  it("starts the composer with the Video chip and the sentence, and never a first turn", () => {
+    const value = makeVideoValue({ ok: true, reason: null });
+    expect(value).toEqual({ text: `@video ${MAKE_VIDEO_WORDS}`, mentions: [{ kind: "video", start: 0, end: 6 }] });
+    // Unknown availability reads as available, as the menu reads it.
+    expect(makeVideoValue(null)).toEqual(value);
+    // Nothing queued: the press sends nothing, whatever it holds.
+    expect(firstTurn(null, true)).toBeNull();
+    expect(makeVideoTitle("Dot product")).toBe("A video of Dot product");
+  });
+
+  it("leaves the words without a chip when the video doctor says no", () => {
+    expect(makeVideoValue({ ok: false, reason: "manimkc is not installed" })).toEqual({ text: MAKE_VIDEO_WORDS, mentions: [] });
+  });
+
+  it("reaches the conversation's composer with its chip where it was, and sends nothing", () => {
+    const store = memory();
+    const value = makeVideoValue({ ok: true, reason: null });
+    leaveOpener(store, "dv", { send: null, sendMentions: [], compose: value.text, composeMentions: value.mentions, source: "dot-product" });
+    const opener = takeOpener(store, "dv")!;
+    expect(opener.send).toBeNull();
+    expect(openerValue(opener)).toEqual(value);
+  });
+
+  it("does not take the key an Extend press on the same diagram left, nor leave it one", () => {
+    const store = memory();
+    let minted = 0;
+    const fresh = () => `k${++minted}`;
+    const extend = extendKey(store, "dot-product", fresh, 1_000);
+    const video = extendKey(store, "dot-product", fresh, 2_000, "video");
+    expect(video).not.toBe(extend);
+    // A reload of the video press finds its own draft.
+    expect(extendKey(store, "dot-product", fresh, 3_000, "video")).toBe(video);
+    // And Extend after it is its own press again.
+    expect(extendKey(store, "dot-product", fresh, 4_000)).not.toBe(video);
+  });
+
+  it("remembers that a draft was opened for a video, in this tab only", async () => {
+    const { arrivingPurpose, arrivingSource, noteArrival } = await import("./studio-extend");
+    expect(arrivingPurpose("fresh-v")).toBeNull();
+    noteArrival("dv1", "dot-product", "video");
+    noteArrival("de1", "dot-product");
+    expect(arrivingPurpose("dv1")).toBe("video");
+    expect(arrivingSource("dv1")).toBe("dot-product");
+    expect(arrivingPurpose("de1")).toBe("extend");
   });
 });
 

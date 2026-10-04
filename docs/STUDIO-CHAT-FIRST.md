@@ -870,6 +870,16 @@ block in the planner's prompt, and opens the chat with the diagram's thumbnail
 pinned at the top of the thread at 160px tall. The planner's first reply names
 what it sees in the diagram and asks what to add.
 
+*Since D86:* the panel carries Make a video of this beside Extend, and the
+canvas page's toolbar carries Make a video. It is the same press
+(`?extend=<name>&make=video`, the same `POST /api/drafts { source }` and the
+same panel while the diagram is read), with two differences: no opener is
+sent, and the composer starts with the Video chip and "Make a video that
+explains this diagram.", which the person edits and sends. The header and the
+studio's unpaid opening turn speak of a video in the tab that pressed it. When
+the video doctor fails, the panel's button is disabled with its reason and the
+toolbar's is left out.
+
 ### Narrow widths, keyboard and focus
 
 | Width | The panel |
@@ -1282,6 +1292,44 @@ rail, and both were the reference given.
 reach a diagram, which is the studio's other main use), and a rail that
 only opens on a click (the owner asked for hover, and the click is there
 too, on the toggle).
+
+### D86. A video of a diagram is a Video tag in a conversation opened on it
+
+**Verdict:** Make a video of this, in a diagram's panel and on the canvas
+toolbar, opens the conversation Extend opens (a draft with `source` naming the
+diagram, so the planner has its EXTENDING block), sends nothing, and leaves
+the Video chip and "Make a video that explains this diagram." in the composer.
+The person reads it, edits it if they like, and presses Send; the planner
+answers with a new video brief (`mode: "new"`), and Make video queues it like
+any other. The runner is unchanged: a draft opened on a diagram already
+carries every kind the machine has (`plannerKinds`), the video section of
+the combined prompt, and the EXTENDING block, and `prepare` makes a new video
+from any draft. A `change` brief naming the diagram's slug is still refused
+(`change-not-in-conversation`), since the diagram is not a video the
+conversation opened on. `services/studio/test/mentions.test.ts`, "a video of
+a diagram", holds both with the fake `claude`. The button is disabled with the
+video doctor's reason when videos cannot be made (`kindUnavailable`), and
+left out of the crowded canvas toolbar then.
+
+**Why:** the owner asked for a one-press way from a diagram to a video, after
+Gauth's story page, which puts Generate Video beside its picture
+(`docs/design/reference/gauth/components.md`). The studio already had every
+piece: a conversation opened on the diagram, a tag that orders a brief, and a
+composer an opener can fill (a video's Change does it with the same chip,
+STUDIO-MENTIONS.md 2c). Prefilling rather than sending keeps the rule every
+other hand-off follows: nothing is paid for until the person presses Send.
+
+**Rejected:** a `sourceKind` or purpose on the draft telling the planner "make
+a video of this" (a runner and prompt change for what the person's own
+sentence already says, and every extend draft's prompt is quoted and tested
+byte for byte); sending the sentence on arrival, as Extend sends its opener
+(a paid turn the person did not press, for a video they may want to shape
+first); and a separate button that queues a video job directly from the
+diagram (no brief to read, no script to approve, and the video agent draws
+from the brief alone). The header and the opening turn say "video" only in
+the tab that pressed the button: the runner records no purpose, so after a
+reload the conversation reads as an Extend one until the first brief names
+it, a cost judged smaller than a schema change.
 
 ## Later: other kinds of asset
 

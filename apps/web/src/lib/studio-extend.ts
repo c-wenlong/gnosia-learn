@@ -1,5 +1,5 @@
-import { validMentions, type MentionValue } from "@/components/ui/mention-text";
-import { isDraftKind, runnerDown, type DraftKind, type DraftMention, type Refusal } from "@/lib/studio-drafts";
+import { validMentions, valueOf, type MentionValue } from "@/components/ui/mention-text";
+import { isDraftKind, runnerDown, type DraftKind, type DraftMention, type Refusal, type VideoAvailability } from "@/lib/studio-drafts";
 
 /**
  * Extend from a tile (docs/STUDIO-CHAT-FIRST.md, phase 2): the words, the
@@ -49,6 +49,47 @@ export const EXTEND_OPENER = "I'd like to add to this diagram. What's in it now?
  */
 export const EXTEND_OPENING_TURN =
   "I've read this diagram. Tell me what it should gain, or ask me what's in it first.";
+
+/* -------------------------------------------------------------------------- */
+/* Make a video of this (D86 of docs/STUDIO-CHAT-FIRST.md)                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The sentence Make a video of this leaves in the composer, after the Video
+ * chip. Short and plain, because the person reads it and may rewrite it
+ * before anything is paid for; "this diagram" is the one the conversation
+ * opened on, which the planner has as its EXTENDING block.
+ */
+export const MAKE_VIDEO_WORDS = "Make a video that explains this diagram.";
+
+/**
+ * What the composer starts with on a Make a video of this press: the Video
+ * chip, then `MAKE_VIDEO_WORDS`. Never sent on its own. When the video doctor
+ * says videos cannot be made (only a hand-typed URL gets here, since the
+ * button is disabled then) the words go in without the chip, and the menu
+ * says why the chip cannot be added. Unknown availability reads as
+ * available, as the menu reads it.
+ */
+export function makeVideoValue(video: VideoAvailability | null): MentionValue<DraftKind> {
+  if (video !== null && !video.ok) return { text: MAKE_VIDEO_WORDS, mentions: [] };
+  return valueOf<DraftKind>([
+    { type: "mention", kind: "video" },
+    { type: "text", text: ` ${MAKE_VIDEO_WORDS}` },
+  ]);
+}
+
+/**
+ * The studio's unpaid opening turn on a conversation Make a video of this
+ * opened, in place of `EXTEND_OPENING_TURN`, which asks what the diagram
+ * should gain.
+ */
+export const MAKE_VIDEO_OPENING_TURN =
+  "I've read this diagram. Send the message below as it is, or say what the video should focus on first.";
+
+/** The header while such a conversation has no brief to name it. */
+export function makeVideoTitle(title: string): string {
+  return `A video of ${title}`;
+}
 
 /** The pending line, which grows a second sentence once the wait is long enough to wonder about. */
 export function readingWords(elapsedMs: number): { lead: string; more: string | null } {
@@ -421,12 +462,26 @@ export function takePrefill(storage: Storage | null, name: string): string | nul
  * reload renders on the server first, where this is always empty, and in a
  * fresh tab it is empty too, so the two renders cannot disagree.
  */
-const arriving = new Map<string, string>();
+const arriving = new Map<string, { name: string; purpose: ArrivalPurpose }>();
 
-export function noteArrival(draftId: string, name: string): void {
-  arriving.set(draftId, name);
+/**
+ * What the press was for: Extend, or Make a video of this (D86). The runner
+ * records only that the draft opened on a diagram, so this is what lets the
+ * conversation's header and its opening turn speak of a video rather than of
+ * extending. Memory only, for the reason above: after a reload the
+ * conversation reads as an Extend one until its first brief names it.
+ */
+export type ArrivalPurpose = "extend" | "video";
+
+export function noteArrival(draftId: string, name: string, purpose: ArrivalPurpose = "extend"): void {
+  arriving.set(draftId, { name, purpose });
 }
 
 export function arrivingSource(draftId: string): string | null {
-  return arriving.get(draftId) ?? null;
+  return arriving.get(draftId)?.name ?? null;
+}
+
+/** The press a just-created draft came from, or null when this tab did not see it made. */
+export function arrivingPurpose(draftId: string): ArrivalPurpose | null {
+  return arriving.get(draftId)?.purpose ?? null;
 }

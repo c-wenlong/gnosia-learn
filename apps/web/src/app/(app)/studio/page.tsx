@@ -17,6 +17,7 @@ import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
 import { diagramAvailability, videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
+import { makeVideoTitle } from "@/lib/studio-extend";
 import { readVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
@@ -219,9 +220,19 @@ export default async function StudioPage({
     if (view.extend !== null) {
       const title = titleOf(titles, view.extend) ?? view.extend;
       return (
-        <StudioDialog key="conversation" closeHref={closeHref} label={`Extending ${title}`} tall>
-          {/* Keyed by name: Extend on another diagram is another press, with its own post. */}
-          <ExtendStart key={view.extend} name={view.extend} title={title} path={path} listed={titleOf(titles, view.extend) !== null} talk={view.talk} video={videoState} />
+        <StudioDialog key="conversation" closeHref={closeHref} label={view.makeVideo ? makeVideoTitle(title) : `Extending ${title}`} tall>
+          {/* Keyed by name and press: Extend on another diagram, or Make a
+              video of this one, is another press, with its own post. */}
+          <ExtendStart
+            key={`${view.extend}:${view.makeVideo ? "video" : "extend"}`}
+            name={view.extend}
+            title={title}
+            path={path}
+            listed={titleOf(titles, view.extend) !== null}
+            talk={view.talk}
+            makeVideo={view.makeVideo}
+            video={videoState}
+          />
         </StudioDialog>
       );
     }
