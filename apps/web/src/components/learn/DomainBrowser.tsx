@@ -172,7 +172,11 @@ export function DomainView({
 }) {
   const graphNodes = useMemo(() => new Map<string, DomainGraphNode>([...rows].map(([id, r]) => [id, r])), [rows]);
   const focus = selected === null ? null : (rows.get(selected) ?? null);
-  const [hover, setHover] = useState<string | null>(null);
+  // A pointer's hover and the list's focus are kept apart, so the mouse leaving a
+  // focused row does not take the focus's light with it; the pointer wins while it lasts.
+  const [pointerHover, setPointerHover] = useState<string | null>(null);
+  const [focusHover, setFocusHover] = useState<string | null>(null);
+  const hover = pointerHover ?? focusHover;
   const [hoverTopic, setHoverTopic] = useState<string | null>(null);
   const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
   // The pill goes as Reset starts, not when the glide home ends.
@@ -218,10 +222,11 @@ export function DomainView({
                 setHoverTopic(null);
                 onGo({ domain: domain.slug, topic: t });
               }}
-              onHover={setHover}
+              onHover={setPointerHover}
               onHoverTopic={setHoverTopic}
               onMove={move}
               onMoveEnd={save}
+              locked={gliding}
             />
             {domain.links.length > 0 && (
               <p data-outside className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-text2">
@@ -264,7 +269,8 @@ export function DomainView({
               hover={hover}
               onGo={onGo}
               onSelect={onSelect}
-              onHover={setHover}
+              onHover={setPointerHover}
+              onFocusHover={setFocusHover}
               onHoverTopic={setHoverTopic}
             />
           </div>
@@ -326,25 +332,34 @@ function useMoved(domain: string, layout: DomainLayout) {
     },
     [],
   );
-  const write = (value: Record<string, Point>) => {
+  /** True when storage took it; false when it refused, and the caller keeps what it holds. */
+  const write = (value: Record<string, Point>): boolean => {
+    let stored = true;
     try {
       if (Object.keys(value).length === 0) window.sessionStorage.removeItem(movedKey(domain));
       else window.sessionStorage.setItem(movedKey(domain), JSON.stringify(value));
     } catch {
-      // Not remembered, still moved.
+      stored = false;
     }
     window.dispatchEvent(new Event(MOVED_EVENT));
+    return stored;
   };
-  const move = (id: string, to: Point) => setLive((m) => ({ ...(m ?? saved), [id]: to }));
+  // A drag during Reset's glide would be overwritten by its next frame, so the glide takes none.
+  const move = (id: string, to: Point) => {
+    if (!gliding) setLive((m) => ({ ...(m ?? saved), [id]: to }));
+  };
+  /** Remember a drag; one storage refuses stays drawn where it was dropped, only not remembered. */
   const save = () => {
-    write(moved);
-    setLive(null);
+    if (!gliding && write(moved)) setLive(null);
   };
   /** Back to the layout's places, gliding there unless motion is reduced. */
   const reset = () => {
     const from = moved;
+    const reduced = prefersReducedMotion() || typeof requestAnimationFrame === "undefined";
+    // Hold the dropped places until the first frame, so clearing storage does not flash them home.
+    setLive(reduced ? null : from);
     write({});
-    if (prefersReducedMotion() || typeof requestAnimationFrame === "undefined") {
+    if (reduced) {
       setLive(null);
       return;
     }
@@ -386,6 +401,7 @@ function ConceptList({
   onGo,
   onSelect,
   onHover,
+  onFocusHover,
   onHoverTopic,
 }: {
   domain: DomainSummary;
@@ -399,6 +415,7 @@ function ConceptList({
   onSelect: (id: string) => void;
   /** Hover and focus here light the graph, as the graph's hover lights a row (D5, D7). */
   onHover: (id: string | null) => void;
+  onFocusHover: (id: string | null) => void;
   onHoverTopic: (topic: string | null) => void;
 }) {
   const groups = topic === null ? layout.groups : layout.groups.filter((g) => g.topic === topic);
@@ -436,8 +453,8 @@ function ConceptList({
                     onClick={() => onSelect(id)}
                     onMouseEnter={() => onHover(id)}
                     onMouseLeave={() => onHover(null)}
-                    onFocus={() => onHover(id)}
-                    onBlur={() => onHover(null)}
+                    onFocus={() => onFocusHover(id)}
+                    onBlur={() => onFocusHover(null)}
                     className={cx(
                       "flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text transition-colors duration-100 hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent motion-reduce:transition-none",
                       id === selected && "bg-surface font-semibold",

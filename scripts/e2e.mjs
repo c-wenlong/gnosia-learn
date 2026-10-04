@@ -713,6 +713,11 @@ async function run() {
     await clickHydrated(page, main.locator('[data-moved]').getByRole('button', { name: 'Reset' }));
     await main.locator('[data-moved]').waitFor({ state: 'detached' });
     await page.waitForFunction((x) => Number(document.querySelector('[data-concept="self-attention"] circle[data-dot]')?.getAttribute('cx')) === x, cx);
+
+    // A plain press still selects: a pointer captured on press would send the click to the svg.
+    await graph.locator('[data-concept="softmax"]').click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('concept') === 'softmax');
+    assert((await graph.locator('[data-concept="softmax"]').getAttribute('aria-pressed')) === 'true', 'a plain press did not select');
   });
 
   // D7: every concept in a domain is a button in the list, reached by Tab.
