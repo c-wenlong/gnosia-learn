@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ConceptCheck } from "@/lib/concept-note-core";
 import {
   asksNothing,
+  canAskAgain,
   buildSessionPlan,
   isEmptyStep,
   sessionCanAsk,
@@ -487,5 +488,23 @@ describe("ids and the tutor prefill", () => {
     expect(tutorPrefill(q, 1)).toBe("I was asked: Why zero? I answered: Parallel. The answer was: Perpendicular. Why?");
     expect(tutorPrefill(q, null)).toContain("I didn't know.");
     expect(tutorPrefill(q, 0)).toContain("Why is that right");
+  });
+});
+
+describe("canAskAgain: a step the tutor failed to fill", () => {
+  const base = { modelAvailable: true, hasOwnQuestion: false, hasFallback: false, resolved: { question: null } };
+  it("offers to ask again when the tutor's request came back with no question", () => {
+    expect(canAskAgain(base)).toBe(true);
+  });
+  it("does not while the request is still out", () => {
+    expect(canAskAgain({ ...base, resolved: undefined })).toBe(false);
+  });
+  it("does not when the tutor answered, or the note or a fallback had a question", () => {
+    expect(canAskAgain({ ...base, resolved: { question: {} } })).toBe(false);
+    expect(canAskAgain({ ...base, hasOwnQuestion: true })).toBe(false);
+    expect(canAskAgain({ ...base, hasFallback: true })).toBe(false);
+  });
+  it("does not with no tutor model, where asking again would ask nobody", () => {
+    expect(canAskAgain({ ...base, modelAvailable: false })).toBe(false);
   });
 });

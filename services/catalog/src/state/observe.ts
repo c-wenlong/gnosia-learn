@@ -319,6 +319,9 @@ async function readableModule(
           isNull(collection.archivedAt),
           isNull(course.archivedAt),
           ownedBy(collection.ownerId, owners),
+          // And its course: a module of theirs under a course they cannot
+          // read is not one their week check answers against.
+          ownedBy(course.ownerId, owners),
         ),
       )
       .limit(1),

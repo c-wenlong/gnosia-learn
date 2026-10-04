@@ -668,3 +668,25 @@ export function tutorPrefill(question: SessionQuestion, picked: number | null): 
     picked === question.correct ? "Why is that right, and what would make it wrong?" : `The answer was: ${bare(right)}. Why?`;
   return clip(`I was asked: ${clip(question.prompt, 400)} ${mine} ${tail}`, PREFILL_LIMIT);
 }
+
+/**
+ * Whether a question step the tutor was asked to fill can be asked again:
+ * the request came back with no question (a rate limit, an error, the
+ * network), the note had none and there is no fallback. Asked only when a
+ * tutor model is set up, so asking again has someone to ask. Without it a
+ * failed request ended the step, and in a week check its concept, untested.
+ */
+export function canAskAgain(input: {
+  modelAvailable: boolean;
+  hasOwnQuestion: boolean;
+  hasFallback: boolean;
+  resolved: { question: unknown | null } | undefined;
+}): boolean {
+  return (
+    input.modelAvailable &&
+    !input.hasOwnQuestion &&
+    !input.hasFallback &&
+    input.resolved !== undefined &&
+    input.resolved.question === null
+  );
+}

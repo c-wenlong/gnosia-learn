@@ -89,6 +89,8 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
           { id: "fx-m2", kind: "module", slug: "m2", title: "Dropped", parentId: "fx", position: 1, archivedAt: new Date() },
           { id: "theirs", kind: "course", slug: "theirs", title: "Theirs", ownerId: "someone-else" },
           { id: "theirs-m1", kind: "module", slug: "m1", title: "Theirs", parentId: "theirs", ownerId: "someone-else" },
+          // The learner's own module under a course they cannot read.
+          { id: "mine-under-theirs", kind: "module", slug: "m2", title: "Mine", parentId: "theirs", position: 2 },
         ])
         .onConflictDoNothing();
     });
@@ -115,6 +117,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
       ["no module of that id", "fx-m9"],
       ["an archived module", "fx-m2"],
       ["another owner's module", "theirs-m1"],
+      ["their own module under a course they cannot read", "mine-under-theirs"],
       ["a course rather than a module", "fx"],
     ])("refuses %s, and writes nothing", async (_label, module) => {
       const graph = await readConceptGraph(scratch.db, LOCAL);

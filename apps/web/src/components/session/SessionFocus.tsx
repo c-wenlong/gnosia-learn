@@ -22,6 +22,7 @@ import {
   type SessionQuestion,
   type SessionStep,
   withConsequence,
+  canAskAgain,
 } from "@/lib/session-core";
 import {
   outcomeOf,
@@ -237,6 +238,16 @@ export function SessionFocus({
         setResolved((prev) => ({ ...prev, [at]: { question: null, note: "The tutor could not be reached." } }));
       });
   }, [index, steps, modelAvailable, graded, questionFor, conceptOf]);
+
+  // A failed request is forgotten, and the effect above asks again.
+  const askAgain = useCallback(() => {
+    requested.current.delete(index);
+    setResolved((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  }, [index]);
 
   const current = questionFor(index);
   // Joined here rather than in the JSX: a call on `current.note` down there made the React Compiler
@@ -505,6 +516,16 @@ export function SessionFocus({
               <p className="text-[14px] leading-[1.5] text-text2">
                 {noQuestion}
               </p>
+              {canAskAgain({
+                modelAvailable,
+                hasOwnQuestion: step?.question != null,
+                hasFallback: step?.fallback != null,
+                resolved: resolved[index],
+              }) && (
+                <Button variant="secondary" size="sm" className="self-start" onClick={askAgain}>
+                  Ask again
+                </Button>
+              )}
             </div>
           )}
 
