@@ -75,6 +75,7 @@ export function DomainGraph({
   marks,
   hover,
   hoverTopic,
+  preview = null,
   moved,
   onSelect,
   onTopic,
@@ -96,6 +97,8 @@ export function DomainGraph({
   /** The concept under the pointer or the list's focus (D5), and the topic whose title is. */
   hover: string | null;
   hoverTopic: string | null;
+  /** The concepts a legend chip previews (D9), kept lit as a topic's group is. */
+  preview?: ReadonlySet<string> | null;
   /** Concepts dragged from where the layout put them (D6). */
   moved: Readonly<Record<string, Point>>;
   onSelect: (id: string) => void;
@@ -143,13 +146,13 @@ export function DomainGraph({
   // A label drawn larger than the layout's size reaches further below its dot, so the frame grows to hold the bottom row's.
   const live = { ...fit, height: fit.height + Math.max(0, labelFoot(2, font) - labelFoot(2)) };
   const view = frozen ?? live;
-  // What stays lit (D5): a concept and its neighbours, or a topic's group.
+  // What stays lit (D5, D9): a concept and its neighbours, a topic's group, or a legend chip's.
   const keep =
     hover !== null && shown.has(hover)
       ? neighbours(edges, hover)
       : hoverTopic !== null
         ? new Set(groups.find((g) => g.topic === hoverTopic)?.concepts ?? [])
-        : null;
+        : preview;
   const hot = (e: GraphEdge) => hover !== null && (e.from === hover || e.to === hover);
   // Which labels are drawn (D10): placed in priority order, skipping any that would collide.
   // Not memoised: every render that reaches here (a hover, a drag frame, a selection) changes

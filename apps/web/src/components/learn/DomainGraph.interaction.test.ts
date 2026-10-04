@@ -364,6 +364,19 @@ describe("domain graph label culling", () => {
     expect(concept(host, "dfs").getAttribute("aria-label")).toMatch(/^Dfs, Learning/);
   });
 
+  it("gives the concepts a group preview keeps lit their labels first", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 1);
+    // Pile quick (sorting) against dfs (graphs): neither has a dependant, so the lower id, dfs, keeps its label.
+    const dfs = { x: cxOf(host, "dfs"), y: Number(dotOf(host, "dfs").getAttribute("cy")) };
+    const quick = { x: cxOf(host, "quick"), y: Number(dotOf(host, "quick").getAttribute("cy")) };
+    dragBy(host, svg, "quick", dfs.x + 6 - quick.x, dfs.y + 4 - quick.y);
+    expect([labelOf(host, "dfs"), labelOf(host, "quick")]).toEqual(["shown", "hidden"]);
+    // Lighting the sorting group puts quick first.
+    enter(host.querySelector('[data-topic-title="sorting"]') as Element);
+    expect([labelOf(host, "dfs"), labelOf(host, "quick")]).toEqual(["hidden", "shown"]);
+  });
+
   // Review of #385: a label's press area is the label's own box, so it never covers another concept's dot.
   it("keeps every label's press area off the other concepts' dots, after a drag too", () => {
     const { host, svg } = mount();
