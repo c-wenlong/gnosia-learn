@@ -237,6 +237,15 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     expect(response.headers.get("content-length")).toBe(String(Buffer.byteLength(body, "utf8")));
   });
 
+  it("saves a note under its title with ?download=1", async () => {
+    const response = await FILE(new Request(`${ORIGIN}/api/assets/${encodeURIComponent(NOTE_ID)}/file?download=1`), {
+      params: Promise.resolve({ id: NOTE_ID }),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="Base.md"');
+  });
+
   it("answers a Range request on row text with the slice", async () => {
     const whole = Buffer.from((await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "", "utf8");
     const response = await call(FILE, "file", NOTE_ID, { range: "bytes=0-2" });
