@@ -1,0 +1,121 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+
+import { SIDEBAR_COOKIE, writeSidebarCookie } from "@/lib/sidebar-cookie";
+
+import { AppSidebar } from "./AppSidebar";
+import { PhoneHeader } from "./PhoneHeader";
+import { PublishContext, ShellContext, type ShellControls, type StudioChats } from "./shell-context";
+
+/**
+ * The client half of `AppShell`: the sidebar beside a column holding the
+ * phone header and whatever the server drew (the store banner and the page),
+ * and the state the three share: the phone's drawer, the desktop fold, and
+ * the conversations the studio page publishes (`usePublishStudioChats`).
+ *
+ * It lives in the `(app)` layout, which Next keeps mounted across
+ * navigations, so the sidebar's scroll, its fold and the conversation list
+ * it read survive moving between pages.
+ */
+export function ShellFrame({
+  studio,
+  initialCollapsed,
+  children,
+}: {
+  studio: boolean;
+  initialCollapsed: boolean;
+  children: ReactNode;
+}) {
+  const [drawer, setDrawer] = useState(false);
+  const [collapsed, setCollapsedState] = useState(initialCollapsed);
+  const [chats, setChats] = useState<StudioChats | null>(null);
+
+  // A navigation closes the drawer: the pick that caused it is done.
+  const pathname = usePathname();
+  const [seenPath, setSeenPath] = useState(pathname);
+  if (pathname !== seenPath) {
+    setSeenPath(pathname);
+    if (drawer) setDrawer(false);
+  }
+
+  // Back or Forward closes it too: on /studio they can move between views
+  // without changing the path, and the drawer would cover the new one.
+  useEffect(() => {
+    if (!drawer) return;
+    const onPop = () => setDrawer(false);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [drawer]);
+
+  // The studio's own sidebar (#301) kept its fold in `localStorage`. Carried
+  // into the cookie once, where the server can read it, and then dropped.
+  useEffect(() => {
+    const folded = takeLegacyFold();
+    if (folded !== null && !document.cookie.split("; ").some((part) => part.startsWith(`${SIDEBAR_COOKIE}=`))) {
+      // Only readable once in the browser, so the server drew it open; this
+      // happens once per browser, the first visit after the move.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCollapsedState(folded);
+      writeSidebarCookie(folded);
+    }
+  }, []);
+
+  // Widened past the drawer's range: the sidebar is a column again, and a
+  // drawer left open would leave the page inert behind nothing.
+  useEffect(() => {
+    if (!drawer) return;
+    const wide = window.matchMedia("(min-width: 768px)");
+    const onWide = () => {
+      if (wide.matches) setDrawer(false);
+    };
+    wide.addEventListener("change", onWide);
+    return () => wide.removeEventListener("change", onWide);
+  }, [drawer]);
+
+  const openDrawer = useCallback(() => setDrawer(true), []);
+  const closeDrawer = useCallback(() => setDrawer(false), []);
+  const setCollapsed = useCallback((value: boolean) => {
+    setCollapsedState(value);
+    writeSidebarCookie(value);
+  }, []);
+
+  const controls = useMemo<ShellControls>(
+    () => ({ studio, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats, setChats }),
+    [studio, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats],
+  );
+
+  return (
+    <PublishContext.Provider value={setChats}>
+      <ShellContext.Provider value={controls}>
+        <div
+          className={[
+            "group/shell flex min-h-full bg-page text-text",
+            "has-[[data-layout=full]]:h-dvh has-[[data-layout=full]]:overflow-hidden",
+            "min-[900px]:has-[[data-layout=workspace]]:h-dvh min-[900px]:has-[[data-layout=workspace]]:overflow-hidden",
+          ].join(" ")}
+        >
+          <AppSidebar />
+          {/* Inert behind the phone's drawer, which holds focus meanwhile. */}
+          <div inert={drawer} className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <PhoneHeader />
+            {children}
+          </div>
+        </div>
+      </ShellContext.Provider>
+    </PublishContext.Provider>
+  );
+}
+
+/** The fold the studio's sidebar saved before it became the app's, or null; the key is removed. */
+function takeLegacyFold(): boolean | null {
+  try {
+    const stored = window.localStorage.getItem("studio:sidebar-collapsed");
+    if (stored === null) return null;
+    window.localStorage.removeItem("studio:sidebar-collapsed");
+    return stored === "1";
+  } catch {
+    return null;
+  }
+}
