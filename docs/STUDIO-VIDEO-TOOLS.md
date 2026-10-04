@@ -8,8 +8,8 @@ revideokc video (and later a remotionkc one) is made unattended, inside the
 same kind of per-job sandbox manimkc runs in today.
 
 **Status: proposed, 2026-09-30, and built in phases; phases 1 to 3 are
-built (2c on 2026-10-03, 3 on 2026-10-04), the paid end-to-end jobs of 2c and
-3 still to run.** The owner asked
+built (2c on 2026-10-03, 3 on 2026-10-04), and a paid end-to-end job of each
+tool has passed the gate and been accepted ("Paid end-to-end jobs", below).** The owner asked
 for this after [VIDEO-TOOLS.md](VIDEO-TOOLS.md) (#248) wrote down what each
 tool is for and a routing procedure for agents at a terminal. The one thing
 that could have sunk it, headless Chrome inside the job sandbox, was measured
@@ -492,6 +492,35 @@ Where this differs from the decisions above, and why:
   review, and the submodule pointer moves once they merge (Workflow 1).
 - **A silent remotionkc brief is refused**, as revideokc's is: its build
   refuses a video with no audio.
+
+## Paid end-to-end jobs
+
+One real job per new backend, posted to a runner as a brief (`POST
+/api/jobs`), made by Opus 5.5 at the studio's default effort, reviewed and
+accepted. Measured on the owner's M4 Pro.
+
+| | revideokc (2c) | remotionkc (3) |
+| --- | --- | --- |
+| Video | "The datacenter storage hierarchy in depth", a lit three.js stack of storage tiers, 3 chapters | "How fast functions grow", growth curves on real axes, 3 chapters |
+| Job | 15.6 min, $3.39, 57 turns | 9.8 min, $1.94, 28 turns |
+| Wrapper calls | 3 `api`, 5 `lint`, 5 `still` (about 32 s render each), 1 `build` (31 s render), 1 refused for a bad argument | `api`, 3 `lint`, 3 `still` (about 20 s render each, 38 s narration the first time), 1 `build` (88 s render) |
+| Gate | All ten steps; 60.8 s against 58 s predicted | All ten steps; 63.5 s against 60 s predicted |
+| Landed | `storage-hierarchy-depth`, 2026-10-03 | `growth-rates-on-a-chart`, 2026-10-04 |
+
+Neither first attempt was this clean. The first revideokc job failed the gate
+after $5.51: Claude Code 2.1.287 runs the agent's Bash with stdout and stderr
+on a file under `/private/tmp`, the wrapper passed those descriptors into the
+sandbox, the profiles deny reading there, and node aborts at start when it
+cannot fstat its standard streams, so every call died in about 20 ms (#274
+gives each step pipes of the wrapper's own; #276 does the same for manimkc's
+wrapper). Before that, the revideokc doctor had failed on the owner's machine
+alone: with `STUDIO_HOME` at its default inside the repository, Puppeteer's
+upward config search read the repository's denied `package.json` (#272). A
+job whose wrapper calls keep dying at start is now stopped after three, as
+`toolchain` (#277). The tests had kept `STUDIO_HOME` under the temporary
+directory and missed both; the real-sandbox suites now put a denied
+`package.json` above their studio home and run the wrapper with its output on
+a denied file.
 
 ## Open questions
 

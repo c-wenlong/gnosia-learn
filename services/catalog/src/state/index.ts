@@ -208,6 +208,7 @@ export {
   assetsByIds,
   assetsForCollection,
   assetsForConcept,
+  assetsForConcepts,
   assetsForTopic,
   byKind,
   conceptsForAsset,
@@ -231,5 +232,6 @@ export {
   type KnowledgeBase,
   type MasteryLabel,
 } from "./knowledge-base";
+export { conceptCheckCounts } from "./checks";
 export { topicTitles, type TopicTitles } from "./topics";
 export { notePaths, type NotePaths } from "./notes";

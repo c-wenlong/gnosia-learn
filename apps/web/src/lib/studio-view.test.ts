@@ -4,6 +4,7 @@ import {
   shotTitle,
   conversationHref,
   extendFromHref,
+  extendHref,
   DEFAULT_VIEW,
   NO_TOPIC,
   canvasHref,
@@ -116,6 +117,7 @@ describe("writing the view back into a URL", () => {
       job: "job-1",
       extend: "tailscale",
       talk: true,
+      makeVideo: true,
       stream: false,
       shot: "after",
       draft: "draft-1",
@@ -393,6 +395,28 @@ describe("what the panel holds", () => {
     // The mark means nothing on its own.
     expect(parsePanel({ talk: "1" }).talk).toBe(false);
     expect(parsePanel({ extend: "dot-product" }).talk).toBe(false);
+  });
+
+  it("marks a Make a video of this press in the URL, and drops the mark with the press (D86)", () => {
+    const href = extendFromHref("/studio?q=x&sel=dot-product", "dot-product", { video: true });
+    expect(href).toBe("/studio?q=x&extend=dot-product&make=video");
+    expect(extendHref("dot-product", { video: true })).toBe("/studio?extend=dot-product&make=video");
+    expect(parsePanel(Object.fromEntries(new URL(href, "http://x").searchParams))).toMatchObject({
+      extend: "dot-product",
+      makeVideo: true,
+      talk: false,
+    });
+    expect(panelHref(href, { extend: null, draft: "d1" })).toBe("/studio?q=x&draft=d1");
+    expect(panelHref(href, { extend: "other" })).toBe("/studio?q=x&extend=other");
+    expect(panelHref("/studio?sel=dot-product", { extend: "dot-product", makeVideo: true, selected: null })).toBe(
+      "/studio?extend=dot-product&make=video",
+    );
+    // The mark means nothing on its own, and only `video` is a mark.
+    expect(parsePanel({ make: "video" }).makeVideo).toBe(false);
+    expect(parsePanel({ extend: "dot-product", make: "diagram" }).makeVideo).toBe(false);
+    // An Extend press and a Make a video press on one diagram are two panels.
+    expect(panelSignature({ extend: "e", make: "video" })).not.toBe(panelSignature({ extend: "e" }));
+    expect(panelSignature({ make: "video" })).toBe(panelSignature({}));
   });
 
   it("opens an Extend press from either screen", () => {

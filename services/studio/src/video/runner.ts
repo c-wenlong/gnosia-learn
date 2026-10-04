@@ -317,7 +317,10 @@ export class VideoRunner {
     }
     const start = await this.startingPoint(brief.slug);
     if (brief.mode === "new" && start.exists === true) {
-      throw new JobRefused(409, `a studio video called ${brief.slug} already exists, and this brief says mode "new": make it a change, or pick another slug`);
+      throw new JobRefused(409, `a studio video called ${brief.slug} already exists, and this brief says mode "new": make it a change, or pick another slug`, {
+        reason: "slug-taken",
+        slug: brief.slug,
+      });
     }
     if (brief.mode === "change" && start.exists === false && replacing === null) {
       throw new JobRefused(409, `there is no studio video called ${brief.slug} to change`);
