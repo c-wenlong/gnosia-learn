@@ -1,7 +1,7 @@
 # Proposal: the Learn page is a map of what you know
 
 Status: proposed, 2026-10-04. Nothing here is implemented. Decisions G1 to
-G7 are the build's defaults; G1 revises decision 13 of
+G8 are the build's defaults; G1 revises decision 13 of
 [DESIGN.md](../design/DESIGN.md) and is the owner's to confirm.
 
 ## The problem
@@ -39,7 +39,7 @@ Measured on `self_learn` on 2026-10-04:
 | Largest cluster | 89 concepts, 12 layers deep, 17 wide at its widest layer | Mostly CP4284, CP4282 and CP4285. About 1,900 by 1,200 pixels at today's spacing, so it needs zoom |
 | Next clusters | 34 (CS3230), 26 (CS4223), 26 (CS4225), 20 (CS4263) | Most clusters belong to one course |
 | Small clusters (4 concepts or fewer) | 23, holding 59 concepts | Need packing, or they scatter across the map |
-| Concepts in no course | 10 | Need a home island too |
+| Concepts in no course | 10, all of them inside a course's island through their links: 7 in CS3230's, 3 in the CP4284 and CP4282 one | They are the courses' background, so they sit beside the course. None forms an island of its own today |
 | Concepts with any observation | 11 | The rest are untouched |
 | Concepts mastered | 0 | Colour alone shows almost nothing yet |
 | Ready concepts (every `requires` prerequisite mastered, not mastered itself) | 121, every one a concept with no `requires` prerequisite | A global "ready" highlight would light up 40% of the map |
@@ -101,6 +101,13 @@ the courses in the `recentModules` preference (the modules Home's "pick up
 where you left off" reads) and marks the ready concepts in those courses
 only. With no recent module, nothing is highlighted.
 
+A concept in no course counts as part of every course whose concepts depend
+on it, through a `requires` or `assumes` edge, directly or through other
+concepts in no course. So the background a course builds on is highlighted
+with it: with CS3230 recent, "Cost model and input size" (no course, a
+prerequisite of three CS3230 concepts) is marked ready, where the rule above
+alone would never mark it.
+
 **G6. The table stays, unchanged except for its place.** It is the list
 view, ordered studied first and then by title as today (it has no sort
 control, and this proposal adds none), the one a screen reader uses, and the one that shows due dates and last
@@ -113,6 +120,14 @@ several, or the note's folder when no concept is in a course. Islands of the
 same course sit next to each other, largest first, so CS3230's two clusters
 read as one region. The 23 small clusters pack in rows beside their course's
 largest island instead of scattering.
+
+**G8. The Status filter can show the concepts in no course.** It gains a
+"Not in a course" option, which dims every concept that is in one. The map
+already places these concepts beside the courses that use them (G7), so
+nothing on it says they are outside every course; the filter finds them, and
+the panel's course line ("No course") says it for one. Filing each under a
+course stays a change to the course file, made through the course, not on the
+map.
 
 ## The map
 
@@ -127,7 +142,7 @@ largest island instead of scattering.
 | Labels when zoomed out | Below a zoom level the node labels hide and the island titles stay, so the zoomed-out map is a set of named regions |
 | Click a node | Selects it: its own lines in the accent, the rest dimmed, and a side panel with mastery, p(L), due, last seen, course, "Open in workspace" and "Start a session" |
 | Search | The existing search box zooms to the match and selects it |
-| Status filter | Dims the nodes that do not match, rather than removing them, so the structure stays readable |
+| Status filter | All, studied, untouched, ready, and not in a course (G8). Dims the nodes that do not match, rather than removing them, so the structure stays readable |
 | URL | `?concept=` and `?view=` as today, so a link to a concept on the map still works |
 
 ## Phases
@@ -139,7 +154,7 @@ working.
 | --- | --- | --- |
 | 1. Layout | `mapLayout` in `apps/web/src/lib/concept-map.ts`: clusters, a dagre layered layout per cluster, island packing and titles (G3, G7). Pure and tested. The existing Graph view draws it as one static SVG in a scrolling box | Tests cover clusters, packing, titles and a cycle. On the owner's database every island has a title, and the crossing count of the largest island is measured and lower than today's `layoutGraph` |
 | 2. Viewer | Pan, zoom, pinch, fit island and fit all on the Graph view; labels hide when zoomed out; it opens on the selected concept's island (G2); the workspace's "Open full course graph" button passes `scope=course`, and the graph view always writes `scope` to the URL | `?concept=<slug>&view=graph` opens zoomed to that island, and the button opens fitted to every island of the concept's course. Switching to Graph, then to course scope, then reloading shows the same view each time. A Playwright walk times a pan across the largest island on the owner's database and finds no frame over 50 ms |
-| 3. Reading the map | Node selection with the side panel, search to zoom, filter dims, the p(L) arc and the overdue and leech marks (G4), the ready highlight (G5). Pinch and drag at 375 pixels wide | Selecting "Vector as a list of numbers" shows its four dependants in the accent and the panel's "Open in workspace" lands on its page. With CS3230 in `recentModules`, only CS3230's ready concepts are highlighted. The phone walk pans and zooms the largest island without a frame over 50 ms (else G3's fallback is taken, and this proposal is amended) |
+| 3. Reading the map | Node selection with the side panel, search to zoom, filter dims, the p(L) arc and the overdue and leech marks (G4), the ready highlight (G5), the "Not in a course" filter (G8). Pinch and drag at 375 pixels wide | Selecting "Vector as a list of numbers" shows its four dependants in the accent and the panel's "Open in workspace" lands on its page. With CS3230 in `recentModules`, only CS3230's ready concepts are highlighted, "Cost model and input size" among them. "Not in a course" leaves exactly the concepts in no course undimmed (10 today). The phone walk pans and zooms the largest island without a frame over 50 ms (else G3's fallback is taken, and this proposal is amended) |
 | 4. Keyboard, then the default | Keyboard: Tab and Shift-Tab move between islands in map order, focusing each island's title and fitting the view to it; Enter enters the island at its first concept; the arrow keys then move to a prerequisite, a dependant, or the next concept in the same layer, so every concept of an island is reachable; Enter opens the panel; Escape goes back to the island's title; a text summary for screen readers that names the islands and points to the table. Then, in the same PR, the map becomes the default view (G1) | Every concept on every island, panel included, can be reached with the keyboard alone, starting from the first island, and a screen reader announces the summary. Only then does `/learn` open on the map |
 
 DESIGN.md's decision 13 row and the `/learn` screen row are rewritten in
