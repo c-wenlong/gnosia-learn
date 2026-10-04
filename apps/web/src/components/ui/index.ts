@@ -1,7 +1,8 @@
 /**
  * The redesign's primitives. Every one is safe in a server component except
- * `FilterMenu`, `Select`, `Combobox` and `Composer`, client components that
- * take an `onChange` and so are rendered from another client component
+ * `FilterMenu`, `Select`, `Combobox`, `Composer` and `Dialog`, client
+ * components that take an `onChange` or an `onClose` and so are rendered
+ * from another client component
  * (`MentionComposer` is one too, and deliberately not exported here: it
  * carries Lexical, which only `/studio` should load); the contract (names and
  * props) is written down in docs/design/IMPLEMENTATION.md.
@@ -12,6 +13,7 @@ export { Checkbox } from "./Checkbox";
 export { Chip } from "./Chip";
 export { ChoiceRow, type ChoiceState } from "./ChoiceRow";
 export { Combobox } from "./Combobox";
+export { Dialog, DIALOG_CLOSE_MS, type DialogProps, type DialogSize } from "./Dialog";
 export { Composer } from "./Composer";
 export { Divider } from "./Divider";
 export { Eyebrow } from "./Eyebrow";
