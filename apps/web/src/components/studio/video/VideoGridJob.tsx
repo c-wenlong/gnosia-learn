@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
+import { FADE_IN, POP_IN } from "@/components/studio/motion";
+import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
@@ -67,8 +69,8 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
       >
         <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-black">
           {video.posterAssetId !== null ? (
-            // eslint-disable-next-line @next/next/no-img-element -- a blob behind the asset route, which the optimiser cannot resize.
-            <img src={posterHref(video.posterAssetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
+            // A blob behind the asset route, which the optimiser cannot resize; it fades in once loaded.
+            <FadeImg src={posterHref(video.posterAssetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
           ) : (
             <span className="text-xs text-white/70">No poster</span>
           )}
@@ -107,8 +109,7 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
     <div className="relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)]">
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-black">
         {video.posterAssetId !== null && (
-          // eslint-disable-next-line @next/next/no-img-element -- see VideoTile.
-          <img src={posterHref(video.posterAssetId)} alt="" loading="lazy" className="h-full w-full object-contain" />
+          <FadeImg src={posterHref(video.posterAssetId)} alt="" loading="lazy" className="h-full w-full object-contain" />
         )}
       </span>
       <KindBadge kind="video" inline />
@@ -234,7 +235,8 @@ function TileVideoJob({ slug, title, poster, path }: { slug: string; title: stri
   const job = videoJobForSlug(jobs, slug, ended, dismissed);
   if (job === null) return null;
   return (
-    <div className="absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-[var(--border)]">
+    // Fades in over the poster as the job starts, as a diagram's does (`TileJob`).
+    <div className={`absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-[var(--border)] ${FADE_IN}`}>
       <VideoStage key={job.jobId} job={job} title={title} backdrop={poster} path={path} isNew={false} />
     </div>
   );
@@ -250,7 +252,7 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
   const making = newVideoJobs(jobs, existing, ended, dismissed);
   return making.map((job) =>
     layout === "grid" ? (
-      <div key={job.jobId} className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${TILE_LIFT}`}>
+      <div key={job.jobId} className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${TILE_LIFT} ${POP_IN}`}>
         <div className="relative aspect-[4/3] overflow-hidden border-b border-[var(--border)]">
           <VideoStage job={job} title={job.title ?? "New video"} backdrop={null} path={path} isNew />
           <KindBadge kind="video" />
@@ -267,7 +269,7 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
         key={job.jobId}
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
-        className="flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)]"
+        className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)] ${FADE_IN}`}
       >
         <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[var(--surface2)]">
           <Dot stage={videoTileStage(job)} />
@@ -385,7 +387,7 @@ function Backdrop({
   }
 
   const blur = stage === "failed" ? "blur-[6px]" : "blur-[3px]";
-  const layer = `absolute inset-0 h-full w-full object-contain ${blur}`;
+  const layer = `absolute inset-0 h-full w-full object-contain ${blur} transition-[filter] duration-300 ease-out motion-reduce:transition-none`;
   const hasPicture = live.current !== null || backdrop !== null;
   return (
     <div aria-hidden className={`absolute inset-0 overflow-hidden ${hasPicture ? "bg-black" : ""}`}>
@@ -401,7 +403,7 @@ function Backdrop({
         // eslint-disable-next-line @next/next/no-img-element -- see above.
         <img key={live.current} src={live.current} alt="" className={`${layer} studio-fade-in`} />
       )}
-      <div className={`absolute inset-0 ${stage === "failed" ? "studio-veil-strong" : "studio-veil"}`} />
+      <div className={`absolute inset-0 transition-[background-color] duration-300 ease-out motion-reduce:transition-none ${stage === "failed" ? "studio-veil-strong" : "studio-veil"}`} />
       {stage === "working" && <div className="studio-shimmer absolute inset-0 overflow-hidden" />}
     </div>
   );
@@ -513,7 +515,7 @@ function RowWords({ job }: { job: VideoJob }) {
 
 function Dot({ stage }: { stage: VideoTileStage }) {
   const tone = stage === "failed" ? "bg-[var(--danger)]" : stage === "review" ? "bg-[var(--ok)]" : "bg-[var(--accent)] studio-breathe";
-  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${tone}`} />;
+  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone}`} />;
 }
 
 /* -------------------------------------------------------------------------- */

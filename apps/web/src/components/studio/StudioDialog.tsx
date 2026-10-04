@@ -1,10 +1,13 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { ENTER, reducedMotion } from "@/components/studio/motion";
 import { PaneContext, usePaneLayout } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
+
+import "./motion.css";
 
 /**
  * The studio's one centred surface: a `<dialog>` opened with `showModal()`
@@ -24,7 +27,17 @@ import { cx } from "@/components/ui/classes";
  * Widths: 720px from 1024px up, the width less 32px of gutter down to 768px,
  * and a full-screen sheet below that, where the header and the composer stay
  * pinned and the thread scrolls between them.
+ *
+ * Motion: the dialog rises in and its backdrop fades in (`@starting-style`,
+ * the backdrop's in `motion.css`). An in-app close (Close, Escape, a press on
+ * the backdrop) fades both out first and navigates once they have gone
+ * (`CLOSE_MS`); the person's choice counts at once (`isClosing`), so a panel
+ * about to hand over elsewhere does not undo it meanwhile. Browser Back is
+ * not in-app: the dialog goes as the URL does.
  */
+
+/** How long the dialog takes to fade out before Close navigates. */
+export const CLOSE_MS = 150;
 
 interface DialogControls {
   /** Close the dialog, which navigates to its `closeHref`. */
@@ -89,22 +102,63 @@ export function StudioDialog({
   const opener = useRef<HTMLElement | null>(null);
   const closing = useRef(false);
   const pressedOnBackdrop = useRef(false);
+  /** The fade before Close navigates, while it runs. */
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The dialog left the top layer before its navigation landed (`go`). */
+  const shutEarly = useRef(false);
+  /** Fading out: `data-closing` on the dialog. */
+  const [leaving, setLeaving] = useState(false);
+
+  // Where Close goes, as the last render had it: the fade outlives the render
+  // that pressed it, and the navigation should use the URL as it is then.
+  const target = useRef({ closeHref, navigate, router });
+  useEffect(() => {
+    target.current = { closeHref, navigate, router };
+  });
 
   const close = useCallback(() => {
     if (closing.current) return;
     closing.current = true;
-    if (navigate !== undefined) navigate(closeHref);
-    else router.push(closeHref, { scroll: false });
-  }, [router, closeHref, navigate]);
+    const go = () => {
+      leaveTimer.current = null;
+      const { closeHref: href, navigate: move, router: push } = target.current;
+      if (move !== undefined) {
+        move(href);
+        return;
+      }
+      push.push(href, { scroll: false });
+      // A router push renders the page on the server first, which can take a
+      // second; the dialog has already faded, so it leaves the top layer now
+      // rather than holding the page inert behind a backdrop nobody can see.
+      if (ref.current?.open) {
+        ref.current.close();
+        shutEarly.current = true;
+      }
+    };
+    if (reducedMotion()) {
+      go();
+      return;
+    }
+    setLeaving(true);
+    leaveTimer.current = setTimeout(go, CLOSE_MS);
+  }, []);
   const isClosing = useCallback(() => closing.current, []);
 
   // The dialog stays mounted across a change of what it holds (a conversation
   // and the Extend press before it share one). If the URL moved and the
   // dialog is still here, whatever close was pending lost to that navigation,
-  // and Close has to work again.
+  // and Close has to work again, on a dialog that is visible again. A close
+  // still fading out has not navigated yet, so it is not the one that lost:
+  // it goes ahead.
   const search = useSearchParams().toString();
   useEffect(() => {
+    if (leaveTimer.current !== null) return;
     closing.current = false;
+    // The URL is outside React: a close that lost to it shows the dialog again.
+    setLeaving(false);
+    const dialog = ref.current;
+    if (shutEarly.current && dialog !== null && !dialog.open) dialog.showModal();
+    shutEarly.current = false;
   }, [search]);
 
   useEffect(() => {
@@ -120,6 +174,9 @@ export function StudioDialog({
     dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
 
     return () => {
+      // Gone before its fade ended (Back, or another panel's link): the
+      // close it was fading out for is not wanted any more.
+      if (leaveTimer.current !== null) clearTimeout(leaveTimer.current);
       if (dialog.open) dialog.close();
       // Back to whatever opened the panel. A reload with a panel open had no
       // opener, so New chat takes it: it is where the person would start
@@ -137,6 +194,7 @@ export function StudioDialog({
       <dialog
         ref={ref}
         aria-label={label}
+        data-closing={leaving ? "" : undefined}
         onCancel={(event) => {
           // Escape. The dialog would close itself and leave the URL saying it
           // is open; closing through the URL keeps the two in step.
@@ -156,7 +214,7 @@ export function StudioDialog({
           if (started && event.target === event.currentTarget) close();
         }}
         className={cx(
-          "m-auto flex-col overflow-hidden bg-surface p-0 text-text open:flex",
+          "studio-dialog m-auto flex-col overflow-hidden bg-surface p-0 text-text open:flex",
           "backdrop:bg-page/60 backdrop:backdrop-blur-[2px]",
           // Phone: a sheet, the whole screen.
           "h-dvh max-h-none w-full max-w-none rounded-none",
@@ -168,7 +226,9 @@ export function StudioDialog({
               ? "md:h-fit md:w-[calc(100vw-32px)] lg:w-[min(960px,calc(100vw-64px))]"
               : "md:h-auto md:w-[calc(100vw-32px)] lg:w-[720px]",
           tall && "md:h-[calc(100dvh-96px)]",
-          "transition-[opacity,translate] duration-150 ease-out starting:open:translate-y-2 starting:open:opacity-0",
+          // In: a rise and a fade. Out, on an in-app close: the same, quicker.
+          "transition-[opacity,translate] duration-200 ease-soft starting:open:translate-y-2 starting:open:opacity-0",
+          "data-closing:translate-y-2 data-closing:opacity-0 data-closing:duration-150 data-closing:ease-out",
           "motion-reduce:transition-none",
         )}
       >
@@ -232,7 +292,10 @@ export function StudioPane({
   return (
     <DialogContext.Provider value={{ close, isClosing }}>
       <PaneContext.Provider value={{ inline: true, leading }}>
-        <section ref={ref} aria-label={label} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page text-text">
+        {/* Rises in from the home view it replaces (`PanelHost`). Filling
+            backwards, so no transform stays behind to trap the composer's
+            @ menu in a stacking context once it has arrived. */}
+        <section ref={ref} aria-label={label} className={cx("flex min-h-0 min-w-0 flex-1 flex-col bg-page text-text", ENTER)}>
           {children}
         </section>
       </PaneContext.Provider>

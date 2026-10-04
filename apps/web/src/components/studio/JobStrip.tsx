@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { useStudioPath } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { Collapse } from "@/components/ui/Collapse";
 import {
   failureReport,
   finishedHeadline,
@@ -56,9 +57,34 @@ export function JobStrip({ path: drawnFor, stream = true }: { path: string; stre
     lastWatched === null || dismissed.includes(lastWatched)
       ? null
       : (jobs.find((job) => job.jobId === lastWatched && !isActive(job.state)) ?? null);
-  const job = active ?? settled;
-  if (job === null) return null;
+  const current = active ?? settled;
+  // The strip folds open when a job starts and shut when it is dismissed,
+  // still showing the job it was about while it folds, rather than emptying
+  // first: the last one shown is held for that.
+  const [last, setLast] = useState<Job | null>(current);
+  if (current !== null && current !== last) setLast(current);
+  const job = current ?? last;
 
+  return (
+    <Collapse open={current !== null}>
+      {job !== null && <Strip job={job} path={path} connection={connection} post={post} dismiss={dismiss} />}
+    </Collapse>
+  );
+}
+
+function Strip({
+  job,
+  path,
+  connection,
+  post,
+  dismiss,
+}: {
+  job: Job;
+  path: string;
+  connection: ReturnType<typeof useStudioJobs>["connection"];
+  post: ReturnType<typeof useStudioJobs>["post"];
+  dismiss: ReturnType<typeof useStudioJobs>["dismiss"];
+}) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-xs">
       <Dot job={job} />
@@ -166,8 +192,8 @@ function Dot({ job }: { job: Job }) {
         : job.state === "cancelled" || job.state === "discarded"
           ? "bg-[var(--muted)]"
           : "bg-[var(--accent)]";
-  const pulse = job.state === "running" ? "animate-pulse" : "";
-  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${tone} ${pulse}`} />;
+  const pulse = job.state === "running" ? "animate-pulse motion-reduce:animate-none" : "";
+  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone} ${pulse}`} />;
 }
 
 /**

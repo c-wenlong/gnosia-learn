@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 /**
  * The strip's popover: a `<details>`, so it still opens with no JavaScript,
@@ -16,6 +16,14 @@ import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
  */
 export function MenuPopover({ label, children }: { label: string; children: ReactNode }) {
   const ref = useRef<HTMLDetailsElement>(null);
+  /**
+   * Counts the openings, to key the panel by. A closed <details> keeps its
+   * content in the page without drawing it, and a second opening does not
+   * start a CSS animation again, so each opening gets a panel the browser
+   * has never drawn. Counted on the summary's press, before the browser opens
+   * it, so the new panel is there by the time it is shown.
+   */
+  const [openings, setOpenings] = useState(0);
 
   useEffect(() => {
     const details = ref.current;
@@ -46,16 +54,26 @@ export function MenuPopover({ label, children }: { label: string; children: Reac
   }
 
   return (
-    <details ref={ref} name="studio-menu" className="relative shrink-0">
-      <summary className="inline-flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium transition-colors hover:bg-[var(--surface-hover)] [&::-webkit-details-marker]:hidden">
+    <details ref={ref} name="studio-menu" className="group/menu relative shrink-0">
+      <summary
+        onClick={() => {
+          if (ref.current !== null && !ref.current.open) setOpenings((count) => count + 1);
+        }}
+        className="inline-flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium transition-colors hover:bg-[var(--surface-hover)] [&::-webkit-details-marker]:hidden"
+      >
         {label}
-        <span aria-hidden className="text-[var(--muted)]">
+        <span
+          aria-hidden
+          className="inline-block text-[var(--muted)] transition-transform duration-150 ease-soft group-open/menu:rotate-180 motion-reduce:transition-none"
+        >
           ▾
         </span>
       </summary>
+      {/* It pops in from its top right corner, where it hangs off the button. */}
       <div
+        key={openings}
         onClick={onChoose}
-        className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-1.5 shadow-lg"
+        className="absolute right-0 z-30 mt-1 w-56 origin-top-right animate-pop-in rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-1.5 shadow-lg motion-reduce:animate-none"
       >
         {children}
       </div>

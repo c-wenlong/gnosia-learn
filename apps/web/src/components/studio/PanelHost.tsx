@@ -22,6 +22,7 @@ import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { HostContext, NEW_CHAT_EVENT } from "@/components/studio/panel-host";
 import { Sentence } from "@/components/studio/Sentence";
 import { VerbNotice } from "@/components/studio/StudioChrome";
+import { FADE_IN } from "@/components/studio/motion";
 import { DialogHeader, StudioDialog, StudioPane } from "@/components/studio/StudioDialog";
 import { StudioSettings } from "@/components/studio/StudioSettings";
 import { VideoPreview } from "@/components/studio/video/VideoPreview";
@@ -288,9 +289,12 @@ export function PanelHost({
         <DialogHeader title="Settings" />
         <div className="min-h-0 flex-1 overflow-y-auto">
           {settings !== null ? (
-            <StudioSettings key={settings.reachable ? "read" : "defaults"} reachable={settings.reachable} rows={settings.rows} onSaved={settingsSaved} />
+            // The rows fade in over the frame `SettingsLoading` held for them.
+            <div key={settings.reachable ? "read" : "defaults"} className={FADE_IN}>
+              <StudioSettings reachable={settings.reachable} rows={settings.rows} onSaved={settingsSaved} />
+            </div>
           ) : settingsFailed ? (
-            <div role="alert" className="flex flex-col items-start gap-3 p-5 text-[14px] text-text2">
+            <div role="alert" className={cx("flex flex-col items-start gap-3 p-5 text-[14px] text-text2", FADE_IN)}>
               <p>The settings could not be read: the studio did not answer.</p>
               <button type="button" onClick={warmSettings} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
                 Try again
@@ -390,7 +394,11 @@ export function PanelHost({
     <HostContext.Provider value={controls}>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {chat}
-        <div hidden={chat !== null} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Fades back in as the conversation closes: an animation starts
+            again whenever `hidden` lets the box be drawn. Opacity only, and
+            filling backwards, so nothing stays behind to put the composer's
+            @ menu in a stacking context of its own. */}
+        <div hidden={chat !== null} className={cx("flex min-h-0 min-w-0 flex-1 flex-col", FADE_IN)}>
           {children}
         </div>
       </div>
@@ -399,7 +407,13 @@ export function PanelHost({
   );
 }
 
-/** The two rows' shape while they are read, so the dialog does not jump when they land. */
+/**
+ * The two rows' shape while they are read, so the dialog does not jump when
+ * they land and the rows fade in over it. Each box is the height of what it
+ * stands for, measured: the legend's 21px line and its 10px margin (a legend
+ * sits outside the fieldset's gap), the label's 16px line, and the 44px
+ * select (`StudioSettings`).
+ */
 function SettingsLoading() {
   return (
     <div className="flex flex-col gap-5 p-5" aria-busy="true">
@@ -407,13 +421,17 @@ function SettingsLoading() {
         Reading the settings
       </p>
       {[0, 1].map((at) => (
-        <div key={at} className="flex flex-col gap-2.5">
-          <div className="mb-2.5 h-4 w-20 rounded bg-surface2" />
+        <div key={at} className="flex flex-col">
+          <div className="mb-2.5 flex h-[21px] items-center">
+            <div className="h-4 w-20 rounded bg-surface2" />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[0, 1].map((menu) => (
               <div key={menu} className="flex flex-col gap-1.5">
-                <div className="h-3 w-12 rounded bg-surface2" />
-                <div className="h-10 rounded-lg bg-surface2 animate-pulse motion-reduce:animate-none" />
+                <div className="flex h-4 items-center">
+                  <div className="h-3 w-12 rounded bg-surface2" />
+                </div>
+                <div className="h-11 rounded-lg bg-surface2 animate-pulse motion-reduce:animate-none" />
               </div>
             ))}
           </div>
