@@ -211,13 +211,25 @@ export function PanelHost({
   const [settings, setSettings] = useState<StudioSettingsData | null>(null);
   const [settingsFailed, setSettingsFailed] = useState(false);
   const settingsRead = useRef<Promise<void> | null>(null);
+  /**
+   * Whether rows read with the catalog behind them are held. A ref beside the
+   * state, so `warmSettings` stays one stable callback and a hover on the
+   * Settings button, which calls it every time, does not start a read whose
+   * answer is thrown away.
+   */
+  const settingsReachable = useRef(false);
   const warmSettings = useCallback(() => {
-    if (settingsRead.current !== null) return;
+    // A read in flight, or rows that are final: only a failed read or the
+    // defaults (the catalog was down) are worth reading again.
+    if (settingsRead.current !== null || settingsReachable.current) return;
     setSettingsFailed(false);
     settingsRead.current = loadStudioSettings()
       .then(
         // Rows read with the catalog down are the defaults: a later read replaces them.
-        (data) => setSettings((held) => (held?.reachable ? held : data)),
+        (data) => {
+          settingsReachable.current = data.reachable;
+          setSettings((held) => (held?.reachable ? held : data));
+        },
         () => setSettingsFailed(true),
       )
       .finally(() => {
