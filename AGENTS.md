@@ -898,6 +898,17 @@ not have to be worked out again.
   `catalog flip` for topics, tags, concepts, sessions, courses and diagrams in
   that order (`scripts/lib/flip-order.mjs`; README.md, "Install"). `npm run
   e2e` builds exactly that database on its own.
+- **A suite that wants every migration takes `migratedScratchDatabase()`,
+  not `createScratchDatabase()` plus `applyMigrations`.** vitest's global
+  setup (`services/catalog/test/migrated-template.ts`) migrates one template
+  per run and each call clones it with `CREATE DATABASE ... TEMPLATE`, which
+  cut the catalog suites' summed time from 417 s to 224 s with two workers
+  (2026-10-04). `createScratchDatabase()` is still the empty database, for a
+  suite that migrates from empty or stops part-way (`partialMigrations`,
+  `BEFORE_BLOB_CONTRACT`); `schema.test.ts` migrating from empty is what
+  keeps the template honest. The template refuses connections, since
+  Postgres will not copy a database anyone is connected to, so never connect
+  to a `self_learn_test_template_*` database or point a suite at it.
 - **`catalog import` is the name; `catalog index` is the alias.** `index`
   is `import` with no directory; it still runs it and prints the new name once
   on stderr, so a `--json` reader is unaffected. A few comments still say

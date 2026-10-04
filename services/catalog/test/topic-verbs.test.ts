@@ -29,9 +29,8 @@ import {
 } from "../src/content/topics";
 import { writeContent } from "../src/content/write";
 import { writeThrough } from "../src/content/write-through";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch, sqlMessage } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlMessage } from "./scratch-database";
 
 /**
  * Track A's writers (docs/CONTENT-MIGRATION.md, Track A; edge cases 2 and 17):
@@ -174,8 +173,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await tree();
     restore = pointAt(scratch.name);
     await runImportCommand({ dir: fixture.root });
@@ -533,8 +531,7 @@ describe.skipIf(!reachable.ok)("renaming a topic a diagram file stamps, while di
   let restore: () => void;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await tree();
     const stamped = {
       tldrawFileFormatVersion: 1,

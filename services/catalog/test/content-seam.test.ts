@@ -37,6 +37,7 @@ import { applyMigrations, migrateHolding, migrationStatus } from "../src/migrati
 import { partialMigrations } from "./partial-migrations";
 import {
   createScratchDatabase,
+  migratedScratchDatabase,
   probe,
   type Scratch,
   sqlMessage,
@@ -292,8 +293,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await scratch.db.insert(topic).values({ slug: "alpha", title: "Alpha", domain: "one" });
   }, 60_000);
 
@@ -658,8 +658,7 @@ describe.skipIf(!reachable.ok)("import revisions and the archive rule", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await scratch.db.insert(topic).values({ slug: "alpha", title: "Alpha", domain: "one" });
     await scratch.db.insert(concept).values([
       { slug: "c-one", title: "One", topicSlug: "alpha", path: "learn/concepts/one/c-one.md" },
@@ -843,8 +842,7 @@ describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
   const allTriggers = COMPLETENESS_RULES.flatMap((rule) => rule.triggers);
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await scratch.db.insert(topic).values([
       { slug: "alpha", title: "Alpha", domain: "one" },
       { slug: "beta", title: "Beta", domain: "one" },
@@ -945,8 +943,7 @@ describe.skipIf(!reachable.ok)("the copy guard", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
   }, 60_000);
 
   afterAll(async () => {

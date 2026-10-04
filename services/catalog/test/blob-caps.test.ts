@@ -24,9 +24,8 @@ import {
   uploadBlob,
 } from "../src/content/blob";
 import { connect } from "../src/db";
-import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * Per-owner caps on the blob store (phase 4 of docs/CONTENT-MIGRATION.md):
@@ -95,8 +94,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
   const rowOf = async (key: string) => (await scratch.db.select().from(blobObject).where(eq(blobObject.key, key)))[0];
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await ensureLearner(scratch.db, B);
   }, 60_000);
 
@@ -530,8 +528,7 @@ describe("the audit's caps and per-owner lines", () => {
     };
 
     beforeAll(async () => {
-      scratch = await createScratchDatabase();
-      await applyMigrations(scratch.db);
+      scratch = await migratedScratchDatabase();
       home = await mkdtemp(path.join(tmpdir(), "blob-caps-home-"));
       process.env["DATABASE_URL"] = scratch.url;
       process.env["SELF_LEARN_HOME"] = home;

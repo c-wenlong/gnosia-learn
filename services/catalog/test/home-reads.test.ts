@@ -1,9 +1,8 @@
 import { draft, learner, LOCAL_LEARNER_ID } from "@self-learn/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { applyMigrations } from "../src/migrations";
 import { asRecentModules, recentDrafts, withRecentModule } from "../src/state";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * The two reads Home's "Pick up where you left off" adds to the catalog
@@ -50,8 +49,7 @@ describe.skipIf(!reachable.ok)("recentDrafts", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await scratch.db.insert(learner).values([{ id: LOCAL_LEARNER_ID }, { id: "owner-b" }]).onConflictDoNothing();
   }, 60_000);
 

@@ -19,6 +19,10 @@ export default defineConfig({
     // there. The setup file keeps the studio's fixtures out of it and fails any
     // test file that leaves something behind in `learn/assets/`.
     setupFiles: ["./vitest.setup.ts"],
+    // Migrates one template database per run for the suites that want a fully
+    // migrated scratch database, so each clones it instead of migrating its
+    // own (services/catalog/test/scratch-database.ts).
+    globalSetup: ["./services/catalog/test/migrated-template.ts"],
     // services/catalog's tests create and drop a scratch database and apply
     // every migration to it. That is slower than the in-process suites, and on
     // a cold Postgres the first connection can take a while.

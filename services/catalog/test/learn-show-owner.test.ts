@@ -13,10 +13,9 @@ import { conceptsIndexer } from "../src/index/concepts";
 import { tagsIndexer } from "../src/index/tags";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
-import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `learn concept show --owner`: the studio runner reads a brief's source note
@@ -67,8 +66,7 @@ describe.skipIf(!reachable.ok)("learn concept show --owner", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     const slugs = Object.keys(NOTES);
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "owners", concepts: slugs }]));
