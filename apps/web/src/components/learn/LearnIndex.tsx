@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConceptGraph, ConceptGraphKey } from "@/components/ConceptGraph";
-import { ConceptMap } from "@/components/learn/ConceptMap";
+import { ConceptMap, type FitRequest, type MapMark } from "@/components/learn/ConceptMap";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -15,6 +15,8 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
 import type { MapLayout } from "@/lib/concept-map";
+import { firstMatch, relatedTo, standingLine } from "@/lib/map-reading";
+import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
@@ -56,6 +58,7 @@ export function LearnIndex({
   const [view, setView] = useState(initial.view);
   const [scope, setScope] = useState(initial.scope);
   const [selected, setSelected] = useState(initial.selected);
+  const [fitRequest, setFitRequest] = useState<FitRequest | null>(null);
 
   useEffect(() => {
     const search = indexSearch({ selected, view, scope, filter }, window.location.search);
@@ -74,6 +77,22 @@ export function LearnIndex({
     [rows],
   );
   const focus = rows.find((r) => r.id === selected) ?? null;
+  // The map dims what the table would hide, so the structure stays readable (docs/proposals/knowledge-map.md).
+  const dimmed = useMemo(() => {
+    const shown = new Set(visible.map((r) => r.id));
+    return new Set(rows.filter((r) => !shown.has(r.id)).map((r) => r.id));
+  }, [rows, visible]);
+  const marks = useMemo(
+    () => Object.fromEntries(rows.map((r) => [r.id, { ready: r.ready, overdue: r.overdue, leech: r.leech } satisfies MapMark])),
+    [rows],
+  );
+  /** Select a concept from outside the map and move the map to it. */
+  const reveal = (id: string, to: FitRequest["to"]) => {
+    setSelected(id);
+    // A fit to a scope is the map's scope from now on, so the URL and a reload agree with it.
+    if (to !== "center") setScope(to);
+    setFitRequest({ to, n: Date.now() });
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -90,6 +109,17 @@ export function LearnIndex({
           placeholder="Search concepts"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            // On the map, Enter lands on the best match and fits its neighbourhood.
+            if (e.key !== "Enter" || view !== "graph") return;
+            // Only among the rows on screen (the filter and the search both), so Enter
+            // never lands on a concept the map has dimmed.
+            const id = firstMatch(visible, query);
+            if (id !== null) {
+              e.preventDefault();
+              reveal(id, "neighbourhood");
+            }
+          }}
           className="w-full sm:w-[280px]"
         />
       </header>
@@ -125,7 +155,19 @@ export function LearnIndex({
           </div>
         </div>
       ) : (
-        <MapCard layout={map} nodes={nodes} edges={edges} focus={focus} scope={scope} onScope={setScope} onSelect={setSelected} />
+        <MapCard
+          layout={map}
+          nodes={nodes}
+          edges={edges}
+          focus={focus}
+          scope={scope}
+          onScope={setScope}
+          onSelect={setSelected}
+          onReveal={(id) => reveal(id, "center")}
+          dimmed={dimmed}
+          marks={marks}
+          fitRequest={fitRequest}
+        />
       )}
     </div>
   );
@@ -237,6 +279,10 @@ function MapCard({
   scope,
   onScope,
   onSelect,
+  onReveal,
+  dimmed,
+  marks,
+  fitRequest,
 }: {
   layout: MapLayout;
   nodes: GraphNode[];
@@ -245,32 +291,125 @@ function MapCard({
   scope: GraphScope;
   onScope: (scope: GraphScope) => void;
   onSelect: (id: string) => void;
+  onReveal: (id: string) => void;
+  dimmed: ReadonlySet<string>;
+  marks: Record<string, MapMark>;
+  fitRequest: FitRequest | null;
 }) {
   return (
     <Card title="Map">
-      {focus !== null && (
-        <p className="flex min-w-0 items-center gap-2 text-[13px] text-text2">
-          <MasteryDot bucket={focus.bucket} size={12} />
-          <span className="min-w-0 truncate font-semibold text-text">{focus.title}</span>
-          <Link
-            href={`/learn/${focus.id}`}
-            className="shrink-0 rounded-sm text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Open in workspace
-          </Link>
-        </p>
-      )}
-      <ConceptMap
-        layout={layout}
-        nodes={nodes}
-        edges={edges}
-        selected={focus?.id ?? null}
-        onSelect={onSelect}
-        scope={scope}
-        onScope={onScope}
-      />
-      <ConceptGraphKey />
+      {/* Sized by the room the page has: the panel docks beside the map when it fits, under it otherwise. */}
+      <div className="@container">
+        <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-[minmax(0,1fr)_280px]">
+          <ConceptMap
+            layout={layout}
+            nodes={nodes}
+            edges={edges}
+            selected={focus?.id ?? null}
+            onSelect={onSelect}
+            scope={scope}
+            onScope={onScope}
+            dimmed={dimmed}
+            marks={marks}
+            fitRequest={fitRequest}
+          />
+          <MapPanel focus={focus} nodes={nodes} edges={edges} onPick={onReveal} />
+        </div>
+      </div>
+      <p className="text-[11px] leading-4 text-text3">
+        Prerequisites sit above. Solid: required. Dashed: background. The arc round a dot is its p(L); a dashed ring is
+        ready to learn; a red dot is a review overdue, a red ring keeps slipping.
+      </p>
     </Card>
+  );
+}
+
+/**
+ * The selected concept, beside the map (phase 3 of docs/proposals/knowledge-map.md):
+ * how well it is known, when it is due, where it is taught, what it needs and
+ * what leads on from it. Choosing one of those moves the map to it.
+ */
+function MapPanel({
+  focus,
+  nodes,
+  edges,
+  onPick,
+}: {
+  focus: IndexRow | null;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  onPick: (id: string) => void;
+}) {
+  if (focus === null) {
+    return (
+      <section aria-label="Concept details" className="rounded-xl bg-surface2 p-4 text-[13px] text-text2">
+        Choose a concept on the map to see what it needs and what it leads to.
+      </section>
+    );
+  }
+  const { needs, leadsTo } = relatedTo(nodes, edges, focus.id);
+  const list = (name: string, items: GraphNode[]) => (
+    <div className="flex flex-col gap-1">
+      <h4 className={LABEL}>{name}</h4>
+      {items.length === 0 ? (
+        <p className="text-[12px] text-text3">None</p>
+      ) : (
+        <ul aria-label={name} className="flex flex-col">
+          {items.map((n) => (
+            <li key={n.id}>
+              <button
+                type="button"
+                data-concept={n.id}
+                onClick={() => onPick(n.id)}
+                className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                <MasteryDot bucket={n.bucket} size={10} className="shrink-0" />
+                <span className="min-w-0 truncate">{n.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+  return (
+    <section aria-label="Concept details" className="flex min-w-0 flex-col gap-3 rounded-xl bg-surface2 p-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-[15px] leading-snug font-bold text-text">{focus.title}</h3>
+        <p className="text-[12px] text-text2">
+          {MASTERY_BUCKET_LABEL[focus.bucket]}
+          {focus.leech && <span className="font-semibold text-danger"> · {LEECH_LABEL}</span>}
+          {focus.ready && " · Ready to learn"}
+        </p>
+      </div>
+      <div className="flex flex-col gap-1">
+        <ProgressBar
+          percent={focus.bucket === "untouched" ? 0 : focus.pL * 100}
+          size="sm"
+          tone={focus.bucket === "mastered" ? "hi" : "mid"}
+          label={`${focus.title} mastery`}
+        />
+        <p className="text-[12px] text-text2">
+          {standingLine(focus).map((part, i) => (
+            <span key={part.text}>
+              {i > 0 && " · "}
+              <span className={part.danger ? "text-danger" : undefined}>{part.text}</span>
+            </span>
+          ))}
+        </p>
+        <p className="text-[12px] text-text2">{focus.courseLabel ?? "Not in a course"}</p>
+      </div>
+      {list("Needs", needs)}
+      {list("Leads to", leadsTo)}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" href={`/learn/${focus.id}`}>
+          Open in workspace
+        </Button>
+        <Button variant="secondary" size="sm" href={`/learn/${focus.id}/session`}>
+          Start a session
+        </Button>
+      </div>
+    </section>
   );
 }
 

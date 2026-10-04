@@ -113,7 +113,7 @@ path, the cost meter and the cap.
 | | Diagram runner | Video runner |
 | --- | --- | --- |
 | Claims | `job.kind = 'diagram'` | `job.kind = 'video'` |
-| Queue and concurrency | its own, `STUDIO_CONCURRENCY`, 1 | its own, `STUDIO_VIDEO_CONCURRENCY`, 1, capped at 1 |
+| Queue and concurrency | its own, `STUDIO_CONCURRENCY`, 1 | its own, `STUDIO_VIDEO_CONCURRENCY`, 2 (3 at most), never two jobs of one tool at once (open question 1 of [STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md#open-questions)) |
 | Agent's one command | `npm run --silent canvas` | the job's own wrapper, `jobs/<id>/bin/video` (D45) |
 | Where agent-written code runs | nowhere: a snippet runs in tldrawkc's browser page | inside a per-job OS sandbox (D44) |
 | Workspace | `jobs/<id>/candidate/`, `scratch/` | `jobs/<id>/checkout/` (a synthetic manimkc checkout) and `render/` (D46) |
@@ -1359,7 +1359,7 @@ limit. What remains:
 | Attempts | three, as for diagrams: a gate failure resumes the agent with the findings | A retry policy, not a limit on work within an attempt |
 | Dead tools | three wrapper calls in a row whose steps die as they start (no exit code, under two seconds), then the job is stopped as `toolchain`, with no gate and no retry (V26) | Measured on 2026-10-03: a revideokc job whose every step aborted 20 ms in spent $5.51 over 15 minutes retrying, then failed the gate. The agent cannot fix a tool that never runs, so only this failure is the runner's to name |
 | `--max-turns` | not passed; `STUDIO_VIDEO_MAX_TURNS` exists for the owner to set | No limit by default, as a hand-run session has none |
-| Concurrency | one video job, independent of the diagram runner's one | A correctness choice, not a cost one: scenes already render in parallel inside a job, `min(cores / 3, (RAM - 2 GB) / 1.5 GB, 4)`, 4 on this machine, from manimkc's measured 930 MB and three cores per 1080p scene |
+| Concurrency | two video jobs of different tools at once, never two of one tool, independent of the diagram runner's one; `STUDIO_VIDEO_CONCURRENCY` sets 1 (one at a time) to 3 (one of each tool) | Scenes already render in parallel inside a job, `min(cores / 3, (RAM - 2 GB) / 1.5 GB, 4)`, 4 on this machine, from manimkc's measured 930 MB and three cores per 1080p scene, so two jobs of one tool still wait for each other. Jobs of different tools run together since 2026-10-04, measured in open question 1 of [STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md#open-questions) |
 | TTS | kokoro, local, no quota | ElevenLabs' free tier is about 10,000 characters a month (manimkc's `AGENTS.md`), which one three-minute script (2,700 characters) and two revisions would mostly spend |
 | Disk | no cap; `render/` deleted once the job is accepted or discarded, except the final lines' clips | The measured workspace is 15 MB for a minute of video |
 

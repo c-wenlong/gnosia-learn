@@ -18,10 +18,9 @@ import { compare } from "../src/content/parity";
 import { contentOwnership } from "../src/content/ownership";
 import { COMPLETENESS_RULES, setTriggers, triggerStates } from "../src/content/rules";
 import { blockScalar, flowList } from "../src/content/yaml-out";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, type Fixture } from "./fixture-tree";
 import { SEED } from "./seed";
-import { createScratchDatabase, probe, sqlMessage, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlMessage } from "./scratch-database";
 
 /**
  * The round trip that makes the content migration reversible
@@ -154,10 +153,8 @@ describe.skipIf(!reachable.ok)("export, import and parity on the seed tree", () 
   let again: string;
 
   beforeAll(async () => {
-    first = await createScratchDatabase();
-    second = await createScratchDatabase();
-    await applyMigrations(first.db);
-    await applyMigrations(second.db);
+    first = await migratedScratchDatabase();
+    second = await migratedScratchDatabase();
     out = await tempDir("export");
     again = await tempDir("export-again");
   }, 120_000);
@@ -339,8 +336,7 @@ describe.skipIf(!reachable.ok)("the round trip on a small tree", () => {
   let restore: () => void;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await smallTree();
     out = await tempDir("small-export");
     restore = pointAt(scratch.name);
@@ -451,8 +447,7 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
   let restore: () => void;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await smallTree();
     out = await tempDir("flip-export");
     restore = pointAt(scratch.name);
@@ -724,8 +719,7 @@ describe.skipIf(!reachable.ok)("a tag gone from tags.yaml while the database own
   let restore: () => void;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await smallTree({ secondItemConcepts: ["derived"] });
     out = await tempDir("owned-courses");
     restore = pointAt(scratch.name);
@@ -761,8 +755,7 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
   let restore: () => void;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await smallTree();
     restore = pointAt(scratch.name);
     await runImportCommand({ dir: fixture.root });
@@ -833,8 +826,7 @@ describe.skipIf(!reachable.ok)("sparse positions (D22) on a copy of the seed tre
   let restore: () => void;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     copy = await tempDir("sparse-copy");
     for (const dir of ["content", "learn"]) {
       await cp(path.join(SEED, dir), path.join(copy, dir), { recursive: true });
@@ -923,8 +915,7 @@ describe.skipIf(!reachable.ok)("sparse positions (D22) inside a module, and renu
   const course = () => path.join(fixture.root, "content/courses/xx1000.yaml");
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await smallTree();
     restore = pointAt(scratch.name);
     await runImportCommand({ dir: fixture.root });

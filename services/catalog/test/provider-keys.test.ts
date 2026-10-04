@@ -11,7 +11,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { runExport } from "../src/commands/export";
 import { runImportCommand } from "../src/commands/index-command";
 import { REPO_ROOT } from "../src/env";
-import { applyMigrations } from "../src/migrations";
 import {
   deleteProviderKey,
   readLearnerSnapshot,
@@ -20,7 +19,7 @@ import {
   writeProviderKey,
 } from "../src/state";
 import { SEED } from "./seed";
-import { createScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
 
 /**
  * `provider_key` (docs/BYOK.md): an owner's own model provider keys, sealed
@@ -53,8 +52,7 @@ describe.skipIf(!reachable.ok)("provider_key", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await scratch.db.insert(learner).values([{ id: LOCAL_LEARNER_ID }, { id: OTHER }]).onConflictDoNothing();
   }, 60_000);
 
@@ -162,8 +160,7 @@ describe.skipIf(!reachable.ok)("provider keys never leave through an export", ()
   };
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     out = await mkdtemp(path.join(tmpdir(), "catalog-byok-export-"));
     home = await mkdtemp(path.join(tmpdir(), "catalog-byok-home-"));
     process.env["DATABASE_URL"] = scratch.url;

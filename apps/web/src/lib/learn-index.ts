@@ -7,7 +7,7 @@ import type { MasteryBucket } from "@/lib/mastery-bucket";
  * learner's time zone) and the browser (which filters as the learner types).
  */
 
-export type IndexFilter = "all" | "due" | "learning" | "mastered" | "untouched" | "leeches";
+export type IndexFilter = "all" | "due" | "learning" | "mastered" | "untouched" | "leeches" | "ready" | "nocourse";
 
 export const INDEX_FILTERS: readonly { key: IndexFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -18,6 +18,10 @@ export const INDEX_FILTERS: readonly { key: IndexFilter; label: string }[] = [
   // "Leech" is Anki's word and stays the key, the URL value and the catalog's
   // field; the reader sees what it means (the owner's call, 2026-09-29).
   { key: "leeches", label: "Keeps slipping" },
+  // The two the map added (docs/proposals/knowledge-map.md, G5 and G8); the
+  // table offers them too, since both views share one filter.
+  { key: "ready", label: "Ready to learn" },
+  { key: "nocourse", label: "Not in a course" },
 ];
 
 export type IndexView = "table" | "graph";
@@ -48,6 +52,8 @@ export interface IndexRow {
   courseLabel: string | null;
   courses: string[];
   domain: string | null;
+  /** Ready to learn in a course opened recently (G5 of docs/proposals/knowledge-map.md). */
+  ready: boolean;
 }
 
 /**
@@ -67,8 +73,9 @@ export function parseFilter(value: string | null | undefined): IndexFilter {
   return INDEX_FILTERS.some((f) => f.key === value) ? (value as IndexFilter) : "all";
 }
 
+/** The map is the default view (G1 of docs/proposals/knowledge-map.md); `view=table` opens the table. */
 export function parseView(value: string | null | undefined): IndexView {
-  return value === "graph" ? "graph" : "table";
+  return value === "table" ? "table" : "graph";
 }
 
 export function parseScope(value: string | null | undefined, view: IndexView): GraphScope {
@@ -81,8 +88,9 @@ export function parseScope(value: string | null | undefined, view: IndexView): G
 
 /**
  * The query string for the index's state, keeping any other parameter already
- * there. The table leaves its defaults out; the graph view always writes its
- * scope, so a reload or a shared link shows exactly what was on the screen.
+ * there. The map is the default view, so only the table writes `view`; the map
+ * always writes its scope and the table only a scope other than its own
+ * default, so a reload or a shared link shows exactly what was on the screen.
  */
 export function indexSearch(
   state: { selected: string | null; view: IndexView; scope: GraphScope; filter: IndexFilter },
@@ -91,7 +99,7 @@ export function indexSearch(
   const params = new URLSearchParams(current);
   const set = (key: string, value: string | null) => (value === null ? params.delete(key) : params.set(key, value));
   set("concept", state.selected);
-  set("view", state.view === "table" ? null : state.view);
+  set("view", state.view === "graph" ? null : state.view);
   set("scope", state.view === "graph" ? state.scope : state.scope === "neighbourhood" ? null : state.scope);
   set("filter", state.filter === "all" ? null : state.filter);
   return params.toString();
@@ -110,6 +118,10 @@ export function matchesFilter(row: IndexRow, filter: IndexFilter): boolean {
       return row.isDue;
     case "leeches":
       return row.leech;
+    case "ready":
+      return row.ready;
+    case "nocourse":
+      return row.courses.length === 0;
     default:
       return row.bucket === filter;
   }

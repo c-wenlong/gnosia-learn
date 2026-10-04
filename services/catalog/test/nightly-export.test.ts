@@ -7,8 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runImportCommand } from "../src/commands/index-command";
 import { REPO_ROOT } from "../src/env";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
 
 /**
@@ -70,8 +69,7 @@ describe.skipIf(!reachable.ok)("scripts/nightly-export.mjs", () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     home = await mkdtemp(path.join(tmpdir(), "catalog-nightly-home-"));
     noManimkc = await mkdtemp(path.join(tmpdir(), "catalog-nightly-no-manimkc-"));
     for (const key of ["DATABASE_URL", "SELF_LEARN_HOME", "MANIMKC_ROOT"]) saved[key] = process.env[key];

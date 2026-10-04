@@ -94,7 +94,13 @@ export function AppSidebar() {
   useEffect(() => {
     if (!peeking) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPeek(false);
+      if (event.key !== "Escape") return;
+      // What had focus in the slid-out sidebar is about to be faded out or made
+      // inert, so focus would fall to the document: it goes to the fold, which
+      // is on the rail too.
+      const inside = room.current?.contains(document.activeElement) === true;
+      setPeek(false);
+      if (inside) requestAnimationFrame(() => room.current?.querySelector<HTMLElement>("[data-fold]")?.focus());
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -213,8 +219,13 @@ export function AppSidebar() {
             "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[min(85vw,300px)]",
             "max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)]",
             // `translate`, not `transform`: Tailwind 4 moves things with the translate property.
-            "max-md:transition-[translate,visibility,box-shadow] max-md:duration-300 max-md:ease-soft",
-            drawer ? "max-md:translate-x-0 max-md:shadow-xl" : "max-md:invisible max-md:-translate-x-full",
+            // Visibility rides the transition only on the way out: on the way in
+            // it would still be hidden on the first frame, and the focus the
+            // drawer moves to its first link on opening would not land.
+            "max-md:duration-300 max-md:ease-soft",
+            drawer
+              ? "max-md:translate-x-0 max-md:shadow-xl max-md:transition-[translate,box-shadow]"
+              : "max-md:invisible max-md:-translate-x-full max-md:transition-[translate,visibility,box-shadow]",
             // From 768px up: over its room, as wide as the room, or slid out to
             // 260px over the page while folded. The width is what animates.
             "md:absolute md:inset-y-0 md:left-0 md:transition-[width,box-shadow] md:duration-200 md:ease-soft",
@@ -389,6 +400,7 @@ function FoldButton({ rail, peeking, onPress }: { rail: boolean; peeking: boolea
       type="button"
       aria-label={label}
       title={label}
+      data-fold=""
       onClick={() => {
         onPress();
         shell.setCollapsed(!rail && !peeking);

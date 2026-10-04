@@ -17,11 +17,27 @@ function integer(name: string, fallback: number, min: number, max: number): numb
 }
 
 /**
- * One video job at a time, and never more. Scenes already render in parallel
- * inside a job (manimkc sizes that itself), so a second job would halve both
- * rather than finish anything sooner. A correctness choice, not a cost one.
+ * How many video jobs run at once: two by default, and never two of one tool
+ * (open question 1 of docs/STUDIO-VIDEO-TOOLS.md, measured 2026-10-04). Two
+ * jobs of one tool would each size their renders for the whole machine
+ * (`renderJobs` in sandbox.ts, two workers, concurrency three), so they still
+ * wait for each other.
+ *
+ * Measured with the three accepted studio videos' own sources, built through
+ * their jobs' wrappers inside the profiles: two builds of different tools
+ * started together each took 1.0 to 1.6 times as long as alone, and the pair
+ * finished 24 to 33% sooner than one after the other. A render is a fifth to
+ * a third of a job's wall time (the rest is the agent thinking), so two jobs
+ * share the cores for a fraction of their lives, and the second stops
+ * waiting a whole job (ten to fifteen minutes) to start. All three at once
+ * made manimkc's build three times as slow, which takes a long preview
+ * toward the Bash tool's 600 s ceiling, so three is the owner's to set, not
+ * the default. `STUDIO_VIDEO_CONCURRENCY=1` is one job at a time again. Read
+ * per kick, so a test can set it.
  */
-export const VIDEO_CONCURRENCY = integer("STUDIO_VIDEO_CONCURRENCY", 1, 1, 1);
+export function videoConcurrency(): number {
+  return integer("STUDIO_VIDEO_CONCURRENCY", 2, 1, 3);
+}
 
 /**
  * The only timer (D54, amended): this long with no line from the agent

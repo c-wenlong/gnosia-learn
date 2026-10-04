@@ -40,10 +40,9 @@ import {
   videoAssetIds,
   type PutVideoInput,
 } from "../src/content/videos";
-import { applyMigrations } from "../src/migrations";
 import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * Studio videos in the catalog (docs/STUDIO-VIDEOS.md, phase 1's catalog
@@ -173,8 +172,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
   let serial = 0;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     work = await mkdtemp(path.join(tmpdir(), "catalog-videos-"));
     tree = path.join(work, "tree");
     await seedWithManimkc(tree);

@@ -40,10 +40,9 @@ import { tagsIndexer } from "../src/index/tags";
 import { topicsIndexer } from "../src/index/topics";
 import { runIndex } from "../src/index/run";
 import { writeSource } from "../src/index/writer";
-import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `catalog import` is one owner's (phase 4 of docs/CONTENT-MIGRATION.md, D23,
@@ -74,8 +73,7 @@ describe.skipIf(!reachable.ok)("an import touches only its owner's rows", () => 
   const db = () => scratch.db;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await ensureLearner(scratch.db, LOCAL_LEARNER_ID);
     await ensureLearner(scratch.db, OTHER);
     await ensureLearner(scratch.db, COMMONS_OWNER);
@@ -525,8 +523,7 @@ describe.skipIf(!reachable.ok)("a whole import, through runIndex", () => {
   let fixture: Fixture;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await ensureLearner(scratch.db, LOCAL_LEARNER_ID);
     await ensureLearner(scratch.db, OTHER);
     await ensureLearner(scratch.db, COMMONS_OWNER);

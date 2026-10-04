@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
 import {
-  createScratchDatabase,
+  migratedScratchDatabase,
   probe,
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
@@ -44,8 +43,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
   let state: typeof import("@self-learn/catalog/state");
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     process.env.DATABASE_URL = scratch.url;
     const [gradeRoute, dueRoute, store] = await Promise.all([
