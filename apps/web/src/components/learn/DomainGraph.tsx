@@ -373,6 +373,9 @@ function Concept({
       )}
       onClick={() => onSelect(n.id)}
       onMouseEnter={() => onHover(n.id)}
+      // A move inside the concept counts as the latest input too, so it takes the light back
+      // from a row Tabbed to meanwhile; with nothing changed, the state bails out of a render.
+      onMouseMove={() => onHover(n.id)}
       onMouseLeave={() => onHover(null)}
       onPointerDown={onPointerDown}
     >

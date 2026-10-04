@@ -228,6 +228,9 @@ describe("domain graph interaction", () => {
     expect(state(host, "dfs")).toBe("hover");
     act(() => row(host, "heap").focus());
     expect(state(host, "heap")).toBe("hover");
+    // The pointer moving inside the concept it already rests on takes the light back.
+    act(() => void concept(host, "dfs").dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
+    expect(state(host, "dfs")).toBe("hover");
   });
 
   it("glides home on Reset without a jump, and takes no drag until it is home", () => {
