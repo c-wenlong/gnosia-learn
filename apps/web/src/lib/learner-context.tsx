@@ -134,6 +134,44 @@ async function post(path: string, body: unknown): Promise<ApiResponse> {
   };
 }
 
+interface Stored {
+  pick: (state: LearnerState) => unknown;
+  value: unknown;
+}
+
+/**
+ * A recap as the database holds it: the server sets `updatedAt` and counts
+ * `sessions` itself, so neither can be compared with the optimistic copy.
+ */
+function recapOf(state: LearnerState, topicId: string): unknown {
+  const recap = state.knowledge[topicId];
+  if (!recap) return null;
+  const { summary, keyPoints, misconceptions, openQuestions, source } = recap;
+  return { summary, keyPoints, misconceptions, openQuestions, source };
+}
+
+/**
+ * Deep equality over JSON-shaped values, blind to key order and to a key
+ * that is present but undefined: a snapshot comes from the server's
+ * serialiser, the optimistic state from a reducer, and both spell the same
+ * row differently in those two ways.
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, i) => sameValue(item, b[i]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = (record: Record<string, unknown>) =>
+    Object.keys(record).filter((k) => record[k] !== undefined);
+  const leftKeys = keys(left);
+  if (leftKeys.length !== keys(right).length) return false;
+  return leftKeys.every((k) => sameValue(left[k], right[k]));
+}
+
 export function LearnerProvider({
   initialState,
   reachable,
@@ -170,43 +208,63 @@ export function LearnerProvider({
   const queue = useRef(createWriteQueue<ApiResponse>());
 
   /**
+   * What each stored write left in the database, by write key: the slice of
+   * state that write decides (`pick`) and its value once stored. See
+   * `receive`.
+   */
+  const stored = useRef(new Map<string, Stored>());
+  /** A snapshot that arrived while writes were in flight, waiting for them. */
+  const held = useRef<LearnerState | null>(null);
+
+  /**
    * The server is the authority. When a navigation or a `router.refresh()`
    * brings back a newer snapshot, adopt it: otherwise a reset in one tab, or a
    * `learn observe` at the terminal, would be invisible until a full reload.
    *
-   * Except while a write is in flight. A snapshot rendered then was read
-   * before the write landed, so adopting it would put the old row back over
-   * the optimistic value, and nothing would restore it when the write is
-   * stored. So it is held back (`held`), and once every write has settled the
-   * snapshot is read again (`settled` below), which by then includes them.
+   * Except a snapshot that may predate a write. One read before a write
+   * landed carries the old row, and adopting it would put that row over the
+   * optimistic value with nothing to restore it once the write is stored. It
+   * happens two ways: the snapshot arrives while the write is in flight, or it
+   * was read while the write was in flight and arrives just after it settled.
+   *
+   * So a snapshot that arrives while writes are in flight is held until they
+   * settle. A snapshot with nothing in flight is checked against `stored`:
+   * when it shows every stored write it is adopted, and those writes are
+   * confirmed and forgotten. When it does not, it is stale or another tab
+   * wrote since, and which is newer is the database's to say, so it is read
+   * again once and the snapshot after that is adopted as it is. Asking only
+   * when a snapshot disagrees keeps it to one server render per navigation
+   * in the usual case, where the last write (often `lastVisited`) landed long
+   * before the next click.
+   *
+   * A refused write leaves nothing in `stored`: the database never had it, so
+   * a snapshot showing the old row is the truth, and the banner says so.
    */
+  const receive = useCallback(
+    (snapshot: LearnerState) => {
+      if (queue.current.pending > 0) {
+        held.current = snapshot;
+        return;
+      }
+      held.current = null;
+      const writes = [...stored.current.values()];
+      stored.current.clear();
+      if (writes.every(({ pick, value }) => sameValue(pick(snapshot), value))) {
+        current.current = snapshot;
+        setState(snapshot);
+        return;
+      }
+      router.refresh();
+    },
+    [router],
+  );
+
   const seen = useRef(initialState);
-  const held = useRef(false);
   useEffect(() => {
     if (seen.current === initialState) return;
     seen.current = initialState;
-    if (queue.current.pending > 0) {
-      held.current = true;
-      return;
-    }
-    setState(initialState);
-  }, [initialState]);
-
-  /** True when a write that settled since the queue was last idle was refused. */
-  const refused = useRef(false);
-
-  /**
-   * The queue has gone idle. If a snapshot was held back meanwhile, read it
-   * again, unless a write was refused: then the unsaved value stays on screen
-   * with the banner, as it does with no refresh in the way, and the next
-   * navigation brings the database's version.
-   */
-  const settled = useCallback(() => {
-    const reread = held.current && !refused.current;
-    held.current = false;
-    refused.current = false;
-    if (reread) router.refresh();
-  }, [router]);
+    receive(initialState);
+  }, [initialState, receive]);
 
   /**
    * Apply the reducer, then write. `send` receives the reducer's output, so
@@ -217,6 +275,10 @@ export function LearnerProvider({
    * another do not and are not. Several keys make the write a barrier over all
    * of them, which is how a reset waits for the writes it is about to delete.
    *
+   * `pick` reads, from any state, the part this write decides, as the
+   * database stores it (no client-made ids or times). It is how a snapshot is
+   * checked for this write once it is stored: see `receive`.
+   *
    * Resolves once the write has settled, true when it was stored. Most
    * callers ignore it and let the banner speak; one that has to say
    * "done" in words (Settings' reset) waits for it.
@@ -226,6 +288,7 @@ export function LearnerProvider({
       key: string | readonly string[],
       reduce: (previous: LearnerState) => LearnerState,
       send: (next: LearnerState) => Promise<ApiResponse>,
+      pick: (state: LearnerState) => unknown,
     ): Promise<boolean> => {
       const next = reduce(current.current);
       current.current = next;
@@ -236,14 +299,19 @@ export function LearnerProvider({
           () => send(next),
           (response) => {
             setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
-            if (response.ok === false) refused.current = true;
-            if (queue.current.pending === 0) settled();
+            if (response.ok !== false) {
+              stored.current.set(typeof key === "string" ? key : key.join("\n"), {
+                pick,
+                value: pick(next),
+              });
+            }
+            if (queue.current.pending === 0 && held.current !== null) receive(held.current);
             resolve(response.ok !== false);
           },
         );
       });
     },
-    [settled],
+    [receive],
   );
 
   // The root layout can only read the theme cookie, so a browser without one
@@ -269,6 +337,7 @@ export function LearnerProvider({
         "preference:theme",
         (previous) => setTheme(previous, theme),
         () => post("preference", { key: "theme", value: theme }),
+        (state) => state.theme,
       );
     },
     [commit],
@@ -286,17 +355,10 @@ export function LearnerProvider({
           return next;
         },
         () => post("name", { name: cleaned }),
-      ).then((ok) => {
-        // A refresh that landed while the write was in flight replaced the
-        // optimistic name with whatever the row held then. Which name is
-        // newest is the database's to say (this save, or another tab's), so
-        // a stored save that no longer matches the screen reads the snapshot
-        // again rather than guessing.
-        if (ok && (current.current.displayName ?? null) !== cleaned) router.refresh();
-        return ok;
-      });
+        (state) => state.displayName ?? null,
+      );
     },
-    [commit, router],
+    [commit],
   );
 
   const toggleTopicCompletion = useCallback(
@@ -309,6 +371,7 @@ export function LearnerProvider({
             curriculumItemId: topicId,
             completed: next.completed[topicId] === true,
           }),
+        (state) => state.completed[topicId] === true,
       );
     },
     [commit],
@@ -320,6 +383,7 @@ export function LearnerProvider({
         `note:${topicId}`,
         (previous) => setNote(previous, topicId, note),
         () => post("note", { curriculumItemId: topicId, note }),
+        (state) => state.notes[topicId] ?? null,
       );
     },
     [commit],
@@ -331,6 +395,7 @@ export function LearnerProvider({
         "preference:userResources",
         (previous) => addUserResource(previous, moduleId, resource),
         (next) => post("preference", { key: "userResources", value: next.userResources }),
+        (state) => state.userResources,
       );
     },
     [commit],
@@ -342,6 +407,7 @@ export function LearnerProvider({
         "preference:userResources",
         (previous) => removeUserResource(previous, moduleId, resourceId),
         (next) => post("preference", { key: "userResources", value: next.userResources }),
+        (state) => state.userResources,
       );
     },
     [commit],
@@ -358,6 +424,7 @@ export function LearnerProvider({
             ...input,
             countSession: options?.countSession !== false,
           }),
+        (state) => recapOf(state, topicId),
       );
     },
     [commit],
@@ -379,6 +446,7 @@ export function LearnerProvider({
             openQuestions: [],
             source: "manual",
           }),
+        (state) => recapOf(state, topicId),
       );
     },
     [commit],
@@ -393,6 +461,7 @@ export function LearnerProvider({
         topicIds.flatMap((id) => [`progress:${id}`, `note:${id}`]),
         (previous) => resetCourseProgress(previous, topicIds),
         () => post("reset", { curriculumItemIds: topicIds }),
+        (state) => topicIds.map((id) => [state.completed[id] === true, state.notes[id] ?? null]),
       ),
     [commit],
   );
@@ -403,6 +472,9 @@ export function LearnerProvider({
         "preference:lastVisited",
         (previous) => setLastVisited(previous, courseSlug, moduleSlug),
         (next) => post("preference", { key: "lastVisited", value: next.lastVisited }),
+        // Not `at`: the server keeps the time, but a check that compared it
+        // would also have to agree on its precision.
+        (state) => [state.lastVisited?.courseSlug ?? null, state.lastVisited?.moduleSlug ?? null],
       );
     },
     [commit],
@@ -416,6 +488,7 @@ export function LearnerProvider({
         // The whole list, from the state the reducer just made. Writes on one
         // key run in order, so the last of two quick toggles carries both.
         (next) => post("preference", { key: "inactiveCourses", value: next.inactiveCourses }),
+        (state) => state.inactiveCourses,
       );
     },
     [commit],

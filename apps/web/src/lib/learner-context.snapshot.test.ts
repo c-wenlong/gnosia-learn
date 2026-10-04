@@ -6,9 +6,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared";
 
 /**
- * A snapshot that lands while a write is in flight was read before the write,
- * so the provider holds it back rather than putting the old row over the
- * optimistic value, and reads the snapshot again once every write is stored.
+ * A snapshot read before a write landed carries the old row: held back while
+ * the write is in flight, checked against the stored write once it settles
+ * (or when it arrives just after), and read again once when it disagrees.
  */
 
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
@@ -122,16 +122,37 @@ describe("a snapshot during a write", () => {
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps a refused write on screen and reads nothing, so the banner and the text stay", async () => {
+  it("holds back a snapshot read during the write that arrives just after it is stored", async () => {
+    const { container, draw, answer } = setup({ notes: { t1: "old" } });
+    act(() => held.learner!.updateNote("t1", "new"));
+    await answer();
+    // Read on the server while the note was in flight, delivered after it settled.
+    draw({ notes: { t1: "old" } });
+    expect(container.textContent).toBe("note=new tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    // The database's answer after that is adopted as it is, whatever it says.
+    draw({ notes: { t1: "another tab" } });
+    expect(container.textContent).toBe("note=another tab tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("adopts the next snapshot without reading again when it already shows the stored write", async () => {
+    const { container, draw, answer } = setup({});
+    act(() => held.learner!.toggleTopicCompletion("t1"));
+    await answer();
+    draw({ completed: { t1: true }, notes: { t2: "from the terminal" } });
+    expect(container.textContent).toBe("note=none tick=true");
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("protects nothing for a refused write: the database never had it", async () => {
     const { container, draw, answer } = setup({});
     act(() => held.learner!.updateNote("t1", "three paragraphs"));
     draw({});
-    await answer(503);
     expect(container.textContent).toBe("note=three paragraphs tick=false");
+    await answer(503);
     expect(held.learner!.saveError).toBe("Not saved.");
-    expect(router.refresh).not.toHaveBeenCalled();
-    // The next snapshot, with nothing in flight, is the database's to give.
-    draw({});
     expect(container.textContent).toBe("note=none tick=false");
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 });
