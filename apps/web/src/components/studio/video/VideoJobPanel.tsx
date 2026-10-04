@@ -7,6 +7,8 @@ import { formatTimecode, type TranscriptCue, type VideoChapter } from "@/compone
 import { JobLog } from "@/components/studio/JobPanel";
 import { Duration } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { FADE_IN } from "@/components/studio/motion";
+import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
 import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
@@ -183,7 +185,7 @@ function StatusLine({ job, replaced }: { job: VideoJob; replaced: boolean }) {
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-      <span aria-hidden className={cx("size-2.5 shrink-0 rounded-full", dotTone(job))} />
+      <span aria-hidden className={cx("size-2.5 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none", dotTone(job))} />
       <div className="min-w-0 flex-1">
         <p role="status" className="truncate text-[15px] font-semibold text-text">
           {replaced ? "Replaced" : headline(job)}
@@ -314,7 +316,11 @@ function FailureCard({ job, path, inConversation }: { job: VideoJob; path: strin
           </Button>
         )}
       </div>
-      {changing && <ChangeForm job={job} path={path} onClose={() => setChanging(false)} />}
+      {changing && (
+        <div className={FADE_IN}>
+          <ChangeForm job={job} path={path} onClose={() => setChanging(false)} />
+        </div>
+      )}
       {said !== null && <p role="alert" className="text-[13px] text-danger">{said}</p>}
     </div>
   );
@@ -383,9 +389,12 @@ function SheetStrip({
         </span>
       </div>
 
+      {/* Fades in as it opens (opacity only, so Close's autofocus and the
+          keys below work from the first frame); a step to another scene
+          keeps the frame and fades the new picture in once it has loaded. */}
       {shown !== null && (
         <figure
-          className="flex min-w-0 flex-col gap-2 rounded-xl border border-hair bg-surface2 p-2"
+          className={cx("flex min-w-0 flex-col gap-2 rounded-xl border border-hair bg-surface2 p-2", FADE_IN)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               // The sheet closes, not the panel: without this the dialog's
@@ -397,8 +406,7 @@ function SheetStrip({
             else if (event.key === "ArrowLeft") step(-1);
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element -- a runner file behind the proxy, which the image optimiser cannot reach. */}
-          <img
+          <FadeImg
             src={sheetSrc(job.jobId, shown)}
             alt={`Contact sheet for ${titleOf(shown.scene)}, round ${shown.round}`}
             className="max-h-[60dvh] w-full rounded-lg bg-black object-contain"
@@ -445,14 +453,13 @@ function SheetStrip({
                     open === scene ? "border-accent ring-2 ring-accent" : "border-hair hover:border-border",
                   )}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- see above. */}
-                  <img
+                  <FadeImg
                     key={sheet.renderedAt ?? sheet.scene}
                     src={sheetSrc(job.jobId, sheet)}
                     alt=""
                     loading="lazy"
                     decoding="async"
-                    className="studio-fade-in h-full w-full object-contain"
+                    className="h-full w-full object-contain"
                   />
                   {sheet.round > 1 && (
                     <span className="absolute top-1.5 right-1.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[11px] font-medium text-white">
@@ -523,7 +530,7 @@ function StepMark({ status, live }: { status: StepRow["status"]; live: boolean }
     );
   }
   if (status === "failed") return <span aria-hidden className={cx(base, "bg-danger")} />;
-  if (status === "current") return <span aria-hidden className={cx(base, "bg-accent", live && "studio-breathe")} />;
+  if (status === "current") return <span aria-hidden className={cx(base, "bg-accent transition-colors duration-200 motion-reduce:transition-none", live && "studio-breathe")} />;
   return <span aria-hidden className={cx(base, "border-2 border-border")} />;
 }
 
@@ -866,8 +873,9 @@ function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: 
 
   return (
     <div className="flex min-w-0 flex-col gap-3 border-t border-hair pt-4">
+      {/* The presses and the change form swap in place, each fading in. */}
       {!changing && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className={cx("flex flex-wrap items-center gap-2", FADE_IN)}>
           {accept && (
             <Button disabled={busy !== null} onClick={() => void act("accept")}>
               {busy === "accept" ? "Accepting" : "Accept"}
@@ -880,7 +888,7 @@ function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: 
           )}
           {discard &&
             (confirmDiscard ? (
-              <span className="flex flex-wrap items-center gap-2">
+              <span className={cx("flex flex-wrap items-center gap-2", FADE_IN)}>
                 <span className="text-[13px] text-text2">The renders are deleted; the source is kept.</span>
                 <Button size="sm" variant="warn" disabled={busy !== null} onClick={() => void act("discard")}>
                   {busy === "discard" ? "Discarding" : "Discard it"}
@@ -890,16 +898,20 @@ function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: 
                 </Button>
               </span>
             ) : (
-              <Button variant="ghost" disabled={busy !== null} onClick={() => setConfirmDiscard(true)}>
+              <Button variant="ghost" disabled={busy !== null} onClick={() => setConfirmDiscard(true)} className={FADE_IN}>
                 Discard
               </Button>
             ))}
         </div>
       )}
       {accept && !changing && (
-        <p className="text-[12px] text-text3">Nothing is in the catalog until Accept. Accept stores the video, its sidecars and its poster in one step.</p>
+        <p className={cx("text-[12px] text-text3", FADE_IN)}>Nothing is in the catalog until Accept. Accept stores the video, its sidecars and its poster in one step.</p>
       )}
-      {changing && <ChangeForm job={job} path={path} onClose={() => setChanging(false)} />}
+      {changing && (
+        <div className={FADE_IN}>
+          <ChangeForm job={job} path={path} onClose={() => setChanging(false)} />
+        </div>
+      )}
       {said !== null && (
         <p role="alert" className="text-[13px] text-danger">
           {said.text}

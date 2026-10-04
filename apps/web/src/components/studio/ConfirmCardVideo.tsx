@@ -2,8 +2,10 @@
 
 import { useId, useState } from "react";
 
+import { Reveal } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { ProposedTopic } from "@/components/studio/ConfirmCard";
+import { Collapse } from "@/components/ui/Collapse";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -128,9 +130,19 @@ export function ConfirmCardVideo({
   }
 
   return (
-    <Card tight as="article" aria-label={`Video brief: ${brief.title}`} className={cx("mt-1", (status === "stale" || status === "closed") && "opacity-60")}>
-      <div className="flex flex-col gap-3.5">
-        <div className={cx("flex flex-col gap-3", onHold && "opacity-60")}>
+    <Card
+      tight
+      as="article"
+      aria-label={`Video brief: ${brief.title}`}
+      className={cx(
+        "mt-1 transition-opacity duration-200 ease-out motion-reduce:transition-none",
+        (status === "stale" || status === "closed") && "opacity-60",
+      )}
+    >
+      {/* No gap: each footer carries its space above it inside its fold, as
+          on the diagram's card (`ConfirmCard`). */}
+      <div className="flex flex-col">
+        <div className={cx("flex flex-col gap-3 transition-opacity duration-200 ease-out motion-reduce:transition-none", onHold && "opacity-60")}>
           <div>
             <div className="flex items-center gap-2">
               <Glyph name="video" size={18} className="text-text2" />
@@ -165,8 +177,8 @@ export function ConfirmCardVideo({
           {warning !== null && <p className="rounded-lg bg-warn-tint px-3 py-2 text-[13px] leading-5 text-text">{warning}</p>}
         </div>
 
-        {onHold && (
-          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+        <Reveal open={onHold}>
+          <div className={FOOTER}>
             <p className="text-[13px] leading-5 text-text">On hold: {holdReason ?? "the conversation contradicted this brief"}</p>
             <div>
               <Button size="sm" variant="secondary" onClick={() => void use(onUse)} disabled={using || editBlock !== null} title={editBlock ?? undefined}>
@@ -175,10 +187,10 @@ export function ConfirmCardVideo({
             </div>
             <UseError text={useError} />
           </div>
-        )}
+        </Reveal>
 
-        {status === "held" && onPutBack !== undefined && (
-          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+        <Reveal open={status === "held" && onPutBack !== undefined}>
+          <div className={FOOTER}>
             <div>
               <Button onClick={() => void use(onPutBack)} disabled={using || editBlock !== null} title={editBlock ?? undefined}>
                 {using ? "Saving…" : "Use this brief"}
@@ -192,10 +204,10 @@ export function ConfirmCardVideo({
               <UseError text={useError} />
             )}
           </div>
-        )}
+        </Reveal>
 
-        {live && (
-          <div className="flex flex-col gap-2 border-t border-hair pt-3.5">
+        <Reveal open={live}>
+          <div className={FOOTER}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Button
                 variant={paired ? "secondary" : "primary"}
@@ -231,19 +243,24 @@ export function ConfirmCardVideo({
               </p>
             )}
           </div>
-        )}
+        </Reveal>
 
-        {status === "drawn" && jobHref !== null && (
-          <div className="border-t border-hair pt-3">
-            <PanelLink href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
-              {madeLine("video", jobRunning)}. Open the job
-            </PanelLink>
+        <Reveal open={status === "drawn" && jobHref !== null}>
+          <div className="mt-3.5 border-t border-hair pt-3">
+            {jobHref !== null && (
+              <PanelLink href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+                {madeLine("video", jobRunning)}. Open the job
+              </PanelLink>
+            )}
           </div>
-        )}
+        </Reveal>
       </div>
     </Card>
   );
 }
+
+/** A footer: its rule, and the card's 14px above it, inside its own fold (`ConfirmCard`'s `FOOTER`). */
+const FOOTER = "mt-3.5 flex flex-col gap-2 border-t border-hair pt-3.5";
 
 /** One collapsed row per scene; open, every beat as it will be spoken and shown. */
 function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSecond: number | undefined }) {
@@ -279,10 +296,18 @@ function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSeco
               <span className="shrink-0 text-[12px] tabular-nums text-text2">
                 {beatCount(scene.beats.length)} · {shortLength(sceneSeconds(scene, narrated, charsPerSecond))}
               </span>
-              <Glyph name="next" size={16} className={cx("text-text3 transition-transform", expanded && "rotate-90")} />
+              <Glyph
+                name="next"
+                size={16}
+                className={cx(
+                  "text-text3 transition-transform duration-300 ease-soft motion-reduce:transition-none",
+                  expanded && "rotate-90",
+                )}
+              />
             </button>
-            {expanded && (
-              <ol id={panel} className="flex flex-col gap-3 px-3 pb-3 pl-11 pt-1">
+            {/* Folds open and shut; the beats stay drawn while shut, inert. */}
+            <Collapse open={expanded} id={panel}>
+              <ol className="flex flex-col gap-3 px-3 pb-3 pl-11 pt-1">
                 {scene.beats.map((beat, index) => (
                   <li key={index} className="flex flex-col gap-1">
                     <p className="text-[14px] leading-5 text-text">
@@ -302,7 +327,7 @@ function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSeco
                   </li>
                 ))}
               </ol>
-            )}
+            </Collapse>
           </li>
         );
       })}

@@ -1,9 +1,10 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 
 import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
+import { useFadeOnChange } from "@/components/studio/motion-parts";
 import { NewDiagramJobs } from "@/components/studio/GridJob";
 import { useStudioPath } from "@/components/studio/panel-host";
 import { EmptyDirectory } from "@/components/studio/StudioBlocked";
@@ -96,6 +97,10 @@ export function StudioGrid({
   // an extend and goes on its tile; any other target is a new diagram's card.
   const targets = useMemo(() => diagrams.map((diagram) => diagram.tldr.path), [diagrams]);
   const videoSlugs = useMemo(() => videos.map((video) => video.slug), [videos]);
+  // A change of how the grid is drawn (grid or list, the kind, the grouping)
+  // fades it in again. Typing a search does not: it moves too often.
+  const box = useRef<HTMLDivElement | null>(null);
+  useFadeOnChange(box, `${view.layout}|${view.kind}|${view.group}`);
 
   const sections = useMemo(() => {
     const groups = groupDiagrams(sortDiagrams(filterDiagrams(diagrams, view), view), view, titleMap, domainMap);
@@ -128,7 +133,7 @@ export function StudioGrid({
 
   if (sections.length === 0) {
     return (
-      <>
+      <div ref={box} className="space-y-6">
         {/* Empty, with no job making anything: no frame at all. */}
         <div className={`${frame} empty:hidden`}>{lead}</div>
         {diagrams.length === 0 && unreadable === 0 && videos.length === 0 ? (
@@ -146,13 +151,13 @@ export function StudioGrid({
             .
           </p>
         )}
-      </>
+      </div>
     );
   }
 
   // Diagrams and studio videos share the groups, and one order inside each.
   return (
-    <>
+    <div ref={box} className="space-y-6">
       {sections.map((section, at) => (
         <section key={section.key}>
           {section.label !== "" && (
@@ -191,6 +196,6 @@ export function StudioGrid({
           </div>
         </section>
       ))}
-    </>
+    </div>
   );
 }

@@ -83,6 +83,7 @@ export function SearchField({
         )}
       />
       {search.query !== "" && (
+        // Fades in with the first letter typed; it goes with the last.
         <button
           type="button"
           aria-label="Clear the search"
@@ -91,7 +92,7 @@ export function SearchField({
             search.clear();
             inputRef.current?.focus();
           }}
-          className="absolute right-1 inline-flex size-7 items-center justify-center rounded-md text-text3 transition-colors hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+          className="absolute right-1 inline-flex size-7 animate-fade-in items-center justify-center rounded-md text-text3 transition-colors hover:text-text focus-visible:outline-2 focus-visible:outline-accent motion-reduce:animate-none"
         >
           <svg aria-hidden viewBox="0 0 20 20" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
             <path d="m5.5 5.5 9 9m0-9-9 9" />
@@ -120,8 +121,10 @@ export function SearchResults({
   onPick: () => void;
 }) {
   const rows = search.found === null ? [] : searchRows(search.found.drafts, titles, search.words);
+  // Fades in over the history it replaces, once, as the search starts; the
+  // words that follow redraw it in place.
   return (
-    <div data-peek-hold="" className="pt-1">
+    <div data-peek-hold="" className="animate-fade-in pt-1 motion-reduce:animate-none">
       {search.error !== null && (
         <p role="alert" className="px-2.5 pt-1 text-[13px] leading-5 text-danger">
           {search.error}

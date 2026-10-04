@@ -14,6 +14,8 @@ import { PinnedConcept, PinnedDiagram, PinnedVideo } from "@/components/studio/P
 import { PANE_GUTTER, usePaneLayout } from "@/components/studio/pane-context";
 import { Sentence } from "@/components/studio/Sentence";
 import { useStartDraft } from "@/components/studio/useStartDraft";
+import { ENTER, FADE_IN, reducedMotion } from "@/components/studio/motion";
+import { Arrive } from "@/components/studio/motion-parts";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { MentionComposer } from "@/components/studio/StudioComposer";
 import { Button } from "@/components/ui/Button";
@@ -231,6 +233,12 @@ export function DraftPanel({
   const [announce, setAnnounce] = useState("");
   /** A card is being edited: its press and Send wait. */
   const [editing, setEditing] = useState(false);
+  /**
+   * The newest seq the first read of the record held. Entries after it are
+   * new while the panel is open and animate in; the ones it opened with do
+   * not, so reopening a conversation does not replay it. Null until read.
+   */
+  const [baseline, setBaseline] = useState<number | null>(null);
   const composer = useRef<MentionComposerHandle | null>(null);
   const thread = useRef<HTMLDivElement | null>(null);
   const focused = useRef(false);
@@ -297,6 +305,7 @@ export function DraftPanel({
     }
     const fresh = result.data;
     setView(fresh);
+    setBaseline((held) => held ?? topSeq(fresh.transcript));
     setStatus("ready");
     setDownReason(null);
     if (!fresh.inFlight) setStream(null);
@@ -336,7 +345,7 @@ export function DraftPanel({
   const ready = status === "ready";
   const lastSeq = useRef(0);
   useEffect(() => {
-    lastSeq.current = view?.transcript.reduce((max, entry) => Math.max(max, entry.seq), 0) ?? 0;
+    lastSeq.current = view === null ? 0 : topSeq(view.transcript);
   }, [view]);
 
   useEffect(() => {
@@ -435,11 +444,26 @@ export function DraftPanel({
   }, [ready, mode]);
 
   const entries = useMemo(() => (view === null ? [] : visibleEntries(view.transcript)), [view]);
+  /** The thread box the last scroll moved: a new one (opening, back from a job) jumps to its foot. */
+  const scrolledBox = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    // The thread scrolls, never the page.
+    // The thread scrolls, never the page. Something new in it (a message, a
+    // reply, a banner) glides into view; the thread's first drawing jumps
+    // straight to its foot, since gliding through a whole conversation on
+    // opening would be a wait.
+    const box = thread.current;
+    if (box === null) return;
+    const glide = scrolledBox.current === box && !reducedMotion();
+    scrolledBox.current = box;
+    if (typeof box.scrollTo === "function") box.scrollTo({ top: box.scrollHeight, behavior: glide ? "smooth" : "auto" });
+    else box.scrollTop = box.scrollHeight;
+  }, [entries.length, pending, mode]);
+  useEffect(() => {
+    // A reply growing as it is written follows at once: a glide per word
+    // would always be behind.
     const box = thread.current;
     if (box !== null) box.scrollTop = box.scrollHeight;
-  }, [entries.length, stream?.text, pending, mode]);
+  }, [stream?.text]);
 
   /* ---------------------------------------------------------------- */
   /* Verbs                                                             */
@@ -586,8 +610,12 @@ export function DraftPanel({
         return { ok: false, status: result.status, refusal: result.refusal };
       }
       await load();
+      // The live one: a card that has just stopped being live keeps its
+      // press for the moment its footer takes to fold shut, inert.
       requestAnimationFrame(() =>
-        thread.current?.querySelector<HTMLElement>(`[data-studio-draw][data-card-kind="${kind}"]`)?.focus(),
+        [...(thread.current?.querySelectorAll<HTMLElement>(`[data-studio-draw][data-card-kind="${kind}"]`) ?? [])]
+          .find((press) => press.closest("[inert]") === null)
+          ?.focus(),
       );
       return { ok: true };
     },
@@ -790,7 +818,7 @@ export function DraftPanel({
             conversation's cost is in the conversation. */}
         <DialogHeader title={job?.title ?? title} />
         <BackBar href={panelHref(path, { job: null })} />
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className={cx("min-h-0 flex-1 overflow-y-auto", FADE_IN)}>
           {ended && (
             <div className="flex flex-wrap items-center gap-3 border-b border-hair px-5 py-3">
               <p className="min-w-0 flex-1 text-[14px] text-text2">
@@ -830,6 +858,10 @@ export function DraftPanel({
   // H8: a conversation opened on a concept takes a bare tag, which means "of this concept".
   const valueBlock = valueSendBlock(value, empty && concept === null);
   const busy = view.inFlight || pending !== null;
+  // A turn taken since the panel opened: what it brings (the reply being
+  // written, a problem, the turn limit) arrives as news. On opening they are
+  // part of the conversation as it stood, and stand still.
+  const liveTurn = baseline !== null && (pending !== null || topSeq(view.transcript) > baseline);
   const lastPerson = pending?.value ?? lastPersonValue(view.transcript);
   const waiting = waitingKinds(view);
   const suggested = suggestionsFor(view);
@@ -854,7 +886,7 @@ export function DraftPanel({
         aria-live="polite"
         aria-busy={busy}
         aria-label="Conversation"
-        className={cx("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto py-5", gutter)}
+        className={cx("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto py-5", gutter, FADE_IN)}
       >
         {view.source !== null && sourceTitle !== null && (diagramSource ? <PinnedDiagram name={view.source} title={sourceTitle} /> : <PinnedVideo slug={view.source} title={sourceTitle} />)}
         {concept !== null && <PinnedConcept slug={concept.slug} title={concept.title} tutorTurns={concept.tutorTurns} />}
@@ -883,69 +915,78 @@ export function DraftPanel({
         )}
 
         {entries.map((entry) => (
-          <Entry
-            key={entry.seq}
-            entry={entry}
-            view={view}
-            topics={topics}
-            jobs={jobs}
-            cards={cards}
-            both={both !== null && both.seq === entry.seq ? both : null}
-            makeBothLive={both !== null}
-            pressing={pressing}
-            refused={refused}
-            entries={entries}
-            answering={view.inFlight || pending !== null}
-            onSave={saveEdit}
-            onUse={takeOffHold}
-            onEditingChange={setEditing}
-            onPress={(card) => void press(card)}
-            onPressBoth={() => void pressBoth()}
-            bothError={bothError}
-            waiting={waiting}
-            path={path}
-            suggest={suggested !== null && suggested.seq === entry.seq ? suggested.kinds : null}
-            unavailable={(kind) => kindUnavailable(kind, view, video)}
-            onSuggest={(kind) => composer.current?.insertMention(kind)}
-            singleCard={cards.length <= 1}
-            videoTools={video?.tools ?? []}
-            charsPerSecond={video?.charsPerSecond}
-          />
+          // A person's turn does not animate: it replaces the bubble that
+          // already rose in at Send (below), in the same place.
+          <Arrive key={entry.seq} animate={baseline !== null && entry.seq > baseline && entry.role !== "person"}>
+            <Entry
+              entry={entry}
+              view={view}
+              topics={topics}
+              jobs={jobs}
+              cards={cards}
+              both={both !== null && both.seq === entry.seq ? both : null}
+              makeBothLive={both !== null}
+              pressing={pressing}
+              refused={refused}
+              entries={entries}
+              answering={view.inFlight || pending !== null}
+              onSave={saveEdit}
+              onUse={takeOffHold}
+              onEditingChange={setEditing}
+              onPress={(card) => void press(card)}
+              onPressBoth={() => void pressBoth()}
+              bothError={bothError}
+              waiting={waiting}
+              path={path}
+              suggest={suggested !== null && suggested.seq === entry.seq ? suggested.kinds : null}
+              unavailable={(kind) => kindUnavailable(kind, view, video)}
+              onSuggest={(kind) => composer.current?.insertMention(kind)}
+              singleCard={cards.length <= 1}
+              videoTools={video?.tools ?? []}
+              charsPerSecond={video?.charsPerSecond}
+            />
+          </Arrive>
         ))}
 
         {pending !== null && !view.transcript.some((entry) => entry.seq === pending.seq) && (
-          <UserMessage>
+          <UserMessage className={ENTER}>
             <Sentence value={pending.value} />
           </UserMessage>
         )}
 
+        {/* One box for the whole turn, so the reply's change from thinking
+            to words to checking moves nothing. */}
         {busy && (
-          <Streaming
-            text={stream?.text ?? null}
-            checking={pending === null && turnIndicator(view, stream !== null) === "checking"}
-          />
+          <Arrive animate={liveTurn}>
+            <Streaming
+              text={stream?.text ?? null}
+              checking={pending === null && turnIndicator(view, stream !== null) === "checking"}
+            />
+          </Arrive>
         )}
 
         {problem !== null && !busy && (
-          <Problem
-            problem={problem}
-            kind={problemKind}
-            onRetry={lastPerson === null ? null : () => void send(lastPerson, { keepComposer: true })}
-            onAskAgain={problem.case === "E6" ? () => void send(askAgainValue(problem, kinds ? problemKind : null), { keepComposer: true }) : null}
-            blocked={editing ? EDITING_BRIEF : null}
-            onStartOver={() => setConfirmStartOver(true)}
-            cutOffShown={entries.at(-1)?.interrupted === true}
-          />
+          <Arrive animate={liveTurn}>
+            <Problem
+              problem={problem}
+              kind={problemKind}
+              onRetry={lastPerson === null ? null : () => void send(lastPerson, { keepComposer: true })}
+              onAskAgain={problem.case === "E6" ? () => void send(askAgainValue(problem, kinds ? problemKind : null), { keepComposer: true }) : null}
+              blocked={editing ? EDITING_BRIEF : null}
+              onStartOver={() => setConfirmStartOver(true)}
+              cutOffShown={entries.at(-1)?.interrupted === true}
+            />
+          </Arrive>
         )}
 
         {sendError !== null && (
-          <p role="alert" className="rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
+          <p role="alert" className={cx("rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text", ENTER)}>
             {sendError}
           </p>
         )}
 
         {view.turnCap > 0 && view.turns >= view.turnCap && (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
+          <Arrive animate={liveTurn} className="flex flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
             <span className="min-w-0 flex-1">
               This conversation has reached its {view.turnCap}-turn limit.
               {cards.length > 0 ? " The last brief can still be made." : ""}
@@ -953,7 +994,7 @@ export function DraftPanel({
             <Button size="sm" variant="secondary" onClick={() => void startDraft()} disabled={starting}>
               New conversation
             </Button>
-          </div>
+          </Arrive>
         )}
       </div>
 
@@ -964,7 +1005,7 @@ export function DraftPanel({
         )}
       >
         {waiting.length > 0 && (
-          <div className="mb-2 flex flex-col gap-1 px-1">
+          <div className={cx("mb-2 flex flex-col gap-1 px-1", FADE_IN)}>
             {waiting.map((item) => (
               <p key={item.kind} className="flex flex-wrap items-center gap-x-3 text-[12px] leading-4 text-text2">
                 <span className="font-semibold">{waitingLine(item.kind)}</span>
@@ -999,8 +1040,9 @@ export function DraftPanel({
           onModEnter={cards.length > 0 ? () => modEnter(null) : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
+          {/* The question and the button swap in place, each fading in. */}
           {confirmStartOver ? (
-            <span className="flex items-center gap-2">
+            <span className={cx("flex items-center gap-2", FADE_IN)}>
               <span className="text-text2">Close this conversation for good?</span>
               <button type="button" onClick={() => void startOver()} className="font-medium text-danger underline-offset-4 hover:underline">
                 Start over
@@ -1011,7 +1053,7 @@ export function DraftPanel({
             </span>
           ) : (
             view.transcript.length > 0 && (
-              <button type="button" onClick={() => setConfirmStartOver(true)} className="underline-offset-4 hover:text-text2 hover:underline">
+              <button type="button" onClick={() => setConfirmStartOver(true)} className={cx("underline-offset-4 hover:text-text2 hover:underline", FADE_IN)}>
                 Start over
               </button>
             )
@@ -1028,6 +1070,11 @@ export function DraftPanel({
 }
 
 /* -------------------------------------------------------------------------- */
+
+/** The newest seq in a transcript, or 0 for an empty one. */
+function topSeq(transcript: readonly Pick<TranscriptEntry, "seq">[]): number {
+  return transcript.reduce((max, entry) => Math.max(max, entry.seq), 0);
+}
 
 /** The kind E6 is about: the refused brief's own, when the runner names one. */
 function problemKindOf(view: Pick<DraftView, "transcript" | "error">): DraftKind | null {
