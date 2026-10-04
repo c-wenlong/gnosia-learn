@@ -30,9 +30,10 @@ function sources(): Array<{ path: string; text: string }> {
 const KIT = "components/ui/classes.ts";
 
 describe("the kit's controls", () => {
+  // Unanchored, so `export const` matches too; any quote, so a template literal does.
   it("declares the focus ring once, in classes.ts", () => {
     const copies = sources()
-      .filter(({ path, text }) => path !== KIT && /const \w+\s*=\s*"focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"/.test(text))
+      .filter(({ path, text }) => path !== KIT && /const \w+\s*=\s*["'`]focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent["'`]/.test(text))
       .map(({ path }) => path);
     expect(copies).toEqual([]);
   });

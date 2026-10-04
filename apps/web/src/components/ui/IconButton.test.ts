@@ -56,8 +56,8 @@ describe("TextLink", () => {
     expect(html).not.toContain("target=");
   });
 
-  it("opens an external one in a new tab without handing it the opener", () => {
-    const html = link({ href: "/api/assets/a/file", external: true });
+  it("opens an external one in a new tab without handing it the opener, whatever the caller passes", () => {
+    const html = link({ href: "/api/assets/a/file", external: true, rel: "opener", target: "_self" });
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
   });

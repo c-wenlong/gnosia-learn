@@ -57,7 +57,8 @@ export function TextLink(props: TextLinkProps) {
     const classes = linkClasses({ tone, size, weight, className });
     if (external) {
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer" className={classes} {...rest}>
+        // After the spread, so a caller cannot drop the opener protection a new tab needs.
+        <a href={href} className={classes} {...rest} target="_blank" rel="noopener noreferrer">
           {children}
         </a>
       );
