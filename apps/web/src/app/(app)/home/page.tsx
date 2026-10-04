@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { PAGE_ENTER } from "@/components/PageLoading";
 import { AskBox } from "@/components/home/AskBox";
 import { CoursesCard } from "@/components/home/CoursesCard";
 import { NextUpCard } from "@/components/home/NextUpCard";
@@ -26,7 +27,7 @@ export const metadata: Metadata = { title: "Home" };
 export default async function HomePage() {
   const home = await loadHome();
   return (
-    <div data-layout="app">
+    <div data-layout="app" className={PAGE_ENTER}>
       <RefreshOnReturn asOf={home.asOf} />
       <h1 className="mb-3 font-display text-[28px] leading-tight font-bold text-text md:sr-only">Home</h1>
       <div className="mb-5">

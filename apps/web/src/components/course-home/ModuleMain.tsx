@@ -68,7 +68,8 @@ export function ModuleMain({
 
   return (
     <Panel as="section" className={className}>
-      <div className="flex flex-col px-1 py-1 sm:px-4 sm:py-2">
+      {/* A new module's words fade in over the panel, which stays put. */}
+      <div className="flex animate-fade-in flex-col px-1 py-1 motion-reduce:animate-none sm:px-4 sm:py-2">
         <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
           <div className="min-w-0 flex-1">
             <p className="text-[14px] leading-5 text-text2">
@@ -148,7 +149,7 @@ function Objectives({ items }: { items: string[] }) {
         aria-expanded={open}
         aria-controls={listId}
         className={cx(
-          "-mx-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 text-[14px] font-semibold leading-5 text-text hover:bg-surface2 hover:underline",
+          "-mx-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 text-[14px] font-semibold leading-5 text-text transition-colors duration-100 hover:bg-surface2 hover:underline motion-reduce:transition-none",
           FOCUS_RING,
         )}
       >

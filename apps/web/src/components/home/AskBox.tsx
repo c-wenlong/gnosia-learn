@@ -146,7 +146,7 @@ export function AskBox() {
           id={listId}
           role="listbox"
           aria-label="Matches"
-          className="absolute inset-x-0 top-full z-40 mt-2 flex max-h-[min(30rem,70vh)] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-2xl border-2 border-border bg-surface p-1.5"
+          className="absolute inset-x-0 top-full z-40 mt-2 flex max-h-[min(30rem,70vh)] origin-top animate-pop-in flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-2xl border-2 border-border bg-surface p-1.5 motion-reduce:animate-none"
         >
           {options.map((option, i) => {
             const on = option === activeOption;
@@ -160,7 +160,7 @@ export function AskBox() {
                 onMouseEnter={() => setActive(i)}
                 onClick={() => go(option)}
                 className={cx(
-                  "flex min-w-0 cursor-pointer items-center gap-3 rounded-xl px-3 py-2",
+                  "flex min-w-0 cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition-colors duration-100 motion-reduce:transition-none",
                   on && "bg-surface2",
                   option.entry === null && options.length > 1 && "mt-1 border-t border-hair",
                 )}

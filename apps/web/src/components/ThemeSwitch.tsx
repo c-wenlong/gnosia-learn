@@ -7,6 +7,7 @@ import { useLearner } from "@/lib/learner-context";
 import {
   APPEARANCE_LABELS,
   appearanceOf,
+  fadeThemeChange,
   PALETTE_LABELS,
   paletteOf,
   THEME_APPEARANCES,
@@ -26,6 +27,10 @@ import {
  * Radio groups rather than toggles because each axis is a choice among named
  * options, and a select would hide them behind a click. Arrow keys move
  * within a group as on any radio group; Tab moves between the two.
+ *
+ * A change crossfades the page's colours (`fadeThemeChange`) instead of
+ * snapping, and the pill under the chosen option slides to the new one.
+ * Neither moves under reduced motion.
  */
 export function ThemeSwitch({
   id,
@@ -57,7 +62,10 @@ export function ThemeSwitch({
         options={THEME_PALETTES}
         labels={PALETTE_LABELS}
         value={palette}
-        onChange={(next) => setThemeMode(themeModeFor(next, appearance))}
+        onChange={(next) => {
+          fadeThemeChange();
+          setThemeMode(themeModeFor(next, appearance));
+        }}
         disabled={!ready}
         small={small}
       />
@@ -66,7 +74,10 @@ export function ThemeSwitch({
         options={THEME_APPEARANCES}
         labels={APPEARANCE_LABELS}
         value={appearance}
-        onChange={(next) => setThemeMode(themeModeFor(palette, next))}
+        onChange={(next) => {
+          fadeThemeChange();
+          setThemeMode(themeModeFor(palette, next));
+        }}
         disabled={!ready}
         small={small}
       />
@@ -93,6 +104,9 @@ function Segments<T extends string>({
   small: boolean;
 }) {
   const captionId = useId();
+  const index = Math.max(0, options.indexOf(value));
+  // The gap between options, in px, for the pill's width and its slide.
+  const gap = small ? 2 : 4;
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, option: T) => {
     const step =
@@ -112,9 +126,20 @@ function Segments<T extends string>({
       <div
         role="radiogroup"
         aria-labelledby={captionId}
-        className={cx("grid rounded-xl bg-surface2 p-0.5", small ? "gap-0.5" : "gap-1")}
+        className={cx("relative grid rounded-xl bg-surface2 p-0.5", small ? "gap-0.5" : "gap-1")}
         style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
       >
+        {/* The chosen option's face, one pill that slides between options
+            rather than a background that jumps. One option's width, moved
+            by whole options and gaps. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0.5 left-0.5 rounded-[10px] bg-surface shadow-[0_1px_0_var(--lip-shade)] transition-[translate] duration-200 ease-soft motion-reduce:transition-none"
+          style={{
+            width: `calc((100% - 4px - ${gap * (options.length - 1)}px) / ${options.length})`,
+            translate: `calc(${index} * (100% + ${gap}px)) 0`,
+          }}
+        />
         {options.map((option) => {
           const on = value === option;
           return (
@@ -129,9 +154,9 @@ function Segments<T extends string>({
               onKeyDown={(event) => onKeyDown(event, option)}
               data-option={option}
               className={cx(
-                "rounded-[10px] font-medium transition-colors duration-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent disabled:opacity-60",
+                "relative rounded-[10px] font-medium transition-colors duration-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent disabled:opacity-60",
                 small ? "h-8 text-[12px]" : "h-10 text-[14px]",
-                on ? "bg-surface text-text shadow-[0_1px_0_var(--lip-shade)]" : "text-text2 hover:text-text",
+                on ? "text-text" : "text-text2 hover:text-text",
               )}
             >
               {labels[option]}

@@ -23,7 +23,7 @@ export function NextCard({ groups }: { groups: NextGroup[] }) {
                 <li key={step.key}>
                   <Link
                     href={step.href}
-                    className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
+                    className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
                   >
                     {step.bucket !== undefined ? (
                       <MasteryDot bucket={step.bucket} />

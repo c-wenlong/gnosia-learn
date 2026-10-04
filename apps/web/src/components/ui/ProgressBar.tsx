@@ -64,7 +64,7 @@ export function ProgressBar({
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className={cx(height, TONE[tone], "rounded-full transition-[width] duration-300")} style={{ width: `${value}%` }} />
+        <div className={cx(height, TONE[tone], "rounded-full transition-[width] duration-300 ease-soft motion-reduce:transition-none")} style={{ width: `${value}%` }} />
       </div>
     </div>
   );

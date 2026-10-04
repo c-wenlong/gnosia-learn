@@ -53,7 +53,19 @@ const LINK_FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus
  * without a reload. The server page hands it `CourseSummary` projections and
  * the `ItemStanding` that says which topics are mastered; a tick still only
  * counts for a topic with no concepts, the path's rule.
+ *
+ * Nothing jumps in or out: Continue learning and the inactive section unfold
+ * and fold (`Collapse`; Continue learning keeps its last cards while it
+ * folds away), and a card that arrives in a list, from a search, a tag, or
+ * an Activate that moved it between sections, fades in.
  */
+
+/** The value while `shown`, and the last one shown while not, for content that folds away. */
+function useLastShown<T>(value: T, shown: boolean): T {
+  const [last, setLast] = useState(value);
+  if (shown && last !== value) setLast(value);
+  return shown ? value : last;
+}
 export function CourseList({
   summaries,
   tags,
@@ -114,6 +126,8 @@ export function CourseList({
     setFilter(next);
     refilter();
   };
+  const continuingShown = useLastShown(continuing, continuing.length > 0);
+  const inactiveShown = useLastShown(inactiveTotal, inactiveTotal > 0);
   const card = (s: CourseSummary, active: boolean) => (
     <CoverCard
       summary={s}
@@ -124,25 +138,26 @@ export function CourseList({
   );
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col">
       <h1 className="font-display text-[28px] leading-tight font-bold text-text">Courses</h1>
 
-      {continuing.length > 0 && (
+      {/* Each fold carries the space above it, so a shut one leaves none. */}
+      <Collapse open={continuing.length > 0} className="pt-8">
         <section aria-labelledby="continue-learning" className="flex flex-col gap-4">
           <h2 id="continue-learning" className="text-[20px] leading-tight font-bold text-text">
             Continue learning
           </h2>
           <ul className="flex flex-col gap-4">
-            {continuing.map((entry) => (
-              <li key={entry.summary.slug}>
+            {continuingShown.map((entry) => (
+              <li key={entry.summary.slug} className="animate-fade-in motion-reduce:animate-none">
                 <ContinueCard entry={entry} />
               </li>
             ))}
           </ul>
         </section>
-      )}
+      </Collapse>
 
-      <section aria-labelledby="all-courses" className="flex flex-col gap-4">
+      <section aria-labelledby="all-courses" className="mt-8 flex flex-col gap-4">
         {/* The heading earns its place only beside Continue learning; alone, the page title says it. */}
         <h2
           id="all-courses"
@@ -197,7 +212,7 @@ export function CourseList({
         )}
       </section>
 
-      {inactiveTotal > 0 && (
+      <Collapse open={inactiveTotal > 0} className="pt-8">
         <section aria-labelledby="inactive-courses" className="flex flex-col gap-4">
           <h2 id="inactive-courses">
             <button
@@ -212,7 +227,7 @@ export function CourseList({
             >
               Inactive courses{" "}
               <span className="text-[16px] font-normal text-text2">
-                {filtering ? `${shown.inactive.length} of ${inactiveTotal}` : inactiveTotal}
+                {filtering ? `${shown.inactive.length} of ${inactiveShown}` : inactiveShown}
               </span>
               <CollapseChevron open={showInactive} className="text-text2" />
             </button>
@@ -225,7 +240,7 @@ export function CourseList({
             )}
           </Collapse>
         </section>
-      )}
+      </Collapse>
     </div>
   );
 }
@@ -290,7 +305,7 @@ function CourseGrid({ courses, render }: { courses: CourseSummary[]; render: (s:
   return (
     <ul className="grid grid-cols-2 gap-3 sm:gap-4 sm:[grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
       {courses.map((s) => (
-        <li key={s.slug} className="group relative flex">
+        <li key={s.slug} className="group relative flex animate-fade-in motion-reduce:animate-none">
           {render(s)}
         </li>
       ))}
