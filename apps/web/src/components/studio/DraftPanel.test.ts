@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   drawDraft: vi.fn(),
   drawBoth: vi.fn(),
   push: vi.fn(),
+  focus: vi.fn(),
   events: null as null | { onEvent: (event: { type: string; data: unknown }) => void },
   composer: null as null | {
     value: { text: string; mentions: unknown[] };
@@ -32,6 +33,7 @@ const mocks = vi.hoisted(() => ({
     disabledReason?: string;
     onChange: (value: { text: string; mentions: unknown[] }) => void;
     onModEnter?: () => void;
+    handleRef?: { current: unknown } | ((handle: unknown) => void) | null;
   },
 }));
 
@@ -46,6 +48,9 @@ vi.mock("next/dynamic", () => ({
   default: () =>
     function StubComposer(props: NonNullable<typeof mocks.composer>) {
       mocks.composer = props;
+      if (props.handleRef && typeof props.handleRef === "object") {
+        props.handleRef.current = { focus: mocks.focus, insertMention: () => {} };
+      }
       return createElement("div", { "data-composer": JSON.stringify(props.value) });
     },
 }));
@@ -87,6 +92,7 @@ beforeAll(() => {
 beforeEach(() => {
   mocks.composer = null;
   mocks.events = null;
+  mocks.focus.mockClear();
   sessionStorage.clear();
   mocks.sendMessage.mockResolvedValue({ ok: true, status: 202, data: { draftId: "d1", seq: 1, note: "" } });
   mocks.abandonDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", state: "abandoned", note: "" } });
@@ -454,5 +460,47 @@ describe("the diagram card (bug 11)", () => {
     const card = host.querySelector('[data-card="diagram"]') as HTMLElement;
     expect(card.textContent).toContain("Draw");
     expect(card.textContent).not.toMatch(/STUDIO_HOME|candidate\/|\.tldr/);
+  });
+});
+
+describe("focus on opening", () => {
+  it("goes to the composer when nobody has moved it since the panel opened", async () => {
+    await mount(pair());
+    expect(mocks.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays where the person put it while the conversation loaded, such as the sidebar's search", async () => {
+    let answer: (value: unknown) => void = () => {};
+    mocks.getDraft.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const search = document.createElement("input");
+    const host = document.createElement("div");
+    document.body.append(search, host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(DraftPanel, {
+          draftId: "d1",
+          jobId: null,
+          path: "/studio?draft=d1",
+          topics: [],
+          titles: {},
+          suggestions: [],
+          cap: null,
+          video: { ok: true, reason: null },
+          videoTitles: {},
+        }),
+      );
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+      search.remove();
+    });
+    search.focus();
+    await act(async () => answer({ ok: true, status: 200, data: pair() }));
+    await settle();
+    expect(mocks.composer).not.toBeNull();
+    expect(mocks.focus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(search);
   });
 });
