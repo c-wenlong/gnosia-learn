@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
+import { PixelAvatar } from "@/components/avatar/PixelAvatar";
 import { cx } from "@/components/ui/classes";
 import { FADE, FADE_IN } from "./motion";
 import { useLearner } from "@/lib/learner-context";
@@ -13,8 +14,10 @@ import { useLearner } from "@/lib/learner-context";
  * upwards: the theme switch, Settings and Sign out. Folded to the rail it is
  * the avatar alone, and the menu opens to its right.
  *
- * The row shows the learner's name (`learner.display_name`, set on Settings),
- * and says "Account" until there is one.
+ * The row shows the learner's sprite (`learner.avatar`) and name
+ * (`learner.display_name`), both set on Settings' Profile tab. It says
+ * "Account" until there is a name, and shows a plain head and shoulders
+ * while the sprite is unknown (the database unreachable).
  *
  * Sign out is a form post rather than a link, so nothing that prefetches or
  * embeds a URL can end the session (see `api/auth/sign-out`).
@@ -30,7 +33,8 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
   const themeLabel = useId();
-  const name = useLearner().state.displayName ?? "Account";
+  const { displayName, avatar } = useLearner().state;
+  const name = displayName ?? "Account";
 
   useEffect(() => {
     if (!open) return;
@@ -78,12 +82,16 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
           "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
         )}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-border text-text2">
-          <svg aria-hidden viewBox="0 0 20 20" className="size-4" fill="currentColor">
-            <circle cx="10" cy="7" r="3.5" />
-            <path d="M3.5 17.5c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5z" />
-          </svg>
-        </span>
+        {avatar === undefined ? (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-border text-text2">
+            <svg aria-hidden viewBox="0 0 20 20" className="size-4" fill="currentColor">
+              <circle cx="10" cy="7" r="3.5" />
+              <path d="M3.5 17.5c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5z" />
+            </svg>
+          </span>
+        ) : (
+          <PixelAvatar avatar={avatar} className="size-8" />
+        )}
         <span aria-hidden={collapsed ? true : undefined} className={cx("flex min-w-0 flex-1 items-center gap-2.5 pr-2", FADE, collapsed ? "opacity-0" : FADE_IN)}>
           <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-text">{name}</span>
           <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0 text-text3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">

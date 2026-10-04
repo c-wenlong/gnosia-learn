@@ -100,7 +100,7 @@ which brief produced them.
 
 | Table | Purpose |
 | --- | --- |
-| `learner` | Who. One row, id `local`, until authentication exists. |
+| `learner` | Who. One row, id `local`, until authentication exists. Carries the owner's `display_name` and `avatar`, a pixel sprite from `AVATARS` that the column's default draws at random whenever a row is made (migration `0023_learner_avatar`; [docs/design/BRAND.md](../../docs/design/BRAND.md#avatar-sprites)). |
 | `event` | Append-only log of everything the tutoring loop observed. |
 | `mastery` | BKT belief per concept: `p_l`, observations, correct, last seen. Derived. |
 | `review` | SM-2 card per concept: repetitions, ease, interval, lapses, due, leech. Derived. |

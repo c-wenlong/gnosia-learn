@@ -5,7 +5,6 @@ import {
   conceptCurriculumItem as conceptLinks,
   curriculumItem,
   LOCAL_LEARNER_ID,
-  learner,
   progress,
   recap,
 } from "@self-learn/schema";
@@ -336,7 +335,8 @@ export async function restoreItem(db: CatalogDatabase, options: ItemOptions): Pr
     ] as const) {
       for (const snap of rows) {
         const back = learnerFromSnapshot(table, snap);
-        await tx.insert(learner).values({ id: String(back["learnerId"]) }).onConflictDoNothing();
+        // `id` alone, as `ensureLearner` writes it: the database draws the rest.
+        await tx.execute(sql`insert into learner (id) values (${String(back["learnerId"])}) on conflict do nothing`);
         await tx
           .insert(table)
           .values({ ...back, curriculumItemId: options.id } as never)

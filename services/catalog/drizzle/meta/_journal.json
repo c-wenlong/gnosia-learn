@@ -162,6 +162,13 @@
       "when": 1791089989103,
       "tag": "0022_readings_on_lessons",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791109233810,
+      "tag": "0023_learner_avatar",
+      "breakpoints": true
     }
   ]
 }

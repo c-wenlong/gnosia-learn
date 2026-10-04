@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { DISPLAY_NAME_MAX, PREFERENCE_KEYS } from "@self-learn/schema/shared";
+import { AVATARS, avatarLabel, DISPLAY_NAME_MAX, PREFERENCE_KEYS, type AvatarId } from "@self-learn/schema/shared";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
+import { PixelAvatar } from "@/components/avatar/PixelAvatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
-import { buttonClasses, inputClasses } from "@/components/ui/classes";
+import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
 import { useLearner } from "@/lib/learner-context";
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
 import {
@@ -140,12 +141,102 @@ export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
   );
 }
 
-/** The Profile tab: who the app says you are. */
+/** The Profile tab: who the app says you are, and the sprite beside it. */
 export function ProfileSettings() {
   return (
-    <Card>
-      <NameField />
-    </Card>
+    <>
+      <Card>
+        <NameField />
+      </Card>
+      <Card title="Avatar">
+        <AvatarPicker />
+      </Card>
+    </>
+  );
+}
+
+/**
+ * The twelve sprites as one radio group (`AVATARS`), saved the moment one is
+ * chosen, through the provider, so the sidebar changes with it. Native
+ * radios under the tiles give the arrow keys, the tab stop and the screen
+ * reader's "3 of 12" for free; the tile is the radio's label.
+ *
+ * With the database unreachable the state holds no sprite, and the group
+ * says so rather than showing a choice it cannot save.
+ */
+export function AvatarPicker() {
+  const { state, setAvatar } = useLearner();
+  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const latest = useRef(0);
+  const name = useId();
+  const current = state.avatar;
+
+  // Chosen on `click`, which a radio fires on a press or an arrow key even
+  // when it is already checked, so the sprite a failed save left showing can
+  // be chosen again to retry; `change` would not fire for it.
+  const choose = (avatar: AvatarId) => {
+    if (avatar === current && status.kind !== "error") return;
+    setStatus({ kind: "saving" });
+    const mine = ++latest.current;
+    void setAvatar(avatar).then((ok) => {
+      if (mine !== latest.current) return;
+      setStatus(
+        ok ? { kind: "saved" } : { kind: "error", message: "Not saved: the database did not answer. Choose it again to retry." },
+      );
+    });
+  };
+
+  return (
+    <fieldset className="flex min-w-0 flex-col gap-3">
+      <legend className="sr-only">Avatar</legend>
+      <div>
+        <p id={`${name}-note`} className="text-[12px] text-text2">
+          {current === undefined
+            ? "Not read: the database is unreachable."
+            : "Drawn at random when your account was made. Shown at the foot of the sidebar."}
+        </p>
+      </div>
+      <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+        {AVATARS.map((avatar) => {
+          const on = avatar === current;
+          return (
+            <label
+              key={avatar}
+              className={cx(
+                "group flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 px-1 py-2.5",
+                "transition-colors duration-150 motion-reduce:transition-none",
+                "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent",
+                on ? "border-accent bg-surface2" : "border-transparent hover:bg-surface2",
+                current === undefined && "pointer-events-none opacity-50",
+              )}
+            >
+              <input
+                type="radio"
+                name={name}
+                value={avatar}
+                checked={on}
+                disabled={current === undefined}
+                aria-describedby={`${name}-note`}
+                onClick={() => choose(avatar)}
+                // Saving is on `click` (see `choose`); this only keeps the
+                // controlled radio from being read-only to React.
+                onChange={() => {}}
+                className="sr-only"
+              />
+              <PixelAvatar
+                avatar={avatar}
+                className={cx(
+                  "size-12 transition-transform duration-150 motion-reduce:transition-none",
+                  on ? "scale-105" : "group-hover:scale-105",
+                )}
+              />
+              <span className={cx("text-[12px]", on ? "font-semibold text-text" : "text-text2")}>{avatarLabel(avatar)}</span>
+            </label>
+          );
+        })}
+      </div>
+      <LiveStatus {...statusLine(status, { saving: "Saving…", saved: "Saved" })} />
+    </fieldset>
   );
 }
 
