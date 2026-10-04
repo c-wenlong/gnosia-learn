@@ -12,8 +12,17 @@ import { usePanelHost } from "@/components/studio/panel-host";
  * skips the server render (a second or more). A modified click (new tab,
  * new window) and anywhere without the host, the canvas route included, is
  * the `Link` it always was.
+ *
+ * With `panel`, a plain click opens that panel and `href` is only where a
+ * modified click and a script-less page go: a video tile plays its preview
+ * in place (`?play=`) and still opens the library page in a new tab.
  */
-export function PanelLink({ href, onClick, ...rest }: Omit<ComponentProps<typeof Link>, "href"> & { href: string }) {
+export function PanelLink({
+  href,
+  panel,
+  onClick,
+  ...rest
+}: Omit<ComponentProps<typeof Link>, "href"> & { href: string; panel?: string }) {
   const host = usePanelHost();
   return (
     <Link
@@ -24,7 +33,7 @@ export function PanelLink({ href, onClick, ...rest }: Omit<ComponentProps<typeof
         onClick?.(event);
         if (event.defaultPrevented || host === null) return;
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        if (host.navigate(href)) event.preventDefault();
+        if (host.navigate(panel ?? href)) event.preventDefault();
       }}
     />
   );

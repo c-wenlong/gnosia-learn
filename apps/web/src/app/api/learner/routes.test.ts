@@ -56,13 +56,14 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
     await seedContent(scratch.db);
     process.env.DATABASE_URL = scratch.url;
 
-    const [progress, note, reset, recap, preference, importRoute, state] = await Promise.all([
+    const [progress, note, reset, recap, preference, importRoute, name, state] = await Promise.all([
       import("./progress/route"),
       import("./note/route"),
       import("./reset/route"),
       import("./recap/route"),
       import("./preference/route"),
       import("./import/route"),
+      import("./name/route"),
       import("@self-learn/catalog/state"),
     ]);
     routes = {
@@ -72,6 +73,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       recap: recap.POST,
       preference: preference.POST,
       import: importRoute.POST,
+      name: name.POST,
     };
     readLearnerSnapshot = state.readLearnerSnapshot;
   }, 60_000);
@@ -289,6 +291,30 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       });
       expect(status).toBe(400);
       expect(String(body.error)).toContain("http(s)");
+    });
+  });
+
+  describe("name", () => {
+    it("stores a name cleaned, answers with it, and clears it with an empty one", async () => {
+      const set = await call("name", { name: "  Ada \t Lovelace " });
+      expect(set.status).toBe(200);
+      expect(set.body.result).toBe("Ada Lovelace");
+      expect((await snapshot()).displayName).toBe("Ada Lovelace");
+      expect((await call("name", { name: "" })).status).toBe(200);
+      expect((await snapshot()).displayName).toBeUndefined();
+      expect((await call("name", { name: null })).status).toBe(200);
+    });
+
+    it("refuses a name that is too long or not a string, and keeps the one stored", async () => {
+      await call("name", { name: "Ada" });
+      expect((await call("name", { name: "x".repeat(61) })).status).toBe(400);
+      expect((await call("name", { name: 42 })).status).toBe(400);
+      expect((await snapshot()).displayName).toBe("Ada");
+      // The catalog's writer holds the limit too, for a caller that is not this route.
+      const { writeDisplayName } = await import("@self-learn/catalog/state");
+      await expect(writeDisplayName(scratch.db, "x".repeat(61))).rejects.toThrow(RangeError);
+      expect((await snapshot()).displayName).toBe("Ada");
+      await call("name", { name: null });
     });
   });
 

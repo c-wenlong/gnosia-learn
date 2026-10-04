@@ -31,6 +31,8 @@ const PATHS = {
   practice: "M12.8 4.7l2.5 2.5-7.6 7.6-3.2.7.7-3.2zM11.3 6.2l2.5 2.5",
   // A plus.
   add: "M10 4.5v11M4.5 10h11",
+  // An arrow, for the box composer's round Send.
+  send: "M4.5 10h11M11 5.5l4.5 4.5-4.5 4.5",
   // A padlock.
   lock: "M6 9V7a4 4 0 0 1 8 0v2M5 9h10v8H5z",
   // A clipboard with a tick: a module's week check.

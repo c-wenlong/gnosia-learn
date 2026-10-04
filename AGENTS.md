@@ -33,7 +33,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/STUDIO-CHAT-FIRST.md](docs/STUDIO-CHAT-FIRST.md) | The studio's chat-first redesign, accepted and being built: the planner agent, the `draft` table, the plus card and chat panel, and the tldraw manual in the drawing prompt |
 | [docs/STUDIO-VIDEOS.md](docs/STUDIO-VIDEOS.md) | Proposed: manimkc videos through the studio's chat. The video runner, the per-job sandbox around agent-written Python, the script as the brief, the gate, `catalog video put`, and the panel for the agent's model and effort |
 | [docs/STUDIO-MENTIONS.md](docs/STUDIO-MENTIONS.md) | Proposed: choosing what the studio's chat makes with @ tags. The menu, the inline chip and the studio's Lexical `MentionComposer`, tags as data on a message, untagged messages as conversation with one-click suggestions, one live brief per kind and Make both, the combined planner prompt, and "Add from library" as a later phase. Supersedes D51 of STUDIO-VIDEOS.md; ships with video phase 2 |
-| [docs/STUDIO-TUTOR-HANDOFF.md](docs/STUDIO-TUTOR-HANDOFF.md) | Accepted; phase 1 (the runner) and phase 2 (the web app) built, the paid and device checks still open: the concept tutor on `/learn/<concept>` gets the @ composer, and a Diagram or Video tag hands the concept to a new studio conversation (the note and the last tutor turns as data blocks, the message sent on arrival). When tags show, when Lexical loads, the runner change, D64 to D70 |
+| [docs/STUDIO-TUTOR-HANDOFF.md](docs/STUDIO-TUTOR-HANDOFF.md) | Accepted, phases 1 (the runner) and 2 (the web app) built and measured, the paid hand-offs and the iOS Safari touch check included; Android Chrome and VoiceOver are the owner's to run: the concept tutor on `/learn/<concept>` gets the @ composer, and a Diagram or Video tag hands the concept to a new studio conversation (the note and the last tutor turns as data blocks, the message sent on arrival). When tags show, when Lexical loads, the runner change, D64 to D70 |
 | [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the three video tools (manimkc, remotionkc, revideokc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
 | [docs/STUDIO-VIDEO-TOOLS.md](docs/STUDIO-VIDEO-TOOLS.md) | Built in phases, phase 3 (remotionkc) the last: the studio picks a video tool. The planner proposes manimkc, remotionkc or revideokc in the brief with a reason (a TOOLS block pinned to VIDEO-TOOLS.md), the card shows it as a switchable chip, the runner gets a backend per tool, and headless Chrome runs inside the job's Seatbelt profile (measured). D71 to D80 |
 | [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into Postgres and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
@@ -159,6 +159,12 @@ Rules of engagement:
   and every `lib/` helper with a real usage line), `example`, `new` (scaffold a
   topic), `lint`, `preview`, `build`, `topics`, `mirrors`. Run it from any
   checkout, or install with `uv tool install -e tools/cli`.
+- **A topic.yml's `concepts:` is read by the catalog, for all three video
+  tools.** Each slug becomes an `asset_concept` row on the video and its
+  sidecars, which is how a video lands on a concept's step of a module path.
+  A slug the importing owner cannot read, or a `concepts:` that is not a list
+  of slugs, refuses the import naming the topic.yml and the slug; an empty
+  list links nothing (`services/catalog/src/index/video-tool.ts`).
 - `tools/manimkc/server/` is a portable job server meant to run locally on macOS or
   Linux, keeping its state under `$MANIMKC_HOME/state/server/`. See
   [`tools/manimkc/server/DESIGN.md`](tools/manimkc/server/DESIGN.md) for what it needs from a machine and how it decides one can take a job.
@@ -195,7 +201,8 @@ Rules of engagement:
 - **There is no `maps.remotionkc`.** Each topic.yml's `topic:` is required and
   names the catalog topic its video is filed under, one the owner can read.
   An import refuses a folder with none, or with a slug nobody holds, naming
-  the file and the slug; it never skips one.
+  the file and the slug; it never skips one. Its optional `concepts:` is read
+  as manimkc's is.
 - **`REMOTIONKC_ROOT` is the checkout, `REMOTIONKC_HOME` the data root.** The
   first is remotionkc's own variable with the same meaning here, read by
   `services/catalog/src/env.ts`, defaulting to `tools/remotionkc`. The second
@@ -243,7 +250,7 @@ Rules of engagement:
   posters. A bare import with no CLI skips revideokc, and refuses once it has
   rows here, as for the other two.
 - **Each topic.yml's `topic:` is required**, as for remotionkc; there is no
-  maps vocabulary.
+  maps vocabulary. Its optional `concepts:` is read as manimkc's is.
 - **`REVIDEOKC_ROOT` is the checkout, `REVIDEOKC_HOME` the data root**, with
   the same split as remotionkc's pair: the catalog reads the first
   (`services/catalog/src/env.ts`, defaulting to `tools/revideokc`) and takes

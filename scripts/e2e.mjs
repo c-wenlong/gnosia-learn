@@ -624,6 +624,97 @@ async function run() {
     await map.locator(`[data-concept="${id}"][aria-pressed="true"]`).waitFor();
   });
 
+  // Phase 2 of docs/proposals/knowledge-map.md: the map pans, zooms and fits,
+  // opens on the selected concept's island, and the URL keeps its scope.
+  await step('learn: the map pans, zooms and fits, and the URL keeps the scope', page, async () => {
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    await go(`/learn?view=graph&concept=${state.concept}`);
+    const map = main.getByRole('group', { name: /^Concept map/ });
+    await map.waitFor();
+    const svg = map;
+    const view = async () => (await svg.getAttribute('viewBox')).split(/\s+/).map(Number);
+    /** Wait for the view to stop moving (fits and button zooms animate), and return it. */
+    const settled = async () => {
+      let last = await view();
+      for (let i = 0; i < 40; i++) {
+        await page.waitForTimeout(50);
+        const next = await view();
+        if (next.every((n, k) => n === last[k])) return next;
+        last = next;
+      }
+      return last;
+    };
+    const param = () => new URL(page.url()).searchParams;
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('scope') === 'island');
+    assert((await svg.getAttribute('data-fit')) === 'island', `opened fitted to ${await svg.getAttribute('data-fit')}, not the island`);
+
+    const zoomIn = main.getByRole('button', { name: 'Zoom in' });
+    const zoomOut = main.getByRole('button', { name: 'Zoom out' });
+    const start = await settled();
+    await clickHydrated(page, zoomIn);
+    const nearer = await settled();
+    assert(nearer[2] < start[2], `Zoom in left the view ${start[2]} wide, now ${nearer[2]}`);
+    await zoomOut.click();
+    await zoomOut.click();
+    const farther = await settled();
+    assert(farther[2] > nearer[2], 'Zoom out did not widen the view');
+
+    // The wheel zooms around the pointer; a drag pans and does not select anything.
+    const box = await svg.boundingBox();
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.wheel(0, -300);
+    const wheeled = await settled();
+    assert(wheeled[2] < farther[2], 'scrolling the wheel up did not zoom in');
+    const before = param().get('concept');
+    await page.mouse.move(cx + 40, cy + 40);
+    await page.mouse.down();
+    await page.mouse.move(cx - 80, cy - 20, { steps: 8 });
+    await page.mouse.up();
+    const panned = await settled();
+    assert(panned[0] > wheeled[0] && panned[1] > wheeled[1], 'dragging left and up did not move the view right and down');
+    assert(param().get('concept') === before, 'a drag changed the selection');
+
+    // Fit all shows the whole map; the scope chips fit and land in the URL.
+    await main.getByRole('button', { name: 'Fit all' }).click();
+    const all = await settled();
+    assert(all[2] >= Number(await svg.getAttribute('data-map-width')), 'Fit all does not show the whole width');
+    assert((await svg.getAttribute('data-fit')) === 'all', 'Fit all did not record its fit');
+    await main.getByRole('group', { name: 'Map scope' }).getByRole('button', { name: 'Course' }).click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('scope') === 'course');
+    assert((await svg.getAttribute('data-fit')) === 'course', 'the Course chip did not fit the course');
+    await page.reload({ waitUntil: 'load' });
+    await map.waitFor();
+    assert((await svg.getAttribute('data-fit')) === 'course', 'a reload lost the course scope');
+
+    // Zoomed far enough out, the concept labels hide and the island titles stay.
+    for (let i = 0; i < 12 && (await svg.getAttribute('data-labels')) !== 'hidden'; i++) {
+      await zoomOut.click();
+      await settled();
+    }
+    assert((await svg.getAttribute('data-labels')) === 'hidden', 'the labels never hid when zoomed out');
+    await map.locator('[data-island-title]').first().waitFor({ state: 'visible' });
+    await zoomIn.click();
+    for (let i = 0; i < 12 && (await svg.getAttribute('data-labels')) !== 'shown'; i++) {
+      await zoomIn.click();
+      await settled();
+    }
+    assert((await svg.getAttribute('data-labels')) === 'shown', 'the labels did not come back when zoomed in');
+  });
+
+  await step('workspace: Open full course graph lands on the course scope of the map', page, async () => {
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    await go(`/learn/${state.concept}`);
+    const link = main.getByRole('link', { name: 'Open full course graph' });
+    assert((await link.getAttribute('href')) === `/learn?concept=${state.concept}&view=graph&scope=course`, `the link is ${await link.getAttribute('href')}`);
+    await clickHydrated(page, link);
+    await page.waitForURL((url) => url.pathname === '/learn' && url.searchParams.get('scope') === 'course');
+    const map = main.getByRole('group', { name: /^Concept map/ });
+    await map.waitFor();
+    assert((await map.getAttribute('data-fit')) === 'course', 'the link did not open the map on the course');
+  });
+
   await step('workspace: a concept renders three panels', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go(`/learn/${state.concept}`);
@@ -727,6 +818,23 @@ async function run() {
     // The close screen says what moved, per concept, and leads back to the module.
     await main.getByRole('heading', { name: 'What moved' }).waitFor();
     await main.getByRole('link', { name: 'Back to the module' }).waitFor();
+  });
+
+  await step('course: the module column has room beside the app sidebar', page, async () => {
+    // At 1280px the app sidebar takes 260px, and a course page laid out by
+    // window breakpoints squeezed its module column to under 300px.
+    await go('/courses');
+    const course = main.locator('a[href^="/courses/"]').first();
+    await course.waitFor();
+    await go((await course.getAttribute('href')) ?? '/courses');
+    const heading = main.getByRole('heading', { level: 1 }).first();
+    await heading.waitFor();
+    const width = await heading.evaluate((h) => {
+      let node = h;
+      while (node.parentElement && getComputedStyle(node.parentElement).display !== 'grid') node = node.parentElement;
+      return node.getBoundingClientRect().width;
+    });
+    assert(width >= 440, `the module column is ${Math.round(width)}px wide at 1280px, expected at least 440`);
   });
 
   await step('home: Pick up lists the course module opened and the concept answered', page, async () => {

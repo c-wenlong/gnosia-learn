@@ -86,7 +86,7 @@ export {
 } from "../poster/recipe";
 
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
-export { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";
+export { bumpEpoch, ensureLearner, readDisplayName, withLearnerLock, writeDisplayName } from "./learner";
 export {
   endSession,
   ensureSession,

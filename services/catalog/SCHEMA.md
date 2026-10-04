@@ -79,7 +79,7 @@ which brief produced them.
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
 | `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. `source_repo` says which repository or tool made it: `self-learn`, `manimkc`, `tldrawkc`, `remotionkc` (0017, the second video tool), or `revideokc` (0018, the third). |
 | `asset_topic` | This asset is about this topic. |
-| `asset_concept` | This asset is about this concept. |
+| `asset_concept` | This asset is about this concept. Written for a note (its own concept), for a session log (the notes its wikilinks name), for a diagram's SVG and source (its `meta.tldrawkc` concepts), for a studio video (its brief's concepts, `catalog video put`), and for a manimkc, remotionkc or revideokc render and each of its sidecars (its topic.yml's `concepts:`). |
 | `concept_prerequisite` | This concept `requires` or `assumes` that one. |
 | `collection_item` | This collection contains exactly one of a topic, a concept or an asset, at a position. A module holds one topic row (its topic, with `topic_position`, its place in that topic's `maps.courses`) and, since 0.5, one asset row per curated link in `resources:` order. |
 | `asset_derivation` | This asset was produced from that one: a transcript from a video, an SVG from a `.tldr`. |
@@ -603,7 +603,7 @@ relative to the directory:
 | `tags` | `content/tags.yaml` | `tag` |
 | `concepts` | `learn/concepts/<domain>/*.md` | `concept`, `concept_prerequisite`, `note` assets |
 | `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `collection_tag`, `curriculum_item_topic`, `concept_curriculum_item`, `link` assets with their `resource_type` |
-| `manimkc` | `manimkc topics --json` | `video`, `transcript`, `chapters`, `captions` assets and their derivations |
+| `manimkc` | `manimkc topics --json` | `video`, `transcript`, `chapters`, `captions` assets, their derivations, and `asset_concept` from each topic.yml's `concepts:` |
 | `remotionkc` | `remotionkc topics --json` | the same four kinds, under `remotionkc:` |
 | `revideokc` | `revideokc topics --json` | the same four kinds, under `revideokc:` |
 | `diagrams` | `tldrawkc list <dir>/learn/assets --json`, or the `.tldr` JSON | `diagram_svg`, `diagram_source` assets |
@@ -635,7 +635,10 @@ the way `manimkc` is of `mirrors`. `tags` is a prerequisite of `courses` too,
 since `collection_tag` points at tag rows, and a dependent of it, since pruning
 a tag clears the links to it that only the courses source writes back. The two
 closures are applied until neither adds anything: `--only concepts` pulls in
-`courses` as a dependent, and `courses` then pulls in `tags`.
+`courses` as a dependent, and `courses` then pulls in `tags`. `--only concepts`
+also pulls in the three video tools, and `mirrors` behind `manimkc`, since a
+concept prune cascades through the `asset_concept` rows a topic.yml's
+`concepts:` wrote, and only those sources write them back.
 
 `manimkc`, `remotionkc`, `revideokc` and `mirrors` are the optional sources.
 `manimkc` and `mirrors` read `tools/manimkc/tools/cli/manimkc`, `remotionkc`
@@ -827,6 +830,17 @@ remotionkc and revideokc have no vocabulary map, so there is nothing to check
 their folders against: a remotionkc or revideokc `topic.yml`'s `topic:` is
 required, and is the topic its video is filed under. A folder with none, or one naming a topic the
 importing owner cannot read, is refused by its file and its slug.
+
+All three tools' topic.yml may name the concepts the video teaches,
+`concepts: [slug, ...]`, which each CLI reports on the topic entry. Each slug
+becomes an `asset_concept` row on the video and on each of its sidecars, as a
+diagram's concepts go on its SVG and its source, and must be a concept the
+importing owner can read (theirs or the commons'). A slug that is not, or a
+`concepts:` that is not a list of slugs, is refused by its file and its slug,
+beside any other refusal in the same run; a missing or empty list links
+nothing, and a slug dropped from the list is pruned on the next import. The
+poster `catalog asset upload` cuts carries no concept, as it carries no
+topic: it is reached through its derivation from the video.
 
 The one exception is `sessions`. A session log is prose, and its wikilinks point
 at other sessions and at notes nobody has written; a link that names no concept

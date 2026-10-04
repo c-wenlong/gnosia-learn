@@ -38,6 +38,8 @@ import {
   videoJobForSlug,
   videoStepCount,
   videoTileStage,
+  videoFileHref,
+  videoStatusHref,
   type ContactSheet,
   type VideoBrief,
   type VideoJob,
@@ -605,6 +607,28 @@ describe("the grid", () => {
     });
     expect(filterVideos(videos, { topics: ["networking", "none"], query: "" }).map((v) => v.slug)).toEqual(["b", "c"]);
     expect(filterVideos(videos, { topics: [], query: "ATTENTION" }).map((v) => v.slug)).toEqual(["a"]);
+  });
+
+  it("keeps every video under All and Videos, and none under Diagrams (D85)", () => {
+    const videos = readVideos({
+      videos: [
+        { slug: "a", title: "Attention weights", topic: "transformers" },
+        { slug: "b", title: "Tunnels", topic: "networking" },
+      ],
+    });
+    const slugs = (kind: "all" | "diagram" | "video") => filterVideos(videos, { topics: [], query: "", kind }).map((v) => v.slug);
+    expect(slugs("all")).toEqual(["a", "b"]);
+    expect(slugs("video")).toEqual(["a", "b"]);
+    expect(slugs("diagram")).toEqual([]);
+    // The kind narrows; the topics and the search still apply under it.
+    expect(filterVideos(videos, { topics: ["networking"], query: "", kind: "video" }).map((v) => v.slug)).toEqual(["b"]);
+  });
+
+  it("plays a preview from the library's own file and status routes, the id encoded", () => {
+    expect(videoFileHref("attention weights")).toBe("/api/assets/video%3Aattention%20weights/file");
+    expect(videoStatusHref("a")).toBe("/api/assets/video%3Aa/status");
+    // Neither ends in an image extension, so the proxy's sign-in check covers both.
+    expect(videoFileHref("a.png")).not.toMatch(/\.(png|jpe?g|webp|svg|gif)$/);
   });
 
   it("links the poster, the library page and the gate's copies through the right routes", () => {

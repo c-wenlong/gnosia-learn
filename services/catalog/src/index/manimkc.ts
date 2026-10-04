@@ -9,6 +9,7 @@ import {
   toolCliPath,
   VIDEO_TOOL_MIME,
   type TopicsReport,
+  type VideoToolRowOptions,
 } from "./video-tool";
 
 /**
@@ -107,10 +108,11 @@ export const manimkcIndexer: Indexer = {
   assetPrefix: MANIMKC.prefix,
   root: ({ manimkcRoot }) => manimkcRoot,
 
-  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary, blobsRequired, owner }) => {
+  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary, blobsRequired, owner, knownConcepts }) => {
     const report = await readTopicsReport(toolsRoot ?? repoRoot, manimkcRoot);
     return buildRows(report, manimkcRoot, vocabulary.byManimkcPath, vocabulary.bySlug, {
       store: blobsRequired === true,
+      knownConcepts: await knownConcepts(),
       ...(owner === undefined ? {} : { owner }),
     });
   },
@@ -144,7 +146,7 @@ export async function buildRows(
   manimkcRoot: string,
   byManimkcPath: ReadonlyMap<string, string>,
   bySlug: ReadonlyMap<string, unknown>,
-  options: { store?: boolean; owner?: string } = {},
+  options: VideoToolRowOptions = {},
 ): ReturnType<typeof buildToolRows> {
   return buildToolRows(MANIMKC, report, manimkcRoot, { by: "vocabulary", byPath: byManimkcPath, bySlug }, options);
 }

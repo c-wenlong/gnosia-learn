@@ -3,6 +3,7 @@ import { act, createElement, useEffect, type ComponentProps, type ReactNode } fr
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { StudioVideo } from "@/lib/studio-video";
 import { panelSignature, type Diagram } from "@/lib/studio-view";
 
 /**
@@ -45,12 +46,35 @@ vi.mock("@/components/shell/shell-context", () => ({
     published.chats = chats;
   },
 }));
+// The player is the library's; what is pinned here is what the preview hands it.
+vi.mock("@/components/VideoPlayer", () => ({
+  VideoPlayer: ({ src, poster, title, seekTo, sourceRepo }: { src: string; poster?: string; title?: string; seekTo?: { seconds: number }; sourceRepo?: string }) =>
+    createElement("div", {
+      "data-player": src,
+      "data-poster": poster ?? "",
+      "data-title": title ?? "",
+      "data-starts": seekTo?.seconds ?? "",
+      "data-source": sourceRepo ?? "",
+    }),
+}));
+vi.mock("next/link", () => ({
+  // `scroll` and `prefetch` are the router's, not the anchor's.
+  default: ({ href, children, ...rest }: { href: string; children: unknown; scroll?: boolean; prefetch?: boolean }) => {
+    const attributes: Record<string, unknown> = { ...rest };
+    delete attributes.scroll;
+    delete attributes.prefetch;
+    return createElement("a", { href, ...attributes }, children as never);
+  },
+  useLinkStatus: () => ({ pending: false }),
+}));
 vi.mock("@/components/studio/DiagramInspector", () => ({
   DiagramPanelBody: ({ diagram, jobs, extendHref }: { diagram: { name: string }; jobs: { jobId: string }[]; extendHref: string }) =>
     createElement("div", { "data-tile": diagram.name, "data-jobs": jobs.map((job) => job.jobId).join(","), "data-extend": extendHref }),
 }));
 
 const { PanelHost, historyOf } = await import("./PanelHost");
+const { VideoRow, VideoTile } = await import("./video/VideoGridJob");
+const { DiagramRow, DiagramTile } = await import("./DiagramTile");
 const { usePanelHost } = await import("./panel-host");
 
 type Controls = NonNullable<ReturnType<typeof usePanelHost>>;
@@ -112,7 +136,16 @@ const DIAGRAM = {
   source: null,
 } as unknown as Diagram;
 
-function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
+const VIDEO: StudioVideo = {
+  slug: "attention",
+  title: "Attention weights",
+  topic: "transformers",
+  posterAssetId: "video:attention",
+  durationSeconds: 95,
+  updated: "2026-10-01T00:00:00.000Z",
+};
+
+function mount(options: { panel?: ReactNode; panelKey?: string; extra?: ReactNode } = {}) {
   const container = document.createElement("div");
   document.body.append(container);
   const root: Root = createRoot(container);
@@ -124,6 +157,7 @@ function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
     suggestions: [],
     cap: null,
     diagrams: [DIAGRAM],
+    videos: [VIDEO],
     drafts: [],
     jobs: [
       { jobId: "j1", state: "accepted", title: "Draw the graph", target: "learn/assets/graph.tldr", requested: "2026-09-30" },
@@ -135,7 +169,13 @@ function mount(options: { panel?: ReactNode; panelKey?: string } = {}) {
       root.render(
         // Children as an argument, as the lint rule wants; the props type
         // requires them, hence the cast.
-        createElement(PanelHost, props as ComponentProps<typeof PanelHost>, createElement(Grab), createElement("p", { "data-home": true }, "Home")),
+        createElement(
+          PanelHost,
+          props as ComponentProps<typeof PanelHost>,
+          createElement(Grab),
+          createElement("p", { "data-home": true }, "Home"),
+          options.extra ?? null,
+        ),
       ),
     );
   draw();
@@ -374,6 +414,113 @@ describe("a job and a tile", () => {
       expect(grabbed.controls!.navigate(href)).toBe(false);
     }
     expect(pushState).not.toHaveBeenCalled();
+  });
+});
+
+describe("a video's preview (D85)", () => {
+  const dialog = (container: HTMLElement) => container.querySelector<HTMLDialogElement>("dialog[open]");
+
+  it("opens from the URL with the video playing, its title, Open and Change, and closes with pushState", () => {
+    setUrl("kind=video&play=attention");
+    const { container, go } = mount();
+    expect(dialog(container)?.getAttribute("aria-label")).toBe("Attention weights");
+    expect(dialog(container)?.querySelector("h2")?.textContent).toBe("Attention weights");
+    const player = container.querySelector("[data-player]");
+    expect(player?.getAttribute("data-player")).toBe("/api/assets/video%3Aattention/file");
+    expect(player?.getAttribute("data-poster")).toBe("/api/assets/video%3Aattention/poster");
+    // Asked to jump to the start, which plays.
+    expect(player?.getAttribute("data-starts")).toBe("0");
+    // A missing file is a studio video to make again, not a manimkc render to upload.
+    expect(player?.getAttribute("data-source")).toBe("studio");
+    // Open is the library page, with the way back to this view (not to the preview).
+    const open = container.querySelector<HTMLAnchorElement>('a[aria-label="Open Attention weights"]');
+    expect(open?.getAttribute("href")).toBe("/library/video%3Aattention?from=%2Fstudio%3Fkind%3Dvideo");
+    expect(container.querySelector('button[aria-label="Change: Attention weights"]')).not.toBeNull();
+
+    close(container);
+    expect(pushState).toHaveBeenCalledWith(null, "", "/studio?kind=video");
+    expect(mocks.push).not.toHaveBeenCalled();
+    // Back, or the close landing: the address bar no longer names it.
+    go("kind=video");
+    expect(container.querySelector("dialog")).toBeNull();
+    // Forward brings it back.
+    go("kind=video&play=attention");
+    expect(dialog(container)).not.toBeNull();
+  });
+
+  it("closes on Escape through the URL", () => {
+    setUrl("play=attention");
+    const { container } = mount();
+    act(() => {
+      dialog(container)!.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+    expect(pushState).toHaveBeenCalledWith(null, "", "/studio");
+  });
+
+  it("says so for a slug the page has no video for", () => {
+    setUrl("play=gone");
+    const { container } = mount();
+    expect(container.textContent).toContain("There is no studio video named gone");
+    expect(container.querySelector("[data-player]")).toBeNull();
+  });
+
+  it("is what a plain press on a video tile opens, while a modified one is left to the library link", () => {
+    setUrl("kind=video");
+    const { container } = mount({ extra: createElement(VideoTile, { video: VIDEO, path: "/studio?kind=video" }) });
+    const tile = container.querySelector<HTMLAnchorElement>('a[aria-label="Play video: Attention weights"]')!;
+    expect(tile.getAttribute("href")).toBe("/library/video%3Aattention?from=%2Fstudio%3Fkind%3Dvideo");
+    const badge = tile.parentElement?.querySelector('[data-kind-badge="video"]');
+    expect(badge?.textContent).toBe("Video");
+    expect(badge?.getAttribute("aria-hidden")).toBe("true");
+
+    // Record whether the page kept the click, and stop jsdom from following the link.
+    const prevented: boolean[] = [];
+    const listen = (event: Event) => {
+      prevented.push(event.defaultPrevented);
+      event.preventDefault();
+    };
+    document.addEventListener("click", listen);
+    try {
+      act(() => {
+        tile.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+      });
+      expect(prevented).toEqual([true]);
+      expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio?kind=video&play=attention");
+
+      pushState.mockClear();
+      act(() => {
+        tile.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, metaKey: true }));
+      });
+      expect(prevented).toEqual([true, false]);
+      expect(pushState).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("click", listen);
+    }
+  });
+
+  it("keeps the kind in every tile's and row's link, where a screen reader's list of links reads it", () => {
+    const tiles = createElement(
+      "div",
+      null,
+      createElement(DiagramTile, { diagram: DIAGRAM, path: "/studio", selectHref: "/studio?sel=graph", extendHref: "/studio?extend=graph", showConcepts: false }),
+      createElement(DiagramRow, { diagram: DIAGRAM, path: "/studio", selectHref: "/studio?sel=graph", showConcepts: false }),
+      createElement(VideoRow, { video: VIDEO, path: "/studio" }),
+    );
+    const { container } = mount({ extra: tiles });
+    const links = [...container.querySelectorAll<HTMLAnchorElement>('a[href="/studio?sel=graph"]')];
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link.querySelector(".sr-only")?.textContent).toBe("Diagram: ");
+    const row = container.querySelector<HTMLAnchorElement>('a[href^="/library/video%3Aattention"]:not([aria-label])');
+    expect(row?.textContent).toBe("Video: Attention weights");
+    // The visible badges stay out of the reading order, so the kind is not said twice.
+    for (const badge of container.querySelectorAll("[data-kind-badge]")) expect(badge.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("is a panel the host opens and swaps in the browser", () => {
+    setUrl("sel=graph");
+    mount();
+    expect(grabbed.controls!.navigate("/studio?play=attention")).toBe(true);
+    expect(pushState).toHaveBeenLastCalledWith(null, "", "/studio?play=attention");
   });
 });
 
