@@ -82,7 +82,7 @@ export function ReviewSession({
   /** The concept `?concept=` named, when the session came from its workspace. */
   focus: string | null;
   /**
-   * The session is Home's "Recall these" (`?only=`), so an empty one means the
+   * The session is a chosen set (`?only=`, once Home's recall button), so an empty one means the
    * picked cards are no longer due, not that nothing is.
    */
   selected?: boolean;
