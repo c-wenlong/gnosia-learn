@@ -449,16 +449,26 @@ export function VideoPlayer({
           </div>
         )}
 
-        {paused && !scrubbing && (
-          <button
-            type="button"
-            onClick={togglePlay}
-            aria-label="Play"
-            className="absolute top-1/2 left-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform hover:scale-105 sm:size-16 focus-visible:outline-2 focus-visible:outline-white motion-reduce:transition-none"
-          >
-            <Icon name="play" className="size-6 translate-x-0.5 sm:size-7" />
-          </button>
-        )}
+        {/* Kept mounted, so it fades and shrinks away as play starts and comes back
+            the same way on pause, rather than blinking. Gone, it is invisible and
+            inert: no focus, no click through to the video under it. */}
+        <button
+          type="button"
+          onClick={togglePlay}
+          aria-label="Play"
+          inert={!(paused && !scrubbing)}
+          data-big-play={paused && !scrubbing ? "shown" : "away"}
+          className={cx(
+            "absolute top-1/2 left-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm sm:size-16 focus-visible:outline-2 focus-visible:outline-white",
+            "duration-150 ease-soft motion-reduce:transition-none",
+            // Visibility waits for the fade out, not in, so the button is reachable the moment it shows.
+            paused && !scrubbing
+              ? "scale-100 opacity-100 transition-[opacity,scale] hover:scale-105"
+              : "invisible scale-90 opacity-0 transition-[opacity,scale,visibility]",
+          )}
+        >
+          <Icon name="play" className="size-6 translate-x-0.5 sm:size-7" />
+        </button>
 
         <div
           className={cx(
@@ -677,7 +687,7 @@ function ControlButton({
       aria-pressed={pressed}
       aria-label={label}
       title={label}
-      className="flex h-9 min-w-9 items-center justify-center rounded-full text-white/90 hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-white"
+      className="flex h-9 min-w-9 items-center justify-center rounded-full text-white/90 transition-colors duration-100 hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-white motion-reduce:transition-none"
     >
       {children}
     </button>

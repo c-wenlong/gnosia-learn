@@ -36,6 +36,11 @@ function errorFor(status: number, data: ChatReply): string {
  * thread lives in this page's state and nowhere else: it is not saved and
  * records no mastery (H4), which the page says above the chat. A failed turn
  * stays on screen with Try again, which resends the same thread.
+ *
+ * Until the browser has said which it is, it draws nothing, rather than an
+ * empty chat that Start then replaces; Start and the chat each fade in, and
+ * every turn rises in as it is added (none is restored: the thread is not
+ * saved).
  */
 export function OpenTutorChat({ subject }: { subject: string }) {
   const [turns, setTurns] = useState<TutorTurn[]>([]);
@@ -105,9 +110,12 @@ export function OpenTutorChat({ subject }: { subject: string }) {
     else if (!started.current) setWaiting(true);
   }, [start, subject]);
 
+  // Before hydration has read session storage: neither Start nor the chat, so neither flashes.
+  if (waiting === null) return null;
+
   if (waiting) {
     return (
-      <div className="flex flex-col items-start gap-3">
+      <div className="flex animate-fade-in flex-col items-start gap-3 motion-reduce:animate-none">
         <p className="text-[14px] text-text2">The tutor starts by asking where you are with it.</p>
         <Button onClick={start}>Start</Button>
       </div>
@@ -115,22 +123,25 @@ export function OpenTutorChat({ subject }: { subject: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex animate-fade-in flex-col gap-5 motion-reduce:animate-none">
       <div className="flex flex-col gap-4" aria-live="polite">
         {turns.map((turn, i) =>
           turn.role === "user" ? (
-            <UserMessage key={i}>
+            <UserMessage key={i} className="animate-enter motion-reduce:animate-none">
               <MathText text={turn.content} />
             </UserMessage>
           ) : (
-            <TutorMessage key={i}>
+            <TutorMessage key={i} className="animate-enter motion-reduce:animate-none">
               <NoteProse source={turn.content} idPrefix={`t${i}-`} />
             </TutorMessage>
           ),
         )}
-        {busy && <p className="px-1.5 text-[14px] text-text2">The tutor is thinking…</p>}
+        {busy && <p className="animate-fade-in px-1.5 text-[14px] text-text2 motion-reduce:animate-none">The tutor is thinking…</p>}
         {error !== null && (
-          <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
+          <div
+            role="alert"
+            className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none"
+          >
             <span className="min-w-0 flex-1">{error}</span>
             <Button variant="secondary" size="sm" onClick={() => void send(turns)}>
               Try again

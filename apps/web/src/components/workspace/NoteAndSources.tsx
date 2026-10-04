@@ -8,11 +8,13 @@ import { MasteryDot } from "@/components/ui/MasteryDot";
 import type { CitationSource } from "@/lib/agent/prompt";
 import type { ConceptWorkspace, NeighbourRef } from "@/lib/concept-workspace-core";
 
+import { NoteDisclosure } from "./NoteDisclosure";
+
 /**
  * The workspace's left panel (hi-fi 04): the summary, what this concept needs
  * and what needs it, the sources the tutor cites, the backlinks, and the whole
- * note behind a disclosure. Server-rendered; the panel frame is
- * `WorkspacePanels`.
+ * note behind a disclosure (`NoteDisclosure`, which glides it open).
+ * Server-rendered; the panel frame is `WorkspacePanels`.
  */
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -130,11 +132,7 @@ export function NoteAndSources({
 
       <Section title="Note">
         {w.note.available ? (
-          <details className="group">
-            <summary className="cursor-pointer rounded-sm text-[13px] font-medium text-accent-text underline-offset-4 select-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-              <span className="group-open:hidden">Read the whole note</span>
-              <span className="hidden group-open:inline">Hide the note</span>
-            </summary>
+          <NoteDisclosure>
             <NoteProse
               source={w.note.source}
               idPrefix="note-"
@@ -143,7 +141,7 @@ export function NoteAndSources({
               resolveEmbed={resolveEmbed}
             />
             <p className="mt-3 font-mono text-[11px] break-all text-text3">{w.note.path}</p>
-          </details>
+          </NoteDisclosure>
         ) : (
           <p className="text-[13px] text-text3">
             {w.note.code === "too-large"
