@@ -2,8 +2,9 @@ import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
 import { ExtendLink } from "@/components/studio/ExtendLink";
-import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
-import { Button as KitButton } from "@/components/ui/Button";
+import { MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Glyph } from "@/components/ui/Glyph";
 import { buttonClasses } from "@/components/ui/classes";
 import { jobStateLabel } from "@/lib/studio-job-state";
@@ -125,14 +126,14 @@ export function DiagramPanelBody({
         {videoBlocked === null ? (
           <ExtendLink href={makeVideoHref} className={buttonClasses({ variant: "secondary" })} label="Make a video of this" icon="video" />
         ) : (
-          <KitButton variant="secondary" disabled disabledReason={videoBlocked}>
+          <Button variant="secondary" disabled disabledReason={videoBlocked}>
             <Glyph name="video" size={16} />
             Make a video of this
-          </KitButton>
+          </Button>
         )}
-        <KitButton href={canvasHref(diagram.name)} variant="secondary">
+        <Button href={canvasHref(diagram.name)} variant="secondary">
           Open canvas
-        </KitButton>
+        </Button>
       </div>
     </>
   );
@@ -173,13 +174,13 @@ function SelectedDiagram({
       {!embedded && <h2 className="text-sm font-medium">{displayTitle(diagram)}</h2>}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {diagram.topic === null ? (
-          <Chip tone="warn">No topic</Chip>
+          <Badge tone="warn">No topic</Badge>
         ) : (
-          <Chip tone="accent">{diagram.topic}</Chip>
+          <Badge tone="accent">{diagram.topic}</Badge>
         )}
-        <Chip tone={pill.tone === "ok" ? "ok" : "warn"} title={pill.title}>
+        <Badge tone={pill.tone === "ok" ? "ok" : "warn"} title={pill.title}>
           {pill.label}
-        </Chip>
+        </Badge>
       </div>
 
       {diagram.topic === null && (
@@ -199,7 +200,7 @@ function SelectedDiagram({
           ) : (
             <span className="flex flex-wrap gap-1">
               {diagram.concepts.map((slug) => (
-                <Chip key={slug}>{slug}</Chip>
+                <Badge key={slug}>{slug}</Badge>
               ))}
             </span>
           )}
@@ -242,9 +243,9 @@ function SelectedDiagram({
       <div className="mt-4">
         <div className="flex flex-wrap gap-1.5">
           {!embedded && (
-            <ButtonLink href={canvasHref(diagram.name)} filled>
+            <Button href={canvasHref(diagram.name)} size="xs" scroll={false}>
               Open canvas
-            </ButtonLink>
+            </Button>
           )}
           <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" />
           <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
@@ -276,7 +277,7 @@ function SelectedDiagram({
                     {job.requested.slice(0, 10)}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{job.title ?? job.jobId}</span>
-                  <Chip tone={job.state === "failed" ? "danger" : "muted"}>{jobStateLabel(job.state)}</Chip>
+                  <Badge tone={job.state === "failed" ? "danger" : "muted"}>{jobStateLabel(job.state)}</Badge>
                 </PanelLink>
               </li>
             ))}
@@ -310,7 +311,9 @@ function VerbForm({
     <form action={action}>
       <input type="hidden" name="name" value={name} />
       <input type="hidden" name="path" value={path} />
-      <Button type="submit">{label}</Button>
+      <Button type="submit" variant="secondary" size="xs">
+        {label}
+      </Button>
     </form>
   );
 }

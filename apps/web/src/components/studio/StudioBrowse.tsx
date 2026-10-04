@@ -8,7 +8,6 @@ import { useFadeOnChange } from "@/components/studio/motion-parts";
 import { NewDiagramJobs } from "@/components/studio/GridJob";
 import { useStudioPath } from "@/components/studio/panel-host";
 import { EmptyDirectory } from "@/components/studio/StudioBlocked";
-import { Spacer } from "@/components/studio/StudioChrome";
 import { DisplayMenu, KindSegments, SortMenu, StudioSearch, TopicChips } from "@/components/studio/StudioControls";
 import { SettingsLink } from "@/components/studio/StudioSettings";
 import { NewVideoJobs, VideoRow, VideoTile } from "@/components/studio/video/VideoGridJob";
@@ -48,16 +47,27 @@ function useStudioView(): StudioView {
 
 export function StudioToolbar({ chips }: { chips: TopicChip[] }) {
   const view = useStudioView();
+  // Two halves, side by side when the panel has room for both (a container
+  // query on the panel's own width, since the sidebar takes 260px of the
+  // window from 768px) and one over the other when it has not: the kind and
+  // Search, then the topics with Display, Sort and Settings. On one row the
+  // controls ran off the right edge of a phone and of a narrow panel, the
+  // topic menu's "+N" and Settings with them, where nothing could reach them.
   return (
-    <>
-      <KindSegments view={view} />
-      <StudioSearch view={view} />
-      <TopicChips chips={chips} view={view} />
-      <Spacer />
-      <DisplayMenu view={view} />
-      <SortMenu view={view} />
-      <SettingsLink href={studioHref(view, { settings: true, draft: null, job: null, extend: null, selected: null, shot: null, play: null })} />
-    </>
+    <div className="@container min-w-0 flex-1">
+      <div className="flex flex-col gap-2 @[52rem]:flex-row @[52rem]:items-center">
+        <div className="flex min-w-0 items-center gap-2">
+          <KindSegments view={view} />
+          <StudioSearch view={view} />
+        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <TopicChips chips={chips} view={view} />
+          <DisplayMenu view={view} />
+          <SortMenu view={view} />
+          <SettingsLink href={studioHref(view, { settings: true, draft: null, job: null, extend: null, selected: null, shot: null, play: null })} />
+        </div>
+      </div>
+    </div>
   );
 }
 

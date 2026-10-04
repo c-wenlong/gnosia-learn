@@ -105,8 +105,8 @@ export const NOTE = "font-sans text-[12px] leading-4 font-normal text-text2";
  */
 export const STATUS_TEXT = "font-sans text-[12px] leading-4 font-normal";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent" | "brand";
-export type ButtonSize = "md" | "sm";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent" | "brand" | "overlay";
+export type ButtonSize = "md" | "sm" | "xs";
 
 /**
  * The kit's focus ring: a 2px accent outline 2px out, shown to a keyboard
@@ -129,7 +129,7 @@ export const FOCUS =
 const DISABLED = "disabled:cursor-not-allowed disabled:opacity-50";
 
 const BUTTON_BASE = cx(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full font-semibold select-none",
+  "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full font-semibold select-none",
   "transition-[translate,box-shadow,background-color,opacity] duration-100 motion-reduce:transition-none",
   DISABLED,
   FOCUS,
@@ -144,28 +144,60 @@ const BUTTON_BASE = cx(
  */
 const LIP = "mb-1 not-disabled:hover:opacity-90 not-disabled:active:translate-y-1 not-disabled:active:shadow-none";
 
-const VARIANT: Record<ButtonVariant, string> = {
-  primary: cx("bg-btn-face text-btn-text shadow-[0_4px_0_var(--btn-lip)]", LIP),
-  ok: cx("bg-ok text-[var(--ok-on)] shadow-[0_4px_0_var(--ok-lip)]", LIP),
-  warn: cx("bg-warn text-[var(--warn-on)] shadow-[0_4px_0_var(--warn-lip)]", LIP),
-  accent: cx("bg-accent text-white shadow-[0_4px_0_var(--accent-lip)]", LIP),
+/**
+ * The same faces at `xs`, flat: a 4px lip under a 28px face is a seventh of
+ * its height, and the dense rows the size is for (the studio's strips, a
+ * job's bar over its picture) have no room to reserve under each button.
+ * Pressed, the face dims a little more than it does under the pointer.
+ */
+const FLAT_PRESS = "not-disabled:hover:opacity-90 not-disabled:active:opacity-80";
+
+/** Each 3D variant's face and, apart, its lip, so `xs` can leave the lip off. */
+const RAISED: Record<"primary" | "ok" | "warn" | "accent" | "brand", { face: string; lip: string }> = {
+  primary: { face: "bg-btn-face text-btn-text", lip: "shadow-[0_4px_0_var(--btn-lip)]" },
+  ok: { face: "bg-ok text-[var(--ok-on)]", lip: "shadow-[0_4px_0_var(--ok-lip)]" },
+  warn: { face: "bg-warn text-[var(--warn-on)]", lip: "shadow-[0_4px_0_var(--warn-lip)]" },
+  accent: { face: "bg-accent text-white", lip: "shadow-[0_4px_0_var(--accent-lip)]" },
   // The Gnosia pill for the public pages (docs/design/BRAND.md): a teal face
   // over a navy lip with cream text in light; in dark the teal lightens, so the
   // label turns navy and the lip is the teal sunk halfway into navy.
-  brand: cx(
-    "bg-brand-teal text-brand-cream shadow-[0_4px_0_var(--brand-navy)]",
-    "dark:text-brand-navy dark:shadow-[0_4px_0_color-mix(in_srgb,var(--brand-teal)_50%,var(--brand-navy))]",
-    LIP,
-  ),
-  secondary: "border-2 border-border bg-surface text-text not-disabled:hover:bg-surface2 not-disabled:active:bg-surface2",
-  ghost: "text-accent-text underline-offset-4 not-disabled:hover:underline",
+  brand: {
+    face: "bg-brand-teal text-brand-cream dark:text-brand-navy",
+    lip: "shadow-[0_4px_0_var(--brand-navy)] dark:shadow-[0_4px_0_color-mix(in_srgb,var(--brand-teal)_50%,var(--brand-navy))]",
+  },
 };
 
-/** Heights 44 and 36, labels 15 and 13 (kit `Btn`). Ghost keeps the height and drops the padding. */
-const SIZE: Record<ButtonSize, { box: string; pad: string; ghostPad: string }> = {
-  md: { box: "h-11 text-[15px]", pad: "px-6", ghostPad: "px-2" },
-  sm: { box: "h-9 text-[13px]", pad: "px-[18px]", ghostPad: "px-1.5" },
+/** The flat variants, the same at every size but for `secondary`'s border at `xs`. */
+const FLAT: Record<"secondary" | "ghost" | "overlay", string> = {
+  secondary: "border-border bg-surface text-text not-disabled:hover:bg-surface2 not-disabled:active:bg-surface2",
+  ghost: "text-accent-text underline-offset-4 not-disabled:hover:underline",
+  // A button laid over a picture (a tile's Open canvas, Extend and Change,
+  // shown on hover): the overlay `Chip`'s translucent face, which blurs what
+  // is under it so the label stays legible on any thumbnail, and a 1px edge
+  // that keeps it apart from a white diagram mat. No shadow: the kit has
+  // none but the lip.
+  overlay: "border border-border bg-surface/90 text-text backdrop-blur-sm not-disabled:hover:bg-surface2",
 };
+
+/**
+ * Heights 44, 36 and 28, labels 15, 13 and 12 (kit `Btn`, and `xs` for the
+ * studio's dense rows: a chip's height and type, beside the 32px fields and
+ * segments of a strip). Ghost keeps the height and drops the padding.
+ * `secondary` draws its outline at 2px, and at 1px at `xs`, a small chip's
+ * weight, where 2px would be heavier than the words inside it.
+ */
+const SIZE: Record<ButtonSize, { box: string; pad: string; ghostPad: string; edge: string }> = {
+  md: { box: "h-11 gap-2 text-[15px]", pad: "px-6", ghostPad: "px-2", edge: "border-2" },
+  sm: { box: "h-9 gap-2 text-[13px]", pad: "px-[18px]", ghostPad: "px-1.5", edge: "border-2" },
+  xs: { box: "h-7 gap-1.5 text-[12px]", pad: "px-2.5", ghostPad: "px-1", edge: "border" },
+};
+
+function variantClasses(variant: ButtonVariant, size: ButtonSize): string {
+  if (variant === "secondary") return cx(SIZE[size].edge, FLAT.secondary);
+  if (variant === "ghost" || variant === "overlay") return FLAT[variant];
+  const raised = RAISED[variant];
+  return size === "xs" ? cx(raised.face, FLAT_PRESS) : cx(raised.face, raised.lip, LIP);
+}
 
 export function buttonClasses({
   variant = "primary",
@@ -180,7 +212,7 @@ export function buttonClasses({
 } = {}): string {
   const s = SIZE[size];
   const pad = variant === "ghost" ? s.ghostPad : variant === "secondary" && size === "md" ? "px-[22px]" : s.pad;
-  return cx(BUTTON_BASE, s.box, pad, VARIANT[variant], block && "w-full", className);
+  return cx(BUTTON_BASE, s.box, pad, variantClasses(variant, size), block && "w-full", className);
 }
 
 export type ChipSize = "md" | "sm";
@@ -238,6 +270,38 @@ export function chipClasses({
     interactive && !active && cx("not-disabled:hover:bg-surface2", ink === "text-text2" && "not-disabled:hover:text-text"),
     interactive && FOCUS,
     interactive && DISABLED,
+    className,
+  );
+}
+
+export type BadgeTone = "muted" | "accent" | "warn" | "danger" | "ok";
+
+/**
+ * Each badge tone: a tint, its ink, and an edge in the tone so a badge on a
+ * ground as pale as its own still has an outline. `danger` mixes the red into
+ * the surface as `Callout`'s danger tone does, since there is no danger tint
+ * token. The inks are the text roles of each tone, never the tone's fill.
+ */
+const BADGE_TONE: Record<BadgeTone, string> = {
+  muted: "border-border bg-surface2 text-text2",
+  accent: "border-accent/40 bg-tint text-accent-text",
+  warn: "border-warn bg-warn-tint text-warn-text",
+  danger: "border-danger/45 bg-danger/8 text-danger",
+  ok: "border-ok/45 bg-ok-tint text-ok-text",
+};
+
+/**
+ * Kit `Badge`: a 24px pill holding a short label (a topic, a job's state, a
+ * cost, "No topic", "SVG stale"), never a control. 12px at weight 500 with a
+ * 1px edge, a little smaller than a small `Chip`, so a badge beside a chip or
+ * a button does not read as one more thing to press. It may shrink in a
+ * crowded row, its words ending in an ellipsis (`Badge` wraps them in a
+ * `truncate` span); `max-w-full` keeps it inside its container.
+ */
+export function badgeClasses({ tone = "muted", className }: { tone?: BadgeTone; className?: string } = {}): string {
+  return cx(
+    "inline-flex h-6 min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-full border px-2 text-[12px] leading-4 font-medium whitespace-nowrap",
+    BADGE_TONE[tone],
     className,
   );
 }

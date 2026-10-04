@@ -1,7 +1,6 @@
-import Link from "next/link";
-
 import { PageLoading } from "@/components/PageLoading";
-import { Spacer, StudioStrip } from "@/components/studio/StudioChrome";
+import { BackToStudio, StudioStrip } from "@/components/studio/StudioChrome";
+import { SHEET, TILE } from "@/components/studio/surfaces";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
@@ -30,18 +29,27 @@ export function StudioGridLoading() {
           <Skeleton className="h-10 w-72 -translate-y-4" />
           <Skeleton className="h-[52px] w-full max-w-3xl -translate-y-4" />
         </div>
-        <div className="mx-2 rounded-t-3xl border border-b-0 border-hair bg-surface md:mx-4">
+        <div className={SHEET}>
           <StudioStrip surface>
-            <Skeleton className="h-7 w-56" />
-            <Skeleton className="hidden h-6 w-40 sm:block" />
-            <Spacer />
-            <Skeleton className="h-7 w-16" />
-            <Skeleton className="h-7 w-16" />
+            {/* The toolbar's two halves, stacked where the panel is narrow, as `StudioToolbar` lays them out. */}
+            <div className="@container min-w-0 flex-1">
+              <div className="flex flex-col gap-2 @[52rem]:flex-row @[52rem]:items-center">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Skeleton className="h-8 w-52 shrink-0" />
+                  <Skeleton className="h-8 min-w-0 flex-1 @[52rem]:w-60 @[52rem]:flex-none" />
+                </div>
+                <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                  <Skeleton className="mr-auto h-7 w-40" />
+                  <Skeleton className="h-7 w-16" />
+                  <Skeleton className="h-7 w-16" />
+                </div>
+              </div>
+            </div>
           </StudioStrip>
           <div className="min-h-0 flex-1 overflow-hidden p-4">
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               {Array.from({ length: 8 }, (_, at) => (
-                <div key={at} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+                <div key={at} className={TILE}>
                   <Skeleton fill className="aspect-[16/10]" />
                   <div className="flex flex-col gap-2 p-3">
                     <Skeleton className="h-3.5 w-3/4" />
@@ -62,13 +70,7 @@ export function StudioCanvasLoading() {
     <PageLoading layout="full" label="Opening the canvas">
       <StudioStrip>
         {/* The way back works before the canvas does. */}
-        <Link
-          href="/studio"
-          className="inline-flex h-8 shrink-0 items-center rounded-md px-2 text-xs hover:bg-[var(--surface-hover)]"
-          aria-label="Back to the studio"
-        >
-          ← Studio
-        </Link>
+        <BackToStudio />
         <Skeleton className="h-4 w-48" />
       </StudioStrip>
       <Skeleton fill className="min-h-0 flex-1" />

@@ -11,7 +11,10 @@ import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { VideoJobPanel } from "@/components/studio/video/VideoJobPanel";
 import { readJobLookup, type JobLookup } from "@/lib/studio-video";
-import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/classes";
 import {
   failureFooter,
   failureReport,
@@ -106,7 +109,7 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
           regains focus.
         </p>
         <div className="mt-3">
-          <Button type="button" onClick={() => setAttempt((held) => held + 1)}>
+          <Button variant="secondary" size="xs" onClick={() => setAttempt((held) => held + 1)}>
             Try again
           </Button>
         </div>
@@ -271,11 +274,11 @@ function DiagramJobPanel({
       )}
 
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        <Chip tone={failed ? "danger" : job.state === "awaiting_review" ? "ok" : "accent"}>{jobStateLabel(job.state)}</Chip>
-        <Chip>{job.topic}</Chip>
+        <Badge tone={failed ? "danger" : job.state === "awaiting_review" ? "ok" : "accent"}>{jobStateLabel(job.state)}</Badge>
+        <Badge>{job.topic}</Badge>
         {isActive(job.state) && job.state !== "awaiting_review" && (
           <>
-            <Chip>{stepLabel(job)}</Chip>
+            <Badge>{stepLabel(job)}</Badge>
             <Elapsed job={job} />
           </>
         )}
@@ -285,7 +288,7 @@ function DiagramJobPanel({
           // accumulation from the stream, which runs low. The tilde and the
           // tooltip are the whole of saying so; a bare number would read as
           // the bill.
-          <Chip
+          <Badge
             title={
               job.costSource === "stream"
                 ? "an estimate: this job was stopped before the agent reported a final cost, so the runner accumulated it from the session's usage events. It runs low."
@@ -293,9 +296,9 @@ function DiagramJobPanel({
             }
           >
             {job.costSource === "stream" ? "~" : ""}${job.costUsd.toFixed(3)}
-          </Chip>
+          </Badge>
         )}
-        {job.turns !== null && <Chip>{job.turns} turns</Chip>}
+        {job.turns !== null && <Badge>{job.turns} turns</Badge>}
       </div>
 
       {report !== null && <FailureMessage job={job} report={report} />}
@@ -323,7 +326,8 @@ function DiagramJobPanel({
       <div className="mt-4 flex flex-wrap gap-1.5">
         {job.state === "running" && (
           <Button
-            type="button"
+            variant="secondary"
+            size="xs"
             disabled={busy || job.cancelRequestedAt !== null}
             onClick={() => void act("cancel")}
           >
@@ -331,12 +335,12 @@ function DiagramJobPanel({
           </Button>
         )}
         {job.state === "queued" && (
-          <Button type="button" disabled={busy} onClick={() => void act("cancel")}>
+          <Button variant="secondary" size="xs" disabled={busy} onClick={() => void act("cancel")}>
             Cancel
           </Button>
         )}
         {report?.actions.includes("resume") === true && (
-          <Button type="button" filled disabled={busy} onClick={() => void act("resume")}>
+          <Button size="xs" disabled={busy} onClick={() => void act("resume")}>
             Resume
           </Button>
         )}
@@ -357,7 +361,7 @@ function DiagramJobPanel({
             <PanelLink
               href={conversationHref(path, job.draftId)}
               scroll={false}
-              className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium hover:bg-[var(--surface-hover)]"
+              className={buttonClasses({ variant: "secondary", size: "xs" })}
             >
               Tell the planner what to change
             </PanelLink>
@@ -365,7 +369,7 @@ function DiagramJobPanel({
             <TalkItThrough job={job} path={path} failure={report} onFailed={(text) => setSaid({ ok: false, text })} />
           ))}
         {report?.actions.includes("doctor") === true && (
-          <Button type="button" disabled={busy} onClick={() => void refresh()} title="The studio checks doctor on every render of this screen">
+          <Button variant="secondary" size="xs" disabled={busy} onClick={() => void refresh()} title="The studio checks doctor on every render of this screen">
             Recheck
           </Button>
         )}
@@ -611,7 +615,8 @@ function RetryButton({
   const [busy, setBusy] = useState(false);
   return (
     <Button
-      type="button"
+      variant="secondary"
+      size="xs"
       disabled={disabled || busy}
       onClick={() => {
         void (async () => {
@@ -672,7 +677,8 @@ function TalkItThrough({
   const [busy, setBusy] = useState(false);
   return (
     <Button
-      type="button"
+      variant="secondary"
+      size="xs"
       disabled={busy}
       onClick={() => {
         void (async () => {
