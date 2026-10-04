@@ -70,7 +70,8 @@ the workflow itself; they are identifiers, not secrets.
 
 To redeploy without a new release (a retry, or a rollback to an older tag),
 run the workflow by hand: **Actions → Deploy → Run workflow**, choosing the
-tag, or `gh workflow run deploy.yml --ref v<x.y.z>`. `vercel rollback` also
+tag, or `gh workflow run deploy.yml --ref v<x.y.z>`. A manual run refuses a
+branch, a tag with no release, and a draft release. `vercel rollback` also
 works and builds nothing.
 
 To see what is live and what produced it:

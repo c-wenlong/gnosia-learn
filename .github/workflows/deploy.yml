@@ -8,8 +8,9 @@ name: Deploy
 # out (2026-10-04: "api-deployments-free-per-day" on every PR).
 #
 # To ship: gh release create v<x.y.z> --generate-notes
-# workflow_dispatch redeploys whatever ref it is run on, for a rollback or a
-# retry without cutting a new release.
+# workflow_dispatch redeploys the release tag it is run on, for a rollback or
+# a retry without cutting a new release; it refuses a branch or an unreleased
+# tag.
 on:
   release:
     types: [published]
@@ -18,8 +19,10 @@ on:
 permissions:
   contents: read
 
-# Two releases in quick succession deploy in order; the second never cancels
-# the first half-way through promoting.
+# A deploy in progress is never cancelled half-way through promoting. While
+# it runs, a newer request waits, and a newer one still replaces the waiting
+# one (GitHub keeps one pending run per group): the newest release wins,
+# which already contains everything the replaced one would have shipped.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
@@ -35,6 +38,29 @@ jobs:
       VERCEL_ORG_ID: team_3RwDblsQVK0MHQPOndO1vDl8
       VERCEL_PROJECT_ID: prj_KfVuvAc4rWmQRe4NiSVgeEm5etXD
     steps:
+      - name: Only a published release
+        # A manual run picks its ref from a menu that lists branches too.
+        # Refuse anything but the tag of a published release, so a retry or a
+        # rollback can never put unreleased code live.
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" != "tag" ]; then
+            echo "::error::Run this on a release tag, not the $REF_TYPE $REF_NAME."
+            exit 1
+          fi
+          draft=$(gh release view "$REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft) || {
+            echo "::error::$REF_NAME has no release. Publish one first: gh release create $REF_NAME"
+            exit 1
+          }
+          if [ "$draft" = "true" ]; then
+            echo "::error::The release for $REF_NAME is a draft. Publish it, which deploys it."
+            exit 1
+          fi
+
       - name: Checkout
         # The release's tag (GITHUB_REF on a release event). Submodules are not
         # needed: the app imports nothing under tools/.
