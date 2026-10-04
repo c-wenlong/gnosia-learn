@@ -88,6 +88,39 @@ export function checkSource(items: readonly ThreadLike[], askedAt: number): "pro
   return "probe";
 }
 
+/**
+ * The tutor's opening turn on a concept whose review is due (R3), built from
+ * the note's own check so it costs no model call: the question is the note's,
+ * and the judge then has that check as its reference. A note with no check
+ * asks the model instead (`RECALL_SEED`).
+ */
+export function recallOpening(title: string, question: string): { role: "assistant"; content: string; check: TurnCheck } {
+  const q = question.trim().replace(/\s+/g, " ").slice(0, CHECK_QUESTION_LIMIT);
+  return {
+    role: "assistant",
+    content: `Welcome back to ${title}. Its review is due, so one question before anything else:\n\n${q}`,
+    check: { question: q },
+  };
+}
+
+/**
+ * What the concept page tells the tutor about recall (R3): null when the
+ * concept has no review card or its card is not yet due, else the note's
+ * first check to open on (null when it has none, so the model is asked).
+ * The card's due date is the only trigger: a `/review` grade moves it
+ * without an observation, so nothing else is read.
+ */
+export function dueRecall(
+  review: { due: string } | null,
+  checks: readonly { question: string }[],
+  now: Date,
+): { question: string | null } | null {
+  if (review === null) return null;
+  const due = Date.parse(review.due);
+  if (!Number.isFinite(due) || due > now.getTime()) return null;
+  return { question: checks.find((c) => c.question.trim() !== "")?.question ?? null };
+}
+
 /** What the observe route answered, as much of it as the row says. */
 export interface RecordedResult {
   correct: boolean;
