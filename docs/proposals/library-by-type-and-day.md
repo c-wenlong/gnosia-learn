@@ -135,8 +135,9 @@ tutor sessions (its `title`, `kind` and `log_asset_id` are there,
 [studio.ts:76](../../packages/schema/src/studio.ts)); videos from the saved
 playback positions (the `playback:<asset id>` preferences Home already reads,
 [home.ts:64](../../apps/web/src/lib/home.ts)), a row being a video with a
-position and no `watchedAt`, since a finished video is for the Library, not
-for picking up, and the `watched` events are not used because they fire only
+position and no `watchedAt` that passes Home's `resumeAt` check (not within
+five seconds of the start or ten of the end), since a finished or barely
+started video is for the Library, not for picking up, and the `watched` events are not used because they fire only
 at Mark watched or 90% played; concepts from the `observation` events, as
 Home's `conceptTouches` builds them ([home.ts:110](../../apps/web/src/lib/home.ts)),
 so a concept studied yesterday stays a row and "Next from here" keeps its
