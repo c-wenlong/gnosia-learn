@@ -1,7 +1,9 @@
 # Proposal: the Learn map is grouped by domain
 
-Status: accepted by the owner on 2026-10-04, being built in four phases.
-Phases 1 (the tree and the layout), 2 (the views, and the island map removed) and 3 (hover and drag) are built. It replaces the island map
+Status: built, 2026-10-04, all four phases: 1 the tree and the layout
+([#354](https://github.com/c-wenlong/self-learn/pull/354)), 2 the views and
+the island map removed ([#358](https://github.com/c-wenlong/self-learn/pull/358)),
+3 hover and drag, 4 these docs. It replaces the island map
 of [knowledge-map.md](knowledge-map.md), decisions G2 to G8; G1 (the graph
 is what `/learn` opens on, the table at `?view=table`) stands.
 
