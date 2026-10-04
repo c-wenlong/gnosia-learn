@@ -1393,7 +1393,6 @@ function Streaming({ text, checking }: { text: string | null; checking: boolean 
   );
 }
 
-
 /** E1, E2 and E6: a `--warn-tint` card at the foot of the thread, with what to do. */
 function Problem({
   problem,
