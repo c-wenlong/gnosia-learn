@@ -31,7 +31,7 @@ and points there.
 | launchd nightly export | systemd timer | S7 |
 | `~/.self-learn/manimkc`, the renders and TTS cache | Nothing | The videos the app serves are in the blob store; the data root is only for rendering, which stays on the Mac |
 | `~/.self-learn/vault`, Obsidian's copy of the notes | Nothing, unless Obsidian runs there | `learn vault pull` rebuilds it from the database |
-| `$STUDIO_HOME/work`, diagram checkouts | Nothing | `catalog diagram checkout` writes a fresh one from the row |
+| `$STUDIO_HOME` (`.studio/` in the checkout by default): job workspaces, draft transcripts, diagram checkouts | Nothing; the server's studio starts empty | The runner lists jobs and drafts from its own files, and the `job`, `session` and `draft` rows the dump carries are a mirror of them, so a laptop job or draft cannot be resumed or reviewed on the server. Its permission files name the laptop's home directory, so copying them would not help. `catalog diagram checkout` writes a fresh checkout from the row |
 
 ## The steps
 
@@ -51,8 +51,12 @@ and points there.
 
    ```bash
    scp ~/self_learn.dump homeserver:~/
+   ssh homeserver 'mkdir -p ~/.self-learn'
    rsync -a ~/.self-learn/blobs/ homeserver:~/.self-learn/blobs/
    ```
+
+   The `mkdir` first: `rsync` creates the last path element and not a
+   missing parent, so on a fresh machine the copy fails without it.
 
 3. Have `OWNER_PASSWORD` and `AUTH_SECRET` from `apps/web/.env.local` to
    hand for step 8 (S4).
@@ -68,8 +72,11 @@ and points there.
    sudo apt install -y git postgresql-client-17 docker.io docker-compose-v2
    ```
 
-   Node from NodeSource or `fnm`; Ubuntu's own package is too old. Check
-   with `node --version`.
+   Node from NodeSource, which installs `/usr/bin/node` and `/usr/bin/npm`
+   for every user; Ubuntu's own package is too old. The systemd units below
+   name `/usr/bin/npm`, so a per-user installer (`fnm`, `nvm`) does not
+   work for them: its `npm` lives under one user's home and is not on a
+   service's `PATH`. Check with `node --version` and `which npm`.
 
 5. Clone and install. The four submodules are needed only for the studio's
    diagram jobs (tldrawkc) and for re-importing videos (the three video
@@ -80,9 +87,13 @@ and points there.
    cd ~/self-learn && npm ci
    ```
 
-6. Start Postgres and restore the dump. The compose file is the one CI's
-   service and this machine share; the `catalog:catalog` credentials are
-   fine because nothing but this host and the tailnet can reach the port:
+6. Start Postgres and restore the dump. The compose file publishes the port
+   on `127.0.0.1` only, so the `catalog:catalog` credentials are reachable
+   from this host and nothing else: not the LAN, and not the tailnet
+   either, which is deliberate while nothing but this machine's own app
+   and CLI connect (S1). Docker publishes ports past `ufw`, so a
+   `0.0.0.0` binding would have been open to every interface the machine
+   has, whatever the firewall said:
 
    ```bash
    docker compose -f services/catalog/compose.yaml up -d
@@ -166,10 +177,13 @@ and points there.
     `apps/web/.env.local` against step 7's, since a value set in only one
     file migrates one database while the app connects to another.
 
-11. The nightly export (S7). Save the wrapper from
-    [DEPLOYMENT.md](DEPLOYMENT.md#the-nightly-export) as
-    `~/.self-learn/bin/nightly-export.sh` with `NODE=` set from
-    `which node` and `cd` pointed at `~/self-learn`, then a timer:
+11. The nightly export (S7). On the Mac the job runs from a second clone
+    with a wrapper that pulls first, because that clone could drift from
+    the checkout that migrates the database. Here there is one checkout,
+    the one the app is served from, so the export runs the code that is
+    running and needs no pull; and a pull from a timer would swap
+    `node_modules` under the live services, which is step 14's job to do
+    on purpose. So the unit runs the script directly:
 
     ```ini
     # /etc/systemd/system/gnosia-export.service
@@ -179,8 +193,9 @@ and points there.
     [Service]
     Type=oneshot
     User=YOU
+    WorkingDirectory=/home/YOU/self-learn
     Environment=SELF_LEARN_HOME=/home/YOU/.self-learn
-    ExecStart=/bin/bash /home/YOU/.self-learn/bin/nightly-export.sh
+    ExecStart=/usr/bin/node scripts/nightly-export.mjs
     ```
 
     ```ini
@@ -205,10 +220,7 @@ and points there.
     `Persistent=true` is launchd's missed-run behaviour: a night the machine
     was off runs at the next boot. Set `SELF_LEARN_HOME` in the unit even
     though `services/catalog/.env` names it, because the script takes the
-    archive's location from its own environment only. The wrapper's `git
-    pull` keeps the export code in step with the database the main checkout
-    migrates; on this machine the two are the same clone, so the pull is
-    also how the server picks up new code (step 14).
+    archive's location from its own environment only.
 
 12. The studio, diagrams only (S5). `claude` must be logged in as the
     account the jobs should bill, since the runner strips every
@@ -240,21 +252,35 @@ and points there.
     `learning` plugin is installed per machine
     (`~/.quiver/plugins/learning/learning`), as on the Mac.
 
-14. Updating. A `git pull` in `~/self-learn`, `npm ci` when the lockfile
-    moved, `npm run catalog -- migrate` when `services/catalog/drizzle/`
-    did, `npm run build`, then `sudo systemctl restart gnosia` (and
-    `gnosia-studio`). The nightly wrapper does the first two every night,
-    so the only manual parts are the migration, the build and the restart.
+14. Updating, by hand and in this order, since nothing else on the machine
+    touches the checkout: stop the services, `git pull` in `~/self-learn`,
+    `npm ci` when the lockfile moved, `npm run catalog -- migrate` when
+    `services/catalog/drizzle/` did, `npm run build`, then start them
+    again:
+
+    ```bash
+    sudo systemctl stop gnosia gnosia-studio
+    git pull --ff-only && npm ci && npm run catalog -- migrate && npm run build
+    sudo systemctl start gnosia gnosia-studio
+    ```
+
+    Stopping first matters because `npm ci` replaces `node_modules` under
+    a running `next start`, and `next build` rewrites `.next/` while it is
+    being served.
 
 ## What to expect afterwards
 
 - **Two databases, two histories.** A note written on the homeserver is not
   on the laptop and the other way round (S1). The nightly archives on each
   machine are the readable record of each. When a sync is wanted, dump the
-  side with the history you want to keep and restore it over the other
-  (`dropdb`, `createdb`, `pg_restore`), then delete that side's blob
-  `.owner` marker and audit again, and `rsync` the blob store in the same
-  direction so every key the restored rows name has an object.
+  side with the history you want to keep and restore it over the other:
+  stop the receiving side's clients first (`sudo systemctl stop gnosia
+  gnosia-studio` on the server, `npm run dev` and the studio on the Mac),
+  since the app holds a connection pool and `dropdb` refuses a database
+  anyone is connected to; then `dropdb`, `createdb`, `pg_restore`, delete
+  that side's blob `.owner` marker, `rsync` the blob store in the same
+  direction so every key the restored rows name has an object, audit, and
+  start the clients again.
 - **Videos in `/library` play on both.** They are in the blob store, which
   moved whole. A video rendered on the Mac after the copy is on the Mac
   only until the next `rsync` and dump.
@@ -273,9 +299,11 @@ and points there.
       jobs by design (S5).
 - [ ] Whether the homeserver should also be the laptop's database over the
       tailnet, so there is one history again. S1 says not for now; the
-      change would be the laptop's two `DATABASE_URL` values pointed at the
-      container, its own instance marked `copy`, and its blob store `rsync`ed
-      from the server rather than the other way.
+      change would be the compose port bound to the machine's Tailscale
+      address instead of `127.0.0.1` (step 6), a real password in place of
+      `catalog`, the laptop's two `DATABASE_URL` values pointed at it, its
+      own instance marked `copy`, and its blob store `rsync`ed from the
+      server rather than the other way.
 - [ ] A reverse proxy with TLS, if the app is ever reached from outside the
       tailnet. Then the per-IP rate limit on `/api/auth/sign-in` that
       [DEPLOYMENT.md](DEPLOYMENT.md#signing-in) names becomes necessary too;
