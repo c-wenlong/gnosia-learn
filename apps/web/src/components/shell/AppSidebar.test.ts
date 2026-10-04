@@ -127,6 +127,34 @@ describe("the sidebar", () => {
     });
     expect(nav(container).getAttribute("role")).toBeNull();
   });
+
+  it("closes the drawer on Back or Forward, which can change the studio's view without its path", async () => {
+    const container = await mount(true);
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    expect(nav(container).getAttribute("role")).toBe("dialog");
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(nav(container).getAttribute("role")).toBeNull();
+  });
+
+  it("keeps the conversations mounted, hidden, while folded to the rail", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root: Root = createRoot(container);
+    act(() => root.render(createElement(ShellFrame, { studio: true, initialCollapsed: true } as ComponentProps<typeof ShellFrame>, null)));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    const history = [...nav(container).querySelectorAll("div")].find((div) => div.textContent?.startsWith("Chats"))!;
+    expect(history.closest("[hidden]")).not.toBeNull();
+    // Read while folded, so it is current when it unfolds.
+    expect(mocks.listDrafts).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("the fold", () => {
@@ -148,6 +176,14 @@ describe("the fold", () => {
   afterEach(() => {
     vi.useRealTimers();
     document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
+  });
+
+  it("carries the studio sidebar's saved fold into the cookie once", () => {
+    localStorage.setItem("studio:sidebar-collapsed", "1");
+    const { room } = mountFolded(false);
+    expect(room().className).toContain("w-[60px]");
+    expect(document.cookie).toContain("gnosia-sidebar=collapsed");
+    expect(localStorage.getItem("studio:sidebar-collapsed")).toBeNull();
   });
 
   it("folds to a rail, keeps it in the cookie, and opens again from the rail", () => {

@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { writeSidebarCookie } from "@/lib/sidebar-cookie";
+import { SIDEBAR_COOKIE, writeSidebarCookie } from "@/lib/sidebar-cookie";
 
 import { AppSidebar } from "./AppSidebar";
 import { PhoneHeader } from "./PhoneHeader";
@@ -39,6 +39,28 @@ export function ShellFrame({
     setSeenPath(pathname);
     if (drawer) setDrawer(false);
   }
+
+  // Back or Forward closes it too: on /studio they can move between views
+  // without changing the path, and the drawer would cover the new one.
+  useEffect(() => {
+    if (!drawer) return;
+    const onPop = () => setDrawer(false);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [drawer]);
+
+  // The studio's own sidebar (#301) kept its fold in `localStorage`. Carried
+  // into the cookie once, where the server can read it, and then dropped.
+  useEffect(() => {
+    const folded = takeLegacyFold();
+    if (folded !== null && !document.cookie.split("; ").some((part) => part.startsWith(`${SIDEBAR_COOKIE}=`))) {
+      // Only readable once in the browser, so the server drew it open; this
+      // happens once per browser, the first visit after the move.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCollapsedState(folded);
+      writeSidebarCookie(folded);
+    }
+  }, []);
 
   // Widened past the drawer's range: the sidebar is a column again, and a
   // drawer left open would leave the page inert behind nothing.
@@ -84,4 +106,16 @@ export function ShellFrame({
       </ShellContext.Provider>
     </PublishContext.Provider>
   );
+}
+
+/** The fold the studio's sidebar saved before it became the app's, or null; the key is removed. */
+function takeLegacyFold(): boolean | null {
+  try {
+    const stored = window.localStorage.getItem("studio:sidebar-collapsed");
+    if (stored === null) return null;
+    window.localStorage.removeItem("studio:sidebar-collapsed");
+    return stored === "1";
+  } catch {
+    return null;
+  }
 }

@@ -210,8 +210,10 @@ export function AppSidebar() {
               })}
             </ul>
 
-            {studio && !rail && (
-              <div className="mt-5">
+            {/* Hidden on the rail rather than unmounted, so it keeps reading
+                while folded and is current the moment it unfolds. */}
+            {studio && (
+              <div hidden={rail} className="mt-5">
                 <ChatHistory onPick={pick} />
               </div>
             )}

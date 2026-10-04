@@ -78,6 +78,11 @@ export function ChatHistory({ onPick }: { onPick: () => void }) {
   // than the last one shown is dropped.
   const issued = useRef(0);
   const landed = useRef(0);
+  // A list the page hands over is newer than any read still in flight here:
+  // those answers are dropped when they land.
+  useEffect(() => {
+    if (seen !== "none") landed.current = issued.current + 1;
+  }, [seen]);
   const read = useCallback(async (count: number) => {
     issued.current += 1;
     const ticket = issued.current;
