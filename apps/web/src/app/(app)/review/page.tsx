@@ -24,7 +24,8 @@ export default async function ReviewPage({
   const params = await searchParams;
   const raw = Array.isArray(params.concept) ? params.concept[0] : params.concept;
   const focus = typeof raw === "string" && raw !== "" && raw.length <= 128 ? raw : null;
-  // `?only=a,b,c`, Home's "Recall these": just those cards.
+  // `?only=a,b,c`: just those cards. Home's recall card linked here until
+  // recall moved into the chat (recall-in-chat phase 3); the parameter stays.
   const only = parseOnly(params.only);
   const session = await loadReviewSession(focus, only);
   const asOf = new Date().toISOString();

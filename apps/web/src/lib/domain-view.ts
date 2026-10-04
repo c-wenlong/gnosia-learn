@@ -119,20 +119,90 @@ export function matchCounts(
 
 /** How far from a dot's centre an edge stops: past the knock-out round the dot. */
 export const DOT_GAP = 14;
-/** From a dot's centre to just under a label of `lines` lines. */
-export const labelFoot = (lines: number) => 28 + (lines - 1) * 14 + 8;
+
+/** A concept's label size in layout units, as drawn when the picture is near full size. */
+export const LABEL_SIZE = 12.5;
+/** The smallest a label is drawn on screen, in pixels, however small the picture (D10). */
+export const LABEL_MIN_PX = 11;
+/** Room kept between two labels, in screen pixels. */
+const LABEL_GAP_PX = 2;
+/**
+ * How wide each character of a label is drawn, in ems: Figtree at weight 500,
+ * measured in the built app with canvas `measureText` and rounded up. Real
+ * label lines run from 0.41 to 0.61 em a character, so a flat allowance
+ * either wastes room or lets a line of wide letters overrun its box.
+ */
+const GLYPH_CHARS = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u2026\u2019";
+const GLYPH_WIDTHS = [
+  0.25, 0.31, 0.35, 0.63, 0.57, 0.8, 0.65, 0.22, 0.36, 0.36, 0.49, 0.63, 0.24, 0.42, 0.22, 0.41, 0.65, 0.42, 0.57, 0.55, 0.63, 0.58, 0.57, 0.55,
+  0.62, 0.57, 0.27, 0.28, 0.63, 0.63, 0.63, 0.51, 0.99, 0.69, 0.62, 0.73, 0.7, 0.6, 0.55, 0.76, 0.76, 0.28, 0.53, 0.63, 0.53, 0.85, 0.78, 0.78,
+  0.59, 0.79, 0.64, 0.62, 0.57, 0.71, 0.71, 0.97, 0.64, 0.62, 0.64, 0.33, 0.41, 0.33, 0.56, 0.44, 0.24, 0.52, 0.59, 0.55, 0.59, 0.55, 0.38, 0.6,
+  0.57, 0.24, 0.28, 0.5, 0.23, 0.86, 0.57, 0.58, 0.6, 0.59, 0.35, 0.47, 0.39, 0.57, 0.53, 0.8, 0.5, 0.54, 0.49, 0.39, 0.26, 0.39, 0.6, 0.64, 0.2,
+];
+const GLYPH_EM = new Map([...GLYPH_CHARS].map((c, i) => [c, GLYPH_WIDTHS[i]]));
+/** A character the table has no width for (an accented or non-Latin letter): as wide as the wider capitals. */
+const GLYPH_UNKNOWN = 0.78;
+/** Bold against weight 500: 1.035 on average over the table, 1.094 at the 90th percentile. */
+const BOLD_EM = 1.1;
+
+/** How wide `line` is drawn, in ems of the label's size: the sum of its characters' widths. */
+export function textEm(line: string, bold = false): number {
+  let em = 0;
+  for (const c of line) em += GLYPH_EM.get(c) ?? GLYPH_UNKNOWN;
+  return bold ? em * BOLD_EM : em;
+}
+/** Half the box a dot keeps clear of other labels: its radius and half its stroke. */
+const DOT_CLEAR = 9;
+/** How far a label's descenders reach below its last baseline, as a share of its size. */
+const LABEL_DESCENT = 0.2;
+
+/**
+ * The smallest a domain's picture is drawn, in screen pixels per layout unit,
+ * before it scrolls sideways in its card instead (D10). Labels hold their
+ * size on screen by culling, so the floor is set by what does not scale with
+ * them: at 0.35 a two-line 11px label still fits between one layer of a topic
+ * and the next (98 units apart, from dot to dot) so a chain keeps its labels,
+ * a concept's press area (112 units) is 39px wide, and the owner's widest
+ * domains (about 900 units) fit a 390px phone.
+ */
+export const MIN_DRAW_SCALE = 0.35;
+
+/**
+ * The size a label is drawn at, in layout units, for a picture drawn at
+ * `scale` screen pixels per layout unit (D10): never less than the layout
+ * size, and never less than `LABEL_MIN_PX` on screen. A scale it cannot use
+ * (none measured yet, or a picture with no width) draws at the layout size.
+ */
+export function labelFont(scale: number): number {
+  if (!Number.isFinite(scale) || scale <= 0) return LABEL_SIZE;
+  return Math.max(LABEL_SIZE, LABEL_MIN_PX / scale);
+}
+
+/** From one line of a label to the next, at size `font`. */
+export const labelLine = (font: number) => (font * 28) / 25;
+/** From a dot's centre to the baseline of a label's line `k`, at size `font`. */
+export const labelBaseline = (font: number, k: number) => 16 + (font * 24) / 25 + k * labelLine(font);
+/**
+ * From a dot's centre to just under a label of `lines` lines at size `font`,
+ * where an edge leaving downward starts. A label not drawn (`lines` 0) leaves
+ * the edge to start at the dot.
+ */
+export const labelFoot = (lines: number, font = LABEL_SIZE) =>
+  lines <= 0 ? DOT_GAP : labelBaseline(font, lines - 1) + (font * 16) / 25;
 
 /**
  * Where an edge between two concepts starts and ends, so it never runs
  * through a label: down from under the upper concept's label to just above
  * the lower one's dot, and side to side between two dots on one row.
- * `fromLines` and `toLines` are how many lines each label has.
+ * `fromLines` and `toLines` are how many lines each label has (0 for a label
+ * culled, D10), drawn at size `font`.
  */
 export function edgeEnds(
   from: { x: number; y: number },
   to: { x: number; y: number },
   fromLines: number,
   toLines: number,
+  font = LABEL_SIZE,
 ): [{ x: number; y: number }, { x: number; y: number }] {
   const dy = to.y - from.y;
   if (Math.abs(dy) < 20) {
@@ -142,8 +212,96 @@ export function edgeEnds(
       { x: to.x - side * DOT_GAP, y: to.y },
     ];
   }
-  if (dy > 0) return [{ x: from.x, y: from.y + labelFoot(fromLines) }, { x: to.x, y: to.y - DOT_GAP }];
-  return [{ x: from.x, y: from.y - DOT_GAP }, { x: to.x, y: to.y + labelFoot(toLines) }];
+  if (dy > 0) return [{ x: from.x, y: from.y + labelFoot(fromLines, font) }, { x: to.x, y: to.y - DOT_GAP }];
+  return [{ x: from.x, y: from.y - DOT_GAP }, { x: to.x, y: to.y + labelFoot(toLines, font) }];
+}
+
+/** One concept's label, as the culling sees it (D10). */
+export interface LabelItem {
+  id: string;
+  /** The dot's centre, in layout units. */
+  x: number;
+  y: number;
+  /** How many lines the label wraps to, and how wide its widest line is in ems (`textEm`). */
+  lines: number;
+  em: number;
+  /** From `labelRank`: lower is placed first. */
+  rank: number;
+  /** How many of the drawn edges leave this concept for one that needs it. */
+  dependants: number;
+}
+
+/** The rank that is always drawn: the concept under the pointer or the list's focus. */
+const HOVER_RANK = 0;
+
+/**
+ * Which labels are placed first when they collide (D10): the hovered concept,
+ * the selected one, the ones the hover keeps lit, then mastered, learning and
+ * ready to learn, then the rest.
+ */
+export function labelRank(c: {
+  hover: boolean;
+  selected: boolean;
+  related: boolean;
+  bucket: "mastered" | "learning" | "untouched";
+  ready: boolean;
+}): number {
+  if (c.hover) return HOVER_RANK;
+  if (c.selected) return 1;
+  if (c.related) return 2;
+  if (c.bucket === "mastered") return 3;
+  if (c.bucket === "learning") return 4;
+  if (c.ready) return 5;
+  return 6;
+}
+
+/**
+ * The box a label of `item` takes at size `font`, in layout units: under the
+ * dot, centred on it, and pushed sideways to stay inside `frame` when one is
+ * given, so the picture's edge does not cut it.
+ */
+export function labelBox(item: Pick<LabelItem, "x" | "y" | "lines" | "em">, font: number, frame?: Box): Box {
+  const width = Math.max(0.5, item.em) * font;
+  const top = item.y + 16;
+  const bottom = item.y + labelBaseline(font, Math.max(1, item.lines) - 1) + font * LABEL_DESCENT;
+  let x = item.x - width / 2;
+  if (frame !== undefined) x = Math.max(frame.x, Math.min(x, frame.x + frame.width - width));
+  return { x, y: top, width, height: bottom - top };
+}
+
+const overlaps = (a: Box, b: Box, gap: number) =>
+  a.x < b.x + b.width + gap && b.x < a.x + a.width + gap && a.y < b.y + b.height + gap && b.y < a.y + a.height + gap;
+
+/**
+ * The labels drawn, by greedy collision culling (D10, after ResearchRabbit's
+ * graph): in priority order, each label's box is placed unless it overlaps a
+ * label already placed, another concept's dot, or one of `clear` (a topic's
+ * title). Each box is where the label is drawn, inside `frame` when one is
+ * given (`labelBox`). The hovered concept's label is always placed. Ties go to the concept
+ * more of the drawn edges lead from, then to the lower id, so the answer does
+ * not depend on the order `items` come in. `scale` is screen pixels per layout
+ * unit, which sets the label size (`labelFont`) and the gap between labels.
+ * Quadratic in the labels, which is a few thousand box tests for a domain.
+ */
+export function cullLabels(items: readonly LabelItem[], scale: number, clear: readonly Box[] = [], frame?: Box): Set<string> {
+  const font = labelFont(scale);
+  const gap = LABEL_GAP_PX / (Number.isFinite(scale) && scale > 0 ? scale : 1);
+  const order = [...items].sort((a, b) => a.rank - b.rank || b.dependants - a.dependants || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const dots = items.map((i) => ({ id: i.id, box: { x: i.x - DOT_CLEAR, y: i.y - DOT_CLEAR, width: 2 * DOT_CLEAR, height: 2 * DOT_CLEAR } }));
+  const placed: Box[] = [];
+  const shown = new Set<string>();
+  for (const item of order) {
+    const box = labelBox(item, font, frame);
+    const free =
+      item.rank === HOVER_RANK ||
+      (!placed.some((p) => overlaps(p, box, gap)) &&
+        !dots.some((d) => d.id !== item.id && overlaps(d.box, box, 0)) &&
+        !clear.some((c) => overlaps(c, box, 0)));
+    if (!free) continue;
+    placed.push(box);
+    shown.add(item.id);
+  }
+  return shown;
 }
 
 /** A concept and every concept one edge away from it, either way: what hover keeps (D5). */

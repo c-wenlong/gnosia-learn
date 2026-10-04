@@ -202,8 +202,11 @@ Written against the island map, which was then replaced on 2026-10-04 by
 the domain map ([DomainGraph.tsx](../../../../apps/web/src/components/learn/DomainGraph.tsx),
 [domain-map.md](../../../proposals/domain-map.md)). That took the hover
 fade, the gap round each dot, the full-title plate, drag with a "Positions
-moved" Reset, and the list beside the graph hovering in step; the legend
-chips and label culling are not built. The island map
+moved" Reset, and the list beside the graph hovering in step. The legend
+chips came next (D9, [#382](https://github.com/c-wenlong/self-learn/pull/382)),
+then label culling: labels at 11px on screen or more, placed greedily in
+priority order, the rest skipped (D10,
+[#385](https://github.com/c-wenlong/self-learn/pull/385)). The island map
 ([knowledge-map.md](../../../proposals/knowledge-map.md)) had islands,
 a dagre layout, pan, wheel and pinch zoom, fit buttons, selection with accent
 edges, and filter dimming. Set against ResearchRabbit:

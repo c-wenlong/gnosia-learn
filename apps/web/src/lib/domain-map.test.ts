@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphEdge } from "@/lib/concept-graph";
 import { cachedDomainLayout, domainLayout, domainOfNode, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
-import { domainTitle, groupBox, NODE_HALF_WIDTH, titleWidth } from "@/lib/domain-view";
+import { cullLabels, domainTitle, groupBox, MIN_DRAW_SCALE, NODE_HALF_WIDTH, titleWidth, type LabelItem } from "@/lib/domain-view";
 
 /**
  * Written before `domain-map.ts` (phase 1 of docs/proposals/domain-map.md),
@@ -250,5 +250,15 @@ describe("domainLayout (D3, D4)", () => {
     const relearned = nodes.map((n) => ({ ...n, bucket: "mastered" as const, pL: 0.99 }));
     expect(cachedDomainLayout(relearned, edges, topics, "algorithms")).toBe(first);
     expect(cachedDomainLayout(nodes, [...edges, req("dfs", "knapsack")], topics, "algorithms")).not.toBe(first);
+  });
+});
+
+describe("labels on a picture drawn at its smallest (D10)", () => {
+  it("fit a two-line label between one layer of a chain and the next, so a chain keeps its labels", () => {
+    const chain = ["a", "b", "c", "d"].map((id) => node(id, "sorting"));
+    const links = [req("a", "b"), req("b", "c"), req("c", "d")];
+    const laid = domainLayout(chain, links, topics, "algorithms");
+    const items: LabelItem[] = chain.map((n) => ({ ...laid.positions[n.id], id: n.id, lines: 2, em: 8.25, rank: 6, dependants: 0 }));
+    expect([...cullLabels(items, MIN_DRAW_SCALE)].sort()).toEqual(["a", "b", "c", "d"]);
   });
 });

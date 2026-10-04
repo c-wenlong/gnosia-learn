@@ -70,7 +70,7 @@ phone had a five-column tab bar. The streak and target the bar once carried
 went with the habit layer (H1 of docs/proposals/home-page.md).
 
 Review left the sidebar on 2026-10-04 (owner's call). `/review` stays as
-the full queue, reached from Review now on a concept page and Recall these
+the full queue, reached from Review now on a concept page and All reviews
 on Home, and the `review` and `mastery` tables are untouched. The reason is
 in [the recall proposal](../proposals/recall-in-chat.md): only the Teach
 session, a module's week check and the terminal's `/learn` skill make a

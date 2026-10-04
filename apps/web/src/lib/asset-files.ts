@@ -135,6 +135,8 @@ export interface AssetStored {
   sha256: string;
   contentType: string;
   filename: string;
+  /** What the Library calls the asset (the learner's name for it, else the source's), for a download's name. */
+  title?: string | null;
 }
 
 /**
@@ -150,6 +152,8 @@ export interface AssetRowText {
   bytes: number;
   contentType: string;
   filename: string;
+  /** As on `AssetStored`. */
+  title?: string | null;
 }
 
 /** Wherever an asset's bytes are served from. */
@@ -357,10 +361,11 @@ export async function resolveAsset(db: CatalogDatabase, id: string): Promise<Ass
   const scope = await currentScope();
   const [row] = await assetsByIds(db, [id], scope);
   if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
+  const titled = (found: AssetSourceResult): AssetSourceResult => (found.ok ? { ...found, title: row.title } : found);
   const blob = (await assetBlobs(db, [row.id], scope)).get(row.id);
-  if (blob !== undefined) return resolveBlob(blob, row.path ?? row.id);
+  if (blob !== undefined) return titled(await resolveBlob(blob, row.path ?? row.id));
   const text = await resolveRowText(db, row);
-  if (text !== undefined) return text;
+  if (text !== undefined) return titled(text);
   return noStoredCopy(row);
 }
 

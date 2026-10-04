@@ -211,7 +211,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
 
   it("refuses a bad body, a duplicate, a missing entry and a provider with no key, by code and without echoing", async () => {
     const cases: [Request, number, string][] = [
-      [request("", "POST", { provider: "openai", model: "x" }), 400, "BAD_REQUEST"],
+      [request("", "POST", { provider: "not-a-provider", model: "x" }), 400, "BAD_REQUEST"],
       [request("", "POST", { provider: "nvidia", model: "has space" }), 400, "BAD_REQUEST"],
       [request("", "POST", { provider: "nvidia", model: "x".repeat(201) }), 400, "BAD_REQUEST"],
       [request("", "POST", { provider: "gemini", model: "gemini-2.5-flash" }), 400, "NO_KEY"],

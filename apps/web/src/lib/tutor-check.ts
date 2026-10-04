@@ -27,12 +27,21 @@ export const CHAT_ANSWER_LIMIT = 4_000;
 /** The longest judge feedback the row shows. */
 export const VERDICT_FEEDBACK_LIMIT = 300;
 
-/** The marker, on its own line: `CHECK: ...`, tolerating the bold or code a model adds around it. */
-const MARKER = /^[\s>*_`]*CHECK[*_`]*\s*:[*_`]*\s*(.+?)[\s*_`]*$/i;
+/**
+ * The marker, on its own line: `CHECK: ...`, or `CHECK(<concept id>): ...`
+ * from the course topic tutor, which names which of its topic's concepts the
+ * check tests (phase 3). Tolerates the bold or code a model adds around it.
+ */
+const MARKER = /^[\s>*_`]*CHECK[*_`]*\s*(?:\(\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*\))?[*_`]*\s*:[*_`]*\s*(.+?)[\s*_`]*$/i;
+
+/** A concept id as the catalog writes them. */
+const CONCEPT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** What the tutor asked, when a turn asked a check. */
 export interface TurnCheck {
   question: string;
+  /** The concept the check tests, when the tutor named one (the course topic tutor). */
+  concept?: string;
 }
 
 /**
@@ -47,10 +56,12 @@ export function splitCheck(reply: string): { content: string; check: TurnCheck |
   const last = lines.at(-1) ?? "";
   const match = MARKER.exec(last);
   if (match === null) return { content: reply.trim(), check: null };
-  const question = match[1].trim().replace(/\s+/g, " ").slice(0, CHECK_QUESTION_LIMIT);
+  const question = match[2].trim().replace(/\s+/g, " ").slice(0, CHECK_QUESTION_LIMIT);
   if (question === "") return { content: reply.trim(), check: null };
   const content = lines.slice(0, -1).join("\n").trim();
-  return { content: content === "" ? question : content, check: { question } };
+  const check: TurnCheck = { question };
+  if (match[1]) check.concept = match[1].toLowerCase();
+  return { content: content === "" ? question : content, check };
 }
 
 /** The roles a thread item can have, as far as these rules need to know. */
@@ -238,8 +249,23 @@ export function settleInterrupted(verdict: Verdict): Verdict | null {
 /** A stored check back, or null. */
 export function restoreCheck(value: unknown): TurnCheck | null {
   if (value === null || typeof value !== "object") return null;
-  const q = (value as Record<string, unknown>).question;
-  return typeof q === "string" && q.trim() !== "" ? { question: q.slice(0, CHECK_QUESTION_LIMIT) } : null;
+  const { question: q, concept } = value as Record<string, unknown>;
+  if (typeof q !== "string" || q.trim() === "") return null;
+  const check: TurnCheck = { question: q.slice(0, CHECK_QUESTION_LIMIT) };
+  if (typeof concept === "string" && CONCEPT_ID.test(concept)) check.concept = concept;
+  return check;
+}
+
+/**
+ * A check the course topic tutor marked, kept only when it names one of the
+ * concepts the topic declares (its course item's `concepts:`). A topic with
+ * exactly one concept takes an unnamed check as that one's. Anything else
+ * is dropped: evidence goes to a concept the topic teaches or nowhere.
+ */
+export function topicCheck(check: TurnCheck | null, concepts: readonly string[]): TurnCheck | null {
+  if (check === null || concepts.length === 0) return null;
+  if (check.concept === undefined) return concepts.length === 1 ? { ...check, concept: concepts[0] } : null;
+  return concepts.includes(check.concept) ? check : null;
 }
 
 /** `Recorded as correct · p(L) 0.25 → 0.41 · review in 1 day`, the session page's words after an answer. */

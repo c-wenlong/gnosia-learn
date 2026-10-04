@@ -15,6 +15,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { Input } from "@/components/ui/Input";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
+import { TextLink } from "@/components/ui/TextLink";
 import { cx } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
 import type { ChainEntry } from "@/lib/agent/providers";
@@ -217,7 +218,23 @@ function AddProvider({
             />
           )}
         </FormRow>
-        <FormRow label="API key" hint="Sent once and stored encrypted. Only its last four characters are shown again." error={error}>
+        <FormRow
+          label="API key"
+          hint={
+            <>
+              Sent once and stored encrypted. Only its last four characters are shown again.
+              {chosen?.keyUrl !== undefined && (
+                <>
+                  {" "}
+                  <TextLink href={chosen.keyUrl} external size="xs">
+                    Get a {chosen.label} key<span aria-hidden> ↗</span>
+                  </TextLink>
+                </>
+              )}
+            </>
+          }
+          error={error}
+        >
           {({ id, describedBy, invalid }) => (
             <Input
               id={id}

@@ -7,7 +7,13 @@ names what it changes and what it leaves. Phase 1 (L1, L2, L3, L8) is
 built: the type tabs, the day groups, the source line from `assetParents`
 (`services/catalog/src/state/asset-parents.ts`, one statement per page) and
 the three `--shell-row` tokens. Days and times are counted in the zone Home
-uses (`appTimeZone()`), not UTC. Phases 2 to 4 are not built.
+uses (`appTimeZone()`), not UTC. Phase 2 (L4, L5) is built: the view
+options (`ViewOptions`, `?group=day|course|concept`, and Show all or
+Favorites only, where #372's Favorites chip moved), and the more menu on
+every row and card (`RowMenu` on the kit `Menu`, its items decided by
+`rowMenuItems` in `apps/web/src/lib/row-menu.ts`), which also offers Rename
+(#370), Favorite (#372) and Ask (#374), and the file route's `?download=1`.
+Phases 3 and 4 are not built.
 
 ## The problem
 

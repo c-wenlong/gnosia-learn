@@ -122,7 +122,7 @@ export async function readReviewSession(
     return { reachable: false, items: [], nextDue: null };
   }
 
-  // `only` is Home's "Recall these": just those due cards, in that order. A
+  // `only` is a chosen set (once Home's recall button): just those due cards, in that order. A
   // name that is not due (graded in another tab since the page drew) is
   // dropped rather than asked early.
   if (only !== null) {
