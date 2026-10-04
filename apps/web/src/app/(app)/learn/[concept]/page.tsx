@@ -140,7 +140,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
           // The style the tutor is told to use (hi-fi 04's "Learning guide ·
           // concise"), linking to where it is changed.
           <Link
-            href="/settings"
+            href="/settings?tab=tutor"
             title="Tutor style, set in Settings"
             className="rounded-sm text-[12px] text-text3 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
