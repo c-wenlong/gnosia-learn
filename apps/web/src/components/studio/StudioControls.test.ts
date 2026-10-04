@@ -108,7 +108,7 @@ describe("the studio's strip menus", () => {
       createElement("input", { type: "hidden", name: "name", value: "dot-product" }),
       createElement("button", { type: "submit" }, "Verify"),
     );
-    const { button } = mount(createElement(StripMenu, { label: "More", name: "More actions", children: verb }));
+    const { button } = mount(createElement(StripMenu, { label: "More", name: "More actions" } as Parameters<typeof StripMenu>[0], verb));
     const more = button(/^More actions/);
     act(() => more.click());
     expect(more.getAttribute("aria-expanded")).toBe("true");
