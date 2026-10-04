@@ -44,17 +44,19 @@ async function mount(
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  await act(async () => {
-    root.render(
-      createElement(component, { value, onChange, onSubmit, label: "Tell", mentions: OPTIONS, handleRef, ...extra }),
-    );
-  });
+  const render = (next: MentionValue<DraftKind>) =>
+    act(async () => {
+      root.render(
+        createElement(component, { value: next, onChange, onSubmit, label: "Tell", mentions: OPTIONS, handleRef, ...extra }),
+      );
+    });
+  await render(value);
   for (let at = 0; at < 5; at += 1) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
   });
-  return { host, onChange, onSubmit, handleRef };
+  return { host, onChange, onSubmit, handleRef, render };
 }
 
 describe("the plain fallback", () => {
@@ -137,6 +139,25 @@ describe("the plain fallback in the box layout (D84)", () => {
       field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     });
     expect(onSubmit).toHaveBeenCalledWith({ text: "A @video of it", mentions: [{ kind: "video", start: 2, end: 8 }] });
+  });
+
+  it("puts the textarea's selection back where it was, moved by a toggle's edit (Greptile on #306)", async () => {
+    const handleRef = createRef<MentionComposerHandle>();
+    const value = { text: "how raft works", mentions: [] };
+    const { host, render } = await mount(value, handleRef, {}, MentionComposerBox);
+    const field = host.querySelector("textarea")!;
+    field.focus();
+    field.setSelectionRange(4, 8);
+    const next = { text: "@diagram how raft works", mentions: [{ kind: "diagram" as const, start: 0, end: 8 }] };
+    handleRef.current!.keepCaretThrough(next, { at: 0, removed: 0, inserted: 9 });
+    await render(next);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([13, 17]);
+    expect(field.value.slice(13, 17)).toBe("raft");
+
+    // And back out: the selection moves back with the text.
+    handleRef.current!.keepCaretThrough(value, { at: 0, removed: 9, inserted: 0 });
+    await render(value);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([4, 8]);
   });
 
   it("keeps the row layout everywhere else: Send is the pill beside the field, and there is no toolbar", async () => {

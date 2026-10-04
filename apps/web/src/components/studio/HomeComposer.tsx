@@ -14,7 +14,7 @@ import {
   hasMention,
   isEmptyValue,
   isUsable,
-  toggleMention,
+  toggleMentionEdit,
   trimValue,
   type MentionOption,
   type MentionValue,
@@ -68,7 +68,11 @@ export function HomeComposer({ path, video }: { path: string; video: VideoAvaila
     const tagged = hasMention(value, option.id);
     // An unavailable kind can still be taken out, never put in.
     if (!tagged && !isUsable(option)) return;
-    setValue(toggleMention(value, option.id));
+    const { value: next, edit } = toggleMentionEdit(value, option.id);
+    if (edit === null) return;
+    // The caret, or a selection, stays where the person left it, moved by the chip.
+    composer.current?.keepCaretThrough(next, edit);
+    setValue(next);
     setAnnouncement(`${option.name} tag ${tagged ? "removed" : "added"}.`);
     composer.current?.focus();
   }

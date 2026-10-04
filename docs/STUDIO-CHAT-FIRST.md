@@ -688,8 +688,12 @@ Send pill beside it. In the box the @ menu opens under the frame, beside the
 plus that opens it.
 
 The toggles work on the message, not on a setting beside it. A press puts
-that kind's chip at the start of the message and focuses the field; a second
-press takes the chip out with the space after it. Neither ever sends. A
+that kind's chip, and a space of its own, at the start of the message and
+focuses the field; a second press takes out exactly what the first put in,
+so toggling never eats a space the person typed. The caret, or a selection,
+stays where the person left it, moved along by the chip
+(`keepCaretThrough` on the composer's handle), rather than jumping to the
+end. Neither press ever sends. A
 toggle shows pressed (`aria-pressed`, the accent's tint) whenever its kind's
 chip is in the message, however it got there, typed with `@` or picked from
 the plus included, so the two buttons always say what Send will ask for. A

@@ -8,6 +8,7 @@ import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import {
   $createParagraphNode,
+  $createRangeSelection,
   $createTextNode,
   $getNodeByKey,
   $getRoot,
@@ -61,10 +62,13 @@ import {
 import { Glyph, type GlyphName } from "./Glyph";
 import { MentionChip } from "./MentionChip";
 import {
+  caretOffset,
+  caretPoint,
   filterMentionOptions,
   firstActive,
   isEmptyValue,
   isUsable,
+  mapOffset,
   MENTION_NODE_TYPE,
   mentionQuery,
   mentionToken,
@@ -75,10 +79,12 @@ import {
   serializeMentions,
   valuePieces,
   plusMenuStays,
+  type CaretLine,
   type MentionOption,
   type MentionValue,
   type PlusAnchor,
   type SerializedNodeLike,
+  type TextEdit,
 } from "./mention-text";
 
 /**
@@ -115,6 +121,14 @@ export interface MentionComposerHandle {
   /** Put `kind`'s chip at the caret, or at the end when the field has not been focused, and focus it. */
   insertMention: (kind: string) => void;
   focus: () => void;
+  /**
+   * Keep the caret through the next value the parent sets, when it is `next`
+   * and was made from the current one by `edit` (a toggle's chip going in or
+   * out): the field is rebuilt from the value as always, and the caret, or
+   * the selection, goes back where it was, moved by the edit, instead of to
+   * the end.
+   */
+  keepCaretThrough: (next: MentionValue, edit: TextEdit) => void;
 }
 
 export interface MentionComposerProps<K extends string = string> {
@@ -325,6 +339,13 @@ function Field<K extends string>({
   // showed a job) is built into it by the effect below rather than skipped.
   const emitted = useRef<MentionValue<K>>({ text: "", mentions: [] });
   const focusedOnce = useRef(false);
+  // A caret to put back after the next rebuild, already moved by the edit, and
+  // the text that rebuild must be to.
+  const pendingCaret = useRef<{ text: string; anchor: number; focus: number } | null>(null);
+  // The last caret the field had, as offsets into the text it had then: the
+  // editor drops its selection when focus leaves, so a toggle pressed from
+  // the keyboard would otherwise find none to keep.
+  const lastCaret = useRef<{ text: string; anchor: number; focus: number } | null>(null);
 
   // The latest props, for command handlers registered once.
   const latest = useRef({ value, onChange, onSubmit, mentions, onModEnter, disabled, sendDisabled });
@@ -355,6 +376,8 @@ function Field<K extends string>({
   useEffect(() => {
     return editor.registerUpdateListener(({ editorState, tags }) => {
       const next = serializeMentions<K>(editorState.toJSON().root as unknown as SerializedNodeLike);
+      const caret = editorState.read(() => $selectionOffsets());
+      if (caret !== null) lastCaret.current = { text: next.text, ...caret };
       if (!sameValue(next, emitted.current)) {
         emitted.current = next;
         if (!tags.has(EXTERNAL)) latest.current.onChange(next);
@@ -398,7 +421,16 @@ function Field<K extends string>({
   useEffect(() => {
     if (sameValue(value, emitted.current)) return;
     emitted.current = value;
-    const focused = editor.getRootElement() !== null && editor.getRootElement() === document.activeElement;
+    const pending = pendingCaret.current;
+    pendingCaret.current = null;
+    const keep = pending !== null && pending.text === value.text ? pending : null;
+    const rootElement = editor.getRootElement();
+    // A kept caret is for a field the caller focuses next (a toggle pressed
+    // from the keyboard has the focus on itself). Focus it first: the browser
+    // applies a selection the editor sets only to a focused field, and would
+    // otherwise put the caret back where its own was, at the end.
+    if (keep !== null && rootElement !== null && rootElement !== document.activeElement) rootElement.focus({ preventScroll: true });
+    const focused = rootElement !== null && rootElement === document.activeElement;
     editor.update(
       () => {
         const root = $getRoot();
@@ -412,6 +444,7 @@ function Field<K extends string>({
           }
           root.append(paragraph);
         }
+        if (keep !== null && $selectOffsets(keep.anchor, keep.focus)) return;
         if (focused) root.selectEnd();
         else $setSelection(null);
       },
@@ -521,7 +554,24 @@ function Field<K extends string>({
     [editor, openMenu],
   );
 
-  useImperativeHandle(handleRef, () => ({ insertMention, focus: () => editor.focus() }), [insertMention, editor]);
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      insertMention,
+      focus: () => editor.focus(),
+      keepCaretThrough: (next: MentionValue, edit: TextEdit) => {
+        // Read now, before the caller focuses the field (which, with no
+        // selection, puts one at the end): the selection the field has, else
+        // the one it had when focus left it.
+        const now = editor.getEditorState().read(() => $selectionOffsets());
+        const last = lastCaret.current;
+        const caret = now ?? (last !== null && last.text === emitted.current.text ? last : null);
+        pendingCaret.current =
+          caret === null ? null : { text: next.text, anchor: mapOffset(caret.anchor, edit), focus: mapOffset(caret.focus, edit) };
+      },
+    }),
+    [insertMention, editor],
+  );
 
   // Once, when the field mounts: the panel behind it asked for focus before
   // this chunk arrived, and the asking has to happen here.
@@ -880,6 +930,46 @@ function $queryAtCaret(): { nodeKey: NodeKey; offset: number; query: string } | 
   const found = mentionQuery(before);
   if (found === null || found.offset < lead.length) return null;
   return { nodeKey: node.getKey(), offset: found.offset - lead.length, query: found.query };
+}
+
+/** The field's paragraphs as plain lines, for `caretOffset` and `caretPoint`. */
+function $caretLines(): CaretLine[] {
+  return $getRoot()
+    .getChildren()
+    .map((block) => ({
+      key: block.getKey(),
+      children: $isElementNode(block)
+        ? block.getChildren().map((child) => ({
+            key: child.getKey(),
+            type: $isMentionNode(child) ? ("chip" as const) : $isLineBreakNode(child) ? ("break" as const) : ("text" as const),
+            length: child.getTextContentSize(),
+          }))
+        : [],
+    }));
+}
+
+/** The selection as offsets into the value's text, or null when there is none to keep. */
+function $selectionOffsets(): { anchor: number; focus: number } | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return null;
+  const lines = $caretLines();
+  const rootKey = $getRoot().getKey();
+  const anchor = caretOffset(lines, { key: selection.anchor.key, offset: selection.anchor.offset, type: selection.anchor.type }, rootKey);
+  const focus = caretOffset(lines, { key: selection.focus.key, offset: selection.focus.offset, type: selection.focus.type }, rootKey);
+  return anchor === null || focus === null ? null : { anchor, focus };
+}
+
+/** Select from `anchor` to `focus`, offsets into the value's text. False when the field has no lines. */
+function $selectOffsets(anchor: number, focus: number): boolean {
+  const lines = $caretLines();
+  const from = caretPoint(lines, anchor);
+  const to = caretPoint(lines, focus);
+  if (from === null || to === null) return false;
+  const selection = $createRangeSelection();
+  selection.anchor.set(from.key, from.offset, from.type);
+  selection.focus.set(to.key, to.offset, to.type);
+  $setSelection(selection);
+  return true;
 }
 
 /** After a chip: a space when the next character is not one, and the caret after it. */

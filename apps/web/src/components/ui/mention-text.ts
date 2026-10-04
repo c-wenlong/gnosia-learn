@@ -320,50 +320,167 @@ export function hasMention<K extends string>(value: MentionValue<K>, kind: K): b
 }
 
 /**
- * `value` with `kind`'s chip at the start and a space after it (none when the
- * text already starts with whitespace), every other position moved to match.
- * A value that already tags `kind` comes back as it is: one chip per kind.
+ * One change to the text: at `at`, `removed` characters out and `inserted`
+ * in. A toggle reports it so the field can keep the person's caret where it
+ * was (`mapOffset`), rather than rebuilding with the caret at the end.
  */
-export function withMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
+export interface TextEdit {
+  at: number;
+  removed: number;
+  inserted: number;
+}
+
+/** A toggle's result: the new value, and the edit that made it, or null when nothing changed. */
+export interface MentionEdit<K extends string> {
+  value: MentionValue<K>;
+  edit: TextEdit | null;
+}
+
+/**
+ * `value` with `kind`'s chip at the start followed by a space of its own,
+ * every other position moved to match. The space is always added, even
+ * before text that already starts with one, so taking the chip out again
+ * (`removeMention`) gives back exactly the text that was there. A value that
+ * already tags `kind` comes back as it is: one chip per kind.
+ */
+export function addMention<K extends string>(value: MentionValue<K>, kind: K): MentionEdit<K> {
   const kept = validMentions(value.text, value.mentions);
-  if (kept.some((mention) => mention.kind === kind)) return value;
+  if (kept.some((mention) => mention.kind === kind)) return { value, edit: null };
   const token = mentionToken(kind);
-  const lead = token + (/^\s/.test(value.text) ? "" : " ");
+  const lead = `${token} `;
   return {
-    text: lead + value.text,
-    mentions: [
-      { kind, start: 0, end: token.length },
-      ...kept.map((mention) => ({ kind: mention.kind, start: mention.start + lead.length, end: mention.end + lead.length })),
-    ],
+    value: {
+      text: lead + value.text,
+      mentions: [
+        { kind, start: 0, end: token.length },
+        ...kept.map((mention) => ({ kind: mention.kind, start: mention.start + lead.length, end: mention.end + lead.length })),
+      ],
+    },
+    edit: { at: 0, removed: 0, inserted: lead.length },
   };
 }
 
 /**
- * `value` without `kind`'s chip, and without the one space that kept it apart
- * from its neighbour (the one after it, else the one before), so taking out a
- * chip the toggle put in gives back the words as they were. A value that does
- * not tag `kind` comes back as it is.
+ * `value` without `kind`'s chip and the one space that separates it: the
+ * space after it, which is the one `addMention` and a pick from the menu put
+ * there, else the one before it. A value that does not tag `kind` comes back
+ * as it is.
  */
-export function withoutMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
+export function removeMention<K extends string>(value: MentionValue<K>, kind: K): MentionEdit<K> {
   const kept = validMentions(value.text, value.mentions);
   const gone = kept.find((mention) => mention.kind === kind);
-  if (gone === undefined) return value;
+  if (gone === undefined) return { value, edit: null };
   let start = gone.start;
   let end = gone.end;
   if (value.text[end] === " ") end += 1;
   else if (start > 0 && value.text[start - 1] === " ") start -= 1;
   const cut = end - start;
   return {
-    text: value.text.slice(0, start) + value.text.slice(end),
-    mentions: kept
-      .filter((mention) => mention !== gone)
-      .map((mention) => (mention.start >= end ? { kind: mention.kind, start: mention.start - cut, end: mention.end - cut } : mention)),
+    value: {
+      text: value.text.slice(0, start) + value.text.slice(end),
+      mentions: kept
+        .filter((mention) => mention !== gone)
+        .map((mention) => (mention.start >= end ? { kind: mention.kind, start: mention.start - cut, end: mention.end - cut } : mention)),
+    },
+    edit: { at: start, removed: cut, inserted: 0 },
   };
 }
 
 /** The toggle's press: the chip out when it is there, in at the start when it is not. */
+export function toggleMentionEdit<K extends string>(value: MentionValue<K>, kind: K): MentionEdit<K> {
+  return hasMention(value, kind) ? removeMention(value, kind) : addMention(value, kind);
+}
+
+export function withMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
+  return addMention(value, kind).value;
+}
+
+export function withoutMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
+  return removeMention(value, kind).value;
+}
+
 export function toggleMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
-  return hasMention(value, kind) ? withoutMention(value, kind) : withMention(value, kind);
+  return toggleMentionEdit(value, kind).value;
+}
+
+/**
+ * Where a caret at `offset` in the text before `edit` sits after it. Text
+ * after the edit moves with it, a caret inside what was removed lands where
+ * the removal was, and a caret exactly where something was inserted ends up
+ * after it, so a chip put in at the start pushes the caret along.
+ */
+export function mapOffset(offset: number, edit: TextEdit): number {
+  if (offset >= edit.at + edit.removed) return offset - edit.removed + edit.inserted;
+  if (offset > edit.at) return edit.at;
+  return offset;
+}
+
+/*
+ * The editor's lines as plain data, so a caret can be turned into an offset
+ * in the value's text and back without Lexical: each line is a paragraph,
+ * joined to the next by `\n` as `serializeMentions` joins them, and each
+ * child is a text node, a chip (as long as its `@<kind>`) or a line break.
+ */
+
+export interface CaretLineChild {
+  key: string;
+  type: "text" | "chip" | "break";
+  length: number;
+}
+
+export interface CaretLine {
+  key: string;
+  children: readonly CaretLineChild[];
+}
+
+/** A Lexical selection point: inside a text node, or between an element's children. */
+export interface CaretPoint {
+  key: string;
+  offset: number;
+  type: "text" | "element";
+}
+
+/** Where `point` sits in the value's text, or null when it names nothing in `lines`. */
+export function caretOffset(lines: readonly CaretLine[], point: CaretPoint, rootKey: string): number | null {
+  let at = 0;
+  for (let line = 0; line < lines.length; line += 1) {
+    if (line > 0) at += 1;
+    const { key, children } = lines[line]!;
+    if (point.type === "element" && point.key === rootKey && point.offset === line) return at;
+    for (let child = 0; child < children.length; child += 1) {
+      const node = children[child]!;
+      if (point.type === "element" && point.key === key && point.offset === child) return at;
+      if (point.type === "text" && node.type === "text" && node.key === point.key) return at + Math.min(Math.max(0, point.offset), node.length);
+      at += node.length;
+    }
+    if (point.type === "element" && point.key === key) return at;
+  }
+  if (point.type === "element" && point.key === rootKey) return at;
+  return null;
+}
+
+/**
+ * The point at `offset` in the value's text: inside a text node where there
+ * is one, else between children (a caret is never inside a chip; one that
+ * would be goes after it). Past the end is the end. Null with no lines.
+ */
+export function caretPoint(lines: readonly CaretLine[], offset: number): CaretPoint | null {
+  if (lines.length === 0) return null;
+  let at = 0;
+  for (let line = 0; line < lines.length; line += 1) {
+    if (line > 0) at += 1;
+    const { key, children } = lines[line]!;
+    for (let child = 0; child < children.length; child += 1) {
+      const node = children[child]!;
+      if (node.type === "text" && offset >= at && offset <= at + node.length) return { key: node.key, offset: offset - at, type: "text" };
+      if (node.type !== "text" && offset === at) return { key, offset: child, type: "element" };
+      if (node.type !== "text" && offset > at && offset < at + node.length) return { key, offset: child + 1, type: "element" };
+      at += node.length;
+    }
+    if (offset <= at) return { key, offset: children.length, type: "element" };
+  }
+  const last = lines.at(-1)!;
+  return { key: last.key, offset: last.children.length, type: "element" };
 }
 
 /* -------------------------------------------------------------------------- */

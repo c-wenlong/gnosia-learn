@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addMention,
+  caretOffset,
+  caretPoint,
   carryMentions,
   fallbackTagLine,
   filterMentionOptions,
@@ -9,23 +12,28 @@ import {
   inlinePieces,
   isBareTag,
   isEmptyValue,
+  mapOffset,
   MENTION_NODE_TYPE,
   mentionQuery,
   menuOpenedAnnouncement,
   moveActive,
   plusMenuStays,
   prependValue,
+  removeMention,
   rowAnnouncement,
   sameValue,
   serializeMentions,
   toggleMention,
+  toggleMentionEdit,
   trimValue,
   validMentions,
   valueOf,
   valuePieces,
   withMention,
   withoutMention,
+  type CaretLine,
   type MentionOption,
+  type MentionValue,
   type SerializedNodeLike,
 } from "./mention-text";
 
@@ -171,8 +179,40 @@ describe("a kind's toggle (D84)", () => {
     ]);
   });
 
-  it("adds no space when the text already starts with one", () => {
-    expect(withMention({ text: " tcp", mentions: [] }, "video").text).toBe("@video tcp");
+  it("adds a space of its own even before text that starts with one, so it can take back only that", () => {
+    expect(withMention({ text: " tcp", mentions: [] }, "video").text).toBe("@video  tcp");
+    expect(withoutMention(withMention({ text: " tcp", mentions: [] }, "video"), "video")).toEqual({ text: " tcp", mentions: [] });
+  });
+
+  it("is an exact round trip, leading spaces and repeated toggles included (Greptile on #306)", () => {
+    const starts: MentionValue<"diagram" | "video">[] = [
+      { text: "", mentions: [] },
+      { text: " ", mentions: [] },
+      { text: "   tcp", mentions: [] },
+      { text: "\n tcp", mentions: [] },
+      { text: " a @video of tcp", mentions: [{ kind: "video", start: 3, end: 9 }] },
+    ];
+    for (const start of starts) {
+      let value = start;
+      for (let round = 0; round < 3; round += 1) {
+        value = toggleMention(toggleMention(value, "diagram"), "diagram");
+        expect(value).toEqual(start);
+      }
+      // Both on, then both off in either order.
+      const both = toggleMention(toggleMention(start, "diagram"), "video");
+      if (!start.mentions.length) {
+        expect(toggleMention(toggleMention(both, "diagram"), "video")).toEqual(start);
+        expect(toggleMention(toggleMention(both, "video"), "diagram")).toEqual(start);
+      }
+    }
+  });
+
+  it("reports the edit it made, and none when nothing changed", () => {
+    expect(toggleMentionEdit({ text: "tcp", mentions: [] }, "video").edit).toEqual({ at: 0, removed: 0, inserted: 7 });
+    const tagged = valueOf([{ type: "text", text: "a " }, { type: "mention", kind: "video" }, { type: "text", text: " b" }]);
+    expect(toggleMentionEdit(tagged, "video").edit).toEqual({ at: 2, removed: 7, inserted: 0 });
+    expect(addMention(tagged, "video")).toEqual({ value: tagged, edit: null });
+    expect(removeMention({ text: "tcp", mentions: [] }, "video")).toEqual({ value: { text: "tcp", mentions: [] }, edit: null });
   });
 
   it("never tags a kind twice", () => {
@@ -210,6 +250,60 @@ describe("a kind's toggle (D84)", () => {
     const stale = { text: "words", mentions: [{ kind: "video", start: 0, end: 5 }] };
     expect(hasMention(stale, "video")).toBe(false);
     expect(withMention(stale, "video")).toEqual({ text: "@video words", mentions: [{ kind: "video", start: 0, end: 6 }] });
+  });
+});
+
+describe("keeping the caret through a toggle (Greptile on #306)", () => {
+  it("moves a caret after the edit with it, and keeps one before it", () => {
+    const insert = { at: 0, removed: 0, inserted: 9 };
+    expect(mapOffset(0, insert)).toBe(9);
+    expect(mapOffset(4, insert)).toBe(13);
+    const remove = { at: 2, removed: 7, inserted: 0 };
+    expect(mapOffset(1, remove)).toBe(1);
+    expect(mapOffset(2, remove)).toBe(2);
+    expect(mapOffset(5, remove)).toBe(2);
+    expect(mapOffset(12, remove)).toBe(5);
+  });
+
+  // "make a @video\nof tcp": a text, a chip, a text, then a second line.
+  const lines: CaretLine[] = [
+    {
+      key: "p1",
+      children: [
+        { key: "t1", type: "text", length: 7 },
+        { key: "c1", type: "chip", length: 6 },
+      ],
+    },
+    { key: "p2", children: [{ key: "t2", type: "text", length: 6 }] },
+  ];
+
+  it("turns a point into an offset in the value's text", () => {
+    expect(caretOffset(lines, { key: "t1", offset: 3, type: "text" }, "root")).toBe(3);
+    expect(caretOffset(lines, { key: "p1", offset: 1, type: "element" }, "root")).toBe(7);
+    expect(caretOffset(lines, { key: "p1", offset: 2, type: "element" }, "root")).toBe(13);
+    expect(caretOffset(lines, { key: "t2", offset: 2, type: "text" }, "root")).toBe(16);
+    expect(caretOffset(lines, { key: "root", offset: 1, type: "element" }, "root")).toBe(14);
+    expect(caretOffset(lines, { key: "gone", offset: 0, type: "text" }, "root")).toBeNull();
+  });
+
+  it("turns an offset back into a point, never inside a chip", () => {
+    expect(caretPoint(lines, 3)).toEqual({ key: "t1", offset: 3, type: "text" });
+    expect(caretPoint(lines, 7)).toEqual({ key: "t1", offset: 7, type: "text" });
+    expect(caretPoint(lines, 10)).toEqual({ key: "p1", offset: 2, type: "element" });
+    expect(caretPoint(lines, 13)).toEqual({ key: "p1", offset: 2, type: "element" });
+    expect(caretPoint(lines, 14)).toEqual({ key: "t2", offset: 0, type: "text" });
+    expect(caretPoint(lines, 99)).toEqual({ key: "p2", offset: 1, type: "element" });
+    expect(caretPoint([], 0)).toBeNull();
+    expect(caretPoint([{ key: "p", children: [{ key: "c", type: "chip", length: 8 }] }], 0)).toEqual({ key: "p", offset: 0, type: "element" });
+  });
+
+  it("round-trips every offset of the text through a point", () => {
+    for (let offset = 0; offset <= 20; offset += 1) {
+      const point = caretPoint(lines, offset)!;
+      const back = caretOffset(lines, point, "root")!;
+      // Inside the chip (8 to 12) comes back as after it.
+      expect(back).toBe(offset > 7 && offset < 13 ? 13 : Math.min(offset, 20));
+    }
   });
 });
 

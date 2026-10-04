@@ -18,12 +18,14 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   begin: vi.fn(),
   settle: vi.fn(),
+  handle: { focus: vi.fn(), insertMention: vi.fn(), keepCaretThrough: vi.fn() },
   composer: null as null | {
     value: Value;
     sendDisabled?: boolean;
     disabledReason?: string;
     layout?: string;
     toolbar?: ReactNode;
+    handleRef?: { current: unknown };
     onChange: (value: Value) => void;
     onSubmit: (value: Value) => void;
   },
@@ -34,6 +36,7 @@ vi.mock("next/dynamic", () => ({
   default: () =>
     function StubComposer(props: NonNullable<typeof mocks.composer>) {
       mocks.composer = props;
+      if (props.handleRef) props.handleRef.current = mocks.handle;
       // A form, as the real composer is, so a toggle that submitted it would show.
       return createElement(
         "form",
@@ -71,6 +74,8 @@ beforeEach(() => {
   mocks.begin.mockReset().mockReturnValue(1);
   mocks.settle.mockReset().mockReturnValue(true);
   mocks.push.mockReset();
+  mocks.handle.focus.mockReset();
+  mocks.handle.keepCaretThrough.mockReset();
 });
 
 const mounted: Array<() => void> = [];
@@ -157,9 +162,13 @@ describe("the Diagram and Video toggles (D84)", () => {
     });
     expect(toggle(container, "Diagram").getAttribute("aria-pressed")).toBe("true");
     expect(container.querySelector("[role=status]")?.textContent).toBe("Diagram tag added.");
+    // The field keeps the person's caret, moved past the chip, and takes focus.
+    expect(mocks.handle.keepCaretThrough).toHaveBeenLastCalledWith(mocks.composer!.value, { at: 0, removed: 0, inserted: 9 });
+    expect(mocks.handle.focus).toHaveBeenCalled();
 
     act(() => toggle(container, "Diagram").click());
     expect(mocks.composer!.value).toEqual({ text: "how raft keeps a log in step", mentions: [] });
+    expect(mocks.handle.keepCaretThrough).toHaveBeenLastCalledWith(mocks.composer!.value, { at: 0, removed: 9, inserted: 0 });
     expect(toggle(container, "Diagram").getAttribute("aria-pressed")).toBe("false");
     expect(container.querySelector("[role=status]")?.textContent).toBe("Diagram tag removed.");
 
@@ -188,6 +197,7 @@ describe("the Diagram and Video toggles (D84)", () => {
 
     act(() => video.click());
     expect(mocks.composer!.value.mentions).toEqual([]);
+    expect(mocks.handle.keepCaretThrough).not.toHaveBeenCalled();
     expect(video.getAttribute("aria-pressed")).toBe("false");
     // The other kind is unaffected.
     expect(toggle(container, "Diagram").getAttribute("aria-disabled")).toBeNull();

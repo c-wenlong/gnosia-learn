@@ -1,14 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useImperativeHandle, useRef, type ReactNode } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { Composer } from "@/components/ui/Composer";
 import { ComposerBox } from "@/components/ui/ComposerBox";
 import { cx } from "@/components/ui/classes";
 import { COMPOSER_BOX_MIN_ROWS, COMPOSER_FRAME, composerBoxFieldPx } from "@/components/ui/composer-keys";
 import type { MentionComposerProps } from "@/components/ui/MentionComposer";
-import { carryMentions, fallbackTagLine } from "@/components/ui/mention-text";
+import { carryMentions, fallbackTagLine, mapOffset } from "@/components/ui/mention-text";
 import type { DraftKind } from "@/lib/studio-drafts";
 
 /**
@@ -76,13 +76,35 @@ export function MentionComposerBox(props: Omit<MentionComposerProps<DraftKind>, 
  * through each edit (`carryMentions`) and says so under the field. Its handle
  * focuses the field, so a panel that focuses its composer on open still can,
  * and it honours `autoFocus` when it mounts; `insertMention` has nothing to
- * put a chip in. In the box layout it is a box too, with the caller's
+ * put a chip in, and `keepCaretThrough` puts the textarea's caret back after a
+ * toggle's edit. In the box layout it is a box too, with the caller's
  * toolbar, whose toggles change the value rather than the editor and so still
  * work here.
  */
 function PlainFallback(props: MentionComposerProps<DraftKind>) {
   const field = useRef<HTMLTextAreaElement | null>(null);
-  useImperativeHandle(props.handleRef, () => ({ focus: () => field.current?.focus(), insertMention: () => {} }), []);
+  // A caret to put back once the textarea holds `text` (a toggle's edit).
+  const pendingCaret = useRef<{ text: string; start: number; end: number } | null>(null);
+  useImperativeHandle(
+    props.handleRef,
+    () => ({
+      focus: () => field.current?.focus(),
+      insertMention: () => {},
+      keepCaretThrough: (next, edit) => {
+        const box = field.current;
+        if (box === null) return;
+        pendingCaret.current = { text: next.text, start: mapOffset(box.selectionStart, edit), end: mapOffset(box.selectionEnd, edit) };
+      },
+    }),
+    [],
+  );
+  useLayoutEffect(() => {
+    const pending = pendingCaret.current;
+    const box = field.current;
+    if (pending === null || box === null || pending.text !== props.value.text) return;
+    pendingCaret.current = null;
+    box.setSelectionRange(pending.start, pending.end);
+  }, [props.value.text]);
   const { autoFocus, disabled } = props;
   useEffect(() => {
     if (!autoFocus || disabled) return;
