@@ -76,11 +76,17 @@ function declares(scope: ts.Node, name: string): boolean {
 
 /**
  * The calls in a file that reach the browser's `confirm()`: through
- * `window`, `globalThis` or `self` (or a chain ending in one), or bare where no scope around the call
+ * `window`, `globalThis` or `self` (or a chain of them), or bare where no scope around the call
  * binds a `confirm` of its own (the learner store's write confirmation is a
  * parameter by that name, and calling it is not a dialog).
  */
 const GLOBALS = ["window", "globalThis", "self"];
+
+/** Whether any scope around `node` binds `name` itself. */
+function boundAt(node: ts.Node, name: string): boolean {
+  for (let scope = node.parent; scope !== undefined; scope = scope.parent) if (declares(scope, name)) return true;
+  return false;
+}
 
 function browserConfirms(path: string, text: string): number {
   const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
@@ -88,17 +94,18 @@ function browserConfirms(path: string, text: string): number {
   const visit = (node: ts.Node) => {
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
-      // `window.confirm`, and any chain ending in a global: `globalThis.window.confirm`.
+      // `window.confirm`, or a chain of globals only (`globalThis.window.confirm`),
+      // rooted in a global nothing local shadows; `api.window.confirm` is not one.
       if (ts.isPropertyAccessExpression(callee) && callee.name.text === "confirm") {
-        const owner = callee.expression;
-        const last = ts.isIdentifier(owner) ? owner.text : ts.isPropertyAccessExpression(owner) ? owner.name.text : null;
-        if (last !== null && GLOBALS.includes(last)) found++;
+        let owner: ts.Expression = callee.expression;
+        let globals = true;
+        while (ts.isPropertyAccessExpression(owner)) {
+          globals &&= GLOBALS.includes(owner.name.text);
+          owner = owner.expression;
+        }
+        if (globals && ts.isIdentifier(owner) && GLOBALS.includes(owner.text) && !boundAt(node, owner.text)) found++;
       }
-      if (ts.isIdentifier(callee) && callee.text === "confirm") {
-        let bound = false;
-        for (let scope: ts.Node | undefined = node.parent; scope !== undefined && !bound; scope = scope.parent) bound = declares(scope, "confirm");
-        if (!bound) found++;
-      }
+      if (ts.isIdentifier(callee) && callee.text === "confirm" && !boundAt(node, "confirm")) found++;
     }
     ts.forEachChild(node, visit);
   };
@@ -151,6 +158,8 @@ describe("notices and confirms", () => {
     expect(browserConfirms("c.tsx", "const go = () => window.confirm('Sure?');")).toBe(1);
     expect(browserConfirms("e.ts", "globalThis.window.confirm('Sure?');")).toBe(1);
     expect(browserConfirms("f.ts", "dialog.confirm('Sure?');")).toBe(0);
+    expect(browserConfirms("g.ts", "api.window.confirm('Sure?');")).toBe(0);
+    expect(browserConfirms("h.ts", "function f(window: Api) { return window.confirm(1); }")).toBe(0);
     expect(browserConfirms("d.ts", "const { confirm } = helpers; confirm(2);")).toBe(0);
   });
 
