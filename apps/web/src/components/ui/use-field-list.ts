@@ -23,16 +23,16 @@ export interface FieldListPlace {
  * While `open`, a layout effect shows the popover (a popover that is not
  * showing has no size), measures, and measures again on a resize and on a
  * scroll of anything around the field, since a fixed list does not move with
- * it, and when `rows` changes. A layout effect, so the list never paints at
- * the corner before it moves; a caller that focuses the list does it in a
- * layout effect declared after this hook, which runs after it.
+ * it, and whenever the list's own size changes: a combobox filtering changes
+ * its rows, and a list opened above the field has to stay flush on it. A
+ * layout effect, so the list never paints at the corner before it moves; a
+ * caller that focuses the list does it in a layout effect declared after this
+ * hook, which runs after it.
  */
 export function useFieldList(
   open: boolean,
   anchor: RefObject<HTMLElement | null>,
   list: RefObject<HTMLElement | null>,
-  /** Measured again when this changes: a list whose rows change while it is open (a combobox filtering) changes height. */
-  rows?: number,
 ): FieldListPlace | null {
   const [place, setPlace] = useState<FieldListPlace | null>(null);
 
@@ -55,20 +55,32 @@ export function useFieldList(
       const width = Math.max(box.offsetWidth, at.width);
       // The list's own cap, min(30rem, 70vh), as FIELD_LIST's max-h has it.
       const cap = Math.min(30 * parseFloat(getComputedStyle(root).fontSize), 0.7 * window.innerHeight);
-      setPlace({
-        ...fieldPlacement({ trigger: at, width, height: box.scrollHeight, cap, viewport: { width: root.clientWidth, height: root.clientHeight } }),
+      // The whole box: `scrollHeight` leaves out the 2px borders, which put a
+      // list opened above the field 4px into the gap under it.
+      const height = box.scrollHeight + box.offsetHeight - box.clientHeight;
+      const next = {
+        ...fieldPlacement({ trigger: at, width, height, cap, viewport: { width: root.clientWidth, height: root.clientHeight } }),
         minWidth: at.width,
-      });
+      };
+      // The same place again is no change: the observer below sees the list
+      // settle after each placement, and must not render it for nothing.
+      setPlace((held) =>
+        held !== null && (Object.keys(next) as (keyof FieldListPlace)[]).every((key) => held[key] === next[key]) ? held : next,
+      );
     };
     measure();
     window.addEventListener("resize", measure);
     // Capture: any scroller, not only the page.
     window.addEventListener("scroll", measure, { capture: true, passive: true });
+    // jsdom has no ResizeObserver; a browser always does.
+    const sized = typeof ResizeObserver === "function" && box !== null ? new ResizeObserver(measure) : null;
+    if (box !== null) sized?.observe(box);
     return () => {
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, { capture: true });
+      sized?.disconnect();
     };
-  }, [open, anchor, list, rows]);
+  }, [open, anchor, list]);
 
   return place;
 }

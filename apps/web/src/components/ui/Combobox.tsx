@@ -94,7 +94,7 @@ export function Combobox<V extends string>({
   if (showList && kept !== suggestions) setKept(suggestions);
   const rows = showList ? suggestions : kept;
   const presence = usePresence(showList, 120);
-  const place = useFieldList(showList, anchor, list, rows.length);
+  const place = useFieldList(showList, anchor, list);
 
   // Keep the highlighted row in view in a list long enough to scroll.
   useEffect(() => {

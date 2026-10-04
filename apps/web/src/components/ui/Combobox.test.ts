@@ -162,3 +162,36 @@ describe("Combobox", () => {
     expect(document.activeElement).toBe(field);
   });
 });
+
+describe("the list's placement", () => {
+  it("is measured again whenever the list's own size changes, and stops watching once it closes", () => {
+    const watched: Element[] = [];
+    let callback: (() => void) | null = null;
+    let disconnected = 0;
+    const original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(run: () => void) {
+        callback = run;
+      }
+      observe(target: Element) {
+        watched.push(target);
+      }
+      unobserve() {}
+      disconnect() {
+        disconnected += 1;
+      }
+    } as unknown as typeof ResizeObserver;
+    try {
+      const { list, press, type } = mount();
+      type("sonnet");
+      // A list filtered to the same number of taller rows changes size, not count.
+      expect(watched).toEqual([list()]);
+      expect(callback).not.toBeNull();
+      act(() => callback!());
+      press("Escape");
+      expect(disconnected).toBe(1);
+    } finally {
+      globalThis.ResizeObserver = original;
+    }
+  });
+});

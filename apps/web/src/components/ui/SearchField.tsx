@@ -145,6 +145,9 @@ export function SearchField({
           type="button"
           aria-label={clearLabel}
           title={clearLabel}
+          // A press keeps the focus in the field: a field that does something
+          // on blur (Home's Ask box closes its list) is not left mid-blur.
+          onMouseDown={(event) => event.preventDefault()}
           onClick={clear}
           className={cx(
             "absolute top-1/2 inline-flex -translate-y-1/2 animate-fade-in items-center justify-center text-text3",

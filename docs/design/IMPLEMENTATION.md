@@ -163,7 +163,7 @@ The pure helpers beside them:
 | --- | --- |
 | [`@/components/ui/filter-menu`](../../apps/web/src/components/ui/filter-menu.ts) | `type FilterOption`, `sectionsOf`, `triggerText`, `nextIndexForKey`, `typeaheadIndex`, `popoverShift`, `fieldPlacement`: the option model, keyboard rules and placement behind `FilterMenu` and `Select` |
 | [`@/components/ui/suggestions`](../../apps/web/src/components/ui/suggestions.ts) | `suggestionsFor`, `nextSuggestion`: `Combobox`'s filter and arrows |
-| [`@/components/ui/use-field-list`](../../apps/web/src/components/ui/use-field-list.ts) | `useFieldList(open, anchor, list, rows?)`, `fieldListStyle`, `fieldListClasses`: a field's list in the top layer, `Select`'s and `Combobox`'s |
+| [`@/components/ui/use-field-list`](../../apps/web/src/components/ui/use-field-list.ts) | `useFieldList(open, anchor, list)`, `fieldListStyle`, `fieldListClasses`: a field's list in the top layer, `Select`'s and `Combobox`'s, placed again on a resize, a scroll, and a change of the list's own size (a combobox filtering) |
 | [`@/components/ui/classes`](../../apps/web/src/components/ui/classes.ts) | `cx(...)`, `buttonClasses({ variant, size, block, className })`, `chipClasses({ active, size, interactive, className })`, `inputClasses({ pill, size, className })` (`size` is `type InputSize`), `textareaClasses({ className })`, `cardClasses({ tight, className })` |
 | [`@/lib/mastery-bucket`](../../apps/web/src/lib/mastery-bucket.ts) | `type MasteryBucket = "mastered" \| "learning" \| "untouched"`, `bucketOf({ mastery, observations? })`, `MASTERY_BUCKETS`, `MASTERY_BUCKET_LABEL`, `masteryCaption(bucket, pL?)` |
 | [`@/lib/nav`](../../apps/web/src/lib/nav.ts) | `DESTINATIONS`, `type DestinationKey`, `activeDestination(pathname)` |
