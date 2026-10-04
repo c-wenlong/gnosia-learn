@@ -2,12 +2,13 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, collection, contentRevision, curriculumItem, curriculumItemAsset } from "@self-learn/schema";
+import { asset, collection, collectionItem, contentRevision, curriculumItem, curriculumItemAsset } from "@self-learn/schema";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { parseCourse, VIDEO_ASSET_PREFIXES } from "@self-learn/content";
 
+import { doctor, formatDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
 import { runImportCommand } from "../src/commands/index-command";
 import { runStatus } from "../src/commands/status";
@@ -202,6 +203,33 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
     expect(await scratch.db.select().from(asset).where(eq(asset.id, VIDEO))).toEqual([]);
     const [practice] = await scratch.db.select().from(asset).where(eq(asset.id, "link:zz3000-m1-r2"));
     expect(practice?.resourceType).toBe("practice");
+  });
+
+  it("has the doctor name each listed video that resolves to no video, and each module on a shared topic listing none, counting neither", async () => {
+    const before = await doctor(scratch.db, "scratch");
+    expect(before.danglingVideos).toEqual([
+      { course: "zz3000", module: "zz3000-m1", item: null, id: VIDEO },
+      { course: "zz3000", module: "zz3000-m1", item: "zz3000-m1-t2", id: "video:a-studio-video" },
+    ]);
+    expect(before.sharedTopicWithoutVideos).toEqual([]);
+    // A third module on alpha: m1 lists videos, so only the new one is named.
+    await scratch.db.insert(collection).values({ id: "zz3000-m3", kind: "module", slug: "m3", title: "Module three", parentId: "zz3000", position: 3 });
+    await scratch.db.insert(collectionItem).values({ collectionId: "zz3000-m3", position: 0, topicSlug: "alpha" });
+    try {
+      const shared = await doctor(scratch.db, "scratch");
+      expect(shared.sharedTopicWithoutVideos).toEqual([{ course: "zz3000", module: "zz3000-m3", topic: "alpha" }]);
+      // The empty module is one module-has-item violator; the two reports add nothing.
+      const beyondRules = (r: typeof before) => r.violations - r.rules.reduce((n, rule) => n + rule.violators, 0);
+      expect(beyondRules(shared)).toBe(beyondRules(before));
+      expect(before.danglingVideos.length).toBeGreaterThan(0);
+      const text = formatDoctor(shared);
+      expect(text).toContain(`zz3000     zz3000-m1 lists ${VIDEO}, which is no video in the catalog`);
+      expect(text).toContain("zz3000     zz3000-m1-t2 (zz3000-m1) lists video:a-studio-video");
+      expect(text).toContain("zz3000     zz3000-m3 on alpha");
+    } finally {
+      await scratch.db.delete(collectionItem).where(eq(collectionItem.collectionId, "zz3000-m3"));
+      await scratch.db.delete(collection).where(eq(collection.id, "zz3000-m3"));
+    }
   });
 
   it("keeps the links in each item's snapshot, and leaves both keys out of an item with neither", async () => {

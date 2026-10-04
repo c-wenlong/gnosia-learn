@@ -7,7 +7,13 @@ import type { Course } from "@/lib/types";
 
 // The learner's ticks decide the current module; none ticked is a new course.
 const learner = {
-  state: { completed: {} as Record<string, true>, userResources: {}, notes: {}, knowledge: {}, epoch: 0 },
+  state: {
+    completed: {} as Record<string, true>,
+    userResources: {} as Record<string, { id: string; title: string; url: string }[]>,
+    notes: {},
+    knowledge: {},
+    epoch: 0,
+  },
   toggleTopicCompletion: vi.fn(),
   updateNote: vi.fn(),
   addResource: vi.fn(),
@@ -55,6 +61,7 @@ const mounted: Array<() => void> = [];
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   learner.state.completed = {};
+  learner.state.userResources = {};
   learner.updateNote.mockClear();
   router.replace.mockClear();
   window.location.hash = "";
@@ -222,5 +229,143 @@ describe("CourseHome", () => {
     expect(learner.updateNote).toHaveBeenCalledTimes(1);
     act(() => mounted.pop()?.());
     expect(learner.updateNote).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CourseHome: the module as one path", () => {
+  const pathModule = {
+    id: "p1",
+    slug: "p1",
+    title: "Path module",
+    order: 1,
+    topic: "growth",
+    videos: ["video:week", "manimkc:not-indexed.mp4"],
+    topics: [
+      { id: "p1-a", title: "First lesson", concepts: ["big-o", "big-omega"], subtopics: [] },
+      { id: "p1-b", title: "Second lesson", concepts: ["theta"], subtopics: [] },
+    ],
+    resources: [
+      { id: "r-book", title: "The textbook", url: "https://example.com/book", type: "book" },
+      { id: "r-docs", title: "Docs for lesson two", url: "https://example.com/docs", type: "docs", lessons: ["p1-b"] },
+      { id: "r-leet", title: "A problem", url: "https://leetcode.com/problems/x/", type: "practice" },
+    ],
+  };
+  const pathCourse = { ...course, slug: "pc", modules: [pathModule] } as unknown as Course;
+  const asset = (id: string, family: "video" | "diagram") => ({
+    id,
+    href: `/library/${encodeURIComponent(id)}`,
+    title: `Asset ${id}`,
+    titled: true,
+    kindLabel: family === "video" ? "Video" : "Diagram",
+    family,
+  });
+  const concept = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    title: `Concept ${id}`,
+    mastery: "gap",
+    observations: 0,
+    requires: [],
+    assumes: [],
+    ...extra,
+  });
+  const data = (reachable = true) => ({
+    p1: {
+      guidebook: "big-o",
+      assets: { count: 7, libraryHref: "/library?topic=growth" },
+      description: null,
+      concepts: [
+        concept("big-o", { assumes: ["machine-model"] }),
+        concept("big-omega"),
+        concept("theta", { requires: ["big-o", "limits"] }),
+        concept("machine-model"),
+        concept("limits"),
+      ],
+      path: reachable
+        ? {
+            byConcept: { theta: [asset("diagram:theta", "diagram")] },
+            listed: { "video:week": asset("video:week", "video") },
+            topicVideos: [asset("manimkc:other.mp4", "video")],
+            topicShared: false,
+          }
+        : null,
+      checks: reachable ? { "big-o": 3 } : null,
+    },
+  });
+
+  function renderPath(reachable = true) {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() =>
+      root.render(
+        createElement(CourseHome, {
+          course: pathCourse,
+          moduleSlug: "p1",
+          mastery: {},
+          modules: data(reachable) as never,
+          assetsReachable: reachable,
+          related: [],
+        }),
+      ),
+    );
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    return host;
+  }
+
+  const main = (host: HTMLElement) => host.querySelector("h1")!.closest("section")!;
+  /** Every link in the module's column, in page order, by href. */
+  const links = (host: HTMLElement) => [...main(host).querySelectorAll("a")].map((a) => a.getAttribute("href"));
+
+  it("draws the groups in path order, with the topics as lessons between read alongside and practice", () => {
+    const host = renderPath();
+    const order = [...main(host).querySelectorAll("h2 button, [aria-label='Topics'] button[aria-expanded]")].map((el) =>
+      el.textContent?.replace(/\s+/g, " ").trim(),
+    );
+    expect(order).toEqual(["Before you start", "Watch", "Read alongside", "First lessonNot started", "Second lessonNot started", "Practice"]);
+  });
+
+  it("puts each step at its place: prerequisites, videos, readings, each concept's note, assets and Quiz me, practice, then the library once", () => {
+    const host = renderPath();
+    expect(links(host)).toEqual([
+      "/learn/big-o", // the Guidebook
+      "/learn/limits",
+      "/learn/machine-model",
+      "/library/video%3Aweek",
+      "/library/manimkc%3Aother.mp4",
+      "https://example.com/book",
+      "/courses/pc/p1/session?topic=p1-a", // Continue, on the first lesson
+      "/learn/big-o",
+      "/learn/big-o/session?mode=check",
+      "/learn/big-omega",
+      "/learn/big-omega/session?mode=check",
+      "/learn/theta",
+      "/library/diagram%3Atheta",
+      "/learn/theta/session?mode=check",
+      "https://example.com/docs",
+      "https://leetcode.com/problems/x/",
+      "/library?topic=growth",
+    ]);
+    expect(main(host).textContent).toContain("All 7 in the library");
+    expect(main(host).textContent).toContain("3 checks in the note");
+    expect(main(host).textContent).toContain("Needed first");
+  });
+
+  it("keeps the learner's own resources and the add form under read alongside", () => {
+    learner.state.userResources = { p1: [{ id: "u1", title: "My own link", url: "https://example.com/mine" }] };
+    const host = renderPath();
+    const group = [...main(host).querySelectorAll("section")].find((s) => s.querySelector("h2")?.textContent === "Read alongside")!;
+    expect([...group.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["The textbookBook · example.com", "My own linkYours · example.com"]);
+    expect(group.textContent).toContain("Add a resource");
+  });
+
+  it("says the catalog did not answer, and still draws the lessons and readings", () => {
+    const host = renderPath(false);
+    expect(main(host).textContent).toContain("The catalog did not answer");
+    expect(main(host).textContent).not.toContain("Watch");
+    expect(main(host).textContent).toContain("First lesson");
+    expect(main(host).textContent).toContain("The textbook");
   });
 });
