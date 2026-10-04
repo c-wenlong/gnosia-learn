@@ -75,7 +75,10 @@ export function RowMenu({
   const router = useRouter();
   const root = useRef<HTMLSpanElement>(null);
   const [notice, setNotice] = useState<{ text: string; tone: StatusTone; at: number } | null>(null);
-  const [dialog, setDialog] = useState<{ kind: "rename" } | { kind: "ask"; subject: AskSubject } | null>(null);
+  const [dialog, setDialog] = useState<"rename" | "ask" | null>(null);
+  // What Ask is about, once it has been opened: its dialog then stays in the
+  // page, closed, so the thread is still there when it is opened again.
+  const [asked, setAsked] = useState<AskSubject | null>(null);
   const [starred, setStarred] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -160,13 +163,17 @@ export function RowMenu({
         );
       case "rename":
         return (
-          <MenuItem key={entry.action} icon={icon} onSelect={() => setDialog({ kind: "rename" })}>
+          <MenuItem key={entry.action} icon={icon} onSelect={() => setDialog("rename")}>
             {entry.label}
           </MenuItem>
         );
       case "ask":
         return (
-          <MenuItem key={entry.action} icon={icon} onSelect={() => setDialog({ kind: "ask", subject: entry.subject })}>
+          <MenuItem key={entry.action} icon={icon} onSelect={() => {
+              setAsked(entry.subject);
+              setDialog("ask");
+            }}
+          >
             {entry.label}
           </MenuItem>
         );
@@ -220,14 +227,8 @@ export function RowMenu({
             </MenuSection>
           ))}
       </Menu>
-      <RowDialog
-        open={dialog !== null}
-        label={dialog?.kind === "ask" ? `Ask about ${title}` : `Rename ${title}`}
-        wide={dialog?.kind === "ask"}
-        onClose={closeDialog}
-        onClosed={refocus}
-      >
-        {dialog?.kind === "rename" && (
+      <RowDialog open={dialog === "rename"} label={`Rename ${title}`} wide={false} onClose={closeDialog} onClosed={refocus}>
+        {dialog === "rename" && (
           <RenameForm
             assetId={assetId}
             title={title}
@@ -239,8 +240,14 @@ export function RowMenu({
             onCancel={closeDialog}
           />
         )}
-        {dialog?.kind === "ask" && <AskPanel assetId={assetId} subject={dialog.subject} />}
       </RowDialog>
+      {asked !== null && (
+        // Kept once opened, as the asset page keeps its Ask panel: closing
+        // hides the thread, leaving the Library loses it.
+        <RowDialog open={dialog === "ask"} label={`Ask about ${title}`} wide keep onClose={closeDialog} onClosed={refocus}>
+          <AskPanel assetId={assetId} subject={asked} />
+        </RowDialog>
+      )}
     </span>
   );
 }
@@ -264,6 +271,7 @@ function RowDialog({
   open,
   label,
   wide,
+  keep = false,
   onClose,
   onClosed,
   children,
@@ -271,6 +279,8 @@ function RowDialog({
   open: boolean;
   label: string;
   wide: boolean;
+  /** Stay in the page while closed (hidden, as a closed `<dialog>` is), so what it holds keeps its state. */
+  keep?: boolean;
   onClose: () => void;
   /** It has left the top layer: where focus goes back. */
   onClosed: () => void;
@@ -300,7 +310,7 @@ function RowDialog({
     };
   }, [mounted]);
 
-  if (!mounted) return null;
+  if (!mounted && !keep) return null;
   return (
     <dialog
       ref={ref}
