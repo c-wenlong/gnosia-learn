@@ -1,7 +1,7 @@
 # Proposal: the Learn map is grouped by domain
 
 Status: accepted by the owner on 2026-10-04, being built in four phases.
-Phase 1 (the tree and the layout) is in this PR. It replaces the island map
+Phase 1 (the tree and the layout) and phase 2 (the views, and the island map removed) are built. It replaces the island map
 of [knowledge-map.md](knowledge-map.md), decisions G2 to G8; G1 (the graph
 is what `/learn` opens on, the table at `?view=table`) stands.
 
@@ -55,8 +55,8 @@ come first.
 
 **D3. A domain is one bounded picture, drawn near full size.** Each topic is
 a group: its concepts laid out in layers by dagre, prerequisites above. The
-groups are packed left to right in rows of at most 1,100 px, a topic after
-the topics it needs. The picture fits the width of its card and grows down
+groups are packed left to right in rows of at most 900 px: a topic after
+the topics it needs, and among equals the one more topics need first. The picture fits the width of its card and grows down
 the page, which scrolls as a page does: there is no pan and no zoom. The
 layout runs on the server, as the island map's did, so dagre stays out of
 the browser.
@@ -92,9 +92,9 @@ concepts it would hide, as the island map did.
 | Phase | What ships | Done when |
 | --- | --- | --- |
 | 1. Tree and layout | `topic` on the knowledge base read; `domain-map.ts` (`domainTree`, `domainLayout`, cached); `domain-view.ts` (titles, `groupBox`) | Tests pass; every domain of `self_learn` lays out with no two groups overlapping |
-| 2. The views | Domain cards, the domain and topic views, the breadcrumb, the list, the panel, search and filters, the URL | e2e walks overview, domain, topic and back |
+| 2. The views | Domain cards, the domain and topic views, the breadcrumb, the list, the panel, search and filters, the URL; the island map and its viewport code removed, since nothing uses them | e2e walks overview, domain, topic and back |
 | 3. Interaction | Hover (D5), drag and Reset (D6), the list in step, keyboard (D7) | e2e hovers, drags and resets; frames under 16 ms |
-| 4. Clean-up | The island map and its viewport code removed; DESIGN.md and knowledge-map.md updated | Nothing imports the old map |
+| 4. Clean-up | DESIGN.md and knowledge-map.md updated, measured on the owner's database, what phases 1 to 3 turned up | The docs describe what ships |
 
 ## Measured
 
@@ -102,3 +102,17 @@ Phase 1, on `self_learn`: all 11 domains lay out in 61 ms together, the
 largest (algorithms) in 18 ms, with no two topic groups overlapping. The
 algorithms domain is 976 by 1,870 px; the others are at most 1,084 px wide
 and 1,184 px tall.
+
+Phase 2, on `self_learn`: `/learn` and a domain open in about 900 ms with
+the built app (the pictures for all 11 domains travel with the page, so
+moving between domains is no round trip). Looking at it turned up three
+things, fixed in this phase:
+
+- Topics that need each other in a loop (asymptotic notation, analysis,
+  recurrences, amortised analysis) were all pushed to the end. Cycles are
+  now one level, and topics order by level, then by how many topics need
+  them.
+- A line leaving a dot downward ran through that concept's own label.
+  Edges now start under the prerequisite's label and stop above the dot.
+- Labels were about 9 px at a 1,100 px row. Rows are 900 px, so a domain is
+  drawn near full size and grows down the page.

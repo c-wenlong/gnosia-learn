@@ -26,12 +26,11 @@ export const INDEX_FILTERS: readonly { key: IndexFilter; label: string }[] = [
 
 export type IndexView = "table" | "graph";
 /**
- * What a graph shows. The table's side card has two (the neighbourhood, or the
- * whole course); the map (docs/proposals/knowledge-map.md, G2) fits to one of
- * three: the selected concept's island, its neighbourhood, or every island of
- * its course.
+ * What the table's side card shows: the selected concept's neighbourhood, or
+ * its whole course. The map has no scope: it shows a domain or one of its
+ * topics (docs/proposals/domain-map.md, D2).
  */
-export type GraphScope = "neighbourhood" | "island" | "course";
+export type GraphScope = "neighbourhood" | "course";
 
 /** One table row, every label already worked out on the server. */
 export interface IndexRow {
@@ -78,36 +77,43 @@ export function parseView(value: string | null | undefined): IndexView {
   return value === "table" ? "table" : "graph";
 }
 
-export function parseScope(value: string | null | undefined, view: IndexView): GraphScope {
-  if (value === "course" || value === "neighbourhood") return value;
-  if (view === "table") return "neighbourhood";
-  // The map opens on the selected concept's island (G2). A link that wants the
-  // course says `scope=course` (`courseGraphHref`).
-  return "island";
+export function parseScope(value: string | null | undefined): GraphScope {
+  return value === "course" ? "course" : "neighbourhood";
 }
 
 /**
  * The query string for the index's state, keeping any other parameter already
- * there. The map is the default view, so only the table writes `view`; the map
- * always writes its scope and the table only a scope other than its own
- * default, so a reload or a shared link shows exactly what was on the screen.
+ * there. The map is the default view, so only the table writes `view`; the
+ * map writes its domain and topic (D2 of docs/proposals/domain-map.md) and
+ * the table only a scope other than its own default, so a reload or a shared
+ * link shows exactly what was on the screen.
  */
 export function indexSearch(
-  state: { selected: string | null; view: IndexView; scope: GraphScope; filter: IndexFilter },
+  state: {
+    selected: string | null;
+    view: IndexView;
+    scope: GraphScope;
+    filter: IndexFilter;
+    domain: string | null;
+    topic: string | null;
+  },
   current = "",
 ): string {
   const params = new URLSearchParams(current);
   const set = (key: string, value: string | null) => (value === null ? params.delete(key) : params.set(key, value));
+  const map = state.view === "graph";
   set("concept", state.selected);
-  set("view", state.view === "graph" ? null : state.view);
-  set("scope", state.view === "graph" ? state.scope : state.scope === "neighbourhood" ? null : state.scope);
+  set("view", map ? null : state.view);
+  set("scope", map || state.scope === "neighbourhood" ? null : state.scope);
+  set("domain", map ? state.domain : null);
+  set("topic", map && state.domain !== null ? state.topic : null);
   set("filter", state.filter === "all" ? null : state.filter);
   return params.toString();
 }
 
-/** Where "Open full course graph" goes: the map, fitted to every island of the concept's course. */
-export function courseGraphHref(slug: string): string {
-  return `/learn?${new URLSearchParams({ concept: slug, view: "graph", scope: "course" }).toString()}`;
+/** Where "Open in the map" goes: the concept, which the page opens in its domain. */
+export function conceptMapHref(slug: string): string {
+  return `/learn?${new URLSearchParams({ concept: slug }).toString()}`;
 }
 
 export function matchesFilter(row: IndexRow, filter: IndexFilter): boolean {
