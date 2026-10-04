@@ -498,7 +498,9 @@ describe.skipIf(!reachable.ok)("migration 0006's backfill", () => {
     folder = await partialMigrations(6);
     await applyMigrations(scratch.db, { folder });
 
-    await scratch.db.insert(learner).values({ id: LOCAL_LEARNER_ID }).onConflictDoNothing();
+    // `id` alone: drizzle's insert names every column the schema has today,
+    // `avatar` (0023) included, which a database stopped at 0005 does not.
+    await scratch.db.execute(sql`insert into learner (id) values (${LOCAL_LEARNER_ID}) on conflict do nothing`);
     const at = (iso: string) => new Date(iso);
     await scratch.db.insert(event).values([
       {
