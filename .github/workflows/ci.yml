@@ -138,12 +138,15 @@ jobs:
         # procedure, and its suite is the slowest in the repository (133 s of
         # 664 s on 2026-10-04): it copies, dumps and restores whole databases.
         # A pull request runs it only when it changes the script, the lib/
-        # modules it imports, or the suite itself; npm test on a laptop and a
-        # manual run (workflow_dispatch) still run it every time.
+        # modules it imports, a migration (the rehearsal applies them to a
+        # copy), or the suite itself; npm test on a laptop and a manual run
+        # (workflow_dispatch) still run it every time. A change to the catalog
+        # CLI alone does not: those verbs have their own suites, and they
+        # change in most pull requests.
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ] &&
              ! git diff --name-only HEAD^1 HEAD |
-               grep -qE '^(scripts/flip-rehearsal\.mjs|scripts/lib/|services/catalog/test/flip-rehearsal\.test\.ts)'; then
+               grep -qE '^(scripts/flip-rehearsal\.mjs|scripts/lib/|services/catalog/drizzle/|services/catalog/test/flip-rehearsal\.test\.ts)'; then
             echo "args=--exclude services/catalog/test/flip-rehearsal.test.ts" >> "$GITHUB_OUTPUT"
             echo "The flip-rehearsal suite is skipped: nothing it covers changed."
           fi
