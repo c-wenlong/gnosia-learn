@@ -9,6 +9,7 @@ import type {
   NewCollectionTag,
   NewConcept,
   NewConceptCurriculumItem,
+  NewCurriculumItemAsset,
   NewConceptPrerequisite,
   NewCurriculumItem,
   NewCurriculumItemTopic,
@@ -131,6 +132,7 @@ export interface SourceRows {
   assetDerivation?: NewAssetDerivation[];
   curriculumItemTopic?: NewCurriculumItemTopic[];
   conceptCurriculumItem?: NewConceptCurriculumItem[];
+  curriculumItemAsset?: NewCurriculumItemAsset[];
   topicRelation?: NewTopicRelation[];
   manimkcTopic?: NewManimkcTopic[];
   collectionTag?: NewCollectionTag[];
@@ -241,6 +243,7 @@ export type OwnedTable =
   | "collectionItem"
   | "curriculumItemTopic"
   | "conceptCurriculumItem"
+  | "curriculumItemAsset"
   | "topicRelation"
   | "manimkcTopic"
   | "collectionTag"

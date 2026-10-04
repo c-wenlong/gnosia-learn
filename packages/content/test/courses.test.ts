@@ -388,6 +388,141 @@ describe("loadCourses refuses", () => {
   });
 });
 
+/**
+ * Phase 2 of docs/proposals/module-learning-path.md: a reading names the
+ * lessons (items of its own module) it goes with, `practice` is a resource
+ * type, and a module and a lesson list videos by catalog asset id. Every new
+ * key is learnt here, since a key the parser does not know is dropped
+ * without a word.
+ */
+describe("readings on lessons and listed videos", () => {
+  type RawCourse = {
+    modules: {
+      id: string;
+      videos?: unknown;
+      topics: Record<string, unknown>[];
+      resources: Record<string, unknown>[];
+    }[];
+  };
+  /** The fixture course with two modules of two items each, edited by `edit`. */
+  const twoModules = (edit: (course: RawCourse) => void = () => {}): string => {
+    const course = JSON.parse(courseYaml()) as RawCourse & Record<string, unknown>;
+    const base = course.modules[0]!;
+    base.topics = [
+      { id: "xx1000-m1-t1", title: "One", subtopics: [] },
+      { id: "xx1000-m1-t2", title: "Two", subtopics: [] },
+    ];
+    course.modules.push({
+      ...base,
+      id: "xx1000-m2",
+      slug: "m2-second",
+      order: 2,
+      topics: [{ id: "xx1000-m2-t1", title: "Three", subtopics: [] }],
+      resources: [{ id: "xx1000-m2-r1", title: "Another", url: "https://example.invalid/b", type: "docs" }],
+    } as RawCourse["modules"][number]);
+    edit(course);
+    return JSON.stringify(course);
+  };
+  const reading = (course: RawCourse) => course.modules[0]!.resources[0]!;
+  const parse = (text: string) => parseCourse(text, "xx1000.yaml");
+
+  it("reads a reading's lessons in the order written, and leaves the key off a reading with none", () => {
+    const course = parse(twoModules((c) => (reading(c).lessons = ["xx1000-m1-t2", "xx1000-m1-t1"])));
+    expect(course.modules[0]!.resources[0]).toEqual({
+      id: "xx1000-m1-r1",
+      title: "A book",
+      url: "https://example.invalid/book",
+      type: "book",
+      lessons: ["xx1000-m1-t2", "xx1000-m1-t1"],
+    });
+    expect(Object.keys(course.modules[1]!.resources[0]!)).toEqual(["id", "title", "url", "type"]);
+  });
+
+  it("refuses a lesson that is an item of another module, naming that module", () => {
+    expect(() => parse(twoModules((c) => (reading(c).lessons = ["xx1000-m2-t1"])))).toThrow(
+      /resource "xx1000-m1-r1": lessons names "xx1000-m2-t1", an item of module "xx1000-m2", not of module "xx1000-m1"/,
+    );
+  });
+
+  it("refuses a lesson id that is no item of the module", () => {
+    expect(() => parse(twoModules((c) => (reading(c).lessons = ["xx1000-m1-t9"])))).toThrow(
+      /resource "xx1000-m1-r1": lessons names "xx1000-m1-t9", which is not an item of module "xx1000-m1"/,
+    );
+  });
+
+  it("refuses a lesson listed twice, and an empty list", () => {
+    expect(() => parse(twoModules((c) => (reading(c).lessons = ["xx1000-m1-t1", "xx1000-m1-t1"])))).toThrow(
+      /resource "xx1000-m1-r1": lessons lists "xx1000-m1-t1" twice/,
+    );
+    expect(() => parse(twoModules((c) => (reading(c).lessons = [])))).toThrow(
+      /resource "xx1000-m1-r1": lessons is present but empty/,
+    );
+    expect(() => parse(twoModules((c) => (reading(c).lessons = null)))).toThrow(
+      /resource "xx1000-m1-r1": lessons is present but empty/,
+    );
+  });
+
+  it("accepts practice as a resource type", () => {
+    const course = parse(twoModules((c) => (reading(c).type = "practice")));
+    expect(course.modules[0]!.resources[0]!.type).toBe("practice");
+  });
+
+  it("reads videos on a module and on a lesson, as listed, and leaves the key off where there are none", () => {
+    const course = parse(
+      twoModules((c) => {
+        c.modules[0]!.videos = ["manimkc:out/algorithms/x/week_01.mp4", "remotionkc:out/y/z.mp4"];
+        c.modules[0]!.topics[1]!.videos = ["video:comparing-growth-rates", "revideokc:out/a/b.mp4"];
+      }),
+    );
+    const [first, second] = course.modules;
+    expect(first!.videos).toEqual(["manimkc:out/algorithms/x/week_01.mp4", "remotionkc:out/y/z.mp4"]);
+    expect(first!.topics[1]!.videos).toEqual(["video:comparing-growth-rates", "revideokc:out/a/b.mp4"]);
+    expect(Object.keys(first!).at(-1)).toBe("videos");
+    expect(Object.keys(first!.topics[1]!).at(-1)).toBe("videos");
+    expect(second!).not.toHaveProperty("videos");
+    expect(first!.topics[0]!).not.toHaveProperty("videos");
+  });
+
+  it("refuses a video id with no asset prefix, naming it", () => {
+    for (const bad of ["week_01.mp4", "manim:out/x.mp4", "link:xx1000-m1-r1", "manimkc:", "video: spaced"]) {
+      expect(() => parse(twoModules((c) => (c.modules[0]!.videos = [bad]))), bad).toThrow(
+        new RegExp(`videos lists ${JSON.stringify(bad).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, which is not a video asset id`),
+      );
+    }
+    expect(() => parse(twoModules((c) => (c.modules[0]!.topics[0]!.videos = [42])))).toThrow(/videos/);
+    expect(() => parse(twoModules((c) => (c.modules[0]!.videos = [])))).toThrow(/videos is present but empty/);
+  });
+
+  it("refuses a video listed twice in one module, on the module and a lesson or on two lessons", () => {
+    const id = "manimkc:out/a/b.mp4";
+    expect(() =>
+      parse(
+        twoModules((c) => {
+          c.modules[0]!.videos = [id];
+          c.modules[0]!.topics[1]!.videos = [id];
+        }),
+      ),
+    ).toThrow(/module "xx1000-m1" lists video "manimkc:out\/a\/b\.mp4" twice: on the module and on item "xx1000-m1-t2"/);
+    expect(() =>
+      parse(
+        twoModules((c) => {
+          c.modules[0]!.topics[0]!.videos = [id];
+          c.modules[0]!.topics[1]!.videos = [id];
+        }),
+      ),
+    ).toThrow(/lists video "manimkc:out\/a\/b\.mp4" twice: on item "xx1000-m1-t1" and on item "xx1000-m1-t2"/);
+    // Two modules may each list the same video: the path places it per module.
+    expect(() =>
+      parse(
+        twoModules((c) => {
+          c.modules[0]!.videos = [id];
+          c.modules[1]!.videos = [id];
+        }),
+      ),
+    ).not.toThrow();
+  });
+});
+
 describe("loadTags refuses", () => {
   it("a duplicate id", () => {
     const f = (fixture = makeFixture());

@@ -27,6 +27,7 @@ export {
   isSourceUrl,
   loadCourses,
   parseCourse,
+  VIDEO_ASSET_PREFIXES,
   type CourseCoverExtension,
   type LoadCoursesOptions,
 } from "./courses";

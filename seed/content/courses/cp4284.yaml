@@ -74,6 +74,7 @@ modules:
         title: Yao et al. — ReAct
         url: https://arxiv.org/abs/2210.03629
         type: paper
+        lessons: [cp4284-m3-t1]
       - id: cp4284-m3-r2
         title: OpenAI — Function calling guide
         url: https://platform.openai.com/docs/guides/function-calling

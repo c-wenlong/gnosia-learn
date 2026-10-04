@@ -12,6 +12,7 @@ import {
   type NewCollectionTag,
   type NewConceptCurriculumItem,
   type NewCurriculumItem,
+  type NewCurriculumItemAsset,
   type NewCurriculumItemTopic,
 } from "@self-learn/schema";
 
@@ -62,6 +63,16 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * share a topic, so the topic cannot say which module a link belongs to; the
  * membership row can, and `catalog export` reads the list back from it.
  *
+ * A reading's `lessons:` become `curriculum_item_asset` rows, each with the
+ * item's place in that list as `position`, so the export writes the list
+ * back as it was written; the reader has already checked each id is an item
+ * of the reading's own module. A lesson's `videos:` is `curriculum_item.videos`
+ * and a module's is `metadata.videos`, kept as data and never resolved here,
+ * since the video tools index after this source and a clone may have none
+ * (docs/proposals/module-learning-path.md). Both are left out of a module's
+ * metadata and an item's snapshot while empty, so a course that lists none
+ * writes exactly the rows it did before.
+ *
  * A course's `tags:` become `collection_tag` rows in list order, pointing at
  * the rows the tags source wrote. The strings stay in `metadata.tags` as well,
  * because the web app reads them there until Track B moves its reader.
@@ -93,6 +104,7 @@ export const coursesIndexer: Indexer = {
     "collectionItem",
     "curriculumItemTopic",
     "conceptCurriculumItem",
+    "curriculumItemAsset",
     "collectionTag",
   ],
   assetPrefix: ASSET_PREFIX.courses,
@@ -110,6 +122,7 @@ export const coursesIndexer: Indexer = {
     const collectionItems: NewCollectionItem[] = [];
     const curriculumItemTopics: NewCurriculumItemTopic[] = [];
     const conceptLinks: NewConceptCurriculumItem[] = [];
+    const readingLinks: NewCurriculumItemAsset[] = [];
     const assets: NewAsset[] = [];
     const assetTopics: NewAssetTopic[] = [];
     const collectionTags: NewCollectionTag[] = [];
@@ -202,7 +215,9 @@ export const coursesIndexer: Indexer = {
           title: mod.title,
           parentId: course.id,
           position: mod.order,
-          metadata: {},
+          // Only with a list: a module that lists no video keeps the metadata
+          // it had before 0022, so its snapshot does not move.
+          metadata: mod.videos === undefined ? {} : { videos: mod.videos },
         });
 
         // The module's shared-vocabulary topic, cross-checked against the
@@ -247,6 +262,7 @@ export const coursesIndexer: Indexer = {
             position: topicIndex + 1,
             title: item.title,
             subtopics: item.subtopics,
+            videos: item.videos ?? [],
           });
           // Every item inherits the module's topic: that is how a course row
           // reaches the videos and notes about the same subject.
@@ -292,6 +308,9 @@ export const coursesIndexer: Indexer = {
             conceptSlug: null,
             assetId: id,
           });
+          for (const [lessonIndex, lesson] of (resource.lessons ?? []).entries()) {
+            readingLinks.push({ curriculumItemId: lesson, assetId: id, position: lessonIndex + 1 });
+          }
         }
       }
     }
@@ -317,13 +336,15 @@ export const coursesIndexer: Indexer = {
       collectionItem: collectionItems,
       curriculumItemTopic: curriculumItemTopics,
       conceptCurriculumItem: conceptLinks,
+      curriculumItemAsset: readingLinks,
       collectionTag: collectionTags,
     };
     return {
       rows,
       notes: [
         `${courses.length} courses, ${moduleCount} modules, ${curriculumItems.length} curriculum items`,
-        `${assets.length} curated links, ${conceptLinks.length} concept links, ${blobs.length} cover(s)`,
+        `${assets.length} curated links, ${conceptLinks.length} concept links, ` +
+          `${readingLinks.length} reading links, ${blobs.length} cover(s)`,
       ],
       blobs,
       coversRead: new Map(courses.map((course) => [course.id, covers.get(course.id) ?? null] as const)),

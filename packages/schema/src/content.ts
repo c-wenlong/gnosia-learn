@@ -90,9 +90,11 @@ export type PrerequisiteKind = (typeof PREREQUISITE_KINDS)[number];
  * What a curated link is, from the course file's `resources[].type`. Carried
  * on `asset.resource_type` since the phase 0 expand migration, because the
  * course reader requires it and an export that dropped it could not be read
- * back (docs/CONTENT-MIGRATION.md 0.2).
+ * back (docs/CONTENT-MIGRATION.md 0.2). `practice` (0022) is a problem to
+ * solve rather than something to read, which the module path places apart
+ * (docs/proposals/module-learning-path.md).
  */
-export const RESOURCE_TYPES = ["paper", "docs", "video", "book", "other"] as const;
+export const RESOURCE_TYPES = ["paper", "docs", "video", "book", "other", "practice"] as const;
 export type AssetResourceType = (typeof RESOURCE_TYPES)[number];
 
 /**
@@ -338,6 +340,15 @@ export const curriculumItem = pgTable(
     title: text("title").notNull(),
     /** The bullet list under the item. Display-only, never joined on. */
     subtopics: jsonb("subtopics").notNull().default(sql`'[]'::jsonb`),
+    /**
+     * The lesson's `videos:`, catalog asset ids in the order the course file
+     * lists them (0022). Data, deliberately not a foreign key: the courses
+     * source indexes before the video tools, and a clone may have none, so a
+     * listed id resolves when a page reads it, not at import
+     * (docs/proposals/module-learning-path.md). A module's list is
+     * `collection.metadata.videos`.
+     */
+    videos: jsonb("videos").notNull().default(sql`'[]'::jsonb`),
     ownerId: ownerId(() => learner.id),
     /**
      * Set instead of deleting when the course file stops listing the item.
@@ -350,6 +361,7 @@ export const curriculumItem = pgTable(
   },
   (t) => [
     check("curriculum_item_id_check", kebab("id")),
+    check("curriculum_item_videos_array_check", jsonArray("videos")),
     index("curriculum_item_collection_id_idx").on(t.collectionId),
     index("curriculum_item_owner_id_idx").on(t.ownerId),
   ],
@@ -654,6 +666,35 @@ export const conceptCurriculumItem = pgTable(
   (t) => [
     primaryKey({ columns: [t.conceptSlug, t.curriculumItemId] }),
     index("concept_curriculum_item_curriculum_item_id_idx").on(t.curriculumItemId),
+  ],
+);
+
+/**
+ * This reading goes with this lesson (0022): a reading's `lessons:` in the
+ * course file, a curated `link` asset to a curriculum item of the same module
+ * (docs/proposals/module-learning-path.md). Written by the courses source and
+ * `course import` only, and part of the item's snapshot, as
+ * `concept_curriculum_item` is. `position` is the item's place in the
+ * reading's `lessons:` list, 1-based, so the export writes the list back in
+ * the order it was written; the readings on one lesson are ordered by the
+ * module's `resources:` instead. `collection_item` stays the module's own
+ * list, so a reading is on its module whether or not it names lessons.
+ */
+export const curriculumItemAsset = pgTable(
+  "curriculum_item_asset",
+  {
+    curriculumItemId: text("curriculum_item_id")
+      .notNull()
+      .references(() => curriculumItem.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    assetId: text("asset_id")
+      .notNull()
+      .references(() => asset.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.curriculumItemId, t.assetId] }),
+    index("curriculum_item_asset_asset_id_idx").on(t.assetId),
   ],
 );
 
