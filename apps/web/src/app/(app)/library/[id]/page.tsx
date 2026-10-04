@@ -26,7 +26,7 @@ import {
   withCatalog,
 } from "@/lib/asset-library";
 import { storedPosters } from "@/lib/asset-files";
-import type { RouteProblemCode } from "@/lib/asset-problems";
+import { problemSource, type RouteProblemCode } from "@/lib/asset-problems";
 import { appTimeZone } from "@/lib/time-zone";
 import { dayKey } from "@/lib/days";
 import { loadKnowledgeBase } from "@/lib/learner-store";
@@ -187,6 +187,8 @@ export default async function AssetPage({
   const name = assetDisplayTitle(asset);
   const label = assetKindLabel(asset.kind);
   const fileHref = assetFileHref(asset.id);
+  // What a failure names as the way back: a studio video is made again, not uploaded.
+  const failureSource = problemSource(asset.id, asset.sourceRepo) ?? asset.sourceRepo;
   const statusHref = assetStatusHref(asset.id);
   const zone = appTimeZone();
 
@@ -290,7 +292,7 @@ export default async function AssetPage({
           statusHref={statusHref}
           poster={poster}
           title={name.text}
-          sourceRepo={asset.sourceRepo}
+          sourceRepo={failureSource}
           chapters={sidecars?.state === "read" ? sidecars.chapters : undefined}
           transcript={sidecars?.state === "read" ? sidecars.cues : undefined}
           saved={playback}
@@ -349,13 +351,13 @@ export default async function AssetPage({
       <div className="min-w-0">
         {asset.kind === "video" ? (
           servable ? null : (
-            fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={asset.sourceRepo} />
+            fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={failureSource} />
           )
         ) : asset.kind === "diagram_svg" ? (
           servable ? (
             <DiagramView src={fileHref} statusHref={statusHref} title={name.text} heading={false} />
           ) : (
-            fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={asset.sourceRepo} />
+            fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={failureSource} />
           )
         ) : asset.kind === "link" ? (
           <LinkPanel url={asset.url} />
@@ -392,7 +394,7 @@ export default async function AssetPage({
             </TextPanel>
           )
         ) : fileProblem !== null ? (
-          <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={asset.sourceRepo} />
+          <Unavailable kind={asset.kind} code={fileProblem} sourceRepo={failureSource} />
         ) : (
           // The file resolves and still did not come back as text: larger than
           // the preview cap, not UTF-8, or gone in the moment since it was
