@@ -112,8 +112,9 @@ export function LearnIndex({
           onKeyDown={(e) => {
             // On the map, Enter lands on the best match and fits its neighbourhood.
             if (e.key !== "Enter" || view !== "graph") return;
-            // Only among what the filter shows, so Enter never lands on a dimmed concept.
-            const id = firstMatch(rows.filter((r) => matchesFilter(r, filter)), query);
+            // Only among the rows on screen (the filter and the search both), so Enter
+            // never lands on a concept the map has dimmed.
+            const id = firstMatch(visible, query);
             if (id !== null) {
               e.preventDefault();
               reveal(id, "neighbourhood");
