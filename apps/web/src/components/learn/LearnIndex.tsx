@@ -209,6 +209,7 @@ export function LearnIndex({
           placeholder="Search concepts"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onClear={() => setQuery("")}
           onKeyDown={(e) => {
             // On the map, Enter opens the best match in its domain (D8).
             // The Enter that confirms an input method's word is not a search.

@@ -5,8 +5,11 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { TopicRecap } from "@/components/TopicRecap";
 import { Button } from "@/components/ui/Button";
-import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { cx, LABEL } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
+import { FormRow } from "@/components/ui/FormRow";
+import { Textarea } from "@/components/ui/Textarea";
 import { topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
 import type { Course, Module, Topic } from "@/lib/types";
@@ -170,16 +173,9 @@ function TopicPanel({
       )}
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <label htmlFor={checkboxId} className="flex cursor-pointer items-center gap-2 text-text">
-          <input
-            id={checkboxId}
-            type="checkbox"
-            checked={Boolean(state.completed[topic.id])}
-            onChange={() => toggleTopicCompletion(topic.id)}
-            className="h-4 w-4 cursor-pointer accent-accent"
-          />
+        <Checkbox id={checkboxId} checked={Boolean(state.completed[topic.id])} onChange={() => toggleTopicCompletion(topic.id)}>
           Mark done
-        </label>
+        </Checkbox>
         <Link
           href={topicSessionHref(course.slug, module.slug, topic.id)}
           className="font-medium text-accent-text underline-offset-4 hover:underline"
@@ -194,20 +190,18 @@ function TopicPanel({
         </p>
       )}
 
-      <div>
-        <label htmlFor={noteId} className={LABEL}>
-          Your note
-        </label>
-        <textarea
-          id={noteId}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={flush}
-          placeholder="Personal notes for this topic"
-          rows={3}
-          className={cx("mt-1.5 block w-full resize-y rounded-lg border-2 border-border bg-surface px-3.5 py-2.5 text-text outline-none transition-colors duration-100 placeholder:text-text3 focus:border-accent", FIELD_TEXT.px14)}
-        />
-      </div>
+      <FormRow id={noteId} label="Your note">
+        {({ id }) => (
+          <Textarea
+            id={id}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={flush}
+            placeholder="Personal notes for this topic"
+            rows={3}
+          />
+        )}
+      </FormRow>
     </div>
   );
 }
