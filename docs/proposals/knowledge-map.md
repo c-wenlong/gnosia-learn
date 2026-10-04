@@ -1,8 +1,14 @@
 # Proposal: the Learn page is a map of what you know
 
-Status: built, 2026-10-04: all four phases. Decisions G1 to G8 stand as
-written; G1 revised decision 13 of [DESIGN.md](../design/DESIGN.md), whose
-row now says so.
+Status: built, 2026-10-04, all four phases, and replaced the same day.
+G1 (the graph is what `/learn` opens on, the table at `?view=table`) still
+stands and revised decision 13 of [DESIGN.md](../design/DESIGN.md). G2 to
+G8, the island map itself, were superseded by
+[domain-map.md](domain-map.md): the owner found the pannable canvas
+impractical and grouping by course wrong for concepts learnt outside a
+course. The code this page names (`ConceptMap.tsx`, `concept-map.ts`,
+`map-viewport.ts`, `map-keys.ts`) was removed in phase 2 of that proposal
+and is reachable in git history.
 
 ## The problem
 
