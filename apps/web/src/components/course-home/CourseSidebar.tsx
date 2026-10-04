@@ -19,10 +19,11 @@ import { FOCUS_RING, ROW_HOVER } from "./rows";
  * it, the course's assets in the library when there are any (the top bar's
  * Library is every course's).
  *
- * Below 1024px it becomes a compact picker over the module: the toggle names
- * the module on screen, and the list opens under it. The two toggles are two
- * buttons, one per width, because which one shows is a media query and the
- * list's open state has to be separate for each.
+ * Below 768px of page (the course grid's container query, the same one that
+ * puts it beside the module) it becomes a compact picker over the module:
+ * the toggle names the module on screen, and the list opens under it. The
+ * two toggles are two buttons, one per width, because which one shows is a
+ * container query and the list's open state has to be separate for each.
  */
 export function CourseSidebar({
   course,
@@ -58,7 +59,7 @@ export function CourseSidebar({
           aria-expanded={wideOpen}
           aria-controls={listId}
           className={cx(
-            "hidden min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg p-2 text-left text-[16px] leading-6 text-text lg:flex",
+            "hidden min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg p-2 text-left text-[16px] leading-6 text-text @3xl:flex",
             ROW_HOVER,
             FOCUS_RING,
           )}
@@ -73,7 +74,7 @@ export function CourseSidebar({
             aria-expanded={narrowOpen}
             aria-controls={listId}
             className={cx(
-              "flex min-h-12 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border-2 border-border px-3 py-2 text-left lg:hidden",
+              "flex min-h-12 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border-2 border-border px-3 py-2 text-left @3xl:hidden",
               FOCUS_RING,
             )}
           >
@@ -92,7 +93,7 @@ export function CourseSidebar({
           className={cx(
             "mt-1 flex-col gap-0.5",
             narrowOpen ? "flex" : "hidden",
-            wideOpen ? "lg:flex" : "lg:hidden",
+            wideOpen ? "@3xl:flex" : "@3xl:hidden",
           )}
         >
           {course.modules.map((m, i) => {
