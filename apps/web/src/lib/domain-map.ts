@@ -63,10 +63,10 @@ const GROUP_GAP = 24;
 const ASPECT = 1.8;
 /**
  * And no wider than this, unless one topic is, so the picture is drawn at
- * close to full size beside the list and grows down the page instead: a page
+ * full size beside the list and grows down the page instead: a page
  * scrolls, where a picture scaled to fit a wide domain had 7px labels.
  */
-const MAX_ROW_WIDTH = 1100;
+const MAX_ROW_WIDTH = 900;
 
 const OTHER = "other";
 
@@ -189,27 +189,77 @@ function layoutTopic(ids: readonly string[], edges: readonly GraphEdge[]) {
 }
 
 /**
- * Topics with their prerequisites first (D3): a topic comes after every
- * topic one of its concepts needs, ties and cycles settled by the vocabulary's
- * order, so the picture reads the way the subject is learnt.
+ * Topics with their prerequisites first (D3). Topics that need each other
+ * (a cycle, as asymptotic notation and analysis often are) count as one, so a
+ * loop does not push them to the end. A topic's level is the longest chain of
+ * topics it needs; topics are ordered by level, then the more topics that
+ * need one the earlier it goes, then the vocabulary's order. So the
+ * foundations come first, a standalone topic waits behind them, and the
+ * picture reads the way the subject is learnt.
  */
 function topicOrder(groups: readonly { slug: string }[], topicOf: ReadonlyMap<string, string>, edges: readonly GraphEdge[]): string[] {
-  const needs = new Map<string, Set<string>>(groups.map((g) => [g.slug, new Set<string>()]));
+  const slugs = groups.map((g) => g.slug);
+  const needs = new Map<string, Set<string>>(slugs.map((t) => [t, new Set<string>()]));
   for (const e of edges) {
     const a = topicOf.get(e.from);
     const b = topicOf.get(e.to);
     if (a !== undefined && b !== undefined && a !== b) needs.get(b)?.add(a);
   }
-  const done = new Set<string>();
-  const order: string[] = [];
-  while (order.length < groups.length) {
-    const left = groups.filter((g) => !done.has(g.slug));
-    // The first topic whose prerequisites are all placed; in a cycle, the first left.
-    const next = left.find((g) => [...(needs.get(g.slug) ?? [])].every((n) => done.has(n))) ?? left[0];
-    done.add(next.slug);
-    order.push(next.slug);
+  const dependants = new Map<string, number>(slugs.map((t) => [t, 0]));
+  for (const set of needs.values()) for (const t of set) dependants.set(t, (dependants.get(t) ?? 0) + 1);
+
+  // Tarjan's strongly connected components over "needs", in vocabulary order.
+  const component = new Map<string, number>();
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  let counter = 0;
+  let components = 0;
+  const visit = (v: string) => {
+    index.set(v, counter);
+    low.set(v, counter);
+    counter++;
+    stack.push(v);
+    onStack.add(v);
+    for (const w of [...(needs.get(v) ?? [])].sort((x, y) => slugs.indexOf(x) - slugs.indexOf(y))) {
+      if (!index.has(w)) {
+        visit(w);
+        low.set(v, Math.min(low.get(v) as number, low.get(w) as number));
+      } else if (onStack.has(w)) low.set(v, Math.min(low.get(v) as number, index.get(w) as number));
+    }
+    if (low.get(v) === index.get(v)) {
+      let w: string;
+      do {
+        w = stack.pop() as string;
+        onStack.delete(w);
+        component.set(w, components);
+      } while (w !== v);
+      components++;
+    }
+  };
+  for (const t of slugs) if (!index.has(t)) visit(t);
+
+  // Tarjan numbers a component after every component it needs, so one pass in that order sets each level.
+  const level = new Array<number>(components).fill(0);
+  const members = new Map<number, string[]>();
+  for (const t of slugs) members.set(component.get(t) as number, [...(members.get(component.get(t) as number) ?? []), t]);
+  for (let c = 0; c < components; c++) {
+    for (const t of members.get(c) ?? []) {
+      for (const n of needs.get(t) ?? []) {
+        const d = component.get(n) as number;
+        if (d !== c) level[c] = Math.max(level[c], level[d] + 1);
+      }
+    }
   }
-  return order;
+  const rank = new Map(slugs.map((t, i) => [t, i]));
+  const levelOf = (t: string) => level[component.get(t) as number];
+  return [...slugs].sort(
+    (a, b) =>
+      levelOf(a) - levelOf(b) ||
+      (dependants.get(b) ?? 0) - (dependants.get(a) ?? 0) ||
+      (rank.get(a) ?? 0) - (rank.get(b) ?? 0),
+  );
 }
 
 /**
@@ -325,4 +375,10 @@ export function cachedDomainLayout(
   cache.set(key, fresh);
   if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value as string);
   return fresh;
+}
+
+/** What the Learn page sends the browser: every domain, and each one's picture. */
+export interface DomainMapData {
+  tree: DomainSummary[];
+  layouts: Record<string, DomainLayout>;
 }

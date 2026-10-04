@@ -146,7 +146,8 @@ describe("domainLayout (D3, D4)", () => {
   });
 
   it("gives every topic a group whose box holds its concepts and overlaps no other", () => {
-    expect(layout.groups.map((g) => g.topic)).toEqual(["sorting", "graphs", "dp", "unknown-topic"]);
+    // Sorting is needed by both other topics; the stray topic needs nothing, so it waits behind Sorting only.
+    expect(layout.groups.map((g) => g.topic)).toEqual(["sorting", "unknown-topic", "graphs", "dp"]);
     const boxes = layout.groups.map((g) => ({ g, box: groupBox(g.concepts.map((id) => layout.positions[id])) }));
     for (const { g, box } of boxes) {
       for (const id of g.concepts) {
@@ -174,6 +175,31 @@ describe("domainLayout (D3, D4)", () => {
   it("lays a prerequisite topic out before the topic that needs it", () => {
     const at = (topic: string) => layout.groups.findIndex((g) => g.topic === topic);
     expect(at("sorting")).toBeLessThan(at("dp"));
+  });
+
+  it("puts a topic many others need before a standalone one earlier in the vocabulary", () => {
+    const vocab: DomainTopic[] = [
+      { slug: "proofs", title: "Proofs", domain: "d" },
+      { slug: "a", title: "A", domain: "d" },
+      { slug: "b", title: "B", domain: "d" },
+      { slug: "basics", title: "Basics", domain: "d" },
+    ];
+    const ns = [node("p1", "proofs"), node("a1", "a"), node("b1", "b"), node("x1", "basics")];
+    const es = [req("x1", "a1"), req("x1", "b1")];
+    expect(domainLayout(ns, es, vocab, "d").groups.map((g) => g.topic)).toEqual(["basics", "proofs", "a", "b"]);
+  });
+
+  it("treats topics that need each other as one level, so a loop does not push them to the end", () => {
+    const vocab: DomainTopic[] = [
+      { slug: "later", title: "Later", domain: "d" },
+      { slug: "loner", title: "Loner", domain: "d" },
+      { slug: "notation", title: "Notation", domain: "d" },
+      { slug: "analysis", title: "Analysis", domain: "d" },
+    ];
+    const ns = [node("l1", "later"), node("s1", "loner"), node("n1", "notation"), node("n2", "notation"), node("a1", "analysis"), node("a2", "analysis")];
+    // notation and analysis need each other; later needs both.
+    const es = [req("n1", "a1"), req("a2", "n2"), req("a1", "l1"), req("n2", "l1")];
+    expect(domainLayout(ns, es, vocab, "d").groups.map((g) => g.topic)).toEqual(["notation", "analysis", "loner", "later"]);
   });
 
   it("draws the domain's own edges, transitively reduced", () => {

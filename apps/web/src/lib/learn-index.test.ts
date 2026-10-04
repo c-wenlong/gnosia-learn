@@ -10,7 +10,7 @@ import {
   parseFilter,
   parseScope,
   indexSearch,
-  courseGraphHref,
+  conceptMapHref,
   parseView,
   statusFilterOptions,
   type IndexRow,
@@ -87,44 +87,43 @@ describe("filters and search", () => {
     expect(parseView(null)).toBe("graph");
     expect(parseView("table")).toBe("table");
     expect(parseView("bogus")).toBe("graph");
-    expect(parseScope("neighbourhood", "graph")).toBe("neighbourhood");
   });
 
-  // Phase 2 of docs/proposals/knowledge-map.md (G2): the map opens on the
-  // selected concept's island, and a graph URL always says its scope.
-  it("reads a missing scope as the island in the graph view and the neighbourhood in the table", () => {
-    expect(parseScope(null, "graph")).toBe("island");
-    expect(parseScope(undefined, "graph")).toBe("island");
-    expect(parseScope("bogus", "graph")).toBe("island");
-    expect(parseScope("course", "graph")).toBe("course");
-    expect(parseScope("island", "graph")).toBe("island");
-    expect(parseScope(null, "table")).toBe("neighbourhood");
-    expect(parseScope("course", "table")).toBe("course");
-    // The table's card has no island scope.
-    expect(parseScope("island", "table")).toBe("neighbourhood");
+  // The table's side card shows a neighbourhood or a course. The map has no
+  // scope any more: it shows a domain or a topic (docs/proposals/domain-map.md, D2).
+  it("reads the table's scope, the neighbourhood unless the course is asked for", () => {
+    expect(parseScope("course")).toBe("course");
+    expect(parseScope("neighbourhood")).toBe("neighbourhood");
+    expect(parseScope(null)).toBe("neighbourhood");
+    expect(parseScope("island")).toBe("neighbourhood");
+    expect(parseScope("bogus")).toBe("neighbourhood");
   });
 
-  it("writes the graph view's scope into the URL every time, so a reload shows the same view", () => {
-    const base = { selected: "dot", filter: "all" as const };
-    // The map is the default view (G1), so its URL leaves `view` out and always says its scope.
-    expect(indexSearch({ ...base, view: "graph", scope: "island" })).toBe("concept=dot&scope=island");
-    expect(indexSearch({ ...base, view: "graph", scope: "course" })).toBe("concept=dot&scope=course");
-    expect(indexSearch({ ...base, view: "graph", scope: "neighbourhood" })).toBe("concept=dot&scope=neighbourhood");
-    // The table says it is the table, and leaves its own default scope out.
-    expect(indexSearch({ ...base, view: "table", scope: "neighbourhood" })).toBe("concept=dot&view=table");
-    expect(indexSearch({ ...base, view: "table", scope: "course" })).toBe("concept=dot&view=table&scope=course");
-    expect(indexSearch({ selected: null, filter: "due", view: "table", scope: "neighbourhood" })).toBe("view=table&filter=due");
-    // Other parameters already in the URL are kept, and an old `view=graph` is dropped as the default.
-    expect(indexSearch({ ...base, view: "graph", scope: "island" }, "utm=x&view=graph&scope=course")).toBe(
-      "utm=x&scope=island&concept=dot",
+  it("writes the map's domain and topic, and the table's own state, so a reload shows the same view", () => {
+    const base = { selected: "dot", filter: "all" as const, scope: "neighbourhood" as const };
+    // The map is the default view (G1), so its URL leaves `view` out.
+    expect(indexSearch({ ...base, view: "graph", domain: "algorithms", topic: null })).toBe("concept=dot&domain=algorithms");
+    expect(indexSearch({ ...base, view: "graph", domain: "algorithms", topic: "sorting" })).toBe(
+      "concept=dot&domain=algorithms&topic=sorting",
+    );
+    // The domain cards: nothing to say.
+    expect(indexSearch({ ...base, selected: null, view: "graph", domain: null, topic: null })).toBe("");
+    // The table says it is the table, drops the map's place, and leaves its own default scope out.
+    expect(indexSearch({ ...base, view: "table", domain: "algorithms", topic: "sorting" }, "domain=algorithms&topic=sorting")).toBe(
+      "concept=dot&view=table",
+    );
+    expect(indexSearch({ ...base, scope: "course", view: "table", domain: null, topic: null })).toBe("concept=dot&view=table&scope=course");
+    expect(indexSearch({ selected: null, filter: "due", scope: "neighbourhood", view: "table", domain: null, topic: null })).toBe(
+      "view=table&filter=due",
+    );
+    // Other parameters are kept; an old `view=graph` and an island map's `scope` are dropped.
+    expect(indexSearch({ ...base, view: "graph", domain: "algorithms", topic: null }, "utm=x&view=graph&scope=island")).toBe(
+      "utm=x&concept=dot&domain=algorithms",
     );
   });
 
-  it("links a concept's full course graph with the scope said out loud", () => {
-    expect(courseGraphHref("big-o")).toBe("/learn?concept=big-o&view=graph&scope=course");
-    // And the link round-trips to the course scope.
-    const params = new URL(courseGraphHref("big-o"), "http://x").searchParams;
-    expect(parseScope(params.get("scope"), parseView(params.get("view")))).toBe("course");
+  it("links a concept to its place on the map, which the page opens in its domain", () => {
+    expect(conceptMapHref("big-o")).toBe("/learn?concept=big-o");
   });
 
   it("counts buckets", () => {

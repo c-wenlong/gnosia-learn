@@ -87,13 +87,22 @@ describe("/learn", () => {
         ],
       },
     });
-    // The map is the default view (G1 of docs/proposals/knowledge-map.md),
-    // with the frontier concept selected and its panel open.
+    // The map is the default view (G1 of docs/proposals/knowledge-map.md) and
+    // opens on a card per domain (D2 of docs/proposals/domain-map.md). With no
+    // topic row, the concept's domain is its folder (D1).
     const html = await render();
     expect(html).toContain("1 concept · 0 mastered · 1 learning · 0 untouched");
-    expect(html).toContain('aria-label="Concept map, 1 concept in 1 island"');
-    expect(html).toMatch(/data-concept="alpha"[^>]*aria-pressed="true"/);
-    expect(html).toContain('href="/learn/alpha"');
+    expect(html).toContain('data-domain-card="fixtures"');
+    expect(html).not.toContain("data-domain-graph");
+
+    // A domain draws its picture; a concept named in the URL opens its domain, selected.
+    const domain = await render({ domain: "fixtures" });
+    expect(domain).toContain('aria-label="Fixtures map, 1 concept in 1 topic"');
+    expect(domain).toMatch(/data-concept="alpha"[^>]*aria-pressed="false"/);
+    const named = await render({ concept: "alpha" });
+    expect(named).toContain('aria-label="Fixtures map, 1 concept in 1 topic"');
+    expect(named).toMatch(/data-concept="alpha"[^>]*aria-pressed="true"/);
+    expect(named).toContain('href="/learn/alpha"');
 
     // The table is one press away, and `view=table` opens it: the row, its link
     // to the workspace, and the graph card.
@@ -101,7 +110,7 @@ describe("/learn", () => {
     expect(table).toContain("Alpha");
     expect(table).toContain('href="/learn/alpha"');
     expect(table).toContain("Neighbourhood graph of Alpha");
-    expect(table).not.toContain("Concept map");
+    expect(table).not.toContain("data-domain-graph");
   });
 
   it("selects the concept the query string names", async () => {
@@ -133,8 +142,8 @@ describe("/learn", () => {
     });
     const html = await render({ concept: "beta", view: "graph" });
 
-    // The Graph view is the whole map (phase 1 of docs/proposals/knowledge-map.md), Beta ringed on it.
-    expect(html).toContain('aria-label="Concept map, 2 concepts in 1 island"');
+    // The map opens Beta's domain, Beta ringed on it (D2 of docs/proposals/domain-map.md).
+    expect(html).toContain('aria-label="Other map, 2 concepts in 1 topic"');
     expect(html).toMatch(/data-concept="beta"[^>]*aria-pressed="true"/);
     expect(html).toMatch(/data-concept="alpha"[^>]*aria-pressed="false"/);
   });
@@ -169,13 +178,13 @@ describe("/learn", () => {
       },
     });
     recentCourses.mockResolvedValueOnce(["cp4284"]);
-    const html = await render({ view: "graph" });
+    const html = await render({ concept: "loose" });
     expect(html).toMatch(/data-concept="root"[^>]*data-ready="true"/);
     expect(html).toMatch(/data-concept="next"[^>]*data-ready="false"/);
     expect(html).toMatch(/data-concept="loose"[^>]*data-ready="false"/);
 
     // With no recent course, nothing is marked.
-    const none = await render({ view: "graph" });
+    const none = await render({ concept: "loose" });
     expect(none).not.toMatch(/data-ready="true"/);
   });
 });

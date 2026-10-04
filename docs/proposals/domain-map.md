@@ -55,8 +55,8 @@ come first.
 
 **D3. A domain is one bounded picture, drawn near full size.** Each topic is
 a group: its concepts laid out in layers by dagre, prerequisites above. The
-groups are packed left to right in rows of at most 1,100 px, a topic after
-the topics it needs. The picture fits the width of its card and grows down
+groups are packed left to right in rows of at most 900 px: a topic after
+the topics it needs, and among equals the one more topics need first. The picture fits the width of its card and grows down
 the page, which scrolls as a page does: there is no pan and no zoom. The
 layout runs on the server, as the island map's did, so dagre stays out of
 the browser.
