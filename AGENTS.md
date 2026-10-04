@@ -632,7 +632,11 @@ Remove only a worktree you made and whose branch has merged, and look first:
 `git -C <dir> status --porcelain` and
 `git -C <dir> submodule foreach --quiet 'git status --porcelain'` must both
 print nothing, since another session's uncommitted work lives in its own
-worktree and a forced removal deletes it for good. Then
+worktree and a forced removal deletes it for good. Neither lists ignored
+files, and a tool's renders and clip cache are ignored and sit in its own
+checkout while its data root is the default (manimkc's `out/` with no
+`MANIMKC_HOME`), so `ls -d <dir>/tools/*/out` must find nothing either; move
+anything it finds out first. Then
 `git worktree remove --force <dir>` (or delete the directory, then
 `git worktree prune`), and never run `git submodule deinit` in one to make
 that work. The `submodule.<name>.*`
