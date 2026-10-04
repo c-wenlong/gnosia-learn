@@ -138,19 +138,26 @@ export function Previewer({
         // under the panel and scrolling it to the top.
         startTransition(() =>
           setAnswers((previous) => {
-          const next = new Map(previous);
-          next.set(id, answer);
-          while (next.size > KEEP) next.delete(next.keys().next().value as string);
-          return next;
+            const next = new Map(previous);
+            next.set(id, answer);
+            while (next.size > KEEP) next.delete(next.keys().next().value as string);
+            return next;
           }),
         );
       });
     // `attempt` asks again after a failure.
   }, [openId, answers, attempt]);
 
+  // Set while a close waits for `history.back()` to land, so a second Escape
+  // in that beat does not go back a second time, out of the Library.
+  const goingBack = useRef(false);
+
   // The back and forward buttons: the URL is the truth.
   useEffect(() => {
-    const onPop = () => show(openFromSearch(window.location.search));
+    const onPop = () => {
+      goingBack.current = false;
+      show(openFromSearch(window.location.search));
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [show]);
@@ -173,10 +180,11 @@ export function Previewer({
   );
 
   const close = useCallback(() => {
-    if (openId === null) return;
+    if (openId === null || goingBack.current) return;
     const state: unknown = window.history.state;
     if (typeof state === "object" && state !== null && (state as Record<string, unknown>)[PUSHED] === true) {
       // The entry the panel pushed: going back to the list closes it (popstate).
+      goingBack.current = true;
       window.history.back();
       return;
     }
