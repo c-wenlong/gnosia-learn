@@ -168,6 +168,22 @@ The pure helpers beside them:
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), and the validators the preference route runs (`validateTutorStyle`, `validateMotionMode`) |
 | [`@/lib/ask-core`](../../apps/web/src/lib/ask-core.ts) | the Ask box's search: `rankAsk`, `normalize`, `askTutorHref`, `type AskEntry` |
 | [`@/lib/home-core`](../../apps/web/src/lib/home-core.ts) | the Home model (`HomeModel`) and its pure parts: `homeThreads`, `conceptTouches`, `nextFromHere`, `nearThreads`, `recallPicks`, `recallHref`, `coursesInProgress`, `pastDayLabel`, `lastSeenLabel`, `clock` |
+| [`@/components/ui/composer-keys`](../../apps/web/src/components/ui/composer-keys.ts) | `composerKey(event)` (Enter sends, Shift+Enter a new line, Cmd/Ctrl+Enter `mod-send`; takes `event.nativeEvent` whole) and `isImeKey(event)` (an input method's key: `isComposing`, or Safari's `keyCode` 229), which every Enter that acts asks first |
+| [`@/components/ui/roving`](../../apps/web/src/components/ui/roving.ts) | `tabKeyIndex(key, index, count, orientation, homeEnd)`: where an arrow, Home or End moves a roving tabindex (`Tabs`, Settings' tabs, the theme switch), or -1 |
+| [`@/components/ui/mention-text`](../../apps/web/src/components/ui/mention-text.ts) | besides the @ menu's model, `moveActive(options, active, delta, usable?)`: Up and Down through any list, wrapping, skipping rows `usable` refuses (every row by default; the @ menu passes `isUsable`) |
+| [`@/lib/send-json`](../../apps/web/src/lib/send-json.ts) | `sendJson<R>(method, path, body?)`: a JSON request to the app's own routes, `{ status, ok, data }` or null when nothing answered. Never logs: provider keys go through it |
+| [`@/lib/quiz-keys`](../../apps/web/src/lib/quiz-keys.ts) | `quizKey(event, pending)`: Review's and a session's shared key prelude (modifiers, a pending write and fields ignored; 1 to 4; Enter and Space unless a focused control takes them) |
+| [`@/lib/plain-click`](../../apps/web/src/lib/plain-click.ts) | `isPlainClick(event)`: main button, no modifier, so a link may take its move in-page |
+| [`@/lib/client-cookie`](../../apps/web/src/lib/client-cookie.ts) | `writeCookie(name, value, maxAge)` and `readCookie(name, cookie?)`: the theme, motion and sidebar cookies' browser side |
+| [`@/lib/focus`](../../apps/web/src/lib/focus.ts) | `rememberFocus()`: the element with the focus now, and `restore(fallback?)`, which gives it back only while it is still on screen |
+
+The small hooks over browser state, each with the server's answer on the
+server and while hydrating: `useHydrated()` ([`@/lib/use-hydrated`](../../apps/web/src/lib/use-hydrated.ts)),
+`usePageVisible()` ([`@/lib/use-page-visible`](../../apps/web/src/lib/use-page-visible.ts)),
+`useMediaQuery(query, serverValue)` ([`@/components/ui/use-media-query`](../../apps/web/src/components/ui/use-media-query.ts)),
+and `useDraftsWake(wake, enabled)` ([`@/lib/use-drafts-wake`](../../apps/web/src/lib/use-drafts-wake.ts)),
+which reads the studio's conversations again on focus and on a change. They
+are not in the barrel, which server components import.
 
 Maths is typeset by KaTeX, through two files. [`@/lib/math`](../../apps/web/src/lib/math.ts)
 is React-free: `renderMath(source, display)` and `splitMath(text)`, which finds
