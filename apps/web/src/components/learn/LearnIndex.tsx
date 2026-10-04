@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { ConceptGraph, ConceptGraphKey } from "@/components/ConceptGraph";
+import { ConceptMap } from "@/components/learn/ConceptMap";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -13,6 +14,7 @@ import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
+import type { MapLayout } from "@/lib/concept-map";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
@@ -39,10 +41,12 @@ import {
 export function LearnIndex({
   rows,
   edges,
+  map,
   initial,
 }: {
   rows: IndexRow[];
   edges: GraphEdge[];
+  map: MapLayout;
   initial: { selected: string | null; view: IndexView; scope: GraphScope; filter: IndexFilter };
 }) {
   const [query, setQuery] = useState("");
@@ -119,15 +123,7 @@ export function LearnIndex({
           />
         </div>
       ) : (
-        <GraphCard
-          nodes={nodes}
-          edges={edges}
-          focus={focus}
-          scope={scope}
-          onScope={setScope}
-          onSelect={setSelected}
-          wide
-        />
+        <MapCard layout={map} nodes={nodes} focus={focus} onSelect={setSelected} />
       )}
     </div>
   );
@@ -222,6 +218,41 @@ function ConceptTable({
   );
 }
 
+/**
+ * The Graph view: every concept on one map (phase 1 of
+ * docs/proposals/knowledge-map.md), the selected one ringed.
+ */
+function MapCard({
+  layout,
+  nodes,
+  focus,
+  onSelect,
+}: {
+  layout: MapLayout;
+  nodes: GraphNode[];
+  focus: IndexRow | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <Card title="Map">
+      {focus !== null && (
+        <p className="flex min-w-0 items-center gap-2 text-[13px] text-text2">
+          <MasteryDot bucket={focus.bucket} size={12} />
+          <span className="min-w-0 truncate font-semibold text-text">{focus.title}</span>
+          <Link
+            href={`/learn/${focus.id}`}
+            className="shrink-0 rounded-sm text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Open in workspace
+          </Link>
+        </p>
+      )}
+      <ConceptMap layout={layout} nodes={nodes} selected={focus?.id ?? null} onSelect={onSelect} className="max-h-[70vh] min-h-[440px]" />
+      <ConceptGraphKey />
+    </Card>
+  );
+}
+
 function GraphCard({
   nodes,
   edges,
@@ -229,7 +260,6 @@ function GraphCard({
   scope,
   onScope,
   onSelect,
-  wide = false,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -237,7 +267,6 @@ function GraphCard({
   scope: GraphScope;
   onScope: (scope: GraphScope) => void;
   onSelect: (id: string) => void;
-  wide?: boolean;
 }) {
   const course = focus ? courseScope(nodes, edges, focus.id) : null;
   const shown = focus === null ? null : scope === "course" && course ? course : neighbourhood(nodes, edges, focus.id);
@@ -269,14 +298,14 @@ function GraphCard({
               {scope === "course" && course?.basis === "domain" && ` · no course, showing the ${focus.domain} folder`}
             </span>
           </p>
-          <div className={cx("rounded-xl bg-surface2 p-2", wide ? "min-h-[440px]" : "min-h-[300px]")}>
+          <div className="min-h-[300px] rounded-xl bg-surface2 p-2">
             <ConceptGraph
               nodes={shown.nodes}
               edges={shown.edges}
               focus={focus.id}
               onSelect={onSelect}
               fit={scope === "neighbourhood"}
-              compact={!wide}
+              compact
               label={`${scope === "course" ? "Course" : "Neighbourhood"} graph of ${focus.title}`}
             />
           </div>
