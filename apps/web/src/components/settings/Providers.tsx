@@ -381,15 +381,19 @@ function ProviderRow({
     const key = draft;
     setDraft("");
     setStatus({ kind: "busy", text: "Saving…" });
-    // A custom provider's name and base URL first, then a key if one was typed.
-    if (row.custom !== undefined && (name.trim() !== row.label || url.trim() !== row.custom.baseUrl)) {
-      const changed = await sendJson<Reply>("PATCH", "/api/learner/custom-provider", { provider: row.id, label: name, baseUrl: url });
+    // A custom provider's name, base URL and key go in one write, so a key
+    // that is refused leaves the name and the URL as they were.
+    const custom = row.custom;
+    const moved = custom !== undefined && (name.trim() !== row.label || url.trim() !== custom.baseUrl);
+    const typed = key.trim() !== "";
+    if (moved || (custom !== undefined && typed)) {
+      const body = { provider: row.id, label: name, baseUrl: url, ...(typed ? { key } : {}) };
+      const changed = await sendJson<Reply>("PATCH", "/api/learner/custom-provider", body);
       if (changed === null || changed.status !== 200 || changed.data.ok !== true) {
         focusNext.current = `${base}-key`;
         return setStatus({ kind: "error", text: failure("saved", changed) });
       }
-    }
-    if (key.trim() !== "") {
+    } else if (typed) {
       const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: row.id, key });
       if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
         focusNext.current = `${base}-key`;

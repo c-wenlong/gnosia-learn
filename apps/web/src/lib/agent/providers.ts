@@ -526,6 +526,18 @@ export function turnTimeouts(env: EnvMap = process.env): TurnTimeouts {
   };
 }
 
+/**
+ * How a provider call treats a redirect. A custom provider's base URL was
+ * checked when it was saved (https, or http to this machine), and a redirect
+ * would carry the call, and on a same-origin hop its key, past that check, to
+ * an address nobody checked. So a custom provider's 3xx fails the call
+ * (T14). The built-in providers' URLs are this file's own, and keep the
+ * default.
+ */
+export function redirectPolicy(config: Pick<ProviderConfig, "custom">): RequestRedirect {
+  return config.custom === true ? "error" : "follow";
+}
+
 /** The most of a reply read: a tutor turn is a few KB, and this is far past any. */
 const REPLY_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -538,6 +550,7 @@ async function callOpenAiCompatible(
 ): Promise<ChatCompletionResult> {
   const res = await fetch(`${provider.baseUrl}/chat/completions`, {
     signal,
+    redirect: redirectPolicy(provider),
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -781,6 +794,7 @@ export async function testProviderKey(
   const secrets = [apiKey];
   try {
     const res = await fetch(`${config.baseUrl}/chat/completions`, {
+      redirect: redirectPolicy(config),
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -935,6 +949,7 @@ async function fetchModelList(
   const secrets = [apiKey];
   try {
     const res = await fetch(url, {
+      redirect: redirectPolicy(config),
       method: "GET",
       headers: { Authorization: `Bearer ${apiKey}`, ...(config.extraHeaders ?? {}) },
       signal: AbortSignal.timeout(timeoutMs),

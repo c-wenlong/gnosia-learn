@@ -139,6 +139,13 @@ describe.skipIf(!reachable.ok)("custom provider routes", () => {
     expect(changed).toMatchObject({ ok: true, provider: { id: "custom-gateway", label: "Work", baseUrl: "https://gw2.example/v1" } });
     expect((await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-nobody", label: "x" }))).status).toBe(404);
     expect((await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", baseUrl: "http://gw.example" }))).status).toBe(400);
+    // A refused key leaves the name and URL alone; a good one lands with them in one write.
+    expect((await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", label: "Moved", key: "x" }))).status).toBe(400);
+    expect((await scratch.pool.query("select label from custom_provider")).rows).toEqual([{ label: "Work" }]);
+    const NEW_KEY = `${KEY.slice(0, -4)}zzzz`;
+    const both = await json(await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", label: "Moved", key: NEW_KEY })));
+    expect(both).toMatchObject({ ok: true, provider: { label: "Moved" }, key: { provider: "custom-gateway", last4: "zzzz" } });
+    expect(JSON.stringify(both)).not.toContain(NEW_KEY);
 
     const gone = await json(await providerRoute.DELETE(request("/api/learner/tutor-model/provider", "DELETE", { provider: "custom-gateway" })));
     expect(gone).toMatchObject({ ok: true, keyRemoved: true, chain: [] });

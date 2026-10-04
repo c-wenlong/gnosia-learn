@@ -457,7 +457,7 @@ export const customProvider = pgTable(
     check(
       "custom_provider_base_url_check",
       sql.raw(
-        `char_length(base_url) between 1 and ${CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars} and (base_url ~ '^https://' or base_url ~ '^http://(localhost|127[.]0[.]0[.]1|\\[::1\\])(:[0-9]+)?(/|$)')`,
+        `char_length(base_url) between 1 and ${CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars} and base_url !~ '/$' and (base_url ~ '^https://[^/@?#[:space:]]+(/[^@?#[:space:]]*)?$' or base_url ~ '^http://(localhost|127[.]0[.]0[.]1|\\[::1\\])(:[0-9]+)?(/[^@?#[:space:]]*)?$')`,
       ),
     ),
   ],

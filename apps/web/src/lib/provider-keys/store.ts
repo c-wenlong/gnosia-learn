@@ -1,7 +1,7 @@
 import "server-only";
 
-import { deleteProviderKey, readProviderKeys, writeProviderKey } from "@self-learn/catalog/state";
-import type { ProviderName } from "@self-learn/schema/shared";
+import { deleteProviderKey, readProviderKeys, saveCustomProviderKey, writeProviderKey } from "@self-learn/catalog/state";
+import { isCustomProviderId, type ProviderName } from "@self-learn/schema/shared";
 
 import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH } from "@/lib/auth/core";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -79,13 +79,31 @@ export class NoKeySecretError extends Error {
   }
 }
 
-/** Seal and store a key that passed `checkKeyShape`, replacing the owner's key for that provider. */
-export async function saveProviderKey(owner: string, provider: ProviderName, key: string): Promise<SavedKeyStatus> {
+/** A sealer for a key that passed `checkKeyShape`, for an owner, or `NoKeySecretError` before anything is written. */
+export function keySealer(owner: string, key: string): (provider: ProviderName) => ReturnType<typeof sealKey> {
   const secret = keySecret();
   if (secret === null) throw new NoKeySecretError();
-  const sealed = sealKey(key, { secret, owner, provider });
-  const { updatedAt } = await writeProviderKey(await catalogDatabase(), owner, provider, sealed);
-  return { provider, last4: sealed.last4, updatedAt: updatedAt.toISOString(), readable: true };
+  return (provider) => sealKey(key, { secret, owner, provider });
+}
+
+/** What Settings is told of a key just stored. */
+export function savedStatus(provider: ProviderName, saved: { last4: string; updatedAt: Date }): SavedKeyStatus {
+  return { provider, last4: saved.last4, updatedAt: saved.updatedAt.toISOString(), readable: true };
+}
+
+/**
+ * Seal and store a key that passed `checkKeyShape`, replacing the owner's key
+ * for that provider. A custom provider's key goes through the catalog's lock
+ * and is refused (`CustomProviderError`, `NOT_FOUND`) when the owner does not
+ * have that provider, a moment-old Delete included (T14).
+ */
+export async function saveProviderKey(owner: string, provider: ProviderName, key: string): Promise<SavedKeyStatus> {
+  const sealed = keySealer(owner, key)(provider);
+  const db = await catalogDatabase();
+  const { updatedAt } = isCustomProviderId(provider)
+    ? await saveCustomProviderKey(db, owner, provider, sealed)
+    : await writeProviderKey(db, owner, provider, sealed);
+  return savedStatus(provider, { last4: sealed.last4, updatedAt });
 }
 
 /** Remove the owner's key for one provider. True when there was one. */

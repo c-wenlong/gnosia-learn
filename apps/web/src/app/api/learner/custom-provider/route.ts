@@ -5,9 +5,8 @@ import { NextResponse } from "next/server";
 import { changeCustomProvider, createCustomProvider } from "@/lib/custom-providers/store";
 import { answer, guard, readBody, refuse } from "@/lib/provider-keys/requests";
 import { checkKeyShape } from "@/lib/provider-keys/seal";
-import { failureCode, NoKeySecretError, saveProviderKey } from "@/lib/provider-keys/store";
+import { failureCode, NoKeySecretError } from "@/lib/provider-keys/store";
 import { CHAIN_WRITE_RATE_LIMIT } from "@/lib/tutor-models/requests";
-import { deleteChainProvider } from "@/lib/tutor-models/store";
 
 export const runtime = "nodejs";
 
@@ -16,14 +15,15 @@ export const runtime = "nodejs";
  *
  * `POST { label, baseUrl, key }` makes it: the name and the base URL are
  * checked (`checkBaseUrl`: https, or http to this machine only), the key's
- * shape is checked before anything is stored, the row is written with an id
- * made from the name, and the key is sealed under that id. If the key cannot
- * be stored the provider is removed again, so a provider never exists
- * without its key. The answer names the new id, never the key.
+ * shape is checked before anything is stored, and the row and the key,
+ * sealed under the id made from the name, are written in one transaction, so
+ * a provider never exists without its key. The answer names the new id,
+ * never the key.
  *
- * `PATCH { provider, label?, baseUrl? }` renames it or moves it. Its key and
- * models stay; a new key goes through `/api/learner/provider-key` as for any
- * provider. Its Delete is the provider route's, which removes it whole.
+ * `PATCH { provider, label?, baseUrl?, key? }` renames it, moves it, and
+ * replaces its key, all in one transaction: a key that cannot be stored
+ * leaves the name and the URL as they were. Its models stay. Its Delete is
+ * the provider route's, which removes it whole.
  */
 
 function failed(what: string, error: unknown): NextResponse {
@@ -43,18 +43,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   const shape = checkKeyShape(body.key);
   if (!shape.ok) return refuse(shape.reason);
 
-  let created;
   try {
-    created = await createCustomProvider(owner, { label: body.label, baseUrl: body.baseUrl });
+    const created = await createCustomProvider(owner, { label: body.label, baseUrl: body.baseUrl }, shape.key);
+    return answer({ ok: true, ...created });
   } catch (error) {
-    return failed("add", error);
-  }
-  try {
-    const key = await saveProviderKey(owner, created.id, shape.key);
-    return answer({ ok: true, provider: created, key });
-  } catch (error) {
-    // No provider without its key: take the row back out.
-    await deleteChainProvider(owner, created.id).catch(() => {});
     return failed("add", error);
   }
 }
@@ -65,9 +57,18 @@ export async function PATCH(req: Request): Promise<NextResponse> {
   const body = await readBody(req);
   if (body instanceof NextResponse) return body;
   if (!isCustomProviderId(body.provider)) return refuse(`"provider" must be the id of one of your providers (custom-…).`);
-  if (body.label === undefined && body.baseUrl === undefined) return refuse("Send a new name, a new base URL, or both.");
+  if (body.label === undefined && body.baseUrl === undefined && body.key === undefined) {
+    return refuse("Send a new name, a new base URL, a new key, or any of them.");
+  }
+  let key: string | undefined;
+  if (body.key !== undefined) {
+    const shape = checkKeyShape(body.key);
+    if (!shape.ok) return refuse(shape.reason);
+    key = shape.key;
+  }
   try {
-    return answer({ ok: true, provider: await changeCustomProvider(owner, body.provider, { label: body.label, baseUrl: body.baseUrl }) });
+    const changed = await changeCustomProvider(owner, body.provider, { label: body.label, baseUrl: body.baseUrl }, key);
+    return answer({ ok: true, ...changed });
   } catch (error) {
     return failed("change", error);
   }
