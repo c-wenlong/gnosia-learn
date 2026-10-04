@@ -60,9 +60,9 @@ export function ShotView({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 text-xs">
+      <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-3 text-xs">
         <span className="font-medium">{label}</span>
-        <span className="min-w-0 truncate text-[var(--muted)]">{title}</span>
+        <span className="min-w-0 truncate text-text2">{title}</span>
         <div className="flex-1" />
         {otherMissing === null ? (
           <Link
@@ -73,19 +73,19 @@ export function ShotView({
             Show {other}
           </Link>
         ) : (
-          <span className="text-[var(--muted)]" title={otherMissing}>
+          <span className="text-text2" title={otherMissing}>
             no {other}
           </span>
         )}
         <Link
           href={panelHref(path, { shot: null })}
           scroll={false}
-          className="text-[var(--muted)] underline underline-offset-2"
+          className="text-text2 underline underline-offset-2"
         >
           Close
         </Link>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto bg-[var(--surface)] p-4">
+      <div className="min-h-0 flex-1 overflow-auto bg-surface p-4">
         {missing === null ? (
           <FadeImg
             src={shotSrc(jobId, which)}
@@ -93,7 +93,7 @@ export function ShotView({
             className="mx-auto max-h-full max-w-full object-contain"
           />
         ) : (
-          <p className="mx-auto max-w-[420px] pt-8 text-center text-sm text-[var(--muted)]">
+          <p className="mx-auto max-w-[420px] pt-8 text-center text-sm text-text2">
             {missing}
           </p>
         )}

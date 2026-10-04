@@ -302,7 +302,7 @@ function FailureCard({ job, path, inConversation }: { job: VideoJob; path: strin
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3">
+    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-danger/45 bg-danger/8 px-4 py-3">
       {failure.detail !== null && failure.detail !== "" && (
         <p className="text-[13px] break-words text-text">{failure.detail}</p>
       )}

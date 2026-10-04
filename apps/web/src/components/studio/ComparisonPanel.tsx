@@ -97,8 +97,8 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
       {accepted && <Accepted job={job} busy={busy !== null} onReindex={() => void act("reindex")} />}
 
       {reviewable && (
-        <div className="mb-3 rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
-          <p className="font-medium text-[var(--ok-text)]">{finishedHeadline(job)}</p>
+        <div className="mb-3 rounded-md border border-ok/40 bg-surface2 p-2 text-xs text-text2">
+          <p className="font-medium text-ok-text">{finishedHeadline(job)}</p>
           <p className="mt-1">Nothing in the catalog has changed yet. Accept stores this drawing as the diagram.</p>
         </div>
       )}
@@ -110,13 +110,13 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
           <Thumbnail which="after" job={job} comparison={comparison} path={path} />
         </div>
         {comparison.refreshedAt !== null && (
-          <p className="mt-1.5 text-xs text-[var(--warn-text)]">
+          <p className="mt-1.5 text-xs text-warn-text">
             The before side was re-read after this job ran, so it shows the file as it is on disk
             now and not the one the job started against.
           </p>
         )}
         {job.gate?.exportFailed === true && (
-          <p className="mt-1.5 text-xs text-[var(--warn-text)]">
+          <p className="mt-1.5 text-xs text-warn-text">
             The document was saved, the export failed. Accept re-exports, so this is still a job
             worth accepting.
           </p>
@@ -151,8 +151,8 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
         <div
           className={`mt-2 rounded-md border p-2 text-xs ${
             said.ok
-              ? "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--muted-strong)]"
-              : "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]"
+              ? "border-ok/40 bg-surface2 text-text2"
+              : "border-danger/45 bg-danger/8 text-danger"
           }`}
         >
           <p className="break-words">{said.text}</p>
@@ -161,7 +161,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
               <Button variant="secondary" size="xs" disabled={busy !== null} onClick={() => void act("compare")}>
                 {busy === "compare" ? "Reading the file…" : "Compare with the file as it is now"}
               </Button>
-              <p className="mt-1.5 text-[var(--muted-strong)]">
+              <p className="mt-1.5 text-text2">
                 This re-reads the committed file and redraws the comparison. It does not make
                 Accept possible: the candidate was drawn against a version that is no longer
                 there, so the way forward is Discard and a new job over the current file.
@@ -172,7 +172,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
       )}
 
       {reviewable && (
-        <p className="mt-3 text-xs text-[var(--muted)]">
+        <p className="mt-3 text-xs text-text2">
           Neither button is undoable inside the studio. Accept stores the drawing as a new
           revision of the diagram, which <Mono>catalog history</Mono> keeps, and Discard deletes
           the candidate, which leaves nothing to undo.
@@ -204,13 +204,13 @@ function Accepted({
   const lastCatalogError = catalogErrorLine(job.catalogErrors);
   return (
     <div className="mb-3 space-y-2">
-      <div className="rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs">
-        <p className="font-medium text-[var(--ok-text)]">
+      <div className="rounded-md border border-ok/40 bg-surface2 p-2 text-xs">
+        <p className="font-medium text-ok-text">
           Landed in the catalog
         </p>
         {/* The names it was stored under (`job.written`) are the catalog's, not
             a person's: the drawing is the diagram's newest revision, and says so. */}
-        <p className="mt-1 text-[var(--muted-strong)]">The drawing is now the diagram&apos;s newest revision.</p>
+        <p className="mt-1 text-text2">The drawing is now the diagram&apos;s newest revision.</p>
       </div>
 
       {!job.indexed && (
@@ -235,15 +235,15 @@ function Accepted({
       )}
 
       {line !== null && (
-        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-xs">
-          <p className="text-[var(--muted)]">
+        <div className="rounded-md border border-border bg-surface p-2 text-xs">
+          <p className="text-text2">
             The files still own diagrams until the flip, so the accept wrote these too.
             Committing them is yours: the studio never runs <Mono>git add</Mono>.
           </p>
           {/* Wrapped, not scrolled. Two repo-relative paths do not fit a 320px
               column, and a line that runs off the edge is one a person copies
               half of — which is the one mistake this box exists to prevent. */}
-          <pre className="mt-1.5 rounded-md bg-[var(--chip-bg)] p-2 font-mono text-xs break-all whitespace-pre-wrap text-[var(--foreground)]">
+          <pre className="mt-1.5 rounded-md bg-surface2 p-2 font-mono text-xs break-all whitespace-pre-wrap text-text">
             {line}
           </pre>
         </div>
@@ -276,7 +276,7 @@ function Thumbnail({
   const label = which === "before" ? "Before" : "After";
   return (
     <figure className="min-w-0">
-      <figcaption className="mb-1 flex items-center gap-1 text-xs text-[var(--muted)]">
+      <figcaption className="mb-1 flex items-center gap-1 text-xs text-text2">
         <span>{label}</span>
         {which === "before" && comparison.before === null && <Badge>none</Badge>}
       </figcaption>
@@ -294,7 +294,7 @@ function Thumbnail({
           />
         </Link>
       ) : (
-        <div className="flex aspect-[4/3] w-full items-center justify-center rounded-md border border-dashed border-[var(--border)] bg-[var(--chip-bg)] p-2 text-center text-xs text-[var(--muted)]">
+        <div className="flex aspect-[4/3] w-full items-center justify-center rounded-md border border-dashed border-border bg-surface2 p-2 text-center text-xs text-text2">
           {missingShotReason(which, comparison, job.brief?.mode)}
         </div>
       )}
@@ -310,7 +310,7 @@ function Counts({ comparison }: { comparison: Comparison }) {
       <PanelHeading>Counts</PanelHeading>
       <table className="w-full text-xs tabular-nums">
         <thead>
-          <tr className="text-[var(--muted)]">
+          <tr className="text-text2">
             <th className="w-1/3 py-1 text-left font-normal"> </th>
             <th className="py-1 text-right font-normal">before</th>
             <th className="py-1 text-right font-normal">after</th>
@@ -319,15 +319,15 @@ function Counts({ comparison }: { comparison: Comparison }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.label} className="border-t border-[var(--border)]">
-              <th scope="row" className="py-1.5 text-left font-normal text-[var(--muted-strong)]">
+            <tr key={row.label} className="border-t border-border">
+              <th scope="row" className="py-1.5 text-left font-normal text-text2">
                 {row.label}
               </th>
-              <td className="py-1.5 text-right text-[var(--muted)]">{row.before}</td>
-              <td className="py-1.5 text-right text-[var(--foreground)]">{row.after}</td>
+              <td className="py-1.5 text-right text-text2">{row.before}</td>
+              <td className="py-1.5 text-right text-text">{row.after}</td>
               <td
                 className={`py-1.5 text-right ${
-                  row.direction === "flat" ? "text-[var(--muted)]" : "text-[var(--muted-strong)]"
+                  row.direction === "flat" ? "text-text2" : "text-text"
                 }`}
               >
                 {row.delta ?? "—"}
@@ -361,7 +361,7 @@ function Lints({
     <div className="mt-4">
       <PanelHeading>{which === "fixed" ? "Fixed" : "New"}</PanelHeading>
       {refs.length === 0 ? (
-        <p className="text-xs text-[var(--muted)]">{emptyLintLine(which, comparison)}</p>
+        <p className="text-xs text-text2">{emptyLintLine(which, comparison)}</p>
       ) : (
         <ul className="space-y-1">
           {refs.map((ref) => (
@@ -369,16 +369,16 @@ function Lints({
               <span
                 className={
                   which === "fixed"
-                    ? "text-[var(--ok-text)]"
+                    ? "text-ok-text"
                     : ref.severity === "warn"
-                      ? "text-[var(--muted-strong)]"
-                      : "text-[var(--warn-text)]"
+                      ? "text-text2"
+                      : "text-warn-text"
                 }
               >
                 <Mono>{lintLine(ref)}</Mono>
               </span>
               {ref.message !== "" && (
-                <span className="block text-[var(--muted)]">{ref.message}</span>
+                <span className="block text-text2">{ref.message}</span>
               )}
             </li>
           ))}
@@ -395,7 +395,7 @@ function Verify({ job }: { job: Job }) {
     <div className="mt-4">
       <PanelHeading>Verify</PanelHeading>
       {checks.length === 0 ? (
-        <p className="text-xs text-[var(--muted)]">
+        <p className="text-xs text-text2">
           {job.gate?.exportFailed === true
             ? "There is no SVG to verify: the export failed. Accept runs both again."
             : "No verify result was recorded for this job."}
@@ -406,14 +406,14 @@ function Verify({ job }: { job: Job }) {
             <li key={check.rule} className="flex items-start gap-2 text-xs">
               <span
                 aria-hidden
-                className={`w-3 shrink-0 ${check.ok ? "text-[var(--ok-text)]" : "text-[var(--danger)]"}`}
+                className={`w-3 shrink-0 ${check.ok ? "text-ok-text" : "text-danger"}`}
               >
                 {check.ok ? "✓" : "✕"}
               </span>
               <span className="min-w-0 flex-1">
                 <Mono>{check.rule}</Mono>
                 {check.detail !== "" && (
-                  <span className="block text-[var(--muted)]">{check.detail}</span>
+                  <span className="block text-text2">{check.detail}</span>
                 )}
               </span>
             </li>

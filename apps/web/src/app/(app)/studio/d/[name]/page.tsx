@@ -12,11 +12,12 @@ import { ShotView } from "@/components/studio/ShotView";
 import { Badge } from "@/components/ui/Badge";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
-import { buttonClasses } from "@/components/ui/classes";
+import { buttonClasses, menuRowClasses } from "@/components/ui/classes";
 import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
-import { BackToStudio, Spacer, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
+import { StripMenu } from "@/components/studio/StudioControls";
+import { BackToStudio, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { videoAvailability } from "@/lib/studio-drafts";
 import { vocabularyBanner, type VocabularyState } from "@/lib/studio-vocabulary";
@@ -250,7 +251,7 @@ export default async function CanvasPage({
             />
           )}
         </div>
-        <aside className="hidden w-80 shrink-0 border-l border-[var(--border)] lg:block">
+        <aside className="hidden w-80 shrink-0 border-l border-border lg:block">
           {panel.job !== null ? (
             <JobPanel jobId={panel.job} path={path} />
           ) : (
@@ -271,83 +272,131 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * The canvas's strip: the way back, what this diagram is, and its verbs.
+ *
+ * It holds more than a phone's width, so it fits itself to its own width (a
+ * container query, as the home toolbar does), and every control stays on
+ * screen at 390px:
+ * - from 80rem, one row with every verb in it, as it always was;
+ * - under that, Export SVG, Verify, Inspect and Make a video go into a More
+ *   menu (the studio's `StripMenu`, a kit `Popover`), since the row ran off
+ *   the right edge at 1280px with the sidebar open;
+ * - under 48rem, two rows: the diagram on the first, Commit, More and Extend
+ *   on the second, with the reason field taking the room that is left.
+ */
 function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path: string; uncommitted: boolean; videos: boolean }) {
   const pill = freshness(diagram.svgState);
+  const verbs: Array<{ action: (formData: FormData) => Promise<void>; label: string }> = [
+    { action: exportSvg, label: "Export SVG" },
+    { action: verifySvg, label: "Verify" },
+    { action: inspectDiagram, label: "Inspect" },
+  ];
   return (
     <StudioStrip>
-      <BackToStudio />
-      <span className="min-w-0 truncate text-sm font-medium">{displayTitle(diagram)}</span>
-      {diagram.topic === null ? <Badge tone="warn">No topic</Badge> : <Badge>{diagram.topic}</Badge>}
-      {/* The pill is a button, not a badge: its whole job when it says stale is
-          to be the thing that fixes it. Stale or missing, it is the warn face;
-          current, a quiet one with the ok dot. */}
-      <form action={exportSvg} className="shrink-0">
-        <input type="hidden" name="name" value={diagram.name} />
-        <input type="hidden" name="path" value={path} />
-        <Button type="submit" variant={pill.tone === "ok" ? "secondary" : "warn"} size="xs" title={`${pill.title} Click to export it again.`}>
-          {pill.tone === "ok" && <span aria-hidden className="size-2 rounded-full bg-ok" />}
-          {pill.label}
-        </Button>
-      </form>
-      {uncommitted && <Badge tone="warn">Uncommitted edits</Badge>}
-      <Spacer />
-      {/* The canvas saves to a checkout; this is how its edits reach the
-          database, with a reason, the way a commit message used to. */}
-      <form action={commitDiagram} className="flex shrink-0 items-center gap-1.5">
-        <input type="hidden" name="name" value={diagram.name} />
-        <input type="hidden" name="path" value={path} />
-        <Input
-          size="compact"
-          type="text"
-          name="reason"
-          required
-          placeholder="Why this change"
-          aria-label="Why this change"
-          className="w-44"
-        />
-        <Button type="submit" variant="secondary" size="xs">
-          Commit
-        </Button>
-      </form>
-      <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" />
-      <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
-      <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" />
-      {/* A change is asked for in a conversation on the grid, which opens on
-          this diagram with its thumbnail pinned (docs/STUDIO-CHAT-FIRST.md,
-          "Extend from a tile"). */}
-      {/* The same conversation, with the Video chip waiting in its composer
-          (D86). Left out when the video doctor fails: the strip has no room
-          for the reason, and the diagram's panel on the grid says it. */}
-      {videos && (
-        <ExtendLink
-          href={extendHref(diagram.name, { video: true })}
-          label="Make a video"
-          className={buttonClasses({ variant: "secondary", size: "xs" })}
-        />
-      )}
-      <ExtendLink href={extendHref(diagram.name)} className={buttonClasses({ size: "xs" })} />
+      <div className="@container min-w-0 flex-1">
+        <div className="flex flex-col gap-1.5 py-1.5 @[48rem]:flex-row @[48rem]:items-center @[48rem]:gap-2 @[48rem]:py-0">
+          <div className="flex min-w-0 items-center gap-2 @[48rem]:flex-1">
+            <BackToStudio />
+            <span className="min-w-0 truncate text-sm font-medium">{displayTitle(diagram)}</span>
+            {diagram.topic === null ? <Badge tone="warn">No topic</Badge> : <Badge>{diagram.topic}</Badge>}
+            {/* The pill is a button, not a badge: its whole job when it says stale is
+                to be the thing that fixes it. Stale or missing, it is the warn face;
+                current, a quiet one with the ok dot. */}
+            <form action={exportSvg} className="shrink-0">
+              <input type="hidden" name="name" value={diagram.name} />
+              <input type="hidden" name="path" value={path} />
+              <Button type="submit" variant={pill.tone === "ok" ? "secondary" : "warn"} size="xs" title={`${pill.title} Click to export it again.`}>
+                {pill.tone === "ok" && <span aria-hidden className="size-2 rounded-full bg-ok" />}
+                {pill.label}
+              </Button>
+            </form>
+            {uncommitted && <Badge tone="warn">Uncommitted edits</Badge>}
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            {/* The canvas saves to a checkout; this is how its edits reach the
+                database, with a reason, the way a commit message used to. */}
+            <form action={commitDiagram} className="flex min-w-0 flex-1 items-center gap-1.5 @[48rem]:flex-none">
+              <input type="hidden" name="name" value={diagram.name} />
+              <input type="hidden" name="path" value={path} />
+              <Input
+                size="compact"
+                type="text"
+                name="reason"
+                required
+                placeholder="Why this change"
+                aria-label="Why this change"
+                className="w-full min-w-0 @[48rem]:w-44"
+              />
+              <Button type="submit" variant="secondary" size="xs" className="shrink-0">
+                Commit
+              </Button>
+            </form>
+            {/* Inline where the row has room; `contents`, so each form is a
+                flex item of the row as before. */}
+            <div className="hidden @[80rem]:contents">
+              {verbs.map((verb) => (
+                <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} />
+              ))}
+              {/* The same conversation, with the Video chip waiting in its composer
+                  (D86). Left out when the video doctor fails: the strip has no room
+                  for the reason, and the diagram's panel on the grid says it. */}
+              {videos && (
+                <ExtendLink
+                  href={extendHref(diagram.name, { video: true })}
+                  label="Make a video"
+                  className={buttonClasses({ variant: "secondary", size: "xs" })}
+                />
+              )}
+            </div>
+            <div className="contents @[80rem]:hidden">
+              <StripMenu label="More" name="More actions">
+                {verbs.map((verb) => (
+                  <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} row />
+                ))}
+                {videos && (
+                  <ExtendLink href={extendHref(diagram.name, { video: true })} label="Make a video" className={menuRowClasses()} />
+                )}
+              </StripMenu>
+            </div>
+            {/* A change is asked for in a conversation on the grid, which opens on
+                this diagram with its thumbnail pinned (docs/STUDIO-CHAT-FIRST.md,
+                "Extend from a tile"). */}
+            <ExtendLink href={extendHref(diagram.name)} className={buttonClasses({ size: "xs", className: "shrink-0" })} />
+          </div>
+        </div>
+      </div>
     </StudioStrip>
   );
 }
 
+/** One verb: a server action's form, as a strip button or, with `row`, a row of the More menu. */
 function VerbForm({
   action,
   name,
   path,
   label,
+  row = false,
 }: {
   action: (formData: FormData) => Promise<void>;
   name: string;
   path: string;
   label: string;
+  row?: boolean;
 }) {
   return (
-    <form action={action} className="shrink-0">
+    <form action={action} className={row ? undefined : "shrink-0"}>
       <input type="hidden" name="name" value={name} />
       <input type="hidden" name="path" value={path} />
-      <Button type="submit" variant="secondary" size="xs">
-        {label}
-      </Button>
+      {row ? (
+        <button type="submit" className={menuRowClasses()}>
+          {label}
+        </button>
+      ) : (
+        <Button type="submit" variant="secondary" size="xs">
+          {label}
+        </Button>
+      )}
     </form>
   );
 }

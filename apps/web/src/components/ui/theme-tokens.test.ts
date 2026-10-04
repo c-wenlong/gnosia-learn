@@ -149,4 +149,93 @@ describe("theme tokens", () => {
       expect(offenders(good), good).toEqual([]);
     }
   });
+
+  it("reads no retired alias, and globals.css declares none", () => {
+    const css = readFileSync(join(src, "app/globals.css"), "utf8");
+    const declared = RETIRED.filter((name) => new RegExp(`--${name}\\s*:`).test(stripComments(css)));
+    expect(declared).toEqual([]);
+    const found: string[] = [];
+    for (const root of ["components", "app"]) {
+      for (const path of files(join(src, root))) {
+        const rel = relative(src, path).split(sep).join("/");
+        for (const hit of aliasReads(readFileSync(path, "utf8"))) found.push(`${rel}:${hit}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("writes a token's own utility, not var() in brackets", () => {
+    const found: string[] = [];
+    for (const root of ["components", "app"]) {
+      for (const path of files(join(src, root))) {
+        const rel = relative(src, path).split(sep).join("/");
+        for (const hit of bracketedTokens(readFileSync(path, "utf8"))) found.push(`${rel}:${hit}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("recognises a retired alias and a bracketed token, and leaves the rest", () => {
+    expect(aliasReads('className="text-[var(--muted)]"')).not.toEqual([]);
+    expect(aliasReads("const tone = 'var(--muted-strong)';")).not.toEqual([]);
+    expect(aliasReads('className="bg-[var(--chip-bg)]"')).not.toEqual([]);
+    expect(aliasReads('className="text-text2 bg-surface-raised"')).toEqual([]);
+    expect(aliasReads("// the old `var(--muted)`")).toEqual([]);
+    expect(bracketedTokens('className="border-[var(--border)]"')).not.toEqual([]);
+    expect(bracketedTokens('className="hover:bg-[var(--surface2)]/60"')).not.toEqual([]);
+    expect(bracketedTokens('className="text-[var(--ok-on)] h-[var(--shell-row)]"')).toEqual([]);
+    expect(bracketedTokens('className="text-[color-mix(in_srgb,var(--tone)_55%,var(--text))]"')).toEqual([]);
+  });
 });
+
+/**
+ * The pre-redesign palette's names, which globals.css kept as aliases of the
+ * new tokens until the last old page moved (#359, 2026-10-05). Each resolved
+ * to one token in every palette, so each was replaced by that token's own
+ * name; `--surface-raised`, which is `--surface` in light and `--surface2` in
+ * dark, is a token of its own and stays.
+ */
+const RETIRED = [
+  "background",
+  "foreground",
+  "muted",
+  "muted-strong",
+  "surface-hover",
+  "sidebar-bg",
+  "header-bg",
+  "chip-bg",
+  "nav-active-bg",
+  "accent-strong",
+  "warn-bg",
+  "warn-border",
+  "danger-bg",
+  "danger-border",
+];
+
+const ALIAS_READ = new RegExp(`var\\(--(?:${RETIRED.join("|")})\\)`);
+
+function aliasReads(code: string): string[] {
+  return stripComments(code)
+    .split("\n")
+    .flatMap((line, i) => {
+      const hit = line.match(ALIAS_READ);
+      return hit ? [`${i + 1}: ${hit[0]}`] : [];
+    });
+}
+
+/** Every colour the `@theme inline` block makes a utility of: `bg-surface2`, `text-text2`. */
+const UTILITY_TOKENS = [...readFileSync(join(src, "app/globals.css"), "utf8").matchAll(/--color-([a-z0-9-]+):\s*var\(--\1\)/g)].map(
+  (match) => match[1],
+);
+
+/** `bg-[var(--surface2)]` where `bg-surface2` says the same, so the token's name is the one thing to grep. */
+function bracketedTokens(code: string): string[] {
+  const bracketed = new RegExp(`-\\[var\\(--(?:${UTILITY_TOKENS.join("|")})\\)\\]`);
+  return stripComments(code)
+    .split("\n")
+    .flatMap((line, i) => {
+      const hit = line.match(bracketed);
+      return hit ? [`${i + 1}: ${hit[0]}`] : [];
+    });
+}
+
