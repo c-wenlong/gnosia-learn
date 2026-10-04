@@ -651,12 +651,13 @@ live preview ("The job in the grid" below):
 conversation out of the dialog; the sections after this one describe what
 came before where they say so.*
 
-`/studio` is a sidebar beside one of two views, the way a chat app is laid
-out (`PanelHost`):
+`/studio` is one of two views beside the app's sidebar, the way a chat app is
+laid out (`PanelHost`). Since D83 that sidebar is the whole app's, not the
+studio's own:
 
 | | Home (`/studio`) | A conversation (`?draft=<id>`) |
 | --- | --- | --- |
-| Sidebar | New chat, then the history | The same, the open conversation marked |
+| Sidebar | New chat, the five learning destinations, then the history | The same, the open conversation marked |
 | Main | "What shall we make?", the composer under it, then the strip, the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
 
 **The home composer** (`HomeComposer`) is the one way into a new
@@ -669,7 +670,7 @@ message. A refusal brings the person home with the words still in the box
 and the reason under it. Nothing is made until something is sent, so New
 chat is simply the home view, its composer focused.
 
-**The history** (`StudioSidebar`) lists every conversation but one closed
+**The history** (`ChatHistory`, in the app's sidebar) lists every conversation but one closed
 with Start over: talking, briefed, drawing and done (`LISTED_STATES`), under
 Today, Yesterday, Previous 7 days, Previous 30 days and Older. The old list
 above the grid showed only the first two, since it was a list of things to
@@ -692,10 +693,10 @@ own, a tile's panel, the settings and an Extend press are still dialogs over
 the home view, and an Extend press becomes a full-screen conversation once
 its draft exists.
 
-Below 768px the sidebar is a drawer, opened by a toggle at the top left of
-the home view and before the conversation's title, and closed by a pick, the
-backdrop or Escape. While it is open the rest of the studio is inert, Tab
-stays inside it, and closing it hands focus back to the toggle.
+Below 768px the sidebar is a drawer, opened by the button at the left of the
+app's phone header, and closed by a pick, the backdrop, Escape or a
+navigation. While it is open the rest of the page is inert, Tab stays inside
+it, and closing it hands focus back to the button.
 
 ### The plus card and the panel
 
@@ -1251,6 +1252,28 @@ messages.
 on the server for every switch (the cost `PanelHost` exists to avoid), and
 hiding the sidebar inside a conversation, which is the dialog's problem
 again.
+
+### D83. The studio's sidebar is the app's sidebar
+
+**Verdict:** the app has one sidebar, on every page: New chat (the studio's
+home), the five learning destinations, the studio's conversations, and the
+account at the foot. The top bar, the phone tab bar and the studio's own
+conversation list are gone. On `/studio`, `PanelHost` publishes the open
+conversation, a pending one, New chat and its in-browser navigation to the
+sidebar (`usePublishStudioChats`), so the list behaves exactly as the
+studio's own did; elsewhere the sidebar reads the list itself and a row is a
+link to `/studio?draft=`.
+
+**Why:** the owner's call on 2026-10-04: the studio is the feature to refine,
+and a chat app's layout, one sidebar and one view, makes it the main page
+with the learning pages as modules beside it. Two nested navigations (the
+top bar over the studio's sidebar) made the studio feel like a page inside
+the app rather than its centre.
+
+**Rejected:** a portal from `PanelHost` into a slot in the app's sidebar. It
+would keep the studio's own component, but the list would be torn down and
+redrawn on every move between the studio and another page, and it could not
+be drawn on the server.
 
 ## Later: other kinds of asset
 

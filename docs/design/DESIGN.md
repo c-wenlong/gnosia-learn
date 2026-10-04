@@ -54,13 +54,17 @@ for it. Where a decision changes the API it is marked, and expanded under
 
 ## Information architecture
 
-Five top-level destinations in the top bar, plus Settings behind the
-avatar. Studio is a sixth destination after them, from 768px up and only
-when `STUDIO_ENABLED` is set; on a phone it stays in the avatar menu (revised
-2026-09-30: the owner asked for it in the bar "so its easier to access", and
-the phone tab bar keeps five because its grid is five columns and the studio
-is desktop first). The bar also carries the streak and the target so they are
-visible everywhere without owning a screen.
+One sidebar, laid out as a chat app's (revised 2026-10-04: the owner asked
+for the studio to be the main page, "like the main chatgpt page to generate
+things", with the learning pages folded into its sidebar and the top bar
+removed). From the top: New chat, which is the studio's composer, when
+`STUDIO_ENABLED` is set; the five learning destinations, Home, Courses,
+Learn, Library and Review; the studio's conversations; and the account at
+the foot, with the theme, Settings and Sign out behind it. On a phone the
+sidebar is a drawer behind a header button. Before this, the five
+destinations sat in a top bar with Studio as a sixth (2026-09-30), and the
+phone had a five-column tab bar. The streak and target the bar once carried
+went with the habit layer (H1 of docs/proposals/home-page.md).
 
 ```mermaid
 flowchart LR

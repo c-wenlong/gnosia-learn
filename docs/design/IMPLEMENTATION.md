@@ -198,25 +198,36 @@ component, drawn by the `(app)` route group's layout
 checks the session and reads the learner snapshot first. The `(site)` group
 (the landing page and `/sign-in`) has no shell and no database read; the root
 layout holds only the document, the fonts and the theme class. Its client parts are in
-[components/shell/](../../apps/web/src/components/shell/): `TopBar`,
-`TabBar`, `AvatarMenu`, `StoreBanner`, `NavIcon`.
+[components/shell/](../../apps/web/src/components/shell/): `ShellFrame`,
+`AppSidebar`, `ChatHistory`, `AccountMenu`, `PhoneHeader`, `StoreBanner`,
+`NavIcon`.
 
-- **Top bar**, 64px on `--surface` with a hairline under it: the Gnosia
-  wordmark linking to `/home`, the five destinations (Home `/home`, Courses, Learn, Library,
-  Review; the selected one in `--text` over a 2px underline), then Studio as
-  a sixth destination when `STUDIO_ENABLED` is set (2026-09-30: the owner
-  asked to move it out of the avatar menu "so its easier to access"; it is
-  active for `/studio` and everything under it), and the avatar menu (theme,
-  Settings, and on a phone only, Studio). `topBarDestinations(studio)` in
-  `lib/nav.ts` is the list. Between 768 and 1024px the labels are 14px and
-  the gaps tighten (24px side padding, 20px after the wordmark, 14px between
-  destinations), so six destinations fit at 768. The streak and target pills
-  that sat before the avatar were removed 2026-10-04 (H1 of
-  [the Home proposal](../proposals/home-page.md)).
-- **Phone**, below 768px: a 56px header with the wordmark and the avatar; the five destinations (`DESTINATIONS`, without
-  Studio) move to a 68px tab bar fixed to the bottom, whose grid is five
-  columns. Studio stays in the avatar menu there.
-- **Store banner** under the bar when the database is unreachable or a
+The app has one sidebar and no top bar (2026-10-04: the owner asked for a
+chat app's layout, with the studio as the main page and the learning pages
+folded into the studio's sidebar). Before that it had a 64px top bar with the
+five destinations and Studio, a phone tab bar, and the studio drew its own
+conversation list beside its pages.
+
+- **Sidebar**, from 768px up, 260px on `--surface` with a hairline at its
+  right, sticky beside a page that scrolls the window: the wordmark and the
+  fold at the top; New chat (`/studio`, the studio's home and composer, only
+  when `STUDIO_ENABLED` is set); the five destinations (`DESTINATIONS` in
+  `lib/nav.ts`: Home, Courses, Learn, Library, Review; the current one on
+  `--surface2`); the studio's conversations under "Chats", newest first by
+  day; and the account row at the foot, whose menu opens upwards (theme,
+  Settings, Sign out). The fold narrows it to a 60px rail of icons and is
+  the `gnosia-sidebar` cookie (`lib/sidebar-cookie.ts`), read by the layout so
+  the first paint has the right width.
+- **Chats.** On `/studio` the page publishes its list, the open
+  conversation, New chat and its in-browser navigation to the sidebar
+  (`usePublishStudioChats` in `components/shell/shell-context.ts`, called by
+  `PanelHost`), so a row opens its conversation without a server render.
+  Anywhere else the sidebar reads the list itself through
+  `/studio/api/drafts`, and a row is a link to `/studio?draft=`.
+- **Phone**, below 768px: a 56px header with the sidebar's button, the
+  wordmark and New chat; the sidebar is a drawer over the page, closed by a
+  pick, the backdrop, Escape or a navigation. There is no tab bar.
+- **Store banner** above the page when the database is unreachable or a
   write failed, as before.
 
 **Six modes, two axes, two classes.** The theme is a palette (Classic or
@@ -235,7 +246,7 @@ rendered light by the server (with `gnosia` already on for the brand one) and
 `prefers-color-scheme` changes while the page is open. The control is
 `ThemeSwitch` (`apps/web/src/components/ThemeSwitch.tsx`): two segmented radio
 groups, Palette and Appearance, stacked under one label, used small in the
-avatar menu and full size on Settings. Changing one axis keeps the other. A
+account menu and full size on Settings. Changing one axis keeps the other. A
 component never branches on the class: it reads tokens, and the palettes are
 in `globals.css` (`:root`, `.dark`, `.gnosia`, `.gnosia.dark`).
 
@@ -246,11 +257,11 @@ client boundary.
 | `data-layout` | Width | Chrome | For |
 | --- | --- | --- | --- |
 | `app` | up to 1392px, 24px gutters (16 on a phone), 24px top | full | every redesigned page |
-| `focus` | the whole width, no padding | no top bar from 768px up; the phone keeps its header and tab bar | Session and Review (hi-fi 05 to 08, 14, 15) |
+| `focus` | the whole width, no padding | no sidebar from 768px up; the phone keeps its header | Session and Review (hi-fi 05 to 08, 14, 15) |
 | `workspace` | as `app`; from 900px up the shell is fixed to the viewport and the page gets a `flex-1 min-h-0` region | full | the concept workspace, whose three panels scroll inside themselves |
 | none | the old 48rem reading measure | full | pages not yet redesigned |
 | `wide` | 72rem | full | the old library pages |
-| `full` | the whole region, no padding, the shell fixed to the viewport | tab bar hidden | the studio canvas |
+| `full` | the whole region, no padding, the shell fixed to the viewport | full | the studio's home, conversations and canvas |
 
 A redesigned page starts `<div data-layout="app">`, puts its title in
 `font-display text-[28px] font-bold`, and builds from `components/ui`.

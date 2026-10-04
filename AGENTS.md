@@ -37,7 +37,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/STUDIO-VIDEO-TOOLS.md](docs/STUDIO-VIDEO-TOOLS.md) | Proposed, being built in phases: the studio picks a video tool. The planner proposes manimkc, remotionkc or revideokc in the brief with a reason (a TOOLS block pinned to VIDEO-TOOLS.md), the card shows it as a switchable chip, the runner gets a backend per tool, and headless Chrome runs inside the job's Seatbelt profile (measured). D71 to D80 |
 | [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into Postgres and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
-| [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (top bar, tab bar, `data-layout`), the habit data, `/courses`, and the screenshot tool |
+| [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (the sidebar, the phone header, `data-layout`), the habit data, `/courses`, and the screenshot tool |
 | [docs/design/BRAND.md](docs/design/BRAND.md) | The Gnosia brand: the idea, the seven `--brand-*` tokens with their contrast ratios, how the mark is built, the mascot rules, and where each piece appears |
 
 ## The learning pipeline

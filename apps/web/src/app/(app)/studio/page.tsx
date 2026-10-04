@@ -7,7 +7,6 @@ import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { RenewLists } from "@/components/studio/RenewLists";
 import { StudioDialog } from "@/components/studio/StudioDialog";
-import { SidebarToggle } from "@/components/studio/StudioSidebar";
 import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import { Notice, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
@@ -38,8 +37,8 @@ import {
  *
  * The home view (docs/STUDIO-CHAT-FIRST.md, "Home and the full-screen
  * conversation"): a heading and the composer in the middle, then the
- * diagrams and videos, with the conversations down the sidebar `PanelHost`
- * draws beside it. Sending opens the conversation full screen.
+ * diagrams and videos, with the conversations down the app's sidebar beside
+ * it (`PanelHost` tells it which one is open). Sending opens the conversation full screen.
  *
  * Reads the directory through the runner, never the `asset` table. That is the
  * whole reason this screen is not a second view of `/library`: the diagram
@@ -248,7 +247,6 @@ export default async function StudioPage({
           {/* The composer is the home view's; a picture takes its place. */}
           {shot === null && (
             <section aria-labelledby="studio-home" className="relative px-4 pb-10 pt-[max(2.5rem,12vh)]">
-              <SidebarToggle className="absolute left-2 top-2" />
               <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-6">
                 <h1 id="studio-home" className="text-center font-display text-[28px] font-semibold leading-tight text-text md:text-[32px]">
                   What shall we make?
@@ -259,8 +257,6 @@ export default async function StudioPage({
           )}
 
           <StudioStrip>
-            {/* The picture has no home view above it, so the phone's toggle is here. */}
-            {shot !== null && <SidebarToggle />}
             <StudioToolbar chips={chips} />
           </StudioStrip>
 
