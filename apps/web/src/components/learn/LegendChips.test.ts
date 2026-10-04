@@ -104,7 +104,9 @@ const light = (host: HTMLElement, id: string) => {
   const g = concept(host, id);
   return g.dataset.hover === "true" ? "hover" : g.dataset.related === "true" ? "lit" : g.dataset.faded === "true" ? "faded" : "plain";
 };
-const lights = (host: HTMLElement) => Object.fromEntries(spec.map(([id]) => [id, light(host, id)]).filter(([id]) => concept(host, id) !== null));
+/** Every concept the picture draws, and how it is lit. */
+const lights = (host: HTMLElement) =>
+  Object.fromEntries(spec.filter(([id]) => concept(host, id) !== null).map(([id]) => [id, light(host, id)]));
 const enter = (el: Element) => act(() => void el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
 const leave = (el: Element) => act(() => void el.dispatchEvent(new MouseEvent("mouseout", { bubbles: true })));
 const status = (host: HTMLElement) =>
@@ -154,6 +156,15 @@ describe("legend chips on a domain's picture", () => {
     const host = mount();
     enter(chip(host, "ready"));
     expect(lights(host)).toEqual({ merge: "faded", quick: "faded", heap: "lit", bfs: "lit", dfs: "faded" });
+  });
+
+  it("previews nothing for an empty group, rather than fading the whole picture", () => {
+    const host = mount("?domain=algorithms&topic=graphs");
+    enter(chip(host, "mastered"));
+    expect(Object.values(lights(host)).every((l) => l === "plain")).toBe(true);
+    leave(chip(host, "mastered"));
+    act(() => chip(host, "mastered").focus());
+    expect(Object.values(lights(host)).every((l) => l === "plain")).toBe(true);
   });
 
   it("previews on keyboard focus, and restores on blur", () => {

@@ -200,7 +200,11 @@ export function DomainView({
     [layout, topic, rows],
   );
   const legend = useLegendPreview();
-  const preview = useMemo(() => (legend.group === null ? null : new Set(members[legend.group])), [legend.group, members]);
+  // An empty group previews nothing: fading every concept with none lit reads as a broken picture.
+  const preview = useMemo(
+    () => (legend.group === null || members[legend.group].length === 0 ? null : new Set(members[legend.group])),
+    [legend.group, members],
+  );
   const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
   // The pill goes as Reset starts, not when the glide home ends.
   const anyMoved = Object.keys(moved).length > 0 && !gliding;
