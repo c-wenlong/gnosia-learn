@@ -31,7 +31,7 @@ import {
 } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { BEFORE_BLOB_CONTRACT, partialMigrations, tagsAfter } from "./partial-migrations";
-import { createScratchDatabase, probe, SQLSTATE, sqlMessage, sqlstate, type Scratch } from "./scratch-database";
+import { createScratchDatabase, migratedScratchDatabase, probe, type Scratch, sqlMessage, SQLSTATE, sqlstate } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
 /**
@@ -223,8 +223,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     work = await mkdtemp(path.join(tmpdir(), "catalog-blob-contract-"));
     tree = path.join(work, "tree");
     await seedWithManimkc(tree);
@@ -483,8 +482,7 @@ describe.skipIf(!reachable.ok)("a contract migration edited after it was applied
   let folder: string;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     // The real folder with 0013's file changed by one comment: drizzle still
     // skips it by timestamp, and its hash now matches nothing applied.
     folder = await partialMigrations(BEFORE_BLOB_CONTRACT + 1);

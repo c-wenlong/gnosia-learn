@@ -28,9 +28,8 @@ import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
 import { checkoutConcept, commitConcept } from "../src/learn/checkout";
 import { bindCatalog, MovedBaseError, updateConcept } from "../src/learn/files";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
 /**
@@ -109,8 +108,7 @@ describe.skipIf(!reachable.ok)("a note is written against the revision it was re
   const row = async (slug: string) => (await scratch.db.select().from(concept).where(eq(concept.slug, slug)))[0];
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha", "beta", "gamma"] }]));
     await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
@@ -297,8 +295,7 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
   const courseFile = () => path.join(fixture.root, "content/courses/xx1000.yaml");
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write(
       "content/topics.yaml",

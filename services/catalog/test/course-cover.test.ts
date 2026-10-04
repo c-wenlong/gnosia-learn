@@ -16,8 +16,7 @@ import { renderType } from "../src/content/export";
 import { parity } from "../src/content/parity";
 import { readSnapshots } from "../src/content/snapshot";
 import { runIndex } from "../src/index/run";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
 import { SEED } from "./seed";
 import { storedBlob } from "./stored-blob";
 
@@ -96,9 +95,8 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
   const cover = (file: string, extra: Partial<typeof CREDIT> = {}) => ({ file, ...CREDIT, ...extra });
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
+    scratch = await migratedScratchDatabase();
     store = ownStore(scratch.name);
-    await applyMigrations(scratch.db);
     tree = await seedWithoutCover();
     files = await mkdtemp(path.join(tmpdir(), "course-cover-files-"));
     await runIndex(scratch.db, { repoRoot: tree, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
@@ -361,10 +359,8 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
     (await db.db.select({ key: collection.coverBlobKey, metadata: collection.metadata }).from(collection).where(eq(collection.id, "cp4284")))[0];
 
   beforeAll(async () => {
-    first = await createScratchDatabase();
-    second = await createScratchDatabase();
-    await applyMigrations(first.db);
-    await applyMigrations(second.db);
+    first = await migratedScratchDatabase();
+    second = await migratedScratchDatabase();
     out = await mkdtemp(path.join(tmpdir(), "course-cover-export-"));
     bad = await mkdtemp(path.join(tmpdir(), "course-cover-bad-"));
   }, 120_000);
@@ -463,9 +459,8 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
   });
 
   it("refuses a tree naming a cover the course lacks when the image is missing", async () => {
-    const third = await createScratchDatabase();
+    const third = await migratedScratchDatabase();
     try {
-      await applyMigrations(third.db);
       await rm(await variant((yaml) => yaml));
       await expect(importBad(third)).rejects.toThrow(
         /cp4284\.yaml: its cover cannot be stored: content\/courses\/cp4284\.cover\.webp: no such file/,

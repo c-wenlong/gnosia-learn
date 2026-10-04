@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { newCard, review as sm2 } from "../../../scripts/learn/lib/schedule.mjs";
-import { applyMigrations } from "../src/migrations";
 import {
   gradeForRating,
   gradeReview,
@@ -18,7 +17,7 @@ import {
   type ReviewCard,
 } from "../src/state";
 import { replayReviews } from "../src/learn/replay";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent } from "./state-fixture";
 
 /**
@@ -109,8 +108,7 @@ describe.skipIf(!reachable.ok)("gradeReview and reviewQueue", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
   }, 60_000);
 

@@ -2,7 +2,6 @@ import { KNOWLEDGE_LIMITS, PREFERENCE_KEYS } from "@self-learn/schema";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { applyMigrations } from "../src/migrations";
 import {
   appendEvent,
   assetCounts,
@@ -41,7 +40,7 @@ import { conceptsIndexer } from "../src/index/concepts";
 import { replayReviews } from "../src/learn/replay";
 import { writeSource } from "../src/index/writer";
 import { readKnowledgeBase } from "../src/state/knowledge-base";
-import { createScratchDatabase, probe, SQLSTATE, sqlstate, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
 import {
   ASSETS,
   CONCEPTS,
@@ -76,8 +75,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
   }, 60_000);
 

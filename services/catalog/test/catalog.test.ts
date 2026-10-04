@@ -34,7 +34,7 @@ import { runStatus } from "../src/commands/status";
 import { REPO_ROOT } from "../src/env";
 import { applyMigrations } from "../src/migrations";
 import { partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { createScratchDatabase, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
 /**
@@ -85,8 +85,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
   let noManimkc: string;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     // The commands connect through DATABASE_URL, which is the same path the
     // CLI takes. Pointing it at the scratch database exercises that path
     // rather than a test-only one.
@@ -584,8 +583,7 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
   const checked = new Date("2026-09-13T00:02:57Z");
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     previousUrl = process.env["DATABASE_URL"];
     const url = new URL(previousUrl ?? "postgres://localhost:5432/self_learn");
     url.pathname = `/${scratch.name}`;

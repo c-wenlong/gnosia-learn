@@ -7,9 +7,8 @@ import { promisify } from "node:util";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { applyMigrations } from "../src/migrations";
 import { readReviews, upsertReview } from "../src/state";
-import { createScratchDatabase, markImported, probe, type Scratch } from "./scratch-database";
+import { markImported, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent, TOPIC_SLUG } from "./state-fixture";
 
 /**
@@ -63,8 +62,7 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
 
     root = await mkdtemp(path.join(tmpdir(), "learn-cli-"));
