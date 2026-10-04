@@ -215,8 +215,9 @@ const ADDED_PROVIDERS: readonly {
     id: "qwen",
     model: "qwen3.8-flash",
     keyUrl: "https://modelstudio.console.alibabacloud.com/ap-southeast-1/model/settings/api-key",
-    // The list is Model Studio's native endpoint, not under compatible-mode.
-    models: { url: "https://dashscope-intl.aliyuncs.com/api/v1/models", shape: "dashscope" },
+    // The list is Model Studio's native endpoint beside compatible-mode, on
+    // the same host as the chat endpoint (`dashScopeListUrl`).
+    models: { shape: "dashscope" },
   },
   { id: "moonshot", model: "kimi-k2.6", keyUrl: "https://platform.kimi.ai/console/api-keys" },
   { id: "minimax", model: "MiniMax-M3", keyUrl: "https://platform.minimax.io/user-center/basic-information/interface-key" },
@@ -861,12 +862,17 @@ const DASHSCOPE_PAGE_SIZE = 100;
  * the same capped reader and id checks as an OpenAI-shape list.
  */
 async function listDashScopeModels(credential: ProviderCredential, timeoutMs: number): Promise<ModelListResult> {
-  const url = credential.config.models?.url ?? `${credential.config.baseUrl}/models`;
+  const url = dashScopeListUrl(credential.config.baseUrl);
+  // A base URL that is not Model Studio's compatible mode (a proxy, a
+  // gateway) lists as an OpenAI-compatible endpoint does.
+  if (url === null) return fetchModelList(credential, `${credential.config.baseUrl}/models`, timeoutMs);
   const models: ListedModel[] = [];
   const seen = new Set<string>();
   for (let page = 1; page <= MODEL_LIST_MAX_PAGES; page += 1) {
     const result = await fetchModelList(credential, `${url}?page_no=${page}&page_size=${DASHSCOPE_PAGE_SIZE}`, timeoutMs, "dashscope");
-    if (!result.ok) return page === 1 ? result : { ok: true, models };
+    // A page that fails fails the list: a part shown as the whole would be
+    // cached for five minutes with its later models missing.
+    if (!result.ok) return result;
     for (const m of result.models) {
       if (!seen.has(m.id)) {
         seen.add(m.id);
@@ -877,6 +883,20 @@ async function listDashScopeModels(credential: ProviderCredential, timeoutMs: nu
   }
   models.sort((a, b) => a.id.localeCompare(b.id));
   return { ok: true, models };
+}
+
+/**
+ * Model Studio's native list on the host the chat endpoint is on:
+ * `<origin>/<prefix>/compatible-mode/v1` lists at `<origin>/<prefix>/api/v1/models`,
+ * so a China-region or workspace base URL keeps its key on its own host. Null
+ * for a base URL without `/compatible-mode/v1`. Never a host the base URL
+ * does not name.
+ */
+export function dashScopeListUrl(baseUrl: string): string | null {
+  const marker = "/compatible-mode/v1";
+  const at = baseUrl.indexOf(marker);
+  if (at === -1 || at + marker.length !== baseUrl.length) return null;
+  return `${baseUrl.slice(0, at)}/api/v1/models`;
 }
 
 /** One list request, read capped and checked. `total` is a paged list's own count, when it gives one. */

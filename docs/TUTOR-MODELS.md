@@ -257,8 +257,12 @@ day, and are `ADDED_PROVIDERS` in `apps/web/src/lib/agent/providers.ts`.
   `?limit=1000` with `anthropic-version: 2023-06-01`. Z.ai has no list
   endpoint, so the card offers the ids its docs name (`glm-5.3-flash`,
   `glm-4.7-flash`, `glm-4.5-flash`) and still takes any typed id. Qwen's list
-  is Model Studio's native `api/v1/models`, read by `output.models[].model`,
-  page by page up to ten pages of 100.
+  is Model Studio's native `api/v1/models` on the same host as the chat
+  base URL (`dashScopeListUrl`, so a China-region or workspace base URL keeps
+  its key on its own host), read by `output.models[].model`, page by page up
+  to ten pages of 100; a page that fails fails the list. A Qwen base URL
+  that is not Model Studio's compatible mode (a proxy) lists as an
+  OpenAI-compatible endpoint, on that URL.
 - **The cascade order** with no chain is the first three, then these in the
   order above; a chain decides for itself (T1, T12).
 - **Add provider** links to each provider's key page.

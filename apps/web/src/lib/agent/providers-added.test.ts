@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { listProviderModels, orderCredentials, providerConfigs, type ProviderCredential } from "./providers";
+import {
+  completeWithFallback,
+  dashScopeListUrl,
+  listProviderModels,
+  orderCredentials,
+  providerConfigs,
+  type ProviderCredential,
+} from "./providers";
 
 /**
  * The providers added on 2026-10-05 (docs/TUTOR-MODELS.md, T13): their
@@ -72,7 +79,7 @@ describe("the added providers", () => {
     expect(result.ok && result.models.some((m) => m.id === "qwen3.8-flash")).toBe(true);
   });
 
-  it("reports a Qwen list that fails on its first page, and keeps what it has when a later page fails", async () => {
+  it("fails a Qwen list when any page fails, rather than showing part of it as the whole", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 401 })));
     expect((await listProviderModels(credential("qwen"))).ok).toBe(false);
     const full = Array.from({ length: 100 }, (_, i) => ({ model: `m-${i}` }));
@@ -82,7 +89,38 @@ describe("the added providers", () => {
         .mockResolvedValueOnce(new Response(JSON.stringify({ output: { models: full } }), { status: 200 }))
         .mockResolvedValueOnce(new Response("{}", { status: 500 })),
     );
-    const partial = await listProviderModels(credential("qwen"));
-    expect(partial.ok && partial.models).toHaveLength(100);
+    expect(await listProviderModels(credential("qwen"))).toMatchObject({ ok: false, status: 500 });
+  });
+
+  it("lists Qwen on the host its base URL names, never the international one behind an override", async () => {
+    expect(dashScopeListUrl("https://dashscope.aliyuncs.com/compatible-mode/v1")).toBe("https://dashscope.aliyuncs.com/api/v1/models");
+    expect(dashScopeListUrl("https://ws1.cn-beijing.maas.aliyuncs.com/compatible-mode/v1")).toBe(
+      "https://ws1.cn-beijing.maas.aliyuncs.com/api/v1/models",
+    );
+    expect(dashScopeListUrl("https://proxy.example/qwen")).toBeNull();
+    // A proxy override lists as an OpenAI-compatible endpoint, on the proxy.
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "qwen3.8-flash" }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await listProviderModels(credential("qwen", { TUTOR_QWEN_BASE_URL: "https://proxy.example/qwen" }));
+    expect(String((fetchMock.mock.calls[0] as unknown as [string])[0])).toBe("https://proxy.example/qwen/models");
+    expect(result).toEqual({ ok: true, models: [{ id: "qwen3.8-flash" }] });
+  });
+
+  it("sends a turn through an added provider's chat endpoint with its key and headers (Anthropic)", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ model: "claude-haiku-4-5", choices: [{ message: { role: "assistant", content: "Hello." } }] }), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const outcome = await completeWithFallback([{ role: "user", content: "Hi" }], [credential("anthropic")]);
+    expect(outcome.ok && outcome.result).toMatchObject({ content: "Hello.", provider: "anthropic", providerLabel: "Anthropic" });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.anthropic.com/v1/chat/completions");
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer test-key-0123456789abcdef");
+    expect(headers["anthropic-version"]).toBe("2023-06-01");
+    expect(JSON.parse(String(init.body))).toMatchObject({ model: "claude-haiku-4-5", stream: false });
   });
 });
