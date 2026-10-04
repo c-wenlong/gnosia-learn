@@ -100,7 +100,7 @@ reduction of it, and where the two disagree the art wins.
 | [docs/design/brand/hero-lockup.png](brand/hero-lockup.png) | The mark, the wordmark, the tagline and the mascot together on cream | Source of the social card |
 | [docs/design/brand/composite.png](brand/composite.png) | The lockup, the mascot and the icons on one board | Reference only |
 | [docs/design/brand/world-staircase.png](brand/world-staircase.png) | The world: a staircase of books into a sky city, the mascot beside it | Source of `public/banner.png` |
-| [docs/design/brand/pixel-art-sheet.png](brand/pixel-art-sheet.png) | A pixel-art take on the book, the wordmark and the world | **Campaign art only, never product UI.** It uses its own palette (royal blue, red ribbon) and its own letterforms, so it must not leak into the app or the landing page |
+| [docs/design/brand/pixel-art-sheet.png](brand/pixel-art-sheet.png) | A pixel-art take on the book, the wordmark and the world | **Campaign art only, never product UI.** It uses its own palette (royal blue, red ribbon) and its own letterforms, so it must not leak into the app or the landing page. The [avatar sprites](#avatar-sprites) are pixel art too, but their own, in the brand palette |
 | [docs/design/brand/logo/](brand/logo/) `mark.png`, `wordmark-ink.png`, `wordmark-cream.png` | The owner's logo art, 2026-09-27: the mark alone (1254px), and the GNOSIA letters in deep teal (for light grounds) and in cream (for dark grounds), 2172 by 724, all on transparent grounds | Source of the four files below |
 | [apps/web/public/brand/](../../apps/web/public/brand/) `mark.png` (256), `wordmark-ink.png`, `wordmark-cream.png` (96px tall) | Cut from `docs/design/brand/logo/`: pixels under 32 alpha cleared (the faint haze round the art), cropped to the art, scaled | `GnosiaWordmark` and `GnosiaLockup` |
 | [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512) | Cut from `logo/mark.png`: the same clean-up, squared with a 5% margin | Favicon and PWA icon |
@@ -214,6 +214,32 @@ Rules:
    art, as its own render on a transparent ground, not from an SVG
    approximation or a crop of the sheet.
 
+## Avatar sprites
+
+Twelve pixel creatures a learner wears as their profile picture: the
+library's familiars, the small animals that live among the books. Owl, cat,
+bookworm, fox, hedgehog, raven, frog, mouse, moth, tortoise, rabbit and bat
+(`AVATARS` in [shared.ts](../../packages/schema/src/shared.ts)), chosen by
+the owner on 2026-10-04 over study objects, a garden and a night sky.
+
+Each is a 16 by 16 grid in
+[sprites.ts](../../apps/web/src/components/avatar/sprites.ts), outlined in
+`--brand-navy` and drawn mostly in the brand's teal, cream and gold, with a
+few colours of the creatures' own (the fox's orange, the frog's greens), on
+a light disc of its own tint. `PixelAvatar` draws one as SVG rects with
+`crispEdges`, so the pixels stay square at any size. The colours are fixed,
+like the mascot's: the same picture in every theme, on its disc.
+
+Rules:
+
+1. **Not the mascot.** The living tome is never redrawn (rule 4 above), so
+   there is no tome among the sprites, and a sprite never stands in for it.
+2. **Readable at 32px.** The sidebar shows one at 32px, so every new sprite
+   is checked at that size: a face whose eyes vanish there is redrawn.
+3. **Adding one is a migration.** `learner.avatar`'s check constraint and its
+   random default are written from `AVATARS`, so a new name needs a migration
+   as well as a grid.
+
 ## Motion and surfaces
 
 The public pages allow what the app kit does not: soft shadows, translucent
@@ -237,6 +263,7 @@ insight. Not as a bullet or an ornament.
 | `GnosiaWordmark` | The app's top bar (links to `/home`), the public header (links to `/`) and footer |
 | `GnosiaLockup` | The sign-in card |
 | `GnosiaMascot` | Landing hero (`curious`), chapters one to three (`reading`, `excited`, `happy`), sign-in (`happy`) |
+| `PixelAvatar` | The sidebar's account row (32px), and the picker on Settings' Profile tab (48px) |
 | The brand button (`variant="brand"` in [classes.ts](../../apps/web/src/components/ui/classes.ts)) | The landing page's calls to action and the sign-in button. Teal face, navy lip and cream label in light; in dark the lip is teal sunk halfway into navy and the label turns navy |
 | `.gnosia-ground` | The `(site)` layout |
 | `.gnosia-paper`, `.gnosia-panel-*` | The landing page's probe, chapter glimpses and chapter panels |

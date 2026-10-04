@@ -12,7 +12,8 @@ import {
   tables,
   topic,
 } from "@self-learn/schema";
-import { eq, sql } from "drizzle-orm";
+import { AVATARS } from "@self-learn/schema/shared";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { applyMigrations, migrationStatus } from "../src/migrations";
@@ -126,6 +127,26 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
           topicSlug: "asymptotics",
         }),
       ).resolves.toBeDefined();
+    });
+
+    it("draws each new learner a sprite of its own from AVATARS, and refuses any other", async () => {
+      // A bare insert, as `ensureLearner`, an import and these tests write
+      // one: the database draws the sprite, per row.
+      const ids = Array.from({ length: 48 }, (_, i) => `avatar-${i}`);
+      await scratch.db.insert(learner).values(ids.map((id) => ({ id })));
+      const rows = await scratch.db.select({ avatar: learner.avatar }).from(learner).where(inArray(learner.id, ids));
+      expect(rows).toHaveLength(48);
+      for (const row of rows) expect(AVATARS).toContain(row.avatar);
+      // 48 draws all landing on one sprite has odds of 12^-47.
+      expect(new Set(rows.map((r) => r.avatar)).size).toBeGreaterThan(1);
+
+      const error = await scratch.db
+        .update(learner)
+        .set({ avatar: "dragon" })
+        .where(eq(learner.id, "avatar-0"))
+        .catch((e: unknown) => e);
+      expect(sqlstate(error)).toBe(SQLSTATE.checkViolation);
+      await scratch.db.delete(learner).where(inArray(learner.id, ids));
     });
 
     it("refuses a prerequisite kind outside requires|assumes", async () => {
