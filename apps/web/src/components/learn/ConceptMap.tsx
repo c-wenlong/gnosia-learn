@@ -298,11 +298,12 @@ export function ConceptMap({
   // Declared after the refs are brought up to date, so a request made with a
   // new selection fits that selection. A request the map mounts with was
   // answered by the map before it (the table in between unmounted it), so it
-  // is not replayed over the scope the URL names.
-  const answered = useRef(fitRequest?.n);
+  // is not replayed over the scope the URL names. By identity, not `n`: two
+  // reveals in one millisecond share a `Date.now()`.
+  const answered = useRef(fitRequest);
   useEffect(() => {
-    if (fitRequest === null || fitRequest.n === answered.current) return;
-    answered.current = fitRequest.n;
+    if (fitRequest === null || fitRequest === answered.current) return;
+    answered.current = fitRequest;
     if (fitRequest.to === "center") centerRef.current(selectedRef.current);
     else fitRef.current(fitRequest.to);
   }, [fitRequest]);

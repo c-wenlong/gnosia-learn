@@ -70,7 +70,8 @@ const svg = (host: HTMLElement) => host.querySelector("svg[data-fit]") as SVGSVG
 const chip = (host: HTMLElement, label: string) =>
   [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === label) as HTMLButtonElement;
 
-function search(host: HTMLElement, text: string) {
+/** Search and press Enter; `settle` runs the timers (and so the fake clock) on. */
+function search(host: HTMLElement, text: string, settle = true) {
   const input = host.querySelector('input[type="search"], input') as HTMLInputElement;
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -80,7 +81,7 @@ function search(host: HTMLElement, text: string) {
   act(() => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
-  act(() => vi.runAllTimers());
+  if (settle) act(() => vi.runAllTimers());
 }
 
 describe("LearnIndex map", () => {
@@ -108,5 +109,43 @@ describe("LearnIndex map", () => {
     // A new request on the returned map is still answered.
     search(host, "delta");
     expect(svg(host).dataset.fit).toBe("neighbourhood");
+  });
+
+  it("does not replay a center asked for from the panel when the map comes back", () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, "", "/learn");
+    const host = mountAtUrl();
+
+    // The panel for gamma lists delta under "Leads to"; picking it centres the map on it.
+    search(host, "gamma");
+    const pick = host.querySelector('section[aria-label="Concept details"] button[data-concept="delta"]') as HTMLButtonElement;
+    act(() => pick.click());
+    act(() => vi.runAllTimers());
+    expect(svg(host).dataset.fit).toBe("");
+
+    act(() => chip(host, "Table").click());
+    act(() => chip(host, "Graph").click());
+    act(() => vi.runAllTimers());
+    const returned = { fit: svg(host).dataset.fit, viewBox: svg(host).getAttribute("viewBox") };
+    const fresh = mountAtUrl();
+    expect(returned).toEqual({ fit: svg(fresh).dataset.fit, viewBox: svg(fresh).getAttribute("viewBox") });
+    expect(returned.fit).toBe("island");
+  });
+
+  it("answers two requests made in the same millisecond", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-04T00:00:00Z"));
+    window.history.replaceState(null, "", "/learn");
+    const host = mountAtUrl();
+
+    // The clock does not move between the two, so both requests have one `n`.
+    search(host, "gamma", false);
+    search(host, "alpha", false);
+    act(() => vi.runAllTimers());
+    const answered = svg(host).getAttribute("viewBox");
+    window.history.replaceState(null, "", "/learn");
+    const direct = mountAtUrl();
+    search(direct, "alpha");
+    expect(answered).toBe(svg(direct).getAttribute("viewBox"));
   });
 });
