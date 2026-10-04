@@ -118,6 +118,8 @@ describe("LearnIndex by domain", () => {
     expect(cards(host)[0].textContent).toContain("Algorithms");
     expect(cards(host)[0].textContent).toContain("3 concepts");
     expect(cards(host)[0].textContent).toContain("2 topics");
+    // The bar's spoken counts name the buckets as the chips do.
+    expect(cards(host)[0].querySelector('[role="img"]')?.getAttribute("aria-label")).toBe("1 mastered, 1 learning, 1 not started");
     expect(graph(host)).toBeNull();
   });
 

@@ -767,7 +767,7 @@ async function run() {
     await page.waitForFunction(() => document.querySelectorAll('svg[data-domain-graph] [data-faded="true"]').length === 0);
 
     const status = main.getByRole('button', { name: /^Status:/ });
-    const menuLabel = { mastered: 'Mastered', learning: 'Learning', untouched: 'Untouched', ready: 'Ready to learn' }[key];
+    const menuLabel = { mastered: 'Mastered', learning: 'Learning', untouched: 'Not started', ready: 'Ready to learn' }[key];
     await chip.click();
     await page.waitForFunction((k) => new URL(location.href).searchParams.get('filter') === k, key);
     assert((await chip.getAttribute('aria-pressed')) === 'true', 'the pressed chip is not pressed');
