@@ -4,17 +4,17 @@ import { cardClasses, cx } from "@/components/ui/classes";
  * What a page under the app shell shows while the server reads it.
  *
  * Every page here is dynamic (the layout reads the learner's state), and none
- * had a loading boundary, so a press on a tab in the top bar changed nothing
+ * had a loading boundary, so a press on a link in the sidebar changed nothing
  * on screen until the next page had read everything it shows: a quarter of a
  * second on a quiet machine, several seconds on a loaded one or under
  * `next dev`. A loading boundary is also what Next prefetches for a dynamic
- * route, so this frame, the new tab underlined, is up in the frame of the
+ * route, so this frame, the new destination marked, is up in the frame of the
  * press. A page with its own (`studio/loading.tsx`, `review/loading.tsx`)
  * shows that instead.
  *
  * Neutral on purpose: a heading and a column of cards beside a narrower one,
  * the outline most pages share, in the surface colours every palette defines.
- * `focus` is Review's shape: no top bar from 768px up and one centred card,
+ * `focus` is Review's shape: no sidebar from 768px up and one centred card,
  * so the frame does not draw a chrome the page is about to take away.
  *
  * The status line sits beside the busy region, not in it, so a screen reader

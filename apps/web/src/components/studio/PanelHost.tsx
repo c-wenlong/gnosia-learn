@@ -14,6 +14,7 @@ import {
 import type { StudioAgentPreference } from "@self-learn/schema/shared";
 
 import { loadStudioSettings, type StudioSettingsData } from "@/app/(app)/studio/actions";
+import { usePublishStudioChats } from "@/components/shell/shell-context";
 import { DiagramPanelBody, type JobRow } from "@/components/studio/DiagramInspector";
 import { DraftPanel } from "@/components/studio/DraftPanel";
 import { JobPanel } from "@/components/studio/JobPanel";
@@ -23,7 +24,6 @@ import { Sentence } from "@/components/studio/Sentence";
 import { VerbNotice } from "@/components/studio/StudioChrome";
 import { DialogHeader, StudioDialog, StudioPane } from "@/components/studio/StudioDialog";
 import { StudioSettings } from "@/components/studio/StudioSettings";
-import { SidebarToggle, StudioSidebar } from "@/components/studio/StudioSidebar";
 import { PANE_GUTTER } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
 import type { MentionValue } from "@/components/ui/mention-text";
@@ -47,9 +47,10 @@ import {
  * The studio's frame, and the panels on `/studio` that open and close in
  * the browser: a conversation, a job, and a tile's panel.
  *
- * The frame is the sidebar of conversations beside one of two things
- * (docs/STUDIO-CHAT-FIRST.md, "Home and the full-screen conversation"):
- * the home view the page drew (`children`: the composer, then the diagrams
+ * The frame is one of two things beside the app's sidebar, which lists the
+ * conversations (docs/STUDIO-CHAT-FIRST.md, "Home and the full-screen
+ * conversation"; `usePublishStudioChats` tells it which one is open): the
+ * home view the page drew (`children`: the composer, then the diagrams
  * and videos), or, with `?draft=`, that conversation full screen
  * (`StudioPane`). The home view stays mounted under a conversation, hidden,
  * so going back to it keeps its scroll and whatever was typed in it. A job
@@ -152,8 +153,6 @@ export function PanelHost({
   const attempts = useRef(0);
   /** The attempt still wanted, and the location the address bar had at its press. */
   const current = useRef<{ token: number; from: string } | null>(null);
-  /** The sidebar's drawer, below 768px. */
-  const [drawer, setDrawer] = useState(false);
 
   const begin = useCallback(
     (first: Value | null) => {
@@ -248,11 +247,9 @@ export function PanelHost({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsOpen, warmSettings]);
 
-  const openSidebar = useCallback(() => setDrawer(true), []);
-  const closeSidebar = useCallback(() => setDrawer(false), []);
   const verbs = useMemo(
-    () => ({ begin, settle, navigate, warmSettings, openSidebar }),
-    [begin, settle, navigate, warmSettings, openSidebar],
+    () => ({ begin, settle, navigate, warmSettings }),
+    [begin, settle, navigate, warmSettings],
   );
   // The path joins the stable verbs here rather than in their memo: in it,
   // the compiler reads the state setters behind them as dependencies and
@@ -265,13 +262,10 @@ export function PanelHost({
   // pressing it and leaving, costs nothing.
   const newChat = useCallback(() => {
     cancel();
-    closeSidebar();
     if (path !== closeHref) pushUrl(closeHref);
     // After the home view is shown again, which this render does.
     requestAnimationFrame(() => window.dispatchEvent(new Event(NEW_CHAT_EVENT)));
-  }, [cancel, closeSidebar, path, closeHref]);
-
-  const toggle = <SidebarToggle onOpen={openSidebar} />;
+  }, [cancel, path, closeHref]);
 
   // The page's order: a picture closes every panel, then the settings, a
   // conversation, a job, an Extend press, and a tile last. A conversation is
@@ -302,13 +296,13 @@ export function PanelHost({
     );
   } else if (view.draft !== null) {
     chat = (
-      <StudioPane key="conversation" closeHref={closeHref} navigate={pushUrl} label="Conversation" leading={toggle}>
+      <StudioPane key="conversation" closeHref={closeHref} navigate={pushUrl} label="Conversation">
         <DraftPanel key={view.draft} draftId={view.draft} jobId={view.job} path={path} {...conversation} />
       </StudioPane>
     );
   } else if (opening !== null) {
     chat = (
-      <StudioPane key="conversation" closeHref={closeHref} navigate={cancel} label="Conversation" leading={toggle}>
+      <StudioPane key="conversation" closeHref={closeHref} navigate={cancel} label="Conversation">
         <DialogHeader title="New conversation" />
         <div role="log" aria-busy aria-label="Conversation" className={cx("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto py-5", PANE_GUTTER)}>
           {opening.first !== null && (
@@ -364,25 +358,22 @@ export function PanelHost({
     );
   }
 
+  usePublishStudioChats({
+    active: chat === null ? null : view.draft,
+    pending: view.draft === null && opening !== null ? (opening.first?.text.trim() || "New conversation") : null,
+    newChat,
+    navigate,
+    path,
+    initial: drafts,
+    titles: conversation.titles,
+  });
+
   return (
     <HostContext.Provider value={controls}>
-      <div className="flex min-h-0 min-w-0 flex-1">
-        <StudioSidebar
-          initial={drafts}
-          path={path}
-          titles={conversation.titles}
-          active={chat === null ? null : view.draft}
-          pending={view.draft === null && opening !== null ? (opening.first?.text.trim() || "New conversation") : null}
-          open={drawer}
-          onClose={closeSidebar}
-          onNewChat={newChat}
-        />
-        {/* Inert behind the phone's drawer, which holds focus meanwhile. */}
-        <div inert={drawer} className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {chat}
-          <div hidden={chat !== null} className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {children}
-          </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {chat}
+        <div hidden={chat !== null} className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {children}
         </div>
       </div>
       {dialog}

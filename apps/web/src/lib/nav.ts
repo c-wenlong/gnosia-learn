@@ -1,16 +1,19 @@
 /**
- * The top bar's destinations and the phone tab bar's, and which one a path
- * belongs to. Five destinations are always there (`DESTINATIONS`, the tab
- * bar's whole list). Studio is a sixth in the top bar only, and only when this
- * deployment has a studio (`topBarDestinations`), because it is an author tool
- * that is desktop first and 404s without `STUDIO_ENABLED`. Settings is not a
- * destination: it lives behind the avatar menu (docs/design/DESIGN.md,
- * "Information architecture").
+ * The sidebar's destinations, and which one a path belongs to.
+ *
+ * The sidebar opens with New chat when this deployment has a studio
+ * (`STUDIO_DESTINATION`, which is `/studio`, the studio's home and its
+ * composer), then the five learning destinations (`DESTINATIONS`), then the
+ * studio's conversations. Studio is not one of the five because it is where
+ * things are made, drawn as the first action rather than as a peer of the
+ * pages that support learning, and because it 404s without `STUDIO_ENABLED`.
+ * Settings is not a destination: it lives behind the account menu at the
+ * foot of the sidebar (docs/design/DESIGN.md, "Information architecture").
  *
  * React-free so the shell's client components and a test can share it.
  */
 
-/** The five destinations the phone tab bar draws, each with an icon. */
+/** The five learning destinations, each with an icon. */
 export type DestinationKey = "home" | "courses" | "learn" | "library" | "review";
 
 /** Every key `activeDestination` can answer with: the five, and Studio. */
@@ -22,7 +25,7 @@ export interface Destination<K extends string = DestinationKey> {
   href: string;
 }
 
-/** The phone tab bar's list. Studio is deliberately not in it. */
+/** The sidebar's list under New chat. Studio is deliberately not in it. */
 export const DESTINATIONS: readonly Destination[] = [
   { key: "home", label: "Home", href: "/home" },
   { key: "courses", label: "Courses", href: "/courses" },
@@ -31,20 +34,12 @@ export const DESTINATIONS: readonly Destination[] = [
   { key: "review", label: "Review", href: "/review" },
 ];
 
-/** The sixth destination, shown from 768px up when the studio is enabled. */
+/** The studio, which the sidebar draws as New chat when the deployment has one. */
 export const STUDIO_DESTINATION: Destination<"studio"> = { key: "studio", label: "Studio", href: "/studio" };
 
 /**
- * What the top bar's primary nav lists: the five, then Studio when `studio`
- * (the server's `studioEnabled()`, passed down as a prop).
- */
-export function topBarDestinations(studio: boolean): readonly Destination<NavKey>[] {
-  return studio ? [...DESTINATIONS, STUDIO_DESTINATION] : DESTINATIONS;
-}
-
-/**
  * The destination a path sits under, or null for one outside all of them.
- * Studio is matched whether or not the deployment has one: the top bar only
+ * Studio is matched whether or not the deployment has one: the sidebar only
  * draws it when it does, and a disabled studio's routes 404 anyway.
  *
  * A prefix match on a whole segment, so `/courses/cp4281/m1` is still Courses
@@ -55,7 +50,7 @@ export function topBarDestinations(studio: boolean): readonly Destination<NavKey
 export function activeDestination(pathname: string | null | undefined): NavKey | null {
   if (!pathname) return null;
   const path = pathname.split(/[?#]/)[0];
-  for (const d of topBarDestinations(true)) {
+  for (const d of [...DESTINATIONS, STUDIO_DESTINATION]) {
     if (path === d.href || path.startsWith(`${d.href}/`)) return d.key;
   }
   return null;

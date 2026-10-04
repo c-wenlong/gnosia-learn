@@ -232,7 +232,7 @@ export function DraftPanel({
   const arriving = arrivingSource(draftId);
 
   // The sidebar lists this conversation by its title, its first message and
-  // its state, so each change to those is news to it (`StudioSidebar`).
+  // its state, so each change to those is news to it (`ChatHistory`).
   const listed = view === null ? null : `${view.state}|${view.title ?? ""}|${view.transcript.length}`;
   useEffect(() => {
     if (listed !== null) announceDraftChange(draftId);

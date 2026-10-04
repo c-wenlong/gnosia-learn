@@ -20,16 +20,10 @@ const PULSE = "animate-pulse motion-reduce:animate-none";
 export function StudioGridLoading() {
   return (
     <div data-layout="full" className="flex min-h-0 min-w-0 flex-1" aria-busy="true">
-      {/* The sidebar: New chat, then the history. A column from 768px up, as on the page. */}
-      <div className="hidden w-[260px] shrink-0 flex-col gap-3 border-r border-hair bg-surface p-4 md:flex">
-        <div className={`h-5 w-24 rounded bg-[var(--surface-hover)] ${PULSE}`} />
-        {Array.from({ length: 6 }, (_, at) => (
-          <div key={at} className={`h-4 rounded bg-[var(--surface-hover)] ${PULSE}`} style={{ width: `${85 - at * 8}%` }} />
-        ))}
-      </div>
+      {/* The conversations are in the app's sidebar, which is already drawn. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* The home view's heading and composer. */}
-        <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-center gap-7 px-4 py-12 md:min-h-[calc(100dvh-13rem)]">
+        <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-center gap-7 px-4 py-12 md:min-h-[calc(100dvh-9rem)]">
           <div className={`h-10 w-72 -translate-y-4 rounded-md bg-[var(--surface-hover)] ${PULSE}`} />
           <div className={`h-[52px] w-full max-w-3xl -translate-y-4 rounded-2xl bg-[var(--surface-hover)] ${PULSE}`} />
         </div>

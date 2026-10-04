@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
  * What a page under the app's shell shows when its server render throws.
  *
  * Inside the shell on purpose: `(app)/layout.tsx` is above this boundary, so
- * the top bar, the tab bar and the learner's numbers stay, and only the page's
+ * the sidebar and the learner's numbers stay, and only the page's
  * own area is replaced. That is edge case 20 of docs/CONTENT-MIGRATION.md:
  * since phase 2 every page reads its content from the database only
  * (`@/data/source`), so a database that is down, or a content type nobody
