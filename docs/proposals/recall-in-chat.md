@@ -1,6 +1,6 @@
 # Proposal: recall in the chat
 
-Status: accepted, 2026-10-04, and phase 1 is built. R2 is the owner's call
+Status: accepted, 2026-10-04, and phases 1 and 2 are built. R2 is the owner's call
 (tap to record); R1 and R3 to R6 are the proposal's defaults, and open
 questions 2 and 3 take theirs until the owner says otherwise. Step 1 of the
 same conversation, taking
@@ -151,6 +151,15 @@ added, and nothing the `learning` plugin parses changes.
 
 ### 5. Recall as the opening move (R3)
 
+Built as: the concept page passes `recall` when the card is due
+(`dueRecall`). An empty thread then opens on the tutor's turn, built in the
+page from the note's first check at no model cost (`recallOpening`), so the
+judge also has that check as its reference; a note with no check asks the
+model, with `RECALL_SEED` standing in for the learner's first turn, and
+opens only on a reply that carries the marker. A thread that opens on the
+tutor is sent with the seed before it, since a request must start on a user
+turn.
+
 The tutor's prompt already says, on a return visit: open by reflecting back
 what was established, then ask one question that checks the ground still
 holds. With the marker, that opening question is a check, and with R4 it is
@@ -168,18 +177,25 @@ it, instead of as a list. Home's "Worth a quick recall" (part 4 of
 The first recorded answer in a thread opens a `session` row and its
 `session-start` event, in the same locked transaction as the answer, exactly
 as the session page's first answer does (`sessionId` on the observe route).
-A thread that records nothing leaves no row. Closing is best-effort, as
-the session page's is: the last answer is re-sent with `closeSession` on
-`pagehide` (its request id makes the resend a replay, not a second
-observation), and a tab killed before that leaves the session open, exactly
-as an abandoned Teach session does today. There is no idle rule in the
+A thread that records nothing leaves no row. The id is
+`chat-<date>-<concept>-<random>`, kept beside the thread in
+`sessionStorage`. Closing is best-effort, as the session page's is: the
+page sends `POST /api/learner/session/close` (idempotent) when it goes away,
+by navigation inside the app or `pagehide`, and when the learner starts a new
+thread, and a tab killed before that leaves the session open, exactly as an
+abandoned Teach session does today. An answer refused because its session was
+closed elsewhere (another tab, the terminal) is sent once more under a fresh
+id; the refusal wrote nothing, so this is not a second observation. There is no idle rule in the
 catalog that closes one, and this proposal adds none; `learn session close`
 closes it from the terminal, and an open session costs nothing but an
 honest row. Two things follow for free: Home's "Pick up
 where you left off" lists the concept through its observation events (the
 limit called out under the Home proposal's "Tutor chats are not a thread"
-narrows to the text of the chat, which stays in the browser), and `learn
-session list` and the session log show a web chat beside a terminal one.
+narrows to the text of the chat, which stays in the browser), and the
+`session` table and its `session-start` and `session-close` events show a web
+chat beside a terminal one. `learn session list` does not: it lists session
+logs, which only the terminal writes, so no web session (the session page's
+included) appears there.
 
 ## Decisions
 
@@ -274,7 +290,7 @@ proposal.
 | Phase | Ships | Done when |
 | --- | --- | --- |
 | 1 (built) | R1, R2, R4, R5: the marker, the judge and its `parseVerdict`, the verdict row, the observe write, on the concept tutor only. `lib/tutor-check.ts`, `lib/agent/judge.ts`, `app/api/agent/judge/route.ts`, `components/workspace/VerdictRow.tsx` | "Give me a check", an answer and one tap writes an `observation` event that shows under Recent answers on the concept page and moves its colour on the map; a thread with no check writes nothing; `observe --json` is byte-for-byte what it was |
-| 2 | R3 and R6: recall as the opening move, the session row | Opening a concept with a due card is met with a question; its answer reschedules the card; Home's threads list the concept; `learn session list` shows the chat |
+| 2 (built) | R3 and R6: recall as the opening move, the session row. `dueRecall` and `recallOpening` in `lib/tutor-check.ts`, `requestTurns` and `RECALL_SEED` in `lib/tutor-thread.ts` | Opening a concept with a due card is met with a question (the note's first check, or the model's when it has none); its answer reschedules the card; Home's threads list the concept; the chat's `session` row opens with the first recorded answer and closes when the page goes away |
 | 3 | The course topic tutor's exit ticket records against the topic's concepts; Home's "Recall these" opens the first concept's chat rather than `/review` | A course session's closing questions move mastery on the concepts the topic declares |
 
 Each phase is its own PR. Phase 3 depends on `concepts:` coverage on course

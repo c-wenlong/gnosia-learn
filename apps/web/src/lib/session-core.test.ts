@@ -468,6 +468,10 @@ describe("ids and the tutor prefill", () => {
   it("makes session ids the observe route accepts", () => {
     const id = newSessionId("dot-product", new Date("2026-09-26T10:00:00Z"), "ab-12/cd");
     expect(id).toBe("web-2026-09-26-dot-product-ab12cd");
+    // The concept tutor's thread says which surface opened it (recall-in-chat R6).
+    expect(newSessionId("dot-product", new Date("2026-09-26T10:00:00Z"), "ab12cd", "chat")).toBe(
+      "chat-2026-09-26-dot-product-ab12cd",
+    );
     expect(isSessionToken(id)).toBe(true);
     expect(isSessionToken(newSessionId("a".repeat(100), new Date(), "x".repeat(40)))).toBe(true);
     expect(isSessionToken("has space")).toBe(false);

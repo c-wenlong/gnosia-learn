@@ -26,17 +26,20 @@ import {
   markerPieces,
   parseThread,
   threadKey,
-  trimForRequest,
+  RECALL_SEED,
+  requestTurns,
+  sessionKey,
   type HandoffMarker,
   type ThreadItem,
   type TutorTurn,
 } from "@/lib/tutor-thread";
-import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
+import { newSessionId, SESSION_TEXT_LIMIT } from "@/lib/session-core";
 import {
   CHAT_ANSWER_LIMIT,
   checkSource,
   newVerdict,
   pendingCheck,
+  recallOpening,
   settleInterrupted,
   type TurnCheck,
   type Verdict,
@@ -81,6 +84,15 @@ import { VerdictRow } from "./VerdictRow";
  * `POST /api/learner/observe`, the session page's write, so mastery, the map
  * and the review card move. No tap, nothing written (R2). "Why?" is a
  * question about the last turn, never an answer to its check.
+ *
+ * **Recall first, and the thread is a session** (phase 2). With `recall`
+ * (the server's word that this concept's review card is due), an empty
+ * thread opens on the tutor: the note's own check when it has one, built
+ * here at no model cost, or a question the model is asked for (R3). The
+ * first answer this thread records opens a `session` row, `chat-<date>-...`,
+ * kept beside the thread in `sessionStorage`; the page closes it through
+ * `POST /api/learner/session/close` when it goes away or the thread starts
+ * over, best-effort as the session page's is (R6).
  *
  * **Motion.** A turn added here rises in (`animate-enter`); turns restored
  * from storage, which arrive in the render after hydration, only fade in, as
@@ -168,6 +180,44 @@ type Kit = typeof import("./TutorStudioKit");
 
 const EMPTY: Value = { text: "", mentions: [] };
 
+/** The thread's session id (R6), in `sessionStorage` beside the thread, with memory behind a refused store. */
+const sessionMemory = new Map<string, string | null>();
+function readSession(slug: string): string | null {
+  const k = sessionKey(slug);
+  if (sessionMemory.has(k)) return sessionMemory.get(k) ?? null;
+  try {
+    return window.sessionStorage.getItem(k);
+  } catch {
+    return null;
+  }
+}
+function writeSession(slug: string, id: string | null): void {
+  const k = sessionKey(slug);
+  sessionMemory.set(k, id);
+  try {
+    if (id === null) window.sessionStorage.removeItem(k);
+    else window.sessionStorage.setItem(k, id);
+  } catch {
+    // Memory still holds it for this page.
+  }
+}
+
+/** Close the thread's session, if an answer opened one, and forget it. Idempotent on the server. */
+function closeSession(slug: string): void {
+  const id = readSession(slug);
+  if (id === null) return;
+  writeSession(slug, null);
+  void fetch("/api/learner/session/close", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: id }),
+    // Survives the page going away, which is when this is usually sent.
+    keepalive: true,
+  }).catch(() => {
+    // Best-effort (R6): an open session costs an honest row, and `learn session close` closes it.
+  });
+}
+
 export function TutorChat({
   slug,
   title,
@@ -175,6 +225,7 @@ export function TutorChat({
   suggestions,
   initialDraft,
   studio = false,
+  recall = null,
 }: {
   slug: string;
   title: string;
@@ -184,6 +235,8 @@ export function TutorChat({
   initialDraft?: string;
   /** `studioEnabled()` on the server: whether to ask the studio at all (D67). */
   studio?: boolean;
+  /** Set when the concept's review card is due (R3): the note's first check to open on, or null to ask the model. */
+  recall?: { question: string | null } | null;
 }) {
   const router = useRouter();
   const key = threadKey(slug);
@@ -358,8 +411,16 @@ export function TutorChat({
     const correct = verdict.tapped ?? tappedNow;
     recording.current.add(requestId);
     patchVerdict(requestId, { state: "saving", tapped: correct, error: null });
-    try {
-      const res = await fetch("/api/learner/observe", {
+    // The thread's session (R6): the first recorded answer opens it, on the server, in its own transaction.
+    const session = () => {
+      const held = readSession(slug);
+      if (held !== null) return held;
+      const id = newSessionId(slug, new Date(), requestToken().slice(5), "chat");
+      writeSession(slug, id);
+      return id;
+    };
+    const send = (sessionId: string) =>
+      fetch("/api/learner/observe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -367,13 +428,23 @@ export function TutorChat({
           correct,
           source: verdict.source,
           requestId,
+          sessionId,
           question: verdict.question,
           // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
           chosen: turn.content.slice(0, SESSION_TEXT_LIMIT),
         }),
         keepalive: true,
       });
-      const data = (await res.json().catch(() => null)) as ObserveReply | null;
+    try {
+      let res = await send(session());
+      let data = (await res.json().catch(() => null)) as ObserveReply | null;
+      // A session closed elsewhere (another tab, `learn session close`) refuses the answer with
+      // nothing written; the thread starts a fresh one and sends the same answer once more.
+      if (res.status === 400 && /session/i.test(data?.error ?? "")) {
+        writeSession(slug, null);
+        res = await send(session());
+        data = (await res.json().catch(() => null)) as ObserveReply | null;
+      }
       if (!res.ok || !data?.ok || !data.result) {
         throw new Error(
           res.status === 429 ? "Too many answers in a minute." : (data?.error ?? `The answer was not recorded (HTTP ${res.status}).`),
@@ -410,6 +481,50 @@ export function TutorChat({
     if (changed) writeTurns(key, settled);
   }, [key]);
 
+  // R6: the thread's session closes when the page goes away, by navigation
+  // inside the app (unmount) or out of it (`pagehide`). Best-effort.
+  useEffect(() => {
+    const onHide = () => closeSession(slug);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      closeSession(slug);
+    };
+  }, [slug]);
+
+  // R3: a due concept opens on the tutor. Once per mount, after hydration,
+  // and only into an empty thread: a thread the learner already has is theirs.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!hydrated || recall === null || opened.current) return;
+    opened.current = true;
+    if (parseThread(readRaw(key)).length > 0) return;
+    if (recall.question) {
+      writeTurns(key, [recallOpening(title, recall.question)]);
+      return;
+    }
+    void (async () => {
+      setBusy(true);
+      try {
+        const res = await fetch("/api/agent/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conceptSlug: slug, messages: [{ role: "user", content: RECALL_SEED }] }),
+        });
+        const data = (await res.json().catch(() => ({}))) as ChatReply;
+        const content = data.message?.content?.trim();
+        // Only a reply that asked a check opens the thread; anything else leaves the greeting.
+        if (res.ok && content && data.check?.question && parseThread(readRaw(key)).length === 0) {
+          writeTurns(key, [{ role: "assistant", content, check: { question: data.check.question } }]);
+        }
+      } catch {
+        // The greeting stays; the learner can still ask for a check.
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [hydrated, recall, key, slug, title]);
+
   async function ask(
     question: string,
     history: ThreadItem[] = turns,
@@ -443,7 +558,8 @@ export function TutorChat({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Markers are the person's record of a hand-off, not the tutor's turns.
-        body: JSON.stringify({ conceptSlug: slug, messages: trimForRequest(chatTurns(next)) }),
+        // A thread that opened on the tutor's recall question is sent with the seed before it.
+        body: JSON.stringify({ conceptSlug: slug, messages: requestTurns(next) }),
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
       if (!res.ok) throw new Error(errorFor(res.status, data));
@@ -617,6 +733,8 @@ export function TutorChat({
             <button
               type="button"
               onClick={() => {
+                // A new thread is a new session: the old one closes with what it recorded.
+                closeSession(slug);
                 setTurns([]);
                 setRestored(0);
                 setError(null);
