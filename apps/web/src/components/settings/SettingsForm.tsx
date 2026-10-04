@@ -173,15 +173,16 @@ export function NameField() {
   const { state, setDisplayName } = useLearner();
   const saved = state.displayName ?? "";
   const [draft, setDraft] = useState(saved);
+  const [status, setStatus] = useState<Status>({ kind: "idle" });
   // A newer name from the server (a refresh, another tab's save) replaces an
   // untouched field, so a focus and blur cannot save the old one over it. A
-  // field being edited keeps what is typed.
+  // field being edited keeps what is typed, and so does one whose save is
+  // still in flight: a refresh then can still carry the name before it.
   const [base, setBase] = useState(saved);
   if (saved !== base) {
     setBase(saved);
-    if (draft === base) setDraft(saved);
+    if (draft === base && status.kind !== "saving") setDraft(saved);
   }
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
   const latest = useRef(0);
   const save = () => {
     const next = draft.replace(/\s+/g, " ").trim();

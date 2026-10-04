@@ -79,6 +79,23 @@ describe("the name field", () => {
     expect(learner.setDisplayName).not.toHaveBeenCalled();
   });
 
+  it("keeps a name whose save is in flight when a refresh carries the old one", async () => {
+    learner.displayName = "Ada";
+    let finish: (ok: boolean) => void = () => undefined;
+    learner.setDisplayName.mockReturnValue(new Promise<boolean>((resolve) => (finish = resolve)));
+    const field = mount();
+    field.type("Grace");
+    await field.blur();
+    // Optimistic, then a refresh with the row as it was before the write.
+    learner.displayName = "Grace";
+    field.draw();
+    learner.displayName = "Ada";
+    field.draw();
+    expect(field.input().value).toBe("Grace");
+    await act(async () => finish(true));
+    expect(field.input().value).toBe("Grace");
+  });
+
   it("sends the same name again after a failed save", async () => {
     learner.setDisplayName.mockResolvedValue(false);
     const field = mount();
