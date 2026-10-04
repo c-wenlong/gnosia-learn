@@ -8,7 +8,18 @@ import { cx } from "@/components/ui/classes";
 import { wrapLabel, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
 import type { MapLayout } from "@/lib/concept-map";
 import type { GraphScope } from "@/lib/learn-index";
-import { fitView, labelsShown, panView, scaleOf, scopeBox, titleFits, zoomView, type View } from "@/lib/map-viewport";
+import {
+  fitView,
+  labelsShown,
+  panView,
+  pinchView,
+  scaleOf,
+  scopeBox,
+  titleFits,
+  titleMinScale,
+  zoomView,
+  type View,
+} from "@/lib/map-viewport";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
@@ -120,6 +131,11 @@ export function ConceptMap({
     el.setAttribute("viewBox", viewBoxOf(v));
     el.dataset.labels = labelsShown(scale) ? "shown" : "hidden";
     el.style.setProperty("--map-title-size", `${TITLE_SIZE / scale}px`);
+    // Titles show only over an island wide enough to hold them, decided here
+    // every frame, so a title appears as the zoom reaches it and not after.
+    el.querySelectorAll<SVGTextElement>("[data-island-title]").forEach((t) => {
+      t.classList.toggle("hidden", scale < Number(t.dataset.minScale) && t.dataset.keep !== "true");
+    });
     window.clearTimeout(commitTimer.current);
     commitTimer.current = window.setTimeout(() => setView(v), 120);
   }, []);
@@ -223,16 +239,11 @@ export function ConceptMap({
   // Pointers: one drags, two pinch. A press that never moves past the slop is
   // left alone, so it reaches the concept under it as a click.
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef({ moved: false, startX: 0, startY: 0, distance: 0 });
-  const spread = () => {
-    const [a, b] = [...pointers.current.values()];
-    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
-  };
+  const gesture = useRef({ moved: false, startX: 0, startY: 0 });
   const onPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.current.size === 1) gesture.current = { moved: false, startX: event.clientX, startY: event.clientY, distance: 0 };
-    else gesture.current.distance = spread();
+    if (pointers.current.size === 1) gesture.current = { moved: false, startX: event.clientX, startY: event.clientY };
   };
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
     const previous = pointers.current.get(event.pointerId);
@@ -246,22 +257,20 @@ export function ConceptMap({
       setFit("");
       svgRef.current?.setPointerCapture(event.pointerId);
     }
+    const before = [...pointers.current.values()];
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const width = svgRef.current?.clientWidth || ASSUMED.width;
     if (pointers.current.size >= 2) {
-      const now = spread();
-      if (g.distance > 0 && now > 0) {
-        const [a, b] = [...pointers.current.values()];
-        paint(zoomView(live.current, g.distance / now, toMap((a.x + b.x) / 2, (a.y + b.y) / 2), width));
-      }
-      g.distance = now;
+      // Two fingers pan with their midpoint and zoom with their spread, both at once.
+      const after = [...pointers.current.values()];
+      const rect = (svgRef.current as SVGSVGElement).getBoundingClientRect();
+      paint(pinchView(live.current, before.slice(0, 2), after.slice(0, 2), rect));
       return;
     }
     paint(panView(live.current, event.clientX - previous.x, event.clientY - previous.y, width));
   };
   const onPointerEnd = (event: React.PointerEvent<SVGSVGElement>) => {
     pointers.current.delete(event.pointerId);
-    if (pointers.current.size < 2) gesture.current.distance = 0;
   };
   // A drag that ends over a concept must not select it.
   const onClickCapture = (event: React.MouseEvent) => {
@@ -327,6 +336,8 @@ export function ConceptMap({
               <rect x={i.x} y={i.y} width={i.width} height={i.height} rx={16} className="fill-surface stroke-hair" strokeWidth={1} />
               <text
                 data-island-title
+                data-min-scale={titleMinScale(i.width, i.title)}
+                data-keep={selectedIsland === i.id}
                 x={i.x + 4}
                 y={i.y - 10}
                 fontWeight={700}
