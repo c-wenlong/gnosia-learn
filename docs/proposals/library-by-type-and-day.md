@@ -128,14 +128,32 @@ module or a video, each with its kind glyph at 18 px as Home's "Pick up where
 you left off" draws them ([home-core.ts:41](../../apps/web/src/lib/home-core.ts)).
 Home's list is not the source, since it returns five rows, reads module
 visits from a preference that keeps five ([home.ts:226](../../apps/web/src/lib/home.ts))
-and has no tutor sessions. Recent is a query of its own: `draft` by
-`updated_at` for conversations, `session` by `updated_at` for tutor sessions
-(its `title`, `kind` and `log_asset_id` are there, [studio.ts:76](../../packages/schema/src/studio.ts)),
-the `watched` events for videos, and module visits, which phase 4 moves from
-the preference into a `visit` event on the append-only `event` table (course
-and module slugs, one row per visit) so a visit older than five survives;
-Home's threads read the same query from then on. The rows merge newest first
-into the day buckets the Chats list uses, 50 a page with Show older. Section labels are 13 px grey, sticky while their section
+and has no tutor sessions. Recent is a query of its own, with five sources,
+and it must keep everything Home's list shows today or Home cannot move to
+it: `draft` by `updated_at` for conversations; `session` by `updated_at` for
+tutor sessions (its `title`, `kind` and `log_asset_id` are there,
+[studio.ts:76](../../packages/schema/src/studio.ts)); videos from the saved
+playback positions (the `playback:<asset id>` preferences Home already reads,
+[home.ts:64](../../apps/web/src/lib/home.ts)), a row being a video with a
+position and no `watchedAt`, since a finished video is for the Library, not
+for picking up, and the `watched` events are not used because they fire only
+at Mark watched or 90% played; concepts from the `observation` events, as
+Home's `conceptTouches` builds them ([home.ts:110](../../apps/web/src/lib/home.ts)),
+so a concept studied yesterday stays a row and "Next from here" keeps its
+input; and module visits. Visits move from the preference into a `visit`
+event on the append-only `event` table (course and module slugs, one row per
+visit) so a visit older than five survives. That is a new event type, which
+is a migration and not only an edit to `EVENT_TYPES`
+([shared.ts:108](../../packages/schema/src/shared.ts)): the table's
+`event_type_check` constraint is rewritten the way `0008_watched_event.sql`
+did for `watched`, generated with `npm run generate -w @self-learn/catalog`,
+and `visit` is not a study event. Until the first visit event exists, the
+query also reads the `recentModules` preference and merges the two by course
+and module, newest first, so the five modules Home shows today do not vanish
+on the day of the change; the preference keeps being written for one release
+and is then left unread, as H1 left the streak's. The rows merge newest first
+into the day buckets the Chats list uses, 50 a page with Show older, and
+Home's threads read the same query from then on. Section labels are 13 px grey, sticky while their section
 scrolls, as Manus's are ([nav-section-header](../design/reference/manus/components.md#nav-section-header)).
 Hovering a row shows a more button; its menu has Pin, Rename (for a
 conversation), Open in course (for a module), Archive (for a conversation).
@@ -183,7 +201,7 @@ is dropped there.
 | 1 | L1, L2, L3, L8: the tab strip, the day groups, `createdAt` and `updatedAt` on the row, the parent query behind the source line, the density tokens | `apps/web/src/app/(app)/library/`, `apps/web/src/lib/library.ts`, `apps/web/src/components/asset-meta.ts`, a shared `dayGroups` helper, the shell's tokens | The Library at `?kind=` shows the tab strip and day groups in both views; every row has its time and, where it differs, its edited date; the source line resolves for an asset with a course item, a concept, a studio job and a session; the counts are in the header; `npm test` passes with a golden of the grouping and of the parent precedence |
 | 2 | L4, L5: view options, the row and card menu, with Copy link, the `?download=1` file response and Open in course built | the same, plus a `RowMenu` in `apps/web/src/components/library/` and `apps/web/src/app/api/assets/[id]/file/` | `?group=course` and `?group=concept` render; each of the six menu actions works on a row and a card, the three new ones with tests |
 | 3 | L6: the previewer | `apps/web/src/components/library/Previewer.tsx`, the asset page's body factored out of `library/[id]/page.tsx` | A row opens the panel, Escape restores the scroll position, deep links still open the page |
-| 4 | L7: the sidebar sections, the Recent query over drafts, sessions, watched events and visits, the `visit` event, the row menu | `apps/web/src/components/shell/`, `apps/web/src/lib/home.ts` and `home-core.ts`, a `recent.ts` beside them, `packages/schema/src/state.ts` for the event type | The sidebar shows Courses, Pinned and Recent with glyphs; a tutor session and a module visited six modules ago both appear; Home's threads come from the same query; the phone drawer is the same column; `AppSidebar.test.ts` covers the sections |
+| 4 | L7: the sidebar sections, the Recent query over drafts, sessions, playback positions, observation events and visits, the `visit` event with its migration and the preference fallback, the row menu | `apps/web/src/components/shell/`, `apps/web/src/lib/home.ts` and `home-core.ts`, a `recent.ts` beside them, `packages/schema/src/shared.ts` for `EVENT_TYPES` and a new `services/catalog/drizzle/00NN_visit_event.sql` | The sidebar shows Courses, Pinned and Recent with glyphs; a tutor session, a half-watched video, a concept observed yesterday and a module visited six modules ago all appear, and a finished video does not; the five modules in the preference still show after the migration; Home's threads come from the same query and its golden test is unchanged; the phone drawer is the same column; `AppSidebar.test.ts` covers the sections |
 
 Phases 1 and 4 are independent; 2 and 3 build on 1.
 
