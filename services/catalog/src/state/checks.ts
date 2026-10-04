@@ -24,6 +24,12 @@ export async function conceptCheckCounts(
   db: CatalogDatabase,
   slugs: readonly string[],
   scope: OwnerScope,
+  /**
+   * The parser to count with. The web app passes the one its concept
+   * session asks from (`concept-note-core.ts`), so the count beside Quiz me
+   * and the questions the session finds cannot disagree on a note.
+   */
+  parse: (body: string) => readonly unknown[] = (body) => parseChecks(body) as unknown[],
 ): Promise<Record<string, number>> {
   const wanted = [...new Set(slugs)];
   if (wanted.length === 0) return {};
@@ -34,6 +40,6 @@ export async function conceptCheckCounts(
       .where(and(inArray(concept.slug, wanted), ownedBy(concept.ownerId, owners))),
   );
   const out: Record<string, number> = {};
-  for (const row of rows) out[row.slug] = (parseChecks(row.body ?? "") as unknown[]).length;
+  for (const row of rows) out[row.slug] = parse(row.body ?? "").length;
   return out;
 }

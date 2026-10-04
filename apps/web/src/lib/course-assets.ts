@@ -10,6 +10,7 @@ import {
 import { connection } from "next/server";
 
 import { assetDisplayTitle, assetKindLabel, familyOf } from "@/components/asset-meta";
+import { parseChecks } from "@/lib/concept-note-core";
 import { withCatalog } from "@/lib/asset-library";
 import { assetHref, isCompanionKind, libraryHref } from "@/lib/library";
 import type { ModulePathAssets, PathAsset } from "@/lib/module-path";
@@ -79,7 +80,7 @@ export async function loadCourseAssets(
       Promise.all(slugs.map((slug) => assetsForTopic(db, slug, scope))),
       assetsForConcepts(db, concepts, scope),
       assetsByIds(db, listed, scope),
-      conceptCheckCounts(db, concepts, scope),
+      conceptCheckCounts(db, concepts, scope, parseChecks),
     ]),
   );
   if (read === null) return { reachable: false, byTopic: {}, paths: {}, checks: null };

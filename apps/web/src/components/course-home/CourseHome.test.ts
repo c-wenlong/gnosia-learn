@@ -340,9 +340,7 @@ describe("CourseHome: the module as one path", () => {
       "/learn/big-o",
       "/learn/big-o/session?mode=check",
       "/learn/big-omega",
-      "/learn/big-omega/session?mode=check",
       "/learn/theta",
-      "/learn/theta/session?mode=check",
       "/library/diagram%3Atheta",
       "https://example.com/docs",
       "https://leetcode.com/problems/x/",
@@ -358,9 +356,8 @@ describe("CourseHome: the module as one path", () => {
     const host = renderPath();
     const quiz = [...main(host).querySelectorAll("a")].filter((a) => a.textContent === "Quiz me");
     expect(quiz.map((a) => a.getAttribute("href"))).toEqual([
+      // Only big-o's note has checks; the others offer no Quiz me.
       "/learn/big-o/session?mode=check",
-      "/learn/big-omega/session?mode=check",
-      "/learn/theta/session?mode=check",
     ]);
     const row = quiz[0]!.closest("li")!;
     expect([...row.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
@@ -368,8 +365,9 @@ describe("CourseHome: the module as one path", () => {
       "/learn/big-o/session?mode=check",
     ]);
     expect(quiz[0]!.getAttribute("aria-label")).toBe("Quiz me on Concept big-o");
-    // big-omega's note has no checks: no count, and no sentence in its place.
-    expect(quiz[1]!.closest("li")!.textContent).toBe("Concept big-omegaNote · Not startedQuiz me");
+    // big-omega's note has no checks: no count, no sentence, and no Quiz me.
+    const omega = [...main(host).querySelectorAll("a")].find((a) => a.getAttribute("href") === "/learn/big-omega")!;
+    expect(omega.closest("li")!.textContent).toBe("Concept big-omegaNote · Not started");
   });
 
   it("keeps the learner's own resources and the add form under read alongside", () => {

@@ -93,6 +93,16 @@ describe.skipIf(!reachable.ok)("module path reads", () => {
     expect(await conceptCheckCounts(scratch.db, [], LOCAL)).toEqual({});
   });
 
+  it("counts with the parser it is given, so the page and the session read a note the same way", async () => {
+    const seen: string[] = [];
+    const counted = await conceptCheckCounts(scratch.db, ["alpha"], LOCAL, (body) => {
+      seen.push(body);
+      return [1, 2, 3, 4, 5];
+    });
+    expect(counted).toEqual({ alpha: 5 });
+    expect(seen).toHaveLength(1);
+  });
+
   it("counts nothing in a note the reader cannot read", async () => {
     expect(await conceptCheckCounts(scratch.db, ["other-concept"], LOCAL)).toEqual({});
     expect(await conceptCheckCounts(scratch.db, ["other-concept", "alpha"], THEIRS)).toEqual({ "other-concept": 1 });

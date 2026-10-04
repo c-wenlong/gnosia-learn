@@ -221,15 +221,17 @@ function ConceptSteps({ step }: { step: ConceptStep }) {
               <span className={ROW_META}>{conceptMeta(step)}</span>
             </span>
           </Link>
-          <Button
-            href={step.quizHref}
-            variant="secondary"
-            size="sm"
-            aria-label={`Quiz me on ${step.title}`}
-            className="relative z-10 ml-8 mt-2 justify-self-start sm:ml-0 sm:mt-0"
-          >
-            Quiz me
-          </Button>
+          {step.quizHref !== null && (
+            <Button
+              href={step.quizHref}
+              variant="secondary"
+              size="sm"
+              aria-label={`Quiz me on ${step.title}`}
+              className="relative z-10 ml-8 mt-2 justify-self-start sm:ml-0 sm:mt-0"
+            >
+              Quiz me
+            </Button>
+          )}
         </div>
       </li>
       {step.assets.map((a) => (

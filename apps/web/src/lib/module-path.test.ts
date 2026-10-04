@@ -162,7 +162,9 @@ describe("modulePath: the order of the steps", () => {
     const [first] = path.lessons;
     expect(first?.concepts.map((c) => [c.slug, c.title, c.href, c.quizHref, c.checks])).toEqual([
       ["big-o", "Title of big-o", "/learn/big-o", "/learn/big-o/session?mode=check", 3],
-      ["big-omega", "Title of big-omega", "/learn/big-omega", "/learn/big-omega/session?mode=check", 0],
+      // No checks: no Quiz me, as the concept workspace offers none either,
+      // since with no tutor model the session would ask nothing.
+      ["big-omega", "Title of big-omega", "/learn/big-omega", null, 0],
     ]);
     expect(quizHref("a b")).toBe("/learn/a%20b/session?mode=check");
   });
@@ -170,6 +172,15 @@ describe("modulePath: the order of the steps", () => {
   it("says nothing about a count of checks it could not read", () => {
     const path = modulePath(input({ checks: null }));
     expect(path.lessons[0]?.concepts.map((c) => c.checks)).toEqual([null, null]);
+    expect(path.lessons[0]?.concepts.map((c) => c.quizHref)).toEqual([null, null]);
+  });
+
+  it("puts a concept's p(L) on its meta line once it has been seen, as the old concept list did", () => {
+    expect(conceptMeta({ bucket: "learning", checks: 3, pL: 0.6234 })).toBe("Note · Learning · p(L) 0.62 · 3 checks");
+    expect(conceptMeta({ bucket: "mastered", checks: 0, pL: 0.97 })).toBe("Note · Mastered · p(L) 0.97");
+    expect(conceptMeta({ bucket: "untouched", checks: 2, pL: 0.25 })).toBe("Note · Not started · 2 checks");
+    const concepts = knowledgeBase({ "big-o": { observations: 2, mastery: "weak", pL: 0.41 } });
+    expect(modulePath(input({ concepts })).lessons[0]?.concepts[0]?.pL).toBe(0.41);
   });
 
   it("puts the check count on the note's meta line only when the note has checks", () => {
@@ -177,7 +188,7 @@ describe("modulePath: the order of the steps", () => {
     const path = modulePath(input({ concepts, checks: { "big-o": 3, "big-omega": 1, theta: 0 } }));
     const steps = path.lessons.flatMap((l) => l.concepts);
     expect(steps.slice(0, 3).map(conceptMeta)).toEqual([
-      "Note · Learning · 3 checks",
+      "Note · Learning · p(L) 0.25 · 3 checks",
       "Note · Not started · 1 check",
       "Note · Not started",
     ]);

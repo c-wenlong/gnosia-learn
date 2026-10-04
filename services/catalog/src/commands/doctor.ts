@@ -346,13 +346,19 @@ async function listedVideos(db: CatalogDatabase): Promise<{
   const shared = await db.execute<{ course: string; module: string; topic: string }>(sql`
     with listed as (${listed}),
     module_topic as (
-      select m.parent_id as course, m.id as module, t.topic_slug as topic
+      select m.parent_id as course, m.id as module, t.topic_slug as topic, m.owner_id
       from collection m
       join collection_item t on t.collection_id = m.id and t.topic_slug is not null
       where m.kind = 'module' and m.archived_at is null
     )
     select course, module, topic from module_topic mt
-    where (select count(*) from module_topic o where o.topic = mt.topic) > 1
+    -- Shared only with a module this module's owner can read: their own or
+    -- the commons'. Two owners on one commons topic never see each other's.
+    where exists (
+      select 1 from module_topic o
+      where o.topic = mt.topic and o.module <> mt.module
+        and (o.owner_id = mt.owner_id or o.owner_id = ${COMMONS_OWNER})
+    )
       and not exists (select 1 from listed l where l.module = mt.module)
     order by course collate "C", module collate "C"
   `);

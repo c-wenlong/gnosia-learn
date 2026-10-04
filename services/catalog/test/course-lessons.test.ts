@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, collection, collectionItem, contentRevision, curriculumItem, curriculumItemAsset } from "@self-learn/schema";
+import { asset, collection, collectionItem, contentRevision, curriculumItem, curriculumItemAsset, learner } from "@self-learn/schema";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -229,6 +229,25 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
     } finally {
       await scratch.db.delete(collectionItem).where(eq(collectionItem.collectionId, "zz3000-m3"));
       await scratch.db.delete(collection).where(eq(collection.id, "zz3000-m3"));
+    }
+  });
+
+  it("has the doctor count a topic as shared only between modules one owner can read", async () => {
+    // Another owner's course with a module on the same topic: neither owner
+    // reads the other's module or videos, so nothing falls back across them.
+    await scratch.db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
+    await scratch.db.insert(collection).values([
+      { id: "yy1000", kind: "course", slug: "yy1000", title: "Theirs", parentId: null, position: 9, ownerId: "someone-else" },
+      { id: "yy1000-m1", kind: "module", slug: "m1", title: "Their module", parentId: "yy1000", position: 1, ownerId: "someone-else" },
+    ]);
+    await scratch.db.insert(collectionItem).values({ collectionId: "yy1000-m1", position: 0, topicSlug: "alpha" });
+    try {
+      const report = await doctor(scratch.db, "scratch");
+      expect(report.sharedTopicWithoutVideos).toEqual([]);
+    } finally {
+      await scratch.db.delete(collectionItem).where(eq(collectionItem.collectionId, "yy1000-m1"));
+      await scratch.db.delete(collection).where(eq(collection.id, "yy1000-m1"));
+      await scratch.db.delete(collection).where(eq(collection.id, "yy1000"));
     }
   });
 

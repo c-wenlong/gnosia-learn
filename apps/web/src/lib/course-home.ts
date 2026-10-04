@@ -91,7 +91,7 @@ export async function loadCourseHome(course: Course): Promise<CourseHomeData> {
  */
 function pathConcepts(
   taught: readonly string[],
-  kb: ReadonlyMap<string, { id: string; title: string; mastery: PathKbConcept["mastery"]; observations: number; requires: string[]; assumes: string[] }>,
+  kb: ReadonlyMap<string, { id: string; title: string; pL: number; mastery: PathKbConcept["mastery"]; observations: number; requires: string[]; assumes: string[] }>,
 ): PathKbConcept[] {
   const wanted = new Set(taught);
   for (const slug of taught) {
@@ -101,7 +101,7 @@ function pathConcepts(
   return [...wanted].flatMap((slug) => {
     const c = kb.get(slug);
     return c
-      ? [{ id: c.id, title: c.title, mastery: c.mastery, observations: c.observations, requires: c.requires, assumes: c.assumes }]
+      ? [{ id: c.id, title: c.title, pL: c.pL, mastery: c.mastery, observations: c.observations, requires: c.requires, assumes: c.assumes }]
       : [];
   });
 }

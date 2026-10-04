@@ -6,7 +6,7 @@ import {
   type KbConceptLike,
   type TopicMastery,
 } from "@/lib/course-path";
-import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import { bucketOf, masteryCaption, type MasteryBucket } from "@/lib/mastery-bucket";
 import type { Module, Resource, Topic } from "@/lib/types";
 
 /**
@@ -51,7 +51,7 @@ export interface PathAsset {
  * A concept of the knowledge base as the path reads it: its title, its
  * mastery and its edges. The slice of `KbConcept` a page sends to the client.
  */
-export interface PathKbConcept extends Pick<KbConceptLike, "id" | "title" | "mastery" | "observations"> {
+export interface PathKbConcept extends Pick<KbConceptLike, "id" | "title" | "pL" | "mastery" | "observations"> {
   requires: readonly string[];
   assumes: readonly string[];
 }
@@ -100,8 +100,15 @@ export interface ConceptStep {
   assets: PathAsset[];
   /** How many checks the note holds; null when unknown. */
   checks: number | null;
-  /** Quiz me, the action on the concept's row: the concept session straight to its checks. */
-  quizHref: string;
+  /** The concept's p(L), shown once it has been seen, as the concept list it replaced showed it. */
+  pL: number | null;
+  /**
+   * Quiz me, the action on the concept's row: the concept session straight
+   * to its checks. Null when the note has none, or none could be counted:
+   * the concept workspace offers no Quiz me then either, since with no tutor
+   * model the session would ask nothing.
+   */
+  quizHref: string | null;
 }
 
 export interface PathLesson {
@@ -208,7 +215,8 @@ export function modulePath(input: ModulePathInput): ModulePath {
           href: conceptHref(slug),
           assets: own,
           checks: checks === null ? null : (checks[slug] ?? 0),
-          quizHref: quizHref(slug),
+          pL: kb?.pL ?? null,
+          quizHref: checks !== null && (checks[slug] ?? 0) > 0 ? quizHref(slug) : null,
         };
       }),
       readings: [...(lessonReadings[i] ?? []), ...(closing[i] ?? [])],
@@ -256,12 +264,12 @@ export function pathSequence(path: ModulePath): PathSequenceStep[] {
 }
 
 /**
- * A concept row's meta line: "Note · Learning", with " · 3 checks" only when
- * the note has checks. Quiz me sits on the row either way: with none, the
- * tutor writes the questions, which the row need not say.
+ * A concept row's meta line: "Note · Learning · p(L) 0.62", with
+ * " · 3 checks" only when the note has checks. Quiz me sits on the row only
+ * then.
  */
-export function conceptMeta(step: Pick<ConceptStep, "bucket" | "checks">): string {
-  const base = `Note · ${MASTERY_BUCKET_LABEL[step.bucket]}`;
+export function conceptMeta(step: Pick<ConceptStep, "bucket" | "checks" | "pL">): string {
+  const base = `Note · ${masteryCaption(step.bucket, step.pL)}`;
   if (!step.checks) return base;
   return `${base} · ${step.checks} check${step.checks === 1 ? "" : "s"}`;
 }
