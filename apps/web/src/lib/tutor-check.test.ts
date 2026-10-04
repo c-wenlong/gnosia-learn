@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkSource,
+  dueRecall,
   matchCheck,
   newVerdict,
   pendingCheck,
+  recallOpening,
   recordedLine,
   restoreCheck,
   restoreVerdict,
@@ -149,5 +151,32 @@ describe("matchCheck", () => {
     expect(matchCheck("Why is softmax used in attention?", checks)).toBeNull();
     expect(matchCheck("?", checks)).toBeNull();
     expect(matchCheck("What is it?", [])).toBeNull();
+  });
+});
+
+describe("recallOpening (R3)", () => {
+  it("opens on the note's check, marked so the answer gets a row, and is a probe", () => {
+    const turn = recallOpening("Dot product", "  Why is it   zero? ");
+    expect(turn.check).toEqual({ question: "Why is it zero?" });
+    expect(turn.content).toContain("Dot product");
+    expect(turn.content.endsWith("Why is it zero?")).toBe(true);
+    expect(pendingCheck([turn])).toBe(0);
+    expect(checkSource([turn], 0)).toBe("probe");
+  });
+});
+
+describe("dueRecall (R3)", () => {
+  const now = new Date("2026-10-04T12:00:00Z");
+  const checks = [{ question: " " }, { question: "Why is it zero?" }];
+
+  it("opens on the first real check once the card is due", () => {
+    expect(dueRecall({ due: "2026-10-04T12:00:00Z" }, checks, now)).toEqual({ question: "Why is it zero?" });
+    expect(dueRecall({ due: "2026-08-21T00:00:00Z" }, [], now)).toEqual({ question: null });
+  });
+
+  it("says nothing with no card, a card not yet due, or a date it cannot read", () => {
+    expect(dueRecall(null, checks, now)).toBeNull();
+    expect(dueRecall({ due: "2026-10-05T00:00:00Z" }, checks, now)).toBeNull();
+    expect(dueRecall({ due: "soon" }, checks, now)).toBeNull();
   });
 });
