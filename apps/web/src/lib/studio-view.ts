@@ -367,6 +367,17 @@ export function browserPanelMove(from: { pathname: string; search: string }, hre
   return next.extend === null || next.settings || next.draft !== null || next.job !== null;
 }
 
+/**
+ * Whether `PanelHost` serves going from `from` to `href` in the browser: a
+ * panel opened, closed or swapped (`browserPanelMove`), or the grid's view
+ * changed (`browserViewMove`). `from` is the address bar, or a path such as
+ * the host's `path`.
+ */
+export function browserMove(from: { pathname: string; search: string } | string, href: string): boolean {
+  const at = typeof from === "string" ? { pathname: from.split("?")[0] ?? "", search: from.split("?")[1] ?? "" } : from;
+  return browserPanelMove(at, href) || browserViewMove(at, href);
+}
+
 /** The patch that closes every panel: what Close, New chat and a link away from the grid use. */
 export const CLOSED = { draft: null, job: null, extend: null, selected: null, shot: null, settings: false, play: null } as const;
 
