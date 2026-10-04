@@ -48,6 +48,13 @@ const PATHS = {
   chat: "M4 4.5h12v8.5H9.5L6 16v-3H4z",
   // A stack of disks: the Settings page's Data tab.
   data: "M4 5.5c0-1.1 2.7-2 6-2s6 .9 6 2-2.7 2-6 2-6-.9-6-2zM4 5.5v9c0 1.1 2.7 2 6 2s6-.9 6-2v-9M4 10c0 1.1 2.7 2 6 2s6-.9 6-2",
+  // A five-point star: a favourite. `fill-current` draws it starred.
+  star: "M10 3.2l2.1 4.3 4.7.7-3.4 3.3.8 4.7-4.2-2.2-4.2 2.2.8-4.7-3.4-3.3 4.7-.7z",
+  // Two sparkles: a question for the tutor on the page in front of you.
+  sparkle:
+    "M9 3c.5 3.3 1.7 4.5 5 5-3.3.5-4.5 1.7-5 5-.5-3.3-1.7-4.5-5-5 3.3-.5 4.5-1.7 5-5zM15 12.5c.2 1.2.6 1.6 1.8 1.8-1.2.2-1.6.6-1.8 1.8-.2-1.2-.6-1.6-1.8-1.8 1.2-.2 1.6-.6 1.8-1.8z",
+  // An arrow down onto a line: save the file.
+  download: "M10 3.5v9M6 8.5l4 4 4-4M4 16h12",
 } as const;
 
 export type GlyphName = keyof typeof PATHS;
