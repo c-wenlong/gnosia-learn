@@ -31,6 +31,7 @@ const concept = (id: string, over: Partial<KbConcept> = {}): KbConcept => ({
   topics: [],
   positions: {},
   domain: "foundations",
+  topic: "foundations",
   ...over,
 });
 
