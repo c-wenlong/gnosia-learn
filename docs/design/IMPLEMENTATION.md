@@ -532,13 +532,14 @@ start (unmastered prerequisites outside the module, `requires` first; only
 when there are any), Watch (the videos the module lists, then its topic's;
 only when there are any), Read alongside (readings with no `lessons:`, the
 learner's own, and the add form), then one group per topic, its row as the
-header and its steps under it on a hairline: each concept's note, its
-diagrams and videos, and Quiz me with the note's check count, then the
-readings listed on the topic. Practice comes last when there is any, then
-"All N in the library" once. One icon per step kind: a bulb for a
-prerequisite, a page for a note, the family glyph for an asset, a question
-mark for Quiz me, the resource type's glyph for a reading, a pencil for
-practice. The concepts left the topic panel, since the steps draw them.
+header and its steps under it on a hairline: each concept is one row, the
+note's title over "Note · Learning" (plus " · 3 checks" when the note has
+checks) with a Quiz me pill at its end, under the title on a phone; its
+diagrams and videos follow as rows of their own, then the readings listed
+on the topic. Practice comes last when there is any, then "All N in the
+library" once. One icon per step kind: a bulb for a prerequisite, a page
+for a note, the family glyph for an asset, the resource type's glyph for a
+reading, a pencil for practice. The concepts left the topic panel, since the steps draw them.
 
 ## Deviations from the hi-fi
 

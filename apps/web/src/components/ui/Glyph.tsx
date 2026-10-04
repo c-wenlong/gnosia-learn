@@ -27,8 +27,6 @@ const PATHS = {
   link: "M8.5 11.5a3 3 0 0 0 4.2 0l2.6-2.6a3 3 0 0 0-4.2-4.2l-.8.8M11.5 8.5a3 3 0 0 0-4.2 0l-2.6 2.6a3 3 0 0 0 4.2 4.2l.8-.8",
   // An open book, as the Courses tab draws it.
   book: "M10 6.5C8.5 5 6 4.5 3 4.8v10.4c3-.3 5.5.2 7 1.8 1.5-1.6 4-2.1 7-1.8V4.8c-3-.3-5.5.2-7 1.7zm0 0V17",
-  // A question mark in a circle: a concept's checks, Quiz me.
-  quiz: "M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM8.2 8.2a1.9 1.9 0 1 1 2.6 1.7c-.5.3-.8.7-.8 1.2v.4M10 13.6h.01",
   // A pencil: a problem to work.
   practice: "M12.8 4.7l2.5 2.5-7.6 7.6-3.2.7.7-3.2zM11.3 6.2l2.5 2.5",
   // A plus.

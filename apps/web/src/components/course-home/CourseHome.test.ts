@@ -327,7 +327,7 @@ describe("CourseHome: the module as one path", () => {
     expect(order).toEqual(["Before you start", "Watch", "Read alongside", "First lessonNot started", "Second lessonNot started", "Practice"]);
   });
 
-  it("puts each step at its place: prerequisites, videos, readings, each concept's note, assets and Quiz me, practice, then the library once", () => {
+  it("puts each step at its place: prerequisites, videos, readings, each concept's row with Quiz me, its assets, practice, then the library once", () => {
     const host = renderPath();
     expect(links(host)).toEqual([
       "/learn/big-o", // the Guidebook
@@ -342,15 +342,34 @@ describe("CourseHome: the module as one path", () => {
       "/learn/big-omega",
       "/learn/big-omega/session?mode=check",
       "/learn/theta",
-      "/library/diagram%3Atheta",
       "/learn/theta/session?mode=check",
+      "/library/diagram%3Atheta",
       "https://example.com/docs",
       "https://leetcode.com/problems/x/",
       "/library?topic=growth",
     ]);
     expect(main(host).textContent).toContain("All 7 in the library");
-    expect(main(host).textContent).toContain("3 checks in the note");
+    expect(main(host).textContent).toContain("Note · Not started · 3 checks");
+    expect(main(host).textContent).not.toContain("tutor writes");
     expect(main(host).textContent).toContain("Needed first");
+  });
+
+  it("draws each concept as one row: the note link, and Quiz me at its end", () => {
+    const host = renderPath();
+    const quiz = [...main(host).querySelectorAll("a")].filter((a) => a.textContent === "Quiz me");
+    expect(quiz.map((a) => a.getAttribute("href"))).toEqual([
+      "/learn/big-o/session?mode=check",
+      "/learn/big-omega/session?mode=check",
+      "/learn/theta/session?mode=check",
+    ]);
+    const row = quiz[0]!.closest("li")!;
+    expect([...row.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
+      "/learn/big-o",
+      "/learn/big-o/session?mode=check",
+    ]);
+    expect(quiz[0]!.getAttribute("aria-label")).toBe("Quiz me on Concept big-o");
+    // big-omega's note has no checks: no count, and no sentence in its place.
+    expect(quiz[1]!.closest("li")!.textContent).toBe("Concept big-omegaNote · Not startedQuiz me");
   });
 
   it("keeps the learner's own resources and the add form under read alongside", () => {

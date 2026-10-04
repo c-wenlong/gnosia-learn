@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { useId, useMemo, useState, type ReactNode } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { continueHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
-import { checksLine, modulePath, type ConceptStep, type PathAsset, type PathPrerequisite } from "@/lib/module-path";
+import { conceptMeta, modulePath, type ConceptStep, type PathAsset, type PathPrerequisite } from "@/lib/module-path";
 import type { Course, Module } from "@/lib/types";
 
 import { FAMILY_GLYPH, Glyph, type GlyphName } from "./icons";
 import { ModuleResources, ResourceRow } from "./ModuleResources";
-import { FOCUS_RING, ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE } from "./rows";
+import { FOCUS_RING, ROW, ROW_BOX, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 import { TopicRow } from "./TopicRow";
 import type { ModuleData } from "./types";
 
@@ -25,8 +26,8 @@ import type { ModuleData } from "./types";
  * video is placed), Read alongside with the learner's own resources and the
  * add form, then one group per lesson: the lesson's row as the header (its
  * mark from `topicDone`, its tools behind the toggle, Continue on the active
- * one) and its steps under it, each concept's note, its diagrams and videos,
- * and its Quiz me, then the lesson's readings. Practice, when there is any,
+ * one) and its steps under it, each concept's note with Quiz me on the same
+ * row, then its diagrams and videos, then the lesson's readings. Practice, when there is any,
  * closes the path, and the library link for everything filed under the
  * module's topic comes once, last.
  *
@@ -196,21 +197,44 @@ function AssetRow({ asset: a }: { asset: PathAsset }) {
   return <StepRow href={a.href} glyph={FAMILY_GLYPH[a.family]} title={a.title} meta={a.kindLabel} mono={!a.titled} />;
 }
 
-/** A concept's steps: its note, what is drawn or filmed about it, then its checks. */
+/**
+ * A concept's step: one row for the note, with Quiz me at its end (under the
+ * title on a phone), then a row for each diagram and video placed on it.
+ * The note link stretches over the row; Quiz me is raised above it and keeps
+ * its own click.
+ */
 function ConceptSteps({ step }: { step: ConceptStep }) {
   return (
     <>
-      <StepRow href={step.href} glyph="text" title={step.title} meta={`Note · ${MASTERY_BUCKET_LABEL[step.bucket]}`} />
+      <li>
+        <div
+          className={cx(
+            ROW_BOX,
+            ROW_HOVER,
+            "grid grid-cols-[minmax(0,1fr)] items-center gap-x-2 sm:grid-cols-[minmax(0,1fr)_auto]",
+          )}
+        >
+          <Link href={step.href} className={cx("flex min-w-0 items-center gap-2", STRETCHED)}>
+            <Glyph name="text" className="text-text2" />
+            <span className="min-w-0 flex-1 pl-1">
+              <span className={cx(ROW_TITLE, "break-words")}>{step.title}</span>
+              <span className={ROW_META}>{conceptMeta(step)}</span>
+            </span>
+          </Link>
+          <Button
+            href={step.quizHref}
+            variant="secondary"
+            size="sm"
+            aria-label={`Quiz me on ${step.title}`}
+            className="relative z-10 ml-8 mt-2 justify-self-start sm:ml-0 sm:mt-0"
+          >
+            Quiz me
+          </Button>
+        </div>
+      </li>
       {step.assets.map((a) => (
         <AssetRow key={a.id} asset={a} />
       ))}
-      <StepRow
-        href={step.quizHref}
-        glyph="quiz"
-        title="Quiz me"
-        label={`Quiz me on ${step.title}`}
-        meta={checksLine(step.checks)}
-      />
     </>
   );
 }

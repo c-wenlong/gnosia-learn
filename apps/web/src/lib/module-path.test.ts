@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { conceptsForTopic, resolveTopicMastery, type KbConceptLike, type TopicMastery } from "./course-path";
 import {
+  conceptMeta,
   modulePath,
   pathSequence,
   quizHref,
@@ -143,20 +144,14 @@ describe("modulePath: the order of the steps", () => {
       "read reading r1",
       "m1-t1 lesson m1-t1",
       "m1-t1 note big-o",
-      "m1-t1 checks big-o",
       "m1-t1 note big-omega",
-      "m1-t1 checks big-omega",
       "m1-t2 lesson m1-t2",
       "m1-t2 note theta",
       "m1-t2 asset diagram:theta",
-      "m1-t2 checks theta",
       "m1-t2 note little-o",
-      "m1-t2 checks little-o",
       "m1-t3 lesson m1-t3",
       "m1-t3 note compare",
-      "m1-t3 checks compare",
       "m1-t3 note log-base",
-      "m1-t3 checks log-base",
       "m1-t3 reading r2",
       "practice reading r3",
     ]);
@@ -175,6 +170,21 @@ describe("modulePath: the order of the steps", () => {
   it("says nothing about a count of checks it could not read", () => {
     const path = modulePath(input({ checks: null }));
     expect(path.lessons[0]?.concepts.map((c) => c.checks)).toEqual([null, null]);
+  });
+
+  it("puts the check count on the note's meta line only when the note has checks", () => {
+    const concepts = knowledgeBase({ "big-o": { observations: 2, mastery: "weak" } });
+    const path = modulePath(input({ concepts, checks: { "big-o": 3, "big-omega": 1, theta: 0 } }));
+    const steps = path.lessons.flatMap((l) => l.concepts);
+    expect(steps.slice(0, 3).map(conceptMeta)).toEqual([
+      "Note · Learning · 3 checks",
+      "Note · Not started · 1 check",
+      "Note · Not started",
+    ]);
+    expect(modulePath(input({ checks: null })).lessons[0]?.concepts.map(conceptMeta)).toEqual([
+      "Note · Not started",
+      "Note · Not started",
+    ]);
   });
 
   it("marks a lesson done by topicDone: mastered when it has concepts, the tick when it has none", () => {
@@ -258,7 +268,7 @@ describe("modulePath: readings", () => {
 });
 
 describe("modulePath: videos", () => {
-  it("lands a concept-linked video and diagram on that concept's step, between the note and the checks", () => {
+  it("lands a concept-linked video and diagram on that concept's step, under its note", () => {
     const assets = noAssets({ byConcept: { "little-o": [video("video:little-o"), diagram("diagram:little-o")] } });
     const path = modulePath(input({ assets }));
     const step = path.lessons[1]?.concepts[1];

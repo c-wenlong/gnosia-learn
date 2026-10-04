@@ -6,13 +6,14 @@ import {
   type KbConceptLike,
   type TopicMastery,
 } from "@/lib/course-path";
-import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
+import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 import type { Module, Resource, Topic } from "@/lib/types";
 
 /**
  * A module as one ordered path (phase 3 of
  * docs/proposals/module-learning-path.md): before you start, the module's
- * own material, one lesson per course item with a step per concept, then
+ * own material, one lesson per course item with a step per concept (its
+ * note with Quiz me on the same row, then its diagrams and videos), then
  * practice.
  *
  * Pure and React-free, so the client page, which owns the learner's ticks,
@@ -99,7 +100,7 @@ export interface ConceptStep {
   assets: PathAsset[];
   /** How many checks the note holds; null when unknown. */
   checks: number | null;
-  /** Quiz me: the concept session straight to its checks. */
+  /** Quiz me, the action on the concept's row: the concept session straight to its checks. */
   quizHref: string;
 }
 
@@ -230,7 +231,7 @@ export function modulePath(input: ModulePathInput): ModulePath {
 export interface PathSequenceStep {
   /** `before`, `watch`, `read`, a lesson's item id, or `practice`. */
   section: string;
-  kind: "prerequisite" | "video" | "reading" | "lesson" | "note" | "asset" | "checks";
+  kind: "prerequisite" | "video" | "reading" | "lesson" | "note" | "asset";
   id: string;
 }
 
@@ -247,7 +248,6 @@ export function pathSequence(path: ModulePath): PathSequenceStep[] {
     for (const step of lesson.concepts) {
       out.push({ section, kind: "note", id: step.slug });
       for (const a of step.assets) out.push({ section, kind: "asset", id: a.id });
-      out.push({ section, kind: "checks", id: step.slug });
     }
     for (const r of lesson.readings) out.push({ section, kind: "reading", id: r.id });
   }
@@ -255,9 +255,13 @@ export function pathSequence(path: ModulePath): PathSequenceStep[] {
   return out;
 }
 
-/** The meta line under Quiz me: how many checks the note holds, or who writes the questions. */
-export function checksLine(checks: number | null): string {
-  if (checks === null) return "Checks from the note";
-  if (checks === 0) return "The tutor writes the questions";
-  return `${checks} check${checks === 1 ? "" : "s"} in the note`;
+/**
+ * A concept row's meta line: "Note · Learning", with " · 3 checks" only when
+ * the note has checks. Quiz me sits on the row either way: with none, the
+ * tutor writes the questions, which the row need not say.
+ */
+export function conceptMeta(step: Pick<ConceptStep, "bucket" | "checks">): string {
+  const base = `Note · ${MASTERY_BUCKET_LABEL[step.bucket]}`;
+  if (!step.checks) return base;
+  return `${base} · ${step.checks} check${step.checks === 1 ? "" : "s"}`;
 }
