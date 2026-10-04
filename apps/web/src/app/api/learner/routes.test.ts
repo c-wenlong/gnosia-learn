@@ -48,13 +48,14 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
   let scratch: Scratch;
   let routes: Record<string, Handler>;
   let readLearnerSnapshot: typeof import("@self-learn/catalog/state").readLearnerSnapshot;
+  let recentGet: (req: Request) => Promise<Response>;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     process.env.DATABASE_URL = scratch.url;
 
-    const [progress, note, reset, recap, preference, importRoute, name, avatar, assetName, state] = await Promise.all([
+    const [progress, note, reset, recap, preference, importRoute, name, avatar, assetName, recent, state] = await Promise.all([
       import("./progress/route"),
       import("./note/route"),
       import("./reset/route"),
@@ -64,6 +65,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       import("./name/route"),
       import("./avatar/route"),
       import("./asset-name/route"),
+      import("./recent/route"),
       import("@self-learn/catalog/state"),
     ]);
     routes = {
@@ -76,7 +78,9 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       name: name.POST,
       avatar: avatar.POST,
       assetName: assetName.POST,
+      recent: recent.POST,
     };
+    recentGet = recent.GET;
     readLearnerSnapshot = state.readLearnerSnapshot;
   }, 60_000);
 
@@ -257,6 +261,21 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect((await call("preference", { key: "recentModules", value: [] })).status).toBe(400);
     });
 
+    it("appends one visit event per visit, with the server's time and no concept", async () => {
+      const before = Date.now();
+      await call("preference", { key: "lastVisited", value: { courseSlug: "cs9001", moduleSlug: "m1", at: "2020-01-01T00:00:00.000Z" } });
+      await call("preference", { key: "lastVisited", value: { courseSlug: "cs9001", at: "2020-01-01T00:00:00.000Z" } });
+      await call("preference", { key: "lastVisited", value: { courseSlug: "cs9001", moduleSlug: "m1", at: "2020-01-01T00:00:00.000Z" } });
+      const { rows } = await scratch.db.execute<{ type: string; payload: Record<string, unknown>; concept_slug: string | null; at: Date }>(
+        "select type, payload, concept_slug, at from event where type = 'visit' and payload->>'course' = 'cs9001' order by id",
+      );
+      // One row each, a repeat included: the log keeps every visit.
+      expect(rows.map((r) => r.payload)).toEqual([{ course: "cs9001", module: "m1" }, { course: "cs9001" }, { course: "cs9001", module: "m1" }]);
+      expect(rows.every((r) => r.concept_slug === null)).toBe(true);
+      // The browser's `at` is the preference's; the log's is the server's.
+      expect(rows.every((r) => new Date(r.at).getTime() >= before - 1_000)).toBe(true);
+    });
+
     it("starts recentModules from the visit lastVisited held before the list existed", async () => {
       await scratch.db.execute(
         `insert into preference (learner_id, key, value) values ('local', 'lastVisited', '{"courseSlug":"cs4223","moduleSlug":"m5","at":"2026-09-01T00:00:00.000Z"}')`,
@@ -319,6 +338,54 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect((await call("assetName", { assetId: ID, name: "x".repeat(201) })).status).toBe(400);
       expect((await call("assetName", { name: "x" })).status).toBe(400);
       expect((await call("assetName", { assetId: ID, name: 42 })).status).toBe(400);
+    });
+  });
+
+  describe("recent", () => {
+    const stored = async (key: string) => {
+      const { rows } = await scratch.db.execute<{ value: unknown }>(`select value from preference where key = '${key}'`);
+      return rows[0]?.value;
+    };
+    const row = { key: "concept:dot-product", kind: "concept", title: "Dot product", href: "/learn/dot-product" };
+
+    it("pins a row at the top, once, and unpins it", async () => {
+      expect((await call("recent", { action: "pin", row })).status).toBe(200);
+      expect((await call("recent", { action: "pin", row: { ...row, key: "video:v1", kind: "video", href: "/library/v1" } })).status).toBe(200);
+      expect((await call("recent", { action: "pin", row })).status).toBe(200);
+      expect(((await stored("pinned")) as { key: string }[]).map((p) => p.key)).toEqual(["concept:dot-product", "video:v1"]);
+      expect((await call("recent", { action: "unpin", key: "video:v1" })).status).toBe(200);
+      expect(((await stored("pinned")) as { key: string }[]).map((p) => p.key)).toEqual(["concept:dot-product"]);
+    });
+
+    it("refuses a pin that links off the app, or whose key is not of its kind", async () => {
+      expect((await call("recent", { action: "pin", row: { ...row, href: "//evil.example/x" } })).status).toBe(400);
+      expect((await call("recent", { action: "pin", row: { ...row, href: "https://evil.example" } })).status).toBe(400);
+      expect((await call("recent", { action: "pin", row: { ...row, kind: "video" } })).status).toBe(400);
+      expect((await call("recent", { action: "pin", row: { ...row, title: "   " } })).status).toBe(400);
+      expect((await call("recent", { action: "drop" })).status).toBe(400);
+      expect(await stored("pinned")).toBeUndefined();
+    });
+
+    it("names a conversation and nothing else, and an empty name takes the name off", async () => {
+      expect((await call("recent", { action: "rename", key: "draft:d1", name: " Transport  layer " })).status).toBe(200);
+      expect(await stored("recentNames")).toEqual({ "draft:d1": "Transport layer" });
+      expect((await call("recent", { action: "rename", key: "concept:dot-product", name: "Mine" })).status).toBe(400);
+      expect((await call("recent", { action: "rename", key: "draft:d1", name: "" })).status).toBe(200);
+      expect(await stored("recentNames")).toEqual({});
+    });
+
+    it("refuses a write from another origin", async () => {
+      expect((await call("recent", { action: "unpin", key: "concept:x" }, "https://evil.example")).status).toBe(403);
+    });
+
+    it("reads Recent back for the owner, the pins with it", async () => {
+      await call("recent", { action: "pin", row });
+      await call("preference", { key: "lastVisited", value: { courseSlug: "cs3230", moduleSlug: "m1" } });
+      const response = await recentGet(new Request(`${ORIGIN}/api/learner/recent?pages=1&drafts=0`, { headers: { host: "localhost:3000" } }));
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { recent: { reachable: boolean; pinned: { key: string }[] } };
+      expect(body.recent.reachable).toBe(true);
+      expect(body.recent.pinned.map((p) => p.key)).toEqual(["concept:dot-product"]);
     });
   });
 

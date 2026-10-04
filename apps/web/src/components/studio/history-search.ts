@@ -52,7 +52,7 @@ export interface HistorySearch {
  * window regains focus and when a conversation says it moved, as the grouped
  * history does.
  */
-export function useHistorySearch(): HistorySearch {
+export function useHistorySearch(enabled = true): HistorySearch {
   const [query, setQueryState] = useState("");
   const words = query.trim();
   const [landed, setLanded] = useState<{ words: string; drafts: DraftSummary[]; more: boolean } | null>(null);
@@ -128,7 +128,9 @@ export function useHistorySearch(): HistorySearch {
   }, []);
 
   useEffect(() => {
-    if (words === "") return;
+    // Without a studio there is no runner to ask: the field searches the
+    // catalog's Recent alone (`useRecentSearch`).
+    if (words === "" || !enabled) return;
     const timer = setTimeout(() => {
       void read(words, 1).then((outcome) => {
         // The newest read failing says so for these words, unless they moved on.
@@ -136,16 +138,16 @@ export function useHistorySearch(): HistorySearch {
       });
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [words, read]);
+  }, [words, read, enabled]);
 
   // The matches can move as the history does: read them again with it.
   const wake = useCallback(() => {
     if (current.current === words) void read(words, pages.current);
   }, [words, read]);
-  useDraftsWake(wake, words !== "");
+  useDraftsWake(wake, words !== "" && enabled);
 
   async function showMore() {
-    if (loadingMore || words === "") return;
+    if (loadingMore || words === "" || !enabled) return;
     setLoadingMore(true);
     setMoreError(null);
     const next = pages.current + 1;
@@ -157,7 +159,13 @@ export function useHistorySearch(): HistorySearch {
     setLoadingMore(false);
   }
 
-  const found = words !== "" && landed !== null && landed.words === words ? { drafts: landed.drafts, more: landed.more } : null;
+  const found = !enabled
+    ? words === ""
+      ? null
+      : { drafts: [], more: false }
+    : words !== "" && landed !== null && landed.words === words
+      ? { drafts: landed.drafts, more: landed.more }
+      : null;
   const error = words !== "" && failed === words ? "The studio did not answer, so nothing could be searched." : null;
   return {
     query,

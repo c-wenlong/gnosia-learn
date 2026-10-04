@@ -1,5 +1,5 @@
 import { draft } from "@self-learn/schema";
-import { and, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 
@@ -53,4 +53,20 @@ export async function recentDrafts(db: CatalogDatabase, ownerId: string, limit =
     title: r.title as string,
     updatedAt: r.updatedAt.toISOString(),
   }));
+}
+
+/**
+ * Some of one owner's drafts by id, titled or not (abandoned ones left out),
+ * newest first: the conversations the owner renamed in the sidebar, which its
+ * search finds by the name they were given even before the planner titled
+ * them. A draft with no title reads as an empty title; the caller names it.
+ */
+export async function draftsByIds(db: CatalogDatabase, ownerId: string, ids: readonly string[]): Promise<RecentDraft[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({ id: draft.id, kind: draft.kind, state: draft.state, title: draft.title, updatedAt: draft.updatedAt })
+    .from(draft)
+    .where(and(eq(draft.ownerId, ownerId), inArray(draft.id, [...ids]), ne(draft.state, "abandoned")))
+    .orderBy(desc(draft.updatedAt));
+  return rows.map((r) => ({ id: r.id, kind: r.kind, state: r.state, title: r.title ?? "", updatedAt: r.updatedAt.toISOString() }));
 }
