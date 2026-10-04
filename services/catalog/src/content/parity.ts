@@ -288,11 +288,16 @@ function countCourse(doc: Record<string, unknown> | null, count: (key: string, n
   count("courses");
   for (const mod of list(doc?.["modules"]) as Record<string, unknown>[]) {
     count("modules");
+    count("video references", list(mod?.["videos"]).length);
     for (const item of list(mod?.["topics"]) as Record<string, unknown>[]) {
       count("items");
       count("concept links", list(item?.["concepts"]).length);
+      count("video references", list(item?.["videos"]).length);
     }
     count("links", list(mod?.["resources"]).length);
+    for (const resource of list(mod?.["resources"]) as Record<string, unknown>[]) {
+      count("lesson links", list(resource?.["lessons"]).length);
+    }
   }
 }
 

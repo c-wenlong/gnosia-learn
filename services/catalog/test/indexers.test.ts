@@ -211,6 +211,7 @@ describe("courses", () => {
         position: 1,
         title: "An item",
         subtopics: ["one", "two"],
+        videos: [],
       },
     ]);
     // The module's topic reaches the item, which is how a course row finds the

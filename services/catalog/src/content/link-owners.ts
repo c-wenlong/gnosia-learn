@@ -85,6 +85,9 @@ export async function linkOwners(db: CatalogDatabase): Promise<LinkOwnerReport> 
         where f.owner_id <> p.owner_id and f.owner_id <> ${COMMONS_OWNER}`);
     }
     for (const link of spec.links) {
+      // A link table a later migration adds (`curriculum_item_asset`, 0022)
+      // has nothing to probe on a database behind it.
+      if (!exists.has(link.name)) continue;
       for (const end of LINK_FAR_ENDS[link.name] ?? []) {
         const target = ENTITIES[end.target];
         probes.push(sql`
