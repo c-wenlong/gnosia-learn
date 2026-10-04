@@ -283,17 +283,36 @@ is animated, and nothing moves for a reader who asked for less.
 | --- | --- |
 | One easing | `ease-soft`, `cubic-bezier(0.2, 0, 0, 1)` (`--ease-soft` in `globals.css`), the curve `ui/Collapse` already used. `ease-out` is fine for a plain fade |
 | Durations | 100ms for colour on hover; 150ms for a fade, a menu or a popover; 200ms for a panel, a width or a dialog; 300ms for a fold (`Collapse`) or a drawer |
-| Height | `ui/Collapse` (grid rows 0fr to 1fr, `inert` while shut). Never a bare `{open && …}` for something with height |
+| Height | `ui/Collapse` (grid rows 0fr to 1fr, `inert` while shut). Never a bare `{open && …}` for something with height. Its inner box clips with `overflow: clip` and a 4px `overflow-clip-margin`, so a focus ring at its edge is drawn whole. A fold whose state is a container query (the course sidebar's module list) writes the same grid out by hand with `invisible` in place of `inert` (and `inert` for its way shut, set by the toggle), transitioning `visibility` only while shut. Content that folds away keeps its last words while it does (`LiveStatus`, the store banner, Next up) |
+| Two things in one place | A button and the form it opens, a row's buttons and its confirm: each in its own `Collapse`, one folding shut as the other opens, with focus moved into what opened and back to the opener when it shuts (Settings' Provider keys and Models, Reset) |
+| A status line | `ui/LiveStatus`: an `sr-only` `aria-live` line that is always in the page, and an `aria-hidden` copy in a `Collapse` that the eye sees, so a "Saved" glides in without a live region ever going inert |
 | Something that mounts | `animate-enter` (fade and a 6px rise: a message, a step, a page), `animate-pop-in` (a menu, a popover), `animate-fade-in` (a swap in place). They fill `backwards`, so no transform is left behind |
-| Something that also leaves | Keep it mounted: `invisible opacity-0` and `inert` when closed. Transition `visibility` on the way out only (`transition-[opacity,translate,scale,visibility]` while closed, the same less `visibility` while open): out, it waits for the fade, so nothing takes focus once gone; in, it would still be hidden on the first frame, and focus moved there on opening would not land (measured on the phone drawer) |
+| Something that also leaves | Keep it mounted: `invisible opacity-0` and `inert` when closed. Transition `visibility` on the way out only (`transition-[opacity,translate,scale,visibility]` while closed, the same less `visibility` while open): out, it waits for the fade, so nothing takes focus once gone; in, it would still be hidden on the first frame, and focus moved there on opening would not land (measured on the phone drawer). Or, for something that mounts on open (a menu's list), `usePresence(open, ms)` in `ui/use-presence.ts`: it stays `ms` longer, inert, with `animate-pop-out`, and goes at once under reduced motion. A modal `<dialog>` closes the same way by hand (`ExpandablePanel`: a `closing` beat, its `::backdrop` fading with it) |
+| Loading | `PageLoading` waits 120ms before it shows and then fades in (`animate-fade-in-late`), so a quick page never flashes it; the page that replaces it fades in (`PAGE_ENTER`, opacity only, on the element carrying `data-layout`). Not on a course page, which remounts whole on a module switch: there only the module's words fade (`ModuleMain`). A page with its own shape passes it to `PageLoading` as children (`settings/loading.tsx`) |
+| Pictures | `ui/use-image-reveal`: a cover or thumbnail fades in once loaded, counts one already complete (cache, or loaded before hydration) as loaded, and hides nothing in the server's HTML |
+| In-app links | `next/link`, never a plain `<a>`, for anything inside the app: a plain anchor reloads the whole document and flashes white between pages |
 | Tailwind 4 | `translate-*` and `scale-*` set the `translate` and `scale` properties, so transition those by name: `transition-[transform]` does nothing for them |
-| Reduced motion | `motion-reduce:transition-none` or `motion-reduce:animate-none` beside each, and a global rule at the end of `globals.css` that finishes every transition and animation at once under `prefers-reduced-motion: reduce`, for anything that forgot or whose responsive variant outranks it |
+| Reduced motion | `motion-reduce:transition-none` or `motion-reduce:animate-none` beside each, and a global rule at the end of `globals.css` that finishes every transition and animation at once under `prefers-reduced-motion: reduce`, for anything that forgot or whose responsive variant outranks it. Two sources count: the device, and Settings' "Always reduce motion" (below). Script that decides whether to move asks `prefersReducedMotion()` in `lib/motion.ts`, never `matchMedia` alone |
 | Checking it | A screenshot of the end state does not show motion. Sample the element's size or opacity every 25ms while it changes (the sidebar's PR did, in Playwright), or look at the computed `transition` |
 
 The sidebar (`components/shell/AppSidebar.tsx`) is the worked example: one
 element whose width animates, icons at a fixed place so only the labels fade
 (`components/shell/motion.ts`), the account menu kept mounted and faded, the
 phone drawer slid in by `translate`.
+
+**The motion preference is applied, the way the theme is.** Settings'
+Motion select (`reducedMotion`, `system` or `always`) writes the
+`self-learn-motion` cookie and sets `data-motion="reduce"` on `<html>` at
+once, before the save lands; the root layout reads the cookie, so the next
+page is still from its first paint (`lib/motion.ts`). The `(app)` layout
+reads the stored row only for a browser with no cookie yet, and `MotionSeed`
+writes it; Settings brings a cookie that disagrees with the row it read back
+in line. `globals.css` redefines Tailwind's `motion-reduce:` and
+`motion-safe:` to read `data-motion` beside the media query, and repeats the
+global rule (and the brand's and the studio's looping animations) under
+`:root[data-motion="reduce"]`. A theme change crossfades for 200ms
+(`fadeThemeChange` in `lib/theme-cookie.ts`, a `theme-fade` class on
+`<html>` for one beat), never under reduced motion.
 
 ## Habit data
 
@@ -636,7 +655,7 @@ reading, a pencil for practice. The concepts left the topic panel, since the ste
 | Settings, Theme | System | Light or Dark | the theme is a two-value cookie the root layout reads; a system mode belongs to the shell |
 | Settings, Reminders | "Facts only · 9:00" | not drawn (a disabled "Off" until 2026-09-29) | reminders are not built, and `reminders` is not a preference key yet |
 | Settings, Model providers | "Order: 3 free tiers" | the configured providers' ids in order, the labels and models as a tooltip | the full labels do not fit the 300px box |
-| Settings, field notes | notes under Daily target and BKT priors only | also under Tutor style and Motion | each says what the choice does today (Motion that it is not applied, Tutor style where it is used), so a stored choice does not pretend to do something |
+| Settings, field notes | notes under Daily target and BKT priors only | also under Tutor style and Motion | each says what the choice does today (Motion that Always stops the app's animations in this browser, Tutor style where it is used), so a stored choice does not pretend to do something |
 | Filter rows on Learn and Library | a row of chips, one per option | one `FilterMenu` per group: Learn has Status, Library has Type and Course (and Topic while `?topic=` is set). Each option carries its count | the option count outgrew a row: Library showed twenty chips over three rows. Picking "All" clears a group, so there is no separate clear button. Courses had a Progress and a Tag menu too until 2026-09-29, when it moved to Coursera's layout with tag chips, and the Tag menu came back on 2026-10-04 (see "Courses" below) |
 
 ### Session focus mode (phase 1d)
@@ -787,9 +806,10 @@ Left on purpose:
   The Deviations rows above say where each belongs, and a one-line comment
   marks the spot where the code would not show it (Snooze, Save to note,
   Reminders).
-- **`reducedMotion` is stored, not applied.** Only the system's
-  `prefers-reduced-motion` is honoured, where a rule exists; the Settings
-  note says so.
+- **`reducedMotion` is applied** (since 2026-10-04): "Always reduce motion"
+  is a cookie and `data-motion="reduce"` on `<html>`, read beside the
+  system's `prefers-reduced-motion` ("Motion" above). Before then it was
+  stored only, and the Settings note said so.
 - **The primary button's hover is ours.** None of the reference apps drew
   one, so `hover:opacity-90` on the 3D pill is our own choice.
 

@@ -71,7 +71,7 @@ export function SessionClose({
   return (
     <div className="flex flex-col gap-4 md:gap-[22px]">
       <div className="flex flex-col items-center gap-1.5 pt-2 text-center md:pt-0">
-        <h1 className="font-display text-[26px] leading-tight font-bold text-text md:text-[32px]">
+        <h1 tabIndex={-1} className="font-display text-[26px] leading-tight font-bold text-text outline-none md:text-[32px]">
           {walked === "" ? "Nothing to ask" : weekCheck === null ? "Session closed" : "Week check done"}
         </h1>
         <p className="text-[13px] text-text2">

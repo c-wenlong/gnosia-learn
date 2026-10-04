@@ -120,7 +120,7 @@ describe("POST /api/agent/judge", () => {
     [{ ...OK, question: "" }],
     [{ ...OK, question: "q".repeat(401) }],
     [{ ...OK, answer: "  " }],
-    [{ ...OK, answer: "a".repeat(2001) }],
+    [{ ...OK, answer: "a".repeat(4001) }],
     [{ conceptSlug: "dot-product" }],
     ["not json"],
   ])("refuses %j as a 400 before any read", async (body) => {

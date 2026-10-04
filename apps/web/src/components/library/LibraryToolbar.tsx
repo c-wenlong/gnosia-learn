@@ -44,7 +44,8 @@ export interface LibraryMenu {
  * changed. `router.push` rather than `replace`, so the back button still
  * undoes a filter as it did when each choice was a link. The trigger shows
  * the pick at once (`useOptimistic`) and dims until the server has rendered
- * the new view.
+ * the new view; the toolbar carries `data-pending` meanwhile, which the page
+ * reads to dim the results under it.
  *
  * **The next URL is built from the latest picks, not the last render.** A
  * second pick made while the first navigation is still in flight would
@@ -107,7 +108,7 @@ export function LibraryToolbar({
   };
 
   return (
-    <section aria-label="Filters" className="flex flex-wrap items-center gap-2">
+    <section aria-label="Filters" data-pending={pending || undefined} className="flex flex-wrap items-center gap-2">
       {/* From 768px it never shrinks: a squeezed group would let its pills
           spill over the search, so when the two halves cannot share a line the
           right one wraps instead. It is never wider than the row, so on a

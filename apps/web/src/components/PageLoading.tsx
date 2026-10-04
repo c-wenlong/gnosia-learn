@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { cardClasses, cx } from "@/components/ui/classes";
 
 /**
@@ -19,13 +21,31 @@ import { cardClasses, cx } from "@/components/ui/classes";
  *
  * The status line sits beside the busy region, not in it, so a screen reader
  * announces it rather than waiting for the region to settle.
+ *
+ * **It waits before it shows.** The frame is invisible for its first 120ms
+ * and then fades in (`animate-fade-in-late`), so a page that answers quickly
+ * replaces it before it was ever seen, rather than flashing grey blocks for a
+ * frame; only a slow read shows it. The page that replaces it fades in on its
+ * own (`PAGE_ENTER`). Under reduced motion the global rule drops the wait and
+ * the frame shows at once, as it did before.
  */
+
+/** A page's own way in once it replaces the loading frame: opacity only, so no transform is left on the page's root. */
+export const PAGE_ENTER = "animate-fade-in motion-reduce:animate-none";
+
+/** The frame's wait-then-fade, on the element carrying `data-layout`. */
+const FRAME_ENTER = "animate-fade-in-late motion-reduce:animate-none";
 
 const BLOCK = "rounded-md bg-surface2 animate-pulse motion-reduce:animate-none";
 
 export function PageLoading({
   layout = "app",
-}: { layout?: "app" | "focus" } = {}) {
+  children,
+}: {
+  layout?: "app" | "focus";
+  /** A page's own outline in place of the generic one, inside the same frame. */
+  children?: ReactNode;
+} = {}) {
   const status = (
     <p role="status" className="sr-only">
       Loading
@@ -38,7 +58,7 @@ export function PageLoading({
         <div
           data-layout="focus"
           aria-busy="true"
-          className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pt-10"
+          className={cx("mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pt-10", FRAME_ENTER)}
         >
           <div className={cx(BLOCK, "h-2 w-full")} />
           <div className={cardClasses({ className: "min-h-[320px]" })}>
@@ -53,34 +73,46 @@ export function PageLoading({
   return (
     <>
       {status}
-      <div data-layout="app" aria-busy="true">
-        <div className={cx(BLOCK, "mb-5 h-8 w-48")} />
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="flex min-w-0 flex-col gap-4">
-            {[176, 132, 220].map((height) => (
-              <div
-                key={height}
-                className={cardClasses({ className: "flex flex-col gap-3" })}
-                style={{ minHeight: height }}
-              >
-                <div className={cx(BLOCK, "h-4 w-40")} />
-                <div className={cx(BLOCK, "h-3 w-3/4")} />
-                <div className={cx(BLOCK, "h-3 w-1/2")} />
-              </div>
-            ))}
-          </div>
-          <div className="flex min-w-0 flex-col gap-4 max-lg:hidden">
-            {[148, 196].map((height) => (
-              <div
-                key={height}
-                className={cardClasses({ className: "flex flex-col gap-3" })}
-                style={{ minHeight: height }}
-              >
-                <div className={cx(BLOCK, "h-4 w-28")} />
-                <div className={cx(BLOCK, "h-3 w-2/3")} />
-              </div>
-            ))}
-          </div>
+      <div data-layout="app" aria-busy="true" className={FRAME_ENTER}>
+        {children ?? <AppOutline />}
+      </div>
+    </>
+  );
+}
+
+/** A loading block in the surface colours, pulsing unless motion is reduced: for a page's own outline. */
+export const LOADING_BLOCK = BLOCK;
+
+/** The outline most pages share: a heading, a column of cards beside a narrower one. */
+function AppOutline() {
+  return (
+    <>
+      <div className={cx(BLOCK, "mb-5 h-8 w-48")} />
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {[176, 132, 220].map((height) => (
+            <div
+              key={height}
+              className={cardClasses({ className: "flex flex-col gap-3" })}
+              style={{ minHeight: height }}
+            >
+              <div className={cx(BLOCK, "h-4 w-40")} />
+              <div className={cx(BLOCK, "h-3 w-3/4")} />
+              <div className={cx(BLOCK, "h-3 w-1/2")} />
+            </div>
+          ))}
+        </div>
+        <div className="flex min-w-0 flex-col gap-4 max-lg:hidden">
+          {[148, 196].map((height) => (
+            <div
+              key={height}
+              className={cardClasses({ className: "flex flex-col gap-3" })}
+              style={{ minHeight: height }}
+            >
+              <div className={cx(BLOCK, "h-4 w-28")} />
+              <div className={cx(BLOCK, "h-3 w-2/3")} />
+            </div>
+          ))}
         </div>
       </div>
     </>

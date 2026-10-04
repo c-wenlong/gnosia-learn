@@ -43,10 +43,18 @@ export function VerdictRow({
   }
 
   if (!live) {
-    return <p className="self-start px-1.5 text-[12px] text-text3">Not recorded</p>;
+    return (
+      <p className="self-start px-1.5 text-[12px] text-text3">Not recorded</p>
+    );
   }
 
   const saving = verdict.state === "saving";
+  // A failed write keeps the verdict that was tapped: its retry replays the
+  // same request id, so only that verdict can be offered again.
+  const retrying =
+    verdict.state === "failed" && verdict.tapped !== null
+      ? verdict.tapped
+      : null;
   const suggested = verdict.judged === "ready" ? verdict.suggested : null;
   const lead =
     verdict.judged === "pending"
@@ -66,28 +74,54 @@ export function VerdictRow({
     >
       <p className="text-text">
         <span className="font-semibold">{lead}</span>
-        {verdict.feedback && <span className="text-text2"> {verdict.feedback}</span>}
+        {verdict.feedback && (
+          <span className="text-text2"> {verdict.feedback}</span>
+        )}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        {/* The suggestion leads; with none, correct comes first as it reads. */}
-        {(suggested === false ? [false, true] : [true, false]).map((correct) => (
+        {retrying !== null ? (
           <Button
-            key={String(correct)}
             size="sm"
-            variant={suggested === correct ? (correct ? "ok" : "warn") : "secondary"}
-            disabled={saving}
-            onClick={() => onRecord(correct)}
+            variant={retrying ? "ok" : "warn"}
+            onClick={() => onRecord(retrying)}
           >
-            {correct ? "Record as correct" : "Record as incorrect"}
+            {retrying
+              ? "Try again: record as correct"
+              : "Try again: record as incorrect"}
           </Button>
-        ))}
+        ) : (
+          /* The suggestion leads; with none, correct comes first as it reads. */
+          (suggested === false ? [false, true] : [true, false]).map(
+            (correct) => (
+              <Button
+                key={String(correct)}
+                size="sm"
+                variant={
+                  suggested === correct
+                    ? correct
+                      ? "ok"
+                      : "warn"
+                    : "secondary"
+                }
+                disabled={saving}
+                onClick={() => onRecord(correct)}
+              >
+                {correct ? "Record as correct" : "Record as incorrect"}
+              </Button>
+            ),
+          )
+        )}
         <span className="text-[12px] text-text3">
-          {saving ? "Recording…" : "Nothing is recorded until you choose."}
+          {saving
+            ? "Recording…"
+            : retrying !== null
+              ? ""
+              : "Nothing is recorded until you choose."}
         </span>
       </div>
       {verdict.state === "failed" && verdict.error && (
         <p role="alert" className="text-[12px] text-warn-text">
-          {verdict.error} Choose again to retry; it will not be recorded twice.
+          {verdict.error} A retry is never recorded twice.
         </p>
       )}
     </div>

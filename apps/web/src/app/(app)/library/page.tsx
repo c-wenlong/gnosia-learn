@@ -3,6 +3,7 @@ import Form from "next/form";
 import Link from "next/link";
 
 import { AssetCard, type CardConcept } from "@/components/AssetCard";
+import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetRow } from "@/components/library/AssetRow";
 import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryToolbar";
 import { Notice } from "@/components/library/Notice";
@@ -229,7 +230,10 @@ export default async function LibraryPage({
   };
 
   return (
-    <div data-layout="app" className="flex flex-col gap-4">
+    // The root fades in once, when the page replaces the loading frame; a
+    // filter, a sort or a search is a navigation that keeps it (measured), so
+    // only the rows that arrive fade then.
+    <div data-layout="app" className={cx("group/library flex flex-col gap-4", PAGE_ENTER)}>
       <header className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
         <h1 className="font-display text-[28px] leading-tight font-bold text-text">Library</h1>
         {reachable && facets.total > 0 && <p className="text-[12px] text-text2 tabular-nums">{count}</p>}
@@ -323,12 +327,15 @@ export default async function LibraryPage({
           ) : view === "list" ? (
             <ul
               aria-label={listLabel}
-              className="flex flex-col divide-y-2 divide-border overflow-hidden rounded-[20px] border-2 border-border bg-surface"
+              className={cx(
+                "flex flex-col divide-y-2 divide-border overflow-hidden rounded-[20px] border-2 border-border bg-surface",
+                RESULTS_MOTION,
+              )}
             >
               {matching.map((row) => {
                 const { concept, topic: topicLabel } = describe(row);
                 return (
-                  <li key={row.id}>
+                  <li key={row.id} className={ARRIVE}>
                     <AssetRow
                       asset={row}
                       concept={concept}
@@ -343,12 +350,12 @@ export default async function LibraryPage({
           ) : (
             <ul
               aria-label={listLabel}
-              className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]"
+              className={cx("grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]", RESULTS_MOTION)}
             >
               {matching.map((row) => {
                 const { concept, topic: topicLabel } = describe(row);
                 return (
-                  <li key={row.id} className="flex">
+                  <li key={row.id} className={cx("flex", ARRIVE)}>
                     <AssetCard
                       asset={row}
                       concept={concept}
@@ -376,6 +383,16 @@ export default async function LibraryPage({
     </div>
   );
 }
+
+/**
+ * The results dim while a filter, sort or view picked in the toolbar is
+ * being rendered (`LibraryToolbar` marks itself `data-pending` for the
+ * length of its transition), so the page says it heard the pick before the
+ * new rows arrive, and a row that arrives fades in.
+ */
+const RESULTS_MOTION =
+  "transition-opacity duration-150 ease-out motion-reduce:transition-none group-has-[[data-pending]]/library:opacity-60";
+const ARRIVE = "animate-fade-in motion-reduce:animate-none";
 
 /**
  * The grid and the list, as two icon links in one chip-high pill: each is a

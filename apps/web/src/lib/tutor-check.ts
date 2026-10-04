@@ -16,6 +16,14 @@
 /** The longest check question kept, as long as a session question may be. */
 export const CHECK_QUESTION_LIMIT = 400;
 
+/**
+ * The longest answer the chat takes, and so the longest the judge grades: the
+ * composer's limit, so the verdict is on the whole reply the learner sent.
+ * The observation stores at most `SESSION_TEXT_LIMIT` of it as `chosen`,
+ * which is the log's record of the answer, not what was graded.
+ */
+export const CHAT_ANSWER_LIMIT = 4_000;
+
 /** The longest judge feedback the row shows. */
 export const VERDICT_FEEDBACK_LIMIT = 300;
 
@@ -103,6 +111,13 @@ export interface Verdict {
   suggested: boolean | null;
   feedback: string | null;
   state: "open" | "saving" | "failed" | "recorded";
+  /**
+   * The verdict the learner tapped, once they have. A retry after a failed
+   * write offers only this one: the request id is the same, so a write that
+   * landed but whose answer was lost replays as this verdict, and offering
+   * the other would ask for a choice the server would not record.
+   */
+  tapped: boolean | null;
   error: string | null;
   recorded: RecordedResult | null;
 }
@@ -117,6 +132,7 @@ export function newVerdict(question: string, requestId: string, source: "probe" 
     suggested: null,
     feedback: null,
     state: "open",
+    tapped: null,
     error: null,
     recorded: null,
   };
@@ -126,10 +142,10 @@ const TOKEN = /^[A-Za-z0-9_-]{1,128}$/;
 const unit = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
 
 /**
- * A stored verdict back, or null when it is not one. A reload cuts off
- * whatever was in flight: a judge still pending becomes `unavailable` (the
- * learner can still choose), and a write still saving becomes `open`, since
- * its request id makes the next tap a replay if the first one landed.
+ * A stored verdict back, or null when it is not one. In-flight states are
+ * kept as stored: the thread is re-read on every render, and a `saving` read
+ * back as `open` would put the buttons back mid-save. What a reload cut off
+ * is settled once, when the chat mounts, by `settleInterrupted`.
  */
 export function restoreVerdict(value: unknown): Verdict | null {
   if (value === null || typeof value !== "object") return null;
@@ -146,8 +162,14 @@ export function restoreVerdict(value: unknown): Verdict | null {
           intervalDays: typeof r.intervalDays === "number" && Number.isFinite(r.intervalDays) ? r.intervalDays : null,
         }
       : null;
-  const state = v.state === "recorded" && recorded !== null ? "recorded" : v.state === "failed" ? "failed" : "open";
-  const judged = v.judged === "ready" && typeof v.suggested === "boolean" ? "ready" : "unavailable";
+  const state =
+    v.state === "recorded" && recorded !== null
+      ? "recorded"
+      : v.state === "failed" || v.state === "saving"
+        ? v.state
+        : "open";
+  const judged =
+    v.judged === "ready" && typeof v.suggested === "boolean" ? "ready" : v.judged === "pending" ? "pending" : "unavailable";
   return {
     question: v.question.slice(0, CHECK_QUESTION_LIMIT),
     requestId: String(v.requestId),
@@ -156,8 +178,27 @@ export function restoreVerdict(value: unknown): Verdict | null {
     suggested: judged === "ready" ? (v.suggested as boolean) : null,
     feedback: typeof v.feedback === "string" ? v.feedback.slice(0, VERDICT_FEEDBACK_LIMIT) : null,
     state,
+    tapped: typeof v.tapped === "boolean" ? v.tapped : null,
     error: state === "failed" && typeof v.error === "string" ? v.error : null,
     recorded: state === "recorded" ? recorded : null,
+  };
+}
+
+/**
+ * A verdict with what a reload cut off settled: a judge still `pending`
+ * becomes `unavailable` (the learner still chooses, with nothing
+ * pre-selected), and a write still `saving` becomes `failed` with its tap
+ * kept, so the one retry offered replays the same request id. Null when
+ * nothing was in flight. The chat runs this once on mount, never per render.
+ */
+export function settleInterrupted(verdict: Verdict): Verdict | null {
+  if (verdict.judged !== "pending" && verdict.state !== "saving") return null;
+  return {
+    ...verdict,
+    ...(verdict.judged === "pending" ? { judged: "unavailable" as const, suggested: null } : {}),
+    ...(verdict.state === "saving"
+      ? { state: "failed" as const, error: "The page closed before the answer was confirmed." }
+      : {}),
   };
 }
 
@@ -184,9 +225,18 @@ function words(text: string): Set<string> {
 }
 
 /**
+ * How alike, by Jaccard over words, a question and a check must be. High on
+ * purpose: "What happens before the action?" and "...after the action?"
+ * share two thirds of their words and ask opposite things, so a looser bar
+ * hands the judge the wrong answer key. A missed match costs the judge its
+ * reference, never the verdict, and the prompt tells it to check the
+ * reference asks the same thing before using it.
+ */
+const MATCH_THRESHOLD = 0.75;
+
+/**
  * The note's check the tutor's question is closest to, when it is close
- * enough to be the same question (half its words shared, by Jaccard), else
- * null. The judge then reads that check's answer as its reference. A tutor
+ * enough to be the same question (`MATCH_THRESHOLD`), else null. The judge then reads that check's answer as its reference. A tutor
  * paraphrasing a check is the case this exists for; a question the note does
  * not ask leaves the judge with the note's body alone.
  */
@@ -206,5 +256,5 @@ export function matchCheck<C extends { question: string }>(question: string, che
       bestScore = score;
     }
   }
-  return bestScore >= 0.5 ? best : null;
+  return bestScore >= MATCH_THRESHOLD ? best : null;
 }

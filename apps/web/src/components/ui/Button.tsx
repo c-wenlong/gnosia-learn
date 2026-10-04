@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useId, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useId, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ReactNode, type Ref } from "react";
 
 import { buttonClasses, cx, type ButtonSize, type ButtonVariant } from "./classes";
 
@@ -40,6 +40,8 @@ export type ButtonAsButton = ButtonOwnProps &
     href?: undefined;
     /** Why it is disabled, shown beside it. Ignored unless `disabled`. */
     disabledReason?: string;
+    /** The `<button>`, for a caller that moves focus back to it. */
+    ref?: Ref<HTMLButtonElement>;
   };
 
 export type ButtonAsLink = ButtonOwnProps &
@@ -82,7 +84,7 @@ function ReasonedButton({ reason, "aria-describedby": describedBy, ...rest }: Pl
   return (
     <span className={cx(rest.block ? "flex w-full" : "inline-flex max-w-full", "flex-wrap items-center gap-x-2 gap-y-1")}>
       <PlainButton {...rest} aria-describedby={cx(describedBy, id)} />
-      <span id={id} className="min-w-0 text-[12px] leading-4 text-text2">
+      <span id={id} className="min-w-0 animate-fade-in text-[12px] leading-4 text-text2 motion-reduce:animate-none">
         {reason}
       </span>
     </span>

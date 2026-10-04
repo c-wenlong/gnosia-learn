@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { chipClasses, cx } from "./classes";
+import { usePresence } from "./use-presence";
 import {
   nextIndexForKey,
   popoverShift,
@@ -32,6 +33,11 @@ const TYPEAHEAD_RESET_MS = 700;
  *
  * Single-select only. No page's filter model holds several values of one
  * group today, so a `multiple` mode would be code with no caller.
+ *
+ * The list pops in (`animate-pop-in`, from the trigger's corner) and out
+ * (`usePresence`: kept for 120ms, inert, fading and shrinking a little), and
+ * the chevron turns with it. It is never hidden with `visibility` on the way
+ * in, so the layout effect that focuses it still finds it focusable.
  *
  * A client component (it has open state and listeners), unlike the rest of
  * the kit. Its option model is the React-free `./filter-menu`.
@@ -83,6 +89,7 @@ export function FilterMenu<V extends string>({
   const optionId = (index: number) => `${id}-option-${index}`;
 
   const selected = options.findIndex((o) => o.value === value);
+  const presence = usePresence(open, 120);
 
   const show = (at: number, byKey: boolean) => {
     // A prefix typed into the last opening does not carry into this one.
@@ -213,7 +220,10 @@ export function FilterMenu<V extends string>({
         <svg
           aria-hidden
           viewBox="0 0 16 16"
-          className={cx("size-3.5 shrink-0", open && "rotate-180")}
+          className={cx(
+            "size-3.5 shrink-0 transition-[rotate] duration-150 ease-soft motion-reduce:transition-none",
+            open && "rotate-180",
+          )}
           fill="none"
           stroke="currentColor"
           strokeWidth="1.8"
@@ -223,14 +233,15 @@ export function FilterMenu<V extends string>({
           <path d="m4 6 4 4 4-4" />
         </svg>
       </button>
-      {open && (
+      {presence.mounted && (
         <div
           ref={list}
-          id={listId}
+          id={presence.leaving ? undefined : listId}
           role="listbox"
           tabIndex={-1}
+          inert={presence.leaving}
           aria-label={label}
-          aria-activedescendant={active >= 0 ? optionId(active) : undefined}
+          aria-activedescendant={active >= 0 && !presence.leaving ? optionId(active) : undefined}
           onKeyDown={onListKey}
           onBlur={(event) => {
             if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
@@ -239,7 +250,11 @@ export function FilterMenu<V extends string>({
           className={cx(
             "absolute top-full z-40 mt-2 flex w-max min-w-[13rem] flex-col gap-0.5 overflow-y-auto overscroll-contain",
             "max-h-[min(30rem,70vh)] max-w-[min(22rem,calc(100vw-2rem))]",
-            "rounded-2xl border-2 border-border bg-surface p-1.5 outline-none",
+            "origin-top-left rounded-2xl border-2 border-border bg-surface p-1.5 outline-none",
+            presence.leaving
+              ? "pointer-events-none animate-pop-out"
+              : "animate-pop-in",
+            "motion-reduce:animate-none",
           )}
         >
           {sectionsOf(options).map((section) => {
@@ -308,6 +323,7 @@ function Option<V extends string>({
       onClick={onPick}
       className={cx(
         "flex min-h-10 cursor-pointer items-center gap-2.5 rounded-xl py-1.5 pr-3 pl-2 text-left select-none",
+        "transition-colors duration-100 motion-reduce:transition-none",
         active && "bg-surface2",
         active && keyboard && "outline-2 -outline-offset-2 outline-accent",
       )}

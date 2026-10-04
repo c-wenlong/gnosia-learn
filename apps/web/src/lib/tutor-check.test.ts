@@ -8,6 +8,7 @@ import {
   recordedLine,
   restoreCheck,
   restoreVerdict,
+  settleInterrupted,
   splitCheck,
 } from "./tutor-check";
 
@@ -70,15 +71,21 @@ describe("pendingCheck and checkSource (R4)", () => {
 });
 
 describe("verdict state", () => {
-  it("restores a stored verdict, cutting off what a reload interrupted", () => {
-    const v = { ...newVerdict("Q?", "chat-abc", "teach"), state: "saving" as const };
+  it("keeps a save and a judge in flight on an ordinary read, so the buttons never reopen mid-save", () => {
+    const v = { ...newVerdict("Q?", "chat-abc", "teach"), state: "saving" as const, tapped: true };
     expect(restoreVerdict(JSON.parse(JSON.stringify(v)))).toMatchObject({
-      judged: "unavailable",
-      suggested: null,
-      state: "open",
+      judged: "pending",
+      state: "saving",
+      tapped: true,
       requestId: "chat-abc",
       source: "teach",
     });
+  });
+
+  it("settles what a reload cut off, once, keeping the tapped verdict for its retry", () => {
+    const v = { ...newVerdict("Q?", "chat-abc", "probe"), state: "saving" as const, tapped: false };
+    expect(settleInterrupted(v)).toMatchObject({ judged: "unavailable", suggested: null, state: "failed", tapped: false });
+    expect(settleInterrupted({ ...v, judged: "ready", suggested: true, state: "open" })).toBeNull();
   });
 
   it("keeps a recorded result and a ready suggestion", () => {
@@ -131,7 +138,11 @@ describe("matchCheck", () => {
   ];
 
   it("finds the note's check the tutor paraphrased", () => {
-    expect(matchCheck("What does a zero dot product tell you about the two vectors?", checks)).toBe(checks[0]);
+    expect(matchCheck("What does a dot product of zero tell you about the two vectors?", checks)).toBe(checks[0]);
+  });
+
+  it("does not take a question that differs in the word it turns on", () => {
+    expect(matchCheck("What happens before the action?", [{ question: "What happens after the action?" }])).toBeNull();
   });
 
   it("finds nothing for a question the note does not ask", () => {

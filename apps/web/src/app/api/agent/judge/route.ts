@@ -12,8 +12,7 @@ import {
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { requestOwner } from "@/lib/learner-api";
-import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
-import { CHECK_QUESTION_LIMIT, matchCheck } from "@/lib/tutor-check";
+import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, matchCheck } from "@/lib/tutor-check";
 
 export const runtime = "nodejs";
 
@@ -57,8 +56,8 @@ export async function POST(req: Request) {
   if (typeof question !== "string" || question.trim() === "" || question.length > CHECK_QUESTION_LIMIT) {
     return bad(`question must be the check the tutor asked, 1 to ${CHECK_QUESTION_LIMIT} characters`);
   }
-  if (typeof answer !== "string" || answer.trim() === "" || answer.length > SESSION_TEXT_LIMIT) {
-    return bad(`answer must be the learner's reply, 1 to ${SESSION_TEXT_LIMIT} characters`);
+  if (typeof answer !== "string" || answer.trim() === "" || answer.length > CHAT_ANSWER_LIMIT) {
+    return bad(`answer must be the learner's reply, 1 to ${CHAT_ANSWER_LIMIT} characters`);
   }
 
   // Before the read, so an unknown slug is not a free way to spin the limiter.

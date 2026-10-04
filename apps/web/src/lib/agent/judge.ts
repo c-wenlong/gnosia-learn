@@ -1,7 +1,6 @@
 import { CONCEPT_BODY_LIMIT } from "@/lib/agent/prompt";
 import { firstObject } from "@/lib/agent/session";
-import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
-import { CHECK_QUESTION_LIMIT, VERDICT_FEEDBACK_LIMIT } from "@/lib/tutor-check";
+import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, VERDICT_FEEDBACK_LIMIT } from "@/lib/tutor-check";
 
 /**
  * The judge (R5 of docs/proposals/recall-in-chat.md): a short second call
@@ -40,7 +39,8 @@ export function buildJudgePrompt(input: JudgeInput): string {
   const body = (input.body ?? "").trim();
   const clipped = body.length > CONCEPT_BODY_LIMIT ? `${body.slice(0, CONCEPT_BODY_LIMIT)}\n\n[note truncated]` : body;
   const reference = input.reference
-    ? `## The note's own check for this question
+    ? `## A check from the note that may be the same question
+Use its answer as your reference only if it asks the same thing as the tutor's question below. If it asks something different, ignore it.
 - Question: ${input.reference.question}
 - Answer: ${input.reference.answer}${input.reference.why ? `\n- Why: ${input.reference.why}` : ""}
 `
@@ -72,7 +72,7 @@ Return only a JSON object, no prose and no code fence:
 
 /** The user turn that carries the answer, as data. */
 export function judgeRequest(answer: string): string {
-  return `<learner_answer>\n${fenced(answer.slice(0, SESSION_TEXT_LIMIT))}\n</learner_answer>\n\nGrade this answer. JSON only.`;
+  return `<learner_answer>\n${fenced(answer.slice(0, CHAT_ANSWER_LIMIT))}\n</learner_answer>\n\nGrade this answer. JSON only.`;
 }
 
 export type ParsedVerdict =

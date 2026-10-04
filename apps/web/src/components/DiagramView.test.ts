@@ -55,13 +55,18 @@ describe("DiagramView", () => {
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
-  it("holds a placeholder until the file arrives, then drops it", () => {
+  it("holds a placeholder until the file arrives, then fades it out", () => {
     const host = mount(createElement(DiagramView, props));
     const img = host.querySelector("img") as HTMLImageElement;
-    expect(host.querySelector("[aria-hidden]")).not.toBeNull();
+    const skeleton = () => host.querySelector("[data-skeleton]") as HTMLElement;
+    expect(skeleton().dataset.skeleton).toBe("loading");
+    expect(skeleton().classList.contains("opacity-100")).toBe(true);
 
     act(() => img.dispatchEvent(new Event("load")));
-    expect(host.querySelector("[aria-hidden]")).toBeNull();
+    // Kept mounted and faded, rather than unmounted, so it does not vanish in one frame.
+    expect(skeleton().dataset.skeleton).toBe("ready");
+    expect(skeleton().classList.contains("opacity-0")).toBe(true);
+    expect(skeleton().className).toContain("transition-opacity");
     // The picture was never hidden behind the placeholder, so a page whose
     // script never runs still shows the diagram.
     expect(host.querySelector("img")).not.toBeNull();
@@ -96,11 +101,11 @@ describe("DiagramView", () => {
   it("puts the placeholder back while the next diagram loads", () => {
     const host = mount(createElement(DiagramView, props));
     act(() => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("load")));
-    expect(host.querySelector("[aria-hidden]")).toBeNull();
+    expect(host.querySelector("[data-skeleton]")?.getAttribute("data-skeleton")).toBe("ready");
 
     rerender(host, createElement(DiagramView, { ...props, src: "/assets/bkt-decay.svg" }));
 
-    expect(host.querySelector("[aria-hidden]")).not.toBeNull();
+    expect(host.querySelector("[data-skeleton]")?.getAttribute("data-skeleton")).toBe("loading");
   });
 
   it("drops its title bar when the page names it, and keeps Full size even when it fails", () => {

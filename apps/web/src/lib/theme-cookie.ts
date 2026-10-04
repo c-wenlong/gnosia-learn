@@ -11,6 +11,8 @@ import {
   type ThemePalette,
 } from "@self-learn/schema/shared";
 
+import { prefersReducedMotion } from "@/lib/motion";
+
 export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_MODES, THEME_PALETTES, themeModeFor };
 
 /**
@@ -132,4 +134,25 @@ export function writeThemeCookie(theme: ThemeMode): void {
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
   document.cookie =
     `${THEME_COOKIE}=${theme}; Path=/; Max-Age=${THEME_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
+}
+
+/** How long `theme-fade` stays on <html>: the 200ms fade in `globals.css`, and a beat for the last frame. */
+export const THEME_FADE_MS = 250;
+
+let themeFadeTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Crossfade the colours of the next theme change instead of snapping: puts
+ * `theme-fade` on <html> (a 200ms colour transition on everything, in
+ * `globals.css`) and takes it off again once the fade is done, so it never
+ * outlives the change and overrides a component's own transitions. Call it
+ * just before the classes change, in the same task. Does nothing under
+ * reduced motion, the device's or Settings'.
+ */
+export function fadeThemeChange(): void {
+  if (typeof document === "undefined" || prefersReducedMotion()) return;
+  const root = document.documentElement;
+  root.classList.add("theme-fade");
+  clearTimeout(themeFadeTimer);
+  themeFadeTimer = setTimeout(() => root.classList.remove("theme-fade"), THEME_FADE_MS);
 }

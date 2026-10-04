@@ -159,14 +159,14 @@ export function TranscriptPanel({
                     type="button"
                     onClick={() => seekTo(cue.start)}
                     aria-current={isActive ? "true" : undefined}
-                    className={`grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-left text-[14px] leading-[22px] transition-colors duration-100 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent ${tone}`}
+                    className={`grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-left text-[14px] leading-[22px] transition-colors duration-150 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent motion-reduce:transition-none ${tone}`}
                   >
                     {content}
                   </button>
                 ) : (
                   <p
                     aria-current={isActive ? "true" : undefined}
-                    className={`grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] ${tone}`}
+                    className={`grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] transition-colors duration-150 motion-reduce:transition-none ${tone}`}
                   >
                     {content}
                   </p>
