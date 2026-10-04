@@ -232,6 +232,8 @@ export function StudioSidebar({
     setCollapsed(!collapsed);
   }
   function newChat() {
+    // A hover that began just before the press must not slide it out after.
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
     setPeek(false);
     onNewChat();
   }
