@@ -130,6 +130,17 @@
      inline styles and arbitrary values can name it. */
   --font-display: Georgia, "Times New Roman", serif;
 
+  /* The shell's density (L8 of docs/proposals/library-by-type-and-day.md):
+     a list row's height, its corner and its start padding, Manus's 36, 10
+     and 8. Read today by the Library's rows and day headings; the sidebar's
+     rows and section labels move onto them when the sidebar is rebuilt
+     (L7), and from then the lists share one rhythm and a Compact setting is
+     one override here. Sizes, not colours, so declared once on :root and
+     never in a theme block. */
+  --shell-row: 36px;
+  --shell-row-radius: 10px;
+  --shell-row-pad: 8px;
+
   /*
    * The old palette's names, kept as aliases so the pages not yet redesigned
    * (the course and module pages, the library, the studio) keep rendering.

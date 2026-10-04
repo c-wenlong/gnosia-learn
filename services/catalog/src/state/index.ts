@@ -222,6 +222,7 @@ export {
   type AssetWithTopics,
   type ListAssetsOptions,
 } from "./assets";
+export { assetParents, type AssetOrigin, type AssetParents, type AssetPlace } from "./asset-parents";
 export { readAssetNaming, writeAssetName, type AssetNaming } from "./asset-names";
 export {
   domainOf,
