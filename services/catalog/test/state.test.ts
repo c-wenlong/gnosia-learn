@@ -33,6 +33,7 @@ import {
   upsertReview,
   writeModel,
   writePreference,
+  readPreferencesWithPrefix,
   writeReviews,
   type ReviewCard,
 } from "../src/state";
@@ -225,6 +226,19 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
   });
 
   describe("preference", () => {
+    it("reads only the keys under a prefix, matching % and _ as themselves", async () => {
+      await writePreference(scratch.db, "favorite:a", { at: "2026-10-04T00:00:00Z" });
+      await writePreference(scratch.db, "favorite:b_c", { at: "2026-10-04T00:00:00Z" });
+      await writePreference(scratch.db, "favoriteXa", 1);
+      await writePreference(scratch.db, "playback:a", { position: 3 });
+      expect(Object.keys(await readPreferencesWithPrefix(scratch.db, "favorite:")).sort()).toEqual([
+        "favorite:a",
+        "favorite:b_c",
+      ]);
+      expect(Object.keys(await readPreferencesWithPrefix(scratch.db, "favorite_"))).toEqual([]);
+      expect(await readPreferencesWithPrefix(scratch.db, "favorite:", "someone-else")).toEqual({});
+    });
+
     it("round-trips a value, and refuses null rather than storing SQL NULL", async () => {
       expect(await readPreference(scratch.db, "something")).toBeUndefined();
       await writePreference(scratch.db, "something", { a: 1 });

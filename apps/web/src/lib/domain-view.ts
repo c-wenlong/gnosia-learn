@@ -145,3 +145,47 @@ export function edgeEnds(
   if (dy > 0) return [{ x: from.x, y: from.y + labelFoot(fromLines) }, { x: to.x, y: to.y - DOT_GAP }];
   return [{ x: from.x, y: from.y - DOT_GAP }, { x: to.x, y: to.y + labelFoot(toLines) }];
 }
+
+/** A concept and every concept one edge away from it, either way: what hover keeps (D5). */
+export function neighbours(edges: readonly { from: string; to: string }[], id: string): Set<string> {
+  const out = new Set([id]);
+  for (const e of edges) {
+    if (e.from === id) out.add(e.to);
+    if (e.to === id) out.add(e.from);
+  }
+  return out;
+}
+
+/** A pointer on the drawn picture, in the layout's coordinates (D6). */
+export function toLayoutPoint(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+  view: Box,
+): { x: number; y: number } {
+  const sx = rect.width > 0 ? view.width / rect.width : 1;
+  const sy = rect.height > 0 ? view.height / rect.height : 1;
+  return { x: view.x + (clientX - rect.left) * sx, y: view.y + (clientY - rect.top) * sy };
+}
+
+/** Where a domain's moved concepts are kept for the session (D6). */
+export const movedKey = (domain: string) => `learn-map:moved:${domain}`;
+
+/** The positions a session saved, for concepts still in the domain; anything unreadable is dropped. */
+export function readMoved(raw: string | null, known: ReadonlySet<string>): Record<string, { x: number; y: number }> {
+  if (raw === null) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const out: Record<string, { x: number; y: number }> = {};
+  for (const [id, p] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!known.has(id) || p === null || typeof p !== "object") continue;
+    const { x, y } = p as { x?: unknown; y?: unknown };
+    if (typeof x === "number" && typeof y === "number" && Number.isFinite(x) && Number.isFinite(y)) out[id] = { x, y };
+  }
+  return out;
+}

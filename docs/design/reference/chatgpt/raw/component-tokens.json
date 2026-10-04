@@ -1,0 +1,301 @@
+{
+ "_comment": "Values that are not ChatGPT custom properties, or that the measured elements settle: read from the real elements in the signed-in page copies (raw/layout.json and raw/components-computed.json). Every leaf names where it was read. Dimensions are CSS pixels.",
+ "core": {
+  "layout": {
+   "thread-max-width": {
+    "type": "dimension",
+    "value": 768,
+    "source": "measured: the thread column (`div.mx-auto.flex-1.group/turn-messages`, max-width 768px) and the markdown body, x 466 at 1440 with the sidebar open (layout.json)"
+   },
+   "composer-width": {
+    "type": "dimension",
+    "value": 768,
+    "source": "measured: the composer box on home, a thread, a project and Images, the same 768 column (layout.json); `--composer-bar_width` defaults to 768px"
+   },
+   "composer-height": {
+    "type": "dimension",
+    "value": 52,
+    "source": "measured: the one-row composer at rest on desktop (components-computed.json, composer); `--composer-bar_height` defaults to 52px"
+   },
+   "composer-height-phone": {
+    "type": "dimension",
+    "value": 87,
+    "source": "measured: the two-row composer at 390 wide, 358x87 at x 16 (m-composer)"
+   },
+   "phone-gutter": {
+    "type": "dimension",
+    "value": 16,
+    "source": "measured: the composer and thread column start at x 16 at 390 wide (layout.json, mobile-*)"
+   },
+   "content-max-width": {
+    "type": "dimension",
+    "value": 800,
+    "source": "measured: `max-w-app-content`, the 800 wide column with 16px padding that holds the Images, Plugins and project pages (layout.json)"
+   },
+   "library-max-width": {
+    "type": "dimension",
+    "value": 1092,
+    "source": "measured: the Library toolbar and list, 1092 wide from x 308 inside 48px side padding at 1440 (layout.json, library-dark)"
+   },
+   "settings-dialog-width": {
+    "type": "dimension",
+    "value": 680,
+    "source": "measured: the settings dialog, 680x600 at (380, 133) (settings-dialog)"
+   },
+   "settings-dialog-height": {
+    "type": "dimension",
+    "value": 600,
+    "source": "measured: the settings dialog (settings-dialog)"
+   },
+   "search-dialog-width": {
+    "type": "dimension",
+    "value": 720,
+    "source": "measured: the search dialog panel, 720x462 at (360, 195) (search-dialog)"
+   },
+   "user-bubble-max-width": {
+    "type": "dimension",
+    "value": 538,
+    "source": "measured: 70% of the 768 thread column (`--user-chat-width: 70%`), 537.6 wide (user-bubble)"
+   }
+  },
+  "radius": {
+   "row": {
+    "type": "dimension",
+    "value": 10,
+    "source": "measured: sidebar nav, chat and project rows, settings tabs, accent options (`.__menu-item`, rounded-[10px])"
+   },
+   "control": {
+    "type": "dimension",
+    "value": 8,
+    "source": "measured: sidebar icon buttons, the wordmark link, Share, the header Upgrade, settings select buttons (rounded-lg)"
+   },
+   "menu-item": {
+    "type": "dimension",
+    "value": 12,
+    "source": "measured: chat menu, user menu and + menu items (12px inside the popover)"
+   },
+   "popover": {
+    "type": "dimension",
+    "value": 20,
+    "source": "measured: the chat row menu, user menu, + menu and phone model menu"
+   },
+   "listbox": {
+    "type": "dimension",
+    "value": 16,
+    "source": "measured: the accent colour menu (a select listbox, radius 16)"
+   },
+   "dialog": {
+    "type": "dimension",
+    "value": 16,
+    "source": "measured: the settings and search dialogs (`--radius-2xl`)"
+   },
+   "composer": {
+    "type": "dimension",
+    "value": 28,
+    "source": "measured: the composer on desktop (rounded-[28px])"
+   },
+   "composer-phone": {
+    "type": "dimension",
+    "value": 26,
+    "source": "measured: the two-row composer at 390 wide"
+   },
+   "user-bubble": {
+    "type": "dimension",
+    "value": 22,
+    "source": "measured: the user message bubble on both widths"
+   },
+   "template-card": {
+    "type": "dimension",
+    "value": 16,
+    "source": "measured: an Images template card (186x232.5)"
+   },
+   "plugin-row": {
+    "type": "dimension",
+    "value": 16,
+    "source": "measured: a Plugins row and the 'See more' row (rounded-2xl)"
+   },
+   "plugin-icon": {
+    "type": "dimension",
+    "value": 12,
+    "source": "measured: the 40px plugin icon tile"
+   },
+   "file-icon": {
+    "type": "dimension",
+    "value": 8,
+    "source": "measured: the 32px Library row tile"
+   },
+   "pill": {
+    "type": "dimension",
+    "value": 9999,
+    "source": "measured: rounded-full on the mode toggle, Think chip, round buttons, tabs, search fields and the toggle track (computes to 33554400px)"
+   }
+  },
+  "size": {
+   "row-height": {
+    "type": "dimension",
+    "value": 36,
+    "source": "measured: every sidebar row, menu item and settings tab (`--menu-item-height`, 9 spacing units)"
+   },
+   "account-row-height": {
+    "type": "dimension",
+    "value": 52,
+    "source": "measured: the sidebar account row (248x52)"
+   },
+   "row-inset": {
+    "type": "dimension",
+    "value": 6,
+    "source": "measured: sidebar rows run from x 6 to 254 inside the 260 sidebar"
+   },
+   "icon-button": {
+    "type": "dimension",
+    "value": 36,
+    "source": "measured: sidebar, header, composer and rail icon buttons (36x36)"
+   },
+   "turn-action": {
+    "type": "dimension",
+    "value": 32,
+    "source": "measured: the Copy button under an answer (32x32)"
+   },
+   "icon": {
+    "type": "dimension",
+    "value": 20,
+    "source": "measured: sidebar, menu and composer icons (20x20; `icon` class), 16 for the small `icon-sm` set"
+   },
+   "icon-small": {
+    "type": "dimension",
+    "value": 16,
+    "source": "measured: chevrons, pin, sparkle and the header Upgrade sparkle at 16 (icons/INDEX.tsv sizes)"
+   },
+   "avatar": {
+    "type": "dimension",
+    "value": 24,
+    "source": "measured: the account avatar in the sidebar (24x24, rounded-full)"
+   },
+   "file-icon": {
+    "type": "dimension",
+    "value": 32,
+    "source": "measured: the Library row tile (32x32)"
+   },
+   "plugin-icon": {
+    "type": "dimension",
+    "value": 40,
+    "source": "measured: the plugin icon tile (40x40)"
+   },
+   "toggle-width": {
+    "type": "dimension",
+    "value": 32,
+    "source": "measured: the settings toggle track (32x20)"
+   },
+   "toggle-height": {
+    "type": "dimension",
+    "value": 20,
+    "source": "measured: the settings toggle track (32x20)"
+   },
+   "library-row-height": {
+    "type": "dimension",
+    "value": 60,
+    "source": "measured: a Library list row (60 tall, 60 pitch)"
+   },
+   "suggestion-row-height": {
+    "type": "dimension",
+    "value": 52,
+    "source": "measured: a home suggestion row (768x52)"
+   },
+   "segment-width": {
+    "type": "dimension",
+    "value": 130,
+    "source": "measured: each Chat / Work segment (130.28x36)"
+   }
+  },
+  "spacing": {
+   "bubble-padding-y": {
+    "type": "dimension",
+    "value": 10,
+    "source": "measured: user bubble padding 10px 16px"
+   },
+   "bubble-padding-x": {
+    "type": "dimension",
+    "value": 16,
+    "source": "measured: user bubble padding 10px 16px"
+   },
+   "row-padding-x": {
+    "type": "dimension",
+    "value": 10,
+    "source": "measured: sidebar row padding 6px 10px"
+   },
+   "row-padding-y": {
+    "type": "dimension",
+    "value": 6,
+    "source": "measured: sidebar row padding 6px 10px"
+   },
+   "header-padding": {
+    "type": "dimension",
+    "value": 8,
+    "source": "measured: the page header (52 tall, padding 8)"
+   },
+   "table-cell-padding-x": {
+    "type": "dimension",
+    "value": 24,
+    "source": "measured: markdown th and td padding-inline-end 24px"
+   },
+   "plugin-grid-gap-x": {
+    "type": "dimension",
+    "value": 8,
+    "source": "measured: the two 384 wide plugin columns are 8 apart (layout.json)"
+   },
+   "plugin-grid-gap-y": {
+    "type": "dimension",
+    "value": 16,
+    "source": "measured: plugin rows on a 72 pitch, 56 tall (layout.json)"
+   }
+  }
+ },
+ "dark": {
+  "component": {
+   "popover-bg": {
+    "type": "color",
+    "value": "#353535",
+    "source": "measured: chat row menu, user menu, accent menu and phone model menu fill (`dark:bg-[#353535]` on `.popover`)"
+   },
+   "popover-shadow-ring": {
+    "type": "color",
+    "value": "rgba(255, 255, 255, 0.2)",
+    "source": "measured: the 1px inset ring every popover and the composer carry in dark (box-shadow 0 0 1px inset)"
+   },
+   "settings-select-bg": {
+    "type": "color",
+    "value": "rgba(0, 0, 0, 0)",
+    "source": "measured: the settings select buttons are transparent in dark (settings-select)"
+   },
+   "code-block-surface": {
+    "type": "color",
+    "value": "{surface.composer-surface-primary}",
+    "source": "CSS only, no code block was captured: the code block sets `[--code-block-surface:var(--bg-elevated-secondary)]` and `dark:[--code-block-surface:var(--composer-surface-primary)]` and paints `bg-(--code-block-surface)`"
+   }
+  }
+ },
+ "light": {
+  "component": {
+   "popover-bg": {
+    "type": "color",
+    "value": "#ffffff",
+    "source": "measured: chat row menu, user menu, accent menu and phone model menu fill in light (`.popover` over `--main-surface-primary`)"
+   },
+   "popover-shadow-ring": {
+    "type": "color",
+    "value": "rgba(0, 0, 0, 0.04)",
+    "source": "measured: the 1px ring of the light composer and popovers (0 0 0 1px #0000000a, then 0 2px 8px and 0 4px 80px 8px soft layers)"
+   },
+   "settings-select-bg": {
+    "type": "color",
+    "value": "#ffffff",
+    "source": "measured: the settings select buttons in light (settings-select)"
+   },
+   "code-block-surface": {
+    "type": "color",
+    "value": "{bg.elevated-secondary}",
+    "source": "CSS only, no code block was captured: `[--code-block-surface:var(--bg-elevated-secondary)]` on the code block, `bg-(--code-block-surface)`"
+   }
+  }
+ }
+}

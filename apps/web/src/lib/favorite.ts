@@ -12,8 +12,11 @@ export interface Favorite {
   at: string;
 }
 
+/** What every favourite's preference key starts with. */
+export const FAVORITE_PREFIX = "favorite:";
+
 export function favoriteKey(assetId: string): string {
-  return `favorite:${assetId}`;
+  return `${FAVORITE_PREFIX}${assetId}`;
 }
 
 /** What the store held, or null for no star (or a row this code did not write). */

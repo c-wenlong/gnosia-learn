@@ -14,6 +14,7 @@ import { cx } from "@/components/ui/classes";
 import { getCourses } from "@/data/courses";
 import {
   loadAssetAccess,
+  loadFavorites,
   loadLibrary,
   loadSearchText,
   thumbnailFor,
@@ -27,6 +28,7 @@ import {
   filesNoun,
   filterRows,
   firstParam,
+  isCompanionKind,
   isOtherKind,
   kindFacets,
   libraryHref,
@@ -59,14 +61,16 @@ export const metadata: Metadata = {
  * `/library` (hi-fi screen 10): every asset the catalog knows about, as a grid
  * to search and filter, or as a list of rows (`?view=list`) for scanning many.
  *
- * **The filters are the URL.** `?kind=`, `?course=`, `?topic=`, `?q=`,
- * `?sort=` and `?view=` are the whole state, so a view is linkable and the back button
+ * **The filters are the URL.** `?kind=`, `?course=`, `?topic=`, `?favorites=`,
+ * `?q=`, `?sort=` and `?view=` are the whole state, so a view is linkable and the back button
  * undoes a filter. The kind is a strip of type tabs under the title (All,
  * Videos, Diagrams, Notes, Sessions, Links, and Others when there are
  * companion files; one chip on a phone), and the course and topic are
- * `FilterMenu`s (Course, and Topic when one is set); the page reads the
- * filters and the options here, and the small client `LibraryToolbar` pushes
- * the `libraryHref` of a pick, so the page itself stays a server component.
+ * `FilterMenu`s (Course, and Topic when one is set), beside a Favorites
+ * toggle that keeps only what the owner starred on an asset's page; the page
+ * reads the filters and the options here, and the small client
+ * `LibraryToolbar` pushes the `libraryHref` of a pick, so the page itself
+ * stays a server component.
  *
  * **Grouped by day, newest first** (L2 of
  * docs/proposals/library-by-type-and-day.md), in both layouts: a heading per
@@ -115,9 +119,19 @@ export default async function LibraryPage({
   const q = firstParam(params.q)?.trim() || null;
   const sort = parseSort(firstParam(params.sort));
   const view = parseView(firstParam(params.view));
-  const filters: LibraryFilters = { kind, topic, course, q, sort, view };
+  const favorites = firstParam(params.favorites) === "1";
+  const filters: LibraryFilters = { kind, topic, course, q, sort, view, favorites };
 
-  const [library, { kb }, courses] = await Promise.all([loadLibrary(), loadKnowledgeBase(), getCourses()]);
+  const [library, { kb }, courses, starred] = await Promise.all([
+    loadLibrary(),
+    loadKnowledgeBase(),
+    getCourses(),
+    // Read only when the filter is on: nothing else on the page draws a star.
+    favorites ? loadFavorites() : Promise.resolve(null),
+  ]);
+  // A store that could not be read filters to nothing rather than to
+  // everything, and the page says why below.
+  const favoriteIds = favorites ? (starred ?? new Set<string>()) : null;
   const { rows, counts, reachable, truncated, titles, concepts } = library;
   // Per row: a video in the blob store or a note the database owns draws, and
   // anything else shows its placeholder.
@@ -141,7 +155,7 @@ export default async function LibraryPage({
   const search = terms.length > 0 ? await loadSearchText(rows, terms) : null;
   const hits = search === null ? null : searchHits(rows, terms, search.texts, search.sources);
 
-  const matching = sortRows(filterRows(rows, { kind, topic, courseTopics, hits }), sort);
+  const matching = sortRows(filterRows(rows, { kind, topic, courseTopics, hits, favorites: favoriteIds }), sort);
   // Said once for the view rather than on every card: how many rows here name
   // bytes nothing has stored yet, and the one command that stores them.
   const unserved = unservedRows(matching, access);
@@ -163,14 +177,16 @@ export default async function LibraryPage({
   const tab = tabOf(kind);
   const tabs = libraryTabs(counts);
   // Narrowed beyond the tab: the header then says "12 of 30 files".
-  const narrowed = topic !== null || course !== null || q !== null;
+  const narrowed = topic !== null || course !== null || q !== null || favorites;
   const kindLabel = (k: string) =>
     k === OTHERS_KIND
       ? "Companion file"
       : ([...facets.primary, ...facets.companion].find((f) => f.kind === k)?.label ?? k);
 
   // Out of the rows the chosen tab could ever show: the standalone ones for
-  // All, the companions for Others, or the one kind's.
+  // All, the companions for Others, or the one kind's. Favorites keeps that
+  // total even though a starred companion file can show under All
+  // (`filterRows` says why); those are counted after it (`companionsShown`).
   const universe =
     kind === null
       ? facets.standalone
@@ -179,21 +195,28 @@ export default async function LibraryPage({
         : (counts.find((c) => c.kind === kind)?.count ?? 0);
   const plural = (n: number) => (n === 1 ? "asset" : "assets");
   const conditions = [
+    favorites && "starred",
     kind !== null && `a ${kindLabel(kind).toLowerCase()}`,
     chosenCourse !== null && `in ${chosenCourse.code}`,
     course !== null && chosenCourse === null && `in a course called "${course}"`,
     topic !== null && `filed under ${ownValue(titles, topic) ?? topic}`,
   ].filter((c): c is string => typeof c === "string");
   const noMatchSentence =
-    "Nothing in the catalog" +
+    favorites && starred !== null && starred.size === 0
+      ? "Nothing is starred yet. Press Favorite on an asset's page to star it."
+      : "Nothing in the catalog" +
     (conditions.length > 0 ? ` is ${conditions.join(", ")}` : "") +
     (q === null ? "" : `${conditions.length > 0 ? " and" : ""} matches "${q}"`) +
     ".";
   // The counts left the menu for the header (L1): "42 files", or "12 of 42
-  // files" when a course, a topic or a search narrows the tab.
-  const count = narrowed
-    ? `${matching.length} of ${universe} ${filesNoun(universe)}`
-    : `${universe} ${filesNoun(universe)}`;
+  // files" when a course, a topic, a search or Favorites narrows the tab.
+  // Starred companion files shown under All are counted on their own, so the
+  // first figure stays within the total beside it.
+  const companionsShown = favorites && kind === null ? matching.filter((row) => isCompanionKind(row.kind)).length : 0;
+  const shown = matching.length - companionsShown;
+  const count =
+    (narrowed ? `${shown} of ${universe} ${filesNoun(universe)}` : `${universe} ${filesNoun(universe)}`) +
+    (companionsShown > 0 ? ` · ${companionsShown} starred companion ${companionsShown === 1 ? "file" : "files"}` : "");
 
   const listLabel = q === null ? "Assets" : `Assets matching ${q}`;
   // What a card or a row names beside the title: the first concept the asset
@@ -317,6 +340,7 @@ export default async function LibraryPage({
                 {kind !== null && <input type="hidden" name="kind" value={kind} />}
                 {topic !== null && <input type="hidden" name="topic" value={topic} />}
                 {course !== null && <input type="hidden" name="course" value={course} />}
+                {favorites && <input type="hidden" name="favorites" value="1" />}
                 {sort !== "newest" && <input type="hidden" name="sort" value={sort} />}
                 {view !== "grid" && <input type="hidden" name="view" value={view} />}
                 <SearchField
@@ -351,6 +375,12 @@ export default async function LibraryPage({
                 </p>
               )}
             </Notice>
+          )}
+
+          {favorites && starred === null && (
+            <p role="status" className="text-[12px] text-text2">
+              Your stars could not be read just now, so nothing is shown as starred. They are where they were.
+            </p>
           )}
 
           {search !== null && !search.searchedText && (

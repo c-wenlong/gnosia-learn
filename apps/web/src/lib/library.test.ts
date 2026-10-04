@@ -190,6 +190,20 @@ describe("libraryHref", () => {
   });
 });
 
+describe("libraryHref with favorites", () => {
+  it("writes favorites=1 when on and nothing when off", () => {
+    expect(libraryHref({ favorites: true, kind: "video" })).toBe("/library?kind=video&favorites=1");
+    expect(libraryHref({ favorites: false })).toBe("/library");
+    expect(libraryHref({ favorites: null })).toBe("/library");
+  });
+
+  it("toggles through withPick and keeps every other filter", () => {
+    const on = withPick({ course: "cs3230", view: "list" }, "favorites", "1");
+    expect(libraryHref(on)).toBe("/library?course=cs3230&favorites=1&view=list");
+    expect(libraryHref(withPick(on, "favorites", ""))).toBe("/library?course=cs3230&view=list");
+  });
+});
+
 describe("withPick", () => {
   const filters = { kind: "note", course: "cs3230", q: "loop", sort: "newest" as const, view: "list" as const };
 
@@ -410,6 +424,13 @@ describe("filterRows", () => {
 
   it("narrows to a topic", () => {
     expect(ids(filterRows(rows, { ...none, topic: "barycentric" }))).toEqual(["v1"]);
+  });
+
+  it("keeps only starred rows with favorites on, a starred companion included, and still honours the kind", () => {
+    const starred = new Set(["t1", "n1"]);
+    expect(ids(filterRows(rows, { ...none, favorites: starred }))).toEqual(["t1", "n1"]);
+    expect(ids(filterRows(rows, { ...none, favorites: starred, kind: "note" }))).toEqual(["n1"]);
+    expect(filterRows(rows, { ...none, favorites: new Set() })).toEqual([]);
   });
 
   it("keeps a search hit only if it passes the other filters too", () => {

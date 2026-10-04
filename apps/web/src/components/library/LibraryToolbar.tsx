@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useOptimistic, useRef, useTransition, type ReactNode } from "react";
 
 import { FilterMenu } from "@/components/ui/FilterMenu";
-import { cx } from "@/components/ui/classes";
+import { chipClasses, cx } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import {
   libraryHref,
@@ -46,8 +47,9 @@ const TYPE = "Type";
  * plain click is taken in-page like a menu pick. On a phone the strip is one
  * chip ("All", "Videos") opening the same list, as Manus's is at 390.
  *
- * **The rest of the row.** The filter menus (Course, Topic while one is set,
- * and Kind inside Others), then the search, the sort and the grid or list
+ * **The rest of the row.** The Favorites toggle (a chip with a star: on
+ * shows only the assets the owner starred), the filter menus (Course, Topic
+ * while one is set, and Kind inside Others), then the search, the sort and the grid or list
  * switch, all at a chip's 34px, at the right of the title's line. From
  * 768px the title, the filters and the controls share that line, the search
  * shrinking from 260px to 120px before the filters and controls wrap whole
@@ -102,6 +104,8 @@ export function LibraryToolbar({
     (current, pick) => ({ ...current, [pick.label]: pick.value }),
   );
 
+  const [favoritesOn, setFavoritesOn] = useOptimistic(filters.favorites === true);
+
   const latest = useRef(filters);
   useEffect(() => {
     if (!pending) latest.current = filters;
@@ -112,6 +116,16 @@ export function LibraryToolbar({
     const href = libraryHref(latest.current);
     startTransition(() => {
       setValues({ label, value: next });
+      router.push(href, { scroll: false });
+    });
+  };
+
+  const toggleFavorites = () => {
+    const next = !favoritesOn;
+    latest.current = withPick(latest.current, "favorites", next ? "1" : "");
+    const href = libraryHref(latest.current);
+    startTransition(() => {
+      setFavoritesOn(next);
       router.push(href, { scroll: false });
     });
   };
@@ -168,6 +182,22 @@ export function LibraryToolbar({
                 onChange={(next) => pick(TYPE, "kind", next)}
               />
             </div>
+            <button
+              type="button"
+              aria-pressed={favoritesOn}
+              onClick={toggleFavorites}
+              className={cx(
+                chipClasses({ active: favoritesOn }),
+                pending && favoritesOn !== (filters.favorites === true) && "opacity-60",
+              )}
+            >
+              <Glyph
+                name="star"
+                size={16}
+                className={cx("transition-[fill] duration-150 motion-reduce:transition-none", favoritesOn && "fill-current")}
+              />
+              Favorites
+            </button>
             {menus.map(menu)}
           </div>
           <div className="flex w-full min-w-0 items-center justify-end gap-2 md:w-auto">

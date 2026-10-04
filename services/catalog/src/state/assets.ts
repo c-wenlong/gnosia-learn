@@ -1,6 +1,7 @@
 import {
   asset,
   assetConcept,
+  assetName,
   assetDerivation,
   assetTopic,
   collection,
@@ -9,10 +10,10 @@ import {
   type OwnerScope,
   topic,
 } from "@self-learn/schema";
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
-import { andOwnedBy, ownedBy, type Owners, scopedRead } from "../content/scope";
+import { andOwnedBy, cacheKey, ownedBy, type Owners, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { bytewise } from "../sql-order";
 
@@ -58,25 +59,70 @@ export interface AssetRef {
   path: string | null;
   url: string | null;
   bytes: number | null;
+  /** The reader's own name for it (`asset_name`) when they gave one, else the source's title. */
   title: string | null;
   sourceRepo: string;
 }
 
 /**
- * The columns an `AssetRef` is made of. Private: a caller that wants asset rows
- * asks for them by topic, concept, collection or id, and never has to know
- * which columns that means. Handing drizzle column objects across the door
- * would be handing out a query builder.
+ * The columns an `AssetRef` is made of, for one reader. Private: a caller that
+ * wants asset rows asks for them by topic, concept, collection or id, and never
+ * has to know which columns that means. Handing drizzle column objects across
+ * the door would be handing out a query builder.
+ *
+ * `title` is the reader's own name for the asset when they gave it one
+ * (`asset_name`, written by `./asset-names.ts`), and the source's title
+ * otherwise. A correlated lookup on the primary key rather than a join, so
+ * every query below keeps its joins and its one row per asset, and so a
+ * renamed video sorts, searches and reads under its new name on every page
+ * that lists assets, with nothing for a caller to remember.
  */
-const ASSET_COLUMNS = {
-  id: asset.id,
-  kind: asset.kind,
-  path: asset.path,
-  url: asset.url,
-  bytes: asset.bytes,
-  title: asset.title,
-  sourceRepo: asset.sourceRepo,
-} as const;
+function assetColumns(learnerId: string, names: boolean) {
+  return {
+    id: asset.id,
+    kind: asset.kind,
+    path: asset.path,
+    url: asset.url,
+    bytes: asset.bytes,
+    title: names ? namedTitle(learnerId) : asset.title,
+    sourceRepo: asset.sourceRepo,
+  } as const;
+}
+
+/**
+ * `asset.title`, unless this learner named the asset (`assetColumns`). Every
+ * column spelled with its table, since drizzle leaves them bare in a query on
+ * one table and a bare `title` inside the lookup would be ambiguous.
+ */
+export function namedTitle(learnerId: string): SQL<string | null> {
+  return sql<string | null>`coalesce((select n.title from ${assetName} n where n.learner_id = ${learnerId} and n.asset_id = "asset"."id"), "asset"."title")`;
+}
+
+/** Only a yes is kept, as `ownersExist` keeps it: a table is never dropped. */
+const hasNames = new WeakMap<object, true>();
+let warnedUnnamed = false;
+
+/**
+ * Does this database have `asset_name` (migration 0024)? A database behind
+ * the journal reads every asset under its source's title, as it did before
+ * the table existed, rather than failing every asset read until someone runs
+ * `migrate`. Asked once per pool after the table appears; asked again on each
+ * read before that, so a migration while the process runs is seen at once.
+ */
+export async function assetNamesExist(db: CatalogDatabase): Promise<boolean> {
+  const key = cacheKey(db);
+  if (hasNames.has(key)) return true;
+  const { rows } = await db.execute<{ present: boolean }>(
+    sql`select to_regclass(current_schema() || '.asset_name') is not null as present`,
+  );
+  const present = rows[0]?.present === true;
+  if (present) hasNames.set(key, true);
+  else if (!warnedUnnamed) {
+    warnedUnnamed = true;
+    console.warn("asset names: this database predates asset_name (0024), so assets show their source's titles; run `npm run catalog -- migrate`");
+  }
+  return present;
+}
 
 /**
  * Group an asset list by kind, dropping empty groups so the JSON stays small.
@@ -100,9 +146,10 @@ export function byKind(rows: AssetRef[]): Record<string, AssetRef[]> {
  * to the players without the caller sorting anything.
  */
 export async function assetsForTopic(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<AssetRef[]> {
+  const names = await assetNamesExist(db);
   return scopedRead(db, scope.readable, (owners) =>
     db
-      .select(ASSET_COLUMNS)
+      .select(assetColumns(scope.owner, names))
       .from(assetTopic)
       .innerJoin(asset, eq(asset.id, assetTopic.assetId))
       // The topic too: asked about one the reader cannot see, the answer is
@@ -119,9 +166,10 @@ export async function assetsForTopic(db: CatalogDatabase, slug: string, scope: O
  * with none, and the empty array is the normal answer rather than a gap.
  */
 export async function assetsForConcept(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<AssetRef[]> {
+  const names = await assetNamesExist(db);
   return scopedRead(db, scope.readable, (owners) =>
     db
-      .select(ASSET_COLUMNS)
+      .select(assetColumns(scope.owner, names))
       .from(assetConcept)
       .innerJoin(asset, eq(asset.id, assetConcept.assetId))
       // As `assetsForTopic`: an unreadable concept answers as a missing one.
@@ -147,9 +195,10 @@ export async function assetsForConcepts(
 ): Promise<Record<string, AssetRef[]>> {
   const wanted = [...new Set(slugs)];
   if (wanted.length === 0) return {};
+  const names = await assetNamesExist(db);
   const rows = await scopedRead(db, scope.readable, (owners) =>
     db
-      .select({ ...ASSET_COLUMNS, conceptSlug: assetConcept.conceptSlug })
+      .select({ ...assetColumns(scope.owner, names), conceptSlug: assetConcept.conceptSlug })
       .from(assetConcept)
       .innerJoin(asset, eq(asset.id, assetConcept.assetId))
       .innerJoin(concept, eq(concept.slug, assetConcept.conceptSlug))
@@ -242,6 +291,7 @@ export async function conceptsForAsset(db: CatalogDatabase, id: string, scope: O
  * Postgres only accepts output column names.
  */
 export async function assetsForCollection(db: CatalogDatabase, id: string, scope: OwnerScope): Promise<AssetRef[]> {
+  const names = await assetNamesExist(db);
   const [viaTopic, viaConcept, direct] = await scopedRead(db, scope.readable, (owners) => {
     // Every hop readable: the asset, the collection asked about (an
     // unreadable one answers as a missing one), and the topic or concept a
@@ -254,21 +304,21 @@ export async function assetsForCollection(db: CatalogDatabase, id: string, scope
     );
     return Promise.all([
     db
-      .select(ASSET_COLUMNS)
+      .select(assetColumns(scope.owner, names))
       .from(collectionItem)
       .innerJoin(assetTopic, eq(assetTopic.topicSlug, collectionItem.topicSlug))
       .innerJoin(topic, eq(topic.slug, collectionItem.topicSlug))
       .innerJoin(asset, eq(asset.id, assetTopic.assetId))
       .where(and(eq(collectionItem.collectionId, id), mine, ownedBy(topic.ownerId, owners))),
     db
-      .select(ASSET_COLUMNS)
+      .select(assetColumns(scope.owner, names))
       .from(collectionItem)
       .innerJoin(assetConcept, eq(assetConcept.conceptSlug, collectionItem.conceptSlug))
       .innerJoin(concept, eq(concept.slug, collectionItem.conceptSlug))
       .innerJoin(asset, eq(asset.id, assetConcept.assetId))
       .where(and(eq(collectionItem.collectionId, id), mine, ownedBy(concept.ownerId, owners))),
     db
-      .select(ASSET_COLUMNS)
+      .select(assetColumns(scope.owner, names))
       .from(collectionItem)
       .innerJoin(asset, eq(asset.id, collectionItem.assetId))
       .where(and(eq(collectionItem.collectionId, id), mine)),
@@ -305,9 +355,10 @@ function byKindThenId(a: AssetRef, b: AssetRef): number {
  */
 export async function assetsByIds(db: CatalogDatabase, ids: string[], scope: OwnerScope): Promise<AssetRef[]> {
   if (ids.length === 0) return [];
+  const names = await assetNamesExist(db);
   return scopedRead(db, scope.readable, (owners) =>
     db
-      .select(ASSET_COLUMNS)
+      .select(assetColumns(scope.owner, names))
       .from(asset)
       .where(and(inArray(asset.id, ids), ownedBy(asset.ownerId, owners)))
       .orderBy(asc(bytewise(asset.id))),
@@ -520,11 +571,18 @@ export async function listAssets(
   // spells that. Short-circuiting also saves the round trip, the same way
   // `assetsByIds` does.
   if (options.ids !== undefined && options.ids.length === 0) return [];
-  return scopedRead(db, scope.readable, (owners) => listScoped(db, options, owners));
+  const names = await assetNamesExist(db);
+  return scopedRead(db, scope.readable, (owners) => listScoped(db, options, owners, scope.owner, names));
 }
 
 /** `listAssets` for one set of owners, or every owner on a database from before 0010. */
-async function listScoped(db: CatalogDatabase, options: ListAssetsOptions, owners: Owners): Promise<AssetWithTopics[]> {
+async function listScoped(
+  db: CatalogDatabase,
+  options: ListAssetsOptions,
+  owners: Owners,
+  learnerId: string,
+  names: boolean,
+): Promise<AssetWithTopics[]> {
   const { kind, topicSlug, sourceRepo, ids, limit, offset } = options;
   const conditions = [
     ownedBy(asset.ownerId, owners),
@@ -541,7 +599,7 @@ async function listScoped(db: CatalogDatabase, options: ListAssetsOptions, owner
 
   const base = db
     .select({
-      ...ASSET_COLUMNS,
+      ...assetColumns(learnerId, names),
       createdAt: asset.createdAt,
       updatedAt: asset.updatedAt,
       // Only chips for topics the reader may read (phase 4).

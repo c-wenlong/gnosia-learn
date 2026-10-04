@@ -77,7 +77,11 @@
   --ok-tint: #e6f8ec;
   --warn: #f7c325;
   --warn-lip: #b78900;
-  --warn-text: #b78900;
+  /* Amber as text: the lip's #b78900 was 2.93:1 on its own tint and 3.19 on
+     white, so a "not quite" verdict or a warning chip was unreadable. This is
+     the amber Gnosia light already used, which clears 4.5:1 on every light
+     ground here (4.62 on --surface2 to 5.13 on white). */
+  --warn-text: #8c6800;
   --warn-tint: #fff5d6;
   --danger: #c43939;
   --streak: #ff9600;
@@ -283,13 +287,13 @@
      gold's hue darkened until it clears 4.5:1 (4.82 on the card). */
   --streak-text: #916a23;
 
-  /* Signal colours keep their :root hues. Only three labels move, each
-     because it was under 4.5:1: the green and amber text darkened just far
-     enough to pass on their tints and on cream, and the label on a green
-     face turned dark, as it already is in `.dark`. */
+  /* Signal colours keep their :root hues. Only two labels move, each
+     because it was under 4.5:1: the green text darkened just far enough to
+     pass on its tint and on cream, and the label on a green face turned
+     dark, as it already is in `.dark`. The amber text needs no override:
+     :root's is the one this palette chose, and it passes on cream (4.75). */
   --ok-text: #008024;
   --ok-on: #0b2e14;
-  --warn-text: #8c6800;
 }
 
 /*

@@ -31,7 +31,7 @@ export function Select<V extends string>({
   options: readonly FilterOption<V>[];
   value: V;
   onChange: (value: V) => void;
-  size?: "md" | "chip";
+  size?: "md" | "inline";
   placeholder?: string;
   busy?: boolean;
   invalid?: boolean;
