@@ -17,7 +17,7 @@ import {
   nextConcept,
   sessionCanAsk,
   withoutEmptySteps,
-  type SessionMode,
+  type ConceptSessionMode,
   type SessionStep,
 } from "@/lib/session-core";
 
@@ -102,7 +102,7 @@ export async function tutorModelConfigured(): Promise<boolean> {
 }
 
 /** Every concept's summary, for wrong options; none when the catalog cannot be read. */
-async function readSummaries(): Promise<ConceptSummary[]> {
+export async function readSummaries(): Promise<ConceptSummary[]> {
   const scope = await currentScope();
   try {
     return await conceptSummaries(await catalogDatabase(), scope);
@@ -132,7 +132,7 @@ export async function sessionWillAsk(workspace: ConceptWorkspace): Promise<boole
   );
 }
 
-export async function loadSessionPage(workspace: ConceptWorkspace, mode: SessionMode): Promise<SessionPageData> {
+export async function loadSessionPage(workspace: ConceptWorkspace, mode: ConceptSessionMode): Promise<SessionPageData> {
   const summaries = await readSummaries();
 
   const [asset, { kb }] = await Promise.all([teachAsset(workspace.assets), readKb(await currentOwner())]);
