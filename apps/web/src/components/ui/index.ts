@@ -1,6 +1,6 @@
 /**
  * The redesign's primitives. Every one is safe in a server component except
- * `FilterMenu` and `Composer`, client components that take an `onChange` and
+ * `FilterMenu`, `Select` and `Composer`, client components that take an `onChange` and
  * so are rendered from another client component (`MentionComposer` is one too,
  * and deliberately not exported here: it carries Lexical, which only `/studio`
  * should load); the contract (names and props) is written
@@ -23,6 +23,7 @@ export { Placeholder } from "./Placeholder";
 export { ProgressBar, type ProgressTone } from "./ProgressBar";
 export { RatingButton } from "./RatingButton";
 export { SearchField } from "./SearchField";
+export { Select } from "./Select";
 export { StatTile, type StatTone } from "./StatTile";
 export { buttonClasses, cardClasses, chipClasses, cx, inputClasses, LABEL } from "./classes";
 export type { ButtonSize, ButtonVariant, ChipSize } from "./classes";
