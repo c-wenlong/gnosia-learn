@@ -45,6 +45,26 @@ export async function readPreferences(
 }
 
 /**
+ * The preferences whose key starts with `prefix`, keyed, for a family of
+ * per-row keys such as `favorite:<asset id>`: read without loading the rest
+ * (the playback positions, the learner's resource links). `starts_with`
+ * rather than `LIKE`, so a `%` or `_` in the prefix is matched as itself.
+ */
+export async function readPreferencesWithPrefix(
+  db: CatalogDatabase,
+  prefix: string,
+  learnerId: string = LOCAL_LEARNER_ID,
+): Promise<Record<string, unknown>> {
+  const rows = await db
+    .select({ key: preference.key, value: preference.value })
+    .from(preference)
+    .where(and(eq(preference.learnerId, learnerId), sql`starts_with(${preference.key}, ${prefix})`));
+  const out: Record<string, unknown> = {};
+  for (const row of rows) out[row.key] = row.value;
+  return out;
+}
+
+/**
  * Set one preference.
  *
  * `value` cannot be `null` or `undefined`. The column is `jsonb not null`, and
