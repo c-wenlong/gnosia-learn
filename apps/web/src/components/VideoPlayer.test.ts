@@ -501,7 +501,7 @@ describe("VideoPlayer", () => {
     expect(video(host).currentTime).toBe(5);
   });
 
-  it("shows the big play button until the first play, then flashes play and pause for a second", () => {
+  it("shows the big play button until the first play, then flashes play and pause for a second", async () => {
     vi.useFakeTimers();
     try {
       const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
@@ -534,9 +534,16 @@ describe("VideoPlayer", () => {
       act(() => vi.advanceTimersByTime(1000));
       expect(flash()).toBe("away");
 
-      act(() => el.click());
+      await act(async () => el.click());
       expect(flash()).toBe("play");
       act(() => vi.advanceTimersByTime(1000));
+      expect(flash()).toBe("away");
+
+      // A resume the browser refuses flashes nothing.
+      press(frame, "k");
+      act(() => vi.advanceTimersByTime(1000));
+      el.play = () => Promise.reject(new Error("NotAllowedError"));
+      await act(async () => el.click());
       expect(flash()).toBe("away");
 
       // A new video starts over with the big button.

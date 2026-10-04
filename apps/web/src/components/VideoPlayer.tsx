@@ -136,8 +136,14 @@ export function VideoPlayer({
   const [skip, setSkip] = useState<SkipFlash | null>(null);
   const skipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The icon a press on play or pause flashes in the middle. `n` counts
-  // presses, so each one is a new element that fades in afresh.
-  const [toggleFlash, setToggleFlash] = useState<{ icon: "play" | "pause"; n: number; shown: boolean } | null>(null);
+  // presses, so each one is a new element that fades in afresh, and `attempt`
+  // is the element it was for, so a retry does not show the old one's flash.
+  const [toggleFlash, setToggleFlash] = useState<{
+    icon: "play" | "pause";
+    n: number;
+    attempt: number;
+    shown: boolean;
+  } | null>(null);
   const toggleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subtitles = useSyncExternalStore(subscribeSubtitles, readSubtitles, () => false);
   // Off on the server, so the first client render matches it.
@@ -308,7 +314,7 @@ export function VideoPlayer({
   }
 
   function flashToggle(icon: "play" | "pause") {
-    setToggleFlash((prev) => ({ icon, n: (prev?.n ?? 0) + 1, shown: true }));
+    setToggleFlash((prev) => ({ icon, n: (prev?.n ?? 0) + 1, attempt, shown: true }));
     if (toggleTimer.current) clearTimeout(toggleTimer.current);
     toggleTimer.current = setTimeout(
       () => setToggleFlash((prev) => (prev === null ? null : { ...prev, shown: false })),
@@ -319,16 +325,18 @@ export function VideoPlayer({
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
-    const starting = video.paused || video.ended;
-    // The first play has the big button fading away as its answer.
-    if (!starting) flashToggle("pause");
-    else if (started) flashToggle("play");
-    if (starting) {
-      void video.play()?.catch(() => {
+    if (video.paused || video.ended) {
+      // The first play has the big button fading away as its answer. A resume
+      // flashes once it has started, so a refused one does not claim it did.
+      const resuming = started;
+      void video.play()?.then(() => {
+        if (resuming) flashToggle("play");
+      }, () => {
         // Refused (autoplay policy, a source that failed). The element's own
         // events keep `paused` honest, and a failure has its own panel.
       });
     } else {
+      flashToggle("pause");
       video.pause();
     }
   }
@@ -551,7 +559,7 @@ export function VideoPlayer({
           </div>
         )}
 
-        {toggleFlash !== null && (
+        {toggleFlash !== null && toggleFlash.attempt === attempt && (
           <div
             key={toggleFlash.n}
             aria-hidden
