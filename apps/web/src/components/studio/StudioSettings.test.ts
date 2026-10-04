@@ -16,6 +16,8 @@ vi.mock("next/link", () => ({ default: () => null }));
 const { StudioSettings } = await import("./StudioSettings");
 
 beforeAll(() => {
+  // jsdom lays nothing out, so the open list has no row to scroll to.
+  Element.prototype.scrollIntoView ??= () => undefined;
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
@@ -51,14 +53,16 @@ async function mount() {
     act(() => root.unmount());
     host.remove();
   });
-  const select = (label: string) =>
-    [...host.querySelectorAll("select")].find((element) => host.querySelector(`label[for="${element.id}"]`)?.textContent === label)!;
+  // The kit `Select`: a trigger the label points at, carrying its value, and
+  // a list of options that each carry theirs once it is open.
+  const trigger = (label: string) =>
+    [...host.querySelectorAll<HTMLButtonElement>('[aria-haspopup="listbox"]')].find(
+      (element) => host.querySelector(`label[for="${element.id}"]`)?.textContent === label,
+    )!;
+  const select = (label: string) => ({ value: trigger(label).dataset.value });
   const pick = async (label: string, value: string) => {
-    await act(async () => {
-      const element = select(label);
-      element.value = value;
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await act(async () => trigger(label).click());
+    await act(async () => host.querySelector<HTMLElement>(`[role="option"][data-value="${value}"]`)!.click());
   };
   return { host, select, pick };
 }

@@ -127,3 +127,39 @@ export function popoverShift({
   if (overflow <= 0) return 0;
   return -Math.min(overflow, Math.max(triggerLeft - gutter, 0));
 }
+
+/**
+ * Where a field-faced menu's list goes, in viewport px. The list sits in the
+ * top layer with fixed coordinates, so no card, fold or dialog that clips its
+ * overflow can cut it off. It opens under the trigger, or over it when it
+ * would not fit below and there is more room above, shifted left as
+ * `popoverShift` says, and `maxHeight` is the room on the side it took, so a
+ * long list scrolls rather than leaving the screen.
+ */
+export function fieldPlacement({
+  trigger,
+  width,
+  height,
+  viewport,
+  gap = 8,
+  gutter = 16,
+}: {
+  trigger: { top: number; bottom: number; left: number };
+  width: number;
+  height: number;
+  viewport: { width: number; height: number };
+  gap?: number;
+  gutter?: number;
+}): { top: number; left: number; above: boolean; maxHeight: number } {
+  const roomBelow = viewport.height - gutter - (trigger.bottom + gap);
+  const roomAbove = trigger.top - gap - gutter;
+  const above = height > roomBelow && roomAbove > roomBelow;
+  const room = Math.max(above ? roomAbove : roomBelow, 0);
+  const shown = Math.min(height, room);
+  return {
+    top: above ? trigger.top - gap - shown : trigger.bottom + gap,
+    left: trigger.left + popoverShift({ triggerLeft: trigger.left, width, viewport: viewport.width, gutter }),
+    above,
+    maxHeight: room,
+  };
+}
