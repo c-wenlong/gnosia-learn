@@ -2,7 +2,7 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { VideoPlayer } from "./VideoPlayer";
 import type { TranscriptCue, VideoChapter } from "./media";
 
@@ -391,5 +391,113 @@ describe("VideoPlayer", () => {
     act(() => button().click());
     expect(button().getAttribute("aria-label")).toBe("Subtitles (c)");
     expect(button().getAttribute("aria-pressed")).toBe(String(before));
+  });
+
+  it("moves five seconds on an arrow and flashes a total that grows while it is up", () => {
+    vi.useFakeTimers();
+    try {
+      const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+      const el = video(host);
+      el.currentTime = 10;
+      const frame = el.parentElement as HTMLElement;
+      const flash = () => host.querySelector("[data-skip]");
+
+      press(frame, "ArrowRight");
+      expect(el.currentTime).toBe(15);
+      expect(flash()?.textContent).toBe("+ 5");
+
+      act(() => vi.advanceTimersByTime(600));
+      press(frame, "ArrowRight");
+      act(() => vi.advanceTimersByTime(600));
+      press(frame, "ArrowRight");
+      // Each press restarts the second, so three presses 600 ms apart are one run.
+      expect(el.currentTime).toBe(25);
+      expect(flash()?.textContent).toBe("+ 15");
+      expect(flash()?.getAttribute("data-skip")).toBe("shown");
+
+      act(() => vi.advanceTimersByTime(1000));
+      expect(flash()?.getAttribute("data-skip")).toBe("away");
+
+      // After it went, a press starts over, and back reads with a minus.
+      press(frame, "ArrowLeft");
+      expect(el.currentTime).toBe(20);
+      expect(flash()?.textContent).toBe("\u2212 5");
+      expect(flash()?.getAttribute("data-skip")).toBe("shown");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("starts a new run when the direction turns, and stops at the start", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const el = video(host);
+    el.currentTime = 7;
+    const frame = el.parentElement as HTMLElement;
+    press(frame, "ArrowRight");
+    press(frame, "ArrowRight");
+    press(frame, "ArrowLeft");
+    expect(host.querySelector("[data-skip]")?.textContent).toBe("\u2212 5");
+    press(frame, "ArrowLeft");
+    press(frame, "ArrowLeft");
+    press(frame, "ArrowLeft");
+    expect(el.currentTime).toBe(0);
+  });
+
+  it("steps and flashes from the scrub bar the same way", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    press(slider(host), "ArrowRight");
+    press(slider(host), "ArrowUp");
+    expect(video(host).currentTime).toBe(10);
+    expect(host.querySelector("[data-skip]")?.textContent).toBe("+ 10");
+  });
+
+  it("leaves the arrows to the volume slider when it has them", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const volume = host.querySelector('input[aria-label="Volume"]') as HTMLInputElement;
+    press(volume, "ArrowRight");
+    expect(video(host).currentTime).toBe(0);
+    expect(host.querySelector("[data-skip]")).toBeNull();
+  });
+
+  it("adds up presses made before the metadata, and flashes nothing when it cannot move", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const el = video(host);
+    let stored = 0;
+    let ready = false;
+    Object.defineProperty(el, "currentTime", {
+      get: () => stored,
+      set: (value: number) => {
+        if (!ready) throw new Error("The element has not loaded metadata yet.");
+        stored = value;
+      },
+      configurable: true,
+    });
+    const frame = el.parentElement as HTMLElement;
+    press(frame, "ArrowRight");
+    press(frame, "ArrowRight");
+    press(frame, "ArrowRight");
+    expect(host.querySelector("[data-skip]")?.textContent).toBe("+ 15");
+    ready = true;
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    expect(stored).toBe(15);
+
+    // From the start, back goes nowhere and says nothing.
+    const fresh = mount(createElement(VideoPlayer, { src: "/w.mp4", chapters }));
+    press(video(fresh).parentElement as HTMLElement, "ArrowLeft");
+    expect(fresh.querySelector("[data-skip]")).toBeNull();
+  });
+
+  it("keeps focus in the player, so the keys answer after a click", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const frame = video(host).parentElement as HTMLElement;
+    // A click on the picture focuses the nearest focusable ancestor, which is
+    // the browser's doing (jsdom does not model it); this is what it needs.
+    expect(frame.tabIndex).toBe(-1);
+    // The big play button goes inert as play starts, so it hands focus on.
+    const play = host.querySelector("[data-big-play]") as HTMLButtonElement;
+    act(() => play.click());
+    expect(document.activeElement).toBe(frame);
+    press(document.activeElement as HTMLElement, "ArrowRight");
+    expect(video(host).currentTime).toBe(5);
   });
 });
