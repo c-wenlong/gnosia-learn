@@ -651,12 +651,13 @@ live preview ("The job in the grid" below):
 conversation out of the dialog; the sections after this one describe what
 came before where they say so.*
 
-`/studio` is a sidebar beside one of two views, the way a chat app is laid
-out (`PanelHost`):
+`/studio` is one of two views beside the app's sidebar, the way a chat app is
+laid out (`PanelHost`). Since D84 that sidebar is the whole app's, not the
+studio's own:
 
 | | Home (`/studio`) | A conversation (`?draft=<id>`) |
 | --- | --- | --- |
-| Sidebar | New chat, then the history | The same, the open conversation marked |
+| Sidebar | New chat, the five learning destinations, then the history | The same, the open conversation marked |
 | Main | "What shall we make?" and the composer, filling the first screen, then the assets panel: the strip (search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
 
 *Since D83:* the composer has the first screen to itself, over a soft wash
@@ -676,7 +677,7 @@ message. A refusal brings the person home with the words still in the box
 and the reason under it. Nothing is made until something is sent, so New
 chat is simply the home view, its composer focused.
 
-**The history** (`StudioSidebar`) lists every conversation but one closed
+**The history** (`ChatHistory`, in the app's sidebar) lists every conversation but one closed
 with Start over: talking, briefed, drawing and done (`LISTED_STATES`), under
 Today, Yesterday, Previous 7 days, Previous 30 days and Older. The old list
 above the grid showed only the first two, since it was a list of things to
@@ -691,7 +692,9 @@ ties broken by id), and every refresh reads all the pages shown again from
 the top (`readHistory`), so a row pushed onto the next page, or closed with
 Start over, ends up where the runner now has it.
 
-*Since D87:* under New chat is a search field, "Search conversations". It asks
+*Since D87:* under New chat in the app's sidebar, on every page, is a search
+field, "Search conversations" (`ChatSearch`, with the reads in
+`useHistorySearch`). It asks
 the runner, not the rows already loaded, so a conversation on a page nobody
 opened is found too: `GET /api/drafts?q=` keeps the drafts whose title, first
 message (the 120 characters the list holds) or concept title contains the
@@ -703,11 +706,12 @@ words in bold and, when the match is in words the heading is not showing (a
 first message under a brief's title), a second line of them. Nothing matching
 reads "No conversations match", a runner that did not answer says so instead,
 and the open conversation is marked among the matches as it is in the groups.
-Escape in a field that holds words, or its clear button, puts the groups
+A match opens as a row does: on `/studio` through the page's in-browser
+navigation, elsewhere as a link to `/studio?draft=`. Escape in a field that holds words, or its clear button, puts the groups
 back; Escape in an empty field closes the drawer or the slid-out sidebar as
 before. On the collapsed rail a search button slides the sidebar out with the
-field focused, and it stays out while focus is inside it, sliding back when
-focus and the pointer have both left.
+field focused, and it stays out while focus is in the field or a match,
+sliding back when focus and the pointer have both left.
 
 **The conversation** is `StudioPane`: `StudioDialog`'s controls without the
 dialog. Nothing is modal, so the sidebar stays usable, and there is no Close:
@@ -717,16 +721,17 @@ own, a tile's panel, the settings and an Extend press are still dialogs over
 the home view, and an Extend press becomes a full-screen conversation once
 its draft exists.
 
-From 768px up the sidebar collapses to a 52px rail (its toggle, then New
-chat), as ChatGPT's does, and remembers that in `localStorage`
-(`useSidebarCollapsed`). Resting the mouse on the rail for a moment slides
-the whole sidebar out over the page, without moving it, and moving off
-slides it back; the toggle pressed while it is out keeps it open.
+From 768px up the sidebar folds to a 60px rail of icons, as ChatGPT's does,
+and remembers that in a cookie (`gnosia-sidebar`, D84), so the first paint
+has the right width. Resting the mouse on the rail for a moment slides the
+whole sidebar out over the page, without moving it, and moving off slides it
+back; the fold button pressed while it is out keeps it open. (D83 built this
+on the studio's own sidebar, with the choice in `localStorage`.)
 
-Below 768px the sidebar is a drawer, opened by a toggle at the top left of
-the home view and before the conversation's title, and closed by a pick, the
-backdrop or Escape. While it is open the rest of the studio is inert, Tab
-stays inside it, and closing it hands focus back to the toggle.
+Below 768px the sidebar is a drawer, opened by the button at the left of the
+app's phone header, and closed by a pick, the backdrop, Escape or a
+navigation. While it is open the rest of the page is inert, Tab stays inside
+it, and closing it hands focus back to the button.
 
 ### The plus card and the panel
 
@@ -1301,14 +1306,40 @@ reach a diagram, which is the studio's other main use), and a rail that
 only opens on a click (the owner asked for hover, and the click is there
 too, on the toggle).
 
+### D84. The studio's sidebar is the app's sidebar
+
+**Verdict:** the app has one sidebar, on every page: New chat (the studio's
+home), the five learning destinations, the studio's conversations, and the
+account at the foot. The top bar, the phone tab bar and the studio's own
+conversation list are gone. On `/studio`, `PanelHost` publishes the open
+conversation, a pending one, New chat and its in-browser navigation to the
+sidebar (`usePublishStudioChats`), so the list behaves exactly as the
+studio's own did; elsewhere the sidebar reads the list itself and a row is a
+link to `/studio?draft=`. D83's fold and hover peek moved with it, and the
+fold is kept in a cookie rather than `localStorage`, since the layout reads
+it to draw the right width before anything runs in the browser.
+
+**Why:** the owner's call on 2026-10-04: the studio is the feature to refine,
+and a chat app's layout, one sidebar and one view, makes it the main page
+with the learning pages as modules beside it. Two nested navigations (the
+top bar over the studio's sidebar) made the studio feel like a page inside
+the app rather than its centre.
+
+**Rejected:** a portal from `PanelHost` into a slot in the app's sidebar. It
+would keep the studio's own component, but the list would be torn down and
+redrawn on every move between the studio and another page, and it could not
+be drawn on the server.
+
 ### D87. The history is searched by the runner, from a field under New chat
 
-**Verdict:** the sidebar has a "Search conversations" field under New chat,
-and a button for it on the collapsed rail. `GET /api/drafts` takes `q`, a
+**Verdict:** the app's sidebar (D84) has a "Search conversations" field under
+New chat, on every page, and a button for it on the collapsed rail. `GET /api/drafts` takes `q`, a
 case-insensitive substring of the draft's title, first message or concept
 title, applied before the limit and the cursor. The client debounces typing by
 200ms and shows the hits as one flat list with the matched words marked; the
-grouped history comes back on Escape or the clear button.
+grouped history comes back on Escape or the clear button. On `/studio` a match
+opens through the page's in-browser navigation, as a row does; elsewhere it
+links to `/studio?draft=`.
 
 **Why:** the history is paged 50 at a time, so a filter over the rows already
 loaded would miss exactly the old conversations a person searches for, and

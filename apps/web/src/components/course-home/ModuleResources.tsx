@@ -19,6 +19,7 @@ const TYPE_LABEL: Record<Resource["type"], string> = {
   video: "Video",
   book: "Book",
   other: "Link",
+  practice: "Practice",
 };
 
 /**

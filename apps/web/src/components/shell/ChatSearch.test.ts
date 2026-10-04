@@ -1,44 +1,41 @@
 // @vitest-environment jsdom
-import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { act, createElement, type ComponentProps } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { DraftSummary } from "@/lib/studio-drafts";
+
 /**
- * The history search (D87 of docs/STUDIO-CHAT-FIRST.md) is the second half of
- * this file.
- *
- * The sidebar's collapse (D83 of docs/STUDIO-CHAT-FIRST.md): the toggle
- * folds it to a rail and remembers that, resting the pointer on the rail
- * slides it out over the page and leaving slides it back, and the toggle
- * pressed then keeps it open. Classes are what is checked, since jsdom has
- * no layout: the `md:` ones are the desktop sidebar's.
+ * The conversation search in the app's sidebar (D87 of
+ * docs/STUDIO-CHAT-FIRST.md): the field under New chat, the debounce, the
+ * runner's matches in place of the day groups, Show more matches, the rail's
+ * search button, and what a slid-out sidebar does while focus is in the
+ * search. The sidebar is the shell's, so every test mounts the frame.
  */
 
-vi.mock("next/link", () => ({
-  default: ({ href, children, ...rest }: { href: string; children: unknown }) => createElement("a", { href, ...rest }, children as never),
-}));
-const listMock = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/studio-drafts")>()),
-  listDrafts: listMock,
-}));
+const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn() }));
+vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
+vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
+vi.mock("next/image", () => ({ default: () => null }));
+vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
+vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
 
-const { StudioSidebar } = await import("./StudioSidebar");
-type DraftSummary = import("@/lib/studio-drafts").DraftSummary;
+const { ShellFrame } = await import("./ShellFrame");
+const { usePublishStudioChats } = await import("./shell-context");
+const listMock = mocks.listDrafts;
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   window.matchMedia ??= ((query: string) => ({
     matches: false,
     media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
   })) as unknown as typeof window.matchMedia;
 });
 
 beforeEach(() => {
-  localStorage.clear();
-  vi.useFakeTimers();
+  mocks.pathname = "/home";
   listMock.mockReset().mockResolvedValue({ ok: true, status: 200, data: { drafts: [], note: "" } });
 });
 
@@ -46,85 +43,41 @@ const mounted: Array<() => void> = [];
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   vi.useRealTimers();
+  document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
 });
 
-function mount(options: { initial?: DraftSummary[]; active?: string | null } = {}) {
+/**
+ * The frame with a studio, on /home unless a page is given. Mounted on real
+ * timers so the sidebar's first read lands, then handed to fake ones.
+ */
+async function mount(options: { collapsed?: boolean; page?: () => null } = {}) {
   const container = document.createElement("div");
   document.body.append(container);
-  const root = createRoot(container);
-  act(() =>
+  const root: Root = createRoot(container);
+  await act(async () => {
     root.render(
-      createElement(StudioSidebar, {
-        initial: options.initial ?? [],
-        path: "/studio",
-        titles: {},
-        active: options.active ?? null,
-        pending: null,
-        open: false,
-        onClose: () => {},
-        onNewChat: () => {},
-      }),
-    ),
-  );
+      createElement(
+        ShellFrame,
+        { studio: true, initialCollapsed: options.collapsed ?? false } as ComponentProps<typeof ShellFrame>,
+        createElement(options.page ?? (() => null)),
+      ),
+    );
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  vi.useFakeTimers();
   mounted.push(() => {
     act(() => root.unmount());
     container.remove();
   });
-  const nav = () => container.querySelector("nav")!;
+  const nav = () => container.querySelector<HTMLElement>('nav[aria-label="Primary"]')!;
   const button = (label: string) => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
-  const room = () => nav().parentElement!;
   const field = () => container.querySelector<HTMLInputElement>('input[type="search"]')!;
-  const links = () => [...container.querySelectorAll<HTMLAnchorElement>("nav a")];
-  return { container, nav, button, room, field, links };
+  /** The matches, once the search holds words; the history's rows are not these. */
+  const links = () => [...container.querySelectorAll<HTMLAnchorElement>("nav [data-peek-hold] a")];
+  return { container, nav, button, field, links };
 }
-
-describe("the sidebar's collapse", () => {
-  it("folds to a rail, remembers it, and opens again from the rail", () => {
-    const { nav, button } = mount();
-    expect(nav().className).toContain("md:flex");
-    act(() => button("Close the sidebar")!.click());
-    expect(localStorage.getItem("studio:sidebar-collapsed")).toBe("1");
-    expect(nav().className).toContain("md:hidden");
-    expect(button("Open the sidebar")).not.toBeNull();
-
-    act(() => button("Open the sidebar")!.click());
-    expect(localStorage.getItem("studio:sidebar-collapsed")).toBe("0");
-    expect(nav().className).toContain("md:static");
-    expect(button("Open the sidebar")).toBeNull();
-  });
-
-  it("starts collapsed when it was left collapsed", () => {
-    localStorage.setItem("studio:sidebar-collapsed", "1");
-    const { nav } = mount();
-    expect(nav().className).toContain("md:hidden");
-  });
-
-  it("slides out over the page while the pointer rests on the rail, and the toggle then keeps it open", () => {
-    localStorage.setItem("studio:sidebar-collapsed", "1");
-    const { nav, button, room } = mount();
-    act(() => {
-      room().dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" } as PointerEventInit));
-    });
-    // Not at once: a pointer passing over on its way elsewhere does nothing.
-    expect(nav().className).toContain("md:hidden");
-    act(() => vi.advanceTimersByTime(150));
-    expect(nav().className).toContain("md:absolute");
-
-    act(() => {
-      room().dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: document.body } as PointerEventInit));
-    });
-    act(() => vi.advanceTimersByTime(250));
-    expect(nav().className).toContain("md:hidden");
-
-    act(() => {
-      room().dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" } as PointerEventInit));
-    });
-    act(() => vi.advanceTimersByTime(150));
-    act(() => button("Keep the sidebar open")!.click());
-    expect(localStorage.getItem("studio:sidebar-collapsed")).toBe("0");
-    expect(nav().className).toContain("md:static");
-  });
-});
 
 describe("the history search", () => {
   function draft(patch: Partial<DraftSummary>): DraftSummary {
@@ -146,16 +99,19 @@ describe("the history search", () => {
     draft({ draftId: "a", title: "Binary search trees", updated: "2026-10-04T10:00:00.000Z" }),
     draft({ draftId: "b", title: "TCP congestion window", updated: "2026-10-03T10:00:00.000Z" }),
   ];
-  // Not in what the page loaded: the runner is where the older ones are found.
+  // Not in what the sidebar listed: the runner is where the older ones are found.
   const unloaded = draft({ draftId: "z", firstMessage: "Why does TCP slow start double each round?", updated: "2025-01-02T10:00:00.000Z" });
 
-  /** What the runner answers: every draft it holds that has `q` in a title or first message. */
-  function runnerWith(held: DraftSummary[]) {
+  /** What the runner answers: the history for a read with no `q`, else every draft it holds with `q` in a title or first message. */
+  function runnerWith(held: DraftSummary[], listed: DraftSummary[] = held) {
     listMock.mockImplementation(async (query: { q?: string }) => ({
       ok: true,
       status: 200,
       data: {
-        drafts: held.filter((d) => query.q === undefined || `${d.title ?? ""} ${d.firstMessage ?? ""}`.toLowerCase().includes(query.q.toLowerCase())),
+        drafts:
+          query.q === undefined
+            ? listed
+            : held.filter((d) => `${d.title ?? ""} ${d.firstMessage ?? ""}`.toLowerCase().includes(query.q!.toLowerCase())),
         note: "",
       },
     }));
@@ -169,11 +125,21 @@ describe("the history search", () => {
   }
   const settle = (ms = 250) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
   const searches = () => listMock.mock.calls.map(([query]) => query as { q?: string }).filter((query) => query.q !== undefined);
+  /** jsdom answers `:hover` from the last mouseover it saw, and an earlier test may have left one on the sidebar. */
+  const pointerAway = () => act(() => void document.body.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+
+  it("is a field under New chat, and not there without a studio", async () => {
+    runnerWith(loaded);
+    const { container, field } = await mount();
+    const items = [...container.querySelectorAll("nav ul > li")].map((li) => (li.querySelector("input") ? "search" : li.textContent));
+    expect(items.slice(0, 3)).toEqual(["New chat", "search", "Home"]);
+    expect(field().getAttribute("aria-label")).toBe("Search conversations");
+  });
 
   it("waits for typing to rest, then asks the runner, which finds conversations that are not loaded", async () => {
-    runnerWith([...loaded, unloaded]);
-    const { field, links, container } = mount({ initial: loaded });
-    expect(links()).toHaveLength(2);
+    runnerWith([...loaded, unloaded], loaded);
+    const { field, links, container } = await mount();
+    expect(container.querySelectorAll("nav section")).not.toHaveLength(0);
 
     type(field(), "t");
     type(field(), "tc");
@@ -191,9 +157,36 @@ describe("the history search", () => {
     expect([...container.querySelectorAll("nav mark")].map((mark) => mark.textContent)).toEqual(["TCP", "TCP"]);
   });
 
+  it("works from a page that is not the studio: a match is a link to its conversation", async () => {
+    runnerWith([...loaded, unloaded], loaded);
+    const { field, links } = await mount();
+    type(field(), "slow start");
+    await settle();
+    expect(links().map((link) => link.getAttribute("href"))).toEqual(["/studio?draft=z"]);
+  });
+
+  it("opens a match through the studio page's own navigation, and marks the open conversation among the matches", async () => {
+    mocks.pathname = "/studio";
+    runnerWith([...loaded, unloaded], loaded);
+    const navigate = vi.fn(() => true);
+    function Studio() {
+      usePublishStudioChats({ active: "z", pending: null, newChat: () => undefined, navigate, path: "/studio?topic=x", initial: loaded, titles: {} });
+      return null;
+    }
+    const { field, links } = await mount({ page: Studio as () => null });
+    type(field(), "tcp");
+    await settle();
+    const marked = links().filter((link) => link.getAttribute("aria-current") === "page");
+    expect(marked).toHaveLength(1);
+    expect(marked[0].getAttribute("href")).toBe("/studio?topic=x&draft=z");
+    const other = links().find((link) => link !== marked[0])!;
+    act(() => other.click());
+    expect(navigate).toHaveBeenCalledWith("/studio?topic=x&draft=b");
+  });
+
   it("shows the words around a match the heading does not hold", async () => {
     runnerWith([draft({ draftId: "t", title: "Congestion control", firstMessage: "@diagram how does a sender back off?" })]);
-    const { field, links } = mount();
+    const { field, links } = await mount();
     type(field(), "sender");
     await settle();
     expect(links()[0].textContent).toBe("Congestion control@diagram how does a sender back off?, In conversation");
@@ -201,8 +194,8 @@ describe("the history search", () => {
   });
 
   it("says when nothing matches, and puts the grouped history back on Escape and on the clear button", async () => {
-    runnerWith([...loaded, unloaded]);
-    const { field, links, container, button } = mount({ initial: loaded });
+    runnerWith([...loaded, unloaded], loaded);
+    const { field, links, container, button } = await mount();
     expect(button("Clear the search")).toBeNull();
 
     type(field(), "zzz");
@@ -215,7 +208,6 @@ describe("the history search", () => {
     });
     expect(field().value).toBe("");
     expect(container.textContent).not.toContain("No conversations match");
-    expect(links()).toHaveLength(2);
     expect(container.querySelectorAll("nav section").length).toBeGreaterThan(0);
 
     type(field(), "tcp");
@@ -229,7 +221,7 @@ describe("the history search", () => {
 
   it("lets Escape through when the field is empty, and keeps it when it clears words", async () => {
     runnerWith(loaded);
-    const { field } = mount({ initial: loaded });
+    const { field } = await mount();
     const reached = vi.fn();
     window.addEventListener("keydown", reached);
     const press = () => act(() => void field().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
@@ -241,19 +233,11 @@ describe("the history search", () => {
     window.removeEventListener("keydown", reached);
   });
 
-  it("keeps the open conversation marked among the matches", async () => {
-    runnerWith([...loaded, unloaded]);
-    const { field, links } = mount({ initial: loaded, active: "z" });
-    type(field(), "tcp");
-    await settle();
-    const marked = links().filter((link) => link.getAttribute("aria-current") === "page");
-    expect(marked).toHaveLength(1);
-    expect(marked[0].getAttribute("href")).toContain("draft=z");
-  });
-
   it("says the studio did not answer rather than that nothing matches", async () => {
-    listMock.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
-    const { field, container } = mount({ initial: loaded });
+    listMock.mockImplementation(async (query: { q?: string }) =>
+      query.q === undefined ? { ok: true, status: 200, data: { drafts: loaded, note: "" } } : { ok: false, status: 502, refusal: { error: "down", detail: null } },
+    );
+    const { field, container } = await mount();
     type(field(), "tcp");
     await settle();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("did not answer");
@@ -265,9 +249,9 @@ describe("the history search", () => {
     listMock.mockImplementation((query: { q?: string }) =>
       query.q === "tcp"
         ? new Promise((resolve) => (release = resolve))
-        : Promise.resolve({ ok: true, status: 200, data: { drafts: [loaded[0]], note: "" } }),
+        : Promise.resolve({ ok: true, status: 200, data: { drafts: query.q === undefined ? loaded : [loaded[0]], note: "" } }),
     );
-    const { field, links } = mount({ initial: loaded });
+    const { field, links } = await mount();
     type(field(), "tcp");
     await settle();
     type(field(), "binary");
@@ -278,64 +262,66 @@ describe("the history search", () => {
     expect(links().map((link) => link.textContent)).toEqual(["Binary search trees, In conversation"]);
   });
 
-  it("is a search button on the collapsed rail, which slides the sidebar out with the field focused", async () => {
-    localStorage.setItem("studio:sidebar-collapsed", "1");
-    const { nav, button, field } = mount({ initial: loaded });
-    expect(nav().className).toContain("md:hidden");
-    act(() => button("Search conversations")!.click());
-    expect(nav().className).toContain("md:absolute");
-    expect(document.activeElement).toBe(field());
+  describe("on the rail", () => {
+    it("is a search button, which slides the sidebar out with the field focused", async () => {
+      runnerWith(loaded);
+      const { nav, button, field, container } = await mount({ collapsed: true });
+      expect(container.querySelector('input[type="search"]')).toBeNull();
+      expect(nav().className).not.toContain("absolute");
+      act(() => button("Search conversations")!.click());
+      expect(nav().className).toContain("absolute");
+      expect(document.activeElement).toBe(field());
 
-    // The pointer leaving does not take it back while the field is in use.
-    const room = nav().parentElement!;
-    act(() => {
-      room.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: document.body } as PointerEventInit));
+      // The pointer leaving does not take it back while the field is in use.
+      const room = nav().parentElement!;
+      act(() => {
+        room.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: document.body } as PointerEventInit));
+      });
+      await settle(300);
+      expect(nav().className).toContain("absolute");
     });
-    await settle(300);
-    expect(nav().className).toContain("md:absolute");
-  });
 
-  it("keeps the slid-out sidebar when focus returns to the field before the close it scheduled", async () => {
-    localStorage.setItem("studio:sidebar-collapsed", "1");
-    const { nav, button, field } = mount({ initial: loaded });
-    act(() => button("Search conversations")!.click());
-    expect(document.activeElement).toBe(field());
-    // jsdom answers `:hover` from the last mouseover it saw, and an earlier test left one on the sidebar.
-    act(() => void document.body.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    it("keeps the slid-out sidebar when focus returns to the field before the close it scheduled", async () => {
+      runnerWith(loaded);
+      const { nav, button, field } = await mount({ collapsed: true });
+      act(() => button("Search conversations")!.click());
+      expect(document.activeElement).toBe(field());
+      pointerAway();
 
-    // Focus leaves with the pointer away: a close is scheduled. Tabbing back in time cancels it.
-    act(() => field().blur());
-    await settle(100);
-    act(() => field().focus());
-    await settle(400);
-    expect(nav().className).toContain("md:absolute");
+      // Focus leaves with the pointer away: a close is scheduled. Tabbing back in time cancels it.
+      act(() => field().blur());
+      await settle(100);
+      act(() => field().focus());
+      await settle(400);
+      expect(nav().className).toContain("absolute");
 
-    // Left for good, it does slide back.
-    act(() => field().blur());
-    await settle(300);
-    expect(nav().className).toContain("md:hidden");
-  });
+      // Left for good, it does slide back.
+      act(() => field().blur());
+      await settle(300);
+      expect(nav().className).not.toContain("absolute");
+    });
 
-  it("does not close the slid-out sidebar when focus moves from the field to a row in it", async () => {
-    runnerWith(loaded);
-    localStorage.setItem("studio:sidebar-collapsed", "1");
-    const { nav, button, field, links } = mount({ initial: loaded });
-    act(() => button("Search conversations")!.click());
-    act(() => void document.body.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
-    type(field(), "tcp");
-    await settle();
-    act(() => links()[0].focus());
-    await settle(400);
-    expect(nav().className).toContain("md:absolute");
+    it("does not close the slid-out sidebar when focus moves from the field to a match, and closes it when focus leaves from there", async () => {
+      runnerWith([...loaded, unloaded], loaded);
+      const { nav, button, field, links } = await mount({ collapsed: true });
+      act(() => button("Search conversations")!.click());
+      pointerAway();
+      type(field(), "tcp");
+      await settle();
+      act(() => links()[0].focus());
+      await settle(400);
+      expect(nav().className).toContain("absolute");
 
-    // Focus leaving the sidebar from there, with the pointer away, does slide it back.
-    act(() => links()[0].blur());
-    await settle(300);
-    expect(nav().className).toContain("md:hidden");
+      act(() => links()[0].blur());
+      await settle(300);
+      expect(nav().className).not.toContain("absolute");
+    });
   });
 
   describe("reads that overlap", () => {
-    const many = Array.from({ length: 50 }, (_, at) => draft({ draftId: `m${String(at).padStart(2, "0")}`, title: `Match number ${at}`, updated: new Date(Date.UTC(2026, 9, 4, 12, 0, 50 - at)).toISOString() }));
+    const many = Array.from({ length: 50 }, (_, at) =>
+      draft({ draftId: `m${String(at).padStart(2, "0")}`, title: `Match number ${at}`, updated: new Date(Date.UTC(2026, 9, 4, 12, 0, 50 - at)).toISOString() }),
+    );
     const rest = [draft({ draftId: "last", title: "Match last one", updated: "2026-10-03T00:00:00.000Z" })];
     const answer = (drafts: DraftSummary[]) => ({ ok: true, status: 200, data: { drafts, note: "" } });
     const down = { ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } };
@@ -350,7 +336,7 @@ describe("the history search", () => {
       });
       return { second };
     }
-    const rows = (container: HTMLElement) => container.querySelectorAll("nav li a").length;
+    const moreButton = (container: HTMLElement) => [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
     const wake = () => act(async () => void window.dispatchEvent(new Event("focus")));
 
     it("does not report a failure for an older read that fails after a newer one landed", async () => {
@@ -362,7 +348,7 @@ describe("the history search", () => {
         calls += 1;
         return calls === 1 ? new Promise((resolve) => first.push(resolve)) : Promise.resolve(answer(rest));
       });
-      const { field, container } = mount();
+      const { field, container } = await mount();
       type(field(), "match");
       await settle();
       await wake();
@@ -374,7 +360,7 @@ describe("the history search", () => {
 
     it("still reports the newest read failing", async () => {
       listMock.mockImplementation((query: { q?: string }) => Promise.resolve(query.q === undefined ? answer([]) : down));
-      const { field, container } = mount();
+      const { field, container } = await mount();
       type(field(), "match");
       await settle();
       expect(container.querySelector('[role="alert"]')?.textContent).toContain("did not answer");
@@ -382,36 +368,34 @@ describe("the history search", () => {
 
     it("keeps the page a newer read loaded when the Show more read that began it fails after", async () => {
       const { second } = held();
-      const { field, container } = mount();
+      const { field, container, links } = await mount();
       type(field(), "match");
       await settle();
-      expect(rows(container)).toBe(50);
-      const more = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
-      act(() => more.click());
+      expect(links()).toHaveLength(50);
+      act(() => moreButton(container).click());
       await settle(0);
       // A refresh begins while the press is still reading its second page: both want two pages.
       await wake();
       expect(second).toHaveLength(2);
       await act(async () => second[1](answer(rest)));
-      expect(rows(container)).toBe(51);
+      expect(links()).toHaveLength(51);
       // The press's own read fails afterwards: nothing is reported, and nothing is taken back.
       await act(async () => second[0](down));
       expect(container.textContent).not.toContain("More matches could not be read");
-      expect(rows(container)).toBe(51);
+      expect(links()).toHaveLength(51);
       // So a later refresh still reads two pages, and the page is still there.
       await wake();
       expect(second).toHaveLength(3);
       await act(async () => second[2](answer(rest)));
-      expect(rows(container)).toBe(51);
+      expect(links()).toHaveLength(51);
     });
 
     it("takes the page back, and says so, when the Show more read and a refresh that began under it both fail", async () => {
       const { second } = held();
-      const { field, container } = mount();
+      const { field, container, links } = await mount();
       type(field(), "match");
       await settle();
-      const more = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
-      act(() => more.click());
+      act(() => moreButton(container).click());
       await settle(0);
       await wake();
       expect(second).toHaveLength(2);
@@ -420,7 +404,7 @@ describe("the history search", () => {
       expect(container.textContent).not.toContain("More matches could not be read");
       await act(async () => second[0](down));
       expect(container.textContent).toContain("More matches could not be read");
-      expect(rows(container)).toBe(50);
+      expect(links()).toHaveLength(50);
       // The page is asked for again, not skipped: a refresh reads one page, as it did before the press.
       await wake();
       expect(second).toHaveLength(2);
@@ -434,14 +418,13 @@ describe("the history search", () => {
       listMock.mockImplementation((query: { q?: string; before?: unknown }) =>
         query.q === "matc" ? new Promise((resolve) => (late = resolve)) : answerFor(query),
       );
-      const { field, container } = mount();
+      const { field, container, links } = await mount();
       type(field(), "matc");
       await settle();
       type(field(), "match");
       await settle();
-      expect(rows(container)).toBe(50);
-      const more = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
-      act(() => more.click());
+      expect(links()).toHaveLength(50);
+      act(() => moreButton(container).click());
       await settle(0);
       await act(async () => second[0](down));
       expect(container.textContent).toContain("More matches could not be read");
@@ -449,20 +432,19 @@ describe("the history search", () => {
       await wake();
       expect(second).toHaveLength(1);
       await act(async () => late(answer(many)));
-      expect(rows(container)).toBe(50);
+      expect(links()).toHaveLength(50);
     });
 
     it("takes the page back, and says so, when the Show more read is the newest and fails", async () => {
       const { second } = held();
-      const { field, container } = mount();
+      const { field, container, links } = await mount();
       type(field(), "match");
       await settle();
-      const more = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show more matches")!;
-      act(() => more.click());
+      act(() => moreButton(container).click());
       await settle(0);
       await act(async () => second[0](down));
       expect(container.textContent).toContain("More matches could not be read");
-      expect(rows(container)).toBe(50);
+      expect(links()).toHaveLength(50);
       // The next refresh is back to one page.
       await wake();
       expect(second).toHaveLength(1);

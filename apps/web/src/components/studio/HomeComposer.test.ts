@@ -37,7 +37,7 @@ vi.mock("next/dynamic", () => ({
 }));
 vi.mock("@/components/studio/panel-host", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/components/studio/panel-host")>()),
-  usePanelHost: () => ({ begin: mocks.begin, settle: mocks.settle, navigate: () => false, openSidebar: () => {} }),
+  usePanelHost: () => ({ begin: mocks.begin, settle: mocks.settle, navigate: () => false }),
 }));
 vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/studio-drafts")>()),

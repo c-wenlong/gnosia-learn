@@ -409,4 +409,6 @@ Each is one PR.
 
 | Step | Landed in |
 | --- | --- |
-| Proposal | this PR |
+| Proposal | #284 |
+| Order guard: rule `course-order-respects-requires` (migration 0021), doctor warnings for `assumes`, the three `requires` cases reordered in the catalog, `catalog flip --rearm` to arm a rule on a type the database already owns | #302 |
+| Readings on lessons: `lessons:` on a reading (`curriculum_item_asset`, migration 0022), `type: practice`, `videos:` on a module and a lesson kept as data (`collection.metadata.videos`, `curriculum_item.videos`), import, export and the reader carrying them, and a `catalog status` line of readings placed on a lesson per course | the PR that follows #302 |

@@ -105,7 +105,7 @@ export function CourseHome({
         status={status}
         selected={index}
         libraryHref={assetTotal > 0 ? libraryHref({ course: course.slug }) : null}
-        className="lg:sticky lg:top-[88px] lg:row-span-2 lg:max-h-[calc(100dvh-112px)] lg:overflow-y-auto xl:row-span-1"
+        className="lg:sticky lg:top-6 lg:row-span-2 lg:max-h-[calc(100dvh-48px)] lg:overflow-y-auto xl:row-span-1"
       />
 
       {shown ? (

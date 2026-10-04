@@ -5,7 +5,7 @@ import { canonical, canonicalJson, type JsonValue } from "@self-learn/schema/sha
 import { getTableName, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
-import { column, contentColumns, ENTITIES, OMITTED_WHEN_NULL } from "./entities";
+import { column, contentColumns, ENTITIES, LINKS_OMITTED_WHEN_EMPTY, OMITTED_WHEN_EMPTY, OMITTED_WHEN_NULL } from "./entities";
 
 /**
  * The snapshot a revision stores: the whole entity after the write, with its
@@ -67,6 +67,7 @@ export async function readSnapshots(
 
   const entityColumns = contentColumns(spec.table);
   const omitted = OMITTED_WHEN_NULL.get(getTableName(spec.table));
+  const omittedEmpty = OMITTED_WHEN_EMPTY.get(getTableName(spec.table));
   const keyColumn = column(spec.table, spec.key);
   const entities = new Map<string, Record<string, unknown>>();
   for (const part of chunks(unique)) {
@@ -98,10 +99,15 @@ export async function readSnapshots(
   }
 
   for (const [id, row] of entities) {
-    const entity = project(row, entityColumns, omitted);
+    const entity = project(row, entityColumns, omitted, omittedEmpty);
     const owned = links.get(id) ?? {};
     for (const name of Object.keys(owned)) {
-      owned[name] = sortRows(owned[name] ?? []);
+      const rows = owned[name] ?? [];
+      if (rows.length === 0 && LINKS_OMITTED_WHEN_EMPTY.has(name)) {
+        delete owned[name];
+        continue;
+      }
+      owned[name] = sortRows(rows);
     }
     const snapshot: Snapshot = { entity, links: owned };
     out.set(id, {
@@ -117,17 +123,20 @@ export async function readSnapshots(
 /**
  * A row keyed by SQL column name, holding only content columns, in canonical
  * form. A column in `omitted` is left out while it is null
- * (`OMITTED_WHEN_NULL` in `entities.ts`).
+ * (`OMITTED_WHEN_NULL` in `entities.ts`), one in `omittedEmpty` while it is
+ * an empty array (`OMITTED_WHEN_EMPTY`).
  */
 function project(
   row: Record<string, unknown>,
   columns: [string, string][],
   omitted?: ReadonlySet<string>,
+  omittedEmpty?: ReadonlySet<string>,
 ): Record<string, JsonValue> {
   const out: Record<string, unknown> = {};
   for (const [key, name] of columns) {
     const value = row[key] ?? null;
     if (value === null && omitted?.has(name) === true) continue;
+    if (Array.isArray(value) && value.length === 0 && omittedEmpty?.has(name) === true) continue;
     out[name] = value;
   }
   return canonical(out) as Record<string, JsonValue>;

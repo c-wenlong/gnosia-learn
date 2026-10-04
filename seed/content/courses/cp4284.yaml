@@ -51,12 +51,6 @@ modules:
     order: 3
     topic: agent-tool-use-and-reasoning-loops
     topics:
-      - id: cp4284-m3-t1
-        title: ReAct-style reasoning + acting loops
-        concepts:
-          - react-loop
-        subtopics:
-          - Interleaved thought and tool calls
       - id: cp4284-m3-t2
         title: Tool use / function calling and multi-step decomposition
         concepts:
@@ -64,6 +58,12 @@ modules:
         subtopics:
           - Tool schemas
           - Task graphs
+      - id: cp4284-m3-t1
+        title: ReAct-style reasoning + acting loops
+        concepts:
+          - react-loop
+        subtopics:
+          - Interleaved thought and tool calls
       - id: cp4284-m3-t3
         title: Agent memory and state management
         subtopics:
@@ -74,6 +74,7 @@ modules:
         title: Yao et al. — ReAct
         url: https://arxiv.org/abs/2210.03629
         type: paper
+        lessons: [cp4284-m3-t1]
       - id: cp4284-m3-r2
         title: OpenAI — Function calling guide
         url: https://platform.openai.com/docs/guides/function-calling
