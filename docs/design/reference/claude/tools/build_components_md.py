@@ -431,7 +431,9 @@ for g, ids in groups.items():
         W(f"<a id=\"{cid}\"></a>`{cid}`, on {', '.join(c.get('pages') or [c['page']])}. {c.get('desc', '')}".rstrip())
         W()
         crops = []
-        for sname in ("default", "hover", "light", "light-hover", "active", "selected", "checked", "on", "open", "typed", "pinned", "thread", "short", "focus-visible"):
+        # The usual states first, then every other state that has a crop, so no captured image is left out.
+        order = ("default", "hover", "light", "light-hover", "active", "selected", "checked", "on", "open", "typed", "pinned", "thread", "short", "focus-visible")
+        for sname in [n for n in order if n in c["states"]] + sorted(n for n in c["states"] if n not in order):
             s = c["states"].get(sname)
             if s and s.get("crop") and Path(s["crop"]).exists():
                 crops.append(f'<img src="{s["crop"]}" alt="{c["title"]}, {sname}" height="{min(120, max(24, round(s["rect"]["h"])))}"> ')

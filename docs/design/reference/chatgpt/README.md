@@ -11,7 +11,7 @@ The earlier references cover learning products (Duolingo, Brilliant, NotebookLM,
 | [components.md](components.md) | The discovery list of every page and state captured, one entry per component with crops of the real product, the shared values (hover fills, radii, motion, focus), the icon index and the Gaps. |
 | [components/crops/](components/crops) | Element screenshots, `{component}-{state}.png`, at 2x. |
 | [icons/](icons) | 77 SVGs lifted from the sprite symbols inlined in the page copies, named by sprite id, with [icons/INDEX.tsv](icons/INDEX.tsv). They are OpenAI's icons, kept for reference only. |
-| [screenshots/](screenshots) | 43 `{page}-{theme}-{state}.png` captures. Desktop shots are 1440 x 900 at 2x, `-full` shots whole pages at 2x for the home, Library and Plugins, `mobile-*` shots 390 x 844 at 2x. Every state exists in both themes. |
+| [screenshots/](screenshots) | 43 `{page}-{theme}-{state}.png` captures. Desktop shots are 1440 x 900 at 2x, `-full` shots whole pages at 2x of the dark home, Library and Plugins only, `mobile-*` shots 390 x 844 at 2x. Every other state exists in both themes. |
 | [raw/](raw) | The unprocessed readings: every custom property the stylesheets declare, by sheet, selector and condition, with the font faces and the value each root-level name computes to in both themes and every accent (`css-vars.json`); per-component computed styles (`components-computed.json`, and `measurements.md` built from it); the measured values the token builder reads (`component-tokens.json`); page geometry (`layout.json`) and the layout notes written from it (`pages.md`). |
 | [tools/](tools) | The three builders and the capture kit. See Rebuild. |
 

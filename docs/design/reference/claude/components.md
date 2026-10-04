@@ -108,7 +108,7 @@ Child layers: a 68.3x20
 
 <a id="sidebar-icon-button"></a>`sidebar-icon-button`, on home-dark. A cds Button, ghost, 32x32 with a 16px glyph from the Anthropicons icon font.
 
-<img src="components/crops/sidebar-icon-button-default.png" alt="Sidebar icon button (Hide sidebar), default" height="32"> <img src="components/crops/sidebar-icon-button-hover.png" alt="Sidebar icon button (Hide sidebar), hover" height="32"> <img src="components/crops/sidebar-icon-button-light.png" alt="Sidebar icon button (Hide sidebar), light" height="32"> <img src="components/crops/sidebar-icon-button-light-hover.png" alt="Sidebar icon button (Hide sidebar), light-hover" height="32"> <img src="components/crops/sidebar-icon-button-focus-visible.png" alt="Sidebar icon button (Hide sidebar), focus-visible" height="32"> 
+<img src="components/crops/sidebar-icon-button-default.png" alt="Sidebar icon button (Hide sidebar), default" height="32"> <img src="components/crops/sidebar-icon-button-hover.png" alt="Sidebar icon button (Hide sidebar), hover" height="32"> <img src="components/crops/sidebar-icon-button-light.png" alt="Sidebar icon button (Hide sidebar), light" height="32"> <img src="components/crops/sidebar-icon-button-light-hover.png" alt="Sidebar icon button (Hide sidebar), light-hover" height="32"> <img src="components/crops/sidebar-icon-button-focus-visible.png" alt="Sidebar icon button (Hide sidebar), focus-visible" height="32"> <img src="components/crops/sidebar-icon-button-light-focus-visible.png" alt="Sidebar icon button (Hide sidebar), light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -151,7 +151,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="mode-pill"></a>`mode-pill`, on home-dark.
 
-<img src="components/crops/mode-pill-default.png" alt="Mode pill, default" height="30"> <img src="components/crops/mode-pill-hover.png" alt="Mode pill, hover" height="30"> <img src="components/crops/mode-pill-light.png" alt="Mode pill, light" height="30"> <img src="components/crops/mode-pill-light-hover.png" alt="Mode pill, light-hover" height="30"> <img src="components/crops/mode-pill-active.png" alt="Mode pill, active" height="30"> <img src="components/crops/mode-pill-focus-visible.png" alt="Mode pill, focus-visible" height="30"> 
+<img src="components/crops/mode-pill-default.png" alt="Mode pill, default" height="30"> <img src="components/crops/mode-pill-hover.png" alt="Mode pill, hover" height="30"> <img src="components/crops/mode-pill-light.png" alt="Mode pill, light" height="30"> <img src="components/crops/mode-pill-light-hover.png" alt="Mode pill, light-hover" height="30"> <img src="components/crops/mode-pill-active.png" alt="Mode pill, active" height="30"> <img src="components/crops/mode-pill-focus-visible.png" alt="Mode pill, focus-visible" height="30"> <img src="components/crops/mode-pill-light-active.png" alt="Mode pill, light-active" height="30"> <img src="components/crops/mode-pill-light-focus-visible.png" alt="Mode pill, light-focus-visible" height="30"> 
 
 | State | Values |
 |---|---|
@@ -181,7 +181,7 @@ Child layers: button 132.9x30 radius 6px
 
 <a id="nav-new-row"></a>`nav-new-row`, on home-dark. The first nav row: a 22px circle with a plus, "New", the ⇧⌘O shortcut, and a Quick task button at the end.
 
-<img src="components/crops/nav-new-row-default.png" alt="New row, default" height="32"> <img src="components/crops/nav-new-row-hover.png" alt="New row, hover" height="32"> <img src="components/crops/nav-new-row-light.png" alt="New row, light" height="32"> <img src="components/crops/nav-new-row-light-hover.png" alt="New row, light-hover" height="32"> <img src="components/crops/nav-new-row-focus-visible.png" alt="New row, focus-visible" height="32"> 
+<img src="components/crops/nav-new-row-default.png" alt="New row, default" height="32"> <img src="components/crops/nav-new-row-hover.png" alt="New row, hover" height="32"> <img src="components/crops/nav-new-row-light.png" alt="New row, light" height="32"> <img src="components/crops/nav-new-row-light-hover.png" alt="New row, light-hover" height="32"> <img src="components/crops/nav-new-row-focus-visible.png" alt="New row, focus-visible" height="32"> <img src="components/crops/nav-new-row-light-focus-visible.png" alt="New row, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -220,7 +220,7 @@ Tokens named in its classes: `--cds-shortcut-cap-ink`, `--df-radius-pill`.
 
 <a id="nav-row"></a>`nav-row`, on home-dark. 32 tall (--df-row-h), radius 8 (--df-radius-pill), a 20px glyph in a 28px leading slot, 14px text in text-secondary; hover fills --df-hover.
 
-<img src="components/crops/nav-row-default.png" alt="Nav row (Artifacts), default" height="32"> <img src="components/crops/nav-row-hover.png" alt="Nav row (Artifacts), hover" height="32"> <img src="components/crops/nav-row-light.png" alt="Nav row (Artifacts), light" height="32"> <img src="components/crops/nav-row-light-hover.png" alt="Nav row (Artifacts), light-hover" height="32"> <img src="components/crops/nav-row-focus-visible.png" alt="Nav row (Artifacts), focus-visible" height="32"> 
+<img src="components/crops/nav-row-default.png" alt="Nav row (Artifacts), default" height="32"> <img src="components/crops/nav-row-hover.png" alt="Nav row (Artifacts), hover" height="32"> <img src="components/crops/nav-row-light.png" alt="Nav row (Artifacts), light" height="32"> <img src="components/crops/nav-row-light-hover.png" alt="Nav row (Artifacts), light-hover" height="32"> <img src="components/crops/nav-row-focus-visible.png" alt="Nav row (Artifacts), focus-visible" height="32"> <img src="components/crops/nav-row-light-focus-visible.png" alt="Nav row (Artifacts), light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -237,7 +237,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-fill-accent`, `-
 
 <a id="nav-row-more"></a>`nav-row-more`, on home-dark, artifacts-dark-more-menu.
 
-<img src="components/crops/nav-row-more-default.png" alt="More row, default" height="32"> <img src="components/crops/nav-row-more-hover.png" alt="More row, hover" height="32"> <img src="components/crops/nav-row-more-light.png" alt="More row, light" height="32"> <img src="components/crops/nav-row-more-light-hover.png" alt="More row, light-hover" height="32"> <img src="components/crops/nav-row-more-open.png" alt="More row, open" height="32"> <img src="components/crops/nav-row-more-focus-visible.png" alt="More row, focus-visible" height="32"> 
+<img src="components/crops/nav-row-more-default.png" alt="More row, default" height="32"> <img src="components/crops/nav-row-more-hover.png" alt="More row, hover" height="32"> <img src="components/crops/nav-row-more-light.png" alt="More row, light" height="32"> <img src="components/crops/nav-row-more-light-hover.png" alt="More row, light-hover" height="32"> <img src="components/crops/nav-row-more-open.png" alt="More row, open" height="32"> <img src="components/crops/nav-row-more-focus-visible.png" alt="More row, focus-visible" height="32"> <img src="components/crops/nav-row-more-light-focus-visible.png" alt="More row, light-focus-visible" height="32"> <img src="components/crops/nav-row-more-light-open.png" alt="More row, light-open" height="32"> 
 
 | State | Values |
 |---|---|
@@ -258,7 +258,7 @@ Tokens named in its classes: `--cds-fill-accent`, `--df-hover`, `--df-radius-pil
 
 <a id="section-label"></a>`section-label`, on home-dark. Caption-size text in text-muted with a caret that shows on hover.
 
-<img src="components/crops/section-label-default.png" alt="Section label (Pinned), default" height="24"> <img src="components/crops/section-label-hover.png" alt="Section label (Pinned), hover" height="24"> <img src="components/crops/section-label-light.png" alt="Section label (Pinned), light" height="24"> <img src="components/crops/section-label-light-hover.png" alt="Section label (Pinned), light-hover" height="24"> <img src="components/crops/section-label-focus-visible.png" alt="Section label (Pinned), focus-visible" height="24"> 
+<img src="components/crops/section-label-default.png" alt="Section label (Pinned), default" height="24"> <img src="components/crops/section-label-hover.png" alt="Section label (Pinned), hover" height="24"> <img src="components/crops/section-label-light.png" alt="Section label (Pinned), light" height="24"> <img src="components/crops/section-label-light-hover.png" alt="Section label (Pinned), light-hover" height="24"> <img src="components/crops/section-label-focus-visible.png" alt="Section label (Pinned), focus-visible" height="24"> <img src="components/crops/section-label-light-focus-visible.png" alt="Section label (Pinned), light-focus-visible" height="24"> 
 
 | State | Values |
 |---|---|
@@ -290,7 +290,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="chat-row"></a>`chat-row`, on home-dark, thread-dark. A 6px hollow ring as the bullet (role=img "Idle"), the title faded at the end (.dframe-fade-label, a mask, not an ellipsis), a more button on hover.
 
-<img src="components/crops/chat-row-default.png" alt="Chat row, default" height="32"> <img src="components/crops/chat-row-hover.png" alt="Chat row, hover" height="32"> <img src="components/crops/chat-row-light.png" alt="Chat row, light" height="32"> <img src="components/crops/chat-row-light-hover.png" alt="Chat row, light-hover" height="32"> <img src="components/crops/chat-row-selected.png" alt="Chat row, selected" height="32"> <img src="components/crops/chat-row-pinned.png" alt="Chat row, pinned" height="32"> 
+<img src="components/crops/chat-row-default.png" alt="Chat row, default" height="32"> <img src="components/crops/chat-row-hover.png" alt="Chat row, hover" height="32"> <img src="components/crops/chat-row-light.png" alt="Chat row, light" height="32"> <img src="components/crops/chat-row-light-hover.png" alt="Chat row, light-hover" height="32"> <img src="components/crops/chat-row-selected.png" alt="Chat row, selected" height="32"> <img src="components/crops/chat-row-pinned.png" alt="Chat row, pinned" height="32"> <img src="components/crops/chat-row-light-pinned.png" alt="Chat row, light-pinned" height="32"> <img src="components/crops/chat-row-light-selected.png" alt="Chat row, light-selected" height="32"> 
 
 | State | Values |
 |---|---|
@@ -320,7 +320,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-fill-accent`, `-
 
 <a id="chat-row-more"></a>`chat-row-more`, on home-dark, home-dark-chat-menu.
 
-<img src="components/crops/chat-row-more-default.png" alt="Chat row more button, default" height="24"> <img src="components/crops/chat-row-more-hover.png" alt="Chat row more button, hover" height="24"> <img src="components/crops/chat-row-more-light.png" alt="Chat row more button, light" height="24"> <img src="components/crops/chat-row-more-light-hover.png" alt="Chat row more button, light-hover" height="24"> <img src="components/crops/chat-row-more-open.png" alt="Chat row more button, open" height="24"> 
+<img src="components/crops/chat-row-more-default.png" alt="Chat row more button, default" height="24"> <img src="components/crops/chat-row-more-hover.png" alt="Chat row more button, hover" height="24"> <img src="components/crops/chat-row-more-light.png" alt="Chat row more button, light" height="24"> <img src="components/crops/chat-row-more-light-hover.png" alt="Chat row more button, light-hover" height="24"> <img src="components/crops/chat-row-more-open.png" alt="Chat row more button, open" height="24"> <img src="components/crops/chat-row-more-light-open.png" alt="Chat row more button, light-open" height="24"> 
 
 | State | Values |
 |---|---|
@@ -335,7 +335,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`, `--df-
 
 <a id="account-row"></a>`account-row`, on home-dark, home-dark-user-menu. Avatar, name, a dot and the plan ("Max") in text-muted, a chevron.
 
-<img src="components/crops/account-row-default.png" alt="Account row, default" height="32"> <img src="components/crops/account-row-hover.png" alt="Account row, hover" height="32"> <img src="components/crops/account-row-light.png" alt="Account row, light" height="32"> <img src="components/crops/account-row-light-hover.png" alt="Account row, light-hover" height="32"> <img src="components/crops/account-row-open.png" alt="Account row, open" height="32"> <img src="components/crops/account-row-focus-visible.png" alt="Account row, focus-visible" height="32"> 
+<img src="components/crops/account-row-default.png" alt="Account row, default" height="32"> <img src="components/crops/account-row-hover.png" alt="Account row, hover" height="32"> <img src="components/crops/account-row-light.png" alt="Account row, light" height="32"> <img src="components/crops/account-row-light-hover.png" alt="Account row, light-hover" height="32"> <img src="components/crops/account-row-open.png" alt="Account row, open" height="32"> <img src="components/crops/account-row-focus-visible.png" alt="Account row, focus-visible" height="32"> <img src="components/crops/account-row-light-focus-visible.png" alt="Account row, light-focus-visible" height="32"> <img src="components/crops/account-row-light-open.png" alt="Account row, light-open" height="32"> 
 
 | State | Values |
 |---|---|
@@ -378,7 +378,7 @@ Tokens named in its classes: `--cds-avatar-sm`, `--cds-rem-scale`.
 
 <a id="footer-apps-button"></a>`footer-apps-button`, on home-dark.
 
-<img src="components/crops/footer-apps-button-default.png" alt="Get apps button, default" height="32"> <img src="components/crops/footer-apps-button-hover.png" alt="Get apps button, hover" height="32"> <img src="components/crops/footer-apps-button-light.png" alt="Get apps button, light" height="32"> <img src="components/crops/footer-apps-button-light-hover.png" alt="Get apps button, light-hover" height="32"> <img src="components/crops/footer-apps-button-focus-visible.png" alt="Get apps button, focus-visible" height="32"> 
+<img src="components/crops/footer-apps-button-default.png" alt="Get apps button, default" height="32"> <img src="components/crops/footer-apps-button-hover.png" alt="Get apps button, hover" height="32"> <img src="components/crops/footer-apps-button-light.png" alt="Get apps button, light" height="32"> <img src="components/crops/footer-apps-button-light-hover.png" alt="Get apps button, light-hover" height="32"> <img src="components/crops/footer-apps-button-focus-visible.png" alt="Get apps button, focus-visible" height="32"> <img src="components/crops/footer-apps-button-light-focus-visible.png" alt="Get apps button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -423,7 +423,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-fill-accent`, `-
 
 <a id="sidebar-show-button"></a>`sidebar-show-button`, on home-dark-sidebar-collapsed.
 
-<img src="components/crops/sidebar-show-button-default.png" alt="Show sidebar button, default" height="24"> <img src="components/crops/sidebar-show-button-hover.png" alt="Show sidebar button, hover" height="24"> <img src="components/crops/sidebar-show-button-light.png" alt="Show sidebar button, light" height="24"> <img src="components/crops/sidebar-show-button-light-hover.png" alt="Show sidebar button, light-hover" height="24"> <img src="components/crops/sidebar-show-button-focus-visible.png" alt="Show sidebar button, focus-visible" height="24"> 
+<img src="components/crops/sidebar-show-button-default.png" alt="Show sidebar button, default" height="24"> <img src="components/crops/sidebar-show-button-hover.png" alt="Show sidebar button, hover" height="24"> <img src="components/crops/sidebar-show-button-light.png" alt="Show sidebar button, light" height="24"> <img src="components/crops/sidebar-show-button-light-hover.png" alt="Show sidebar button, light-hover" height="24"> <img src="components/crops/sidebar-show-button-focus-visible.png" alt="Show sidebar button, focus-visible" height="24"> <img src="components/crops/sidebar-show-button-light-focus-visible.png" alt="Show sidebar button, light-focus-visible" height="24"> 
 
 | State | Values |
 |---|---|
@@ -470,7 +470,7 @@ Tokens named in its classes: `--app-visual-viewport-height`, `--band-slot-lift`,
 
 <a id="incognito-button"></a>`incognito-button`, on home-dark.
 
-<img src="components/crops/incognito-button-default.png" alt="Incognito button, default" height="32"> <img src="components/crops/incognito-button-hover.png" alt="Incognito button, hover" height="32"> <img src="components/crops/incognito-button-light.png" alt="Incognito button, light" height="32"> <img src="components/crops/incognito-button-light-hover.png" alt="Incognito button, light-hover" height="32"> <img src="components/crops/incognito-button-focus-visible.png" alt="Incognito button, focus-visible" height="32"> 
+<img src="components/crops/incognito-button-default.png" alt="Incognito button, default" height="32"> <img src="components/crops/incognito-button-hover.png" alt="Incognito button, hover" height="32"> <img src="components/crops/incognito-button-light.png" alt="Incognito button, light" height="32"> <img src="components/crops/incognito-button-light-hover.png" alt="Incognito button, light-hover" height="32"> <img src="components/crops/incognito-button-focus-visible.png" alt="Incognito button, focus-visible" height="32"> <img src="components/crops/incognito-button-light-focus-visible.png" alt="Incognito button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -485,7 +485,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="chat-title-button"></a>`chat-title-button`, on thread-dark.
 
-<img src="components/crops/chat-title-button-default.png" alt="Chat title button, default" height="28"> <img src="components/crops/chat-title-button-hover.png" alt="Chat title button, hover" height="28"> <img src="components/crops/chat-title-button-light.png" alt="Chat title button, light" height="28"> <img src="components/crops/chat-title-button-light-hover.png" alt="Chat title button, light-hover" height="28"> <img src="components/crops/chat-title-button-focus-visible.png" alt="Chat title button, focus-visible" height="28"> 
+<img src="components/crops/chat-title-button-default.png" alt="Chat title button, default" height="28"> <img src="components/crops/chat-title-button-hover.png" alt="Chat title button, hover" height="28"> <img src="components/crops/chat-title-button-light.png" alt="Chat title button, light" height="28"> <img src="components/crops/chat-title-button-light-hover.png" alt="Chat title button, light-hover" height="28"> <img src="components/crops/chat-title-button-focus-visible.png" alt="Chat title button, focus-visible" height="28"> <img src="components/crops/chat-title-button-light-focus-visible.png" alt="Chat title button, light-focus-visible" height="28"> 
 
 | State | Values |
 |---|---|
@@ -513,7 +513,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="share-button"></a>`share-button`, on thread-dark.
 
-<img src="components/crops/share-button-default.png" alt="Share button, default" height="28"> <img src="components/crops/share-button-hover.png" alt="Share button, hover" height="28"> <img src="components/crops/share-button-light.png" alt="Share button, light" height="28"> <img src="components/crops/share-button-light-hover.png" alt="Share button, light-hover" height="28"> <img src="components/crops/share-button-focus-visible.png" alt="Share button, focus-visible" height="28"> 
+<img src="components/crops/share-button-default.png" alt="Share button, default" height="28"> <img src="components/crops/share-button-hover.png" alt="Share button, hover" height="28"> <img src="components/crops/share-button-light.png" alt="Share button, light" height="28"> <img src="components/crops/share-button-light-hover.png" alt="Share button, light-hover" height="28"> <img src="components/crops/share-button-focus-visible.png" alt="Share button, focus-visible" height="28"> <img src="components/crops/share-button-light-focus-visible.png" alt="Share button, light-focus-visible" height="28"> 
 
 | State | Values |
 |---|---|
@@ -556,7 +556,7 @@ The new-chat page: the serif greeting led by the clay asterisk, and the composer
 
 <a id="composer"></a>`composer`, on home-dark, home-dark-composer-typed, thread-dark, project-dark. A card on surface-3 with radius 20 (rounded-[20px]; 12 at compact), a 1px ring of --cds-border (border-strong on focus) and a soft 4/20 drop (shadow-composer); the editor (Tiptap) above a 32px tool row.
 
-<img src="components/crops/composer-default.png" alt="Composer, default" height="120"> <img src="components/crops/composer-light.png" alt="Composer, light" height="120"> <img src="components/crops/composer-typed.png" alt="Composer, typed" height="120"> <img src="components/crops/composer-thread.png" alt="Composer, thread" height="100"> <img src="components/crops/composer-focus-visible.png" alt="Composer, focus-visible" height="120"> 
+<img src="components/crops/composer-default.png" alt="Composer, default" height="120"> <img src="components/crops/composer-light.png" alt="Composer, light" height="120"> <img src="components/crops/composer-typed.png" alt="Composer, typed" height="120"> <img src="components/crops/composer-thread.png" alt="Composer, thread" height="100"> <img src="components/crops/composer-focus-visible.png" alt="Composer, focus-visible" height="120"> <img src="components/crops/composer-light-focus-visible.png" alt="Composer, light-focus-visible" height="120"> <img src="components/crops/composer-light-project.png" alt="Composer, light-project" height="120"> <img src="components/crops/composer-light-thread.png" alt="Composer, light-thread" height="100"> <img src="components/crops/composer-light-typed.png" alt="Composer, light-typed" height="120"> <img src="components/crops/composer-project.png" alt="Composer, project" height="120"> 
 
 | State | Values |
 |---|---|
@@ -599,7 +599,7 @@ Tokens named in its classes: `--cds-border`, `--cds-cursor-interactive`, `--cds-
 
 <a id="composer-plus"></a>`composer-plus`, on home-dark, home-dark-plus-menu.
 
-<img src="components/crops/composer-plus-default.png" alt="Composer + button, default" height="32"> <img src="components/crops/composer-plus-hover.png" alt="Composer + button, hover" height="32"> <img src="components/crops/composer-plus-light.png" alt="Composer + button, light" height="32"> <img src="components/crops/composer-plus-light-hover.png" alt="Composer + button, light-hover" height="32"> <img src="components/crops/composer-plus-open.png" alt="Composer + button, open" height="32"> <img src="components/crops/composer-plus-focus-visible.png" alt="Composer + button, focus-visible" height="32"> 
+<img src="components/crops/composer-plus-default.png" alt="Composer + button, default" height="32"> <img src="components/crops/composer-plus-hover.png" alt="Composer + button, hover" height="32"> <img src="components/crops/composer-plus-light.png" alt="Composer + button, light" height="32"> <img src="components/crops/composer-plus-light-hover.png" alt="Composer + button, light-hover" height="32"> <img src="components/crops/composer-plus-open.png" alt="Composer + button, open" height="32"> <img src="components/crops/composer-plus-focus-visible.png" alt="Composer + button, focus-visible" height="32"> <img src="components/crops/composer-plus-light-focus-visible.png" alt="Composer + button, light-focus-visible" height="32"> <img src="components/crops/composer-plus-light-open.png" alt="Composer + button, light-open" height="32"> 
 
 | State | Values |
 |---|---|
@@ -627,7 +627,7 @@ Tokens named in its classes: `--cds-border`, `--cds-radius`, `--cds-segmented-co
 
 <a id="segment"></a>`segment`, on home-dark.
 
-<img src="components/crops/segment-default.png" alt="Segment option, default" height="26"> <img src="components/crops/segment-hover.png" alt="Segment option, hover" height="26"> <img src="components/crops/segment-light.png" alt="Segment option, light" height="26"> <img src="components/crops/segment-light-hover.png" alt="Segment option, light-hover" height="26"> <img src="components/crops/segment-checked.png" alt="Segment option, checked" height="26"> 
+<img src="components/crops/segment-default.png" alt="Segment option, default" height="26"> <img src="components/crops/segment-hover.png" alt="Segment option, hover" height="26"> <img src="components/crops/segment-light.png" alt="Segment option, light" height="26"> <img src="components/crops/segment-light-hover.png" alt="Segment option, light-hover" height="26"> <img src="components/crops/segment-checked.png" alt="Segment option, checked" height="26"> <img src="components/crops/segment-light-checked.png" alt="Segment option, light-checked" height="26"> 
 
 | State | Values |
 |---|---|
@@ -644,7 +644,7 @@ Tokens named in its classes: `--cds-radius`.
 
 <a id="model-selector"></a>`model-selector`, on home-dark, home-dark-model-menu. "Opus 5.5" in text-primary, "Medium" (the effort) in text-muted, a chevron.
 
-<img src="components/crops/model-selector-default.png" alt="Model selector, default" height="32"> <img src="components/crops/model-selector-hover.png" alt="Model selector, hover" height="32"> <img src="components/crops/model-selector-light.png" alt="Model selector, light" height="32"> <img src="components/crops/model-selector-light-hover.png" alt="Model selector, light-hover" height="32"> <img src="components/crops/model-selector-open.png" alt="Model selector, open" height="32"> <img src="components/crops/model-selector-focus-visible.png" alt="Model selector, focus-visible" height="32"> 
+<img src="components/crops/model-selector-default.png" alt="Model selector, default" height="32"> <img src="components/crops/model-selector-hover.png" alt="Model selector, hover" height="32"> <img src="components/crops/model-selector-light.png" alt="Model selector, light" height="32"> <img src="components/crops/model-selector-light-hover.png" alt="Model selector, light-hover" height="32"> <img src="components/crops/model-selector-open.png" alt="Model selector, open" height="32"> <img src="components/crops/model-selector-focus-visible.png" alt="Model selector, focus-visible" height="32"> <img src="components/crops/model-selector-light-focus-visible.png" alt="Model selector, light-focus-visible" height="32"> <img src="components/crops/model-selector-light-open.png" alt="Model selector, light-open" height="32"> 
 
 | State | Values |
 |---|---|
@@ -659,7 +659,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="mic-button"></a>`mic-button`, on home-dark.
 
-<img src="components/crops/mic-button-default.png" alt="Dictation button, default" height="32"> <img src="components/crops/mic-button-hover.png" alt="Dictation button, hover" height="32"> <img src="components/crops/mic-button-light.png" alt="Dictation button, light" height="32"> <img src="components/crops/mic-button-light-hover.png" alt="Dictation button, light-hover" height="32"> <img src="components/crops/mic-button-focus-visible.png" alt="Dictation button, focus-visible" height="32"> 
+<img src="components/crops/mic-button-default.png" alt="Dictation button, default" height="32"> <img src="components/crops/mic-button-hover.png" alt="Dictation button, hover" height="32"> <img src="components/crops/mic-button-light.png" alt="Dictation button, light" height="32"> <img src="components/crops/mic-button-light-hover.png" alt="Dictation button, light-hover" height="32"> <img src="components/crops/mic-button-focus-visible.png" alt="Dictation button, focus-visible" height="32"> <img src="components/crops/mic-button-light-focus-visible.png" alt="Dictation button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -676,7 +676,7 @@ Child layers: button 32x32 radius 8px
 
 <a id="voice-button"></a>`voice-button`, on home-dark.
 
-<img src="components/crops/voice-button-default.png" alt="Voice mode button, default" height="32"> <img src="components/crops/voice-button-hover.png" alt="Voice mode button, hover" height="32"> <img src="components/crops/voice-button-light.png" alt="Voice mode button, light" height="32"> <img src="components/crops/voice-button-light-hover.png" alt="Voice mode button, light-hover" height="32"> <img src="components/crops/voice-button-focus-visible.png" alt="Voice mode button, focus-visible" height="32"> 
+<img src="components/crops/voice-button-default.png" alt="Voice mode button, default" height="32"> <img src="components/crops/voice-button-hover.png" alt="Voice mode button, hover" height="32"> <img src="components/crops/voice-button-light.png" alt="Voice mode button, light" height="32"> <img src="components/crops/voice-button-light-hover.png" alt="Voice mode button, light-hover" height="32"> <img src="components/crops/voice-button-focus-visible.png" alt="Voice mode button, focus-visible" height="32"> <img src="components/crops/voice-button-light-focus-visible.png" alt="Voice mode button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -693,7 +693,7 @@ Child layers: button 32x32 radius 8px
 
 <a id="send-button"></a>`send-button`, on home-dark-composer-typed. Takes the voice button's place once there is text: a filled clay (--cds-fill-brand) square with an arrow.
 
-<img src="components/crops/send-button-default.png" alt="Send button, default" height="32"> <img src="components/crops/send-button-hover.png" alt="Send button, hover" height="32"> <img src="components/crops/send-button-light.png" alt="Send button, light" height="32"> <img src="components/crops/send-button-light-hover.png" alt="Send button, light-hover" height="32"> <img src="components/crops/send-button-focus-visible.png" alt="Send button, focus-visible" height="32"> 
+<img src="components/crops/send-button-default.png" alt="Send button, default" height="32"> <img src="components/crops/send-button-hover.png" alt="Send button, hover" height="32"> <img src="components/crops/send-button-light.png" alt="Send button, light" height="32"> <img src="components/crops/send-button-light-hover.png" alt="Send button, light-hover" height="32"> <img src="components/crops/send-button-focus-visible.png" alt="Send button, focus-visible" height="32"> <img src="components/crops/send-button-light-focus-visible.png" alt="Send button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -740,7 +740,7 @@ Tokens named in its classes: `--available-height`, `--cds-h-control`, `--cds-lea
 
 <a id="menu-item"></a>`menu-item`, on home-dark-plus-menu. A 20px glyph, body text, an optional shortcut or chevron at the end; hover fills --cds-fill-ghost-hover.
 
-<img src="components/crops/menu-item-default.png" alt="Menu item, default" height="32"> <img src="components/crops/menu-item-hover.png" alt="Menu item, hover" height="32"> <img src="components/crops/menu-item-light.png" alt="Menu item, light" height="32"> <img src="components/crops/menu-item-light-hover.png" alt="Menu item, light-hover" height="32"> 
+<img src="components/crops/menu-item-default.png" alt="Menu item, default" height="32"> <img src="components/crops/menu-item-hover.png" alt="Menu item, hover" height="32"> <img src="components/crops/menu-item-light.png" alt="Menu item, light" height="32"> <img src="components/crops/menu-item-light-hover.png" alt="Menu item, light-hover" height="32"> <img src="components/crops/menu-item-checkbox.png" alt="Menu item, checkbox" height="32"> <img src="components/crops/menu-item-light-checkbox.png" alt="Menu item, light-checkbox" height="32"> <img src="components/crops/menu-item-light-submenu.png" alt="Menu item, light-submenu" height="32"> <img src="components/crops/menu-item-submenu.png" alt="Menu item, submenu" height="32"> 
 
 | State | Values |
 |---|---|
@@ -779,7 +779,7 @@ Tokens named in its classes: `--available-height`, `--available-width`, `--cds-f
 
 <a id="model-menu-item"></a>`model-menu-item`, on home-dark-model-menu.
 
-<img src="components/crops/model-menu-item-default.png" alt="Model menu item, default" height="50"> <img src="components/crops/model-menu-item-hover.png" alt="Model menu item, hover" height="50"> <img src="components/crops/model-menu-item-light.png" alt="Model menu item, light" height="50"> <img src="components/crops/model-menu-item-light-hover.png" alt="Model menu item, light-hover" height="50"> <img src="components/crops/model-menu-item-checked.png" alt="Model menu item, checked" height="50"> 
+<img src="components/crops/model-menu-item-default.png" alt="Model menu item, default" height="50"> <img src="components/crops/model-menu-item-hover.png" alt="Model menu item, hover" height="50"> <img src="components/crops/model-menu-item-light.png" alt="Model menu item, light" height="50"> <img src="components/crops/model-menu-item-light-hover.png" alt="Model menu item, light-hover" height="50"> <img src="components/crops/model-menu-item-checked.png" alt="Model menu item, checked" height="50"> <img src="components/crops/model-menu-item-light-checked.png" alt="Model menu item, light-checked" height="50"> 
 
 | State | Values |
 |---|---|
@@ -829,7 +829,7 @@ Tokens named in its classes: `--available-height`, `--cds-font-size-body`, `--cd
 
 <a id="user-menu-item"></a>`user-menu-item`, on home-dark-user-menu.
 
-<img src="components/crops/user-menu-item-default.png" alt="Account menu item, default" height="32"> <img src="components/crops/user-menu-item-hover.png" alt="Account menu item, hover" height="32"> <img src="components/crops/user-menu-item-light.png" alt="Account menu item, light" height="32"> <img src="components/crops/user-menu-item-light-hover.png" alt="Account menu item, light-hover" height="32"> 
+<img src="components/crops/user-menu-item-default.png" alt="Account menu item, default" height="32"> <img src="components/crops/user-menu-item-hover.png" alt="Account menu item, hover" height="32"> <img src="components/crops/user-menu-item-light.png" alt="Account menu item, light" height="32"> <img src="components/crops/user-menu-item-light-hover.png" alt="Account menu item, light-hover" height="32"> <img src="components/crops/user-menu-item-light-twoLine.png" alt="Account menu item, light-twoLine" height="50"> <img src="components/crops/user-menu-item-twoLine.png" alt="Account menu item, twoLine" height="50"> 
 
 | State | Values |
 |---|---|
@@ -918,7 +918,7 @@ Tokens named in its classes: `--cds-black`, `--cds-cursor-interactive`, `--cds-p
 
 <a id="search-field"></a>`search-field`, on home-dark-search.
 
-<img src="components/crops/search-field-default.png" alt="Search field row, default" height="64"> <img src="components/crops/search-field-light.png" alt="Search field row, light" height="64"> <img src="components/crops/search-field-focus-visible.png" alt="Search field row, focus-visible" height="64"> 
+<img src="components/crops/search-field-default.png" alt="Search field row, default" height="64"> <img src="components/crops/search-field-light.png" alt="Search field row, light" height="64"> <img src="components/crops/search-field-focus-visible.png" alt="Search field row, focus-visible" height="64"> <img src="components/crops/search-field-light-focus-visible.png" alt="Search field row, light-focus-visible" height="64"> 
 
 | State | Values |
 |---|---|
@@ -933,7 +933,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="search-result"></a>`search-result`, on home-dark-search.
 
-<img src="components/crops/search-result-default.png" alt="Search result row, default" height="36"> <img src="components/crops/search-result-hover.png" alt="Search result row, hover" height="36"> <img src="components/crops/search-result-light.png" alt="Search result row, light" height="36"> <img src="components/crops/search-result-light-hover.png" alt="Search result row, light-hover" height="36"> <img src="components/crops/search-result-selected.png" alt="Search result row, selected" height="36"> 
+<img src="components/crops/search-result-default.png" alt="Search result row, default" height="36"> <img src="components/crops/search-result-hover.png" alt="Search result row, hover" height="36"> <img src="components/crops/search-result-light.png" alt="Search result row, light" height="36"> <img src="components/crops/search-result-light-hover.png" alt="Search result row, light-hover" height="36"> <img src="components/crops/search-result-selected.png" alt="Search result row, selected" height="36"> <img src="components/crops/search-result-light-selected.png" alt="Search result row, light-selected" height="36"> 
 
 | State | Values |
 |---|---|
@@ -959,7 +959,7 @@ Child layers: button 650x36 radius 8px
 
 <a id="dialog-close"></a>`dialog-close`, on home-dark-search.
 
-<img src="components/crops/dialog-close-default.png" alt="Dialog close button, default" height="32"> <img src="components/crops/dialog-close-hover.png" alt="Dialog close button, hover" height="32"> <img src="components/crops/dialog-close-light.png" alt="Dialog close button, light" height="32"> <img src="components/crops/dialog-close-light-hover.png" alt="Dialog close button, light-hover" height="32"> <img src="components/crops/dialog-close-focus-visible.png" alt="Dialog close button, focus-visible" height="32"> 
+<img src="components/crops/dialog-close-default.png" alt="Dialog close button, default" height="32"> <img src="components/crops/dialog-close-hover.png" alt="Dialog close button, hover" height="32"> <img src="components/crops/dialog-close-light.png" alt="Dialog close button, light" height="32"> <img src="components/crops/dialog-close-light-hover.png" alt="Dialog close button, light-hover" height="32"> <img src="components/crops/dialog-close-focus-visible.png" alt="Dialog close button, focus-visible" height="32"> <img src="components/crops/dialog-close-light-focus-visible.png" alt="Dialog close button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1000,7 +1000,7 @@ The settings dialog: a 192px nav with a search field and two groups (Settings, C
 
 <a id="settings-search"></a>`settings-search`, on settings-dark-general.
 
-<img src="components/crops/settings-search-default.png" alt="Settings search field, default" height="32"> <img src="components/crops/settings-search-hover.png" alt="Settings search field, hover" height="32"> <img src="components/crops/settings-search-light.png" alt="Settings search field, light" height="32"> <img src="components/crops/settings-search-light-hover.png" alt="Settings search field, light-hover" height="32"> <img src="components/crops/settings-search-focus-visible.png" alt="Settings search field, focus-visible" height="32"> 
+<img src="components/crops/settings-search-default.png" alt="Settings search field, default" height="32"> <img src="components/crops/settings-search-hover.png" alt="Settings search field, hover" height="32"> <img src="components/crops/settings-search-light.png" alt="Settings search field, light" height="32"> <img src="components/crops/settings-search-light-hover.png" alt="Settings search field, light-hover" height="32"> <img src="components/crops/settings-search-focus-visible.png" alt="Settings search field, focus-visible" height="32"> <img src="components/crops/settings-search-light-focus-visible.png" alt="Settings search field, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1024,7 +1024,7 @@ Child layers: div 167x32 background rgba(255, 255, 255, 0.05) `alpha.1` radius 8
 
 <a id="settings-nav-item"></a>`settings-nav-item`, on settings-dark-general.
 
-<img src="components/crops/settings-nav-item-default.png" alt="Settings nav item, default" height="32"> <img src="components/crops/settings-nav-item-hover.png" alt="Settings nav item, hover" height="32"> <img src="components/crops/settings-nav-item-light.png" alt="Settings nav item, light" height="32"> <img src="components/crops/settings-nav-item-light-hover.png" alt="Settings nav item, light-hover" height="32"> <img src="components/crops/settings-nav-item-active.png" alt="Settings nav item, active" height="32"> <img src="components/crops/settings-nav-item-focus-visible.png" alt="Settings nav item, focus-visible" height="32"> 
+<img src="components/crops/settings-nav-item-default.png" alt="Settings nav item, default" height="32"> <img src="components/crops/settings-nav-item-hover.png" alt="Settings nav item, hover" height="32"> <img src="components/crops/settings-nav-item-light.png" alt="Settings nav item, light" height="32"> <img src="components/crops/settings-nav-item-light-hover.png" alt="Settings nav item, light-hover" height="32"> <img src="components/crops/settings-nav-item-active.png" alt="Settings nav item, active" height="32"> <img src="components/crops/settings-nav-item-focus-visible.png" alt="Settings nav item, focus-visible" height="32"> <img src="components/crops/settings-nav-item-active-hover.png" alt="Settings nav item, active-hover" height="32"> <img src="components/crops/settings-nav-item-light-active.png" alt="Settings nav item, light-active" height="32"> <img src="components/crops/settings-nav-item-light-active-hover.png" alt="Settings nav item, light-active-hover" height="32"> <img src="components/crops/settings-nav-item-light-focus-visible.png" alt="Settings nav item, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1113,7 +1113,7 @@ Tokens named in its classes: `--cds-border`, `--cds-radius`, `--cds-segmented-co
 
 <a id="theme-option"></a>`theme-option`, on settings-dark-general.
 
-<img src="components/crops/theme-option-default.png" alt="Theme option, default" height="30"> <img src="components/crops/theme-option-hover.png" alt="Theme option, hover" height="30"> <img src="components/crops/theme-option-light.png" alt="Theme option, light" height="30"> <img src="components/crops/theme-option-light-hover.png" alt="Theme option, light-hover" height="30"> <img src="components/crops/theme-option-checked.png" alt="Theme option, checked" height="30"> 
+<img src="components/crops/theme-option-default.png" alt="Theme option, default" height="30"> <img src="components/crops/theme-option-hover.png" alt="Theme option, hover" height="30"> <img src="components/crops/theme-option-light.png" alt="Theme option, light" height="30"> <img src="components/crops/theme-option-light-hover.png" alt="Theme option, light-hover" height="30"> <img src="components/crops/theme-option-checked.png" alt="Theme option, checked" height="30"> <img src="components/crops/theme-option-light-checked.png" alt="Theme option, light-checked" height="30"> 
 
 | State | Values |
 |---|---|
@@ -1141,7 +1141,7 @@ Tokens named in its classes: `--cds-border`, `--cds-radius`, `--cds-segmented-co
 
 <a id="select"></a>`select`, on settings-dark-general. cds Combobox: the value and a chevron in a control-height field.
 
-<img src="components/crops/select-default.png" alt="Select (Chat font), default" height="32"> <img src="components/crops/select-hover.png" alt="Select (Chat font), hover" height="32"> <img src="components/crops/select-light.png" alt="Select (Chat font), light" height="32"> <img src="components/crops/select-light-hover.png" alt="Select (Chat font), light-hover" height="32"> <img src="components/crops/select-focus-visible.png" alt="Select (Chat font), focus-visible" height="32"> 
+<img src="components/crops/select-default.png" alt="Select (Chat font), default" height="32"> <img src="components/crops/select-hover.png" alt="Select (Chat font), hover" height="32"> <img src="components/crops/select-light.png" alt="Select (Chat font), light" height="32"> <img src="components/crops/select-light-hover.png" alt="Select (Chat font), light-hover" height="32"> <img src="components/crops/select-focus-visible.png" alt="Select (Chat font), focus-visible" height="32"> <img src="components/crops/select-light-focus-visible.png" alt="Select (Chat font), light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1156,7 +1156,7 @@ Tokens named in its classes: `--cds-border`, `--cds-radius`, `--cds-segmented-co
 
 <a id="switch"></a>`switch`, on settings-dark-general. 36x20 track (--cds-switch-track), a 16px knob with shadow-sm that slides on --cds-dur-snap.
 
-<img src="components/crops/switch-default.png" alt="Switch, default" height="24"> <img src="components/crops/switch-hover.png" alt="Switch, hover" height="24"> <img src="components/crops/switch-light.png" alt="Switch, light" height="24"> <img src="components/crops/switch-light-hover.png" alt="Switch, light-hover" height="24"> <img src="components/crops/switch-on.png" alt="Switch, on" height="24"> <img src="components/crops/switch-focus-visible.png" alt="Switch, focus-visible" height="24"> 
+<img src="components/crops/switch-default.png" alt="Switch, default" height="24"> <img src="components/crops/switch-hover.png" alt="Switch, hover" height="24"> <img src="components/crops/switch-light.png" alt="Switch, light" height="24"> <img src="components/crops/switch-light-hover.png" alt="Switch, light-hover" height="24"> <img src="components/crops/switch-on.png" alt="Switch, on" height="24"> <img src="components/crops/switch-focus-visible.png" alt="Switch, focus-visible" height="24"> <img src="components/crops/switch-light-focus-visible.png" alt="Switch, light-focus-visible" height="24"> <img src="components/crops/switch-light-on.png" alt="Switch, light-on" height="24"> <img src="components/crops/switch-light-on-hover.png" alt="Switch, light-on-hover" height="24"> <img src="components/crops/switch-on-hover.png" alt="Switch, on-hover" height="24"> 
 
 | State | Values |
 |---|---|
@@ -1190,7 +1190,7 @@ Tokens named in its classes: `--cds-switch-h`, `--cds-switch-knob`.
 
 <a id="settings-close"></a>`settings-close`, on settings-dark-general.
 
-<img src="components/crops/settings-close-default.png" alt="Settings close button, default" height="32"> <img src="components/crops/settings-close-hover.png" alt="Settings close button, hover" height="32"> <img src="components/crops/settings-close-light.png" alt="Settings close button, light" height="32"> <img src="components/crops/settings-close-light-hover.png" alt="Settings close button, light-hover" height="32"> <img src="components/crops/settings-close-focus-visible.png" alt="Settings close button, focus-visible" height="32"> 
+<img src="components/crops/settings-close-default.png" alt="Settings close button, default" height="32"> <img src="components/crops/settings-close-hover.png" alt="Settings close button, hover" height="32"> <img src="components/crops/settings-close-light.png" alt="Settings close button, light" height="32"> <img src="components/crops/settings-close-light-hover.png" alt="Settings close button, light-hover" height="32"> <img src="components/crops/settings-close-focus-visible.png" alt="Settings close button, focus-visible" height="32"> <img src="components/crops/settings-close-light-focus-visible.png" alt="Settings close button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1224,7 +1224,7 @@ Tokens named in its classes: `--cds-bg-user-message`, `--cds-message-bubble-meas
 
 <a id="user-message"></a>`user-message`, on thread-dark, thread-dark-followup. Right-aligned, at most 85% of the column (--cds-message-bubble-measure), --cds-bg-user-message, radius --cds-message-bubble-radius, padding pad-md / pad-lg.
 
-<img src="components/crops/user-message-default.png" alt="User message bubble, default" height="120"> <img src="components/crops/user-message-light.png" alt="User message bubble, light" height="120"> <img src="components/crops/user-message-short.png" alt="User message bubble, short" height="44"> 
+<img src="components/crops/user-message-default.png" alt="User message bubble, default" height="120"> <img src="components/crops/user-message-light.png" alt="User message bubble, light" height="120"> <img src="components/crops/user-message-short.png" alt="User message bubble, short" height="44"> <img src="components/crops/user-message-light-short.png" alt="User message bubble, light-short" height="44"> 
 
 | State | Values |
 |---|---|
@@ -1261,7 +1261,7 @@ Tokens named in its classes: `--cds-bg-user-message`, `--cds-message-bubble-meas
 
 <a id="thinking-pill"></a>`thinking-pill`, on thread-dark. The collapsed reasoning row: text-muted, a caret that shows on hover.
 
-<img src="components/crops/thinking-pill-default.png" alt="Thought for 6s, default" height="28"> <img src="components/crops/thinking-pill-hover.png" alt="Thought for 6s, hover" height="28"> <img src="components/crops/thinking-pill-light.png" alt="Thought for 6s, light" height="28"> <img src="components/crops/thinking-pill-light-hover.png" alt="Thought for 6s, light-hover" height="28"> <img src="components/crops/thinking-pill-focus-visible.png" alt="Thought for 6s, focus-visible" height="28"> 
+<img src="components/crops/thinking-pill-default.png" alt="Thought for 6s, default" height="28"> <img src="components/crops/thinking-pill-hover.png" alt="Thought for 6s, hover" height="28"> <img src="components/crops/thinking-pill-light.png" alt="Thought for 6s, light" height="28"> <img src="components/crops/thinking-pill-light-hover.png" alt="Thought for 6s, light-hover" height="28"> <img src="components/crops/thinking-pill-focus-visible.png" alt="Thought for 6s, focus-visible" height="28"> <img src="components/crops/thinking-pill-light-focus-visible.png" alt="Thought for 6s, light-focus-visible" height="28"> 
 
 | State | Values |
 |---|---|
@@ -1411,7 +1411,7 @@ Tokens named in its classes: `--msg-text-inset`.
 
 <a id="message-action"></a>`message-action`, on thread-dark-table.
 
-<img src="components/crops/message-action-default.png" alt="Message action button, default" height="24"> <img src="components/crops/message-action-hover.png" alt="Message action button, hover" height="24"> <img src="components/crops/message-action-light.png" alt="Message action button, light" height="24"> <img src="components/crops/message-action-light-hover.png" alt="Message action button, light-hover" height="24"> <img src="components/crops/message-action-focus-visible.png" alt="Message action button, focus-visible" height="24"> 
+<img src="components/crops/message-action-default.png" alt="Message action button, default" height="24"> <img src="components/crops/message-action-hover.png" alt="Message action button, hover" height="24"> <img src="components/crops/message-action-light.png" alt="Message action button, light" height="24"> <img src="components/crops/message-action-light-hover.png" alt="Message action button, light-hover" height="24"> <img src="components/crops/message-action-focus-visible.png" alt="Message action button, focus-visible" height="24"> <img src="components/crops/message-action-light-focus-visible.png" alt="Message action button, light-focus-visible" height="24"> 
 
 | State | Values |
 |---|---|
@@ -1458,7 +1458,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`, `--cds
 
 <a id="page-title"></a>`page-title`, on artifacts-dark, chats-dark, projects-dark.
 
-<img src="components/crops/page-title-default.png" alt="Page title (h1), default" height="32"> <img src="components/crops/page-title-light.png" alt="Page title (h1), light" height="32"> 
+<img src="components/crops/page-title-default.png" alt="Page title (h1), default" height="32"> <img src="components/crops/page-title-light.png" alt="Page title (h1), light" height="32"> <img src="components/crops/page-title-chats.png" alt="Page title (h1), chats" height="32"> <img src="components/crops/page-title-light-chats.png" alt="Page title (h1), light-chats" height="32"> <img src="components/crops/page-title-light-projects.png" alt="Page title (h1), light-projects" height="32"> <img src="components/crops/page-title-projects.png" alt="Page title (h1), projects" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1488,7 +1488,7 @@ Child layers: button 40.5469pxx32px background rgba(255, 255, 255, 0.07) `fill.g
 
 <a id="tab"></a>`tab`, on artifacts-dark.
 
-<img src="components/crops/tab-default.png" alt="Tab, default" height="32"> <img src="components/crops/tab-hover.png" alt="Tab, hover" height="32"> <img src="components/crops/tab-light.png" alt="Tab, light" height="32"> <img src="components/crops/tab-light-hover.png" alt="Tab, light-hover" height="32"> <img src="components/crops/tab-selected.png" alt="Tab, selected" height="32"> <img src="components/crops/tab-focus-visible.png" alt="Tab, focus-visible" height="32"> 
+<img src="components/crops/tab-default.png" alt="Tab, default" height="32"> <img src="components/crops/tab-hover.png" alt="Tab, hover" height="32"> <img src="components/crops/tab-light.png" alt="Tab, light" height="32"> <img src="components/crops/tab-light-hover.png" alt="Tab, light-hover" height="32"> <img src="components/crops/tab-selected.png" alt="Tab, selected" height="32"> <img src="components/crops/tab-focus-visible.png" alt="Tab, focus-visible" height="32"> <img src="components/crops/tab-light-focus-visible.png" alt="Tab, light-focus-visible" height="32"> <img src="components/crops/tab-light-selected.png" alt="Tab, light-selected" height="32"> <img src="components/crops/tab-light-selected-hover.png" alt="Tab, light-selected-hover" height="32"> <img src="components/crops/tab-selected-hover.png" alt="Tab, selected-hover" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1505,7 +1505,7 @@ Child layers: button 40.5469pxx32px background rgba(255, 255, 255, 0.07) `fill.g
 
 <a id="header-icon-button"></a>`header-icon-button`, on artifacts-dark.
 
-<img src="components/crops/header-icon-button-default.png" alt="Page header icon button, default" height="32"> <img src="components/crops/header-icon-button-hover.png" alt="Page header icon button, hover" height="32"> <img src="components/crops/header-icon-button-light.png" alt="Page header icon button, light" height="32"> <img src="components/crops/header-icon-button-light-hover.png" alt="Page header icon button, light-hover" height="32"> <img src="components/crops/header-icon-button-focus-visible.png" alt="Page header icon button, focus-visible" height="32"> 
+<img src="components/crops/header-icon-button-default.png" alt="Page header icon button, default" height="32"> <img src="components/crops/header-icon-button-hover.png" alt="Page header icon button, hover" height="32"> <img src="components/crops/header-icon-button-light.png" alt="Page header icon button, light" height="32"> <img src="components/crops/header-icon-button-light-hover.png" alt="Page header icon button, light-hover" height="32"> <img src="components/crops/header-icon-button-focus-visible.png" alt="Page header icon button, focus-visible" height="32"> <img src="components/crops/header-icon-button-light-focus-visible.png" alt="Page header icon button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1520,7 +1520,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="header-button"></a>`header-button`, on projects-dark, chats-dark.
 
-<img src="components/crops/header-button-default.png" alt="Page header button (New project), default" height="32"> <img src="components/crops/header-button-hover.png" alt="Page header button (New project), hover" height="32"> <img src="components/crops/header-button-light.png" alt="Page header button (New project), light" height="32"> <img src="components/crops/header-button-light-hover.png" alt="Page header button (New project), light-hover" height="32"> <img src="components/crops/header-button-focus-visible.png" alt="Page header button (New project), focus-visible" height="32"> 
+<img src="components/crops/header-button-default.png" alt="Page header button (New project), default" height="32"> <img src="components/crops/header-button-hover.png" alt="Page header button (New project), hover" height="32"> <img src="components/crops/header-button-light.png" alt="Page header button (New project), light" height="32"> <img src="components/crops/header-button-light-hover.png" alt="Page header button (New project), light-hover" height="32"> <img src="components/crops/header-button-focus-visible.png" alt="Page header button (New project), focus-visible" height="32"> <img src="components/crops/header-button-light-focus-visible.png" alt="Page header button (New project), light-focus-visible" height="32"> <img src="components/crops/header-button-light-link.png" alt="Page header button (New project), light-link" height="32"> <img src="components/crops/header-button-link.png" alt="Page header button (New project), link" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1554,7 +1554,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="card-button"></a>`card-button`, on artifacts-dark.
 
-<img src="components/crops/card-button-default.png" alt="Secondary button in a card, default" height="28"> <img src="components/crops/card-button-hover.png" alt="Secondary button in a card, hover" height="28"> <img src="components/crops/card-button-light.png" alt="Secondary button in a card, light" height="28"> <img src="components/crops/card-button-light-hover.png" alt="Secondary button in a card, light-hover" height="28"> <img src="components/crops/card-button-focus-visible.png" alt="Secondary button in a card, focus-visible" height="28"> 
+<img src="components/crops/card-button-default.png" alt="Secondary button in a card, default" height="28"> <img src="components/crops/card-button-hover.png" alt="Secondary button in a card, hover" height="28"> <img src="components/crops/card-button-light.png" alt="Secondary button in a card, light" height="28"> <img src="components/crops/card-button-light-hover.png" alt="Secondary button in a card, light-hover" height="28"> <img src="components/crops/card-button-focus-visible.png" alt="Secondary button in a card, focus-visible" height="28"> <img src="components/crops/card-button-light-focus-visible.png" alt="Secondary button in a card, light-focus-visible" height="28"> 
 
 | State | Values |
 |---|---|
@@ -1571,7 +1571,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="dismiss-button"></a>`dismiss-button`, on artifacts-dark.
 
-<img src="components/crops/dismiss-button-default.png" alt="Dismiss button, default" height="28"> <img src="components/crops/dismiss-button-hover.png" alt="Dismiss button, hover" height="28"> <img src="components/crops/dismiss-button-light.png" alt="Dismiss button, light" height="28"> <img src="components/crops/dismiss-button-light-hover.png" alt="Dismiss button, light-hover" height="28"> <img src="components/crops/dismiss-button-focus-visible.png" alt="Dismiss button, focus-visible" height="28"> 
+<img src="components/crops/dismiss-button-default.png" alt="Dismiss button, default" height="28"> <img src="components/crops/dismiss-button-hover.png" alt="Dismiss button, hover" height="28"> <img src="components/crops/dismiss-button-light.png" alt="Dismiss button, light" height="28"> <img src="components/crops/dismiss-button-light-hover.png" alt="Dismiss button, light-hover" height="28"> <img src="components/crops/dismiss-button-focus-visible.png" alt="Dismiss button, focus-visible" height="28"> <img src="components/crops/dismiss-button-light-focus-visible.png" alt="Dismiss button, light-focus-visible" height="28"> 
 
 | State | Values |
 |---|---|
@@ -1597,7 +1597,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`.
 
 <a id="template-card"></a>`template-card`, on artifacts-dark. 136 wide: a preview tile with --cds-radius-composer, then the name and a Beta badge.
 
-<img src="components/crops/template-card-default.png" alt="Make something new card, default" height="119"> <img src="components/crops/template-card-hover.png" alt="Make something new card, hover" height="119"> <img src="components/crops/template-card-light.png" alt="Make something new card, light" height="119"> <img src="components/crops/template-card-light-hover.png" alt="Make something new card, light-hover" height="119"> <img src="components/crops/template-card-focus-visible.png" alt="Make something new card, focus-visible" height="119"> 
+<img src="components/crops/template-card-default.png" alt="Make something new card, default" height="119"> <img src="components/crops/template-card-hover.png" alt="Make something new card, hover" height="119"> <img src="components/crops/template-card-light.png" alt="Make something new card, light" height="119"> <img src="components/crops/template-card-light-hover.png" alt="Make something new card, light-hover" height="119"> <img src="components/crops/template-card-focus-visible.png" alt="Make something new card, focus-visible" height="119"> <img src="components/crops/template-card-light-focus-visible.png" alt="Make something new card, light-focus-visible" height="119"> 
 
 | State | Values |
 |---|---|
@@ -1614,7 +1614,7 @@ Tokens named in its classes: `--cds-rem-scale`, `--hue`, `--ink`, `--neutral`, `
 
 <a id="badge"></a>`badge`, on artifacts-dark, projects-dark.
 
-<img src="components/crops/badge-default.png" alt="Badge (Beta), default" height="24"> <img src="components/crops/badge-light.png" alt="Badge (Beta), light" height="24"> 
+<img src="components/crops/badge-default.png" alt="Badge (Beta), default" height="24"> <img src="components/crops/badge-light.png" alt="Badge (Beta), light" height="24"> <img src="components/crops/badge-light-project.png" alt="Badge (Beta), light-project" height="24"> <img src="components/crops/badge-project.png" alt="Badge (Beta), project" height="24"> 
 
 | State | Values |
 |---|---|
@@ -1677,7 +1677,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`, `--lis
 
 <a id="artifact-row-more"></a>`artifact-row-more`, on artifacts-dark.
 
-<img src="components/crops/artifact-row-more-default.png" alt="Artifact row more button, default" height="32"> <img src="components/crops/artifact-row-more-hover.png" alt="Artifact row more button, hover" height="32"> <img src="components/crops/artifact-row-more-light.png" alt="Artifact row more button, light" height="32"> <img src="components/crops/artifact-row-more-light-hover.png" alt="Artifact row more button, light-hover" height="32"> <img src="components/crops/artifact-row-more-focus-visible.png" alt="Artifact row more button, focus-visible" height="32"> 
+<img src="components/crops/artifact-row-more-default.png" alt="Artifact row more button, default" height="32"> <img src="components/crops/artifact-row-more-hover.png" alt="Artifact row more button, hover" height="32"> <img src="components/crops/artifact-row-more-light.png" alt="Artifact row more button, light" height="32"> <img src="components/crops/artifact-row-more-light-hover.png" alt="Artifact row more button, light-hover" height="32"> <img src="components/crops/artifact-row-more-focus-visible.png" alt="Artifact row more button, focus-visible" height="32"> <img src="components/crops/artifact-row-more-light-focus-visible.png" alt="Artifact row more button, light-focus-visible" height="32"> 
 
 | State | Values |
 |---|---|
@@ -1733,7 +1733,7 @@ Tokens named in its classes: `--cds-cursor-interactive`, `--cds-page-bg`, `--lis
 
 <a id="breadcrumb"></a>`breadcrumb`, on project-dark.
 
-<img src="components/crops/breadcrumb-default.png" alt="Project breadcrumb, default" height="28"> <img src="components/crops/breadcrumb-hover.png" alt="Project breadcrumb, hover" height="28"> <img src="components/crops/breadcrumb-light.png" alt="Project breadcrumb, light" height="28"> <img src="components/crops/breadcrumb-light-hover.png" alt="Project breadcrumb, light-hover" height="28"> <img src="components/crops/breadcrumb-focus-visible.png" alt="Project breadcrumb, focus-visible" height="28"> 
+<img src="components/crops/breadcrumb-default.png" alt="Project breadcrumb, default" height="28"> <img src="components/crops/breadcrumb-hover.png" alt="Project breadcrumb, hover" height="28"> <img src="components/crops/breadcrumb-light.png" alt="Project breadcrumb, light" height="28"> <img src="components/crops/breadcrumb-light-hover.png" alt="Project breadcrumb, light-hover" height="28"> <img src="components/crops/breadcrumb-focus-visible.png" alt="Project breadcrumb, focus-visible" height="28"> <img src="components/crops/breadcrumb-light-focus-visible.png" alt="Project breadcrumb, light-focus-visible" height="28"> 
 
 | State | Values |
 |---|---|
