@@ -9,10 +9,13 @@ import { TextLink, type TextLinkProps } from "./TextLink";
 // Children as an argument, as the lint rule wants; the props type requires them, hence the cast.
 type ChipProps = ComponentProps<typeof Chip>;
 
-const icon = (props: Omit<IconButtonProps, "children">) =>
+/** `Omit` over each member of the union, so a link's anchor attributes stay in the type. */
+type Without<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+const icon = (props: Without<IconButtonProps, "children">) =>
   renderToStaticMarkup(createElement(IconButton, props as IconButtonProps, createElement("svg")));
 
-const link = (props: Omit<TextLinkProps, "children">) =>
+const link = (props: Without<TextLinkProps, "children">) =>
   renderToStaticMarkup(createElement(TextLink, props as TextLinkProps, "Back"));
 
 describe("IconButton", () => {
@@ -73,13 +76,13 @@ describe("TextLink", () => {
 
 describe("Chip", () => {
   it("disables its toggle, and dims it", () => {
-    const html = renderToStaticMarkup(createElement(Chip, { onClick: () => undefined, disabled: true } as ChipProps, "Add"));
+    const html = renderToStaticMarkup(createElement(Chip, { onClick: () => undefined, disabled: true } as unknown as ChipProps, "Add"));
     expect(html).toContain('disabled=""');
     expect(html).toContain("disabled:opacity-50");
   });
 
   it("draws a dashed chip", () => {
-    const html = renderToStaticMarkup(createElement(Chip, { onClick: () => undefined, dashed: true } as ChipProps, "Add"));
+    const html = renderToStaticMarkup(createElement(Chip, { onClick: () => undefined, dashed: true } as unknown as ChipProps, "Add"));
     expect(html).toContain("border-dashed");
   });
 });
