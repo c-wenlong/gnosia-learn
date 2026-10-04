@@ -23,6 +23,7 @@ import { concept, curriculumItem } from "./content";
 // that is still in its temporal dead zone.
 import { session } from "./studio";
 import {
+  ASSET_NAME_MAX,
   AVATARS,
   DEFAULT_P_L,
   EVENT_TYPES,
@@ -415,6 +416,49 @@ export const tutorModel = pgTable(
     check(
       "tutor_model_model_check",
       sql.raw(`char_length(model) between 1 and ${TUTOR_MODEL_LIMITS.maxModelChars} and model ~ '^[!-~]+$'`),
+    ),
+  ],
+);
+
+/**
+ * A learner's own name for an asset: a video, a diagram, a link, anything in
+ * the library. Read in place of `asset.title` wherever that learner sees the
+ * asset (`services/catalog/src/state/assets.ts`), and written only by
+ * `services/catalog/src/state/asset-names.ts`.
+ *
+ * **State, not content.** `asset.title` belongs to the asset's source: the
+ * video tool's `topic.yml`, the course file, the `.tldr`. Every import writes
+ * the whole row again (`updateSet` in `content/upsert.ts`), so a title edited
+ * in place would be undone by the next `catalog import`. A row here is never
+ * touched by an import, and it is the learner's, like a bookmark's label, so
+ * the web app may write it (ARCHITECTURE.md rule 11) and one learner's name
+ * for a commons video is nobody else's.
+ *
+ * **No foreign key on `asset_id`**, as `content_revision.entity_id` has none:
+ * an import that prunes an asset and later writes it back under the same id
+ * (a reindex from a worktree without the renders, then the fix) keeps the
+ * name. An orphan row is read by nothing, since every reader starts from an
+ * `asset` row. The writer checks the asset exists and is readable before it
+ * names it. `cascade` on the learner, as `tutor_model`.
+ */
+export const assetName = pgTable(
+  "asset_name",
+  {
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    assetId: text("asset_id").notNull(),
+    title: text("title").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.learnerId, t.assetId] }),
+    index("asset_name_asset_id_idx").on(t.assetId),
+    // Stored cleaned (`cleanAssetName`): never blank, never padded, no line breaks.
+    check(
+      "asset_name_title_check",
+      sql.raw(`char_length(title) between 1 and ${ASSET_NAME_MAX} and title = btrim(title) and title !~ '\\s{2}|[\\n\\r\\t]'`),
     ),
   ],
 );

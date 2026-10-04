@@ -83,7 +83,7 @@ let warnedUnowned = false;
  */
 const hasOwners = new WeakMap<object, true>();
 
-function cacheKey(db: CatalogDatabase): object {
+export function cacheKey(db: CatalogDatabase): object {
   const client = (db as { $client?: unknown }).$client;
   return typeof client === "object" && client !== null ? client : db;
 }
