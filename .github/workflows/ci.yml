@@ -89,6 +89,11 @@ jobs:
         # clone. (eslint.config.mjs ignores tools/** for both, so a checkout
         # would not pollute lint, but there is still no reason to pay for it.)
         uses: actions/checkout@v7
+        with:
+          # Two commits: on a pull request HEAD is GitHub's merge commit and
+          # HEAD^1 the base it merges into, so the step below can list what
+          # the pull request changed.
+          fetch-depth: 2
 
       - name: Setup Node.js
         # 22 matches the engines floor in package.json, which in turn clears
@@ -127,6 +132,22 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Choose the test files
+        id: scope
+        # scripts/flip-rehearsal.mjs is the owner's flip-day and cut-over
+        # procedure, and its suite is the slowest in the repository (133 s of
+        # 664 s on 2026-10-04): it copies, dumps and restores whole databases.
+        # A pull request runs it only when it changes the script, the lib/
+        # modules it imports, or the suite itself; npm test on a laptop and a
+        # manual run (workflow_dispatch) still run it every time.
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] &&
+             ! git diff --name-only HEAD^1 HEAD |
+               grep -qE '^(scripts/flip-rehearsal\.mjs|scripts/lib/|services/catalog/test/flip-rehearsal\.test\.ts)'; then
+            echo "args=--exclude services/catalog/test/flip-rehearsal.test.ts" >> "$GITHUB_OUTPUT"
+            echo "The flip-rehearsal suite is skipped: nothing it covers changed."
+          fi
+
       - name: Tests with coverage
         # test:coverage rather than test, so the suite runs once and produces
         # the lcov report in the same pass instead of being executed twice.
@@ -143,14 +164,15 @@ jobs:
         # the catalog tests need the Postgres service above, so their number
         # would move with the environment rather than with the code.
         #
-        # --maxWorkers=4: a private repository gets a 2-CPU runner, and vitest
+        # --maxWorkers=2: a private repository gets a 2-CPU runner, and vitest
         # defaults to one worker fewer than the CPUs, so on CI every test file
         # ran one after another (2026-10-04: 664 s of file time in an 814 s
-        # step). Most of that time is spent waiting on Postgres and on spawned
-        # CLI processes rather than on the CPU, so four files at once overlap
-        # the waits. Locally vitest already runs as many files at once as the
-        # machine has cores, so the suites are known to be safe in parallel.
-        run: npm run test:coverage -- --maxWorkers=4
+        # step). Four workers were tried first and were worse than they look:
+        # the step fell to 614 s, but the summed file time tripled to 1963 s
+        # and a studio test hit its 30 s timeout, because the work is CPU (the
+        # Postgres container and each file's scratch database migrations share
+        # the same two CPUs), not waiting. Two workers, one per CPU.
+        run: npm run test:coverage -- --maxWorkers=2 ${{ steps.scope.outputs.args }}
 
       - name: Production build
         # Runs on pull requests too, not only on the default branch. Next 16
