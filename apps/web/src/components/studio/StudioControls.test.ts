@@ -22,7 +22,7 @@ vi.mock("next/link", () => ({
   },
 }));
 
-const { DisplayMenu, SortMenu, TopicChips } = await import("./StudioControls");
+const { DisplayMenu, SortMenu, StripMenu, TopicChips } = await import("./StudioControls");
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -96,4 +96,31 @@ describe("the studio's strip menus", () => {
     act(() => more.click());
     expect(rows()).toEqual(["Topic 56", "Topic 67 (current)"]);
   });
+
+  it("runs a form row's action and closes, with the focus back on its button (the canvas page's More)", async () => {
+    const ran: string[] = [];
+    const action = async (data: FormData) => {
+      ran.push(String(data.get("name")));
+    };
+    const verb = createElement(
+      "form",
+      { action },
+      createElement("input", { type: "hidden", name: "name", value: "dot-product" }),
+      createElement("button", { type: "submit" }, "Verify"),
+    );
+    const { button } = mount(createElement(StripMenu, { label: "More", name: "More actions", children: verb }));
+    const more = button(/^More actions/);
+    act(() => more.click());
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+
+    // `requestSubmit`, as a press on the row does: the harness cancels every
+    // click's default so a link does not navigate, which would cancel this too.
+    const submit = document.querySelector<HTMLButtonElement>("[popover] button[type=submit]")!;
+    await act(async () => submit.form!.requestSubmit(submit));
+    expect(ran).toEqual(["dot-product"]);
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector("[popover]")).toBeNull();
+    expect(document.activeElement).toBe(more);
+  });
 });
+
