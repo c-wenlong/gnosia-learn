@@ -209,6 +209,21 @@ describe("a snapshot during a write", () => {
     expect(router.refresh).not.toHaveBeenCalled();
   });
 
+  it("expects one more epoch for each reset stored before a snapshot", async () => {
+    const { container, draw, answer } = setup({});
+    act(() => void held.learner!.resetCourse(["t1"]));
+    await answer();
+    act(() => void held.learner!.resetCourse(["t2"]));
+    await answer();
+    // Read between the two resets: it has the first and not the second.
+    draw({ epoch: 1 });
+    expect(container.textContent).toBe("note=none tick=false epoch=2");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    draw({ epoch: 2 });
+    expect(container.textContent).toBe("note=none tick=false epoch=2");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("protects nothing for a refused write: the database never had it", async () => {
     const { container, draw, answer } = setup({});
     act(() => held.learner!.updateNote("t1", "three paragraphs"));

@@ -137,9 +137,22 @@ async function post(path: string, body: unknown): Promise<ApiResponse> {
   };
 }
 
-interface Stored {
-  pick: (state: LearnerState) => unknown;
-  value: unknown;
+/**
+ * How a write is confirmed: called once the write is stored, with the state
+ * the write made, it returns whether a snapshot shows that write.
+ */
+type Confirm = (next: LearnerState) => (snapshot: LearnerState) => boolean;
+
+/**
+ * The usual confirmation: `pick` reads the part of the state the write
+ * decides, as the database stores it (no client-made ids or times), and a
+ * snapshot shows the write when its part is the same.
+ */
+function same(pick: (state: LearnerState) => unknown): Confirm {
+  return (next) => {
+    const value = pick(next);
+    return (snapshot) => sameValue(pick(snapshot), value);
+  };
 }
 
 /**
@@ -211,17 +224,20 @@ export function LearnerProvider({
   const queue = useRef(createWriteQueue<ApiResponse>());
 
   /**
-   * What each stored write left in the database, by write key: the slice of
-   * state that write decides (`pick`) and its value once stored. See
-   * `receive`.
+   * Each stored write, by write key, as a check of whether a snapshot shows
+   * it (see `Confirm` and `receive`).
    */
-  const stored = useRef(new Map<string, Stored>());
+  const stored = useRef(new Map<string, (snapshot: LearnerState) => boolean>());
   /** A snapshot that arrived while writes were in flight, waiting for them. */
   const held = useRef<LearnerState | null>(null);
   /** Snapshots read again since the last write was stored. */
   const rereads = useRef(0);
-  /** The epoch of the last snapshot adopted: the database's, never an optimistic one. */
-  const serverEpoch = useRef(initialState.epoch);
+  /**
+   * The least epoch the database holds: the last adopted snapshot's, plus one
+   * for each reset stored since. Never the optimistic epoch, which a refused
+   * reset raised and the database never did.
+   */
+  const epochFloor = useRef(initialState.epoch);
 
   /**
    * The server is the authority. When a navigation or a `router.refresh()`
@@ -257,9 +273,7 @@ export function LearnerProvider({
         return;
       }
       held.current = null;
-      const shown = [...stored.current.values()].every(({ pick, value }) =>
-        sameValue(pick(snapshot), value),
-      );
+      const shown = [...stored.current.values()].every((shows) => shows(snapshot));
       if (!shown && rereads.current < MAX_REREADS) {
         rereads.current += 1;
         router.refresh();
@@ -267,7 +281,7 @@ export function LearnerProvider({
       }
       stored.current.clear();
       rereads.current = 0;
-      serverEpoch.current = snapshot.epoch;
+      epochFloor.current = snapshot.epoch;
       current.current = snapshot;
       setState(snapshot);
     },
@@ -290,9 +304,8 @@ export function LearnerProvider({
    * another do not and are not. Several keys make the write a barrier over all
    * of them, which is how a reset waits for the writes it is about to delete.
    *
-   * `pick` reads, from any state, the part this write decides, as the
-   * database stores it (no client-made ids or times). It is how a snapshot is
-   * checked for this write once it is stored: see `receive`.
+   * `confirm` builds, once the write is stored, the check of whether a
+   * snapshot shows it: see `receive`. Most writes use `same`.
    *
    * Resolves once the write has settled, true when it was stored. Most
    * callers ignore it and let the banner speak; one that has to say
@@ -303,7 +316,7 @@ export function LearnerProvider({
       key: string | readonly string[],
       reduce: (previous: LearnerState) => LearnerState,
       send: (next: LearnerState) => Promise<ApiResponse>,
-      pick: (state: LearnerState) => unknown,
+      confirm: Confirm,
     ): Promise<boolean> => {
       const next = reduce(current.current);
       current.current = next;
@@ -315,10 +328,7 @@ export function LearnerProvider({
           (response) => {
             setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
             if (response.ok !== false) {
-              stored.current.set(typeof key === "string" ? key : key.join("\n"), {
-                pick,
-                value: pick(next),
-              });
+              stored.current.set(typeof key === "string" ? key : key.join("\n"), confirm(next));
               // A new write gets its own re-reads, whatever earlier ones used.
               rereads.current = 0;
             }
@@ -354,7 +364,7 @@ export function LearnerProvider({
         "preference:theme",
         (previous) => setTheme(previous, theme),
         () => post("preference", { key: "theme", value: theme }),
-        (state) => state.theme,
+        same((state) => state.theme),
       );
     },
     [commit],
@@ -372,7 +382,7 @@ export function LearnerProvider({
           return next;
         },
         () => post("name", { name: cleaned }),
-        (state) => state.displayName ?? null,
+        same((state) => state.displayName ?? null),
       );
     },
     [commit],
@@ -388,7 +398,7 @@ export function LearnerProvider({
             curriculumItemId: topicId,
             completed: next.completed[topicId] === true,
           }),
-        (state) => state.completed[topicId] === true,
+        same((state) => state.completed[topicId] === true),
       );
     },
     [commit],
@@ -400,7 +410,7 @@ export function LearnerProvider({
         `note:${topicId}`,
         (previous) => setNote(previous, topicId, note),
         () => post("note", { curriculumItemId: topicId, note }),
-        (state) => state.notes[topicId] ?? null,
+        same((state) => state.notes[topicId] ?? null),
       );
     },
     [commit],
@@ -412,7 +422,7 @@ export function LearnerProvider({
         "preference:userResources",
         (previous) => addUserResource(previous, moduleId, resource),
         (next) => post("preference", { key: "userResources", value: next.userResources }),
-        (state) => state.userResources,
+        same((state) => state.userResources),
       );
     },
     [commit],
@@ -424,7 +434,7 @@ export function LearnerProvider({
         "preference:userResources",
         (previous) => removeUserResource(previous, moduleId, resourceId),
         (next) => post("preference", { key: "userResources", value: next.userResources }),
-        (state) => state.userResources,
+        same((state) => state.userResources),
       );
     },
     [commit],
@@ -441,7 +451,7 @@ export function LearnerProvider({
             ...input,
             countSession: options?.countSession !== false,
           }),
-        (state) => recapOf(state, topicId),
+        same((state) => recapOf(state, topicId)),
       );
     },
     [commit],
@@ -463,33 +473,33 @@ export function LearnerProvider({
             openQuestions: [],
             source: "manual",
           }),
-        (state) => recapOf(state, topicId),
+        same((state) => recapOf(state, topicId)),
       );
     },
     [commit],
   );
 
   const resetCourse = useCallback(
-    (topicIds: string[]) => {
-      // The server moves the epoch up in the same statement, so a snapshot
-      // that shows this reset has a higher epoch than the last one adopted. A
-      // reset with nothing to clear differs from the snapshot before it only
-      // here. Not the optimistic epoch: a refused reset raised that and the
-      // database never did.
-      const epoch = serverEpoch.current;
-      return commit(
+    (topicIds: string[]) =>
+      commit(
         // A barrier over every row the reset deletes. Without it a note still
         // in flight for one of these topics could land after the delete and
         // recreate the row, while the page went on showing it as cleared.
         topicIds.flatMap((id) => [`progress:${id}`, `note:${id}`]),
         (previous) => resetCourseProgress(previous, topicIds),
         () => post("reset", { curriculumItemIds: topicIds }),
-        (state) => [
-          state.epoch > epoch,
-          topicIds.map((id) => [state.completed[id] === true, state.notes[id] ?? null]),
-        ],
-      );
-    },
+        () => {
+          // The server moves the epoch up by one in the same statement, so a
+          // snapshot that shows this reset has at least the floor this reset
+          // raised (more if another tab reset). A reset with nothing to clear
+          // differs from the snapshot before it only here.
+          epochFloor.current += 1;
+          const least = epochFloor.current;
+          return (snapshot) =>
+            snapshot.epoch >= least &&
+            topicIds.every((id) => snapshot.completed[id] !== true && snapshot.notes[id] === undefined);
+        },
+      ),
     [commit],
   );
 
@@ -501,7 +511,7 @@ export function LearnerProvider({
         (next) => post("preference", { key: "lastVisited", value: next.lastVisited }),
         // Not `at`: the server keeps the time, but a check that compared it
         // would also have to agree on its precision.
-        (state) => [state.lastVisited?.courseSlug ?? null, state.lastVisited?.moduleSlug ?? null],
+        same((state) => [state.lastVisited?.courseSlug ?? null, state.lastVisited?.moduleSlug ?? null]),
       );
     },
     [commit],
@@ -515,7 +525,7 @@ export function LearnerProvider({
         // The whole list, from the state the reducer just made. Writes on one
         // key run in order, so the last of two quick toggles carries both.
         (next) => post("preference", { key: "inactiveCourses", value: next.inactiveCourses }),
-        (state) => state.inactiveCourses,
+        same((state) => state.inactiveCourses),
       );
     },
     [commit],
