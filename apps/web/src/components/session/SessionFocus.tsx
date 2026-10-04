@@ -509,7 +509,7 @@ export function SessionFocus({
       {step.kind === "teach" ? (
         <>
           <div className="min-w-0">{teach}</div>
-          {asset ?? <Placeholder label="No diagram or video explains this concept yet" height={170} className="md:h-[220px]!" />}
+          {asset ?? <Placeholder label="No diagram or video explains this concept yet" className="h-[170px] md:h-[220px]" />}
           {nothingToAsk && (
             <Callout tone="neutral" role="status" title="No question this session">
               {withConsequence(NOTHING_TO_ASK, "Nothing is recorded; Continue closes the session.")}

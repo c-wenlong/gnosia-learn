@@ -160,19 +160,22 @@ function foldTags(text: string): string[] {
 /** A padding utility, with or without variants: `pt-4`, `md:px-3`, `p-[3px]`. */
 const PADDING = /(?:^|[\s"'`:])p[xytrblse]?-(?:\d|\[|px\b)/;
 
-/**
- * Folds still padded in a file another open PR owns, to be moved when it
- * lands. The entry fails once the padding is gone, so it cannot go stale.
- */
-const PADDED_ELSEWHERE = new Set(["components/settings/Providers.tsx"]);
-
 describe("the kit's leftovers stay gone", () => {
+  const padded = (text: string) =>
+    foldTags(text).some((tag) => /className=/.test(tag) && PADDING.test(tag.slice(tag.indexOf("className="))));
+
+  it("knows a padded fold when it sees one", () => {
+    expect(padded(`<Collapse open={n > 0} className="pt-8">`)).toBe(true);
+    expect(padded(`<Reveal open={a} className={cx("md:px-3", b)}>`)).toBe(true);
+    expect(padded(`<Collapse open={n > 0} className="min-w-0">`)).toBe(false);
+    expect(padded(`<Collapse open={open}><p className="pt-4" /></Collapse>`)).toBe(false);
+  });
+
   it("puts no padding on a Collapse's own box", () => {
-    const padded = sources()
-      .filter(({ text }) => foldTags(text).some((tag) => /className=/.test(tag) && PADDING.test(tag.slice(tag.indexOf("className=")))))
+    const paddedFiles = sources()
+      .filter(({ text }) => padded(text))
       .map(({ path }) => path);
-    expect(padded.filter((path) => !PADDED_ELSEWHERE.has(path))).toEqual([]);
-    for (const path of PADDED_ELSEWHERE) expect(padded).toContain(path);
+    expect(paddedFiles).toEqual([]);
   });
 
   it("builds every card shell with cardClasses", () => {
