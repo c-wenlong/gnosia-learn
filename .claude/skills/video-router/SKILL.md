@@ -19,8 +19,11 @@ undoes an earlier one.
 1. **Unattended?** If the video has to come out of the studio with no one at
    a terminal, any of the three can make it, and only on macOS (the studio's
    video kind is off on Linux). On Linux, say it cannot be made unattended
-   there, and stop. Otherwise carry on: the steps below choose among the
-   three as they would at a terminal.
+   there, and stop. A studio job cannot be given footage, a screen
+   recording, an image or a sound from outside: when the video is about
+   such media, say so and ask; when one beat wants it, draw that beat as an
+   animation and say so. Otherwise carry on: the steps below choose among
+   the three as they would at a terminal.
 2. **The user named a tool** ("use Revideo", "make it in Remotion")? Use it.
    Skip to step 6.
 3. **Series first.** If the video is a week or a part of a series that

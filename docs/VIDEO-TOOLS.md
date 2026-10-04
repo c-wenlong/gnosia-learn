@@ -38,7 +38,7 @@ higher up wins.
 | Real data on a chart (a series from a file, log axes, a trend line) | remotionkc | d3-style scales and SVG in React, driven by the frame; its prototype's data chart was the strongest of the three | `computer-architecture/cs4223/week-01-why-multicore-data` |
 | Words on screen that must match the voice (word-level captions, kinetic text) | remotionkc | `@remotion/captions` and whisper.cpp give paged, per-word captions; the other two have no captions pipeline | the same topic |
 | A code walkthrough in an editor and a terminal, variables changing beside it | remotionkc | CSS layout makes an editor, a variables panel and a terminal cheap; its prototype beat manimkc clearly here | `big-data/cs4225/week-02-wordcount-code` |
-| Real footage or a screen recording, transitions between shots, sound effects | remotionkc | `<Video>` with trim and effects, `TransitionSeries` with twenty presentations, `@remotion/sfx`; neither other tool composites footage well | Remotion's skills (no topic yet) |
+| Real footage or a screen recording, transitions between shots, sound effects | remotionkc | `<Video>` with trim and effects, `TransitionSeries` with twenty presentations, `@remotion/sfx`; neither other tool composites footage well. At a terminal only: a studio job cannot be given footage | Remotion's skills (no topic yet) |
 | The same composition embedded live in the web app, or many videos from one template | remotionkc | `<Player>` runs a composition in Next.js without rendering, and props make one composition a template | Remotion's skills (not wired up here) |
 | Depth and light: layers stacked in perspective, a spotlight following the story, soft shadows, glass cards | revideokc | A three.js scene inside the 2D stage, with 2D titles, code and formulas drawn over it; filters dim or blur the stage behind a panel | `computer-architecture/cache-basics/memory-hierarchy-in-depth` |
 | Code that is edited in place while the voice explains the change (a loop from `a[i]` to `a[16 * i]`), with the other lines dimmed | revideokc | `Code` reflows lines around an insert or a replace and tweens a selection; this is its strongest 2D feature | both revideokc topics |
@@ -73,6 +73,7 @@ missing or poor.
 | Springs, masks, additive light, filters | partial | yes (CSS) | yes |
 | Visuals cued on the spoken word | yes (`narration.word_times`) | yes | yes |
 | Studio can make it unattended | on macOS only | on macOS only | on macOS only |
+| Footage, a screen recording or any media from outside, in the studio | no (nothing can supply it) | no (nothing can supply it) | no (nothing can supply it) |
 | Render speed, 1080p, measured on the owner's Mac | about 30 s for a 79 s scene, 8 scenes in parallel | 32 to 75 s for 68 to 113 s videos, concurrency 3 | about 25 s for a 62 s video with a 3D stage, 2 workers |
 
 ## Shared ground, and what it allows
@@ -111,8 +112,12 @@ come before preferences, so a later step can never undo an earlier one.
 
 1. **Unattended or not.** If the video has to come out of the studio with no
    one at a terminal, any of the three can make it, and only on macOS. On
-   Linux, say it cannot be made unattended there, and stop. Otherwise carry
-   on: the steps below choose among the three as they would at a terminal.
+   Linux, say it cannot be made unattended there, and stop. A studio job has
+   no way to be given footage, a screen recording, an image or a sound from
+   outside, and its render has no network to fetch one: when the video is
+   about such media, say so and ask; when one beat wants it, draw that beat
+   as an animation and say so. Otherwise carry on: the steps below choose
+   among the three as they would at a terminal.
 2. **The user named a tool.** Use it, and stop.
 3. **Series.** Is this a week or a part of an existing series? Use that
    series' tool, and stop.

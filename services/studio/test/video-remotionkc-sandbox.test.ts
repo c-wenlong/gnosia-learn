@@ -15,6 +15,7 @@ import { runSandboxed } from "../src/video/exec";
 import { runVideoGate } from "../src/video/gate";
 import { HOSTILE_PROBE_JS } from "../src/video/hostile-probe";
 import { readPorts } from "../src/video/ports";
+import { lanAddress, watchPorts } from "./lan-probe";
 import { remotionkcPaths } from "../src/video/remotionkc/paths";
 import { remotionkcEnv } from "./../src/video/remotionkc/sandbox";
 import { discoverRemotionkcToolchain, remotionkcProblems, type RemotionkcToolchain } from "../src/video/remotionkc/toolchain";
@@ -52,6 +53,10 @@ let tools: RemotionkcToolchain;
 let root: string;
 let job: BackendJob;
 let classes: string[];
+/** What the still and build case saw of the render's server from outside: null until it ran, or when there is no LAN address. */
+let lanWatch: { loopbackUp: number; lanReached: number[] } | null = null;
+/** The last scene's extraFrames in the case's composition: half a second at 30 fps. */
+const HELD_FRAMES = 15;
 const saved = { STUDIO_HOME: process.env.STUDIO_HOME, REMOTIONKC_ROOT: process.env.REMOTIONKC_ROOT };
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -131,7 +136,8 @@ beforeAll(async () => {
   job = { tools, paths, home: realpathSync(process.env.HOME ?? "/"), voice: "af_heart" };
   await backend.prepare(job);
   classes = (await backend.scaffold(job, brief, null)).classes;
-  await writeFile(paths.sceneFile, SCENE, "utf8");
+  // The last scene held by extraFrames, so the gate's measurement of a hold is checked against a real build.
+  await writeFile(paths.sceneFile, SCENE.replace("defineTopic({ component: Video })", `defineTopic({ component: Video, extraFrames: { ${JSON.stringify(classes.at(-1))}: ${HELD_FRAMES} } })`), "utf8");
   await backend.wrapper(job, { scenes: classes, narrated: true });
 }, 120_000);
 
@@ -231,9 +237,13 @@ const tryPort = (port) => new Promise((resolve) => {
     const env = { PATH: "/usr/bin:/bin", HOME: job.home, NODE_OPTIONS: "--require /nowhere.js", ANTHROPIC_API_KEY: "sk-not-for-the-job", BROWSERSLIST: "ie 6" };
     const lint = await execFileAsync(paths.wrapper, ["lint"], { env, timeout: 300_000 }).catch((error: { stdout?: string; code?: number }) => error);
     expect((lint as { code?: number }).code ?? 0, (lint as { stdout?: string }).stdout?.slice(-1500)).toBe(0);
+    // The render's server is watched from outside while the still and the build run (lan-probe.ts).
+    const lan = lanAddress();
+    const watch = lan === null ? null : watchPorts([readPorts(paths)], lan);
     const still = await execFileAsync(paths.wrapper, ["still"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
     expect((still as { code?: number }).code ?? 0, (still as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
     const built = await execFileAsync(paths.wrapper, ["build"], { env, timeout: 600_000 }).catch((error: { stderr?: string; code?: number }) => error);
+    lanWatch = watch === null ? null : await watch.stop();
     expect((built as { code?: number }).code ?? 0, (built as { stderr?: string }).stderr?.slice(-1500)).toBe(0);
 
     const calls = await readCalls(paths.calls);
@@ -269,9 +279,23 @@ const tryPort = (port) => new Promise((resolve) => {
     expect(gate.findings).toEqual([]);
     expect(gate.ok).toBe(true);
     expect(existsSync(paths.poster)).toBe(true);
+    // Step 7 measured the hold where it landed: the line's 0.4 s tail and the extraFrames at 30 fps.
+    expect(gate.sync?.heldTail[classes.at(-1)!]).toBeCloseTo(0.4 + HELD_FRAMES / 30, 1);
+    expect(gate.sync?.heldTail[classes[0]!]).toBeCloseTo(0.4, 1);
 
     // After a verdict the final lines' clips are kept, by their gnosia-audio keys.
     await backendFor("remotionkc").keepClips(job);
     expect((await readdir(paths.clips)).filter((name) => name.endsWith(".wav"))).toHaveLength(2);
   }, 900_000);
+
+  it("never lets the render's server be reached on the machine's LAN address, only on loopback", (context) => {
+    if (skip !== "") return context.skip(skip);
+    if (lanAddress() === null) return context.skip("this machine has no non-loopback IPv4 address to try the render's server on");
+    // Remotion's server listens on "::" when left alone, and the profile's
+    // localhost rule does not stop a LAN connection to that; loopbackOnly in
+    // remotionkc's tools/render/sandbox.mjs moves it to 127.0.0.1.
+    expect(lanWatch, "the still and build case did not run").not.toBeNull();
+    expect(lanWatch!.loopbackUp, "the render's server never answered on loopback, so the LAN check proves nothing").toBeGreaterThan(0);
+    expect(lanWatch!.lanReached).toEqual([]);
+  });
 });

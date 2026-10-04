@@ -2,12 +2,22 @@ import path from "node:path";
 
 import { run } from "../../proc";
 import { DATA_FENCE, DATA_FENCE_END } from "../../prompt";
+import { HELD_TAIL_SECONDS } from "../gate";
 import { videoPromptFacing } from "../prompt";
 import type { VideoPromptRequest } from "../backend";
 import type { VideoPaths } from "../paths";
 import { FIXTURE_COMPOSITION } from "./fixture";
 import { remotionkcPaths } from "./paths";
 import type { RemotionkcToolchain } from "./toolchain";
+
+/**
+ * The most `extraFrames` a scene can hold at 30 fps and still pass step 7,
+ * which measures the picture after each scene's last line in the build and
+ * allows `HELD_TAIL_SECONDS`, the line's own 0.4 s tail included. The
+ * measurement is the rule, so a computed value or another frame rate is
+ * judged the same way; this figure only says what it means in frames.
+ */
+export const MAX_EXTRA_FRAMES_AT_30 = Math.floor((HELD_TAIL_SECONDS - 0.4) * 30 + 1e-9);
 
 /**
  * A remotionkc job's manual and prompts (phase 3 of
@@ -63,7 +73,7 @@ An error anywhere is yours to fix and run again, as the owner would: a TypeScrip
 
 ## The narration
 
-\`narration.json\` is the script. Every scene of the brief is one chapter, with its class name as \`scene\`, in the brief's order: keep those names and that order. Each line is what the voice says, in full; the lines decide the length (each is a 0.2 s lead-in, the clip, a 0.4 s tail, back to back). \`title\` is the chapter title a viewer reads in the chapter list, so make it a short title, never a note about the screen. There is no \`hold\` here: a scene that needs to land after its last line gets \`extraFrames\` in \`defineTopic\`, at most 90 (three seconds).
+\`narration.json\` is the script. Every scene of the brief is one chapter, with its class name as \`scene\`, in the brief's order: keep those names and that order. Each line is what the voice says, in full; the lines decide the length (each is a 0.2 s lead-in, the clip, a 0.4 s tail, back to back). \`title\` is the chapter title a viewer reads in the chapter list, so make it a short title, never a note about the screen. There is no \`hold\` here: a scene that needs to land after its last line gets \`extraFrames\` in \`defineTopic\`. The gate measures every scene in the build and refuses one whose picture runs more than ${HELD_TAIL_SECONDS} seconds past the end of its last line, the 0.4 s tail included: at 30 fps that is \`extraFrames\` of at most ${MAX_EXTRA_FRAMES_AT_30}.
 
 You may reword, split or respell a line when the picture or the voice needs it, as the owner would; say which and why in your final message. Say numbers the way a person says them ("nineteen seventy-one") and show the digits on screen. Every changed line is shown to the person beside the brief's. \`still\` and \`build\` voice whatever the file says.
 

@@ -61,15 +61,17 @@ describe("a draft without a concept", () => {
     // STUDIO-VIDEO-TOOLS.md added the tool to the video section and the
     // TOOLS block, again when phase 2c put revideokc in the studio (its
     // TOOLS line and the matrix's "Studio can make it unattended" row), and
-    // again when phase 3 did the same for remotionkc; the diagram-only one
+    // again when phase 3 did the same for remotionkc, and again when the
+    // matrix gained its row saying no studio job can be given footage or a
+    // screen recording, with the routing step that follows; the diagram-only one
     // never changed.
     const hash = (input: CombinedPromptInput): string => createHash("sha256").update(buildCombinedSystemPrompt(input)).digest("hex");
-    expect(hash(base)).toBe("4f7400f0e73345b56c8fb49c3a4db88ea38bef98bad3041d684563a96684db9c");
+    expect(hash(base)).toBe("9cbace48977eaee9cace554667ea35f992f978ec40de1dfb35532e6e4b927bfc");
     expect(hash({ kinds: ["diagram"], vocabulary: vocabulary.entries, corpus: [], extending: "slug: a" })).toBe(
       "d0fc1b3aec58fadb15a05657f8a92213843ead3d2c50db4a17e25da4cf2fc1f9",
     );
     expect(hash({ kinds: ["diagram", "video"], vocabulary: vocabulary.entries, corpus: [], videos: null, changing: "slug: b" })).toBe(
-      "f7ed9c29fff6a68d69ab8c695ec78a2ed6610e14136d3d5b6e6ff9fe0170c495",
+      "50a9219fdcf551812f0e62c9f1a0ef53ed2312e3ff4a11a1703ddd4bf15a6266",
     );
     expect(buildCombinedSystemPrompt({ ...base, concept: null, tutor: null })).toBe(buildCombinedSystemPrompt(base));
     expect(combinedPrompt(["diagram", "video"])).not.toContain(CONCEPT_PARAGRAPH);

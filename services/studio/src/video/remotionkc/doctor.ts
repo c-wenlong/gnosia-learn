@@ -8,6 +8,7 @@ import { commandPathProblem } from "../bash-guard";
 import type { VideoDoctorCheck, VideoDoctorReport } from "../doctor";
 import { runSandboxed } from "../exec";
 import { HOSTILE_PROBE_JS } from "../hostile-probe";
+import { installedFingerprint } from "../installed";
 import type { VideoPaths } from "../paths";
 import { freePair, writePorts } from "../ports";
 import { resolvedStudioHome, type ProfileKind } from "../sandbox";
@@ -35,8 +36,9 @@ import { discoverRemotionkcToolchain, remotionkcProblems, type RemotionkcToolcha
  *   profile, and the build probed and its poster cut in the gate profile.
  *
  * The build takes most of a minute, so a passing verdict is kept for
- * `RENDER_KEPT_MS` while the toolchain, the voice and the code a render runs
- * (`checkoutFingerprint`) are unchanged, and the cheap checks and the probe
+ * `RENDER_KEPT_MS` while the toolchain, the voice, the code a render runs
+ * (`checkoutFingerprint`) and what is installed under it
+ * (`installedFingerprint`) are unchanged, and the cheap checks and the probe
  * run every time.
  */
 
@@ -48,9 +50,21 @@ export const DOCTOR_PORTS = { first: 46980, last: 46988 } as const;
 
 let lastRender: { key: string; at: number; checks: VideoDoctorCheck[] } | null = null;
 
-/** What a kept fixture build stands for: the toolchain, the voice, the code a render runs and the fixture. */
+/**
+ * What a kept fixture build stands for: the toolchain, the voice, the code a
+ * render runs, what is installed under it (remotion and `@remotion/*`, the
+ * Headless Shell's version and both lockfiles, `installedFingerprint`) and
+ * the fixture.
+ */
 export async function renderKey(tools: RemotionkcToolchain, voice: string): Promise<string> {
-  return JSON.stringify({ tools, voice, code: await checkoutFingerprint(tools.remotionkc.root), fixture: FIXTURE_COMPOSITION });
+  const own = tools.remotionkc;
+  const installed = await installedFingerprint({
+    root: own.root,
+    nodeModules: own.nodeModules,
+    packages: (name) => name === "remotion" || name.startsWith("@remotion/"),
+    files: own.nodeModules === null ? [] : [path.join(own.nodeModules, ".remotion", "chrome-headless-shell", "VERSION")],
+  });
+  return JSON.stringify({ tools, voice, code: await checkoutFingerprint(own.root), installed, fixture: FIXTURE_COMPOSITION });
 }
 
 /** Forget the kept fixture build (a test, or a change the toolchain cannot see). */

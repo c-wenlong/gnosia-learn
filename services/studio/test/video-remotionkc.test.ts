@@ -11,12 +11,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { backendFor } from "../src/video/backend";
 import { secondsForLines } from "../src/video/brief";
-import { runVideoGate, type GateTools, type SceneParse } from "../src/video/gate";
+import { HELD_TAIL_SECONDS, runVideoGate, type GateTools, type SceneParse } from "../src/video/gate";
 import type { VideoPaths } from "../src/video/paths";
 import { freePair, JOB_PORTS, profilePorts } from "../src/video/ports";
 import { DOCTOR_PORTS as REVIDEOKC_DOCTOR_PORTS } from "../src/video/revideokc/ports";
 import { buildRemotionkcCheckout, scaffoldRemotionkc, stubComposition } from "../src/video/remotionkc/checkout";
 import { DOCTOR_PORTS, renderKey } from "../src/video/remotionkc/doctor";
+import { MAX_EXTRA_FRAMES_AT_30, remotionkcManualText } from "../src/video/remotionkc/manual";
 import { remotionkcPaths, remotionkcVideoPaths } from "../src/video/remotionkc/paths";
 import { buildRemotionkcProfile, CHROME_RENDEZVOUS, remotionkcEnv, RENDER_XPC_SERVICES } from "../src/video/remotionkc/sandbox";
 import { buildRemotionkcSettings } from "../src/video/remotionkc/settings";
@@ -486,6 +487,45 @@ describe("the doctor's kept build", () => {
     }
     expect(await renderKey(tools, "am_michael")).not.toBe(await renderKey(tools, "af_heart"));
   });
+
+  it("is keyed on what is installed: a reinstall or an upgrade at the same paths renders again", async () => {
+    // Greptile on #293: the key was paths, so `npm ci` after a lockfile bump
+    // or a new Headless Shell kept a passing verdict for six hours.
+    const checkout = path.join(root, "remotionkc-installed");
+    const nodeModules = path.join(checkout, "node_modules");
+    const put = async (relative: string, body: string): Promise<void> => {
+      await mkdir(path.dirname(path.join(checkout, relative)), { recursive: true });
+      await writeFile(path.join(checkout, relative), body);
+    };
+    const pkg = (name: string, version: string): string => JSON.stringify({ name, version });
+    await put("package-lock.json", "{}\n");
+    await put("node_modules/.package-lock.json", "{}\n");
+    await put("node_modules/remotion/package.json", pkg("remotion", "4.0.530"));
+    await put("node_modules/@remotion/renderer/package.json", pkg("@remotion/renderer", "4.0.530"));
+    await put("node_modules/react/package.json", pkg("react", "19.0.0"));
+    await put("node_modules/.remotion/chrome-headless-shell/VERSION", "1\n");
+    const tools = { ...fixedTools(), remotionkc: { ...fixedTools().remotionkc, root: checkout, nodeModules } };
+    const first = await renderKey(tools, "af_heart");
+    expect(await renderKey(tools, "af_heart")).toBe(first);
+    // A package the render does not name, with neither lockfile moved, is not a reinstall.
+    await put("node_modules/react/package.json", pkg("react", "19.0.1"));
+    expect(await renderKey(tools, "af_heart")).toBe(first);
+    for (const [file, body] of [
+      ["node_modules/remotion/package.json", pkg("remotion", "4.0.531")],
+      ["node_modules/@remotion/renderer/package.json", pkg("@remotion/renderer", "4.0.531")],
+      ["node_modules/@remotion/media/package.json", pkg("@remotion/media", "4.0.531")],
+      ["node_modules/.remotion/chrome-headless-shell/VERSION", "2\n"],
+      ["node_modules/.package-lock.json", "{\"lockfileVersion\":3}\n"],
+      ["package-lock.json", "{\"lockfileVersion\":3}\n"],
+    ] as const) {
+      const before = await renderKey(tools, "af_heart");
+      await put(file, body);
+      expect(await renderKey(tools, "af_heart"), file).not.toBe(before);
+    }
+    const before = await renderKey(tools, "af_heart");
+    await rm(path.join(nodeModules, ".remotion"), { recursive: true });
+    expect(await renderKey(tools, "af_heart"), "the Headless Shell gone").not.toBe(before);
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -673,7 +713,7 @@ describe("the gate, for a remotionkc job", () => {
     };
   }
 
-  async function layOutJob(lines: string[][], options: { scene?: string; narration?: unknown } = {}) {
+  async function layOutJob(lines: string[][], options: { scene?: string; narration?: unknown; lastTail?: number } = {}) {
     const paths = await jobPaths();
     const own = remotionkcPaths(paths);
     const brief = { ...narratedBrief(), tool: "remotionkc" as const };
@@ -692,7 +732,10 @@ describe("the gate, for a remotionkc job", () => {
     );
     await writeFile(paths.deliverable, mp4Bytes());
     await writeFile(paths.transcript, JSON.stringify({ segments }));
-    await writeFile(paths.chapters, JSON.stringify(classes.map((scene, i) => ({ scene, end: (segments.filter((s) => s.scene === scene).at(-1)?.end ?? 0) + 1 + i * 0 }))));
+    await writeFile(
+      paths.chapters,
+      JSON.stringify(classes.map((scene, i) => ({ scene, end: (segments.filter((s) => s.scene === scene).at(-1)?.end ?? 0) + (i === classes.length - 1 ? (options.lastTail ?? 1) : 1) }))),
+    );
     await writeFile(paths.vtt, "WEBVTT\n");
     const hash = (await currentSourceHash(paths.topicDir))!;
     return { paths, own, brief, voiced, hash };
@@ -725,6 +768,42 @@ describe("the gate, for a remotionkc job", () => {
     expect(result.steps.map((step) => step.name)).toEqual(["source", "lint", "script", "topic", "build", "probe", "sync", "length", "poster", "looked"]);
     expect(Object.keys(result.copies ?? {}).filter((name) => name.startsWith("source/")).sort()).toEqual(["source/composition.tsx", "source/narration.json", "source/topic.yml"]);
     expect(result.looked).toMatchObject({ build: { readAt: expect.any(String) } });
+  });
+
+  it("judges a scene's extraFrames where it lands, by the picture after its last line, as the manual says", async () => {
+    // Greptile on #293: the manual capped extraFrames at 90 and nothing
+    // checked it. The rule is now the one step 7 measures in the build, so a
+    // computed value or another frame rate cannot slip past it.
+    const manual = remotionkcManualText("/job/remotionkc", "", await jobPaths());
+    expect(manual).toContain(`refuses one whose picture runs more than ${HELD_TAIL_SECONDS} seconds past the end of its last line, the 0.4 s tail included: at 30 fps that is \`extraFrames\` of at most ${MAX_EXTRA_FRAMES_AT_30}.`);
+    expect(MAX_EXTRA_FRAMES_AT_30).toBe(108);
+    expect(manual).not.toContain("at most 90");
+    const brief = narratedBrief();
+    const lines = brief.scenes.map((scene) => scene.beats.map((beat) => beat.say));
+    const gateWith = async (lastTail: number) => {
+      const { paths, own, voiced, hash } = await layOutJob(lines, { lastTail });
+      return runVideoGate({
+        brief: { ...brief, tool: "remotionkc" },
+        paths,
+        classes,
+        startedAtMs: Date.now() - 60_000,
+        sourceHashBefore: null,
+        calls: [still(at(-5_000), hash), built(at(-2_000), hash)],
+        reads: [
+          { path: own.stillsSheet, at: at(-4_000) },
+          { path: own.buildSheet, at: at(-1_000) },
+        ],
+        tools: tools(Math.round(secondsForLines(voiced))),
+        backend: backendFor("remotionkc"),
+      });
+    };
+    // The most the manual allows: the 0.4 s tail and 108 frames at 30 fps.
+    const most = await gateWith(0.4 + MAX_EXTRA_FRAMES_AT_30 / 30);
+    expect(most.steps.find((step) => step.name === "sync")).toMatchObject({ ok: true });
+    // 120 frames (four seconds) on top of the tail is past it.
+    const over = await gateWith(0.4 + 120 / 30);
+    expect(over.ok).toBe(false);
+    expect(over.findings.join(" ")).toContain("TB2_Recap holds 4.4s of picture after its last line; four is the most");
   });
 
   it("holds the build to every source file, and asks for the build's sheet to be read", async () => {

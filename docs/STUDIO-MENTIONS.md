@@ -907,7 +907,12 @@ What you must end up knowing:
    the person named a tool the block says is not in the studio yet, propose
    no video brief in that reply (a diagram asked for with it still gets
    its brief): say in one line that the studio cannot make it yet, and ask
-   whether an available tool should make it instead.
+   whether an available tool should make it instead. No studio video can
+   be given footage, a screen recording, an image or a sound from outside
+   (the matrix's media row): when the video is about such media, propose
+   no video brief and ask whether it should be drawn as an animation
+   instead; when only a beat wants it, draw that beat as an animation in
+   its `show` and say so in one line above the brief.
 
 Writing the storyboard:
 

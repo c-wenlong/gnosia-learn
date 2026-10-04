@@ -8,6 +8,7 @@ import { commandPathProblem } from "../bash-guard";
 import type { VideoDoctorCheck, VideoDoctorReport } from "../doctor";
 import { runSandboxed } from "../exec";
 import { HOSTILE_PROBE_JS } from "../hostile-probe";
+import { installedFingerprint } from "../installed";
 import type { VideoPaths } from "../paths";
 import { resolvedStudioHome, type ProfileKind } from "../sandbox";
 import { VOICES } from "../voices";
@@ -37,8 +38,9 @@ import { discoverRevideokcToolchain, revideokcProblems, type RevideokcToolchain 
  *
  * The build takes seconds to a minute and a half, so it is not run on every
  * refresh: a passing verdict is kept for `RENDER_KEPT_MS` while the
- * toolchain, the voice and the code a render runs (`checkoutFingerprint`)
- * are unchanged, and the cheap checks and the probe run every time.
+ * toolchain, the voice, the code a render runs (`checkoutFingerprint`) and
+ * what is installed under it (`installedFingerprint`) are unchanged, and the
+ * cheap checks and the probe run every time.
  */
 
 /** How long a passing fixture build stands for an unchanged toolchain. */
@@ -49,10 +51,23 @@ let lastRender: { key: string; at: number; checks: VideoDoctorCheck[] } | null =
 /**
  * What a kept fixture build stands for: the toolchain, the voice, the code a
  * render runs (the checkout's `lib/`, `src/`, `tools/` and the files beside
- * them, by content) and the fixture. A change to any of them renders again.
+ * them, by content), what is installed under it (`@revideo/*`, the Chrome
+ * and both lockfiles, `installedFingerprint`) and the fixture. A change to
+ * any of them renders again.
  */
 export async function renderKey(tools: RevideokcToolchain, voice: string): Promise<string> {
-  return JSON.stringify({ tools, voice, code: await checkoutFingerprint(tools.revideokc.root), fixture: FIXTURE_SCENE });
+  const own = tools.revideokc;
+  // A Chrome update keeps its paths: the bundle's Info.plist carries the
+  // version, and the binary's size and time stand in where there is no bundle.
+  const chrome = own.chrome;
+  const installed = await installedFingerprint({
+    root: own.root,
+    nodeModules: own.nodeModules,
+    packages: (name) => name.startsWith("@revideo/"),
+    files: chrome !== null && chrome.bundle.endsWith(".app") ? [path.join(chrome.bundle, "Contents", "Info.plist")] : [],
+    stats: chrome === null ? [] : [chrome.binary],
+  });
+  return JSON.stringify({ tools, voice, code: await checkoutFingerprint(own.root), installed, fixture: FIXTURE_SCENE });
 }
 
 /** Forget the kept fixture build (a test, or a change the toolchain cannot see). */

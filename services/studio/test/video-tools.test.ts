@@ -104,6 +104,20 @@ describe("the TOOLS block", () => {
     }
   });
 
+  it("says no studio job can be given footage, and tells the planner to ask or animate it", () => {
+    // The footage route names remotionkc, but a studio job has no way to be
+    // handed a clip, and the manual tells the agent to leave out media it
+    // cannot use: without this, a brief asking for footage loses it silently.
+    const media = VIDEO_TOOL_CAPABILITIES.find((row) => row.capability.startsWith("Footage, a screen recording"));
+    expect(media).toMatchObject({ manimkc: "no (nothing can supply it)", remotionkc: "no (nothing can supply it)", revideokc: "no (nothing can supply it)" });
+    expect(VIDEO_TOOL_ROUTES.find((route) => route.need.includes("footage"))?.why).toContain("a studio job cannot be given footage");
+    expect(toolsBlock()).toContain(`${media!.capability} | no (nothing can supply it)`);
+    const prompt = combinedPrompt(["diagram", "video"]).replace(/\s+/g, " ");
+    expect(prompt).toContain("No studio video can be given footage, a screen recording, an image or a sound from outside");
+    expect(prompt).toContain("propose no video brief and ask whether it should be drawn as an animation instead");
+    expect(prompt).toContain("draw that beat as an animation in its `show` and say so");
+  });
+
   it("is what health reports, tool for tool", () => {
     expect(toolsHealth()).toEqual([
       { name: "manimkc", strength: strength("manimkc"), available: true, reason: null },
