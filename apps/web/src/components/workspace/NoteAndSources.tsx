@@ -5,6 +5,7 @@ import { MathText } from "@/components/Math";
 import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
 import { cx } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { TextLink } from "@/components/ui/TextLink";
 import type { CitationSource } from "@/lib/agent/prompt";
 import type { ConceptWorkspace, NeighbourRef } from "@/lib/concept-workspace-core";
 
@@ -121,9 +122,9 @@ export function NoteAndSources({
             </p>
             <p className="flex flex-wrap gap-x-2 gap-y-1 text-[12px]">
               {w.backlinks.map((b) => (
-                <Link key={b.slug} href={`/learn/${b.slug}`} className="text-accent-text underline-offset-4 hover:underline">
+                <TextLink key={b.slug} href={`/learn/${b.slug}`}>
                   {b.title}
-                </Link>
+                </TextLink>
               ))}
             </p>
           </>

@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { Panel } from "@/components/ui/Panel";
+import { TextLink } from "@/components/ui/TextLink";
 import {
   conceptHref,
   moduleConceptCount,
@@ -20,7 +21,7 @@ import type { Course, Module } from "@/lib/types";
 
 import { Glyph, META_GLYPH } from "./icons";
 import { ModulePath } from "./ModulePath";
-import { FOCUS_RING, ROW_HOVER, ROW_META } from "./rows";
+import { ROW_HOVER, ROW_META } from "./rows";
 import type { ModuleData } from "./types";
 
 /**
@@ -100,9 +101,9 @@ export function ModuleMain({
             <Glyph name="lock" size={16} className="text-text2" />
             <span>
               Opens once you start{" "}
-              <Link href={moduleHref(course.slug, previous.slug)} className="font-medium text-accent-text underline-offset-4 hover:underline">
+              <TextLink href={moduleHref(course.slug, previous.slug)}>
                 Module {previous.order}: {previous.title}
-              </Link>
+              </TextLink>
               . Its topics are here to read in the meantime.
             </span>
           </p>
@@ -150,7 +151,7 @@ function Objectives({ items }: { items: string[] }) {
         aria-controls={listId}
         className={cx(
           "-mx-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 text-[14px] font-semibold leading-5 text-text transition-colors duration-100 hover:bg-surface2 hover:underline motion-reduce:transition-none",
-          FOCUS_RING,
+          FOCUS,
         )}
       >
         {open ? "Hide learning objectives" : "Show learning objectives"}
@@ -183,7 +184,7 @@ function NeighbourLink({
       className={cx(
         "flex min-w-0 items-center gap-2 rounded-lg p-2",
         ROW_HOVER,
-        FOCUS_RING,
+        FOCUS,
         next && "justify-end text-right sm:col-start-2",
       )}
     >

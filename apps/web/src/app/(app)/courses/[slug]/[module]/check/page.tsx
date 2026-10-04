@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { SessionFocus } from "@/components/session/SessionFocus";
 import { getCourse, getModule } from "@/data/courses";
 import { moduleHref } from "@/lib/course-path";
 import { loadWeekCheck } from "@/lib/week-check-page";
+import { TextLink } from "@/components/ui/TextLink";
 
 /**
  * A module's week check (phase 4 of docs/proposals/module-learning-path.md):
@@ -73,9 +73,9 @@ function Unreachable({ href }: { href: string }) {
           The database could not be reached, so there is no mastery to start from and nowhere to record an answer.
           Nothing is lost. Start Postgres and reload.
         </p>
-        <Link href={href} className="text-[14px] font-medium text-accent-text underline-offset-4 hover:underline">
+        <TextLink href={href} size="md">
           Back to the module
-        </Link>
+        </TextLink>
       </div>
     </div>
   );

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
 import { ResetCourseButton } from "@/components/ResetCourseButton";
@@ -9,6 +8,7 @@ import { cx, LABEL } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { Panel } from "@/components/ui/Panel";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { TextLink } from "@/components/ui/TextLink";
 import { doneWord, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
 import type { Course, Module, Topic } from "@/lib/types";
 
@@ -130,9 +130,9 @@ export function CourseRail({
           <ul className="flex flex-col gap-2">
             {related.map((r) => (
               <li key={r.slug} className="text-[14px] leading-5">
-                <Link href={`/courses/${r.slug}`} className="font-medium text-accent-text underline-offset-4 hover:underline">
+                <TextLink href={`/courses/${r.slug}`}>
                   {r.code} {r.title}
-                </Link>
+                </TextLink>
                 {r.shared.length > 0 && <span className="block text-text2">{r.shared.join(", ")}</span>}
               </li>
             ))}

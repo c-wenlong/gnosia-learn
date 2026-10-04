@@ -171,6 +171,76 @@ export function kindNoun(label: string, count: number): string {
   return `${word}s`;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Type tabs                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The `?kind=` of the Others tab: every companion file, of any kind.
+ *
+ * Not an asset kind (`asset_kind_check` allows none by this name), so it
+ * cannot collide with one, and every `?kind=<companion>` link written before
+ * the tabs still works: it opens the Others tab narrowed to that kind.
+ */
+export const OTHERS_KIND = "other";
+
+/** One tab in the strip under the Library title. */
+export interface LibraryTab {
+  /** The `?kind=` it sets; `""` is All. */
+  value: string;
+  label: string;
+}
+
+/**
+ * The strip (L1 of docs/proposals/library-by-type-and-day.md): All, then one
+ * tab per standalone kind in `KIND_ORDER`, as plain words with no counts
+ * (Manus's `type-tab`; the count is in the header). Videos is the video
+ * family: its transcript, chapters, captions and poster are companions,
+ * listed on the video's own page and under Others, never as tabs of their
+ * own. Others is there only while the catalog holds a companion file, so a
+ * library of videos and notes alone shows no empty tab.
+ */
+export const LIBRARY_TABS: readonly LibraryTab[] = [
+  { value: "", label: "All" },
+  { value: "video", label: "Videos" },
+  { value: "diagram_svg", label: "Diagrams" },
+  { value: "note", label: "Notes" },
+  { value: "session", label: "Sessions" },
+  { value: "link", label: "Links" },
+];
+
+/** The tabs to draw for these counts: the six, and Others when any companion file exists. */
+export function libraryTabs(counts: readonly { kind: string; count: number }[]): LibraryTab[] {
+  const others = counts.some(({ kind, count }) => count > 0 && isCompanionKind(kind));
+  return others ? [...LIBRARY_TABS, { value: OTHERS_KIND, label: "Others" }] : [...LIBRARY_TABS];
+}
+
+/**
+ * Which tab a `?kind=` selects: `""` for none, the kind for one with a tab,
+ * Others for `other` and for a companion kind such as `transcript`, so an old
+ * link lands on the tab that holds what it names. A standalone kind with no
+ * tab (none exists today: `asset_kind_check` allows only the ten) selects no
+ * tab, since its rows are in All and not in Others.
+ */
+export function tabOf(kind: string | null): string {
+  if (kind === null || kind === "") return "";
+  if (kind === OTHERS_KIND || isCompanionKind(kind)) return OTHERS_KIND;
+  return kind;
+}
+
+/**
+ * Whether a row's kind is one the Others tab lists: exactly the companion
+ * kinds, the rows All leaves out, so no file is in both tabs.
+ */
+export function isOtherKind(kind: string): boolean {
+  return isCompanionKind(kind);
+}
+
+/** "42 files", "1 file". */
+export function filesNoun(count: number): string {
+  return count === 1 ? "file" : "files";
+}
+
 /** The two orders the grid offers. `newest` is the default and is left out of a URL. */
 export type LibrarySort = "newest" | "title";
 
@@ -185,18 +255,6 @@ export type LibraryView = "grid" | "list";
 /** Anything but `list` is the grid, so a hand-typed `?view=` cannot break the page. */
 export function parseView(value: string | null | undefined): LibraryView {
   return value === "list" ? "list" : "grid";
-}
-
-const ADDED_ON = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-
-/**
- * When a row entered the catalog, as the list view prints it: `4 Oct 2026`.
- * In UTC, so the server and a test agree on the day; `null` for a value that
- * does not parse, so a bad timestamp is a blank cell rather than "Invalid Date".
- */
-export function addedOn(createdAt: string): string | null {
-  const time = Date.parse(createdAt);
-  return Number.isNaN(time) ? null : ADDED_ON.format(time);
 }
 
 /** Every filter the library's URL can carry. */
@@ -463,6 +521,7 @@ export function searchHits(
  * The rows one filter state shows, before sorting.
  *
  * - No kind is the default view: every standalone row, companions left out.
+ * - `other` (`OTHERS_KIND`) is the Others tab: every companion file.
  * - `courseTopics` is the chosen course's module topics, or null for none.
  * - `hits` is the search's answer, or null when nothing was searched. A hit
  *   still has to pass the other filters, so a video lifted in by its
@@ -487,7 +546,11 @@ export function filterRows<T extends { id: string; kind: string; topics: string[
   const { kind, topic, courseTopics, hits, favorites = null } = filters;
   return rows.filter(
     (row) =>
-      (kind === null ? favorites !== null || !isCompanionKind(row.kind) : row.kind === kind) &&
+      (kind === null
+        ? favorites !== null || !isCompanionKind(row.kind)
+        : kind === OTHERS_KIND
+          ? isOtherKind(row.kind)
+          : row.kind === kind) &&
       (favorites === null || favorites.has(row.id)) &&
       (topic === null || row.topics.includes(topic)) &&
       (courseTopics === null || row.topics.some((slug) => courseTopics.has(slug))) &&

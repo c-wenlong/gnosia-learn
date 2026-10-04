@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
@@ -13,6 +12,7 @@ import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { cx, TRACK } from "@/components/ui/classes";
+import { TextLink } from "@/components/ui/TextLink";
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
 import {
@@ -501,13 +501,10 @@ function Frame({
           <span className="md:hidden">{short ?? label}</span>
           <span className="hidden md:inline">{label}</span>
         </p>
-        <Link
-          href={exit.href}
-          className="rounded-sm hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
+        <TextLink href={exit.href} tone="muted">
           <span className="md:hidden">Exit</span>
           <span className="hidden md:inline">{exit.label}</span>
-        </Link>
+        </TextLink>
       </div>
       <div
         key={stepKey}

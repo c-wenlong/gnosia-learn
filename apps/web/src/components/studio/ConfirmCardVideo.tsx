@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { FilterMenu } from "@/components/ui/FilterMenu";
-import { cx } from "@/components/ui/classes";
+import { cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import type { TopicOption } from "@/data/topics";
 import {
@@ -227,7 +227,7 @@ export function ConfirmCardVideo({
               </p>
             )}
             {holder !== null && (
-              <PanelLink href={holderHref(holder)} scroll={false} className="w-fit text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+              <PanelLink href={holderHref(holder)} scroll={false} className={linkClasses({ size: "sm", className: "w-fit" })}>
                 Open that job
               </PanelLink>
             )}
@@ -248,7 +248,7 @@ export function ConfirmCardVideo({
         <Reveal open={status === "drawn" && jobHref !== null}>
           <div className="mt-3.5 border-t border-hair pt-3">
             {jobHref !== null && (
-              <PanelLink href={jobHref} scroll={false} className="text-[13px] font-medium text-accent-text underline-offset-4 hover:underline">
+              <PanelLink href={jobHref} scroll={false} className={linkClasses({ size: "sm" })}>
                 {madeLine("video", jobRunning)}. Open the job
               </PanelLink>
             )}

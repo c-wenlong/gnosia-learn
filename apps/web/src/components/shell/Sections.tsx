@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
 import type { HistorySearch } from "@/components/studio/history-search";
+import { TextLink } from "@/components/ui/TextLink";
 import { cx, FIELD_TEXT } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
@@ -196,14 +197,9 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
             {/* Whenever there is more, even with every row on screen pinned. */}
             {merged.more && (
               <div inert={rail} className={cx("px-0.5 pt-1", FADE, rail ? "opacity-0" : FADE_IN)}>
-                <button
-                  type="button"
-                  onClick={() => void showOlder()}
-                  disabled={loadingOlder}
-                  className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
-                >
+                <TextLink onClick={() => void showOlder()} pending={loadingOlder} size="sm" className="px-1.5 py-1">
                   {loadingOlder ? "Reading older rows…" : "Show older"}
-                </button>
+                </TextLink>
                 {olderError !== null && (
                   <p role="alert" className="px-1.5 text-[12px] text-danger">
                     {olderError}
@@ -340,7 +336,8 @@ function CoursesSection({
                     className={cx(
                       "absolute inset-0 opacity-0 transition-[opacity,rotate] duration-200 ease-soft motion-reduce:transition-none",
                       !rail && "group-hover/course:opacity-100 group-focus-visible/course:opacity-100",
-                      unfolded && "rotate-90",
+                      // The kit's chevron points down: to the right while folded.
+                      unfolded ? "rotate-0" : "-rotate-90",
                     )}
                   />
                 </span>

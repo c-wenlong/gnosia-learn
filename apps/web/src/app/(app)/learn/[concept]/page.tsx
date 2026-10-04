@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import type { EmbedResolution } from "@/components/NoteProse";
@@ -7,8 +6,10 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { TextLink } from "@/components/ui/TextLink";
 import { NoteAndSources } from "@/components/workspace/NoteAndSources";
 import { StudioCards, type StudioAsset } from "@/components/workspace/StudioCards";
+import { dueRecall } from "@/lib/tutor-check";
 import { TutorChat } from "@/components/workspace/TutorChat";
 import { WorkspacePanels } from "@/components/workspace/WorkspacePanels";
 import { buildConceptSessionContext, tutorStyleLabel } from "@/lib/agent/prompt";
@@ -74,6 +75,11 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   const session = buildConceptSessionContext(toConceptPromptInput(w), { style });
   const timeZone = appTimeZone();
   const nextReview = w.review ? dueLabel(w.review.due, new Date(), timeZone).label : null;
+  // R3 of docs/proposals/recall-in-chat.md: a due card opens the tutor on a
+  // recall question, the note's first check when there is one. The due date
+  // is the only trigger, read here per request, so a recorded answer that
+  // reschedules the card turns it off on the next refresh.
+  const recall = dueRecall(w.review, w.checks, new Date());
 
   // Pictures: an asset row's thumbnail and the note's `![[embeds]]`, decided
   // on the server exactly as the library decides them, per row, so neither
@@ -139,13 +145,9 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
         tutorAside={
           // The style the tutor is told to use (hi-fi 04's "Learning guide ·
           // concise"), linking to where it is changed.
-          <Link
-            href="/settings?tab=tutor"
-            title="Tutor style, set in Settings"
-            className="rounded-sm text-[12px] text-text3 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
+          <TextLink href="/settings?tab=tutor" title="Tutor style, set in Settings" tone="muted" size="xs" weight="normal">
             {tutorStyleLabel(style)}
-          </Link>
+          </TextLink>
         }
         tutor={
           <TutorChat
@@ -156,6 +158,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
             initialDraft={ask}
             // D67: only a deployment with a studio asks it anything.
             studio={studioEnabled()}
+            recall={recall}
           />
         }
         initialPanel={ask === undefined ? undefined : "tutor"}

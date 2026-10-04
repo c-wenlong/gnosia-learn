@@ -32,6 +32,7 @@ import {
   type MentionValue,
 } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
+import { TextLink } from "@/components/ui/TextLink";
 import type { TopicOption } from "@/data/topics";
 import {
   askAgainValue,
@@ -1028,13 +1029,7 @@ export function DraftPanel({
             {waiting.map((item) => (
               <p key={item.kind} className="flex flex-wrap items-center gap-x-3 text-[12px] leading-4 text-text2">
                 <span className="font-semibold">{waitingLine(item.kind)}</span>
-                <button
-                  type="button"
-                  onClick={() => void stopWaitingFor(item.kind)}
-                  className="font-medium text-accent-text underline-offset-4 hover:underline"
-                >
-                  Stop waiting
-                </button>
+                <TextLink onClick={() => void stopWaitingFor(item.kind)}>Stop waiting</TextLink>
               </p>
             ))}
             {waitError !== null && (
@@ -1063,18 +1058,18 @@ export function DraftPanel({
           {confirmStartOver ? (
             <span className={cx("flex items-center gap-2", FADE_IN)}>
               <span className="text-text2">Close this conversation for good?</span>
-              <button type="button" onClick={() => void startOver()} className="font-medium text-danger underline-offset-4 hover:underline">
+              <TextLink onClick={() => void startOver()} tone="danger">
                 Start over
-              </button>
-              <button type="button" onClick={() => setConfirmStartOver(false)} className="underline-offset-4 hover:text-text2 hover:underline">
+              </TextLink>
+              <TextLink onClick={() => setConfirmStartOver(false)} tone="muted" weight="normal">
                 Keep it
-              </button>
+              </TextLink>
             </span>
           ) : (
             view.transcript.length > 0 && (
-              <button type="button" onClick={() => setConfirmStartOver(true)} className={cx("underline-offset-4 hover:text-text2 hover:underline", FADE_IN)}>
+              <TextLink onClick={() => setConfirmStartOver(true)} tone="muted" weight="normal" className={FADE_IN}>
                 Start over
-              </button>
+              </TextLink>
             )
           )}
           {downReason !== null && <span className="text-danger">The runner stopped answering: {downReason}</span>}
@@ -1323,7 +1318,7 @@ function Entry({
                 disabled={reason !== null}
                 title={reason ?? undefined}
                 aria-label={suggestionName(kind)}
-                className={chipClasses({ size: "sm", className: "disabled:cursor-not-allowed disabled:opacity-50" })}
+                className={chipClasses({ size: "sm" })}
               >
                 <Glyph name={kind} size={16} className="text-accent-text" />
                 {KIND_NAME[kind]}
@@ -1503,9 +1498,7 @@ function BackBar({ href }: { href: string }) {
         scroll={false}
         className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium text-text2 transition-colors hover:bg-surface hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <svg aria-hidden viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 5l-5 5 5 5" />
-        </svg>
+        <Glyph name="previous" size={16} />
         From your conversation
       </PanelLink>
     </div>

@@ -19,6 +19,7 @@ export { FeedbackBar } from "./FeedbackBar";
 export { FilterMenu } from "./FilterMenu";
 export { FormRow, type FormRowField } from "./FormRow";
 export { Glyph, type GlyphName } from "./Glyph";
+export { IconButton, type IconButtonProps } from "./IconButton";
 export { Input } from "./Input";
 export { MasteryDot } from "./MasteryDot";
 export { Panel } from "./Panel";
@@ -29,7 +30,31 @@ export { SearchField } from "./SearchField";
 export { Select } from "./Select";
 export { StatTile, type StatTone } from "./StatTile";
 export { Textarea } from "./Textarea";
-export { buttonClasses, cardClasses, chipClasses, cx, inputClasses, LABEL, textareaClasses } from "./classes";
-export type { ButtonSize, ButtonVariant, ChipSize, InputSize } from "./classes";
+export { TextLink, type TextLinkProps } from "./TextLink";
+export {
+  buttonClasses,
+  cardClasses,
+  chipClasses,
+  cx,
+  FOCUS,
+  iconButtonClasses,
+  inputClasses,
+  LABEL,
+  linkClasses,
+  textareaClasses,
+} from "./classes";
+export type {
+  ButtonSize,
+  ButtonVariant,
+  ChipSize,
+  ChipTone,
+  IconButtonShape,
+  IconButtonSize,
+  IconButtonTone,
+  InputSize,
+  LinkSize,
+  LinkTone,
+  LinkWeight,
+} from "./classes";
 export type { FilterOption } from "./filter-menu";
 export { tabKeyIndex, type RovingOrientation } from "./roving";
