@@ -294,6 +294,12 @@ export interface VideoToolRowOptions {
    * render deleted. Absent means none, which checks nothing.
    */
   storedPaths?: readonly string[];
+  /**
+   * The data root the last import of this tool recorded. When the report
+   * names another one, a stored file missing from the new root and still in
+   * this one refuses the run. Absent or null checks nothing.
+   */
+  recordedOutRoot?: string | null;
 }
 
 /**
@@ -316,6 +322,38 @@ function emptyDataRoot(tool: VideoTool, root: string, outRoot: string, stored: r
       `rows name (${first} is one), so this import would delete every one of them. The data root is ` +
       `${tool.homeEnv}, which falls back to the checkout when it is unset: set it, in the environment or ` +
       `in ${path.join(root, ".env")}, to where the renders are, and run again.`,
+  );
+}
+
+/**
+ * The refusal for a data root that moved from the one the last import
+ * recorded while stored files are still in the old one and not the new, or
+ * null. `emptyDataRoot` lets through a root holding even one stored file,
+ * such as a checkout left with an old render from before its `*_HOME` was
+ * set; the files left behind are what this catches. A file gone from both
+ * roots is pruned, so moving the data root and deleting a render in one step
+ * still imports.
+ */
+function movedDataRoot(
+  tool: VideoTool,
+  root: string,
+  outRoot: string,
+  recorded: string | null,
+  stored: readonly string[],
+): IndexError | null {
+  if (recorded === null || path.resolve(recorded) === path.resolve(outRoot)) return null;
+  const left = stored
+    .filter((file) => !existsSync(path.join(outRoot, file)) && existsSync(path.join(recorded, file)))
+    .sort();
+  if (left.length === 0) return null;
+  const first = path.join(recorded, left[0] as string);
+  const count = left.length === 1 ? "1 of the files" : `${left.length} of the files`;
+  return new IndexError(
+    `${tool.name}'s data root moved from ${recorded}, the last import's, to ${outRoot}, and ${count} ` +
+      `this owner's ${tool.name} rows name ${left.length === 1 ? "is" : "are"} under the old one and not the new ` +
+      `(${first} is one), so this import would delete their rows. Set ${tool.homeEnv}, in the environment or ` +
+      `in ${path.join(root, ".env")}, back to ${recorded}, or finish moving the renders to ${outRoot}, ` +
+      `and run again.`,
   );
 }
 
@@ -454,8 +492,10 @@ export async function buildToolRows(
   // The fallback is for a report from a CLI predating the field; it is also
   // what the value would be anyway on a checkout with no data root configured.
   const outRoot = str(report.outRoot) ?? root;
-  const empty = emptyDataRoot(tool, root, outRoot, options.storedPaths ?? []);
-  if (empty !== null) throw empty;
+  const wrong =
+    emptyDataRoot(tool, root, outRoot, options.storedPaths ?? []) ??
+    movedDataRoot(tool, root, outRoot, options.recordedOutRoot ?? null, options.storedPaths ?? []);
+  if (wrong !== null) throw wrong;
 
   let videos = 0;
   let sidecars = 0;
@@ -619,6 +659,7 @@ export function declaredToolIndexer(
         store: context.blobsRequired === true,
         knownConcepts: await context.knownConcepts(),
         storedPaths: await context.storedAssetPaths(tool.name),
+        recordedOutRoot: await context.recordedOutRoot(tool.name),
         ...(context.owner === undefined ? {} : { owner: context.owner }),
       });
     },
