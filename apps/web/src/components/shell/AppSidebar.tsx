@@ -13,7 +13,8 @@ import { activeDestination, DESTINATIONS, STUDIO_DESTINATION } from "@/lib/nav";
 import mark from "../../../public/brand/mark.png";
 import { AccountMenu } from "./AccountMenu";
 import { ChatHistory } from "./ChatHistory";
-import { SearchField, SearchIcon } from "./ChatSearch";
+import { SearchField } from "./ChatSearch";
+import { FADE, FADE_IN } from "./motion";
 import { NavIcon } from "./NavIcon";
 import { useShell } from "./shell-context";
 
@@ -93,7 +94,13 @@ export function AppSidebar() {
   useEffect(() => {
     if (!peeking) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPeek(false);
+      if (event.key !== "Escape") return;
+      // What had focus in the slid-out sidebar is about to be faded out or made
+      // inert, so focus would fall to the document: it goes to the fold, which
+      // is on the rail too.
+      const inside = room.current?.contains(document.activeElement) === true;
+      setPeek(false);
+      if (inside) requestAnimationFrame(() => room.current?.querySelector<HTMLElement>("[data-fold]")?.focus());
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -113,7 +120,10 @@ export function AppSidebar() {
       }
       // Tab stays inside the drawer: the page behind it is covered.
       if (event.key !== "Tab" || panel.current === null) return;
-      const stops = [...panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled])")];
+      // Not what is inert (the closed account menu, mounted so it can fade).
+      const stops = [...panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled])")].filter(
+        (stop) => stop.closest("[inert]") === null,
+      );
       const first = stops[0];
       const last = stops.at(-1);
       if (first === undefined || last === undefined) return;
@@ -142,26 +152,32 @@ export function AppSidebar() {
 
   return (
     <>
-      {drawer && (
-        <button
-          type="button"
-          aria-label="Close the sidebar"
-          onClick={pick}
-          className="fixed inset-0 z-40 bg-page/60 backdrop-blur-[2px] md:hidden"
-        />
-      )}
+      {/* Mounted on a phone so it can fade; closed, it takes no clicks and no focus. */}
+      <button
+        type="button"
+        aria-label="Close the sidebar"
+        aria-hidden={drawer ? undefined : true}
+        tabIndex={drawer ? undefined : -1}
+        onClick={pick}
+        className={cx(
+          "fixed inset-0 z-40 bg-page/60 backdrop-blur-[2px] transition-opacity duration-300 ease-soft motion-reduce:transition-none md:hidden",
+          drawer ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      />
       {/* The sidebar's room beside the page, from 768px up: 260px open, 60px
           folded, whether or not the folded one is slid out over the page. The
           drawer takes no room; it is fixed over the page. */}
       <div
         ref={room}
         className={cx(
-          drawer
-            ? "contents"
-            : // z-30: a sticky box is a layer of its own, so the slid-out sidebar
-              // inside it only sits over the page if the box does.
-              "sticky top-0 z-30 hidden h-dvh shrink-0 self-start md:block md:group-has-[[data-layout=focus]]/shell:hidden",
-          !drawer && (collapsed ? "w-[60px]" : "w-[260px]"),
+          // A phone gives it no room: the drawer is fixed over the page.
+          "max-md:contents",
+          // z-30: a sticky box is a layer of its own, so the slid-out sidebar
+          // inside it only sits over the page if the box does. The room's width
+          // animates with the fold, so the page beside it eases over too.
+          "sticky top-0 z-30 h-dvh shrink-0 self-start md:group-has-[[data-layout=focus]]/shell:hidden",
+          "transition-[width] duration-200 ease-soft motion-reduce:transition-none",
+          collapsed ? "w-[60px]" : "w-[260px]",
         )}
         onPointerEnter={(event) => {
           if (collapsed && event.pointerType === "mouse") peekAfter(true, 120);
@@ -190,53 +206,91 @@ export function AppSidebar() {
           aria-label="Primary"
           aria-modal={drawer ? true : undefined}
           role={drawer ? "dialog" : undefined}
+          // Which of its four shapes it is in, for tests and styles that would
+          // otherwise have to read it back out of the classes.
+          data-state={drawer ? "drawer" : peeking ? "peek" : rail ? "rail" : "open"}
           className={cx(
-            "flex flex-col border-r border-hair bg-surface",
+            // No overflow clipping on the nav itself: the account menu opens past its
+            // edge on the rail. Each part clips its own labels instead.
+            "flex flex-col border-r border-hair bg-surface motion-reduce:transition-none",
+            // A phone: off the left edge until the drawer opens, then slid in.
+            // `invisible` once out, so nothing in it takes focus, and only
+            // once out: visibility waits for the slide to finish.
+            "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[min(85vw,300px)]",
+            "max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)]",
+            // `translate`, not `transform`: Tailwind 4 moves things with the translate property.
+            // Visibility rides the transition only on the way out: on the way in
+            // it would still be hidden on the first frame, and the focus the
+            // drawer moves to its first link on opening would not land.
+            "max-md:duration-300 max-md:ease-soft",
             drawer
-              ? "fixed inset-y-0 left-0 z-50 w-[min(85vw,300px)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-xl"
-              : peeking
-                ? "absolute inset-y-0 left-0 z-40 w-[260px] shadow-xl"
-                : "h-full w-full",
+              ? "max-md:translate-x-0 max-md:shadow-xl max-md:transition-[translate,box-shadow]"
+              : "max-md:invisible max-md:-translate-x-full max-md:transition-[translate,visibility,box-shadow]",
+            // From 768px up: over its room, as wide as the room, or slid out to
+            // 260px over the page while folded. The width is what animates.
+            "md:absolute md:inset-y-0 md:left-0 md:transition-[width,box-shadow] md:duration-200 md:ease-soft",
+            rail ? "md:w-[60px]" : "md:w-[260px]",
+            peeking ? "md:shadow-xl" : "md:shadow-none",
           )}
         >
-          <div className={cx("flex h-14 shrink-0 items-center px-2", rail ? "justify-center" : "justify-between pl-3.5")}>
-            {!rail && (
-              <Link
-                href={studio ? STUDIO_DESTINATION.href : "/home"}
-                onClick={pick}
-                aria-label={studio ? "Gnosia, Studio" : "Gnosia, Home"}
-                className="rounded-sm text-[15px] text-text focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
-              >
-                <GnosiaWordmark />
-              </Link>
-            )}
-            {drawer ? (
-              <IconButton label="Close the sidebar" onClick={pick}>
-                <path d="M5 5l10 10M15 5 5 15" />
-              </IconButton>
-            ) : (
-              <FoldButton rail={rail} peeking={peeking} onPress={stopPeek} />
-            )}
+          {/* The wordmark at the left and the fold at the right, both placed
+              absolutely so neither moves while the width changes: the fold sits
+              12px in from the right edge, which on the 60px rail is its centre. */}
+          <div className="relative h-14 shrink-0 overflow-hidden">
+            <Link
+              href={studio ? STUDIO_DESTINATION.href : "/home"}
+              onClick={pick}
+              inert={rail}
+              aria-label={studio ? "Gnosia, Studio" : "Gnosia, Home"}
+              className={cx(
+                "absolute top-1/2 left-3.5 -translate-y-1/2 rounded-sm text-[15px] whitespace-nowrap text-text",
+                "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent",
+                FADE,
+                rail ? "opacity-0" : FADE_IN,
+              )}
+            >
+              <GnosiaWordmark />
+            </Link>
+            <div className="absolute top-1/2 right-3 -translate-y-1/2">
+              {drawer ? (
+                <IconButton label="Close the sidebar" onClick={pick}>
+                  <path d="M5 5l10 10M15 5 5 15" />
+                </IconButton>
+              ) : (
+                <FoldButton rail={rail} peeking={peeking} onPress={stopPeek} />
+              )}
+            </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3">
+          {/* 11px in from each side: on the 60px rail that centres a 38px item,
+              and each item's 10px left padding puts its icon in the same place
+              open or folded, so only the labels appear and go. */}
+          <div className={cx("min-h-0 flex-1 overflow-x-hidden px-[11px] pb-3", rail ? "overflow-y-hidden" : "overflow-y-auto")}>
             <ul className="flex flex-col gap-0.5">
               {studio && (
                 <li>
-                  <NewChatLink onPick={pick} className={item(newChatOn, rail)} current={newChatOn} label={rail ? "New chat" : undefined}>
+                  <NewChatLink onPick={pick} className={item(newChatOn)} current={newChatOn} label={rail ? "New chat" : undefined}>
                     <ComposeIcon />
                     <Label rail={rail}>New chat</Label>
                   </NewChatLink>
                 </li>
               )}
               {studio && (
-                <li>
-                  {rail ? (
-                    <button type="button" onClick={openSearch} aria-label="Search conversations" title="Search conversations" className={item(false, true)}>
-                      <SearchIcon />
-                    </button>
-                  ) : (
-                    <SearchField search={search} inputRef={searchField} />
+                <li className="relative">
+                  {/* The field stays, narrowed to its icon on the rail, so it
+                      widens with the sidebar rather than swapping in. On the
+                      rail a button over it opens the sidebar and focuses it. */}
+                  <div inert={rail}>
+                    <SearchField search={search} inputRef={searchField} compact={rail} />
+                  </div>
+                  {rail && (
+                    <button
+                      type="button"
+                      onClick={openSearch}
+                      aria-label="Search conversations"
+                      title="Search conversations"
+                      className="absolute inset-0 rounded-lg transition-colors hover:bg-surface2/60 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
+                    />
                   )}
                 </li>
               )}
@@ -250,7 +304,7 @@ export function AppSidebar() {
                       aria-current={on ? "page" : undefined}
                       aria-label={rail ? d.label : undefined}
                       title={rail ? d.label : undefined}
-                      className={item(on, rail)}
+                      className={item(on)}
                     >
                       <NavIcon name={d.key} className="size-[18px] shrink-0 text-text2" />
                       <Label rail={rail}>{d.label}</Label>
@@ -263,13 +317,13 @@ export function AppSidebar() {
             {/* Hidden on the rail rather than unmounted, so it keeps reading
                 while folded and is current the moment it unfolds. */}
             {studio && (
-              <div hidden={rail} className="mt-5">
+              <div inert={rail} className={cx("mt-5 min-w-[238px]", FADE, rail ? "opacity-0" : FADE_IN)}>
                 <ChatHistory onPick={pick} search={search} />
               </div>
             )}
           </div>
 
-          <div className="shrink-0 border-t border-hair p-2">
+          <div className="shrink-0 border-t border-hair px-[11px] py-2">
             <AccountMenu collapsed={rail} onPick={pick} />
           </div>
         </nav>
@@ -278,17 +332,17 @@ export function AppSidebar() {
   );
 }
 
-function item(on: boolean, rail: boolean): string {
+function item(on: boolean): string {
   return cx(
-    "flex h-10 w-full items-center gap-2.5 rounded-lg text-[14px] text-text transition-colors",
+    "flex h-10 w-full items-center gap-2.5 overflow-hidden rounded-lg px-2.5 text-[14px] text-text transition-colors",
     "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-    rail ? "justify-center px-0" : "px-2.5",
     on ? "bg-surface2 font-medium" : "hover:bg-surface2",
   );
 }
 
+/** A destination's name: always there, faded out on the rail, where the link's own label names it. */
 function Label({ rail, children }: { rail: boolean; children: ReactNode }) {
-  return rail ? <span className="sr-only">{children}</span> : <span className="min-w-0 flex-1 truncate">{children}</span>;
+  return <span className={cx("min-w-0 flex-1 whitespace-nowrap", FADE, rail ? "opacity-0" : FADE_IN)}>{children}</span>;
 }
 
 /**
@@ -346,6 +400,7 @@ function FoldButton({ rail, peeking, onPress }: { rail: boolean; peeking: boolea
       type="button"
       aria-label={label}
       title={label}
+      data-fold=""
       onClick={() => {
         onPress();
         shell.setCollapsed(!rail && !peeking);
@@ -355,18 +410,22 @@ function FoldButton({ rail, peeking, onPress }: { rail: boolean; peeking: boolea
         "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
       )}
     >
-      {rail && (
-        <Image
-          src={mark}
-          alt=""
-          draggable={false}
-          className="size-7 group-hover/fold:hidden group-focus-visible/fold:hidden"
-        />
-      )}
+      {/* The rail's top is the mark, which gives way to the fold's icon on a
+          hover or focus. Both stay mounted and cross-fade. */}
+      <Image
+        src={mark}
+        alt=""
+        draggable={false}
+        className={cx(
+          "absolute size-7",
+          FADE,
+          rail ? "opacity-100 group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0" : "opacity-0",
+        )}
+      />
       <svg
         aria-hidden
         viewBox="0 0 20 20"
-        className={cx("size-[18px]", rail && "hidden group-hover/fold:block group-focus-visible/fold:block")}
+        className={cx("size-[18px]", FADE, rail ? "opacity-0 group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100" : "opacity-100")}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.7"
