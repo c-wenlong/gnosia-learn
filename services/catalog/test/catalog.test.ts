@@ -34,7 +34,7 @@ import { runStatus } from "../src/commands/status";
 import { REPO_ROOT } from "../src/env";
 import { applyMigrations } from "../src/migrations";
 import { partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { createScratchDatabase, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
 /**
@@ -85,8 +85,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
   let noManimkc: string;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     // The commands connect through DATABASE_URL, which is the same path the
     // CLI takes. Pointing it at the scratch database exercises that path
     // rather than a test-only one.
@@ -289,7 +288,10 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       // The seed's one course, cut to the two modules under its topics: three
       // of its five rows list concepts (m1-t1 and m3-t1, m3-t2), and one of
       // its four readings (the ReAct paper) is placed on a lesson.
-      expect(status.coverage).toEqual([{ course: "cp4284", items: 5, withConcepts: 3, readings: 4, readingsOnLessons: 1 }]);
+      // Its five rows teach eight concepts, three of whose notes hold checks.
+      expect(status.coverage).toEqual([
+        { course: "cp4284", items: 5, withConcepts: 3, readings: 4, readingsOnLessons: 1, concepts: 8, conceptsWithChecks: 3 },
+      ]);
     });
 
     it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
@@ -480,6 +482,8 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
           withConcepts: 1,
           readings: 2,
           readingsOnLessons: 0,
+          concepts: 1,
+          conceptsWithChecks: 1,
         });
 
         const tree = await runLs("cp4284");
@@ -527,6 +531,8 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
           withConcepts: 0,
           readings: 4,
           readingsOnLessons: 0,
+          concepts: 0,
+          conceptsWithChecks: 0,
         });
       } finally {
         await scratch.db.execute(
@@ -577,8 +583,7 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
   const checked = new Date("2026-09-13T00:02:57Z");
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     previousUrl = process.env["DATABASE_URL"];
     const url = new URL(previousUrl ?? "postgres://localhost:5432/self_learn");
     url.pathname = `/${scratch.name}`;

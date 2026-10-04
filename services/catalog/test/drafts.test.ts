@@ -7,9 +7,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { draftRow, runDraftDelete, runDraftList, runDraftShow, runDraftUpsert, type DraftDocument } from "../src/commands/draft";
 import { runEnqueue, runShow } from "../src/commands/job";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
 
 /**
  * `catalog draft` and `job.draft_id` (docs/STUDIO-CHAT-FIRST.md, phase 1).
@@ -28,8 +27,7 @@ describe.skipIf(!reachable.ok)("catalog draft", () => {
   let fixture: Fixture;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     previousUrl = process.env["DATABASE_URL"];
     process.env["DATABASE_URL"] = scratch.url;
     fixture = await makeFixture();

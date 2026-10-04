@@ -13,9 +13,8 @@ import { runParity } from "../src/commands/parity";
 import { CourseWriteError, exportCourse, importCourse } from "../src/content/courses";
 import { archiveItem, purgeItem, restoreItem } from "../src/content/items";
 import { type CatalogDatabase, connect } from "../src/db";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, sqlstate, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
 
 /**
  * Track B's writers (docs/CONTENT-MIGRATION.md): `catalog course import`,
@@ -186,8 +185,7 @@ describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs
   };
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await tree();
     // `stray` is filed under gamma, which no module uses: the note for the
     // wrong-topic refusal below.

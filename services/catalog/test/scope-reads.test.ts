@@ -35,7 +35,6 @@ import { noteText, readNoteRows } from "../src/content/note-rows";
 import { cliScope, scopedRead } from "../src/content/scope";
 import { connect } from "../src/db";
 import { listLogIds } from "../src/content/session-logs";
-import { applyMigrations } from "../src/migrations";
 import {
   dueReviews,
   ensureLearner,
@@ -47,7 +46,7 @@ import {
   StateError,
   upsertRecap,
 } from "../src/state";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { ITEMS, seedContent, TOPIC_SLUG } from "./state-fixture";
 
 /**
@@ -72,9 +71,8 @@ describe.skipIf(!reachable.ok)("reads that crossed owners", () => {
   let work: string;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
+    scratch = await migratedScratchDatabase();
     const db = scratch.db;
-    await applyMigrations(db);
     await seedContent(db);
     await db.update(concept).set({ body: "A note.\n" });
     await ensureLearner(db, LOCAL_LEARNER_ID);

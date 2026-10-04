@@ -10,3 +10,14 @@ export function focusIsUnclaimed(active: Element | null): boolean {
   if (active instanceof HTMLDialogElement) return true;
   return active.hasAttribute("data-dialog-close");
 }
+
+/**
+ * Whether a panel's composer, arriving late, may still take focus: focus is
+ * unclaimed, or it has not moved from where it was when the panel opened (a
+ * history row or New chat stays focused after the press that opened the
+ * conversation). A person who has since clicked or tabbed somewhere else, such
+ * as the sidebar's search, keeps it.
+ */
+export function focusIsStill(active: Element | null, openedWith: Element | null): boolean {
+  return focusIsUnclaimed(active) || (openedWith !== null && active === openedWith);
+}

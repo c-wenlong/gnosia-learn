@@ -22,6 +22,7 @@ import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { type HeldMigration, heldMigrations, isContractMigration, migrationStatus } from "../migrations";
 import { bytewise } from "../sql-order";
+import { parseChecks } from "../../../../scripts/learn/lib/markdown.mjs";
 
 /** One row per source, whether or not it has ever been indexed. */
 export interface SourceStatus {
@@ -67,6 +68,10 @@ export interface CourseCoverage {
   readings: number;
   /** How many of those name at least one live lesson in `lessons:`; the rest are module material. */
   readingsOnLessons: number;
+  /** The distinct concepts the course's live lessons teach. */
+  concepts: number;
+  /** How many of those notes hold at least one check, which the week check asks from. */
+  conceptsWithChecks: number;
 }
 
 export interface StatusResult {
@@ -242,7 +247,40 @@ async function courseCoverage(db: Db): Promise<CourseCoverage[]> {
     .groupBy(course.id, course.position)
     .orderBy(asc(course.position), asc(bytewise(course.id)));
   const placed = await readingCoverage(db);
-  return rows.map((row) => ({ ...row, readings: 0, readingsOnLessons: 0, ...placed.get(row.course) }));
+  const checked = await checkCoverage(db);
+  return rows.map((row) => ({
+    ...row,
+    readings: 0,
+    readingsOnLessons: 0,
+    ...placed.get(row.course),
+    concepts: 0,
+    conceptsWithChecks: 0,
+    ...checked.get(row.course),
+  }));
+}
+
+/**
+ * Per course, the distinct concepts its live lessons teach and how many of
+ * their notes hold a check, counted with the pipeline's own `parseChecks`
+ * (phase 6 of docs/proposals/module-learning-path.md: the week check asks
+ * from those checks, and the tutor writes a question for a note with none).
+ */
+async function checkCoverage(db: Db): Promise<Map<string, { concepts: number; conceptsWithChecks: number }>> {
+  const { rows } = await db.execute<{ course: string; slug: string; body: string | null }>(sql`
+    select distinct m.parent_id as course, c.slug, c.body
+    from concept_curriculum_item l
+    join curriculum_item i on i.id = l.curriculum_item_id and i.archived_at is null
+    join collection m on m.id = i.collection_id and m.kind = 'module' and m.archived_at is null
+    join concept c on c.slug = l.concept_slug
+    where m.parent_id is not null`);
+  const out = new Map<string, { concepts: number; conceptsWithChecks: number }>();
+  for (const row of rows) {
+    const entry = out.get(row.course) ?? { concepts: 0, conceptsWithChecks: 0 };
+    entry.concepts += 1;
+    if ((parseChecks(row.body ?? "") as unknown[]).length > 0) entry.conceptsWithChecks += 1;
+    out.set(row.course, entry);
+  }
+  return out;
 }
 
 /**
@@ -420,7 +458,8 @@ export function formatStatus(result: StatusResult): string {
     lines.push(
       `  ${c.course.padEnd(courseWidth)}  ${String(c.withConcepts).padStart(3)} of ` +
         `${String(c.items).padStart(3)} items have concepts, ` +
-        `${String(c.readingsOnLessons).padStart(3)} of ${String(c.readings).padStart(3)} readings are on a lesson`,
+        `${String(c.readingsOnLessons).padStart(3)} of ${String(c.readings).padStart(3)} readings are on a lesson, ` +
+        `${String(c.conceptsWithChecks).padStart(3)} of ${String(c.concepts).padStart(3)} concepts have checks`,
     );
   }
   return lines.join("\n");

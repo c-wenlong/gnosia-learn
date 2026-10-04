@@ -9,8 +9,7 @@ import { runExport } from "../src/commands/export";
 import { runImportCommand } from "../src/commands/index-command";
 import type { ExportSubset } from "../src/content/subset";
 import { REPO_ROOT } from "../src/env";
-import { applyMigrations } from "../src/migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `catalog export --subset`, which is how `seed/` is cut (seed/README.md).
@@ -42,8 +41,7 @@ describe.skipIf(!reachable.ok)("catalog export --subset", () => {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     process.env["DATABASE_URL"] = scratch.url;
     out = await mkdtemp(path.join(tmpdir(), "catalog-subset-"));
     // No manimkc CLI: the seed maps no topic folder.

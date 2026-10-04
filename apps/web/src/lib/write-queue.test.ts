@@ -71,6 +71,39 @@ describe("createWriteQueue", () => {
     await flush();
   });
 
+  it("hands a superseded task its own result, and reports only the newest as settled", async () => {
+    const queue = createWriteQueue<string>();
+    const first = deferred<string>();
+    const settled: string[] = [];
+    const superseded: string[] = [];
+
+    queue.run("name", () => first.promise, (r) => settled.push(r), (r) => superseded.push(r));
+    queue.run("name", () => Promise.resolve("second"), (r) => settled.push(r), (r) => superseded.push(r));
+
+    first.resolve("first");
+    await flush();
+    expect(superseded).toEqual(["first"]);
+    expect(settled).toEqual(["second"]);
+  });
+
+  it("hands a barrier its own result once a newer task holds every one of its keys", async () => {
+    const queue = createWriteQueue<string>();
+    const reset = deferred<string>();
+    const settled: string[] = [];
+    const superseded: string[] = [];
+
+    queue.run(["x", "y"], () => reset.promise, (r) => settled.push(r), (r) => superseded.push(r));
+    queue.run("x", () => Promise.resolve("tick"), (r) => settled.push(r), (r) => superseded.push(r));
+    queue.run("y", () => Promise.resolve("note"), (r) => settled.push(r), (r) => superseded.push(r));
+
+    reset.resolve("reset");
+    await flush();
+    // Two newer tasks, one per key, and neither is the barrier's to report.
+    expect(superseded).toEqual(["reset"]);
+    expect(settled).toEqual(["tick", "note"]);
+    expect(queue.pending).toBe(0);
+  });
+
   it("does not strand the queue when a task rejects", async () => {
     const queue = createWriteQueue<string>();
     const settled: string[] = [];

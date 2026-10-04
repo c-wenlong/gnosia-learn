@@ -22,8 +22,8 @@ export interface HostControls {
   settle: (token: number, href: string | null) => boolean;
   /**
    * Go to `href` without a server render when it only opens, closes or swaps
-   * a panel the browser draws (`browserPanelMove`). False when it does not,
-   * and the caller navigates as it would have.
+   * a panel the browser draws, or changes the grid's view (`browserMove`).
+   * False when it does not, and the caller navigates as it would have.
    */
   navigate: (href: string) => boolean;
   /**

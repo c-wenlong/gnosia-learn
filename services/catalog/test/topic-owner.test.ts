@@ -13,10 +13,9 @@ import { conceptsIndexer } from "../src/index/concepts";
 import { tagsIndexer } from "../src/index/tags";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
-import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
 import { makeFixture, note, tagsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `catalog topic ls --owner` and `catalog topic add --owner`: the studio runner
@@ -96,8 +95,7 @@ describe.skipIf(!reachable.ok)("catalog topic ls and add --owner", () => {
   }
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     const lines = ["topics:"];
     for (const t of TOPICS) {

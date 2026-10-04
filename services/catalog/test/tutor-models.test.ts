@@ -2,7 +2,6 @@ import { learner, LOCAL_LEARNER_ID, TUTOR_MODEL_LIMITS, tutorModel } from "@self
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { applyMigrations } from "../src/migrations";
 import {
   addTutorModel,
   moveTutorModel,
@@ -11,7 +10,7 @@ import {
   type StoredTutorModel,
   TutorModelError,
 } from "../src/state";
-import { createScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
 
 /**
  * `tutor_model` (docs/TUTOR-MODELS.md): the owner's ordered model chain.
@@ -33,8 +32,7 @@ describe.skipIf(!reachable.ok)("tutor_model", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     await scratch.db.insert(learner).values([{ id: LOCAL_LEARNER_ID }, { id: OTHER }]).onConflictDoNothing();
   }, 60_000);
 

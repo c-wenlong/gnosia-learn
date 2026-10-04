@@ -18,9 +18,8 @@ import { sessionsIndexer } from "../src/index/sessions";
 import { tagsIndexer } from "../src/index/tags";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
-import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `learn concept add --item` with the two types it touches owned by different
@@ -56,8 +55,7 @@ interface Mixed {
 
 /** A fixture imported source by source, then `owned` flipped, as on flip day. */
 async function mixed(owned: "courses" | "concepts"): Promise<Mixed> {
-  const scratch = await createScratchDatabase();
-  await applyMigrations(scratch.db);
+  const scratch = await migratedScratchDatabase();
   const fixture = await makeFixture();
   await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha"], courses: ["xx1000-m1"] }]));
   await fixture.write("content/tags.yaml", tagsYaml(["testing"]));

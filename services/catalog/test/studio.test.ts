@@ -39,7 +39,7 @@ import { applyMigrations, migrationStatus } from "../src/migrations";
 import { endSession, ensureSession } from "../src/state/sessions";
 import { makeFixture, topicsYaml, type Fixture } from "./fixture-tree";
 import { partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, markImported, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
+import { createScratchDatabase, markImported, migratedScratchDatabase, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
 
 /**
  * The studio schema, the job lifecycle, and accept over what
@@ -78,8 +78,7 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
   let fixture: Fixture;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     // The commands connect through DATABASE_URL, the same path the CLI takes.
     previousUrl = process.env["DATABASE_URL"];
     process.env["DATABASE_URL"] = scratch.url;
@@ -633,8 +632,7 @@ describe.skipIf(!reachable.ok)("accept over a landed diagram", () => {
   let store: BlobStore;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     previousUrl = process.env["DATABASE_URL"];
     process.env["DATABASE_URL"] = scratch.url;
     blobs = await mkdtemp(path.join(tmpdir(), "catalog-studio-blobs-"));

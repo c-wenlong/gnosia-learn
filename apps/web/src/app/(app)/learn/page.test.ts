@@ -26,6 +26,11 @@ vi.mock("@/lib/kb/load", () => ({
   dueConcepts: () => [],
 }));
 
+// The ready highlight reads the owner's recent courses (G5 of docs/proposals/knowledge-map.md).
+const recentCourses = vi.hoisted(() => vi.fn(async () => [] as string[]));
+vi.mock("@/lib/owner", () => ({ currentOwner: async () => "local" }));
+vi.mock("@/lib/recent-courses", () => ({ readRecentCourses: recentCourses }));
+
 async function render(params: Record<string, string> = {}): Promise<string> {
   const { default: LearnPage } = await import("./page");
   return renderToStaticMarkup(await LearnPage({ searchParams: Promise.resolve(params) }));
@@ -82,14 +87,21 @@ describe("/learn", () => {
         ],
       },
     });
+    // The map is the default view (G1 of docs/proposals/knowledge-map.md),
+    // with the frontier concept selected and its panel open.
     const html = await render();
-
-    // The row, its link to the workspace, and the graph card with the frontier
-    // concept selected by default.
-    expect(html).toContain("Alpha");
-    expect(html).toContain('href="/learn/alpha"');
     expect(html).toContain("1 concept · 0 mastered · 1 learning · 0 untouched");
-    expect(html).toContain("Neighbourhood graph of Alpha");
+    expect(html).toContain('aria-label="Concept map, 1 concept in 1 island"');
+    expect(html).toMatch(/data-concept="alpha"[^>]*aria-pressed="true"/);
+    expect(html).toContain('href="/learn/alpha"');
+
+    // The table is one press away, and `view=table` opens it: the row, its link
+    // to the workspace, and the graph card.
+    const table = await render({ view: "table" });
+    expect(table).toContain("Alpha");
+    expect(table).toContain('href="/learn/alpha"');
+    expect(table).toContain("Neighbourhood graph of Alpha");
+    expect(table).not.toContain("Concept map");
   });
 
   it("selects the concept the query string names", async () => {
@@ -125,5 +137,45 @@ describe("/learn", () => {
     expect(html).toContain('aria-label="Concept map, 2 concepts in 1 island"');
     expect(html).toMatch(/data-concept="beta"[^>]*aria-pressed="true"/);
     expect(html).toMatch(/data-concept="alpha"[^>]*aria-pressed="false"/);
+  });
+
+  it("marks the ready concepts of the recent courses on the map, and only those", async () => {
+    const concept = (id: string, topics: string[], requires: string[] = []) => ({
+      id,
+      title: id,
+      summary: "",
+      requires,
+      assumes: [],
+      pL: 0.1,
+      mastery: "gap" as const,
+      observations: 0,
+      correct: 0,
+      lastSeen: null,
+      due: null,
+      lapses: 0,
+      leech: false,
+      topics,
+      domain: null,
+    });
+    loadKnowledgeBase.mockResolvedValue({
+      reachable: true,
+      kb: {
+        indexedAt: null,
+        stats: { total: 3, mastered: 0, learning: 0, untouched: 3 },
+        frontier: [],
+        edges: [{ from: "root", to: "next", kind: "requires" }],
+        // root and next are taught in CP4284's first topic; loose is in no course and serves none.
+        concepts: [concept("root", ["cp4284-m1-t1"]), concept("next", ["cp4284-m1-t1"], ["root"]), concept("loose", [])],
+      },
+    });
+    recentCourses.mockResolvedValueOnce(["cp4284"]);
+    const html = await render({ view: "graph" });
+    expect(html).toMatch(/data-concept="root"[^>]*data-ready="true"/);
+    expect(html).toMatch(/data-concept="next"[^>]*data-ready="false"/);
+    expect(html).toMatch(/data-concept="loose"[^>]*data-ready="false"/);
+
+    // With no recent course, nothing is marked.
+    const none = await render({ view: "graph" });
+    expect(none).not.toMatch(/data-ready="true"/);
   });
 });

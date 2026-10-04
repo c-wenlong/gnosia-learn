@@ -13,7 +13,7 @@ import { runIndex } from "../src/index/run";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { partialMigrations, tagsAfter } from "./partial-migrations";
-import { createScratchDatabase, probe, sqlMessage, sqlstate, type Scratch } from "./scratch-database";
+import { createScratchDatabase, migratedScratchDatabase, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
 
 /**
  * Track C's contract migration (0012): `concept.topic_slug` becomes `NOT
@@ -94,8 +94,7 @@ describe.skipIf(!reachable.ok)("an import that drops a topic its concepts still 
   let fixture: Fixture;
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }, { slug: "beta" }]));
     await fixture.write("learn/concepts/testing/base.md", note({ id: "base" }));
@@ -144,8 +143,7 @@ describe.skipIf(!reachable.ok)("one catalog index that moves a topic's concepts 
   const index = () => runIndex(scratch.db, { repoRoot: fixture.root, manimkcRoot: path.join(fixture.root, "none") });
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await vocabulary([
       { slug: "alpha", concepts: ["base", "spare"], manimkc: ["one/first"] },
@@ -210,8 +208,7 @@ describe.skipIf(!reachable.ok)("a held topic with a relation, and a manimkc path
   const index = () => runIndex(scratch.db, { repoRoot: fixture.root, manimkcRoot: path.join(fixture.root, "none") });
 
   beforeAll(async () => {
-    scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write(
       "content/topics.yaml",

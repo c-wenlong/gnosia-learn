@@ -64,6 +64,13 @@ describe("the (app) layout's motion seed", () => {
     expect(html).not.toContain("data-seed");
   });
 
+  it("keeps the no-JavaScript notice beside the seed", async () => {
+    env.stored = "always";
+    const html = await render();
+    expect(html).toContain("<noscript>");
+    expect(html).toContain("Gnosia needs JavaScript");
+  });
+
   it("writes nothing when the row could not be read", async () => {
     const html = await render();
     expect(html).not.toContain("data-seed");

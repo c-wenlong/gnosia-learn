@@ -28,8 +28,11 @@ import { ProfileError } from "./sandbox";
  * - **Each tool's doctor takes a pair in a small range of its own**, outside
  *   the jobs' range and away from every other doctor's, since the doctors
  *   refresh on their own clocks and may render at the same moment.
- * - Two jobs never run at once (`VIDEO_CONCURRENCY` is one), so the range is
- *   for a port something else on the machine holds, not for sharing.
+ * - Jobs of different tools run at once (`videoConcurrency`), so a pair is
+ *   held from the job's setup until it ends, and another job's setup passes
+ *   over it: a pair is free to the system between renders, and the first
+ *   render may start minutes after setup. The searches run one at a time, so
+ *   two setups at the same moment cannot both find one pair free.
  *
  * A pair that was free at setup can be taken later by another program; the
  * render then fails on that port by name, and each tool's wrapper checks both
@@ -52,12 +55,13 @@ export async function portFree(port: number): Promise<boolean> {
   return (await freeOn(port, "127.0.0.1")) && (await freeOn(port, "::1"));
 }
 
-/** The first even base in `range`, starting at `start` and wrapping, whose pair is free; throws when none is. */
-export async function freePair(range: { first: number; last: number }, start: number = range.first): Promise<number> {
+/** The first even base in `range`, starting at `start` and wrapping, whose pair is free and not in `held`; throws when none is. */
+export async function freePair(range: { first: number; last: number }, start: number = range.first, held: ReadonlySet<number> = new Set()): Promise<number> {
   const count = Math.floor((range.last - range.first) / 2) + 1;
   const first = Math.max(0, Math.min(count - 1, Math.floor((start - range.first) / 2)));
   for (let i = 0; i < count; i += 1) {
     const base = range.first + ((first + i) % count) * 2;
+    if (held.has(base)) continue;
     if ((await portFree(base)) && (await portFree(base + 1))) return base;
   }
   throw new Error(`no free pair of ports from ${range.first} to ${range.last + 1} on this machine, so no Chrome render can be sandboxed`);
@@ -70,9 +74,26 @@ export function jobPortStart(jobId: string): number {
   return JOB_PORTS.first + index * 2;
 }
 
-/** A job's pair: its base, the first free from where its id points. */
+/** The pairs this process has handed to jobs that have not ended, by job id. */
+const held = new Map<string, number>();
+/** The search before this one: each waits for it, so a pair is recorded as held before the next search reads `held`. */
+let searching: Promise<unknown> = Promise.resolve();
+
+/** A job's pair: its base, the first free from where its id points that no other running job holds. Held until `releaseJobPorts`. */
 export function jobPorts(jobId: string): Promise<number> {
-  return freePair(JOB_PORTS, jobPortStart(jobId));
+  const search = searching.then(async () => {
+    const others = new Set([...held].filter(([id]) => id !== jobId).map(([, base]) => base));
+    const base = await freePair(JOB_PORTS, jobPortStart(jobId), others);
+    held.set(jobId, base);
+    return base;
+  });
+  searching = search.catch(() => undefined);
+  return search;
+}
+
+/** The job has ended: its pair is another job's to take. */
+export function releaseJobPorts(jobId: string): void {
+  held.delete(jobId);
 }
 
 /** The ports file a job's setup writes: `{ "base": 47012 }`. Outside every profile's writes, and outside the agent's reach. */

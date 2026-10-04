@@ -17,6 +17,7 @@ import { scaffoldRevideokc } from "../src/video/revideokc/checkout";
 import { renderKey } from "../src/video/revideokc/doctor";
 import { revideokcPaths, revideokcVideoPaths } from "../src/video/revideokc/paths";
 import { freePair, jobPortStart, JOB_PORTS, DOCTOR_PORTS } from "../src/video/revideokc/ports";
+import { jobPorts, releaseJobPorts } from "../src/video/ports";
 import { buildRevideokcProfile, profilePorts, RENDER_SERVICES, revideokcEnv } from "../src/video/revideokc/sandbox";
 import { buildRevideokcSettings } from "../src/video/revideokc/settings";
 import { combinedHash, COMBINED_HASH_JS, currentSourceHash, readSources } from "../src/video/revideokc/source";
@@ -279,6 +280,33 @@ describe("the job's ports", () => {
       expect(next % 2).toBe(0);
     } finally {
       await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it("are held from setup until the job ends, so two jobs running at once never get one pair", async () => {
+    // Two ids whose search starts at the same pair: the case where both
+    // setups would find it free, since neither job's render has bound it yet.
+    const sharingAStart = (): [string, string] => {
+      const seen = new Map<number, string>();
+      for (let i = 0; ; i += 1) {
+        const id = `job-${i}`;
+        const other = seen.get(jobPortStart(id));
+        if (other !== undefined) return [other, id];
+        seen.set(jobPortStart(id), id);
+      }
+    };
+    const [first, second] = sharingAStart();
+    try {
+      const [a, b] = await Promise.all([jobPorts(first), jobPorts(second)]);
+      expect(a).not.toBe(b);
+      // Asked again for one job, the search passes over only the other's pair.
+      expect(await jobPorts(second)).toBe(b);
+      // Once the first job has ended, its pair is the next search's to take.
+      releaseJobPorts(first);
+      expect(await jobPorts(second)).toBe(a);
+    } finally {
+      releaseJobPorts(first);
+      releaseJobPorts(second);
     }
   });
 });
