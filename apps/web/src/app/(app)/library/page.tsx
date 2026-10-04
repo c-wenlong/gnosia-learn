@@ -160,9 +160,8 @@ export default async function LibraryPage({
   // Out of the rows this view could ever show: the standalone ones, or every
   // row when a companion kind is chosen.
   // Favorites keeps the unfiltered page's total even though a starred
-  // companion file can show with it (`filterRows` says why): "2 of 963"
-  // beside a page that says 300 assets unfiltered would read as a different
-  // library.
+  // companion file can show with it (`filterRows` says why); those are
+  // counted after it instead (`companionsShown`).
   const universe = kind !== null && isCompanionKind(kind) ? facets.total : facets.standalone;
   const plural = (n: number) => (n === 1 ? "asset" : "assets");
   const conditions = [
@@ -180,8 +179,13 @@ export default async function LibraryPage({
     (q === null ? "" : `${conditions.length > 0 ? " and" : ""} matches "${q}"`) +
     ".";
   const hidden = facets.total - facets.standalone;
+  // Starred companion files shown under All kinds are counted on their own,
+  // so the first figure stays within the total beside it.
+  const companionsShown = favorites && kind === null ? matching.filter((row) => isCompanionKind(row.kind)).length : 0;
+  const shown = matching.length - companionsShown;
   const count =
-    (filtered ? `${matching.length} of ${universe} ${plural(universe)}` : `${universe} ${plural(universe)}`) +
+    (filtered ? `${shown} of ${universe} ${plural(universe)}` : `${universe} ${plural(universe)}`) +
+    (companionsShown > 0 ? ` · ${companionsShown} starred companion ${companionsShown === 1 ? "file" : "files"}` : "") +
     // Said out loud, since the companion rows are only listed inside the Type menu.
     (hidden > 0 && kind === null && !favorites ? ` · ${hidden} companion ${hidden === 1 ? "file" : "files"} not in All kinds` : "");
 

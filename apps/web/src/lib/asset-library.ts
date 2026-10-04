@@ -9,7 +9,7 @@ import {
   listAssets,
   readEvents,
   readPreference,
-  readPreferences,
+  readPreferencesWithPrefix,
   topicTitles,
   type AssetDerivations,
   type AssetKindCount,
@@ -760,15 +760,14 @@ export async function loadFavorite(id: string): Promise<Favorite | null> {
 
 /**
  * Every asset the owner starred, by id, for the Library's Favorites filter:
- * the `favorite:` preferences, read in one go (one owner's preferences are a
- * few dozen rows). Null when the store could not be read, which the page
+ * the `favorite:` preferences and nothing else. Null when the store could not be read, which the page
  * says rather than showing an empty list as though nothing were starred.
  */
 export async function loadFavorites(): Promise<Set<string> | null> {
   await connection();
   const owner = await currentOwner();
   try {
-    const all = await readPreferences(await catalogDatabase(), owner);
+    const all = await readPreferencesWithPrefix(await catalogDatabase(), FAVORITE_PREFIX, owner);
     const ids = new Set<string>();
     for (const [key, value] of Object.entries(all)) {
       if (key.startsWith(FAVORITE_PREFIX) && parseFavorite(value) !== null) ids.add(key.slice(FAVORITE_PREFIX.length));

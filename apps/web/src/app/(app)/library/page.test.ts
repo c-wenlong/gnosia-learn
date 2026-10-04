@@ -169,6 +169,29 @@ describe("/library", () => {
     expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="favorites"[^>]*value="1"/);
   });
 
+  it("counts a starred companion file beside the total, never inside it", async () => {
+    loadLibrary.mockResolvedValueOnce({
+      rows: [
+        ...ROWS,
+        { ...ROWS[1], id: "transcript:paging", kind: "transcript", title: "Paging transcript", path: "out/os/paging.json" },
+      ],
+      counts: [
+        { kind: "video", count: 1 },
+        { kind: "note", count: 1 },
+        { kind: "link", count: 1 },
+        { kind: "transcript", count: 1 },
+      ],
+      reachable: true,
+      truncated: false,
+      titles: {},
+      concepts: {},
+    });
+    loadFavorites.mockResolvedValueOnce(new Set(["note:tlb", "transcript:paging"]));
+    const html = await render({ favorites: "1", view: "list" });
+    expect(html).toContain("Paging transcript");
+    expect(html).toContain("1 of 3 assets · 1 starred companion file");
+  });
+
   it("does not read the stars when the filter is off", async () => {
     await render();
     expect(loadFavorites).not.toHaveBeenCalled();
