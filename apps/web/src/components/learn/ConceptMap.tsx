@@ -214,22 +214,32 @@ export function ConceptMap({
     [layout, animateTo],
   );
 
-  /** Fit one island, whichever concept is selected: where Tab lands. */
+  /**
+   * Fit one island, whichever concept is selected: where Tab lands. It is the
+   * map's scope from then on, so the URL and a reload agree with the screen.
+   */
   const fitIsland = useCallback(
     (islandId: string) => {
       const first = firstConcept(layout, islandId);
       if (first === null) return;
       setFit("island");
+      onScope("island");
       animateTo(fitView(scopeBox(layout, nodes, edges, "island", first), aspect(), 40, widthPx()));
     },
-    [layout, nodes, edges, animateTo],
+    [layout, nodes, edges, animateTo, onScope],
   );
 
-  /** Move the keyboard focus to a concept, panning only when it is off screen. */
+  /**
+   * Move the keyboard focus to a concept, panning only when it is off screen.
+   * Going into an island does not pan at all: the island's own fit, which may
+   * still be animating, already shows its first concept, and a pan would cut
+   * that fit short.
+   */
   const focusConcept = useCallback(
-    (id: string) => {
+    (id: string, pan = true) => {
       const el = svgRef.current?.querySelector<SVGGElement>(`[data-concept="${CSS.escape(id)}"]`);
       el?.focus({ preventScroll: true });
+      if (!pan) return;
       const p = layout.positions[id];
       const v = live.current;
       const margin = v.w * 0.08;
@@ -462,7 +472,7 @@ export function ConceptMap({
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
                   const first = firstConcept(layout, i.id);
-                  if (first !== null) focusConcept(first);
+                  if (first !== null) focusConcept(first, false);
                 }}
               >
                 <rect
