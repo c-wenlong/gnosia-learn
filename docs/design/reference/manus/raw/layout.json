@@ -1,0 +1,8465 @@
+{
+ "agents-dark@1440": {
+  "label": "agents-dark",
+  "url": "https://manus.im/app/agents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [],
+  "h1": {
+   "text": "Meet Cue",
+   "font": "500 34px / 34px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 589,
+   "y": 168,
+   "w": 562,
+   "h": 34
+  },
+  "maxWidths": [
+   {
+    "el": "div.relative.flex.w-full",
+    "max": "562px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 589,
+    "y": 64,
+    "w": 562,
+    "h": 766.1
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "automations-dark@1440": {
+  "label": "automations-dark",
+  "url": "https://manus.im/app/automation?tab=updates",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [],
+  "h1": {
+   "text": "Automations",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 104,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1008px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 366,
+    "y": 48,
+    "w": 1008,
+    "h": 852
+   },
+   {
+    "el": "div.grid.w-full.grid-cols-1",
+    "max": "960px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 390,
+    "y": 226.5,
+    "w": 960,
+    "h": 421
+   },
+   {
+    "el": "div.flex.w-full.flex-col",
+    "max": "400px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 390,
+    "y": 226.5,
+    "w": 312,
+    "h": 421
+   },
+   {
+    "el": "div.flex.w-full.flex-col",
+    "max": "400px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 714,
+    "y": 226.5,
+    "w": 312,
+    "h": 421
+   },
+   {
+    "el": "div.flex.w-full.flex-col",
+    "max": "400px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 1038,
+    "y": 226.5,
+    "w": 312,
+    "h": 421
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.w-full.grid-cols-1",
+    "cols": "312px 312px 312px",
+    "colGap": "12px",
+    "rowGap": "12px",
+    "x": 390,
+    "y": 226.5,
+    "w": 960,
+    "h": 421,
+    "firstChild": {
+     "x": 390,
+     "y": 226.5,
+     "w": 312,
+     "h": 421
+    }
+   },
+   {
+    "el": "div.grid.grid-cols-7.text-center",
+    "cols": "32.5625px 32.5781px 32.5625px 32.5781px 32.5625px 32.5781px 32.5781px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 432,
+    "y": -13.5,
+    "w": 228,
+    "h": 49,
+    "firstChild": {
+     "x": 432,
+     "y": -13.5,
+     "w": 32.6,
+     "h": 49
+    }
+   },
+   {
+    "el": "div.grid.grid-cols-7.text-center",
+    "cols": "32.5625px 32.5781px 32.5625px 32.5781px 32.5625px 32.5781px 32.5781px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 432,
+    "y": 306.5,
+    "w": 228,
+    "h": 49,
+    "firstChild": {
+     "x": 432,
+     "y": 306.5,
+     "w": 32.6,
+     "h": 49
+    }
+   },
+   {
+    "el": "div.grid.grid-cols-7.text-center",
+    "cols": "32.5625px 32.5781px 32.5625px 32.5781px 32.5625px 32.5781px 32.5781px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 432,
+    "y": 626.5,
+    "w": 228,
+    "h": 49,
+    "firstChild": {
+     "x": 432,
+     "y": 626.5,
+     "w": 32.6,
+     "h": 49
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "computers-dark@1440": {
+  "label": "computers-dark",
+  "url": "https://manus.im/app/computers",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Create cloud computer",
+    "x": 1226.4,
+    "y": 8,
+    "w": 189.6,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Computers",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 91.3,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "960px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 390,
+    "y": 60,
+    "w": 960,
+    "h": 864
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1.gap-3",
+    "cols": "312px 312px 312px",
+    "colGap": "12px",
+    "rowGap": "12px",
+    "x": 390,
+    "y": 140,
+    "w": 960,
+    "h": 610,
+    "firstChild": {
+     "x": 390,
+     "y": 140,
+     "w": 312,
+     "h": 299
+    }
+   },
+   {
+    "el": "div.grid.grid-cols-1.gap-3",
+    "cols": "474px 474px",
+    "colGap": "12px",
+    "rowGap": "12px",
+    "x": 390,
+    "y": 774,
+    "w": 960,
+    "h": 86,
+    "firstChild": {
+     "x": 390,
+     "y": 774,
+     "w": 474,
+     "h": 86
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 876,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "creations-dark@1440": {
+  "label": "creations-dark",
+  "url": "https://manus.im/app/creations",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1136,
+    "y": 8,
+    "w": 280,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1384,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Creations",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 79,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   },
+   {
+    "el": "div.mx-auto.w-full",
+    "max": "1000px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 370,
+    "y": 112,
+    "w": 1000,
+    "h": 324.5
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 576.6,
+    "y": 56,
+    "w": 100.1,
+    "h": 32
+   },
+   "count": 4,
+   "gap": 4
+  }
+ },
+ "home-dark@1440": {
+  "label": "home-dark",
+  "url": "https://manus.im/app",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.relative.z-20.min-w-0",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 154.1,
+    "h": 32
+   },
+   {
+    "el": "div.flex.shrink-0.items-center",
+    "text": "Free plan\nUpgrade\n341",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 240.6,
+    "h": 32
+   },
+   {
+    "el": "div.relative",
+    "text": "341",
+    "x": 1350.1,
+    "y": 7.5,
+    "w": 65.9,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Manus Studio",
+   "font": "16px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, ",
+   "x": 486,
+   "y": 193,
+   "w": 376,
+   "h": 64
+  },
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 256.5,
+    "h": 32
+   },
+   "sticky": {
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.desktop-no-drag.relative.inline-flex",
+    "max": "360px",
+    "padL": "12px",
+    "padR": "12px",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 166.7,
+    "h": 32
+   },
+   {
+    "el": "div#chat-home-view-container.group/home.relative.flex",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": 48,
+    "w": 800,
+    "h": 852
+   },
+   {
+    "el": "div.relative.w-full.flex",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 193,
+    "w": 768,
+    "h": 362
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1",
+    "cols": "490px 270px",
+    "colGap": "8px",
+    "rowGap": "10px",
+    "x": 486,
+    "y": 285,
+    "w": 768,
+    "h": 270,
+    "firstChild": {
+     "x": 486,
+     "y": 285,
+     "w": 490,
+     "h": 130
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.sticky.bottom-0.z-20",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "20",
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "home-dark-attach-menu@1440": {
+  "label": "home-dark-attach-menu",
+  "url": "https://manus.im/app",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.relative.z-20.min-w-0",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 154.1,
+    "h": 32
+   },
+   {
+    "el": "div.flex.shrink-0.items-center",
+    "text": "Free plan\nUpgrade\n341",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 240.6,
+    "h": 32
+   },
+   {
+    "el": "div.relative",
+    "text": "341",
+    "x": 1350.1,
+    "y": 7.5,
+    "w": 65.9,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Manus Studio",
+   "font": "16px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, ",
+   "x": 486,
+   "y": 193,
+   "w": 376,
+   "h": 64
+  },
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 256.5,
+    "h": 32
+   },
+   "sticky": {
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.desktop-no-drag.relative.inline-flex",
+    "max": "360px",
+    "padL": "12px",
+    "padR": "12px",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 166.7,
+    "h": 32
+   },
+   {
+    "el": "div#chat-home-view-container.group/home.relative.flex",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": 48,
+    "w": 800,
+    "h": 852
+   },
+   {
+    "el": "div.relative.w-full.flex",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 193,
+    "w": 768,
+    "h": 362
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1",
+    "cols": "490px 270px",
+    "colGap": "8px",
+    "rowGap": "10px",
+    "x": 486,
+    "y": 285,
+    "w": 768,
+    "h": 270,
+    "firstChild": {
+     "x": 486,
+     "y": 285,
+     "w": 490,
+     "h": 130
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.sticky.bottom-0.z-20",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "20",
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200
+   },
+   {
+    "el": "div#_r_3ah_.min-w-max.inline-block.group",
+    "pos": "fixed",
+    "top": "550px",
+    "bottom": "81px",
+    "z": "auto",
+    "x": 499,
+    "y": 550,
+    "w": 198.9,
+    "h": 269
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_3ah_.min-w-max.inline-block.group",
+    "x": 499,
+    "y": 550,
+    "w": 198.9,
+    "h": 269,
+    "panel": {
+     "x": 499,
+     "y": 550,
+     "w": 198.9,
+     "h": 269
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "home-dark-composer-typed@1440": {
+  "label": "home-dark-composer-typed",
+  "url": "https://manus.im/app",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.relative.z-20.min-w-0",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 154.1,
+    "h": 32
+   },
+   {
+    "el": "div.flex.shrink-0.items-center",
+    "text": "Free plan\nUpgrade\n341",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 240.6,
+    "h": 32
+   },
+   {
+    "el": "div.relative",
+    "text": "341",
+    "x": 1350.1,
+    "y": 7.5,
+    "w": 65.9,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Manus Studio",
+   "font": "16px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, ",
+   "x": 486,
+   "y": 193,
+   "w": 376,
+   "h": 64
+  },
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 256.5,
+    "h": 32
+   },
+   "sticky": {
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.desktop-no-drag.relative.inline-flex",
+    "max": "360px",
+    "padL": "12px",
+    "padR": "12px",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 166.7,
+    "h": 32
+   },
+   {
+    "el": "div#chat-home-view-container.group/home.relative.flex",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": 48,
+    "w": 800,
+    "h": 852
+   },
+   {
+    "el": "div.relative.w-full.flex",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 193,
+    "w": 768,
+    "h": 362
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1",
+    "cols": "490px 270px",
+    "colGap": "8px",
+    "rowGap": "10px",
+    "x": 486,
+    "y": 285,
+    "w": 768,
+    "h": 270,
+    "firstChild": {
+     "x": 486,
+     "y": 285,
+     "w": 490,
+     "h": 130
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.sticky.bottom-0.z-20",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "20",
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "home-dark-model-menu@1440": {
+  "label": "home-dark-model-menu",
+  "url": "https://manus.im/app",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.relative.z-20.min-w-0",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 154.1,
+    "h": 32
+   },
+   {
+    "el": "div.flex.shrink-0.items-center",
+    "text": "Free plan\nUpgrade\n341",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 240.6,
+    "h": 32
+   },
+   {
+    "el": "div.relative",
+    "text": "341",
+    "x": 1350.1,
+    "y": 7.5,
+    "w": 65.9,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Manus Studio",
+   "font": "16px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, ",
+   "x": 486,
+   "y": 193,
+   "w": 376,
+   "h": 64
+  },
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 256.5,
+    "h": 32
+   },
+   "sticky": {
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.desktop-no-drag.relative.inline-flex",
+    "max": "360px",
+    "padL": "12px",
+    "padR": "12px",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 166.7,
+    "h": 32
+   },
+   {
+    "el": "div#chat-home-view-container.group/home.relative.flex",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": 48,
+    "w": 800,
+    "h": 852
+   },
+   {
+    "el": "div.relative.w-full.flex",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 193,
+    "w": 768,
+    "h": 362
+   },
+   {
+    "el": "div.shadow-menu.flex.flex-col",
+    "max": "1124px",
+    "padL": "4px",
+    "padR": "4px",
+    "x": 316,
+    "y": 43.5,
+    "w": 366,
+    "h": 232
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1",
+    "cols": "490px 270px",
+    "colGap": "8px",
+    "rowGap": "10px",
+    "x": 486,
+    "y": 285,
+    "w": 768,
+    "h": 270,
+    "firstChild": {
+     "x": 486,
+     "y": 285,
+     "w": 490,
+     "h": 130
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.sticky.bottom-0.z-20",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "20",
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200
+   },
+   {
+    "el": "div#_r_3a2_.min-w-max.inline-block",
+    "pos": "fixed",
+    "top": "43.5px",
+    "bottom": "624.5px",
+    "z": "-1",
+    "x": 316,
+    "y": 43.5,
+    "w": 366,
+    "h": 232
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_3a2_.min-w-max.inline-block",
+    "x": 316,
+    "y": 43.5,
+    "w": 366,
+    "h": 232,
+    "panel": {
+     "x": 316,
+     "y": 43.5,
+     "w": 366,
+     "h": 232
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "home-dark-notifications@1440": {
+  "label": "home-dark-notifications",
+  "url": "https://manus.im/app#notification",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.relative.z-20.min-w-0",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 154.1,
+    "h": 32
+   },
+   {
+    "el": "div.flex.shrink-0.items-center",
+    "text": "Free plan\nUpgrade\n341",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 240.6,
+    "h": 32
+   },
+   {
+    "el": "div.relative",
+    "text": "341",
+    "x": 1350.1,
+    "y": 7.5,
+    "w": 65.9,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Manus Studio",
+   "font": "16px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, ",
+   "x": 486,
+   "y": 193,
+   "w": 376,
+   "h": 64
+  },
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 256.5,
+    "h": 32
+   },
+   "sticky": {
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.desktop-no-drag.relative.inline-flex",
+    "max": "360px",
+    "padL": "12px",
+    "padR": "12px",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 166.7,
+    "h": 32
+   },
+   {
+    "el": "div#chat-home-view-container.group/home.relative.flex",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": 48,
+    "w": 800,
+    "h": 852
+   },
+   {
+    "el": "div.relative.w-full.flex",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 193,
+    "w": 768,
+    "h": 362
+   },
+   {
+    "el": "div.flex.flex-col.overflow-hidden",
+    "max": "1408px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 298,
+    "y": 284,
+    "w": 400,
+    "h": 600
+   },
+   {
+    "el": "div.group.relative.w-full",
+    "max": "596px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 315,
+    "y": 473,
+    "w": 366,
+    "h": 221.9
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1",
+    "cols": "490px 270px",
+    "colGap": "8px",
+    "rowGap": "10px",
+    "x": 486,
+    "y": 285,
+    "w": 768,
+    "h": 270,
+    "firstChild": {
+     "x": 486,
+     "y": 285,
+     "w": 490,
+     "h": 130
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.sticky.bottom-0.z-20",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "20",
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200
+   },
+   {
+    "el": "div#_r_51_.min-w-max.inline-block",
+    "pos": "fixed",
+    "top": "284px",
+    "bottom": "16px",
+    "z": "auto",
+    "x": 298,
+    "y": 284,
+    "w": 400,
+    "h": 600
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_51_.min-w-max.inline-block",
+    "x": 298,
+    "y": 284,
+    "w": 400,
+    "h": 600,
+    "panel": {
+     "x": 298,
+     "y": 284,
+     "w": 400,
+     "h": 600
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 299,
+    "y": 377,
+    "w": 398,
+    "h": 506,
+    "scrollHeight": 3550,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "home-dark-search@1440": {
+  "label": "home-dark-search",
+  "url": "https://manus.im/app#search",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.relative.z-20.min-w-0",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 154.1,
+    "h": 32
+   },
+   {
+    "el": "div.flex.shrink-0.items-center",
+    "text": "Free plan\nUpgrade\n341",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 240.6,
+    "h": 32
+   },
+   {
+    "el": "div.relative",
+    "text": "341",
+    "x": 1350.1,
+    "y": 7.5,
+    "w": 65.9,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Manus Studio",
+   "font": "16px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, ",
+   "x": 486,
+   "y": 193,
+   "w": 376,
+   "h": 64
+  },
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 256.5,
+    "h": 32
+   },
+   "sticky": {
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.desktop-no-drag.relative.inline-flex",
+    "max": "360px",
+    "padL": "12px",
+    "padR": "12px",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 166.7,
+    "h": 32
+   },
+   {
+    "el": "div#chat-home-view-container.group/home.relative.flex",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": 48,
+    "w": 800,
+    "h": 852
+   },
+   {
+    "el": "div.relative.w-full.flex",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 193,
+    "w": 768,
+    "h": 362
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1",
+    "cols": "490px 270px",
+    "colGap": "8px",
+    "rowGap": "10px",
+    "x": 486,
+    "y": 285,
+    "w": 768,
+    "h": 270,
+    "firstChild": {
+     "x": 486,
+     "y": 285,
+     "w": 490,
+     "h": 130
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.sticky.bottom-0.z-20",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "20",
+    "x": 486,
+    "y": 700,
+    "w": 768,
+    "h": 200
+   },
+   {
+    "el": "div.w-full.h-full.fixed",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div.fixed.inset-0.flex",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div.@container/dialog.overflow-auto.outline-none",
+    "x": 380,
+    "y": 230,
+    "w": 680,
+    "h": 440,
+    "panel": {
+     "x": 380,
+     "y": 230,
+     "w": 680,
+     "h": 0
+    },
+    "radius": "0px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "ul.flex.flex-1.flex-col",
+    "x": 380,
+    "y": 297,
+    "w": 680,
+    "h": 373,
+    "scrollHeight": 416,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "home-dark-sidebar-collapsed@1440": {
+  "label": "home-dark-sidebar-collapsed",
+  "url": "https://manus.im/app",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 52,
+   "y": 0,
+   "w": 1388,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 52,
+   "y": 0,
+   "w": 1388,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.relative.z-20.min-w-0",
+    "text": "Manus 2.0 Lite",
+    "x": 68,
+    "y": 7.5,
+    "w": 154.1,
+    "h": 32
+   },
+   {
+    "el": "div.flex.shrink-0.items-center",
+    "text": "Free plan\nUpgrade\n341",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 240.6,
+    "h": 32
+   },
+   {
+    "el": "div.relative",
+    "text": "341",
+    "x": 1350.1,
+    "y": 7.5,
+    "w": 65.9,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Manus Studio",
+   "font": "16px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, ",
+   "x": 362,
+   "y": 193,
+   "w": 376,
+   "h": 64
+  },
+  "composer": {
+   "box": {
+    "x": 362,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 379,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 375,
+    "y": 823,
+    "w": 256.5,
+    "h": 32
+   },
+   "sticky": {
+    "x": 362,
+    "y": 700,
+    "w": 768,
+    "h": 200,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.desktop-no-drag.relative.inline-flex",
+    "max": "360px",
+    "padL": "12px",
+    "padR": "12px",
+    "x": 1175.4,
+    "y": 7.5,
+    "w": 166.7,
+    "h": 32
+   },
+   {
+    "el": "div#chat-home-view-container.group/home.relative.flex",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 346,
+    "y": 48,
+    "w": 800,
+    "h": 852
+   },
+   {
+    "el": "div.relative.w-full.flex",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 362,
+    "y": 193,
+    "w": 768,
+    "h": 362
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1",
+    "cols": "490px 270px",
+    "colGap": "8px",
+    "rowGap": "10px",
+    "x": 362,
+    "y": 285,
+    "w": 768,
+    "h": 270,
+    "firstChild": {
+     "x": 362,
+     "y": 285,
+     "w": 490,
+     "h": 130
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 52,
+    "y": 0,
+    "w": 1388,
+    "h": 48
+   },
+   {
+    "el": "div.sticky.bottom-0.z-20",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "20",
+    "x": 362,
+    "y": 700,
+    "w": 768,
+    "h": 200
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "library-dark@1440": {
+  "label": "library-dark",
+  "url": "https://manus.im/app/documents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 2320,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 358,
+    "y": 144,
+    "w": 1024,
+    "h": 67
+   },
+   "inner": {
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 67
+   },
+   "icon": {
+    "x": 378,
+    "y": 165,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 414,
+    "y": 156,
+    "w": 493.4,
+    "h": 20
+   },
+   "source": {
+    "x": 414,
+    "y": 180,
+    "w": 331.7,
+    "h": 18
+   },
+   "time": {
+    "x": 1258.9,
+    "y": 169,
+    "w": 55.1,
+    "h": 16
+   },
+   "menu": {
+    "x": 1338,
+    "y": 161,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 67,
+   "count": 24
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "library-dark-images-grid@1440": {
+  "label": "library-dark-images-grid",
+  "url": "https://manus.im/app/documents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1.items-start",
+    "cols": "322.656px 322.672px 322.656px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 144,
+     "w": 322.7,
+     "h": 258.4
+    }
+   },
+   {
+    "el": "div.grid.grid-cols-1.items-start",
+    "cols": "322.656px 322.672px 322.656px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 474.4,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 474.4,
+     "w": 322.7,
+     "h": 258.4
+    }
+   },
+   {
+    "el": "div.grid.grid-cols-1.items-start",
+    "cols": "322.656px 322.672px 322.672px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 804.8,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 804.8,
+     "w": 322.7,
+     "h": 258.4
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 2314,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "gridCards": {
+   "first": {
+    "x": 370,
+    "y": 144,
+    "w": 322.7,
+    "h": 258.4
+   },
+   "second": {
+    "x": 708.7,
+    "y": 144,
+    "w": 322.7,
+    "h": 258.4
+   },
+   "gapX": 16,
+   "perRow": 2,
+   "count": 18
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "library-dark-images-grid-by-task@1440": {
+  "label": "library-dark-images-grid-by-task",
+  "url": "https://manus.im/app/documents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.gap-4.items-start",
+    "cols": "322.656px 322.672px 322.656px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 158,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 158,
+     "w": 322.7,
+     "h": 258.4
+    }
+   },
+   {
+    "el": "div.grid.gap-4.items-start",
+    "cols": "322.656px 322.672px 322.656px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 514.4,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 514.4,
+     "w": 322.7,
+     "h": 258.4
+    }
+   },
+   {
+    "el": "div.grid.gap-4.items-start",
+    "cols": "322.656px 322.672px 322.672px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 870.8,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 870.8,
+     "w": 322.7,
+     "h": 258.4
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 1921,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "gridCards": {
+   "first": {
+    "x": 370,
+    "y": 158,
+    "w": 322.7,
+    "h": 258.4
+   },
+   "second": {
+    "x": 708.7,
+    "y": 158,
+    "w": 322.7,
+    "h": 258.4
+   },
+   "gapX": 16,
+   "perRow": 2,
+   "count": 12
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "library-dark-images-grid-view-options@1440": {
+  "label": "library-dark-images-grid-view-options",
+  "url": "https://manus.im/app/documents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1.items-start",
+    "cols": "322.656px 322.672px 322.656px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 144,
+     "w": 322.7,
+     "h": 258.4
+    }
+   },
+   {
+    "el": "div.grid.grid-cols-1.items-start",
+    "cols": "322.656px 322.672px 322.656px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 474.4,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 474.4,
+     "w": 322.7,
+     "h": 258.4
+    }
+   },
+   {
+    "el": "div.grid.grid-cols-1.items-start",
+    "cols": "322.656px 322.672px 322.672px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 370,
+    "y": 804.8,
+    "w": 1000,
+    "h": 258.4,
+    "firstChild": {
+     "x": 370,
+     "y": 804.8,
+     "w": 322.7,
+     "h": 258.4
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div#_r_6l_.min-w-max.inline-block.desktop-no-drag-tree",
+    "pos": "fixed",
+    "top": "44px",
+    "bottom": "744.5px",
+    "z": "auto",
+    "x": 1148,
+    "y": 44,
+    "w": 192,
+    "h": 111.5
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_6l_.min-w-max.inline-block.desktop-no-drag-tree",
+    "x": 1148,
+    "y": 44,
+    "w": 192,
+    "h": 111.5,
+    "panel": {
+     "x": 1148,
+     "y": 44,
+     "w": 192,
+     "h": 111.5
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 2314,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "gridCards": {
+   "first": {
+    "x": 370,
+    "y": 144,
+    "w": 322.7,
+    "h": 258.4
+   },
+   "second": {
+    "x": 708.7,
+    "y": 144,
+    "w": 322.7,
+    "h": 258.4
+   },
+   "gapX": 16,
+   "perRow": 2,
+   "count": 18
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "library-dark-preview-doc@1440": {
+  "label": "library-dark-preview-doc",
+  "url": "https://manus.im/app/documents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   },
+   {
+    "el": "div.overflow-hidden.pointer-events-auto.origin-center",
+    "max": "1200px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 120,
+    "y": 40,
+    "w": 1200,
+    "h": 820
+   },
+   {
+    "el": "div.relative.w-full.mx-auto",
+    "max": "712px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 364,
+    "y": 108,
+    "w": 712,
+    "h": 3058.9
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.fixed.inset-0.pointer-events-none",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div.fixed.opacity-0.flex",
+    "pos": "fixed",
+    "top": "-10000px",
+    "bottom": "10864px",
+    "z": "1000",
+    "x": -10000,
+    "y": -10000,
+    "w": 364.5,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 2320,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.overflow-auto.overscroll-x-contain.relative",
+    "x": 120,
+    "y": 88,
+    "w": 1200,
+    "h": 772,
+    "scrollHeight": 3099,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.flex.p-1.flex-col",
+    "x": 1120,
+    "y": 186,
+    "w": 200,
+    "h": 576,
+    "scrollHeight": 616,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 358,
+    "y": 144,
+    "w": 1024,
+    "h": 67
+   },
+   "inner": {
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 67
+   },
+   "icon": {
+    "x": 378,
+    "y": 165,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 414,
+    "y": 156,
+    "w": 493.4,
+    "h": 20
+   },
+   "source": {
+    "x": 414,
+    "y": 180,
+    "w": 331.7,
+    "h": 18
+   },
+   "time": {
+    "x": 1258.9,
+    "y": 169,
+    "w": 55.1,
+    "h": 16
+   },
+   "menu": {
+    "x": 1338,
+    "y": 161,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 67,
+   "count": 24
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "library-dark-row-menu@1440": {
+  "label": "library-dark-row-menu",
+  "url": "https://manus.im/app/documents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div#_r_13g_.min-w-max.inline-block",
+    "pos": "fixed",
+    "top": "197px",
+    "bottom": "474px",
+    "z": "auto",
+    "x": 1090,
+    "y": 197,
+    "w": 280,
+    "h": 229
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_13g_.min-w-max.inline-block",
+    "x": 1090,
+    "y": 197,
+    "w": 280,
+    "h": 229,
+    "panel": {
+     "x": 1090,
+     "y": 197,
+     "w": 280,
+     "h": 229
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 2320,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 358,
+    "y": 144,
+    "w": 1024,
+    "h": 67
+   },
+   "inner": {
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 67
+   },
+   "icon": {
+    "x": 378,
+    "y": 165,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 414,
+    "y": 156,
+    "w": 493.4,
+    "h": 20
+   },
+   "source": {
+    "x": 414,
+    "y": 180,
+    "w": 331.7,
+    "h": 18
+   },
+   "time": {
+    "x": 1258.9,
+    "y": 169,
+    "w": 55.1,
+    "h": 16
+   },
+   "menu": {
+    "x": 1338,
+    "y": 161,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 67,
+   "count": 24
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "library-dark-slides@1440": {
+  "label": "library-dark-slides",
+  "url": "https://manus.im/app/documents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 893,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 358,
+    "y": 144,
+    "w": 1024,
+    "h": 67
+   },
+   "inner": {
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 67
+   },
+   "icon": {
+    "x": 378,
+    "y": 165,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 414,
+    "y": 156,
+    "w": 420.3,
+    "h": 20
+   },
+   "source": {
+    "x": 414,
+    "y": 180,
+    "w": 294.2,
+    "h": 18
+   },
+   "time": {
+    "x": 1258.7,
+    "y": 169,
+    "w": 55.3,
+    "h": 16
+   },
+   "menu": {
+    "x": 1338,
+    "y": 161,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 139,
+   "count": 7
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "library-dark-user-menu@1440": {
+  "label": "library-dark-user-menu",
+  "url": "https://manus.im/app/documents",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div#_r_4r_.min-w-max.inline-block",
+    "pos": "fixed",
+    "top": "438px",
+    "bottom": "44px",
+    "z": "auto",
+    "x": 10,
+    "y": 438,
+    "w": 284,
+    "h": 418
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_4r_.min-w-max.inline-block",
+    "x": 10,
+    "y": 438,
+    "w": 284,
+    "h": 418,
+    "panel": {
+     "x": 10,
+     "y": 438,
+     "w": 284,
+     "h": 418
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 2320,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 358,
+    "y": 144,
+    "w": 1024,
+    "h": 67
+   },
+   "inner": {
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 67
+   },
+   "icon": {
+    "x": 378,
+    "y": 165,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 414,
+    "y": 156,
+    "w": 493.4,
+    "h": 20
+   },
+   "source": {
+    "x": 414,
+    "y": 180,
+    "w": 331.7,
+    "h": 18
+   },
+   "time": {
+    "x": 1258.9,
+    "y": 169,
+    "w": 55.1,
+    "h": 16
+   },
+   "menu": {
+    "x": 1338,
+    "y": 161,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 67,
+   "count": 24
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "mobile-home-dark@390": {
+  "label": "mobile-home-dark",
+  "url": "https://manus.im/app",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": -300,
+   "y": 0,
+   "w": 300,
+   "h": 844,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [],
+  "h1": {
+   "text": "What can I do for you?",
+   "font": "28px / 42px LibreBaskerville, Georgia, Cambria, ui-serif, \"Times New Roman\", Times, serif",
+   "x": 35.2,
+   "y": 276.8,
+   "w": 319.7,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 346.8,
+    "w": 358,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 33,
+    "y": 360.8,
+    "w": 332,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 29,
+    "y": 421.8,
+    "w": 131.1,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.top-0.left-0.w-full",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "779px",
+    "z": "2",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 65
+   },
+   {
+    "el": "nav.flex.flex-col.duration-200",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "20",
+    "x": -300,
+    "y": 0,
+    "w": 300,
+    "h": 844
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": -292,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "60px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 0,
+    "y": 60,
+    "w": 390,
+    "h": 48
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": -300,
+    "y": 130,
+    "w": 300,
+    "h": 612,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "mobile-home-dark-app-gate@390": {
+  "label": "mobile-home-dark-app-gate",
+  "url": "https://manus.im/app",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": -300,
+   "y": 0,
+   "w": 300,
+   "h": 844,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [],
+  "h1": {
+   "text": "What can I do for you?",
+   "font": "28px / 42px LibreBaskerville, Georgia, Cambria, ui-serif, \"Times New Roman\", Times, serif",
+   "x": 35.2,
+   "y": 276.8,
+   "w": 319.7,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 346.8,
+    "w": 358,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 33,
+    "y": 360.8,
+    "w": 332,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 29,
+    "y": 421.8,
+    "w": 131.1,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "max": "300px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 46,
+    "y": 440,
+    "w": 298,
+    "h": 48
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.top-0.left-0.w-full",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "779px",
+    "z": "2",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 65
+   },
+   {
+    "el": "nav.flex.flex-col.duration-200",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "20",
+    "x": -300,
+    "y": 0,
+    "w": 300,
+    "h": 844
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": -292,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "60px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 0,
+    "y": 60,
+    "w": 390,
+    "h": 48
+   },
+   {
+    "el": "div.w-full.h-full.min-h-screen",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "1",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 844
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": -300,
+    "y": 130,
+    "w": 300,
+    "h": 612,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "mobile-home-dark-drawer@390": {
+  "label": "mobile-home-dark-drawer",
+  "url": "https://manus.im/app",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 844,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [],
+  "h1": {
+   "text": "What can I do for you?",
+   "font": "28px / 42px LibreBaskerville, Georgia, Cambria, ui-serif, \"Times New Roman\", Times, serif",
+   "x": 35.2,
+   "y": 276.8,
+   "w": 319.7,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 346.8,
+    "w": 358,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 33,
+    "y": 360.8,
+    "w": 332,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 29,
+    "y": 421.8,
+    "w": 131.1,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.top-0.left-0.w-full",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "779px",
+    "z": "2",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 65
+   },
+   {
+    "el": "nav.flex.flex-col.duration-200",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "20",
+    "x": 0,
+    "y": 0,
+    "w": 300,
+    "h": 844
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "60px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 0,
+    "y": 60,
+    "w": 390,
+    "h": 48
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 612,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "mobile-library-dark@390": {
+  "label": "mobile-library-dark",
+  "url": "https://manus.im/app/documents",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": -300,
+   "y": 0,
+   "w": 300,
+   "h": 844,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 50,
+   "y": 72,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "20px",
+    "padR": "20px",
+    "x": 0,
+    "y": 108,
+    "w": 390,
+    "h": 64
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.top-0.left-0.w-full",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "779px",
+    "z": "2",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 65
+   },
+   {
+    "el": "nav.flex.flex-col.duration-200",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "20",
+    "x": -300,
+    "y": 0,
+    "w": 300,
+    "h": 844
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": -292,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": -300,
+    "y": 130,
+    "w": 300,
+    "h": 612,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 0,
+    "y": 172,
+    "w": 390,
+    "h": 672,
+    "scrollHeight": 2320,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 20,
+    "y": 204,
+    "w": 350,
+    "h": 67
+   },
+   "inner": {
+    "x": 20,
+    "y": 204,
+    "w": 350,
+    "h": 67
+   },
+   "icon": {
+    "x": 20,
+    "y": 225,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 56,
+    "y": 216,
+    "w": 202.9,
+    "h": 20
+   },
+   "source": {
+    "x": 56,
+    "y": 240,
+    "w": 202.9,
+    "h": 18
+   },
+   "time": {
+    "x": 270.9,
+    "y": 229,
+    "w": 55.1,
+    "h": 16
+   },
+   "menu": {
+    "x": 338,
+    "y": 221,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 67,
+   "count": 24
+  }
+ },
+ "mobile-library-dark-type-menu@390": {
+  "label": "mobile-library-dark-type-menu",
+  "url": "https://manus.im/app/documents",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": -300,
+   "y": 0,
+   "w": 300,
+   "h": 844,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 50,
+   "y": 72,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "20px",
+    "padR": "20px",
+    "x": 0,
+    "y": 108,
+    "w": 390,
+    "h": 64
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.top-0.left-0.w-full",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "779px",
+    "z": "2",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 65
+   },
+   {
+    "el": "nav.flex.flex-col.duration-200",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "20",
+    "x": -300,
+    "y": 0,
+    "w": 300,
+    "h": 844
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": -292,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div#_r_a0_.min-w-max.inline-block",
+    "pos": "fixed",
+    "top": "152px",
+    "bottom": "396px",
+    "z": "auto",
+    "x": 20,
+    "y": 152,
+    "w": 200,
+    "h": 296
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_a0_.min-w-max.inline-block",
+    "x": 20,
+    "y": 152,
+    "w": 200,
+    "h": 296,
+    "panel": {
+     "x": 20,
+     "y": 152,
+     "w": 200,
+     "h": 296
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": -300,
+    "y": 130,
+    "w": 300,
+    "h": 612,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 0,
+    "y": 172,
+    "w": 390,
+    "h": 672,
+    "scrollHeight": 2320,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 20,
+    "y": 204,
+    "w": 350,
+    "h": 67
+   },
+   "inner": {
+    "x": 20,
+    "y": 204,
+    "w": 350,
+    "h": 67
+   },
+   "icon": {
+    "x": 20,
+    "y": 225,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 56,
+    "y": 216,
+    "w": 202.9,
+    "h": 20
+   },
+   "source": {
+    "x": 56,
+    "y": 240,
+    "w": 202.9,
+    "h": 18
+   },
+   "time": {
+    "x": 270.9,
+    "y": 229,
+    "w": 55.1,
+    "h": 16
+   },
+   "menu": {
+    "x": 338,
+    "y": 221,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 67,
+   "count": 24
+  }
+ },
+ "mobile-task-dark@390": {
+  "label": "mobile-task-dark",
+  "url": "https://manus.im/app/sgJiDxxlavxQD40ydGleer",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": {
+   "x": -300,
+   "y": 0,
+   "w": 300,
+   "h": 844,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [],
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 676,
+    "w": 358,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 33,
+    "y": 690,
+    "w": 332,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 29,
+    "y": 751,
+    "w": 235.6,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.w-full.grid.gap-2",
+    "max": "568px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 32,
+    "y": 289.5,
+    "w": 326,
+    "h": 119
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.top-0.left-0.w-full",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "779px",
+    "z": "2",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 65
+   },
+   {
+    "el": "nav.flex.flex-col.duration-200",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "20",
+    "x": -300,
+    "y": 0,
+    "w": 300,
+    "h": 844
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": -292,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": -292,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "60px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 0,
+    "y": 60,
+    "w": 390,
+    "h": 48
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "pos": "fixed",
+    "top": "635px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 16,
+    "y": 635,
+    "w": 358,
+    "h": 209
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": -300,
+    "y": 130,
+    "w": 300,
+    "h": 612,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 0,
+    "y": 48,
+    "w": 390,
+    "h": 796,
+    "scrollHeight": 9285,
+    "scrollTop": 8489
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "thread": {
+   "turn": {
+    "x": 32,
+    "y": -1459.7,
+    "w": 326,
+    "h": 2289.3
+   },
+   "column": {
+    "x": 32,
+    "y": -1459.7,
+    "w": 326,
+    "h": 2289.3
+   },
+   "userBubble": {
+    "x": 64.6,
+    "y": -1435.7,
+    "w": 293.4,
+    "h": 168
+   }
+  }
+ },
+ "plugins-dark@1440": {
+  "label": "plugins-dark",
+  "url": "https://manus.im/app/plugins",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.gap-2.items-center",
+    "text": "Manage Connectors\nCreate",
+    "x": 1179.2,
+    "y": 8,
+    "w": 236.8,
+    "h": 32
+   },
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Create",
+    "x": 1336,
+    "y": 8,
+    "w": 80,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Plugins",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 847.2,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 48,
+    "w": 768,
+    "h": 18218
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1.gap-3",
+    "cols": "378px 378px",
+    "colGap": "12px",
+    "rowGap": "12px",
+    "x": 486,
+    "y": 326,
+    "w": 768,
+    "h": 17940,
+    "firstChild": {
+     "x": 486,
+     "y": 326,
+     "w": 378,
+     "h": 76
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 18258,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "gridCards": {
+   "first": {
+    "x": 486,
+    "y": 88,
+    "w": 280,
+    "h": 114
+   },
+   "second": {
+    "x": 782,
+    "y": 88,
+    "w": 280,
+    "h": 114
+   },
+   "gapX": 16,
+   "perRow": 4,
+   "count": 4
+  },
+  "typeTabs": {
+   "first": {
+    "x": 486,
+    "y": 278,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 1063.2,
+    "y": 278,
+    "w": 63.2,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "plugins-dark-more-menu@1440": {
+  "label": "plugins-dark-more-menu",
+  "url": "https://manus.im/app/plugins",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.gap-2.items-center",
+    "text": "Manage Connectors\nCreate",
+    "x": 1179.2,
+    "y": 8,
+    "w": 236.8,
+    "h": 32
+   },
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Create",
+    "x": 1336,
+    "y": 8,
+    "w": 80,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Plugins",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 847.2,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 48,
+    "w": 768,
+    "h": 18218
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1.gap-3",
+    "cols": "378px 378px",
+    "colGap": "12px",
+    "rowGap": "12px",
+    "x": 486,
+    "y": 326,
+    "w": 768,
+    "h": 17940,
+    "firstChild": {
+     "x": 486,
+     "y": 326,
+     "w": 378,
+     "h": 76
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div#_r_4i_.min-w-max.inline-block",
+    "pos": "fixed",
+    "top": "315px",
+    "bottom": "469px",
+    "z": "auto",
+    "x": 296,
+    "y": 315,
+    "w": 190,
+    "h": 116
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_4i_.min-w-max.inline-block",
+    "x": 296,
+    "y": 315,
+    "w": 190,
+    "h": 116,
+    "panel": {
+     "x": 296,
+     "y": 315,
+     "w": 190,
+     "h": 116
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 18258,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "gridCards": {
+   "first": {
+    "x": 486,
+    "y": 88,
+    "w": 280,
+    "h": 114
+   },
+   "second": {
+    "x": 782,
+    "y": 88,
+    "w": 280,
+    "h": 114
+   },
+   "gapX": 16,
+   "perRow": 4,
+   "count": 4
+  },
+  "typeTabs": {
+   "first": {
+    "x": 486,
+    "y": 278,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 1063.2,
+    "y": 278,
+    "w": 63.2,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "plugins-dark-project-context-menu@1440": {
+  "label": "plugins-dark-project-context-menu",
+  "url": "https://manus.im/app/plugins",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.gap-2.items-center",
+    "text": "Manage Connectors\nCreate",
+    "x": 1179.2,
+    "y": 8,
+    "w": 236.8,
+    "h": 32
+   },
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Create",
+    "x": 1336,
+    "y": 8,
+    "w": 80,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Plugins",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 847.2,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 48,
+    "w": 768,
+    "h": 18218
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-1.gap-3",
+    "cols": "378px 378px",
+    "colGap": "12px",
+    "rowGap": "12px",
+    "x": 486,
+    "y": 326,
+    "w": 768,
+    "h": 17940,
+    "firstChild": {
+     "x": 486,
+     "y": 326,
+     "w": 378,
+     "h": 76
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div#_r_cp_.min-w-max.inline-block",
+    "pos": "fixed",
+    "top": "423px",
+    "bottom": "361px",
+    "z": "auto",
+    "x": 81,
+    "y": 423,
+    "w": 132.3,
+    "h": 116
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_cp_.min-w-max.inline-block",
+    "x": 81,
+    "y": 423,
+    "w": 132.3,
+    "h": 116,
+    "panel": {
+     "x": 81,
+     "y": 423,
+     "w": 132.3,
+     "h": 116
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 18258,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "gridCards": {
+   "first": {
+    "x": 486,
+    "y": 88,
+    "w": 280,
+    "h": 114
+   },
+   "second": {
+    "x": 782,
+    "y": 88,
+    "w": 280,
+    "h": 114
+   },
+   "gapX": 16,
+   "perRow": 4,
+   "count": 4
+  },
+  "typeTabs": {
+   "first": {
+    "x": 486,
+    "y": 278,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 1063.2,
+    "y": 278,
+    "w": 63.2,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "project-dark@1440": {
+  "label": "project-dark",
+  "url": "https://manus.im/app/project/Cs3pGnEW2qAsLgDtYzY6bx",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.items-center",
+    "text": "Manus 2.0 Lite",
+    "x": 324,
+    "y": 8,
+    "w": 154.1,
+    "h": 32
+   },
+   {
+    "el": "div.flex.shrink-0.items-center",
+    "text": "Share",
+    "x": 1271.8,
+    "y": 8,
+    "w": 144.2,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1352,
+    "y": 10,
+    "w": 28,
+    "h": 28
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1384,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "composer": {
+   "box": {
+    "x": 318,
+    "y": 748,
+    "w": 740,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 335,
+    "y": 762,
+    "w": 714,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 331,
+    "y": 823,
+    "w": 274,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.pt-8",
+    "max": "1168px",
+    "padL": "18px",
+    "padR": "18px",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.mx-auto.w-full.pt-8",
+    "cols": "740px 320px",
+    "colGap": "44px",
+    "rowGap": "normal",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "firstChild": {
+     "x": 318,
+     "y": 80,
+     "w": 740,
+     "h": 48
+    }
+   },
+   {
+    "el": "div.mx-auto.grid.w-full",
+    "cols": "740px 320px",
+    "colGap": "44px",
+    "rowGap": "normal",
+    "x": 300,
+    "y": 700,
+    "w": 1140,
+    "h": 200,
+    "firstChild": {
+     "x": 318,
+     "y": 700,
+     "w": 740,
+     "h": 200
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  }
+ },
+ "settings-dark-general@1440": {
+  "label": "settings-dark-general",
+  "url": "https://manus.im/app/documents#settings",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   },
+   {
+    "el": "div.@container/dialog.outline-none.shadow-menu",
+    "max": "1440px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 144,
+    "y": 45,
+    "w": 1152,
+    "h": 810
+   },
+   {
+    "el": "div.relative.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 446.5,
+    "y": 45,
+    "w": 768,
+    "h": 842
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.w-full.h-full.fixed",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div.fixed.inset-0.flex",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div.@container/dialog.outline-none.shadow-menu",
+    "x": 144,
+    "y": 45,
+    "w": 1152,
+    "h": 810,
+    "panel": {
+     "x": 144,
+     "y": 45,
+     "w": 1152,
+     "h": 0
+    },
+    "radius": "0px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 2320,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 144,
+    "y": 163,
+    "w": 220,
+    "h": 692,
+    "scrollHeight": 807,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 365,
+    "y": 45,
+    "w": 931,
+    "h": 810,
+    "scrollHeight": 842,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 358,
+    "y": 144,
+    "w": 1024,
+    "h": 67
+   },
+   "inner": {
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 67
+   },
+   "icon": {
+    "x": 378,
+    "y": 165,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 414,
+    "y": 156,
+    "w": 493.4,
+    "h": 20
+   },
+   "source": {
+    "x": 414,
+    "y": 180,
+    "w": 331.7,
+    "h": 18
+   },
+   "time": {
+    "x": 1258.9,
+    "y": 169,
+    "w": 55.1,
+    "h": 16
+   },
+   "menu": {
+    "x": 1338,
+    "y": 161,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 67,
+   "count": 24
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "settings-dark-shortcuts@1440": {
+  "label": "settings-dark-shortcuts",
+  "url": "https://manus.im/app/documents#settings/keyboard-shortcuts",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.@container.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 112
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "",
+    "x": 1060,
+    "y": 8,
+    "w": 356,
+    "h": 32
+   },
+   {
+    "el": "button.clickable.flex.size-8",
+    "text": "",
+    "x": 1308,
+    "y": 8,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "span.flex.size-full.items-center",
+    "text": "",
+    "x": 1309,
+    "y": 9,
+    "w": 30,
+    "h": 30
+   },
+   {
+    "el": "div.h-8.flex.items-stretch",
+    "text": "",
+    "x": 1348,
+    "y": 8,
+    "w": 68,
+    "h": 32
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1350,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   },
+   {
+    "el": "li.relative.list-none",
+    "text": "",
+    "x": 1382,
+    "y": 10,
+    "w": 32,
+    "h": 28
+   }
+  ],
+  "h1": {
+   "text": "Library",
+   "font": "500 18px / 24px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 324,
+   "y": 12,
+   "w": 57.6,
+   "h": 24
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1048px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 346,
+    "y": 48,
+    "w": 1048,
+    "h": 64
+   },
+   {
+    "el": "div.@container/dialog.outline-none.shadow-menu",
+    "max": "1440px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 144,
+    "y": 45,
+    "w": 1152,
+    "h": 810
+   },
+   {
+    "el": "div.relative.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 446.5,
+    "y": 45,
+    "w": 768,
+    "h": 810
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.w-full.h-full.fixed",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div.fixed.inset-0.flex",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div.@container/dialog.outline-none.shadow-menu",
+    "x": 144,
+    "y": 45,
+    "w": 1152,
+    "h": 810,
+    "panel": {
+     "x": 144,
+     "y": 45,
+     "w": 1152,
+     "h": 0
+    },
+    "radius": "0px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 112,
+    "w": 1140,
+    "h": 788,
+    "scrollHeight": 2320,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 144,
+    "y": 163,
+    "w": 220,
+    "h": 692,
+    "scrollHeight": 807,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "libraryRow": {
+   "row": {
+    "x": 358,
+    "y": 144,
+    "w": 1024,
+    "h": 67
+   },
+   "inner": {
+    "x": 370,
+    "y": 144,
+    "w": 1000,
+    "h": 67
+   },
+   "icon": {
+    "x": 378,
+    "y": 165,
+    "w": 24,
+    "h": 24
+   },
+   "title": {
+    "x": 414,
+    "y": 156,
+    "w": 493.4,
+    "h": 20
+   },
+   "source": {
+    "x": 414,
+    "y": 180,
+    "w": 331.7,
+    "h": 18
+   },
+   "time": {
+    "x": 1258.9,
+    "y": 169,
+    "w": 55.1,
+    "h": 16
+   },
+   "menu": {
+    "x": 1338,
+    "y": 161,
+    "w": 32,
+    "h": 32
+   },
+   "pitch": 67,
+   "count": 24
+  },
+  "typeTabs": {
+   "first": {
+    "x": 370,
+    "y": 56,
+    "w": 48,
+    "h": 32
+   },
+   "last": {
+    "x": 900.2,
+    "y": 56,
+    "w": 64.8,
+    "h": 32
+   },
+   "count": 8,
+   "gap": 4
+  }
+ },
+ "task-dark-completed@1440": {
+  "label": "task-dark-completed",
+  "url": "https://manus.im/app/sgJiDxxlavxQD40ydGleer",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 866.9,
+    "h": 32
+   },
+   {
+    "el": "div.flex.flex-shrink-0.items-center",
+    "text": "Upgrade\nShare",
+    "x": 1186.9,
+    "y": 7.5,
+    "w": 241.1,
+    "h": 32
+   },
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Share",
+    "x": 1281.8,
+    "y": 7.5,
+    "w": 74.2,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1360,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1396,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 273.6,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.max-w-full",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": -9699,
+    "w": 800,
+    "h": 10599.4
+   },
+   {
+    "el": "div.w-full.grid.gap-2",
+    "max": "568px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 502,
+    "y": 416.8,
+    "w": 568,
+    "h": 56
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.w-full.grid.gap-2",
+    "cols": "280px 280px",
+    "colGap": "8px",
+    "rowGap": "8px",
+    "x": 502,
+    "y": 416.8,
+    "w": 568,
+    "h": 56,
+    "firstChild": {
+     "x": 502,
+     "y": 416.8,
+     "w": 280,
+     "h": 56
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "pos": "fixed",
+    "top": "707px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 10599,
+    "scrollTop": 9747
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "thread": {
+   "turn": {
+    "x": 502,
+    "y": -917.7,
+    "w": 736,
+    "h": 1795.5
+   },
+   "column": {
+    "x": 502,
+    "y": -917.7,
+    "w": 736,
+    "h": 1795.5
+   },
+   "userBubble": {
+    "x": 575.6,
+    "y": -893.7,
+    "w": 662.4,
+    "h": 96
+   }
+  }
+ },
+ "task-dark-files-dialog@1440": {
+  "label": "task-dark-files-dialog",
+  "url": "https://manus.im/app/sgJiDxxlavxQD40ydGleer#file-management",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 866.9,
+    "h": 32
+   },
+   {
+    "el": "div.flex.flex-shrink-0.items-center",
+    "text": "Upgrade\nShare",
+    "x": 1186.9,
+    "y": 7.5,
+    "w": 241.1,
+    "h": 32
+   },
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Share",
+    "x": 1281.8,
+    "y": 7.5,
+    "w": 74.2,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1360,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1396,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "h1": {
+   "text": "Files in this task",
+   "font": "600 18px / 28px -apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Ari",
+   "x": 444,
+   "y": 136,
+   "w": 480,
+   "h": 28
+  },
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 273.6,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.max-w-full",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": -9699,
+    "w": 800,
+    "h": 10599.4
+   },
+   {
+    "el": "div.w-full.grid.gap-2",
+    "max": "568px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 502,
+    "y": 416.8,
+    "w": 568,
+    "h": 56
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.w-full.grid.gap-2",
+    "cols": "280px 280px",
+    "colGap": "8px",
+    "rowGap": "8px",
+    "x": 502,
+    "y": 416.8,
+    "w": 568,
+    "h": 56,
+    "firstChild": {
+     "x": 502,
+     "y": 416.8,
+     "w": 280,
+     "h": 56
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "pos": "fixed",
+    "top": "707px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   },
+   {
+    "el": "div.w-full.h-full.fixed",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div.fixed.inset-0.flex",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div.@container/dialog.overflow-auto.outline-none",
+    "x": 420,
+    "y": 110,
+    "w": 600,
+    "h": 680,
+    "panel": {
+     "x": 420,
+     "y": 110,
+     "w": 600,
+     "h": 0
+    },
+    "radius": "0px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 10599,
+    "scrollTop": 9747
+   },
+   {
+    "el": "div.flex-1.min-h-0.overflow-auto",
+    "x": 420,
+    "y": 228,
+    "w": 600,
+    "h": 562,
+    "scrollHeight": 596,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "thread": {
+   "turn": {
+    "x": 502,
+    "y": -917.7,
+    "w": 736,
+    "h": 1795.5
+   },
+   "column": {
+    "x": 502,
+    "y": -917.7,
+    "w": 736,
+    "h": 1795.5
+   },
+   "userBubble": {
+    "x": 575.6,
+    "y": -893.7,
+    "w": 662.4,
+    "h": 96
+   }
+  }
+ },
+ "task-dark-files-tab@1440": {
+  "label": "task-dark-files-tab",
+  "url": "https://manus.im/app/sgJiDxxlavxQD40ydGleer",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 438,
+    "h": 32
+   },
+   {
+    "el": "div.flex.flex-shrink-0.items-center",
+    "text": "",
+    "x": 758,
+    "y": 7.5,
+    "w": 100,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 790,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 826,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.desktop-no-drag.scrollbar-none.flex",
+    "text": "Files",
+    "x": 870,
+    "y": 7.5,
+    "w": 172,
+    "h": 32
+   },
+   {
+    "el": "div.min-w-0.shrink-0.overflow-hidden",
+    "text": "Files",
+    "x": 882,
+    "y": 7.5,
+    "w": 160,
+    "h": 32
+   },
+   {
+    "el": "div.group/launcher.flex.shrink-0",
+    "text": "",
+    "x": 1046,
+    "y": 7.5,
+    "w": 48,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1078,
+    "y": 7.5,
+    "w": 16,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1360,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1396,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "composer": {
+   "box": {
+    "x": 316,
+    "y": 748,
+    "w": 538,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 333,
+    "y": 762,
+    "w": 512,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 329,
+    "y": 823,
+    "w": 273.6,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.max-w-full",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 300,
+    "y": -2888,
+    "w": 570,
+    "h": 8808.3
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 316,
+    "y": 707,
+    "w": 538,
+    "h": 193
+   },
+   {
+    "el": "div.flex.flex-col.items-center",
+    "max": "320px",
+    "padL": "24px",
+    "padR": "24px",
+    "x": 920.3,
+    "y": 459.5,
+    "w": 197.3,
+    "h": 77
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 570,
+    "h": 48
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "pos": "fixed",
+    "top": "707px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 316,
+    "y": 707,
+    "w": 538,
+    "h": 193
+   },
+   {
+    "el": "div.flex.w-full.items-center",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "2",
+    "x": 1184,
+    "y": 136,
+    "w": 252,
+    "h": 30
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 570,
+    "h": 852,
+    "scrollHeight": 8808,
+    "scrollTop": 2936
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "thread": {
+   "turn": {
+    "x": 332,
+    "y": 64.1,
+    "w": 506,
+    "h": 1144.5
+   },
+   "column": {
+    "x": 332,
+    "y": 64.1,
+    "w": 506,
+    "h": 1144.5
+   },
+   "userBubble": {
+    "x": 382.6,
+    "y": 152.1,
+    "w": 455.4,
+    "h": 72
+   }
+  },
+  "sidePanel": {
+   "panel": {
+    "x": 870,
+    "y": 0,
+    "w": 570,
+    "h": 900
+   },
+   "tabbar": {
+    "x": 882,
+    "y": 7.5,
+    "w": 160,
+    "h": 32
+   },
+   "tab": {
+    "x": 882,
+    "y": 7.5,
+    "w": 160,
+    "h": 32
+   },
+   "handle": {
+    "x": 1179.5,
+    "y": 96,
+    "w": 1,
+    "h": 804
+   }
+  },
+  "fileTree": {
+   "x": 1180,
+   "y": 96,
+   "w": 260,
+   "h": 804
+  }
+ },
+ "task-dark-side-panel@1440": {
+  "label": "task-dark-side-panel",
+  "url": "https://manus.im/app/sgJiDxxlavxQD40ydGleer",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": null,
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 438,
+    "h": 32
+   },
+   {
+    "el": "div.flex.flex-shrink-0.items-center",
+    "text": "",
+    "x": 758,
+    "y": 7.5,
+    "w": 100,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 790,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 826,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.desktop-no-drag.scrollbar-none.flex",
+    "text": "New tab",
+    "x": 870,
+    "y": 7.5,
+    "w": 172,
+    "h": 32
+   },
+   {
+    "el": "div.min-w-0.shrink-0.overflow-hidden",
+    "text": "New tab",
+    "x": 882,
+    "y": 7.5,
+    "w": 160,
+    "h": 32
+   },
+   {
+    "el": "div.group/launcher.flex.shrink-0",
+    "text": "",
+    "x": 1046,
+    "y": 7.5,
+    "w": 48,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1078,
+    "y": 7.5,
+    "w": 16,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1360,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1396,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "composer": {
+   "box": {
+    "x": 316,
+    "y": 748,
+    "w": 538,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 333,
+    "y": 762,
+    "w": 512,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 329,
+    "y": 823,
+    "w": 273.6,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.max-w-full",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 300,
+    "y": -2888,
+    "w": 570,
+    "h": 8808.3
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 316,
+    "y": 707,
+    "w": 538,
+    "h": 193
+   },
+   {
+    "el": "div.m-auto.flex.w-full",
+    "max": "440px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 935,
+    "y": 337.5,
+    "w": 440,
+    "h": 273
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.grid.grid-cols-2",
+    "cols": "216px 216px",
+    "colGap": "8px",
+    "rowGap": "8px",
+    "x": 935,
+    "y": 458.5,
+    "w": 440,
+    "h": 152,
+    "firstChild": {
+     "x": 935,
+     "y": 458.5,
+     "w": 216,
+     "h": 72
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 570,
+    "h": 48
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "pos": "fixed",
+    "top": "707px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 316,
+    "y": 707,
+    "w": 538,
+    "h": 193
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 570,
+    "h": 852,
+    "scrollHeight": 8808,
+    "scrollTop": 2936
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "gridCards": {
+   "first": {
+    "x": 935,
+    "y": 458.5,
+    "w": 216,
+    "h": 72
+   },
+   "second": {
+    "x": 1159,
+    "y": 458.5,
+    "w": 216,
+    "h": 72
+   },
+   "gapX": 8,
+   "perRow": 2,
+   "count": 4
+  },
+  "thread": {
+   "turn": {
+    "x": 332,
+    "y": 64.1,
+    "w": 506,
+    "h": 1144.5
+   },
+   "column": {
+    "x": 332,
+    "y": 64.1,
+    "w": 506,
+    "h": 1144.5
+   },
+   "userBubble": {
+    "x": 382.6,
+    "y": 152.1,
+    "w": 455.4,
+    "h": 72
+   }
+  },
+  "sidePanel": {
+   "panel": {
+    "x": 870,
+    "y": 0,
+    "w": 570,
+    "h": 900
+   },
+   "tabbar": {
+    "x": 882,
+    "y": 7.5,
+    "w": 160,
+    "h": 32
+   },
+   "tab": {
+    "x": 882,
+    "y": 7.5,
+    "w": 160,
+    "h": 32
+   },
+   "handle": {
+    "x": 869.5,
+    "y": 0,
+    "w": 1,
+    "h": 900
+   }
+  }
+ },
+ "task-dark-sidebar-task-menu@1440": {
+  "label": "task-dark-sidebar-task-menu",
+  "url": "https://manus.im/app/sgJiDxxlavxQD40ydGleer",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 866.9,
+    "h": 32
+   },
+   {
+    "el": "div.flex.flex-shrink-0.items-center",
+    "text": "Upgrade\nShare",
+    "x": 1186.9,
+    "y": 7.5,
+    "w": 241.1,
+    "h": 32
+   },
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Share",
+    "x": 1281.8,
+    "y": 7.5,
+    "w": 74.2,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1360,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1396,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 273.6,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.max-w-full",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": -7584,
+    "w": 800,
+    "h": 8484.3
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "pos": "fixed",
+    "top": "707px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   },
+   {
+    "el": "div#_r_e4_.min-w-max.inline-block",
+    "pos": "fixed",
+    "top": "137px",
+    "bottom": "339px",
+    "z": "auto",
+    "x": 90,
+    "y": 137,
+    "w": 200,
+    "h": 424
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#_r_e4_.min-w-max.inline-block",
+    "x": 90,
+    "y": 137,
+    "w": 200,
+    "h": 424,
+    "panel": {
+     "x": 90,
+     "y": 137,
+     "w": 200,
+     "h": 424
+    },
+    "radius": "12px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 8484,
+    "scrollTop": 7632
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "thread": {
+   "turn": {
+    "x": 502,
+    "y": -4631.9,
+    "w": 736,
+    "h": 1084.5
+   },
+   "column": {
+    "x": 502,
+    "y": -4631.9,
+    "w": 736,
+    "h": 1084.5
+   },
+   "userBubble": {
+    "x": 716.6,
+    "y": -4543.9,
+    "w": 521.4,
+    "h": 48
+   }
+  }
+ },
+ "task-dark-thread-mid@1440": {
+  "label": "task-dark-thread-mid",
+  "url": "https://manus.im/app/sgJiDxxlavxQD40ydGleer",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 866.9,
+    "h": 32
+   },
+   {
+    "el": "div.flex.flex-shrink-0.items-center",
+    "text": "Upgrade\nShare",
+    "x": 1186.9,
+    "y": 7.5,
+    "w": 241.1,
+    "h": 32
+   },
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Share",
+    "x": 1281.8,
+    "y": 7.5,
+    "w": 74.2,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1360,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1396,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 273.6,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.max-w-full",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": -4152,
+    "w": 800,
+    "h": 8484.3
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   },
+   {
+    "el": "span#_r_du_.min-w-10.z-tooltip.break-words",
+    "max": "1416px",
+    "padL": "8px",
+    "padR": "8px",
+    "x": 296,
+    "y": 563,
+    "w": 320,
+    "h": 82
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "pos": "fixed",
+    "top": "707px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 8484,
+    "scrollTop": 4200
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "thread": {
+   "turn": {
+    "x": 502,
+    "y": -1199.9,
+    "w": 736,
+    "h": 1084.5
+   },
+   "column": {
+    "x": 502,
+    "y": -1199.9,
+    "w": 736,
+    "h": 1084.5
+   },
+   "userBubble": {
+    "x": 716.6,
+    "y": -1111.9,
+    "w": 521.4,
+    "h": 48
+   }
+  }
+ },
+ "task-dark-thread-top@1440": {
+  "label": "task-dark-thread-top",
+  "url": "https://manus.im/app/sgJiDxxlavxQD40ydGleer",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "x": 0,
+   "y": 0,
+   "w": 300,
+   "h": 900,
+   "bg": "rgb(31, 31, 31)",
+   "after": "1px rgba(255, 255, 255, 0.06)"
+  },
+  "main": {
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 900,
+   "bg": "rgb(26, 26, 26)"
+  },
+  "header": {
+   "el": "div.flex.w-full.shrink-0",
+   "x": 300,
+   "y": 0,
+   "w": 1140,
+   "h": 48
+  },
+  "topBarItems": [
+   {
+    "el": "div.flex.min-w-0.flex-1",
+    "text": "Manus 2.0 Lite",
+    "x": 316,
+    "y": 7.5,
+    "w": 866.9,
+    "h": 32
+   },
+   {
+    "el": "div.flex.flex-shrink-0.items-center",
+    "text": "Upgrade\nShare",
+    "x": 1186.9,
+    "y": 7.5,
+    "w": 241.1,
+    "h": 32
+   },
+   {
+    "el": "button.inline-flex.items-center.justify-center",
+    "text": "Share",
+    "x": 1281.8,
+    "y": 7.5,
+    "w": 74.2,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1360,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   },
+   {
+    "el": "div.flex.items-center.justify-center",
+    "text": "",
+    "x": 1396,
+    "y": 7.5,
+    "w": 32,
+    "h": 32
+   }
+  ],
+  "composer": {
+   "box": {
+    "x": 486,
+    "y": 748,
+    "w": 768,
+    "h": 120
+   },
+   "radius": "22px",
+   "editor": {
+    "x": 503,
+    "y": 762,
+    "w": 742,
+    "h": 24
+   },
+   "toolRow": {
+    "x": 499,
+    "y": 823,
+    "w": 273.6,
+    "h": 32
+   },
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.w-full.max-w-full",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 470,
+    "y": 48,
+    "w": 800,
+    "h": 10029.4
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   },
+   {
+    "el": "span#_r_du_.min-w-10.z-tooltip.break-words",
+    "max": "1416px",
+    "padL": "8px",
+    "padR": "8px",
+    "x": 296,
+    "y": 563,
+    "w": 320,
+    "h": 82
+   }
+  ],
+  "grids": [],
+  "fixed": [
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 363,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.nav-bar-project-item-header.w-full.flex",
+    "pos": "sticky",
+    "top": "36px",
+    "bottom": "auto",
+    "z": "1",
+    "x": 8,
+    "y": 402,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.group.group/nav-section.flex",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "3",
+    "x": 8,
+    "y": 452,
+    "w": 284,
+    "h": 36
+   },
+   {
+    "el": "div.flex.w-full.shrink-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 300,
+    "y": 0,
+    "w": 1140,
+    "h": 48
+   },
+   {
+    "el": "div.group/chat-input.flex.flex-col",
+    "pos": "fixed",
+    "top": "707px",
+    "bottom": "0px",
+    "z": "auto",
+    "x": 486,
+    "y": 707,
+    "w": 768,
+    "h": 193
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.simplebar-content-wrapper.flex.flex-col",
+    "x": 0,
+    "y": 130,
+    "w": 300,
+    "h": 668,
+    "scrollHeight": 887,
+    "scrollTop": 0
+   },
+   {
+    "el": "div.simplebar-content-wrapper",
+    "x": 300,
+    "y": 48,
+    "w": 1140,
+    "h": 852,
+    "scrollHeight": 10029,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system, \"system-ui\", \"Segoe UI Variable Display\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif, ",
+   "size": "16px",
+   "bg": "rgb(36, 36, 36)",
+   "color": "rgb(230, 230, 230)"
+  },
+  "thread": {
+   "turn": {
+    "x": 502,
+    "y": 64,
+    "w": 736,
+    "h": 1184.5
+   },
+   "column": {
+    "x": 502,
+    "y": 64,
+    "w": 736,
+    "h": 1184.5
+   },
+   "userBubble": {
+    "x": 575.6,
+    "y": 152,
+    "w": 662.4,
+    "h": 72
+   }
+  }
+ }
+}
