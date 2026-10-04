@@ -406,6 +406,41 @@ describe("the doctor's kept build", () => {
     }
     expect(await renderKey(tools, "am_michael")).not.toBe(await renderKey(tools, "af_heart"));
   });
+
+  it("is keyed on what is installed: a reinstall, an upgrade or a Chrome update at the same paths renders again", async () => {
+    // Greptile on #293, for remotionkc's doctor and this one alike: the key
+    // was paths, so a reinstall kept a passing verdict for six hours.
+    const checkout = path.join(root, "revideokc-installed");
+    const nodeModules = path.join(checkout, "node_modules");
+    const bundle = path.join(checkout, "Chrome.app");
+    const binary = path.join(bundle, "Contents", "MacOS", "Chrome");
+    const put = async (file: string, body: string): Promise<void> => {
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, body);
+    };
+    const pkg = (name: string, version: string): string => JSON.stringify({ name, version });
+    await put(path.join(checkout, "package-lock.json"), "{}\n");
+    await put(path.join(nodeModules, ".package-lock.json"), "{}\n");
+    await put(path.join(nodeModules, "@revideo/core/package.json"), pkg("@revideo/core", "0.11.0"));
+    await put(path.join(nodeModules, "@revideo/renderer/package.json"), pkg("@revideo/renderer", "0.11.0"));
+    await put(path.join(bundle, "Contents", "Info.plist"), "<string>140.0</string>\n");
+    await put(binary, "chrome\n");
+    const tools = { ...fixedTools(), revideokc: { ...fixedTools().revideokc, root: checkout, nodeModules, chrome: { binary, bundle } } };
+    const first = await renderKey(tools, "af_heart");
+    expect(await renderKey(tools, "af_heart")).toBe(first);
+    for (const [file, body] of [
+      [path.join(nodeModules, "@revideo/core/package.json"), pkg("@revideo/core", "0.11.1")],
+      [path.join(nodeModules, "@revideo/renderer/package.json"), pkg("@revideo/renderer", "0.11.1")],
+      [path.join(nodeModules, ".package-lock.json"), "{\"lockfileVersion\":3}\n"],
+      [path.join(checkout, "package-lock.json"), "{\"lockfileVersion\":3}\n"],
+      [path.join(bundle, "Contents", "Info.plist"), "<string>141.0</string>\n"],
+      [binary, "a newer chrome\n"],
+    ] as const) {
+      const before = await renderKey(tools, "af_heart");
+      await put(file, body);
+      expect(await renderKey(tools, "af_heart"), file).not.toBe(before);
+    }
+  });
 });
 
 /* -------------------------------------------------------------------------- */

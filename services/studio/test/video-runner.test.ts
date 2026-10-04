@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RecordStore } from "../src/store";
 import type { ValidVideoBrief } from "../src/video/brief";
 import type { VideoDoctor, VideoDoctorReport } from "../src/video/doctor";
+import { VIDEO_TOOLS } from "../src/video/tools";
 import type { VideoJobRecord } from "../src/video/types";
 
 import { narratedBrief } from "./video-fixture";
@@ -167,7 +168,13 @@ describe("the video runner's refusals", () => {
 
   it("refuses a tool the studio cannot make, and a change whose tool is not its video's (D72, D74)", async () => {
     const made = await runner();
-    await expect(made.enqueue(brief({ tool: "remotionkc" }))).rejects.toMatchObject({ status: 409, message: expect.stringContaining("not in the studio yet") });
+    const remotionkc = VIDEO_TOOLS.find((tool) => tool.name === "remotionkc") as { inStudio: boolean };
+    remotionkc.inStudio = false;
+    try {
+      await expect(made.enqueue(brief({ tool: "remotionkc" }))).rejects.toMatchObject({ status: 409, message: expect.stringContaining("not in the studio yet") });
+    } finally {
+      remotionkc.inStudio = true;
+    }
     // A video made with another tool: its change must keep that tool.
     catalogMock.videoShow.mockResolvedValue(ok({ video: { slug: "two-boxes", revision: 2, brief: { tool: "revideokc" } } }));
     await expect(made.enqueue(brief({ mode: "change" }))).rejects.toMatchObject({
@@ -193,6 +200,18 @@ describe("the video runner's refusals", () => {
     await passing.drain();
     expect((await passing.enqueue(brief({ tool: "revideokc" }))).created).toBe(true);
     await expect(passing.enqueue(brief({ slug: "manimkc-one" }))).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("admits a remotionkc brief on remotionkc's own doctor, never on another tool's (phase 3)", async () => {
+    const bare = new VideoRunner(store, { doctor: doctor(), doctors: { revideokc: doctor() } });
+    await bare.drain();
+    await expect(bare.enqueue(brief({ tool: "remotionkc" }))).rejects.toMatchObject({ status: 503, message: expect.stringContaining("remotionkc video job") });
+    const failing = new VideoRunner(store, { doctor: doctor(), doctors: { remotionkc: doctor({ ok: false, checks: [{ name: "toolchain", ok: false, detail: "no Headless Shell" }] }) } });
+    await failing.drain();
+    await expect(failing.enqueue(brief({ tool: "remotionkc" }))).rejects.toMatchObject({ status: 503, detail: { tool: "remotionkc", doctor: [{ detail: "no Headless Shell" }] } });
+    const passing = new VideoRunner(store, { doctor: doctor({ ok: false, checks: [{ name: "render profile", ok: false, detail: "Metal" }] }), doctors: { remotionkc: doctor() } });
+    await passing.drain();
+    expect((await passing.enqueue(brief({ tool: "remotionkc" }))).created).toBe(true);
   });
 
   it("counts video spend against the one daily cap, and refuses at it", async () => {
