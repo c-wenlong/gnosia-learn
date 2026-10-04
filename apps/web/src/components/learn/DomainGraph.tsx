@@ -92,7 +92,7 @@ export function DomainGraph({
   const shown = new Set(groups.flatMap((g) => g.concepts));
   const edges = layout.edges.filter((e) => shown.has(e.from) && shown.has(e.to));
   const svg = useRef<SVGSVGElement | null>(null);
-  const drag = useRef<{ id: string; start: Point; from: Point; moving: boolean; view: Box } | null>(null);
+  const drag = useRef<{ id: string; start: Point; from: Point; moving: boolean; view: Box; pointer: number } | null>(null);
   /** The frame a drag started in, held while it lasts so the picture does not rescale under the pointer. */
   const [frozen, setFrozen] = useState<Box | null>(null);
   /** Set when a drag ends, so the click the browser sends after it does not select. */
@@ -150,7 +150,16 @@ export function DomainGraph({
           const dx = p.x - d.from.x;
           const dy = p.y - d.from.y;
           if (!d.moving && Math.hypot(dx, dy) < DRAG_SLOP) return;
-          if (!d.moving) setFrozen(d.view);
+          if (!d.moving) {
+            setFrozen(d.view);
+            // Captured only once it is a drag: a captured pointer's click goes to the svg,
+            // so capturing on press would stop a plain press from selecting.
+            try {
+              svg.current?.setPointerCapture(d.pointer);
+            } catch {
+              // A synthetic pointer has no capture to take; the drag still follows the svg's own events.
+            }
+          }
           d.moving = true;
           onMove(d.id, { x: Math.round(d.start.x + dx), y: Math.round(d.start.y + dy) });
         }}
@@ -230,12 +239,7 @@ export function DomainGraph({
                 if (event.button !== 0) return;
                 dragged.current = false;
                 const frame = live;
-                drag.current = { id, start: p, from: pointerAt(event, frame), moving: false, view: frame };
-                try {
-                  svg.current?.setPointerCapture(event.pointerId);
-                } catch {
-                  // A synthetic pointer has no capture to take; the drag still follows the svg's own events.
-                }
+                drag.current = { id, start: p, from: pointerAt(event, frame), moving: false, view: frame, pointer: event.pointerId };
               }}
             />
           );
