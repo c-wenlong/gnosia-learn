@@ -104,7 +104,7 @@ export type ParsedQuestion =
   | { ok: false; reason: string };
 
 /** The first `{` to its matching `}`, skipping braces inside strings. */
-function firstObject(text: string): string | null {
+export function firstObject(text: string): string | null {
   const start = text.indexOf("{");
   if (start === -1) return null;
   let depth = 0;

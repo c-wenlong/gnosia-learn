@@ -17,6 +17,7 @@ import {
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { readTutorStyle } from "@/lib/settings";
+import { splitCheck } from "@/lib/tutor-check";
 import { tutorCredentials } from "@/lib/agent/credentials";
 import {
   availableProviderSummary,
@@ -168,6 +169,11 @@ export async function POST(req: Request) {
  * style preference, all read on the server from `conceptSlug`; nothing about
  * the concept is taken from the browser. The response adds `concept` and the numbered `sources` the reply
  * may cite as `[n]`.
+ *
+ * A reply that asks a check ends with a `CHECK: <question>` line
+ * (docs/proposals/recall-in-chat.md, R5). It is taken off here and returned
+ * as `check: { question }` beside the prose, or `check: null`, so the browser
+ * never shows the marker and the thread knows the next message answers it.
  */
 async function conceptTurn(req: Request, body: ChatBody, owner: string) {
   const { conceptSlug, messages, learnerNote } = body;
@@ -223,10 +229,13 @@ async function conceptTurn(req: Request, body: ChatBody, owner: string) {
     typeof learnerNote === "string" && learnerNote.trim()
       ? `\n## Learner notes (from their study hub)\n${learnerNote.trim()}\n`
       : "";
-  return completeTurn(owner, session.systemPrompt + note, messages, {
-    concept: { slug: read.workspace.slug, title: read.workspace.title },
-    sources: session.sources,
-  });
+  return completeTurn(
+    owner,
+    session.systemPrompt + note,
+    messages,
+    { concept: { slug: read.workspace.slug, title: read.workspace.title }, sources: session.sources },
+    { markChecks: true },
+  );
 }
 
 /** Every turn a `{ role, content }` pair, so a malformed one is a 400 before anything is read. */
@@ -277,6 +286,7 @@ async function completeTurn(
   systemPrompt: string,
   messages: ChatMessage[],
   extra: { concept?: { slug: string; title: string }; sources?: CitationSource[] } = {},
+  { markChecks = false }: { markChecks?: boolean } = {},
 ) {
   // Always inject our system prompt as the authoritative first message.
   const payloadMessages: ChatMessage[] = [
@@ -311,8 +321,12 @@ async function completeTurn(
     );
   }
 
+  // Only the concept tutor's prompt asks for the marker; the other two keep
+  // the reply exactly as the model wrote it.
+  const split = markChecks ? splitCheck(outcome.result.content) : null;
   return NextResponse.json({
-    message: { role: "assistant", content: outcome.result.content },
+    message: { role: "assistant", content: split ? split.content : outcome.result.content },
+    ...(split ? { check: split.check } : {}),
     model: outcome.result.model,
     provider: outcome.result.provider,
     providerLabel: outcome.result.providerLabel,
