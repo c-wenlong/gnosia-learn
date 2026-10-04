@@ -4,6 +4,7 @@ import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Button as KitButton } from "@/components/ui/Button";
+import { Glyph } from "@/components/ui/Glyph";
 import { buttonClasses } from "@/components/ui/classes";
 import { jobStateLabel } from "@/lib/studio-job-state";
 import {
@@ -91,22 +92,28 @@ function DirectoryFacts({ listing }: { listing: DiagramListing }) {
 
 /**
  * One diagram's panel inside the studio's dialog: the same content as the
- * inspector, with Extend and Open canvas pinned at the foot
- * (docs/STUDIO-CHAT-FIRST.md, "The plus card and the panel"). Extend is the
- * primary one: asking for a change is what the studio is for, and editing by
- * hand is the way around it.
+ * inspector, with Extend, Make a video of this and Open canvas pinned at the
+ * foot (docs/STUDIO-CHAT-FIRST.md, "The plus card and the panel" and D86).
+ * Extend is the primary one: asking for a change is what the studio is for,
+ * and editing by hand is the way around it.
  */
 export function DiagramPanelBody({
   diagram,
   jobs,
   path,
   extendHref,
+  makeVideoHref,
+  videoBlocked = null,
 }: {
   diagram: Diagram;
   jobs: JobRow[];
   path: string;
   /** Where Extend goes: a conversation opening on this diagram. */
   extendHref: string;
+  /** Where Make a video of this goes: the same conversation, the Video chip waiting in its composer. */
+  makeVideoHref: string;
+  /** Why a video cannot be made here (the video doctor's reason), or null when it can. */
+  videoBlocked?: string | null;
 }) {
   return (
     <>
@@ -115,6 +122,14 @@ export function DiagramPanelBody({
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-t border-hair px-5 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
         <ExtendLink href={extendHref} className={buttonClasses({})} />
+        {videoBlocked === null ? (
+          <ExtendLink href={makeVideoHref} className={buttonClasses({ variant: "secondary" })} label="Make a video of this" icon="video" />
+        ) : (
+          <KitButton variant="secondary" disabled disabledReason={videoBlocked}>
+            <Glyph name="video" size={16} />
+            Make a video of this
+          </KitButton>
+        )}
         <KitButton href={canvasHref(diagram.name)} variant="secondary">
           Open canvas
         </KitButton>
