@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { PAGE_TITLE } from "@/components/ui/classes";
 
 /**
  * A page the new top bar links to before its phase has built it, so the bar
@@ -10,7 +11,7 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 export function ComingSoon({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div data-layout="app" className="flex flex-col gap-4">
-      <h1 className="font-display text-[28px] leading-tight font-bold text-text">{title}</h1>
+      <h1 className={PAGE_TITLE}>{title}</h1>
       <Card className="max-w-xl items-start">
         <Eyebrow>Coming soon</Eyebrow>
         <p className="text-text2">{children}</p>

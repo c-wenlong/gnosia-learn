@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cx } from "./classes";
+import { cx, PANEL_TITLE } from "./classes";
 
 /**
  * Kit `Panel`: NotebookLM's workspace column. The surface colour at radius 16
@@ -44,7 +44,7 @@ export function Panel({
       {header && (
         <div className={cx("flex h-12 shrink-0 items-center gap-2 border-b border-hair px-4", headerClassName)}>
           {title !== undefined && (
-            <h2 className={cx("min-w-0 flex-1 truncate text-[14px] font-semibold text-text", titleClassName)}>{title}</h2>
+            <h2 className={cx(PANEL_TITLE, "min-w-0 flex-1 truncate", titleClassName)}>{title}</h2>
           )}
           {actions !== undefined && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
         </div>

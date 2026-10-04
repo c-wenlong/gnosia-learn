@@ -6,6 +6,7 @@ import { getCourse, getModule } from "@/data/courses";
 import { moduleHref } from "@/lib/course-path";
 import { loadWeekCheck } from "@/lib/week-check-page";
 import { TextLink } from "@/components/ui/TextLink";
+import { PAGE_TITLE } from "@/components/ui/classes";
 
 /**
  * A module's week check (phase 4 of docs/proposals/module-learning-path.md):
@@ -68,7 +69,7 @@ function Unreachable({ href }: { href: string }) {
   return (
     <div data-layout="focus">
       <div className="mx-auto flex max-w-[720px] flex-col items-center gap-4 px-4 pt-16 text-center">
-        <h1 className="font-display text-[28px] font-bold text-text">The week check cannot start</h1>
+        <h1 className={PAGE_TITLE}>The week check cannot start</h1>
         <p className="text-[14px] text-text2">
           The database could not be reached, so there is no mastery to start from and nowhere to record an answer.
           Nothing is lost. Start Postgres and reload.

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { PanelLink } from "@/components/studio/PanelLink";
 import { Banner } from "@/components/ui/Banner";
+import { cx, LABEL } from "@/components/ui/classes";
 
 /**
  * The small, shared pieces of the studio's own chrome.
@@ -154,7 +155,7 @@ export function ButtonLink({
 /** A heading inside the right panel. */
 export function PanelHeading({ children }: { children: ReactNode }) {
   return (
-    <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
+    <h2 className={cx(LABEL, "mb-2")}>
       {children}
     </h2>
   );

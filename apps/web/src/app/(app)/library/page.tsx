@@ -12,7 +12,7 @@ import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Notice } from "@/components/ui/Notice";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { cx } from "@/components/ui/classes";
+import { cx, NOTE, PAGE_TITLE, STATUS_TEXT } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { getCourses } from "@/data/courses";
 import {
@@ -345,7 +345,7 @@ export default async function LibraryPage({
     // filter, a sort or a search is a navigation that keeps it (measured), so
     // only the rows that arrive fade then.
     <div data-layout="app" className={cx("group/library flex flex-col gap-6", PAGE_ENTER)}>
-      {(!reachable || facets.total === 0) && <h1 className={TITLE}>Library</h1>}
+      {(!reachable || facets.total === 0) && <h1 className={PAGE_TITLE}>Library</h1>}
 
       {!reachable ? (
         <Notice title="The catalog is unreachable" command="npm run catalog -- status">
@@ -364,8 +364,8 @@ export default async function LibraryPage({
           <LibraryToolbar
             heading={
               <>
-                <h1 className={TITLE}>Library</h1>
-                <p className="text-[13px] whitespace-nowrap text-text2 tabular-nums">{count}</p>
+                <h1 className={PAGE_TITLE}>Library</h1>
+                <p className={cx(NOTE, "whitespace-nowrap tabular-nums")}>{count}</p>
               </>
             }
             filters={filters}
@@ -421,19 +421,19 @@ export default async function LibraryPage({
           )}
 
           {favorites && starred === null && (
-            <p role="status" className="text-[12px] text-text2">
+            <p role="status" className={cx(STATUS_TEXT, "text-text2")}>
               Your stars could not be read just now, so nothing is shown as starred. They are where they were.
             </p>
           )}
 
           {search !== null && !search.searchedText && (
-            <p role="status" className="text-[12px] text-text2">
+            <p role="status" className={cx(STATUS_TEXT, "text-text2")}>
               Searched titles only: no note or transcript here has a stored copy yet, so they were matched by
               name, not by what they say.
             </p>
           )}
           {search !== null && search.searchedText && search.skipped > 0 && (
-            <p role="status" className="text-[12px] text-text2">
+            <p role="status" className={cx(STATUS_TEXT, "text-text2")}>
               {search.skipped} {search.skipped === 1 ? "note or transcript was" : "notes and transcripts were"}{" "}
               matched by name only: {search.skipped === 1 ? "it has" : "they have"} no stored copy yet.
             </p>
@@ -524,7 +524,6 @@ const RESULTS_MOTION =
   "transition-opacity duration-150 ease-out motion-reduce:transition-none group-has-[[data-pending]]/library:opacity-60";
 const ARRIVE = "animate-fade-in motion-reduce:animate-none";
 
-const TITLE = "font-display text-[28px] leading-tight font-bold text-text";
 
 /**
  * One group's rows under its heading, Manus's `date-heading`: the day ("4 Oct",

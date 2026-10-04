@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { buttonClasses, cx } from "@/components/ui/classes";
+import { buttonClasses, cx, STATUS_TEXT } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 
 /**
@@ -63,7 +63,7 @@ export function FavoriteButton({ assetId, initial }: { assetId: string; initial:
         Favorite
       </Button>
       {failed && (
-        <span role="status" className="animate-fade-in text-[12px] text-text2 motion-reduce:animate-none">
+        <span role="status" className={cx(STATUS_TEXT, "animate-fade-in text-text2 motion-reduce:animate-none")}>
           Not saved. Try again.
         </span>
       )}

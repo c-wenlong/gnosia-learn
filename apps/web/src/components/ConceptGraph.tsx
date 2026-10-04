@@ -167,7 +167,7 @@ export function ConceptGraph({
 /** The two-line key under a graph: what the line styles and the ring mean. */
 export function ConceptGraphKey({ className }: { className?: string }) {
   return (
-    <p className={cx("text-[11px] leading-4 text-text3", className)}>
+    <p className={cx("text-[12px] leading-4 text-text3", className)}>
       Prerequisites sit above. Solid: required. Dashed: background. Ringed: selected.
     </p>
   );
