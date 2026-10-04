@@ -11,6 +11,7 @@ import { Collapse } from "@/components/ui/Collapse";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
 import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
+import { isImeKey } from "@/components/ui/composer-keys";
 import { useLearner } from "@/lib/learner-context";
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
 import {
@@ -372,7 +373,8 @@ export function NameField() {
           onChange={(event) => setDraft(event.target.value)}
           onBlur={save}
           onKeyDown={(event) => {
-            if (event.key === "Enter") {
+            // The Enter that confirms an input method's word is not a save.
+            if (event.key === "Enter" && !isImeKey(event.nativeEvent)) {
               event.preventDefault();
               save();
             }

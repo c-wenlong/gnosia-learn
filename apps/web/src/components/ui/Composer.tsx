@@ -114,15 +114,7 @@ export function Composer({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    const meaning = composerKey({
-      key: event.key,
-      shiftKey: event.shiftKey,
-      metaKey: event.metaKey,
-      ctrlKey: event.ctrlKey,
-      altKey: event.altKey,
-      isComposing: event.nativeEvent.isComposing,
-      keyCode: event.nativeEvent.keyCode,
-    });
+    const meaning = composerKey(event.nativeEvent);
     if (meaning === "send") {
       event.preventDefault();
       submit();

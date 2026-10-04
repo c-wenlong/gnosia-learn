@@ -12,6 +12,7 @@ import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
 import { cx, FIELD_TEXT, LABEL } from "@/components/ui/classes";
+import { composerKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
@@ -1024,7 +1025,8 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
             event.preventDefault();
             event.stopPropagation();
             onClose();
-          } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          } else if (composerKey(event.nativeEvent) === "mod-send") {
+            // Cmd or Ctrl+Enter, by the composer's rule: never an input method's Enter.
             event.preventDefault();
             void revise();
           }
