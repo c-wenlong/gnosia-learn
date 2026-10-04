@@ -79,6 +79,16 @@ export function Providers({ view }: { view: ProvidersView }) {
   // While a new key is on its way the form must stay open: the toggle would
   // shut it under a save that is still going to land.
   const [addSaving, setAddSaving] = useState(false);
+  // A deleted provider's row leaves with the refresh, and the focus it held
+  // with it: Add provider, which offers that provider again, takes it once
+  // the new rows have arrived (unless the person has put it somewhere).
+  const focusAdd = useRef(false);
+  useEffect(() => {
+    if (!focusAdd.current) return;
+    focusAdd.current = false;
+    const at = document.activeElement;
+    if (at === null || at === document.body) document.getElementById(`${base}-add`)?.focus();
+  }, [view, base]);
   const addButton = view.addable.length === 0 ? undefined : (
     <Button
       id={`${base}-add`}
@@ -140,6 +150,9 @@ export function Providers({ view }: { view: ProvidersView }) {
               usingDefaults={view.usingDefaults}
               full={view.full}
               disabled={!view.keysReachable || !view.chainReachable}
+              onGone={() => {
+                focusAdd.current = true;
+              }}
             />
           ))}
         </ul>
@@ -255,6 +268,7 @@ function ProviderRow({
   usingDefaults,
   full,
   disabled,
+  onGone,
 }: {
   row: ProviderRowView;
   /** No provider with models above it: Move up does nothing. */
@@ -264,6 +278,8 @@ function ProviderRow({
   usingDefaults: boolean;
   full: boolean;
   disabled: boolean;
+  /** This row was deleted and leaves with the refresh (no server key keeps it listed). */
+  onGone: () => void;
 }) {
   const router = useRouter();
   const base = useId();
@@ -320,12 +336,14 @@ function ProviderRow({
     setStatus({ kind: "busy", text: "Deleting…" });
     const reply = await sendJson<Reply>("DELETE", "/api/learner/tutor-model/provider", { provider: row.id });
     // Focus after either answer is the fold's (`ConfirmFold`): back to its
-    // Delete when the delete failed, to the row's Delete once it closes.
+    // Delete when the delete failed, to the row's Delete once it closes, and
+    // to Add provider when the row itself goes (`onGone`).
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
       return setStatus({ kind: "error", text: failure("deleted", reply) });
     }
     setMode("idle");
     setStatus({ kind: "done", text: row.server ? "Deleted. The server's key still applies." : "Deleted." });
+    if (!row.server) onGone();
     router.refresh();
   };
 
