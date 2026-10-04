@@ -7,9 +7,10 @@ import {
   type SessionKind,
   type SessionState,
 } from "@self-learn/schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { bytewise } from "../sql-order";
 import { StateError } from "./errors";
 import { ensureLearner } from "./learner";
 
@@ -100,6 +101,49 @@ export async function readSession(
     .where(and(eq(session.id, id), learnerId === undefined ? undefined : eq(session.learnerId, learnerId)))
     .limit(1);
   return rows[0];
+}
+
+/** A tutor session as the sidebar's Recent lists it (`recentTutorSessions`). */
+export interface RecentSession {
+  id: string;
+  title: string | null;
+  /** What the session set out to learn: a concept slug for one the web app opened. */
+  goal: string | null;
+  /** The session's markdown log, when the row points at one. */
+  logAssetId: string | null;
+  state: string;
+  /** ISO instant. */
+  updatedAt: string;
+}
+
+/**
+ * One learner's tutor sessions, most recently touched first, for the
+ * sidebar's Recent and Home's "Pick up where you left off" (L7 of
+ * docs/proposals/library-by-type-and-day.md). Studio sessions are a
+ * generation runner's and are left out: a conversation is reached through its
+ * `draft`, not its runs.
+ */
+export async function recentTutorSessions(
+  db: CatalogDatabase,
+  learnerId: string,
+  limit = 50,
+): Promise<RecentSession[]> {
+  const rows = await db
+    .select({
+      id: session.id,
+      title: session.title,
+      goal: session.goal,
+      logAssetId: session.logAssetId,
+      state: session.state,
+      updatedAt: session.updatedAt,
+    })
+    .from(session)
+    .where(and(eq(session.learnerId, learnerId), eq(session.kind, "tutor")))
+    // `id` breaks a tie, so a page boundary between two sessions touched in
+    // the same instant (the 0006 backfill stamped many alike) is stable.
+    .orderBy(desc(session.updatedAt), desc(bytewise(session.id)))
+    .limit(limit);
+  return rows.map((r) => ({ ...r, updatedAt: r.updatedAt.toISOString() }));
 }
 
 export interface SessionEndInput {

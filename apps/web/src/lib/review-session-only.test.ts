@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * `readReviewSession` with `only` (Home's "Recall these"): just those due
+ * `readReviewSession` with `only` (a chosen set, once Home's recall button): just those due
  * cards, in that order, and never a card that is not due. The catalog reads
  * are stand-ins; what is under test is how the session narrows the queue.
  */

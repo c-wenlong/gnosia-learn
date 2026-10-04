@@ -1,7 +1,7 @@
-import { draft, learner, LOCAL_LEARNER_ID } from "@self-learn/schema";
+import { draft, learner, LOCAL_LEARNER_ID, session } from "@self-learn/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { asRecentModules, recentDrafts, withRecentModule } from "../src/state";
+import { asRecentModules, appendEvent, draftsByIds, readEvents, recentDrafts, recentTutorSessions, withRecentModule } from "../src/state";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -84,5 +84,58 @@ describe.skipIf(!reachable.ok)("recentDrafts", () => {
       ["oldest", "diagram", "open"],
     ]);
     expect(drafts[0]?.updatedAt).toBe("2026-10-03T10:02:00.000Z");
+  });
+
+  it("reads some of one owner's drafts by id, titled or not, leaving abandoned ones and other owners' out", async () => {
+    const drafts = await draftsByIds(scratch.db, LOCAL_LEARNER_ID, ["untitled", "titled", "abandoned", "theirs", "missing"]);
+    expect(drafts.map((d) => [d.id, d.title])).toEqual([
+      ["untitled", ""],
+      ["titled", "titled"],
+    ]);
+    expect(await draftsByIds(scratch.db, LOCAL_LEARNER_ID, [])).toEqual([]);
+  });
+});
+
+describe.skipIf(!reachable.ok)("recentTutorSessions and the visit event", () => {
+  let scratch: Scratch;
+
+  beforeAll(async () => {
+    scratch = await migratedScratchDatabase();
+    await scratch.db.insert(learner).values([{ id: LOCAL_LEARNER_ID }, { id: "owner-b" }]).onConflictDoNothing();
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+  });
+
+  it("lists one learner's tutor sessions, newest first, leaving studio runs and other learners out", async () => {
+    const row = (id: string, minutes: number, extra: Partial<typeof session.$inferInsert> = {}) => ({
+      id,
+      kind: "tutor",
+      learnerId: LOCAL_LEARNER_ID,
+      state: "closed",
+      startedAt: new Date(Date.UTC(2026, 9, 3, 9)),
+      endedAt: new Date(Date.UTC(2026, 9, 3, 9, 30)),
+      updatedAt: new Date(Date.UTC(2026, 9, 3, 10, minutes)),
+      ...extra,
+    });
+    await scratch.db.insert(session).values([
+      row("older", 1, { title: "Older", goal: "dot-product" }),
+      row("newer", 3),
+      row("same-b", 2),
+      row("same-a", 2),
+      row("studio-run", 5, { kind: "studio" }),
+      row("theirs", 6, { learnerId: "owner-b" }),
+    ]);
+    const sessions = await recentTutorSessions(scratch.db, LOCAL_LEARNER_ID, 4);
+    // A tie on the instant is broken by id, so a page boundary is stable.
+    expect(sessions.map((s) => s.id)).toEqual(["newer", "same-b", "same-a", "older"]);
+    expect(sessions[3]).toMatchObject({ title: "Older", goal: "dot-product", logAssetId: null, updatedAt: "2026-10-03T10:01:00.000Z" });
+  });
+
+  it("takes a visit event, course and module in the payload, and reads it back as the CLI's flat record", async () => {
+    await appendEvent(scratch.db, { type: "visit", course: "cs3230", module: "m1" }, LOCAL_LEARNER_ID);
+    const events = await readEvents(scratch.db, LOCAL_LEARNER_ID);
+    expect(events.filter((e) => e.type === "visit")).toEqual([expect.objectContaining({ type: "visit", course: "cs3230", module: "m1" })]);
   });
 });

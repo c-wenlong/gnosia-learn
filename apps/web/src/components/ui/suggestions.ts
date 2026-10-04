@@ -11,16 +11,23 @@ import type { FilterOption } from "./filter-menu";
  * list's own order. An empty field suggests everything. Matching anywhere in
  * the label rather than only at its start is what lets "sonnet" find
  * `anthropic/claude-sonnet-4`.
+ *
+ * Words typed with spaces between them each have to appear, in the label or
+ * the row's `detail`, in any order: "deepseek free" finds
+ * `deepseek/deepseek-chat:free` and a row marked "free". One word matches
+ * exactly what it did before words were split.
  */
 export function suggestionsFor<V extends string>(options: readonly FilterOption<V>[], typed: string): FilterOption<V>[] {
   const query = typed.trim().toLowerCase();
   if (query === "") return [...options];
+  const words = query.split(/\s+/);
   const starts: FilterOption<V>[] = [];
   const holds: FilterOption<V>[] = [];
   for (const option of options) {
     const label = option.label.toLowerCase();
+    const text = option.detail === undefined ? label : `${label} ${option.detail.toLowerCase()}`;
     if (label.startsWith(query)) starts.push(option);
-    else if (label.includes(query)) holds.push(option);
+    else if (label.includes(query) || (words.length > 1 && words.every((word) => text.includes(word)))) holds.push(option);
   }
   return [...starts, ...holds];
 }

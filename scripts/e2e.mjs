@@ -589,7 +589,7 @@ async function run() {
     const slugs = await cards.locator('[data-domain-card]').evaluateAll((els) => els.map((el) => el.getAttribute('data-domain-card')));
     for (const slug of ['foundations', 'machine-learning', 'agentic-ai']) assert(slugs.includes(slug), `no card for ${slug}: ${slugs}`);
     assert(!new URL(page.url()).searchParams.has('view'), 'the default view wrote view= into the URL');
-    await clickHydrated(page, main.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Table' }));
+    await clickHydrated(page, main.getByRole('radiogroup', { name: 'View' }).getByRole('radio', { name: 'Table' }));
     await main.getByRole('table').waitFor();
     await page.waitForFunction(() => new URL(location.href).searchParams.get('view') === 'table');
     await page.reload({ waitUntil: 'load' });
@@ -1084,7 +1084,7 @@ async function run() {
     await page.getByRole('listbox', { name: 'Sort' }).getByRole('option', { name: /^Title\b/ }).click();
     await page.waitForURL((url) => url.searchParams.get('sort') === 'title' && url.searchParams.get('kind') === 'note');
     // The layout switch keeps both, and the list is in title order.
-    await main.getByRole('navigation', { name: 'Layout' }).getByRole('link', { name: 'List' }).click();
+    await main.getByRole('group', { name: 'Layout' }).getByRole('link', { name: 'List' }).click();
     await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('sort') === 'title');
     assert(new URL(page.url()).searchParams.get('kind') === 'note', `the list lost the type: ${page.url()}`);
     const titles = await page.getByRole('list', { name: 'Assets' }).locator('li a > span:nth-child(2) > span:first-child').allTextContents();
