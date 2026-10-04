@@ -60,15 +60,17 @@ the island of the selected concept (`?concept=`, else `defaultSelection`, as
 today). "Fit all" is one press away. That keeps what decision 13 protected:
 the first screen is a readable region, never all 306 nodes at once.
 
-`?scope=` keeps the meaning it has today. `parseScope`
-([learn-index.ts](../../apps/web/src/lib/learn-index.ts)) still reads it:
-`scope=course` fits every island that holds a concept of the selected
-concept's course, which shows the whole course however many clusters it
-spans, and `scope=neighbourhood` fits the selected concept and its
-neighbours. With no `scope`, the map fits the selected concept's island. The
-"Open full course graph" link the comments in `learn-index.ts` and
-`LearnIndex.tsx` describe is no longer on the workspace page, so no link
-changes meaning; a hand-kept URL with `scope=course` still shows the course.
+`?scope=` keeps the meaning it has today. `scope=course` fits every island
+that holds a concept of the selected concept's course, so it shows the whole
+course however many clusters it spans, and `scope=neighbourhood` fits the
+selected concept and its neighbours. With no `scope`, the map fits the
+selected concept's island. The workspace's "Open full course graph" button
+([StudioCards.tsx](../../apps/web/src/components/workspace/StudioCards.tsx))
+links to `/learn?concept=<slug>&view=graph` and relies on `parseScope`
+([learn-index.ts](../../apps/web/src/lib/learn-index.ts)) reading a missing
+scope as `course` in the graph view. Phase 2 makes the button say
+`scope=course` itself, and only then changes the missing-scope default to
+the island, so the button keeps opening the whole course.
 
 **G3. The layout is computed on the server, and drawn as the app's own
 SVG.** The page already reads the knowledge base on the server, so it runs
@@ -131,7 +133,7 @@ working.
 | Phase | Ships | Done when |
 | --- | --- | --- |
 | 1. Layout | `mapLayout` in `apps/web/src/lib/concept-map.ts`: clusters, a dagre layered layout per cluster, island packing and titles (G3, G7). Pure and tested. The existing Graph view draws it as one static SVG in a scrolling box | Tests cover clusters, packing, titles and a cycle. On the owner's database every island has a title, and the crossing count of the largest island is measured and lower than today's `layoutGraph` |
-| 2. Viewer | Pan, zoom, pinch, fit island and fit all on the Graph view; labels hide when zoomed out; it opens on the selected concept's island (G2) | `?concept=<slug>&view=graph` opens zoomed to that island. A Playwright walk times a pan across the largest island on the owner's database and finds no frame over 50 ms |
+| 2. Viewer | Pan, zoom, pinch, fit island and fit all on the Graph view; labels hide when zoomed out; it opens on the selected concept's island (G2); the workspace's "Open full course graph" button passes `scope=course` | `?concept=<slug>&view=graph` opens zoomed to that island, and the button opens fitted to every island of the concept's course. A Playwright walk times a pan across the largest island on the owner's database and finds no frame over 50 ms |
 | 3. Reading the map | Node selection with the side panel, search to zoom, filter dims, the p(L) arc and the overdue and leech marks (G4), the ready highlight (G5). Pinch and drag at 375 pixels wide | Selecting "Vector as a list of numbers" shows its four dependants in the accent and the panel's "Open in workspace" lands on its page. With CS3230 in `recentModules`, only CS3230's ready concepts are highlighted. The phone walk pans and zooms the largest island without a frame over 50 ms (else G3's fallback is taken, and this proposal is amended) |
 | 4. Keyboard, then the default | Keyboard: Tab enters the map, the arrow keys move to a prerequisite or a dependant, Enter opens the panel, Escape leaves; a text summary for screen readers that names the islands and points to the table. Then, in the same PR, the map becomes the default view (G1) | The whole map, panel included, can be walked with the keyboard alone, and a screen reader announces the summary. Only then does `/learn` open on the map |
 
