@@ -13,7 +13,8 @@ import { dbSource } from "../src/content/source";
 import { runIndex } from "../src/index/run";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
-import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@self-learn/schema";
+import { writeAssetName } from "../src/state";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -59,6 +60,27 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
     expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.topics.length, 0), 0)).toBe(5);
     expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.resources.length, 0), 0)).toBe(4);
     expect(JSON.stringify(rows)).toBe(JSON.stringify(files));
+  });
+
+  it("lists a resource under the reader's own name, and only theirs", async () => {
+    const [course] = await dbSource(scratch.db, LOCAL).courses();
+    const resource = course?.modules.flatMap((m) => m.resources)[0];
+    if (resource === undefined) throw new Error("the seed has no course resource");
+    const original = resource.title;
+    const id = (await scratch.db.execute<{ id: string }>(sql`select id from asset where kind = 'link' and url = ${resource.url}`)).rows[0]?.id;
+    if (id === undefined) throw new Error(`no link row for ${resource.url}`);
+
+    await writeAssetName(scratch.db, id, "My name for it", LOCAL_LEARNER_ID);
+    try {
+      const titles = async (scope: OwnerScope) =>
+        (await dbSource(scratch.db, scope).courses()).flatMap((c) => c.modules.flatMap((m) => m.resources)).map((r) => r.title);
+      expect(await titles(LOCAL)).toContain("My name for it");
+      expect(await titles(LOCAL)).not.toContain(original);
+      // Unscoped, as an operator's tool reads, the course file's title stands.
+      expect((await readCourses(scratch.db)).flatMap((c) => c.modules.flatMap((m) => m.resources)).map((r) => r.title)).toContain(original);
+    } finally {
+      await writeAssetName(scratch.db, id, null, LOCAL_LEARNER_ID);
+    }
   });
 
   it("reads the whole tree from one snapshot", async () => {

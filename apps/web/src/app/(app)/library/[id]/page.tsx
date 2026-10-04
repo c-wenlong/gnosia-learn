@@ -7,6 +7,7 @@ import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/library/AssetTabs";
+import { AssetTitle } from "@/components/library/AssetTitle";
 import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
 import { WatchProgress } from "@/components/library/WatchProgress";
@@ -167,7 +168,7 @@ export default async function AssetPage({
     loadLastWatched(id),
     loadPlayback(id),
   ]);
-  const { asset, derivations, related, reachable, titles, notes, concepts } = detail;
+  const { asset, derivations, related, reachable, titles, notes, concepts, naming } = detail;
 
   if (asset === null) {
     // A reachable catalog that has no such row is a 404. An unreachable one is
@@ -268,17 +269,18 @@ export default async function AssetPage({
   // should have a unique key". A key satisfies that check and changes nothing
   // else.
   const heading = (
-    <h1
+    <AssetTitle
       key="heading"
-      className={cx(
+      assetId={asset.id}
+      text={name.text}
+      naming={naming}
+      headingClassName={cx(
         "break-words text-text",
         name.source === "title"
           ? "text-[22px] leading-snug font-bold tracking-[-0.01em] sm:text-[24px]"
           : "font-mono text-[17px] leading-snug font-semibold",
       )}
-    >
-      {name.text}
-    </h1>
+    />
   );
 
   if (asset.kind === "video" && servable) {

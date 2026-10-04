@@ -27,6 +27,7 @@ import { uploadBlob } from "./blob";
 import { BlobOwnerError } from "./blob-owner";
 import { sha256 } from "./diagram-document";
 import { latestRevisions, lockEntity } from "./revisions";
+import { assetNamesExist } from "../state/assets";
 import { andOwnedBy } from "./scope";
 import { ContentWriteError, deleteContent, writeContents, type WriteContentInput, type WriteContentResult } from "./write";
 import { VIDEO_SOURCE_BYTES_MAX, VIDEO_SOURCE_FILES_MAX } from "./video-source-limits";
@@ -850,8 +851,12 @@ interface StudioRow extends Record<string, unknown> {
 }
 
 async function studioRows(db: CatalogDatabase, scope: OwnerScope, only?: string, withSource = false): Promise<StudioRow[]> {
+  const names = await assetNamesExist(db);
   const { rows } = await db.execute<StudioRow>(sql`
-    select v.slug, v.title, v.topic_slug, v.source_hash, v.rendered_source_hash, v.mp4_blob_key,
+    -- The owner's own name for the cut (asset_name), as the library shows it.
+    select v.slug,
+      ${names ? sql`coalesce((select n.title from asset_name n where n.asset_id = ${VIDEO_PREFIX} || v.slug and n.learner_id = ${scope.owner}), v.title)` : sql`v.title`} as title,
+      v.topic_slug, v.source_hash, v.rendered_source_hash, v.mp4_blob_key,
       v.duration_seconds, v.updated_at, b.bytes as mp4_bytes, b.sha256 as mp4_sha256,
       (select array_agg(c.concept_slug order by c.concept_slug collate "C") from asset_concept c
         join concept k on k.slug = c.concept_slug
@@ -921,8 +926,12 @@ interface RenderRow extends Record<string, unknown> {
  */
 export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promise<VideoSummary[]> {
   const studio = (await studioRows(db, scope)).map(studioSummary);
+  const names = await assetNamesExist(db);
   const { rows } = await db.execute<RenderRow>(sql`
-    select a.id, a.title, a.blob_key, a.bytes, a.content_hash, a.updated_at,
+    -- The owner's own name for a render (asset_name), as the library shows it.
+    select a.id,
+      ${names ? sql`coalesce((select n.title from asset_name n where n.asset_id = a.id and n.learner_id = ${scope.owner}), a.title)` : sql`a.title`} as title,
+      a.blob_key, a.bytes, a.content_hash, a.updated_at,
       (select min(t.topic_slug collate "C") from asset_topic t join topic o on o.slug = t.topic_slug
         where t.asset_id = a.id${andOwnedBy(sql`o.owner_id`, scope.readable)}) as topic,
       (select array_agg(c.concept_slug order by c.concept_slug collate "C") from asset_concept c join concept k on k.slug = c.concept_slug

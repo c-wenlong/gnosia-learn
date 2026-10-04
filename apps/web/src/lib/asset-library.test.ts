@@ -57,6 +57,7 @@ vi.mock("@self-learn/catalog/state", () => ({
         : [...rows, ...notes].filter((r) => filter.ids!.includes(r.id)),
   assetCounts: async () => [{ kind: "video", count: 1 }],
   assetDerivations: async () => ({ sources: [], derived: [] }),
+  readAssetNaming: async () => null,
   // The one that fails. Everything else answers normally, which is the shape
   // of the real failure: one statement in a sequence, not a dead database.
   topicTitles: async () => {
