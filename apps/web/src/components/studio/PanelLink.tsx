@@ -15,7 +15,9 @@ import { browserMove } from "@/lib/studio-view";
  * the `Link` it always was.
  *
  * With `panel`, a plain click opens that panel and `href` is only where a
- * modified click and a script-less page go: a video tile plays its preview
+ * modified click and a click before the page's scripts load go (with scripts
+ * off the page never gets past its loading frame, so there is no tile to
+ * press; see the notice in the `(app)` layout): a video tile plays its preview
  * in place (`?play=`) and still opens the library page in a new tab.
  *
  * A link the host serves is not prefetched. A `Link` in view asks the server
