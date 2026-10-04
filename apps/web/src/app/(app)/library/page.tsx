@@ -6,10 +6,10 @@ import { AssetCard, type CardConcept } from "@/components/AssetCard";
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetRow } from "@/components/library/AssetRow";
 import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryToolbar";
-import { Notice } from "@/components/library/Notice";
 import { Previewer } from "@/components/library/Previewer";
 import { loadPreview } from "@/components/library/preview-content";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { Notice } from "@/components/ui/Notice";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx } from "@/components/ui/classes";
@@ -444,11 +444,8 @@ export default async function LibraryPage({
               reopens it, a filter that now matches nothing included. */}
           <Previewer initial={preview} initialOpen={open}>
           {matching.length === 0 ? (
-            <Notice title="No assets match">
+            <Notice title="No assets match" actions={<TextLink href="/library">Clear every filter</TextLink>}>
               <p>{noMatchSentence}</p>
-              <p className="mt-3">
-                <TextLink href="/library">Clear every filter</TextLink>
-              </p>
             </Notice>
           ) : (
             <section

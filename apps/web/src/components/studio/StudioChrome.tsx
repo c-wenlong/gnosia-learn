@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { PanelLink } from "@/components/studio/PanelLink";
+import { Banner } from "@/components/ui/Banner";
 
 /**
  * The small, shared pieces of the studio's own chrome.
@@ -175,38 +176,17 @@ export function Mono({ children }: { children: ReactNode }) {
 }
 
 /**
- * An amber strip that does not take the screen.
- *
- * U3 and U5 are both this: the catalog is unreachable, or the page bundle is
- * older than its source. Both mean "everything still works", which is a banner
- * and never a wall — the wall is U4, and that is `StudioBlocked`.
- */
-export function Notice({
-  tone = "warn",
-  children,
-}: {
-  tone?: "warn" | "danger";
-  children: ReactNode;
-}) {
-  const tones = {
-    warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)]",
-    danger: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
-    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok-text)]",
-  } as const;
-  return (
-    <div role="status" className={`border-b px-3 py-1.5 text-xs ${tones[tone]}`}>
-      {children}
-    </div>
-  );
-}
-
-/**
  * What the verb a person just pressed actually did.
  *
  * Rendered from the query string the action redirected to, so a 409 or a 502
  * reads as an answer rather than as a button that did nothing. It carries a
  * link that drops the message, since a stale outcome pinned in a URL somebody
  * bookmarked would be worse than no outcome at all.
+ *
+ * The kit's `Banner`, as the studio's other strips are (U3 and U5: the catalog
+ * is unreachable, or the page bundle is older than its source; both mean
+ * "everything still works", which is a banner and never a wall, the wall
+ * being U4's `StudioBlocked`).
  */
 export function VerbNotice({
   report,
@@ -215,25 +195,13 @@ export function VerbNotice({
   report: { verb: string; ok: boolean; headline: string; detail: string | null };
   clearHref: string;
 }) {
-  const tones = {
-    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok-text)]",
-    bad: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
-  } as const;
   return (
-    <div
-      role="status"
-      className={`flex items-start gap-3 border-b px-3 py-1.5 text-xs ${report.ok ? tones.ok : tones.bad}`}
-    >
-      <span className="min-w-0 flex-1">
-        <span className="font-medium">{report.verb}: </span>
-        {report.headline}
-        {report.detail !== null && report.detail !== "" && (
-          <span className="block font-mono text-xs opacity-80">{report.detail}</span>
-        )}
-      </span>
-      <Link href={clearHref} scroll={false} className="shrink-0 underline underline-offset-2">
-        Dismiss
-      </Link>
-    </div>
+    <Banner tone={report.ok ? "ok" : "danger"} dismissHref={clearHref}>
+      <span className="font-semibold">{report.verb}: </span>
+      {report.headline}
+      {report.detail !== null && report.detail !== "" && (
+        <span className="block font-mono text-[12px] text-text2">{report.detail}</span>
+      )}
+    </Banner>
   );
 }

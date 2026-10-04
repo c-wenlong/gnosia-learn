@@ -11,10 +11,12 @@ import { FADE_IN } from "@/components/studio/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { cx, LABEL } from "@/components/ui/classes";
 import { composerKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph } from "@/components/ui/Glyph";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { Textarea } from "@/components/ui/Textarea";
 import { TextLink } from "@/components/ui/TextLink";
 import { VideoPlayer } from "@/components/VideoPlayer";
@@ -798,14 +800,16 @@ function Checks({ job }: { job: VideoJob }) {
         </TextLink>
       </div>
       {gate.warnings.length > 0 && (
-        <ul className="mt-2 flex flex-col gap-1 rounded-xl bg-warn-tint px-4 py-2.5">
-          {uniqueWarnings(gate.warnings).map(({ text, count }) => (
-            <li key={text} className="text-[13px] leading-5 text-warn-text">
-              {text.charAt(0).toUpperCase() + text.slice(1)}
-              {count > 1 && <span className="text-warn-text/80"> ({count} times)</span>}
-            </li>
-          ))}
-        </ul>
+        <Callout className="mt-2">
+          <ul className="flex flex-col gap-1">
+            {uniqueWarnings(gate.warnings).map(({ text, count }) => (
+              <li key={text}>
+                {text.charAt(0).toUpperCase() + text.slice(1)}
+                {count > 1 && <span className="text-text2"> ({count} times)</span>}
+              </li>
+            ))}
+          </ul>
+        </Callout>
       )}
       <Collapse open={open} id={id}>
         <ul className="mt-2 flex flex-col">
@@ -882,22 +886,18 @@ function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: 
               Change
             </Button>
           )}
-          {discard &&
-            (confirmDiscard ? (
-              <span className={cx("flex flex-wrap items-center gap-2", FADE_IN)}>
-                <span className="text-[13px] text-text2">The renders are deleted; the source is kept.</span>
-                <Button size="sm" variant="warn" disabled={busy !== null} onClick={() => void act("discard")}>
-                  {busy === "discard" ? "Discarding" : "Discard it"}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmDiscard(false)}>
-                  Keep it
-                </Button>
-              </span>
-            ) : (
-              <Button variant="ghost" disabled={busy !== null} onClick={() => setConfirmDiscard(true)} className={FADE_IN}>
-                Discard
-              </Button>
-            ))}
+          {discard && (
+            <InlineConfirm
+              label="Discard"
+              question="The renders are deleted; the source is kept."
+              confirmLabel="Discard it"
+              busyLabel={busy === "discard" ? "Discarding" : undefined}
+              onConfirm={() => void act("discard")}
+              busy={busy !== null}
+              open={confirmDiscard}
+              onOpenChange={setConfirmDiscard}
+            />
+          )}
         </div>
       )}
       {accept && !changing && (

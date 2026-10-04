@@ -7,7 +7,7 @@ import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { PixelAvatar } from "@/components/avatar/PixelAvatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Collapse } from "@/components/ui/Collapse";
+import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow, type FormRowField } from "@/components/ui/FormRow";
 import { Input } from "@/components/ui/Input";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
@@ -435,10 +435,10 @@ function ReadOnly({ field, title, children }: { field: FormRowField; title?: str
  * delete would recreate the row). It says "reset" only once the write has
  * been stored; a refusal is said here and in the shell's banner.
  *
- * The confirm and the status line glide open and shut (`Collapse`,
- * `LiveStatus`). Closing the confirm, by Cancel or by a reset that landed,
- * puts focus back on Reset progress, since the button pressed is inside the
- * fold that just closed.
+ * The confirm and the status line glide open and shut (`ConfirmFold`,
+ * `LiveStatus`). Closing the confirm, by Cancel, Escape or a reset that
+ * landed, puts focus back on Reset progress when it was inside the fold that
+ * just closed; a reset that failed gives it back to the press it disabled.
  */
 function DataActions({ topicIds }: { topicIds: string[] }) {
   const { resetCourse } = useLearner();
@@ -446,29 +446,12 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const confirmId = useId();
   const toggle = useRef<HTMLButtonElement>(null);
-  // Set before the state that closes the confirm, focused once it has rendered.
-  const refocus = useRef(false);
-  useEffect(() => {
-    if (!refocus.current || confirming) return;
-    refocus.current = false;
-    toggle.current?.focus();
-  }, [confirming]);
-
-  const close = () => {
-    // Only when focus was inside the fold (or was dropped by a button that
-    // went disabled): never pull it back from somewhere the person moved it.
-    const at = document.activeElement;
-    if (confirming && (at === null || at === document.body || document.getElementById(confirmId)?.contains(at))) {
-      refocus.current = true;
-    }
-    setConfirming(false);
-  };
 
   const reset = async () => {
     setStatus({ kind: "saving" });
     const stored = await resetCourse(topicIds);
     if (stored) {
-      close();
+      setConfirming(false);
       setStatus({ kind: "saved" });
     } else {
       setStatus({ kind: "error", message: "Not reset: the write was not stored." });
@@ -494,22 +477,18 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
           Reset progress
         </Button>
       </div>
-      <Collapse open={confirming} id={confirmId} className="pt-3">
-        <div role="group" aria-label="Confirm reset" className="flex flex-col gap-3 rounded-2xl border-2 border-warn bg-warn-tint p-4">
-          <p className="text-[14px] text-text">
-            Clear the ticks and notes on every course? Mastery, review cards and saved recaps are kept. This cannot be
-            undone.
-          </p>
-          <div className="flex flex-wrap gap-2.5">
-            <Button variant="warn" size="sm" disabled={status.kind === "saving"} onClick={() => void reset()}>
-              Reset every course
-            </Button>
-            <Button variant="secondary" size="sm" onClick={close}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Collapse>
+      <ConfirmFold
+        open={confirming}
+        id={confirmId}
+        className="pt-3"
+        label="Confirm reset"
+        message="Clear the ticks and notes on every course? Mastery, review cards and saved recaps are kept. This cannot be undone."
+        confirmLabel="Reset every course"
+        onConfirm={() => void reset()}
+        onCancel={() => setConfirming(false)}
+        busy={status.kind === "saving"}
+        returnFocusTo={toggle}
+      />
       <LiveStatus
         {...statusLine(status, { saving: "Resetting…", saved: "Progress reset. Ticks and notes are cleared." })}
         className="pt-3"
