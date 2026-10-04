@@ -11,7 +11,7 @@ Gnosia
 </p>
 
 <p align="center">
-  <a href="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml"><img src="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
+  <a href="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml"><img src="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI status"></a>
   <a href="https://app.codecov.io/gh/c-wenlong/self-learn"><img src="https://codecov.io/gh/c-wenlong/self-learn/graph/badge.svg?token=LRJZ81XZA4&branch=main" alt="Test coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/typescript-5-blue.svg" alt="TypeScript 5"></a>
@@ -308,7 +308,7 @@ Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the brow
 
 Thirteen Vitest files cover the three halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself. On the catalog side: migrations applying from empty and staying idempotent, and the constraints that make the database worth having — an unknown foreign key, a prerequisite kind outside `requires|assumes`, a `collection_item` with zero or two targets, and an `UPDATE` on `event`. Those need a reachable Postgres and skip themselves with a named reason without one, so `npm test` stays green on a machine that has none; CI runs a `postgres:17` service so they are a real gate there.
 
-`.github/workflows/ci.yml` runs `lint` → `typecheck` → `test:coverage` → `build` on every push and pull request, against a `postgres:17` service container, then uploads the lcov report to Codecov. Production deploys go through Vercel's Git integration on every push to the default branch; there is no deploy workflow to maintain. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+`.github/workflows/ci.yml` runs `lint` → `typecheck` → `test:coverage` → `build` on every pull request (not on the push that merges it, which would test the same code twice), with two test files at a time, against a `postgres:17` service container, then uploads the lcov report to Codecov. Production deploys go through Vercel's Git integration on every push to the default branch; there is no deploy workflow to maintain. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Contributing
 
