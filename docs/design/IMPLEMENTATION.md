@@ -214,8 +214,10 @@ conversation list beside its pages.
   when `STUDIO_ENABLED` is set); the five destinations (`DESTINATIONS` in
   `lib/nav.ts`: Home, Courses, Learn, Library, Review; the current one on
   `--surface2`); the studio's conversations under "Chats", newest first by
-  day; and the account row at the foot, whose menu opens upwards (theme,
-  Settings, Sign out). The fold narrows it to a 60px rail of icons and is
+  day; and the account row at the foot, showing the learner's name
+  (`learner.display_name`, set under Settings, Profile, through
+  `/api/learner/name`; "Account" until there is one), whose menu opens
+  upwards (theme, Settings, Sign out). The fold narrows it to a 60px rail of icons and is
   the `gnosia-sidebar` cookie (`lib/sidebar-cookie.ts`), read by the layout so
   the first paint has the right width. Resting the mouse on the rail slides
   the full sidebar out over the page; the fold button then keeps it open.

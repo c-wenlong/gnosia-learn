@@ -464,6 +464,26 @@ export interface LearnerState {
   lastVisited?: LastVisited;
   /** Course slugs the learner set aside (`PREFERENCE_KEYS.inactiveCourses`). */
   inactiveCourses: string[];
+  /**
+   * What the learner asked to be called (`learner.display_name`), shown in
+   * the sidebar's account row and set on Settings. Absent until they set one.
+   */
+  displayName?: string;
+}
+
+/** The longest name `learner.display_name` takes, in characters. */
+export const DISPLAY_NAME_MAX = 60;
+
+/**
+ * A name as it is stored: trimmed, inner runs of whitespace (a tab, a line
+ * break) as one space, and null when nothing is left. Anything but a string
+ * is null too. Length is the writer's to refuse (`DISPLAY_NAME_MAX`), never
+ * cut here, so a reader cannot silently shorten what was saved.
+ */
+export function cleanDisplayName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  return cleaned === "" ? null : cleaned;
 }
 
 /**
