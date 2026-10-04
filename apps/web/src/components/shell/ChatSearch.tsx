@@ -7,6 +7,7 @@ import type { RefObject } from "react";
 import { SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
+import { SearchField as KitSearchField } from "@/components/ui/SearchField";
 import { isCurrentRow } from "@/lib/nav";
 import type { RecentItem } from "@/lib/recent-core";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
@@ -31,20 +32,13 @@ import { useRecentSearch } from "./use-recent";
  * back once focus and the pointer have both left (`AppSidebar`).
  */
 
-/** A magnifying glass, the field's and the rail's. */
-export function SearchIcon({ className = "size-[18px] shrink-0 text-text2" }: { className?: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-      <circle cx="9" cy="9" r="5.5" />
-      <path d="m13.2 13.2 3.3 3.3" />
-    </svg>
-  );
-}
-
 /**
- * The field. Escape clears it when it holds words and does nothing else, so a
- * drawer or a slid-out sidebar is not closed by the same press; with the field
- * empty Escape goes on to close them.
+ * The field: the kit `SearchField`'s filled face, the sidebar's, at the
+ * sidebar's row size (36px, radius 10, its magnifier 8px in, where a row's
+ * glyph sits, so it lines up with the rows and centres on the rail). Escape
+ * clears it when it holds words and does nothing else, so a drawer or a
+ * slid-out sidebar is not closed by the same press; with the field empty
+ * Escape goes on to close them.
  */
 export function SearchField({
   search,
@@ -57,18 +51,11 @@ export function SearchField({
   compact?: boolean;
 }) {
   return (
-    <div
-      data-peek-hold=""
-      className={cx(
-        "relative flex h-[var(--shell-row,36px)] items-center overflow-hidden rounded-[var(--shell-row-radius,10px)] text-text2 transition-colors duration-150 motion-reduce:transition-none",
-        compact ? "bg-transparent" : "bg-surface2",
-        "focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
-      )}
-    >
-      <SearchIcon className="pointer-events-none absolute left-[var(--shell-row-pad,8px)] size-[18px] shrink-0" />
-      <input
+    <div data-peek-hold="">
+      <KitSearchField
         ref={inputRef}
-        type="search"
+        face="filled"
+        label="Search recent"
         name="history-search"
         value={search.query}
         maxLength={SEARCH_MAX}
@@ -82,32 +69,21 @@ export function SearchField({
           event.stopPropagation();
           search.clear();
         }}
-        className={cx(
-          "h-full min-w-0 flex-1 appearance-none bg-transparent pl-[34px] pr-8 text-[16px] text-text outline-none md:text-[14px]",
-          // The words fade with the sidebar's labels; the icon beside them stays.
+        // Not on the folded rail: it would sit on the icon, under the rail's search button.
+        onClear={compact ? undefined : search.clear}
+        // The kit's filled face is 40px with radius 8 and its magnifier 10px
+        // in; the sidebar's rows are the density variables', so the field
+        // takes theirs.
+        className="!rounded-[var(--shell-row-radius,10px)] [&_svg]:!left-[var(--shell-row-pad,8px)]"
+        // The words and the fill fade with the sidebar's labels; the icon
+        // beside them stays. The clear button's room is kept on the rail too,
+        // so the placeholder does not move as the sidebar widens.
+        inputClassName={cx(
+          "pr-8 !h-[var(--shell-row,36px)] !rounded-[var(--shell-row-radius,10px)] !pl-[34px]",
           FADE,
           compact ? "opacity-0" : FADE_IN,
-          "placeholder:text-text3 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",
         )}
       />
-      {/* Not on the folded rail: it would sit on the icon, under the rail's search button. */}
-      {search.query !== "" && !compact && (
-        // Fades in with the first letter typed; it goes with the last.
-        <button
-          type="button"
-          aria-label="Clear the search"
-          title="Clear the search"
-          onClick={() => {
-            search.clear();
-            inputRef.current?.focus();
-          }}
-          className="absolute right-1 inline-flex size-7 animate-fade-in items-center justify-center rounded-md text-text3 transition-colors hover:text-text focus-visible:outline-2 focus-visible:outline-accent motion-reduce:animate-none"
-        >
-          <svg aria-hidden viewBox="0 0 20 20" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-            <path d="m5.5 5.5 9 9m0-9-9 9" />
-          </svg>
-        </button>
-      )}
     </div>
   );
 }

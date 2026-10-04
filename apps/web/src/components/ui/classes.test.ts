@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buttonClasses, cardClasses, chipClasses, cx, inputClasses } from "./classes";
+import { buttonClasses, cardClasses, chipClasses, cx, inputClasses, textareaClasses } from "./classes";
 
 describe("cx", () => {
   it("drops falsy parts", () => {
@@ -86,6 +86,20 @@ describe("inputClasses and cardClasses", () => {
     expect(chip).not.toContain("border-2");
     expect(chip).not.toContain("h-11");
     expect(inputClasses().split(" ")).toContain("border-2");
+  });
+
+  it("gives each smaller size its height and a 1px border, and an inline field its words' width", () => {
+    expect(inputClasses({ size: "compact" }).split(" ")).toEqual(expect.arrayContaining(["h-8", "border", "rounded-lg"]));
+    const inline = inputClasses({ size: "inline" }).split(" ");
+    expect(inline).toEqual(expect.arrayContaining(["h-7", "border", "rounded-full", "[field-sizing:content]"]));
+    expect(inline).not.toContain("w-full");
+    expect(inputClasses({ size: "lg" }).split(" ")).toEqual(expect.arrayContaining(["h-12", "border-2"]));
+  });
+
+  it("gives a textarea the field's face with no single-line height", () => {
+    const area = textareaClasses().split(" ");
+    expect(area).toEqual(expect.arrayContaining(["border-2", "rounded-lg", "min-h-20", "resize-y", "focus:border-accent"]));
+    expect(area).not.toContain("h-11");
   });
 
   it("pads a card 20px, or 14 when tight", () => {
