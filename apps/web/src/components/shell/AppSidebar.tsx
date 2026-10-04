@@ -219,8 +219,13 @@ export function AppSidebar() {
             "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[min(85vw,300px)]",
             "max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)]",
             // `translate`, not `transform`: Tailwind 4 moves things with the translate property.
-            "max-md:transition-[translate,visibility,box-shadow] max-md:duration-300 max-md:ease-soft",
-            drawer ? "max-md:translate-x-0 max-md:shadow-xl" : "max-md:invisible max-md:-translate-x-full",
+            // Visibility rides the transition only on the way out: on the way in
+            // it would still be hidden on the first frame, and the focus the
+            // drawer moves to its first link on opening would not land.
+            "max-md:duration-300 max-md:ease-soft",
+            drawer
+              ? "max-md:translate-x-0 max-md:shadow-xl max-md:transition-[translate,box-shadow]"
+              : "max-md:invisible max-md:-translate-x-full max-md:transition-[translate,visibility,box-shadow]",
             // From 768px up: over its room, as wide as the room, or slid out to
             // 260px over the page while folded. The width is what animates.
             "md:absolute md:inset-y-0 md:left-0 md:transition-[width,box-shadow] md:duration-200 md:ease-soft",

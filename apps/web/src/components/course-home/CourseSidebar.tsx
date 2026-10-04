@@ -113,11 +113,15 @@ export function CourseSidebar({
           id={listId}
           inert={shutting}
           className={cx(
-            "grid transition-[grid-template-rows,opacity,visibility] duration-300 ease-soft motion-reduce:transition-none",
-            narrowOpen ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0",
+            "grid duration-300 ease-soft motion-reduce:transition-none",
+            // Visibility is transitioned on the way shut only: on the way open
+            // it would hold the list hidden for its first frame.
+            narrowOpen
+              ? "visible grid-rows-[1fr] opacity-100 transition-[grid-template-rows,opacity]"
+              : "invisible grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity,visibility]",
             wideOpen
-              ? "@3xl:visible @3xl:grid-rows-[1fr] @3xl:opacity-100"
-              : "@3xl:invisible @3xl:grid-rows-[0fr] @3xl:opacity-0",
+              ? "@3xl:visible @3xl:grid-rows-[1fr] @3xl:opacity-100 @3xl:transition-[grid-template-rows,opacity]"
+              : "@3xl:invisible @3xl:grid-rows-[0fr] @3xl:opacity-0 @3xl:transition-[grid-template-rows,opacity,visibility]",
           )}
         >
           <div className="min-h-0 overflow-clip [overflow-clip-margin:4px]">
