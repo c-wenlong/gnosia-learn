@@ -296,7 +296,7 @@ describe("Popover's Escape inside the kit Dialog", () => {
   for (const [name, menu] of cases) {
     it(`closes ${name} on the first Escape and leaves the dialog open; the next one asks the dialog to close`, () => {
       const onClose = vi.fn();
-      const { escape } = mount(createElement(Dialog, { label: "Settings", onClose } as DialogProps, menu));
+      const { escape } = mount(createElement(Dialog, { label: "Settings", onClose, children: menu } satisfies DialogProps));
       const dialog = document.querySelector("dialog")!;
       const trigger = dialog.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
       act(() => trigger.click());
