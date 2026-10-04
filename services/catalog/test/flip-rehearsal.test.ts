@@ -555,7 +555,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
       // The waiver: item-has-concept only, with the reason given, and the rest armed.
       expect(report.cutover.waivers).toEqual([{ rule: "item-has-concept", reason }]);
       expect(step("cut-over: flip courses --strict")).toMatchObject({
-        rulesArmed: ["module-has-item", "item-concept-in-module-topic"],
+        rulesArmed: ["module-has-item", "item-concept-in-module-topic", "course-order-respects-requires"],
         waivers: [{ rule: "item-has-concept", reason }],
       });
       const doctor = step("cut-over: doctor") as {
@@ -569,6 +569,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
         ["module-has-item", "armed", null],
         ["item-has-concept", "disarmed", reason],
         ["item-concept-in-module-topic", "armed", null],
+        ["course-order-respects-requires", "armed", null],
       ]);
 
       // The tag, on a throwaway repository of the copied tree, at its HEAD.

@@ -409,4 +409,5 @@ Each is one PR.
 
 | Step | Landed in |
 | --- | --- |
-| Proposal | this PR |
+| Proposal | #284 |
+| Order guard: rule `course-order-respects-requires` (migration 0021), doctor warnings for `assumes`, the three `requires` cases reordered in the catalog, `catalog flip --rearm` to arm a rule on a type the database already owns | the PR that follows #284 |
