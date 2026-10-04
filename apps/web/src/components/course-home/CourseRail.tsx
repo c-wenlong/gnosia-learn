@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { ResetCourseButton } from "@/components/ResetCourseButton";
 import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
+import { Collapse } from "@/components/ui/Collapse";
 import { Panel } from "@/components/ui/Panel";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { doneWord, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
@@ -21,6 +22,9 @@ import type { RelatedCourse } from "./types";
  * Coursera's weekly target and timeline have no data behind them here (the
  * daily target lives in the top bar, and courses carry no dates), so the rail
  * is built from what the course file and the learner's standing do hold.
+ *
+ * Next up unfolds and folds (`Collapse`) as the next topic leaves or enters
+ * the module on screen, keeping the topic it last named while it folds.
  */
 export function CourseRail({
   course,
@@ -44,6 +48,12 @@ export function CourseRail({
   className?: string;
 }) {
   const topicIds = course.modules.flatMap((m) => m.topics.map((t) => t.id));
+  const nextOpen = next !== null && showNext;
+  const [lastNext, setLastNext] = useState(next);
+  // Compared by the topic and module themselves: `next` is a new object on
+  // every render of the page.
+  if (nextOpen && (next.topic !== lastNext?.topic || next.module !== lastNext?.module)) setLastNext(next);
+  const nextShown = nextOpen ? next : lastNext;
   return (
     <div className={cx("flex min-w-0 flex-col gap-4", className)}>
       <RailCard title="Course progress">
@@ -67,19 +77,29 @@ export function CourseRail({
         </div>
       </RailCard>
 
-      {next && showNext && (
-        <RailCard title="Next up">
-          <div>
-            <p className="text-[16px] font-semibold leading-6 text-text">{next.topic.title}</p>
-            <p className="text-[14px] leading-5 text-text2">
-              {topicMeta(mastery[next.topic.id], false)} · Module {next.module.order}
-            </p>
-          </div>
-          <Button href={moduleHref(course.slug, next.module.slug)} variant="secondary" size="sm" className="self-start">
-            Open module {next.module.order}
-          </Button>
-        </RailCard>
-      )}
+      {/* The column's gap is folded into the card, so a shut card leaves none. */}
+      <div className="-mt-4">
+        <Collapse open={nextOpen} className="pt-4">
+          {nextShown && (
+            <RailCard title="Next up">
+              <div>
+                <p className="text-[16px] font-semibold leading-6 text-text">{nextShown.topic.title}</p>
+                <p className="text-[14px] leading-5 text-text2">
+                  {topicMeta(mastery[nextShown.topic.id], false)} · Module {nextShown.module.order}
+                </p>
+              </div>
+              <Button
+                href={moduleHref(course.slug, nextShown.module.slug)}
+                variant="secondary"
+                size="sm"
+                className="self-start"
+              >
+                Open module {nextShown.module.order}
+              </Button>
+            </RailCard>
+          )}
+        </Collapse>
+      </div>
 
       <RailCard title="About this course">
         {/* The course file's `notes` is its summary: what the course covers. */}

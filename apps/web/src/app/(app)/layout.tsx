@@ -1,9 +1,12 @@
 import { cookies } from "next/headers";
 
 import { AppShell } from "@/components/AppShell";
+import { MotionSeed } from "@/components/settings/MotionSeed";
 import { requireSignedIn } from "@/lib/auth/session";
 import { LearnerProvider } from "@/lib/learner-context";
 import { loadLearnerSnapshot } from "@/lib/learner-store";
+import { asMotionMode, MOTION_COOKIE, MOTION_REDUCE_SCRIPT } from "@/lib/motion";
+import { readStoredMotion } from "@/lib/motion-preference";
 import { SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
 import { studioEnabled } from "@/lib/studio";
 import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
@@ -27,6 +30,15 @@ import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
  * turned an anonymous visitor away; this is the second lock, the one that
  * still holds if a matcher edit ever lets a page through, and it also means a
  * stranger's request never reaches Postgres.
+ *
+ * A browser with no motion cookie (`@/lib/motion`) has its stored motion
+ * preference read once here, beside the snapshot, and `MotionSeed` writes the
+ * cookie, so the root layout can apply "Always reduce motion" from then on.
+ * For this first page, an inline script ahead of the shell marks `<html>`
+ * while the document is parsed, so nothing under it paints moving first.
+ * With scripts off neither runs, and nothing needs them to: the loading
+ * frame's wait-then-fade (`PageLoading`) is CSS alone, so it still shows,
+ * fully opaque, under the notice above.
  */
 export default async function AppLayout({
   children,
@@ -34,7 +46,12 @@ export default async function AppLayout({
   children: React.ReactNode;
 }>) {
   await requireSignedIn();
-  const [cookieStore, { state, reachable }] = await Promise.all([cookies(), loadLearnerSnapshot()]);
+  const cookieStore = await cookies();
+  const motionKnown = asMotionMode(cookieStore.get(MOTION_COOKIE)?.value) !== null;
+  const [{ state, reachable }, storedMotion] = await Promise.all([
+    loadLearnerSnapshot(),
+    motionKnown ? Promise.resolve(null) : readStoredMotion(),
+  ]);
 
   // The cookie wins when both are present: it is what the browser last chose,
   // and it may have been chosen while the database was unreachable.
@@ -42,15 +59,19 @@ export default async function AppLayout({
   const initialState = theme === state.theme ? state : { ...state, theme };
 
   return (
-    <LearnerProvider initialState={initialState} reachable={reachable}>
-      <AppShell studio={studioEnabled()} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
-        <noscript>
-          <p className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-[14px] leading-5 text-text2">
-            Gnosia needs JavaScript. Turn it on for this site and reload the page.
-          </p>
-        </noscript>
-        {children}
-      </AppShell>
-    </LearnerProvider>
+    <>
+      {storedMotion === "always" && <script dangerouslySetInnerHTML={{ __html: MOTION_REDUCE_SCRIPT }} />}
+      <LearnerProvider initialState={initialState} reachable={reachable}>
+        {storedMotion !== null && <MotionSeed mode={storedMotion} />}
+        <AppShell studio={studioEnabled()} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
+          <noscript>
+            <p className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-[14px] leading-5 text-text2">
+              Gnosia needs JavaScript. Turn it on for this site and reload the page.
+            </p>
+          </noscript>
+          {children}
+        </AppShell>
+      </LearnerProvider>
+    </>
   );
 }

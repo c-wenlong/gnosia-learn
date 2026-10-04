@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Figtree, Geist_Mono } from "next/font/google";
+import { asMotionMode, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
 import { resolveSiteUrl } from "@/lib/site-url";
 import { asThemeMode, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
 import "./globals.css";
@@ -64,6 +65,10 @@ export const metadata: Metadata = {
  * palette and `data-theme` naming the mode, and the first thing in `<body>`
  * is a two-line script that adds `dark` when the device prefers it, before
  * anything paints (see `SYSTEM_THEME_SCRIPT` in `@/lib/theme-cookie`).
+ *
+ * Settings' "Always reduce motion" is a cookie for the same reason, and lands
+ * as `data-motion="reduce"` on `<html>`, which `globals.css` reads beside the
+ * device's `prefers-reduced-motion` (`@/lib/motion`).
  */
 export default async function RootLayout({
   children,
@@ -73,12 +78,14 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value) ?? "light";
   const classes = themeClass(theme, false);
+  const motion = motionAttribute(asMotionMode(cookieStore.get(MOTION_COOKIE)?.value));
 
   return (
     <html
       lang="en"
       suppressHydrationWarning
       data-theme={theme}
+      data-motion={motion}
       className={`${figtree.variable} ${geistMono.variable} h-full antialiased${classes.map((c) => ` ${c}`).join("")}`}
     >
       <body className="min-h-full">

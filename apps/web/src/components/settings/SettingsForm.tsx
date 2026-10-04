@@ -1,13 +1,16 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { DISPLAY_NAME_MAX, PREFERENCE_KEYS } from "@self-learn/schema/shared";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
+import { Collapse } from "@/components/ui/Collapse";
+import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
+import { buttonClasses, inputClasses } from "@/components/ui/classes";
 import { useLearner } from "@/lib/learner-context";
+import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
 import {
   MOTION_MODES,
   TUTOR_STYLES,
@@ -23,9 +26,25 @@ import type { SettingsSnapshot } from "@/lib/settings";
  * Each select saves on change through `POST /api/learner/preference` and says
  * what happened beside it. The theme is `ThemeSwitch`, which goes through the
  * provider's `setThemeMode` and so also writes the cookie the layout reads.
+ * Motion is applied the same way, at once and before the save lands: the
+ * `self-learn-motion` cookie and `data-motion` on <html> (`@/lib/motion`).
  */
 
 type Status = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string };
+
+/** What a status says, for `LiveStatus`: nothing while idle. */
+function statusLine(status: Status | undefined, words: { saving: string; saved: string }): { text: string | null; tone: StatusTone } {
+  switch (status?.kind) {
+    case "saving":
+      return { text: words.saving, tone: "muted" };
+    case "saved":
+      return { text: words.saved, tone: "ok" };
+    case "error":
+      return { text: status.message, tone: "danger" };
+    default:
+      return { text: null, tone: "muted" };
+  }
+}
 
 async function savePreference(key: string, value: unknown): Promise<string | null> {
   try {
@@ -76,14 +95,39 @@ function usePreference<T>(key: string, initial: T) {
 /** The General tab: how the app looks and moves. */
 export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
   const motion = usePreference<MotionMode>(PREFERENCE_KEYS.reducedMotion, settings.motion);
+
+  // The stored row is the truth once it has been read: a browser whose
+  // cookie disagrees (a save that failed, a change made in another browser)
+  // is brought in line with what this page shows.
+  const storedMotion = settings.reachable ? settings.motion : null;
+  useEffect(() => {
+    if (storedMotion === null || readMotionCookie() === storedMotion) return;
+    writeMotionCookie(storedMotion);
+    applyMotionToDocument(storedMotion);
+  }, [storedMotion]);
   return (
     <Card title="Appearance">
       <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
         {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}
       </Field>
-      <Field label="Motion" note="Saved, not applied yet: only your system's reduced-motion setting is honoured today." status={motion.status}>
+      <Field
+        label="Motion"
+        note="Always reduce motion stops the app's animations in this browser, whatever your device says. Respect system follows your device's setting."
+        status={motion.status}
+      >
         {(id) => (
-          <Select id={id} value={motion.value} onChange={(v) => motion.save(v as MotionMode)}>
+          <Select
+            id={id}
+            value={motion.value}
+            onChange={(v) => {
+              const mode = v as MotionMode;
+              // At once, and whether or not the save lands, as the theme
+              // does: the cookie is what the next page's first paint reads.
+              applyMotionToDocument(mode);
+              writeMotionCookie(mode);
+              motion.save(mode);
+            }}
+          >
             {MOTION_MODES.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
@@ -282,11 +326,9 @@ function Field({
         )}
       </div>
       <div className="w-full md:w-[300px] md:shrink-0">{children(id)}</div>
-      <p aria-live="polite" className="min-w-0 text-[12px] md:flex-1">
-        {status?.kind === "saving" && <span className="text-text3">Saving…</span>}
-        {status?.kind === "saved" && <span className="text-ok-text">Saved</span>}
-        {status?.kind === "error" && <span className="text-danger">{status.message}</span>}
-      </p>
+      <div className="min-w-0 md:flex-1">
+        <LiveStatus {...statusLine(status, { saving: "Saving…", saved: "Saved" })} />
+      </div>
     </div>
   );
 }
@@ -351,17 +393,41 @@ function ReadOnly({ id, title, children }: { id: string; title?: string; childre
  * waits behind any tick or note still being saved (a write landing after the
  * delete would recreate the row). It says "reset" only once the write has
  * been stored; a refusal is said here and in the shell's banner.
+ *
+ * The confirm and the status line glide open and shut (`Collapse`,
+ * `LiveStatus`). Closing the confirm, by Cancel or by a reset that landed,
+ * puts focus back on Reset progress, since the button pressed is inside the
+ * fold that just closed.
  */
 function DataActions({ topicIds }: { topicIds: string[] }) {
   const { resetCourse } = useLearner();
   const [confirming, setConfirming] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const confirmId = useId();
+  const toggle = useRef<HTMLButtonElement>(null);
+  // Set before the state that closes the confirm, focused once it has rendered.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current || confirming) return;
+    refocus.current = false;
+    toggle.current?.focus();
+  }, [confirming]);
+
+  const close = () => {
+    // Only when focus was inside the fold (or was dropped by a button that
+    // went disabled): never pull it back from somewhere the person moved it.
+    const at = document.activeElement;
+    if (confirming && (at === null || at === document.body || document.getElementById(confirmId)?.contains(at))) {
+      refocus.current = true;
+    }
+    setConfirming(false);
+  };
 
   const reset = async () => {
     setStatus({ kind: "saving" });
     const stored = await resetCourse(topicIds);
     if (stored) {
-      setConfirming(false);
+      close();
       setStatus({ kind: "saved" });
     } else {
       setStatus({ kind: "error", message: "Not reset: the write was not stored." });
@@ -369,14 +435,16 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col">
       <div className="flex flex-wrap items-center gap-2.5">
         <a href="/api/learner/export" className={buttonClasses({ variant: "secondary" })}>
           Export learner data
         </a>
         <Button
+          ref={toggle}
           variant="secondary"
           aria-expanded={confirming}
+          aria-controls={confirmId}
           onClick={() => {
             setConfirming((v) => !v);
             setStatus({ kind: "idle" });
@@ -385,7 +453,7 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
           Reset progress
         </Button>
       </div>
-      {confirming && (
+      <Collapse open={confirming} id={confirmId} className="pt-3">
         <div role="group" aria-label="Confirm reset" className="flex flex-col gap-3 rounded-2xl border-2 border-warn bg-warn-tint p-4">
           <p className="text-[14px] text-text">
             Clear the ticks and notes on every course? Mastery, review cards and saved recaps are kept. This cannot be
@@ -395,17 +463,16 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
             <Button variant="warn" size="sm" disabled={status.kind === "saving"} onClick={() => void reset()}>
               Reset every course
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setConfirming(false)}>
+            <Button variant="secondary" size="sm" onClick={close}>
               Cancel
             </Button>
           </div>
         </div>
-      )}
-      <p aria-live="polite" className={cx("text-[12px]", status.kind === "idle" && "sr-only")}>
-        {status.kind === "saving" && <span className="text-text3">Resetting…</span>}
-        {status.kind === "saved" && <span className="text-ok-text">Progress reset. Ticks and notes are cleared.</span>}
-        {status.kind === "error" && <span className="text-danger">{status.message}</span>}
-      </p>
+      </Collapse>
+      <LiveStatus
+        {...statusLine(status, { saving: "Resetting…", saved: "Progress reset. Ticks and notes are cleared." })}
+        className="pt-3"
+      />
     </div>
   );
 }

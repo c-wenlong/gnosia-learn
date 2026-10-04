@@ -123,7 +123,8 @@ describe("/library", () => {
     expect(html).toContain("divide-y-2");
     expect(html).not.toContain("[grid-template-columns:repeat(auto-fill");
     expect(currentLayout(html)).toEqual({ href: "/library?view=list", label: "List" });
-    expect(html.match(/<li>/g)).toHaveLength(3);
+    // One row each, fading in as it arrives (the list's rows are the only `<li>`s that do).
+    expect(html.match(/<li class="animate-fade-in/g)).toHaveLength(3);
 
     const order = ["Paging, step by step", "The TLB", "OSTEP"].map((title) => html.indexOf(title));
     expect(order.every((at) => at >= 0)).toBe(true);
