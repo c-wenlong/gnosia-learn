@@ -1,64 +1,74 @@
 // @vitest-environment jsdom
-import { act, createElement } from "react";
+import { act, createElement, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { LearnIndex } from "./LearnIndex";
-import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
-import { mapLayout } from "@/lib/concept-map";
-import { parseFilter, parseScope, parseView, type IndexRow } from "@/lib/learn-index";
+import type { MapLayout } from "@/lib/concept-map";
+import type { IndexRow } from "@/lib/learn-index";
 
-// One chain, so a concept's neighbourhood is a smaller box than its island.
-const ids = ["alpha", "beta", "gamma", "delta", "epsilon"];
-const rows: IndexRow[] = ids.map((id) => ({
-  id,
-  title: id[0].toUpperCase() + id.slice(1),
-  summary: "",
-  bucket: "untouched",
-  pL: 0,
-  due: null,
-  isDue: false,
-  dueLabel: "",
-  overdue: false,
-  lastSeenLabel: "",
-  leech: false,
-  courseLabel: null,
-  courses: [],
-  domain: "test",
-  ready: false,
-}));
-const edges: GraphEdge[] = ids.slice(1).map((to, i) => ({ from: ids[i], to, kind: "requires" }) as GraphEdge);
-const nodes: GraphNode[] = rows.map((r) => ({ id: r.id, title: r.title, bucket: r.bucket, pL: r.pL, courses: r.courses, domain: r.domain }));
-const map = mapLayout(nodes, edges);
+import { LearnIndex, MapPanel } from "./LearnIndex";
+import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
+
+/**
+ * The Learn index's graph card fades a new concept's graph in by mounting it
+ * afresh (a key), which takes the node a keyboard user pressed away with the
+ * old graph. The concept it chose takes the focus in the new one.
+ */
+
+vi.mock("next/link", async () => {
+  const { createElement } = await import("react");
+  return {
+    default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => createElement("a", { href, ...rest }, children),
+  };
+});
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // jsdom has no matchMedia; reduced motion makes every fit land in one frame.
-  window.matchMedia = ((query: string) => ({ matches: query.includes("reduce"), media: query })) as typeof window.matchMedia;
 });
 
 const mounted: Array<() => void> = [];
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
-  vi.useRealTimers();
-  window.history.replaceState(null, "", "/learn");
 });
 
-/** The index as the page would draw it for the URL the browser shows now. */
-function mountAtUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const view = parseView(params.get("view"));
-  const initial = {
-    selected: params.get("concept"),
-    view,
-    scope: parseScope(params.get("scope"), view),
-    filter: parseFilter(params.get("filter")),
-  };
+function row(id: string, title: string): IndexRow {
+  // A cast rather than a typed literal: rows gain fields as the map grows, and this test needs none of them.
+  return {
+    id,
+    title,
+    summary: "",
+    bucket: "learning",
+    pL: 0.4,
+    due: null,
+    isDue: false,
+    dueLabel: "–",
+    overdue: false,
+    lastSeenLabel: "–",
+    leech: false,
+    courseLabel: null,
+    courses: [],
+    domain: "networks",
+    ready: false,
+  } as IndexRow;
+}
+
+function mount() {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  act(() => root.render(createElement(LearnIndex, { rows, edges, map, initial })));
-  act(() => vi.runAllTimers());
+  act(() =>
+    root.render(
+      createElement(LearnIndex, {
+        rows: [row("ip", "IP"), row("tcp", "TCP"), row("tls", "TLS")],
+        edges: [
+          { from: "ip", to: "tcp", kind: "requires" },
+          { from: "tcp", to: "tls", kind: "requires" },
+        ],
+        map: {} as MapLayout,
+        initial: { selected: "tcp", view: "table", scope: "neighbourhood", filter: "all" },
+      }),
+    ),
+  );
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
@@ -66,86 +76,81 @@ function mountAtUrl() {
   return host;
 }
 
-const svg = (host: HTMLElement) => host.querySelector("svg[data-fit]") as SVGSVGElement;
-const chip = (host: HTMLElement, label: string) =>
-  [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === label) as HTMLButtonElement;
+const node = (host: HTMLElement, title: string) =>
+  [...host.querySelectorAll('svg g[role="button"]')].find((g) => g.getAttribute("aria-label")?.startsWith(`${title},`)) as SVGGElement;
 
-/** Search and press Enter; `settle` runs the timers (and so the fake clock) on. */
-function search(host: HTMLElement, text: string, settle = true) {
-  const input = host.querySelector('input[type="search"], input') as HTMLInputElement;
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(input, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => {
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
-  if (settle) act(() => vi.runAllTimers());
-}
+describe("LearnIndex graph card", () => {
+  it("fades a newly chosen concept's graph in, and gives the chosen node the focus back", () => {
+    const host = mount();
+    const before = host.querySelector('svg[aria-label^="Neighbourhood graph of"]');
+    expect(before?.getAttribute("aria-label")).toBe("Neighbourhood graph of TCP");
 
-describe("LearnIndex map", () => {
-  it("returns from the table to the view the URL names, not to a fit asked for before", () => {
-    vi.useFakeTimers();
-    window.history.replaceState(null, "", "/learn");
-    const host = mountAtUrl();
+    const tls = node(host, "TLS");
+    tls.focus();
+    act(() => {
+      tls.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
 
-    // On the map, Enter on a search fits the match's neighbourhood.
-    search(host, "gamma");
-    expect(svg(host).dataset.fit).toBe("neighbourhood");
-
-    // To the table and back: the map comes back on the island the URL now says.
-    act(() => chip(host, "Table").click());
-    act(() => chip(host, "Graph").click());
-    act(() => vi.runAllTimers());
-    expect(new URLSearchParams(window.location.search).get("scope")).toBe("island");
-    const returned = { fit: svg(host).dataset.fit, viewBox: svg(host).getAttribute("viewBox") };
-
-    // A reload of that URL draws the same thing.
-    const fresh = mountAtUrl();
-    expect(returned).toEqual({ fit: svg(fresh).dataset.fit, viewBox: svg(fresh).getAttribute("viewBox") });
-    expect(returned.fit).toBe("island");
-
-    // A new request on the returned map is still answered.
-    search(host, "delta");
-    expect(svg(host).dataset.fit).toBe("neighbourhood");
+    const after = host.querySelector('svg[aria-label^="Neighbourhood graph of"]') as SVGSVGElement;
+    expect(after.getAttribute("aria-label")).toBe("Neighbourhood graph of TLS");
+    // Mounted afresh, so it fades in.
+    expect(before?.isConnected).toBe(false);
+    expect(after.parentElement?.classList.contains("animate-fade-in")).toBe(true);
+    expect(document.activeElement).toBe(node(host, "TLS"));
+    expect(document.activeElement?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("does not replay a center asked for from the panel when the map comes back", () => {
-    vi.useFakeTimers();
-    window.history.replaceState(null, "", "/learn");
-    const host = mountAtUrl();
-
-    // The panel for gamma lists delta under "Leads to"; picking it centres the map on it.
-    search(host, "gamma");
-    const pick = host.querySelector('section[aria-label="Concept details"] button[data-concept="delta"]') as HTMLButtonElement;
-    act(() => pick.click());
-    act(() => vi.runAllTimers());
-    expect(svg(host).dataset.fit).toBe("");
-
-    act(() => chip(host, "Table").click());
-    act(() => chip(host, "Graph").click());
-    act(() => vi.runAllTimers());
-    const returned = { fit: svg(host).dataset.fit, viewBox: svg(host).getAttribute("viewBox") };
-    const fresh = mountAtUrl();
-    expect(returned).toEqual({ fit: svg(fresh).dataset.fit, viewBox: svg(fresh).getAttribute("viewBox") });
-    expect(returned.fit).toBe("island");
+  it("does not pull the focus into the graph later after the ringed node is pressed again", () => {
+    const host = mount();
+    const tcp = node(host, "TCP");
+    tcp.focus();
+    act(() => {
+      tcp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const link = [...host.querySelectorAll("table a")].find((a) => a.textContent === "IP") as HTMLAnchorElement;
+    act(() => link.focus());
+    expect(document.activeElement).toBe(link);
   });
 
-  it("answers two requests made in the same millisecond", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-10-04T00:00:00Z"));
-    window.history.replaceState(null, "", "/learn");
-    const host = mountAtUrl();
+  it("leaves the focus alone when the choice came from outside the graph", () => {
+    const host = mount();
+    const link = [...host.querySelectorAll("table a")].find((a) => a.textContent === "IP") as HTMLAnchorElement;
+    act(() => link.focus());
+    expect(document.activeElement).toBe(link);
+    expect(host.querySelector('svg[aria-label^="Neighbourhood graph of"]')?.getAttribute("aria-label")).toBe(
+      "Neighbourhood graph of IP",
+    );
+  });
+});
 
-    // The clock does not move between the two, so both requests have one `n`.
-    search(host, "gamma", false);
-    search(host, "alpha", false);
-    act(() => vi.runAllTimers());
-    const answered = svg(host).getAttribute("viewBox");
-    window.history.replaceState(null, "", "/learn");
-    const direct = mountAtUrl();
-    search(direct, "alpha");
-    expect(answered).toBe(svg(direct).getAttribute("viewBox"));
+describe("LearnIndex map details", () => {
+  it("moves focus to the newly chosen concept's name after a Needs or Leads to press", () => {
+    const node = (id: string, title: string) => ({ id, title, bucket: "learning", pL: 0.4, courses: [], domain: "networks" }) as unknown as GraphNode;
+    const nodes = [node("a", "TCP"), node("b", "UDP")];
+    const edges: GraphEdge[] = [{ from: "a", to: "b", kind: "requires" }];
+    const rows = { a: row("a", "TCP"), b: row("b", "UDP") } as Record<string, IndexRow>;
+    function Host() {
+      const [focus, setFocus] = useState("a");
+      return createElement(MapPanel, { focus: rows[focus], nodes, edges, onPick: setFocus });
+    }
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() => root.render(createElement(Host)));
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    const scrolled: string[] = [];
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      scrolled.push(this.textContent ?? "");
+    };
+    const leadsTo = host.querySelector<HTMLButtonElement>('button[data-concept="b"]')!;
+    act(() => leadsTo.focus());
+    act(() => leadsTo.click());
+    expect(document.activeElement?.tagName).toBe("H3");
+    expect(document.activeElement?.textContent).toBe("UDP");
+    // And brought into view, since a press near the foot of the panel could leave it above the fold.
+    expect(scrolled).toContain("UDP");
   });
 });

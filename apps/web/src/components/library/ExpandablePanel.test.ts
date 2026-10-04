@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { act, createElement, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ExpandablePanel } from "./ExpandablePanel";
+import { CLOSE_MS, ExpandablePanel } from "./ExpandablePanel";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -24,9 +24,21 @@ beforeAll(() => {
 });
 
 const mounted: Array<() => void> = [];
+beforeEach(() => {
+  vi.useFakeTimers();
+});
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
+  vi.useRealTimers();
+  delete document.documentElement.dataset.motion;
 });
+
+/** The popup fades for `CLOSE_MS` before the state closes it. */
+function finishClosing() {
+  act(() => {
+    vi.advanceTimersByTime(CLOSE_MS);
+  });
+}
 
 function render() {
   const host = document.createElement("div");
@@ -80,6 +92,7 @@ describe("ExpandablePanel", () => {
     act(() => button(host, "Expand note.md").click());
     expect(document.activeElement).toBe(button(host, "Close"));
     act(() => button(host, "Close").click());
+    finishClosing();
     expect(dialog(host)).toBeNull();
     expect(document.documentElement.style.overflow).toBe("");
     expect(host.querySelectorAll(".words")).toHaveLength(1);
@@ -93,12 +106,44 @@ describe("ExpandablePanel", () => {
     expect(dialog(host)).not.toBeNull();
 
     pressAndClick(dialog(host)!);
+    finishClosing();
     expect(dialog(host)).toBeNull();
 
     act(() => button(host, "Expand note.md").click());
     act(() => {
       dialog(host)!.dispatchEvent(new Event("cancel", { cancelable: true }));
     });
+    finishClosing();
+    expect(dialog(host)).toBeNull();
+  });
+
+  it("fades out for a beat before it closes, and ignores a second close meanwhile", () => {
+    const host = render();
+    act(() => button(host, "Expand note.md").click());
+    act(() => button(host, "Close").click());
+    // Still there, fading, and no longer taking clicks.
+    expect(dialog(host)?.className).toContain("opacity-0");
+    expect(dialog(host)?.className).toContain("pointer-events-none");
+    act(() => {
+      vi.advanceTimersByTime(CLOSE_MS / 2);
+    });
+    act(() => {
+      dialog(host)!.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+    pressAndClick(dialog(host)!);
+    expect(dialog(host)).not.toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(CLOSE_MS / 2);
+    });
+    expect(dialog(host)).toBeNull();
+    expect(document.activeElement).toBe(button(host, "Expand note.md"));
+  });
+
+  it("closes at once when motion is reduced", () => {
+    document.documentElement.dataset.motion = "reduce";
+    const host = render();
+    act(() => button(host, "Expand note.md").click());
+    act(() => button(host, "Close").click());
     expect(dialog(host)).toBeNull();
   });
 

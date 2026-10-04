@@ -467,6 +467,48 @@ describe("the diagram card (bug 11)", () => {
   });
 });
 
+describe("what arrives while the conversation is open", () => {
+  /** The thread's child box that holds `text`: an entry's, the pending turn's, the reply being written's. */
+  const boxOf = (host: HTMLElement, text: string) =>
+    [...host.querySelectorAll('[role="log"] > *')].find((box) => box.textContent?.includes(text)) ?? null;
+
+  it("rises in, and what the conversation opened with stands still", async () => {
+    const host = await mount(draft({ turns: 1, transcript: [entry(1, "person", "a raft log"), entry(2, "planner", "An opening reply.")] }));
+    expect(boxOf(host, "An opening reply.")?.className).not.toContain("animate-enter");
+
+    // Another turn lands (from another tab, say): its reply is news.
+    mocks.getDraft.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: draft({
+        turns: 2,
+        transcript: [entry(1, "person", "a raft log"), entry(2, "planner", "An opening reply."), entry(3, "person", "and the leader?"), entry(4, "planner", "A new reply.")],
+      }),
+    });
+    act(() => mocks.events!.onEvent({ type: "reply", data: {} }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    await settle();
+    expect(boxOf(host, "A new reply.")?.className).toContain("animate-enter");
+    // A person's turn replaces the bubble that rose in at Send, so it does not rise twice.
+    expect(boxOf(host, "and the leader?")?.className).not.toContain("animate-enter");
+    // A re-render does not start the opening reply's animation late.
+    expect(boxOf(host, "An opening reply.")?.className).not.toContain("animate-enter");
+  });
+
+  it("raises the person's turn at Send, and the reply being written under it", async () => {
+    const host = await mount(draft());
+    mocks.sendMessage.mockReturnValue(new Promise(() => undefined));
+    const composer = mocks.composer as unknown as { onSubmit: (value: { text: string; mentions: unknown[] }) => void };
+    await act(async () => composer.onSubmit({ text: "draw a heap", mentions: [] }));
+    const sent = [...host.querySelectorAll('[role="log"] p')].find((line) => line.textContent?.includes("draw a heap"));
+    expect(sent?.closest(".animate-enter")).not.toBeNull();
+    const thinking = host.querySelector('[role="log"] [role="status"]');
+    expect(thinking?.closest(".animate-enter")).not.toBeNull();
+  });
+});
+
 describe("focus on opening", () => {
   it("goes to the composer when nobody has moved it since the panel opened", async () => {
     await mount(pair());

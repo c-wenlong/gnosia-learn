@@ -18,6 +18,30 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
+ * Reduced motion has two sources: the device's `prefers-reduced-motion`, and
+ * Settings' "Always reduce motion", which the root layout writes as
+ * `data-motion="reduce"` on <html> from the `self-learn-motion` cookie
+ * (lib/motion.ts). Tailwind's own `motion-reduce:` and `motion-safe:` read
+ * only the first, so both are redefined here to read both, the way `dark:`
+ * above reads the class rather than the OS.
+ */
+@custom-variant motion-reduce {
+  @media (prefers-reduced-motion: reduce) {
+    @slot;
+  }
+  &:where([data-motion="reduce"], [data-motion="reduce"] *) {
+    @slot;
+  }
+}
+@custom-variant motion-safe {
+  @media (prefers-reduced-motion: no-preference) {
+    &:where(:root:not([data-motion="reduce"]) *) {
+      @slot;
+    }
+  }
+}
+
+/*
  * The hi-fi palette. The starting values and their provenance are `TOKENS`
  * in docs/design/kit/hifi.py and the token table in docs/design/DESIGN.md,
  * which record the hi-fi frames as drawn; where the app has since moved a
@@ -336,6 +360,20 @@
   --animate-enter: enter 200ms var(--ease-soft) backwards;
   --animate-pop-in: pop-in 150ms var(--ease-soft) backwards;
   --animate-fade-in: fade-in 150ms ease-out backwards;
+  /* The way out, for something kept mounted for one beat after it closes
+     (`usePresence` in components/ui/use-presence.ts): `forwards`, since it is
+     unmounted the moment it ends and must not flash back first. */
+  --animate-pop-out: pop-out 120ms ease-in forwards;
+  /* A loading frame that waits before it shows, so a quick page never
+     flashes it: invisible for 120ms, then a fade (components/PageLoading). */
+  --animate-fade-in-late: fade-in 150ms ease-out 120ms backwards;
+
+  @keyframes pop-out {
+    to {
+      opacity: 0;
+      scale: 0.97;
+    }
+  }
 
   @keyframes enter {
     from {
@@ -749,12 +787,81 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
-  *::after {
+  *::after,
+  ::backdrop {
     transition-duration: 0.01ms !important;
     transition-delay: 0s !important;
     animation-duration: 0.01ms !important;
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* The same net for Settings' "Always reduce motion" (`data-motion="reduce"`
+   on <html>, lib/motion.ts), which holds whatever the device says. The
+   brand's float and rise and the studio's loops above are keyed to the media
+   query only, so they are stopped here by name. */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after,
+:root[data-motion="reduce"] ::backdrop {
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+:root[data-motion="reduce"] .gnosia-float,
+:root[data-motion="reduce"] .gnosia-rise,
+:root[data-motion="reduce"] .studio-shimmer::after,
+:root[data-motion="reduce"] .studio-fade-in,
+:root[data-motion="reduce"] .studio-breathe {
+  animation: none;
+}
+
+:root[data-motion="reduce"] .animate-\[studio-slide_1\.6s_ease-in-out_infinite\] {
+  animation: none;
+  width: 100%;
+  opacity: 0.4;
+}
+
+/* A palette or appearance change crossfades instead of snapping: ThemeSwitch
+   puts this class on <html> for one beat around the change (`fadeThemeChange`
+   in lib/theme-cookie.ts), never under reduced motion. Colours, and the
+   `translate` of the segmented control's sliding pill, which moves in the
+   same beat; it outranks every component's own transition for that beat,
+   which is why it comes off again as soon as the fade is done. */
+html.theme-fade *,
+html.theme-fade *::before,
+html.theme-fade *::after {
+  transition-property:
+    color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, box-shadow, translate !important;
+  transition-duration: 200ms !important;
+  transition-timing-function: ease-out !important;
+  transition-delay: 0s !important;
+}
+
+/* A Settings tab's panel fades and rises a little as it is shown, so a press
+   on a tab reads as a change of page rather than a jump. `hidden` is
+   display: none, so the animation runs again each time a panel comes back.
+   Not under either kind of reduced motion: the device's, or Settings'
+   "Always reduce motion" (`data-motion="reduce"`). */
+@keyframes settings-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .settings-panel:not([hidden]) {
+    animation: settings-panel-in 180ms ease-out both;
   }
 }

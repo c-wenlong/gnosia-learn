@@ -44,10 +44,16 @@ describe("activeDestination", () => {
 });
 
 describe("the destination lists", () => {
-  it("keeps Studio out of the five learning destinations", () => {
-    expect(DESTINATIONS).toHaveLength(5);
-    expect(DESTINATIONS.map((d) => d.key)).toEqual(["home", "courses", "learn", "library", "review"]);
+  it("keeps Studio out of the four learning destinations", () => {
+    expect(DESTINATIONS).toHaveLength(4);
+    expect(DESTINATIONS.map((d) => d.key)).toEqual(["home", "courses", "learn", "library"]);
     expect(DESTINATIONS.some((d) => d.href.startsWith("/studio"))).toBe(false);
+  });
+
+  it("does not list Review, and gives /review no active destination", () => {
+    expect(DESTINATIONS.some((d) => d.href === "/review")).toBe(false);
+    expect(activeDestination("/review")).toBeNull();
+    expect(activeDestination("/review?concept=softmax")).toBeNull();
   });
 
   it("points New chat at the studio's home", () => {

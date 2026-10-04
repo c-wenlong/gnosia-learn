@@ -27,7 +27,7 @@ export default function AppError({
   retry: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-4 py-6">
+    <div className="flex animate-enter flex-col gap-4 py-6 motion-reduce:animate-none">
       <Notice role="alert" title="This page could not read its content." command="npm run catalog -- doctor">
         <p>
           The app reads every course, topic, note and diagram from the catalog database, and that read failed.

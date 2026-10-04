@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useCallback } from "react";
+
 import {
   assetDisplayTitle,
   assetKindLabel,
@@ -10,6 +13,7 @@ import {
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Chip } from "@/components/ui/Chip";
 import { cardClasses, cx } from "@/components/ui/classes";
+import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { useAssetFailure } from "@/components/use-asset-failure";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
@@ -85,6 +89,17 @@ export function AssetCard({
   // inherit; `useAssetFailure` resets on a new `src` instead.
   const { failure, fail, observe } = useAssetFailure(thumbnailSrc, thumbnailStatusHref);
   const thumbFailed = failure !== null;
+  // The picture fades in when it arrives; one ref callback for both hooks,
+  // stable across renders, as `observe` needs.
+  const reveal = useImageReveal(thumbnailSrc);
+  const revealAttach = reveal.attach;
+  const thumbRef = useCallback(
+    (img: HTMLImageElement | null) => {
+      observe(img);
+      revealAttach(img);
+    },
+    [observe, revealAttach],
+  );
 
   const family = familyOf(asset.kind);
   const label = assetKindLabel(asset.kind);
@@ -117,13 +132,14 @@ export function AssetCard({
         {showThumb ? (
           // eslint-disable-next-line @next/next/no-img-element -- the poster and the diagram are files the app serves as-is, and a vector drawing must not be rasterised.
           <img
-            ref={observe}
+            ref={thumbRef}
             src={thumbnailSrc ?? undefined}
             alt=""
             loading="lazy"
             decoding="async"
             onError={fail}
-            className={cx("h-full w-full", family === "diagram" ? "object-contain p-2" : "object-cover")}
+            onLoad={reveal.onLoad}
+            className={cx("h-full w-full", family === "diagram" ? "object-contain p-2" : "object-cover", reveal.className)}
           />
         ) : thumbFailed ? (
           <WidgetFailure
@@ -166,8 +182,11 @@ export function AssetCard({
     return <article className={shell}>{body}</article>;
   }
 
+  // `next/link`, so opening an asset is an in-app navigation: the shell
+  // stays and the loading frame shows, where a plain anchor reloaded the
+  // whole document and flashed white between the two pages.
   return (
-    <a
+    <Link
       href={href}
       className={cx(
         shell,
@@ -176,6 +195,6 @@ export function AssetCard({
       )}
     >
       {body}
-    </a>
+    </Link>
   );
 }

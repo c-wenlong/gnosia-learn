@@ -3,20 +3,27 @@
  *
  * The sidebar opens with New chat when this deployment has a studio
  * (`STUDIO_DESTINATION`, which is `/studio`, the studio's home and its
- * composer), then the five learning destinations (`DESTINATIONS`), then the
- * studio's conversations. Studio is not one of the five because it is where
+ * composer), then the four learning destinations (`DESTINATIONS`), then the
+ * studio's conversations. Studio is not one of the four because it is where
  * things are made, drawn as the first action rather than as a peer of the
  * pages that support learning, and because it 404s without `STUDIO_ENABLED`.
  * Settings is not a destination: it lives behind the account menu at the
  * foot of the sidebar (docs/design/DESIGN.md, "Information architecture").
  *
+ * Review is not a destination either (2026-10-04). `/review` still exists,
+ * reached from a concept page's Review now and Home's Recall these, but the
+ * sidebar does not offer the whole queue: the chat, the studio and the
+ * videos never make a review card, so a top-level Review was a window onto
+ * something the product's main surfaces cannot fill
+ * (docs/proposals/recall-in-chat.md).
+ *
  * React-free so the shell's client components and a test can share it.
  */
 
-/** The five learning destinations, each with an icon. */
-export type DestinationKey = "home" | "courses" | "learn" | "library" | "review";
+/** The four learning destinations, each with an icon. */
+export type DestinationKey = "home" | "courses" | "learn" | "library";
 
-/** Every key `activeDestination` can answer with: the five, and Studio. */
+/** Every key `activeDestination` can answer with: the four, and Studio. */
 export type NavKey = DestinationKey | "studio";
 
 export interface Destination<K extends string = DestinationKey> {
@@ -31,7 +38,6 @@ export const DESTINATIONS: readonly Destination[] = [
   { key: "courses", label: "Courses", href: "/courses" },
   { key: "learn", label: "Learn", href: "/learn" },
   { key: "library", label: "Library", href: "/library" },
-  { key: "review", label: "Review", href: "/review" },
 ];
 
 /** The studio, which the sidebar draws as New chat when the deployment has one. */
@@ -45,7 +51,8 @@ export const STUDIO_DESTINATION: Destination<"studio"> = { key: "studio", label:
  * A prefix match on a whole segment, so `/courses/cp4281/m1` is still Courses
  * (a nav item that unhighlights the moment you open something from it reads as
  * having navigated away) and `/learning` would not be Learn. `/` itself is the
- * public landing page and belongs to no destination.
+ * public landing page and belongs to no destination, and so does `/review`,
+ * which opens in focus layout with no sidebar to highlight.
  */
 export function activeDestination(pathname: string | null | undefined): NavKey | null {
   if (!pathname) return null;

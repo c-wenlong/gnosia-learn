@@ -11,6 +11,9 @@ import { cx } from "./classes";
  * `ok` is the green verdict; otherwise it is "not quite", yellow rather than
  * red. The bar is a live region, so a screen reader hears the verdict the
  * moment it replaces the buttons. On a phone the actions drop under the text.
+ *
+ * It rises in as it mounts (`animate-enter`): only its look is delayed, never
+ * its mounting, so the live region still speaks at once.
  */
 export function FeedbackBar({
   ok,
@@ -31,7 +34,7 @@ export function FeedbackBar({
     <div
       role="status"
       className={cx(
-        "flex flex-col gap-4 rounded-2xl p-[18px] sm:flex-row sm:items-center",
+        "flex animate-enter flex-col gap-4 rounded-2xl p-[18px] motion-reduce:animate-none sm:flex-row sm:items-center",
         ok ? "bg-ok-tint" : "bg-warn-tint",
         className,
       )}
