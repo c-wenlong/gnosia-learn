@@ -243,35 +243,29 @@ export function LearnerProvider({
     [commit],
   );
 
-  /** How many name saves have started, so only the newest restores its name. */
-  const nameWrites = useRef(0);
   const setDisplayName = useCallback(
     (name: string) => {
       const cleaned = cleanDisplayName(name);
-      const mine = ++nameWrites.current;
-      const before = current.current.displayName ?? null;
-      const named = (previous: LearnerState) => {
-        const next = { ...previous };
-        if (cleaned === null) delete next.displayName;
-        else next.displayName = cleaned;
-        return next;
-      };
-      return commit("name", named, () => post("name", { name: cleaned })).then((ok) => {
-        // A refresh that landed while the write was in flight carried the row
-        // from before it, and the provider adopted that. The write is the
-        // newer fact, so the newest save puts its name back once it is stored,
-        // but only over the name from before it: any other name came from a
-        // save elsewhere (another tab) and is newer still.
-        const shown = current.current.displayName ?? null;
-        if (ok && mine === nameWrites.current && shown === before && shown !== cleaned) {
-          const next = named(current.current);
-          current.current = next;
-          setState(next);
-        }
+      return commit(
+        "name",
+        (previous) => {
+          const next = { ...previous };
+          if (cleaned === null) delete next.displayName;
+          else next.displayName = cleaned;
+          return next;
+        },
+        () => post("name", { name: cleaned }),
+      ).then((ok) => {
+        // A refresh that landed while the write was in flight replaced the
+        // optimistic name with whatever the row held then. Which name is
+        // newest is the database's to say (this save, or another tab's), so
+        // a stored save that no longer matches the screen reads the snapshot
+        // again rather than guessing.
+        if (ok && (current.current.displayName ?? null) !== cleaned) router.refresh();
         return ok;
       });
     },
-    [commit],
+    [commit, router],
   );
 
   const toggleTopicCompletion = useCallback(

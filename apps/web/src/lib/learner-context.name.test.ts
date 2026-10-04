@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 import { act, createElement, useEffect, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared";
 
 /**
- * A name saved while a refresh lands: the refresh carries the row from
- * before the write, and once the write is stored the sidebar shows the saved
- * name again rather than the old one.
+ * A name saved while a refresh lands: the refresh carries the row as it was
+ * then, and which name is newest is the database's to say, so a stored save
+ * that no longer matches the screen reads the snapshot again.
  */
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }) }));
+const router = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: router.refresh, push: vi.fn(), replace: vi.fn() }) }));
 
 const { LearnerProvider, useLearner } = await import("./learner-context");
 
@@ -20,6 +21,7 @@ beforeAll(() => {
 });
 
 let root: Root | null = null;
+beforeEach(() => router.refresh.mockReset());
 afterEach(() => {
   act(() => root?.unmount());
   root = null;
@@ -35,58 +37,50 @@ function Name() {
   return createElement("p", null, state.displayName ?? "none");
 }
 
-describe("setDisplayName", () => {
-  it("shows the saved name once stored, though a refresh mid-write carried the old one", async () => {
-    let answer: (response: Response) => void = () => undefined;
-    const fetcher = vi.fn(() => new Promise<Response>((resolve) => (answer = resolve)));
-    vi.stubGlobal("fetch", fetcher);
-    const container = document.createElement("div");
-    root = createRoot(container);
-    const draw = (state: LearnerState) =>
-      act(() => root!.render(createElement(LearnerProvider, { initialState: state, reachable: true } as ComponentProps<typeof LearnerProvider>, createElement(Name))));
-    const before: LearnerState = { ...emptyLearnerState(), displayName: "Ada" };
-    draw(before);
+/** The provider with a held `fetch`, and a way to answer it. */
+function setup(initial: string) {
+  let answer: (response: Response) => void = () => undefined;
+  const fetcher = vi.fn(() => new Promise<Response>((resolve) => (answer = resolve)));
+  vi.stubGlobal("fetch", fetcher);
+  const container = document.createElement("div");
+  root = createRoot(container);
+  const draw = (name: string) => {
+    const state: LearnerState = { ...emptyLearnerState(), displayName: name };
+    act(() => root!.render(createElement(LearnerProvider, { initialState: state, reachable: true } as ComponentProps<typeof LearnerProvider>, createElement(Name))));
+  };
+  draw(initial);
+  const settle = async (saved: Promise<boolean>) => {
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      answer(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      expect(await saved).toBe(true);
+    });
+  };
+  return { container, draw, settle };
+}
 
+describe("setDisplayName", () => {
+  it("shows the name at once, and reads nothing more when the save lands with it on screen", async () => {
+    const { container, settle } = setup("Ada");
     let saved: Promise<boolean> = Promise.resolve(false);
     act(() => {
       saved = held.setDisplayName!("Grace");
     });
     expect(container.textContent).toBe("Grace");
-
-    // A refresh with the row as it was before the write.
-    draw({ ...before });
-    expect(container.textContent).toBe("Ada");
-
-    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
-    await act(async () => {
-      answer(new Response(JSON.stringify({ ok: true, result: "Grace" }), { status: 200 }));
-      expect(await saved).toBe(true);
-    });
-    expect(container.textContent).toBe("Grace");
+    await settle(saved);
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 
-  it("leaves a name saved elsewhere meanwhile, which is newer than this one", async () => {
-    let answer: (response: Response) => void = () => undefined;
-    const fetcher = vi.fn(() => new Promise<Response>((resolve) => (answer = resolve)));
-    vi.stubGlobal("fetch", fetcher);
-    const container = document.createElement("div");
-    root = createRoot(container);
-    const draw = (state: LearnerState) =>
-      act(() => root!.render(createElement(LearnerProvider, { initialState: state, reachable: true } as ComponentProps<typeof LearnerProvider>, createElement(Name))));
-    draw({ ...emptyLearnerState(), displayName: "Ada" });
-
+  it("reads the snapshot again when a refresh mid-write replaced the saved name", async () => {
+    const { container, draw, settle } = setup("Ada");
     let saved: Promise<boolean> = Promise.resolve(false);
     act(() => {
       saved = held.setDisplayName!("Grace");
     });
-    // Another tab saved after this write, and a refresh brought it here.
-    draw({ ...emptyLearnerState(), displayName: "Hopper" });
-
-    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
-    await act(async () => {
-      answer(new Response(JSON.stringify({ ok: true, result: "Grace" }), { status: 200 }));
-      expect(await saved).toBe(true);
-    });
+    // A refresh with some other row: the one from before, or another tab's.
+    draw("Hopper");
     expect(container.textContent).toBe("Hopper");
+    await settle(saved);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 });
