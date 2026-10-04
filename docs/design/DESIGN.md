@@ -433,6 +433,8 @@ CLI's `--json` shapes.
 The three captured design systems (tokens, style guides, component specs,
 screenshots) are under [reference/](reference/), one folder each for
 NotebookLM, Duolingo and Brilliant.
+Two were added later: [Coursera](reference/coursera/README.md) (2026-09-29)
+and [Gauth](reference/gauth/README.md) (2026-10-04).
 
 Third-party assets live under `research/assets/<product>/` on the machine
 that gathered them and are gitignored. Our own captures under
