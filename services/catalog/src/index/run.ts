@@ -84,9 +84,10 @@ const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   // the concept link is the courses source's own row, and progress and recap
   // are learner state, not index output.
   courses: [],
-  // A course row's `concepts:` list, diagrams and sessions all link to
-  // concepts by slug.
-  concepts: ["courses", "diagrams", "sessions"],
+  // A course row's `concepts:` list, diagrams, sessions and the three video
+  // tools (a topic.yml's `concepts:`) all link to concepts by slug, and a
+  // concept prune cascades through their `asset_concept` rows.
+  concepts: ["courses", "diagrams", "sessions", "manimkc", "remotionkc", "revideokc"],
   // `mirror` rows hang off manimkc's asset rows and cascade when one is
   // pruned, so re-reading manimkc alone would silently empty the ledger for a
   // renamed video. `topics` reaches mirrors through here, transitively.

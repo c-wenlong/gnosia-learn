@@ -42,6 +42,9 @@ const READABLE = new Map<string, unknown>([
   ["cs4225-mapreduce", {}],
 ]);
 
+/** The concept the captured recursion-tree topic.yml names, as one the owner can read. */
+const CONCEPTS = { knownConcepts: new Set(["recursion-tree-method"]) };
+
 let fixture: Fixture;
 let dataRoot: string;
 
@@ -71,7 +74,7 @@ describe("remotionkc rows", () => {
   it("turns each deliverable and its sidecars into linked assets under the remotionkc: namespace", async () => {
     await withRenders();
     const checkout = path.join(fixture.root, "remotionkc");
-    const { rows, metadata, notes } = await buildRemotionkcRows(await captured(dataRoot), checkout, READABLE);
+    const { rows, metadata, notes } = await buildRemotionkcRows(await captured(dataRoot), checkout, READABLE, CONCEPTS);
 
     expect(rows.asset?.map((a) => [a.id, a.kind])).toEqual([
       [`remotionkc:${RT}.mp4`, "video"],
@@ -95,6 +98,14 @@ describe("remotionkc rows", () => {
       })),
       ...[".mp4", ".transcript.json"].map((ext) => ({ assetId: `remotionkc:${WC}${ext}`, topicSlug: "cs4225-mapreduce" })),
     ]);
+    // The concept its topic.yml names, on the video and each sidecar; the
+    // wordcount folder says `concepts: []` and links none.
+    expect(rows.assetConcept).toEqual(
+      [".mp4", ".transcript.json", ".chapters.json", ".vtt"].map((ext) => ({
+        assetId: `remotionkc:${RT}${ext}`,
+        conceptSlug: "recursion-tree-method",
+      })),
+    );
     expect(rows.assetDerivation).toEqual([
       ...[".transcript.json", ".chapters.json", ".vtt"].map((ext) => ({
         assetId: `remotionkc:${RT}${ext}`,
@@ -117,6 +128,7 @@ describe("remotionkc rows", () => {
     const { rows, blobs } = await buildRemotionkcRows(await captured(dataRoot), dataRoot, READABLE, {
       store: true,
       owner: "local",
+      ...CONCEPTS,
     });
     expect(blobs).toHaveLength(6);
     expect(blobs[0]).toMatchObject({ file: path.join(dataRoot, `${RT}.mp4`), mime: "video/mp4", ext: "mp4", ownerId: "local" });
@@ -147,7 +159,7 @@ describe("remotionkc rows", () => {
     const report = await captured(dataRoot);
     report.topics[0] = { ...report.topics[0], topic: "" };
     report.topics[1] = { ...report.topics[1], topic: "nope" };
-    const refusal = buildRemotionkcRows(report, dataRoot, READABLE);
+    const refusal = buildRemotionkcRows(report, dataRoot, READABLE, CONCEPTS);
     await expect(refusal).rejects.toThrow(/remotionkc topics \(.*\): 2 unresolved references/s);
     await expect(refusal).rejects.toThrow(/week-02-recursion-tree.*declares no topic.*week-02-wordcount-code.*"nope"/s);
   });
@@ -157,7 +169,7 @@ describe("remotionkc rows", () => {
     // remotionkc folder with the same path as a mapped manimkc folder is filed
     // by its own topic.yml and nothing else.
     await withRenders();
-    const { rows } = await buildRemotionkcRows(await captured(dataRoot), dataRoot, READABLE);
+    const { rows } = await buildRemotionkcRows(await captured(dataRoot), dataRoot, READABLE, CONCEPTS);
     expect(new Set(rows.assetTopic?.map((t) => t.topicSlug))).toEqual(new Set(["cs3230-recurrences", "cs4225-mapreduce"]));
   });
 
@@ -165,7 +177,7 @@ describe("remotionkc rows", () => {
     await withRenders();
     const report = await captured(dataRoot);
     report.drift.orphans = [{ path: "out/networking/gone", videos: ["gone.mp4"] }];
-    const { notes } = await buildRemotionkcRows(report, dataRoot, READABLE);
+    const { notes } = await buildRemotionkcRows(report, dataRoot, READABLE, CONCEPTS);
     expect(notes).toContain("ORPHAN out/networking/gone: rendered video with no topics/ source, not indexed");
   });
 });
@@ -213,7 +225,7 @@ describe("the remotionkc CLI", () => {
     await standIn(dataRoot);
     process.env[REMOTIONKC_ROOT_ENV] = stand;
 
-    const context = await fixture.context();
+    const context = await fixture.context({ knownConcepts: async () => CONCEPTS.knownConcepts });
     // Unset in the context: the checkout is the variable's, as a run would pass it.
     expect(remotionkcIndexer.root(context)).toBe(stand);
     const { rows, metadata } = await remotionkcIndexer.read(context);

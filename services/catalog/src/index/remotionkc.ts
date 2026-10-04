@@ -1,5 +1,12 @@
 import type { Indexer } from "./source";
-import { buildToolRows, declaredToolIndexer, readToolReport, REMOTIONKC, type TopicsReport } from "./video-tool";
+import {
+  buildToolRows,
+  declaredToolIndexer,
+  readToolReport,
+  REMOTIONKC,
+  type TopicsReport,
+  type VideoToolRowOptions,
+} from "./video-tool";
 
 /**
  * remotionkc's videos and their sidecars, via `remotionkc topics --json`.
@@ -38,13 +45,14 @@ export const remotionkcIndexer: Indexer = declaredToolIndexer(REMOTIONKC, (conte
 
 /**
  * The pure half: a report plus the slugs the owner can read become rows. Each
- * topic folder is filed under the topic its topic.yml declares.
+ * topic folder is filed under the topic its topic.yml declares, and linked to
+ * the concepts it names (`options.knownConcepts` says which exist).
  */
 export async function buildRemotionkcRows(
   report: TopicsReport,
   remotionkcRoot: string,
   bySlug: ReadonlyMap<string, unknown>,
-  options: { store?: boolean; owner?: string } = {},
+  options: VideoToolRowOptions = {},
 ): ReturnType<typeof buildToolRows> {
   return buildToolRows(REMOTIONKC, report, remotionkcRoot, { by: "declared", bySlug }, options);
 }
