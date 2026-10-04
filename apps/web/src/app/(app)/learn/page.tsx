@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 import { LearnIndex } from "@/components/learn/LearnIndex";
 import { Card } from "@/components/ui/Card";
 import { getCourses } from "@/data/courses";
-import { defaultSelection, type GraphNode } from "@/lib/concept-graph";
-import { cachedMapLayout } from "@/lib/concept-map";
+import { getTopics } from "@/data/topics";
+import { defaultSelection } from "@/lib/concept-graph";
+import { cachedDomainLayout, domainTree, type DomainMapData, type DomainNode, type DomainTopic } from "@/lib/domain-map";
 import { readyConcepts } from "@/lib/map-reading";
 import { currentOwner } from "@/lib/owner";
 import { readRecentCourses } from "@/lib/recent-courses";
@@ -63,10 +64,17 @@ function toRow(
  */
 export default async function LearnPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const [{ kb, reachable }, courses, recentCourses] = await Promise.all([
+  const [{ kb, reachable }, courses, recentCourses, topics] = await Promise.all([
     loadKnowledgeBase(),
     getCourses(),
     currentOwner().then(readRecentCourses),
+    // The vocabulary places each concept in a domain (D1 of docs/proposals/domain-map.md).
+    // Without it every concept falls back to its folder, which still draws a map, and
+    // the page says so rather than passing folders off as the curated domains.
+    getTopics().then(
+      (list) => ({ list, read: true }),
+      () => ({ list: [], read: false }),
+    ),
   ]);
 
   if (kb.concepts.length === 0) {
@@ -85,21 +93,31 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
   const rows = unmarked.map((r) => (ready.has(r.id) ? { ...r, ready: true } : r));
 
   const asked = first(params.concept);
-  const selected = asked !== null && rows.some((r) => r.id === asked) ? asked : defaultSelection(kb.concepts, kb.frontier, now);
+  const known = asked !== null && rows.some((r) => r.id === asked);
   const view = parseView(first(params.view));
-  // The map is laid out here, on the server, so dagre never reaches the
-  // browser (G3 of docs/proposals/knowledge-map.md), and remembered per graph,
-  // so a request whose graph has not changed does not pay for it again.
-  const graphNodes: GraphNode[] = rows.map((r) => ({
+  // The table opens on a concept even when nobody named one; the map opens on
+  // the domain cards, or on the domain of the concept the URL names.
+  const selected = known ? asked : view === "table" ? defaultSelection(kb.concepts, kb.frontier, now) : null;
+  // Every domain is laid out here, on the server, so dagre never reaches the
+  // browser (D3), and remembered per graph, so a request whose graph has not
+  // changed does not pay for it again. The pictures together are a few
+  // kilobytes, and moving between domains then needs no round trip.
+  const topicOf = new Map(kb.concepts.map((c) => [c.id, c.topic]));
+  const domainNodes: DomainNode[] = rows.map((r) => ({
     id: r.id,
     title: r.title,
     bucket: r.bucket,
     pL: r.pL,
     courses: r.courses,
     domain: r.domain,
+    topic: topicOf.get(r.id) ?? null,
   }));
-  const courseCodes = Object.fromEntries(courses.map((c) => [c.slug, c.code]));
-  const map = cachedMapLayout(graphNodes, kb.edges, { courseCodes });
+  const vocabulary: DomainTopic[] = topics.list.map((t) => ({ slug: t.slug, title: t.title, domain: t.domain }));
+  const tree = domainTree(domainNodes, kb.edges, vocabulary);
+  const map: DomainMapData = {
+    tree,
+    layouts: Object.fromEntries(tree.map((d) => [d.slug, cachedDomainLayout(domainNodes, kb.edges, vocabulary, d.slug)])),
+  };
 
   return (
     <div data-layout="app">
@@ -107,7 +125,15 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
         rows={rows}
         edges={kb.edges}
         map={map}
-        initial={{ selected, view, scope: parseScope(first(params.scope), view), filter: parseFilter(first(params.filter)) }}
+        foldersOnly={!topics.read}
+        initial={{
+          selected,
+          view,
+          scope: parseScope(first(params.scope)),
+          filter: parseFilter(first(params.filter)),
+          domain: first(params.domain),
+          topic: first(params.topic),
+        }}
       />
     </div>
   );

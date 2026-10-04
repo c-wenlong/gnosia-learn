@@ -3,7 +3,7 @@ import { act, createElement, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { MapLayout } from "@/lib/concept-map";
+import type { DomainMapData } from "@/lib/domain-map";
 import type { IndexRow } from "@/lib/learn-index";
 
 import { LearnIndex, MapPanel } from "./LearnIndex";
@@ -64,8 +64,8 @@ function mount() {
           { from: "ip", to: "tcp", kind: "requires" },
           { from: "tcp", to: "tls", kind: "requires" },
         ],
-        map: {} as MapLayout,
-        initial: { selected: "tcp", view: "table", scope: "neighbourhood", filter: "all" },
+        map: { tree: [], layouts: {} } satisfies DomainMapData,
+        initial: { selected: "tcp", view: "table", scope: "neighbourhood", filter: "all", domain: null, topic: null },
       }),
     ),
   );
