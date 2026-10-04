@@ -1086,6 +1086,10 @@ const show = (t) => (t.t === 'shadow' ? t.v.map((l) => `${l.offsetX} ${l.offsetY
       return { x: c ? c.x : xs[i], y: c ? c.y : ys[i], size: sizes[i] };
     });
     avoidCollisions(pts);
+    // The engine runs collision avoidance after applying a dragged spot (1.7 then 1.4), so a node
+    // dropped onto another is nudged clear. Saving where it settled makes that nudge happen once:
+    // later relayouts start from the resolved spot instead of sliding the node again.
+    nodes.forEach((n, i) => { if (custom.has(n.id)) custom.set(n.id, { x: pts[i].x, y: pts[i].y }); });
     const now = performance.now();
     nodes.forEach((n, i) => {
       const p = pts[i];
@@ -1578,7 +1582,11 @@ const show = (t) => (t.t === 'shadow' ? t.v.map((l) => `${l.offsetX} ${l.offsetY
       : '<svg class="ic mk" width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="var(--graph-node-stroke)" stroke-width="2.4"/></svg>';
   ul.innerHTML = ordered.map((d) => `<li class="li" data-id="${d.id}">${marker(d)}<span class="nm">${esc(d.name)}</span><button class="tick" type="button" aria-pressed="${ticked.has(d.id)}" title="Tick"><svg class="ic" width="12" height="12"><use href="#i-check"/></svg></button><span class="mt">Week ${d.week} · ${d.dependants} build on it</span></li>`).join('');
   const rows = new Map([...ul.children].map((li) => [li.dataset.id, li]));
-  ul.addEventListener('pointerover', (e) => { const li = e.target.closest('.li'); if (li && ui.listHovered !== li.dataset.id) { ui.listHovered = li.dataset.id; applyFocus(); } });
+  // A pointer over a gap between rows (the list itself) clears the hover, as leaving the list does.
+  ul.addEventListener('pointerover', (e) => {
+    const id = e.target.closest('.li')?.dataset.id ?? null;
+    if (ui.listHovered !== id) { ui.listHovered = id; applyFocus(); }
+  });
   ul.addEventListener('pointerleave', () => { ui.listHovered = null; applyFocus(); });
   ul.addEventListener('click', (e) => {
     const li = e.target.closest('.li'); if (!li) return;

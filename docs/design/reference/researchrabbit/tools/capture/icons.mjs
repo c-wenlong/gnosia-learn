@@ -121,7 +121,17 @@ async function main() {
   if (!seen.size) throw new Error('no icons collected');
 
   fs.mkdirSync(OUT, { recursive: true });
-  for (const f of fs.readdirSync(OUT)) if (f.endsWith('.svg') || f === 'INDEX.tsv') fs.unlinkSync(OUT + f);
+  // The graph icons come from the bundle, which is not kept. Without it, the committed
+  // graph-*.svg files and their index rows stay exactly as they are.
+  const haveBundle = Boolean(BUNDLE && fs.existsSync(BUNDLE));
+  let keptGraphRows = [];
+  if (!haveBundle && fs.existsSync(OUT + 'INDEX.tsv')) {
+    keptGraphRows = fs.readFileSync(OUT + 'INDEX.tsv', 'utf8').split('\n').filter((l) => l.startsWith('graph-'));
+  }
+  for (const f of fs.readdirSync(OUT)) {
+    if (!haveBundle && f.startsWith('graph-')) continue;
+    if (f.endsWith('.svg') || f === 'INDEX.tsv') fs.unlinkSync(OUT + f);
+  }
 
   const names = new Map();
   try { for (const l of fs.readFileSync(path.join(HERE, 'icon-names.tsv'), 'utf8').split('\n')) { const [k, n] = l.split('\t'); if (k && n && k !== 'hash') names.set(k, n); } } catch { /* optional */ }
@@ -141,7 +151,7 @@ async function main() {
 
   // The graph engine's canvas icons: 24x24 path strings from the bundle.
   const graph = [];
-  if (BUNDLE && fs.existsSync(BUNDLE)) {
+  if (haveBundle) {
     const src = fs.readFileSync(BUNDLE, 'utf8');
     for (const n of ['Author', 'EvaluationAlert', 'EvaluationCaution', 'Seed', 'Star', 'StarCircle', 'Tick']) {
       const m = new RegExp(`(?:^|[\\s,;])${n}\\s*=\\s*"(M[^"]+)"`).exec(src);
@@ -151,7 +161,8 @@ async function main() {
       graph.push([file, `graph-${slug(n)}`, crypto.createHash('md5').update(m[1]).digest('hex').slice(0, 8), '24x24', '0 0 24 24', 'fill', 'graph canvas (graphIconPathMap)', `canvas Path2D, ${n}`, n].join('\t'));
     }
   } else {
-    console.log('  no bundle at', BUNDLE, '(set RR_BUNDLE); graph icons not written');
+    graph.push(...keptGraphRows);
+    console.log('  no bundle (set RR_BUNDLE); kept', keptGraphRows.length, 'graph icons as they are');
   }
   fs.writeFileSync(OUT + 'INDEX.tsv', ['file\tinferred_name\thash\tsizes\tviewBox\tstyle\tseen_on\tplace\ttext_or_label', ...rows, ...graph].join('\n') + '\n');
   console.log(rows.length, 'dom icons and', graph.length, 'graph icons ->', OUT);
