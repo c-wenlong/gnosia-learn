@@ -7,6 +7,24 @@ import {
   type Scratch,
 } from "../../../../../../../services/catalog/test/scratch-database";
 import { seedContent } from "../../../../../../../services/catalog/test/state-fixture";
+import { collection, learner } from "@self-learn/schema";
+
+/**
+ * Beside the fixture's live module `fx-m1`: one the course file stopped
+ * listing (archived), and one another owner wrote, so a week check's
+ * `module` can be refused for each reason.
+ */
+async function seedModules(db: Scratch["db"]) {
+  await db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
+  await db
+    .insert(collection)
+    .values([
+      { id: "fx-m2", kind: "module", slug: "m2", title: "Dropped module", parentId: "fx", position: 1, archivedAt: new Date() },
+      { id: "theirs", kind: "course", slug: "theirs", title: "Their course", ownerId: "someone-else" },
+      { id: "theirs-m1", kind: "module", slug: "m1", title: "Their module", parentId: "theirs", ownerId: "someone-else" },
+    ])
+    .onConflictDoNothing();
+}
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
@@ -51,6 +69,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     scratch = await createScratchDatabase();
     await applyMigrations(scratch.db);
     await seedContent(scratch.db);
+    await seedModules(scratch.db);
     process.env.DATABASE_URL = scratch.url;
     const [observeRoute, closeRoute, store] = await Promise.all([
       import("./route"),
@@ -107,6 +126,8 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     ["a session id with a slash", { sessionId: "a/b" }],
     ["a question past the cap", { question: "x".repeat(2_001) }],
     ["a non-boolean closeSession", { closeSession: "yes" }],
+    ["a module that is not an id", { module: "Week 1!" }],
+    ["a module that is not a string", { module: 7 }],
   ])("refuses %s as a 400", async (_label, change) => {
     const { status, body } = await send({ ...answer, ...change });
     expect(status).toBe(400);
@@ -168,6 +189,32 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     });
     expect((await state.readModel(scratch.db)).concepts.gamma?.observations).toBe(1);
     expect(Object.keys((await state.readReviews(scratch.db)).cards)).toEqual(["gamma"]);
+  });
+
+  it("records the week check's module in the event, and opens the session on the module", async () => {
+    const { status } = await send({ ...answer, source: "probe", module: "fx-m1" });
+    expect(status).toBe(200);
+    const events = await state.readEvents(scratch.db);
+    expect(events[1]).toMatchObject({ concept: "gamma", source: "probe", opportunity: false, module: "fx-m1" });
+    expect(await state.readSession(scratch.db, answer.sessionId)).toMatchObject({ title: "Fixture module", goal: "fx-m1" });
+  });
+
+  it("writes no module key when the answer names none", async () => {
+    await send(answer);
+    expect(Object.keys((await state.readEvents(scratch.db))[1] ?? {})).not.toContain("module");
+  });
+
+  it.each([
+    ["no module of that id", "fx-m9"],
+    ["an archived module", "fx-m2"],
+    ["another owner's module", "theirs-m1"],
+    ["a course, not a module", "fx"],
+  ])("refuses %s as a 400, and writes nothing", async (_label, module) => {
+    const { status, body } = await send({ ...answer, source: "probe", module });
+    expect(status).toBe(400);
+    expect(body.code).toBe("BAD_REQUEST");
+    expect(await state.readEvents(scratch.db)).toEqual([]);
+    expect(await state.readSession(scratch.db, answer.sessionId)).toBeUndefined();
   });
 
   it("records a probe without the learning step", async () => {

@@ -22,7 +22,7 @@ import {
 import { replayReviews } from "../src/learn/replay";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { fixtureGraph, seedContent } from "./state-fixture";
-import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { collection, learner, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -78,6 +78,52 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
     expect(requires("alpha")).toEqual([]);
     expect(requires("beta")).toEqual(["alpha"]);
     expect(requires("gamma")).toEqual(["beta"]);
+  });
+
+  describe("a week check's answer", () => {
+    beforeAll(async () => {
+      await scratch.db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
+      await scratch.db
+        .insert(collection)
+        .values([
+          { id: "fx-m2", kind: "module", slug: "m2", title: "Dropped", parentId: "fx", position: 1, archivedAt: new Date() },
+          { id: "theirs", kind: "course", slug: "theirs", title: "Theirs", ownerId: "someone-else" },
+          { id: "theirs-m1", kind: "module", slug: "m1", title: "Theirs", parentId: "theirs", ownerId: "someone-else" },
+        ])
+        .onConflictDoNothing();
+    });
+
+    it("carries its module in the event payload, and the session it opens is the module's", async () => {
+      const graph = await readConceptGraph(scratch.db, LOCAL);
+      await recordObservation(scratch.db, {
+        conceptId: "beta",
+        correct: true,
+        graph,
+        source: "probe",
+        module: "fx-m1",
+        session: "web-week",
+        openSession: { goal: "fx-m1" },
+        now: NOW,
+      });
+      const [start, answer] = await readEvents(scratch.db);
+      expect(answer).toMatchObject({ type: "observation", concept: "beta", source: "probe", module: "fx-m1" });
+      expect(start).toMatchObject({ type: "session-start", goal: "fx-m1" });
+      expect(await readSession(scratch.db, "web-week")).toMatchObject({ title: "Fixture module", goal: "fx-m1" });
+    });
+
+    it.each([
+      ["no module of that id", "fx-m9"],
+      ["an archived module", "fx-m2"],
+      ["another owner's module", "theirs-m1"],
+      ["a course rather than a module", "fx"],
+    ])("refuses %s, and writes nothing", async (_label, module) => {
+      const graph = await readConceptGraph(scratch.db, LOCAL);
+      const observe = recordObservation(scratch.db, { conceptId: "beta", correct: true, graph, module, session: "web-x", openSession: {} });
+      await expect(observe).rejects.toBeInstanceOf(StateError);
+      await expect(observe).rejects.toThrow(`no live module "${module}"`);
+      expect(await readEvents(scratch.db)).toEqual([]);
+      expect(await readSession(scratch.db, "web-x")).toBeUndefined();
+    });
   });
 
   it("appends the event, moves p(L), propagates and schedules, on one clock", async () => {

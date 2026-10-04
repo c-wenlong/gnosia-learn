@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
@@ -23,6 +23,14 @@ import {
   type SessionStep,
   withConsequence,
 } from "@/lib/session-core";
+import {
+  outcomeOf,
+  weekCheckLabel,
+  weekCheckPercent,
+  weekCheckSteps,
+  type WeekCheckOutcome,
+  type WeekCheckPlan,
+} from "@/lib/week-check";
 
 import { SessionClose } from "./SessionClose";
 
@@ -45,7 +53,27 @@ import { SessionClose } from "./SessionClose";
  * pressing Check again retries the same answer rather than recording a second.
  * After each write `router.refresh()` re-reads the layout, so the learner
  * snapshot the shell holds moves with the session.
+ *
+ * **A week check** (`weekCheck`, mode `module`) walks a module's concepts
+ * rather than one: its steps are not fixed in advance but grow by one after
+ * each answer, from `weekCheckSteps` over what was answered so far, since
+ * whether a concept is asked again depends on the answer just given. The
+ * plan is held from the first render, so the refresh after each answer (which
+ * re-reads mastery on the server) cannot reorder the check under the learner.
+ * Each step asks about its own concept: the answer is a probe recorded
+ * against that concept with the module named, and a step the note cannot
+ * fill asks the tutor about that concept.
  */
+
+/** A week check as the page hands it over. */
+export interface WeekCheckProps {
+  moduleId: string;
+  plan: WeekCheckPlan;
+  /** The module page: where Exit and the close screen lead. */
+  moduleHref: string;
+  /** Why the check asks nothing, when the server knew before it began. */
+  reason: string | null;
+}
 
 type Resolved = { question: SessionQuestion | null; note: string | null };
 
@@ -89,6 +117,7 @@ export function SessionFocus({
   asset,
   assetCompact,
   next,
+  weekCheck = null,
 }: {
   slug: string;
   title: string;
@@ -104,8 +133,12 @@ export function SessionFocus({
   /** The same asset, smaller, above a check; null draws nothing. */
   assetCompact: ReactNode | null;
   next: { slug: string; title: string } | null;
+  /** A module's week check; `slug` and `title` are then the module's. */
+  weekCheck?: WeekCheckProps | null;
 }) {
   const router = useRouter();
+  // Held from the first render: a refresh brings a new plan, which must not change this check.
+  const [checkPlan] = useState(() => weekCheck?.plan ?? null);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [graded, setGraded] = useState<Record<number, Graded>>({});
@@ -123,6 +156,8 @@ export function SessionFocus({
    * option they never sent.
    */
   const [sent, setSent] = useState<Record<number, number | null>>({});
+  /** A week check's step left with no question: the concept it was about. */
+  const [skipped, setSkipped] = useState<Record<number, string>>({});
 
   // Refs, not state, for what a handler must see before React re-renders.
   const inFlight = useRef(false);
@@ -134,13 +169,30 @@ export function SessionFocus({
   const saving = useRef<Record<string, unknown> | null>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
 
-  const step = plan[index];
-  const exitHref = `/learn/${slug}`;
+  // What each step of a week check came to, in order, as far as they are decided.
+  const outcomes = useMemo((): WeekCheckOutcome[] => {
+    const out: WeekCheckOutcome[] = [];
+    for (let i = 0; ; i += 1) {
+      const g = graded[i];
+      if (g !== undefined) out.push(outcomeOf(g.recorded));
+      else if (skipped[i] !== undefined) out.push({ concept: skipped[i] as string, result: "none", mastered: false });
+      else return out;
+    }
+  }, [graded, skipped]);
+  const steps = useMemo(
+    () => (checkPlan === null ? plan : weekCheckSteps(checkPlan, outcomes)),
+    [checkPlan, plan, outcomes],
+  );
+
+  const step = steps[index];
+  const exitHref = weekCheck?.moduleHref ?? `/learn/${slug}`;
+  /** The concept a step asks about: its own in a week check, else the session's. */
+  const conceptOf = useCallback((s: SessionStep | undefined) => s?.place?.slug ?? slug, [slug]);
 
   /** The question on screen for a step, or why there is none, or that it is coming. */
   const questionFor = useCallback(
     (i: number): { status: "ready"; question: SessionQuestion } | { status: "loading" } | { status: "none"; note: string } => {
-      const s = plan[i];
+      const s = steps[i];
       if (s === undefined || (s.kind !== "probe" && s.kind !== "check")) return { status: "none", note: "" };
       if (s.question !== null) return { status: "ready", question: s.question };
       if (!modelAvailable) {
@@ -152,17 +204,20 @@ export function SessionFocus({
       if (s.fallback !== null) return { status: "ready", question: s.fallback };
       return { status: "none", note: r.note ?? NOTHING_TO_ASK };
     },
-    [plan, modelAvailable, resolved],
+    [steps, modelAvailable, resolved],
   );
 
   // A question step with nothing from the note asks the tutor, once.
   useEffect(() => {
-    const s = plan[index];
+    const s = steps[index];
     if (s === undefined || s.question !== null || !modelAvailable) return;
     if (s.kind !== "probe" && s.kind !== "check") return;
     if (requested.current.has(index)) return;
     requested.current.add(index);
+    const concept = conceptOf(s);
+    // Only this concept's questions: a week check asks several concepts.
     const asked = Object.keys(graded)
+      .filter((k) => conceptOf(steps[Number(k)]) === concept)
       .map((k) => questionFor(Number(k)))
       .flatMap((q) => (q.status === "ready" ? [q.question.prompt] : []))
       .slice(-4);
@@ -170,7 +225,7 @@ export function SessionFocus({
     fetch("/api/agent/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conceptSlug: slug, step: s.kind, avoid: asked }),
+      body: JSON.stringify({ conceptSlug: concept, step: s.kind, avoid: asked }),
     })
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as { question?: SessionQuestion; code?: string; error?: string };
@@ -181,7 +236,7 @@ export function SessionFocus({
       .catch(() => {
         setResolved((prev) => ({ ...prev, [at]: { question: null, note: "The tutor could not be reached." } }));
       });
-  }, [index, plan, modelAvailable, slug, graded, questionFor]);
+  }, [index, steps, modelAvailable, graded, questionFor, conceptOf]);
 
   const current = questionFor(index);
   // Joined here rather than in the JSX: a call on `current.note` down there made the React Compiler
@@ -206,11 +261,13 @@ export function SessionFocus({
       const correct = picked !== null && picked === question.correct;
       sessionId.current ??= newSessionId(slug, new Date(), randomToken());
       const payload = {
-        conceptSlug: slug,
+        conceptSlug: conceptOf(step),
         correct,
         // Asked after this session taught it is a teaching check; a probe,
-        // and a Quiz me with no teaching, only measure.
+        // and a Quiz me or a week check with no teaching, only measure.
         source: step.kind === "check" && mode === "learn" ? "teach" : "probe",
+        // A week check names its module, which the event carries.
+        ...(weekCheck === null ? {} : { module: weekCheck.moduleId }),
         requestId: attempt.requestId,
         sessionId: sessionId.current,
         question: question.prompt,
@@ -246,7 +303,7 @@ export function SessionFocus({
         setPending(false);
       }
     },
-    [question, step, graded, index, slug, mode, router],
+    [question, step, graded, index, slug, mode, router, conceptOf, weekCheck],
   );
 
   /**
@@ -310,18 +367,27 @@ export function SessionFocus({
   }, [closeSession]);
 
   const advance = useCallback(() => {
+    let walk = steps;
+    // A week check's step left with nothing to ask ends its concept; the
+    // step after it is decided by that, here, before moving on to it.
+    const current = steps[index];
+    if (checkPlan !== null && current?.kind === "check" && graded[index] === undefined && skipped[index] === undefined) {
+      const concept = conceptOf(current);
+      setSkipped((prev) => ({ ...prev, [index]: concept }));
+      walk = weekCheckSteps(checkPlan, [...outcomes, { concept, result: "none", mastered: false }]);
+    }
     const to = index + 1;
-    if (to >= plan.length) return;
+    if (to >= walk.length) return;
     setIndex(to);
     setSelected(null);
     setWhyOpen(false);
     setError(null);
-    if (plan[to]?.kind === "close") {
+    if (walk[to]?.kind === "close") {
       setClosedAt(Date.now());
       void closeSession(false).then(() => router.refresh());
     }
     window.scrollTo({ top: 0 });
-  }, [index, plan, router, closeSession]);
+  }, [index, steps, router, closeSession, checkPlan, graded, skipped, outcomes, conceptOf]);
 
   // On a phone the verdict lands under the options; bring it up.
   useEffect(() => {
@@ -361,9 +427,11 @@ export function SessionFocus({
 
   if (step === undefined) return null;
 
-  const percent = ((index + 1) / plan.length) * 100;
-  const label = stepLabel(plan, index, title);
-  const short = stepLabel(plan, index, title, true);
+  const percent = checkPlan === null ? ((index + 1) / steps.length) * 100 : weekCheckPercent(step);
+  const label = checkPlan === null ? stepLabel(steps, index, title) : `Week check · ${weekCheckLabel(step)}`;
+  const short = checkPlan === null ? stepLabel(steps, index, title, true) : weekCheckLabel(step);
+  const exitLabel = weekCheck === null ? "Exit to workspace" : "Exit to module";
+  const noQuestionReason = weekCheck?.reason ?? null;
 
   if (step.kind === "close") {
     const answers = Object.keys(graded)
@@ -371,25 +439,33 @@ export function SessionFocus({
       .sort((a, b) => a - b)
       .map((i) => (graded[i] as Graded).recorded);
     return (
-      <Frame percent={100} label={label} short={short} exitHref={exitHref}>
+      <Frame percent={100} label={checkPlan === null ? label : "Week check"} short={checkPlan === null ? short : "Week check"} exitHref={exitHref} exitLabel={exitLabel}>
         <SessionClose
           slug={slug}
           title={title}
-          plan={plan}
+          plan={steps}
           answers={answers}
           minutes={Math.max(1, Math.round(((closedAt ?? startedAt) - startedAt) / 60_000))}
           next={next}
-          reason={nothingToAsk ? NOTHING_TO_ASK : null}
+          reason={nothingToAsk ? (noQuestionReason ?? NOTHING_TO_ASK) : null}
+          weekCheck={
+            checkPlan === null || weekCheck === null
+              ? null
+              : {
+                  titles: Object.fromEntries(checkPlan.concepts.map((c) => [c.slug, c.title])),
+                  moduleHref: weekCheck.moduleHref,
+                }
+          }
         />
       </Frame>
     );
   }
 
   return (
-    <Frame percent={percent} label={label} short={short} exitHref={exitHref}>
+    <Frame percent={percent} label={label} short={short} exitHref={exitHref} exitLabel={exitLabel}>
       <h1 className="font-display text-[20px] leading-tight font-bold text-text md:text-[28px]">
-        {title}
-        <span className="hidden md:inline"> · {STEP_NAME[step.kind]}</span>
+        {step.place?.title ?? title}
+        {step.place === undefined && <span className="hidden md:inline"> · {STEP_NAME[step.kind]}</span>}
       </h1>
 
       {step.kind === "teach" ? (
@@ -457,7 +533,7 @@ export function SessionFocus({
                           Why?
                         </Button>
                       )}
-                      <Button variant="ghost" href={`/learn/${slug}?ask=${encodeURIComponent(tutorPrefill(question, answered.picked))}`}>
+                      <Button variant="ghost" href={`/learn/${conceptOf(step)}?ask=${encodeURIComponent(tutorPrefill(question, answered.picked))}`}>
                         Ask the tutor
                       </Button>
                       <Button variant={answered.correct ? "ok" : "warn"} onClick={advance} aria-keyshortcuts="Enter">
@@ -562,12 +638,15 @@ function Frame({
   label,
   short,
   exitHref,
+  exitLabel,
   children,
 }: {
   percent: number;
   label: string;
   short: string;
   exitHref: string;
+  /** What the exit link says from 768px up; "Exit" on a phone. */
+  exitLabel: string;
   children: ReactNode;
 }) {
   const value = Math.max(0, Math.min(100, percent));
@@ -596,7 +675,7 @@ function Frame({
           className="shrink-0 rounded-sm hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           <span className="md:hidden">Exit</span>
-          <span className="hidden md:inline">Exit to workspace</span>
+          <span className="hidden md:inline">{exitLabel}</span>
         </Link>
       </div>
       <div

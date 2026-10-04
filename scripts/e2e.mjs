@@ -686,6 +686,49 @@ async function run() {
     }
   });
 
+  await step("week check: the module path's last step answers through to the close screen", page, async () => {
+    // The seed's cp4284 module 3: tool-calling and react-loop, whose notes carry checks.
+    const modulePage = '/courses/cp4284/m3-agentic-frameworks';
+    await go(modulePage);
+    const row = main.getByRole('link', { name: /^Week check/ });
+    await row.getByText(/^2 concepts · up to 6 questions$/).waitFor();
+    await clickHydrated(page, row);
+    await page.waitForURL(`${base}${modulePage}/check`);
+
+    const bar = page.getByRole('progressbar', { name: 'Session progress' });
+    const closed = page.getByRole('heading', { name: 'Week check done' });
+    const check = page.getByRole('button', { name: 'Check', exact: true });
+    const cont = page.getByRole('button', { name: 'Continue', exact: true });
+    const choices = page.locator('[role=group][aria-labelledby="session-question"]').getByRole('button');
+
+    const sent = [];
+    for (let moves = 0; ; moves += 1) {
+      assert(moves < 10, 'still not closed after 10 moves');
+      await closed.or(check).or(cont).first().waitFor({ timeout: 30_000 });
+      if (await closed.isVisible()) break;
+      const before = await progressValue(bar);
+      if (await check.isVisible()) {
+        await clickHydrated(page, choices.first());
+        const posted = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/learner/observe');
+        await check.click();
+        sent.push((await posted).postDataJSON());
+        await cont.waitFor();
+      }
+      await clickHydrated(page, cont);
+      await page.waitForFunction(
+        (value) => document.querySelector('[role=progressbar][aria-label="Session progress"]')?.getAttribute('aria-valuenow') !== value,
+        before,
+      );
+    }
+    assert(sent.length > 0, 'the week check asked nothing');
+    for (const body of sent) {
+      assert(body.source === 'probe' && body.module === 'cp4284-m3', `an answer went in as ${JSON.stringify({ source: body.source, module: body.module })}`);
+    }
+    // The close screen says what moved, per concept, and leads back to the module.
+    await main.getByRole('heading', { name: 'What moved' }).waitFor();
+    await main.getByRole('link', { name: 'Back to the module' }).waitFor();
+  });
+
   await step('home: Pick up lists the course module opened and the concept answered', page, async () => {
     // Open a course: its page records the visit (VisitTracker), which the
     // preference route also puts on recentModules.

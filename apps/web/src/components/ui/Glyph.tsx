@@ -33,6 +33,8 @@ const PATHS = {
   add: "M10 4.5v11M4.5 10h11",
   // A padlock.
   lock: "M6 9V7a4 4 0 0 1 8 0v2M5 9h10v8H5z",
+  // A clipboard with a tick: a module's week check.
+  check: "M7 4H5v13h10V4h-2M7.5 3h5v2.5h-5zM7.5 11.5l1.8 1.8 3.4-3.6",
   // Arrows for the previous and next module.
   previous: "M12 5l-5 5 5 5",
   next: "M8 5l5 5-5 5",

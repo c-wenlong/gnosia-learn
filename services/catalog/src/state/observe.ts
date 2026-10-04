@@ -1,5 +1,8 @@
-import { event, LOCAL_LEARNER_ID, session as sessionTable } from "@self-learn/schema";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { collection, event, LOCAL_LEARNER_ID, readableOwners, session as sessionTable } from "@self-learn/schema";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+
+import { ownedBy, scopedRead } from "../content/scope";
 
 import type { CatalogDatabase } from "../db";
 import {
@@ -63,6 +66,15 @@ export interface ObserveInput {
   chosen?: string | null;
   /** The session this answer belongs to; the row is created if nobody opened it. */
   session?: string | null;
+  /**
+   * The module whose week check asked (docs/proposals/module-learning-path.md,
+   * "The week check"): a live module id the learner can read, refused
+   * otherwise, and written into the event's payload as `module`. Left out of
+   * the event when absent, so the CLI's observation is unchanged. With
+   * `openSession`, the session it opens takes the module's title when none is
+   * given.
+   */
+  module?: string | null;
   /**
    * Open `session` as a tutor session in the same transaction as the answer,
    * or refuse the answer if it cannot be (a closed session, a studio one).
@@ -165,6 +177,7 @@ export async function recordObservation(
   // so the message says what to do rather than naming a constraint. Only a
   // concept this learner may read (phase 4).
   await assertReadableConcepts(db, [id], learnerId);
+  const weekModule = input.module == null ? null : await readableModule(db, input.module, learnerId);
 
   // One clock for the whole write. The card's `now`, the model's `lastSeen`
   // and the event's `at` were three separate `new Date()` calls once, which
@@ -196,7 +209,8 @@ export async function recordObservation(
     // its `session-close` counts this answer).
     const sessionId = input.session ?? null;
     if (sessionId !== null && input.openSession !== undefined) {
-      await openInTransaction(tx, { id: sessionId, ...input.openSession, now, learnerId });
+      const title = input.openSession.title ?? weekModule?.title ?? null;
+      await openInTransaction(tx, { id: sessionId, ...input.openSession, title, now, learnerId });
     }
 
     const model = await readModel(tx, learnerId);
@@ -252,6 +266,8 @@ export async function recordObservation(
         // Undefined for the CLI, and `toRow` drops an undefined key, so a
         // terminal observation's payload is exactly what it always was.
         requestId,
+        // The same for an answer that is not a week check's.
+        module: weekModule?.id,
       },
       learnerId,
     );
@@ -275,6 +291,42 @@ export async function recordObservation(
       closed: false,
     };
   }
+}
+
+/**
+ * The module a week check names, if it is one this learner may answer
+ * against: a `module` collection, not archived, under a course that is not
+ * archived either, owned by the learner or the commons. Anything else is a
+ * StateError naming the id, which the web route turns into a 400. The
+ * sentence is the same for every reason, as for a concept: whose a module is
+ * is not something a refusal says.
+ */
+async function readableModule(
+  db: CatalogDatabase,
+  id: string,
+  learnerId: string,
+): Promise<{ id: string; title: string }> {
+  const course = alias(collection, "course");
+  const [row] = await scopedRead(db, readableOwners(learnerId), (owners) =>
+    db
+      .select({ id: collection.id, title: collection.title })
+      .from(collection)
+      .innerJoin(course, eq(course.id, collection.parentId))
+      .where(
+        and(
+          eq(collection.id, id),
+          eq(collection.kind, "module"),
+          isNull(collection.archivedAt),
+          isNull(course.archivedAt),
+          ownedBy(collection.ownerId, owners),
+        ),
+      )
+      .limit(1),
+  );
+  if (row === undefined) {
+    throw new StateError(`no live module "${id}" in the catalog. A week check answers against a module its course still lists.`);
+  }
+  return row;
 }
 
 /** What the first write of `requestId` recorded, as a result, or null if nothing did. */

@@ -425,6 +425,37 @@ describe("the feedback and close arithmetic", () => {
     ]);
   });
 
+  it("totals a week check over its concepts: the mean of each one's first prior and last posterior", () => {
+    const answers = [
+      answer({ concept: "big-o", pLBefore: 0.25, pLAfter: 0.6 }),
+      answer({ concept: "big-o", pLBefore: 0.6, pLAfter: 0.87 }),
+      answer({ concept: "theta", correct: false, pLBefore: 0.45, pLAfter: 0.1 }),
+    ];
+    const totals = sessionTotals(["big-o", "theta", "never-asked"], answers);
+    expect(totals.answered).toBe(3);
+    expect(totals.before).toBeCloseTo((0.25 + 0.45) / 2, 12);
+    expect(totals.after).toBeCloseTo((0.87 + 0.1) / 2, 12);
+    expect(formatTotalsMove(totals)).toBe("+0.13");
+  });
+
+  it("titles each concept a week check asked, and counts one first reached as a prerequisite as asked", () => {
+    const answers = [
+      answer({
+        concept: "theta",
+        pLBefore: 0.25,
+        pLAfter: 0.6,
+        propagated: [{ concept: "big-o", title: "Big O", hops: 1, pLBefore: 0.3, pLAfter: 0.4 }],
+      }),
+      answer({ concept: "big-o", pLBefore: 0.4, pLAfter: 0.75 }),
+    ];
+    const titles = { theta: "Theta", "big-o": "Big O notation" };
+    expect(whatMoved("cs3230-m1", "Week 1", answers, titles)).toEqual([
+      { slug: "theta", title: "Theta", before: 0.25, after: 0.6, prerequisite: false },
+      { slug: "big-o", title: "Big O notation", before: 0.3, after: 0.75, prerequisite: false },
+    ]);
+    expect(scheduledCards("cs3230-m1", "Week 1", answers, titles).map((r) => r.title)).toEqual(["Theta", "Big O notation"]);
+  });
+
   it("has no movement with no answers, and leaves out a replay's unknown propagation", () => {
     expect(sessionTotals("x", [])).toEqual({ answered: 0, right: 0, before: null, after: null, cards: 0 });
     const replayed = answer({ replayed: true, propagated: [{ concept: "vector", title: "Vector", hops: 1 }] });

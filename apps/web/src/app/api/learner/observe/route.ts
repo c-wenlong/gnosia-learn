@@ -10,8 +10,15 @@ import { isSessionToken, OBSERVE_SOURCES, SESSION_TEXT_LIMIT, type ObserveSource
  * evidence.
  *
  * ```ts
- * { conceptSlug, correct, source: "probe" | "teach", requestId, sessionId?, question?, answer?, chosen?, closeSession? }
+ * { conceptSlug, correct, source: "probe" | "teach", requestId, sessionId?, question?, answer?, chosen?, closeSession?, module? }
  * ```
+ *
+ * `module` is set by a module's week check (docs/proposals/module-learning-path.md,
+ * "The week check"): a live module id the owner can read, written into the
+ * event's payload, and the session the first answer opens is then the
+ * module's (its title, the module id as its goal). An id the catalog has no
+ * live module for, or one the owner cannot read, is a 400 like an unknown
+ * concept.
  *
  * It runs `recordObservation`, the function `learn observe` runs, so an answer
  * from this page and one from the terminal are the same write: an
@@ -57,7 +64,12 @@ interface ObserveRequest {
   chosen: string | null;
   /** Close the session once this answer is recorded: the page leaving mid-save. */
   closeSession: boolean;
+  /** The module whose week check asked, or null. */
+  module: string | null;
 }
+
+/** A collection id as the course files write them: lowercase letters, digits and hyphens. */
+const MODULE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function optionalText(body: Record<string, unknown>, field: string): string | null {
   const value = body[field];
@@ -86,6 +98,14 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
   if (sessionId !== undefined && sessionId !== null && !isSessionToken(sessionId)) {
     throw new BadRequest(`"sessionId" must be a short token of letters, digits, "-" and "_".`);
   }
+  const moduleId = body.module;
+  if (
+    moduleId !== undefined &&
+    moduleId !== null &&
+    (typeof moduleId !== "string" || moduleId.length > 128 || !MODULE_ID.test(moduleId))
+  ) {
+    throw new BadRequest(`"module" must be a module id: lowercase letters, digits and hyphens.`);
+  }
   return {
     conceptSlug,
     correct,
@@ -96,6 +116,7 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
     answer: optionalText(body, "answer"),
     chosen: optionalText(body, "chosen"),
     closeSession: optionalBoolean(body, "closeSession", false),
+    module: typeof moduleId === "string" ? moduleId : null,
   };
 }
 
@@ -118,7 +139,15 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
     // The first answer opens the session, in the answer's own transaction:
     // a refused answer leaves no `session-start`, and a closed session (or a
     // studio one) refuses the answer. Idempotent for every later answer.
-    openSession: input.sessionId === null ? undefined : { title: titleOf(input.conceptSlug), goal: input.conceptSlug },
+    // A week check's session is the module's: `recordObservation` names it
+    // after the module it has just checked the owner may read.
+    openSession:
+      input.sessionId === null
+        ? undefined
+        : input.module === null
+          ? { title: titleOf(input.conceptSlug), goal: input.conceptSlug }
+          : { goal: input.module },
+    module: input.module,
     requestId: input.requestId,
     // A page going away with an answer still saving sends it again with this:
     // the answer and the close commit together, so neither lands without the
