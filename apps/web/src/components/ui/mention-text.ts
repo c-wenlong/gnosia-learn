@@ -307,7 +307,7 @@ export function valueOf<K extends string>(pieces: readonly ValuePiece<K>[]): Men
 /* -------------------------------------------------------------------------- */
 
 /*
- * The studio home's Diagram and Video buttons (D84 of
+ * The studio home's Diagram and Video buttons (D88 of
  * docs/STUDIO-CHAT-FIRST.md): one press puts the kind's chip in the message,
  * the next takes it out, and the button shows pressed whenever the chip is
  * there, however it got there. They work on the value, not the editor, so

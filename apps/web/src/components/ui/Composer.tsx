@@ -33,7 +33,7 @@ import {
  *
  * `layout="box"` draws the field in `ComposerBox` instead: three lines tall
  * when empty, with `toolbar` and a round Send in a row inside the frame under
- * it (D84 of docs/STUDIO-CHAT-FIRST.md). The keys and the growth rule are the
+ * it (D88 of docs/STUDIO-CHAT-FIRST.md). The keys and the growth rule are the
  * same. Nothing else uses it today but the studio's plain fallback for a box
  * `MentionComposer`.
  *

@@ -155,6 +155,13 @@
       "when": 1791088482716,
       "tag": "0021_course_order",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791089989103,
+      "tag": "0022_readings_on_lessons",
+      "breakpoints": true
     }
   ]
 }

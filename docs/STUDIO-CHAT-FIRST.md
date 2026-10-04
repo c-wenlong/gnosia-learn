@@ -647,16 +647,17 @@ live preview ("The job in the grid" below):
 
 ### Home and the full-screen conversation
 
-*Since 2026-10-04 (D81, D82, D83, D84). It replaces the plus card and moves the
+*Since 2026-10-04 (D81, D82, D83, D84, D88). It replaces the plus card and moves the
 conversation out of the dialog; the sections after this one describe what
 came before where they say so.*
 
-`/studio` is a sidebar beside one of two views, the way a chat app is laid
-out (`PanelHost`):
+`/studio` is one of two views beside the app's sidebar, the way a chat app is
+laid out (`PanelHost`). Since D84 that sidebar is the whole app's, not the
+studio's own:
 
 | | Home (`/studio`) | A conversation (`?draft=<id>`) |
 | --- | --- | --- |
-| Sidebar | New chat, then the history | The same, the open conversation marked |
+| Sidebar | New chat, the five learning destinations, then the history | The same, the open conversation marked |
 | Main | "What shall we make?", a line under it, and the composer, filling the first screen, then the assets panel: the strip (search, topics, Display, Sort), the job strip, the notices and the grid of diagrams and videos | The conversation full screen: its header, the thread and the composer in a 48rem column in the middle |
 
 *Since D83:* the composer has the first screen to itself, over a soft wash
@@ -676,7 +677,7 @@ message. A refusal brings the person home with the words still in the box
 and the reason under it. Nothing is made until something is sent, so New
 chat is simply the home view, its composer focused.
 
-*Since D84:* the heading has a line under it in the display serif, muted:
+*Since D88:* the heading has a line under it in the display serif, muted:
 "Talk an idea through, then make it a diagram or a video." The composer is a
 box, laid out as Gauth's Atlas prompt box is
 ([reference](design/reference/gauth/components.md)): the field three lines
@@ -705,7 +706,7 @@ The rules are `hasMention`, `withMention`, `withoutMention` and
 than the editor, the plain textarea that stands in when Lexical will not load
 is a box with the same toggles, and they still tag there.
 
-**The history** (`StudioSidebar`) lists every conversation but one closed
+**The history** (`ChatHistory`, in the app's sidebar) lists every conversation but one closed
 with Start over: talking, briefed, drawing and done (`LISTED_STATES`), under
 Today, Yesterday, Previous 7 days, Previous 30 days and Older. The old list
 above the grid showed only the first two, since it was a list of things to
@@ -728,16 +729,17 @@ own, a tile's panel, the settings and an Extend press are still dialogs over
 the home view, and an Extend press becomes a full-screen conversation once
 its draft exists.
 
-From 768px up the sidebar collapses to a 52px rail (its toggle, then New
-chat), as ChatGPT's does, and remembers that in `localStorage`
-(`useSidebarCollapsed`). Resting the mouse on the rail for a moment slides
-the whole sidebar out over the page, without moving it, and moving off
-slides it back; the toggle pressed while it is out keeps it open.
+From 768px up the sidebar folds to a 60px rail of icons, as ChatGPT's does,
+and remembers that in a cookie (`gnosia-sidebar`, D84), so the first paint
+has the right width. Resting the mouse on the rail for a moment slides the
+whole sidebar out over the page, without moving it, and moving off slides it
+back; the fold button pressed while it is out keeps it open. (D83 built this
+on the studio's own sidebar, with the choice in `localStorage`.)
 
-Below 768px the sidebar is a drawer, opened by a toggle at the top left of
-the home view and before the conversation's title, and closed by a pick, the
-backdrop or Escape. While it is open the rest of the studio is inert, Tab
-stays inside it, and closing it hands focus back to the toggle.
+Below 768px the sidebar is a drawer, opened by the button at the left of the
+app's phone header, and closed by a pick, the backdrop, Escape or a
+navigation. While it is open the rest of the page is inert, Tab stays inside
+it, and closing it hands focus back to the button.
 
 ### The plus card and the panel
 
@@ -1312,7 +1314,31 @@ reach a diagram, which is the studio's other main use), and a rail that
 only opens on a click (the owner asked for hover, and the click is there
 too, on the toggle).
 
-### D84. The home composer is a box with Diagram and Video toggles
+### D84. The studio's sidebar is the app's sidebar
+
+**Verdict:** the app has one sidebar, on every page: New chat (the studio's
+home), the five learning destinations, the studio's conversations, and the
+account at the foot. The top bar, the phone tab bar and the studio's own
+conversation list are gone. On `/studio`, `PanelHost` publishes the open
+conversation, a pending one, New chat and its in-browser navigation to the
+sidebar (`usePublishStudioChats`), so the list behaves exactly as the
+studio's own did; elsewhere the sidebar reads the list itself and a row is a
+link to `/studio?draft=`. D83's fold and hover peek moved with it, and the
+fold is kept in a cookie rather than `localStorage`, since the layout reads
+it to draw the right width before anything runs in the browser.
+
+**Why:** the owner's call on 2026-10-04: the studio is the feature to refine,
+and a chat app's layout, one sidebar and one view, makes it the main page
+with the learning pages as modules beside it. Two nested navigations (the
+top bar over the studio's sidebar) made the studio feel like a page inside
+the app rather than its centre.
+
+**Rejected:** a portal from `PanelHost` into a slot in the app's sidebar. It
+would keep the studio's own component, but the list would be torn down and
+redrawn on every move between the studio and another page, and it could not
+be drawn on the server.
+
+### D88. The home composer is a box with Diagram and Video toggles
 
 **Verdict:** the home composer is a box: the field three lines tall on top,
 and inside the frame under it the plus, a Diagram and a Video toggle, and a

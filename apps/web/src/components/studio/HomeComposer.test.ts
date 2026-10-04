@@ -53,7 +53,7 @@ vi.mock("next/dynamic", () => ({
 }));
 vi.mock("@/components/studio/panel-host", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/components/studio/panel-host")>()),
-  usePanelHost: () => ({ begin: mocks.begin, settle: mocks.settle, navigate: () => false, openSidebar: () => {} }),
+  usePanelHost: () => ({ begin: mocks.begin, settle: mocks.settle, navigate: () => false }),
 }));
 vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/studio-drafts")>()),
@@ -140,7 +140,7 @@ describe("the home composer", () => {
   });
 });
 
-describe("the Diagram and Video toggles (D84)", () => {
+describe("the Diagram and Video toggles (D88)", () => {
   const toggle = (container: HTMLElement, name: string) =>
     [...container.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")].find((button) => button.textContent === name)!;
 

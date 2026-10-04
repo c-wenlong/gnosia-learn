@@ -57,6 +57,10 @@ import { bytewise } from "../sql-order";
  * **The rows it writes are the rows the courses indexer writes** for the same
  * file, column for column, so importing an unchanged file appends no revision
  * and a later `catalog import` of the same tree appends none either.
+ * That includes a reading's `lessons:` (`curriculum_item_asset` rows, owned by
+ * each lesson, so placing a reading is a revision of the lessons it moved)
+ * and the `videos:` lists, which are stored as written and never resolved:
+ * an archived item loses its reading links, since the file cannot name it.
  *
  * **The file is kept in step** (D17, the shared `write-through.ts`): in the
  * same transaction the course file, and `topics.yaml` when a module's topic
@@ -519,7 +523,10 @@ async function plan(
       owner: CLI_OWNER,
       type: "curriculum_item",
       id: item.id,
-      next: { row: { ...item, archivedAt: now } },
+      // Its reading links go: the file cannot name an item it no longer
+      // lists in a reading's `lessons:`, and the courses indexer clears an
+      // archived item's links the same way.
+      next: { row: { ...item, archivedAt: now }, links: { curriculum_item_asset: [] } },
       base: base.get(`curriculum_item ${item.id}`) ?? null,
       ...common,
     });
@@ -608,7 +615,8 @@ async function plan(
           title: mod.title,
           parentId: course.id,
           position: mod.order,
-          metadata: {},
+          // As the courses indexer writes it: `videos` only when listed.
+          metadata: mod.videos === undefined ? {} : { videos: mod.videos },
           archivedAt: null,
         }),
         links: {
@@ -637,6 +645,16 @@ async function plan(
   }
 
   for (const mod of course.modules) {
+    // Each lesson's readings, with the lesson's place in each reading's
+    // `lessons:` as the position, as the courses indexer writes them.
+    const readings = new Map<string, { assetId: string; position: number }[]>();
+    for (const resource of mod.resources) {
+      for (const [i, lesson] of (resource.lessons ?? []).entries()) {
+        const list = readings.get(lesson) ?? [];
+        list.push({ assetId: `${ASSET_PREFIX.courses}${resource.id}`, position: i + 1 });
+        readings.set(lesson, list);
+      }
+    }
     for (const item of mod.topics) {
       inputs.push({
         owner: CLI_OWNER,
@@ -649,11 +667,13 @@ async function plan(
             position: itemPositions.get(item.id) ?? 0,
             title: item.title,
             subtopics: item.subtopics,
+            videos: item.videos ?? [],
             archivedAt: null,
           }),
           links: {
             curriculum_item_topic: [{ topicSlug: mod.topic }],
             concept_curriculum_item: item.concepts.map((conceptSlug, i) => ({ conceptSlug, position: i + 1 })),
+            curriculum_item_asset: readings.get(item.id) ?? [],
           },
         },
         base: base.get(`curriculum_item ${item.id}`) ?? null,

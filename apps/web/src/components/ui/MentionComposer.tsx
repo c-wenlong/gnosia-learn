@@ -106,7 +106,7 @@ import {
  * suggestion's prefill, a clear after Send) rebuilds the field from it.
  * `insertMention` on the handle is for the suggestion buttons.
  *
- * `layout="box"` is the studio home's (D84 of docs/STUDIO-CHAT-FIRST.md): the
+ * `layout="box"` is the studio home's (D88 of docs/STUDIO-CHAT-FIRST.md): the
  * field three lines tall on top, and under it, inside the same frame, the
  * plus, the caller's `toolbar` and a round Send (`ComposerBox`). The menu then
  * opens under the box, beside the plus that opens it. Everything else is the

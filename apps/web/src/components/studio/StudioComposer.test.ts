@@ -119,7 +119,7 @@ describe("the plain fallback's note and focus", () => {
   });
 });
 
-describe("the plain fallback in the box layout (D84)", () => {
+describe("the plain fallback in the box layout (D88)", () => {
   it("is a box too: the caller's toolbar and a round Send in a row under the field, and Enter still sends", async () => {
     const toolbar = createElement("button", { type: "button", "data-toggle": "diagram" }, "Diagram");
     const { host, onSubmit } = await mount(

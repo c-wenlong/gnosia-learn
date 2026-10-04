@@ -50,7 +50,7 @@ export function composerHeight(scrollHeight: number, maxRows: number = COMPOSER_
 }
 
 /*
- * The box layout (`layout="box"`, D84 of docs/STUDIO-CHAT-FIRST.md): the
+ * The box layout (`layout="box"`, D88 of docs/STUDIO-CHAT-FIRST.md): the
  * field on top and a row of controls inside the frame under it, as Gauth's
  * Atlas prompt box is laid out. Radius 20 as a card (DESIGN.md), the same 2px
  * border going `--accent` on focus, and no shadow: the kit has none.

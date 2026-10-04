@@ -20,7 +20,7 @@ import { loadSessionPage, type TeachAsset } from "@/lib/session-page";
 /**
  * Session focus mode (hi-fi 05, 06 and 07, and 15 on a phone): one concept
  * taught as a short scripted loop, probe, teach, check, close, in focus mode
- * with no top bar.
+ * with no sidebar.
  *
  * Everything is read here, on the server: the workspace (the note, its
  * checks, its assets, the learner's p(L)), the step plan built from the

@@ -40,7 +40,7 @@ describe("composerHeight", () => {
   });
 });
 
-describe("composerBoxHeight (the box layout, D84)", () => {
+describe("composerBoxHeight (the box layout, D88)", () => {
   it("shows three lines when empty", () => expect(composerBoxHeight(40)).toBe(16 + 24 * 3));
   it("grows a line at a time past them", () => expect(composerBoxHeight(16 + 24 * 4)).toBe(16 + 24 * 4));
   it("stops at six lines and scrolls past them", () => expect(composerBoxHeight(10_000)).toBe(16 + 24 * 6));

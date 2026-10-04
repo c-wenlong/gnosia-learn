@@ -35,6 +35,9 @@ export const RESOURCE_GLYPH: Record<ResourceType, GlyphName> = {
   video: "video",
   book: "book",
   other: "link",
+  // A problem to solve (0022). It looks like the link it was filed as before
+  // the type existed until the module path gives practice a place of its own.
+  practice: "link",
 };
 
 /** A filled mastered disc with a tick: a topic that is done, a module whose topics all are. */

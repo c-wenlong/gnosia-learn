@@ -40,7 +40,7 @@ type Value = MentionValue<DraftKind>;
  * answers. A bare tag gives the planner nothing to go on in a conversation
  * with no turn yet (T15), so Send waits for words.
  *
- * The box (D84) also has a Diagram and a Video toggle in its bottom row. A
+ * The box (D88) also has a Diagram and a Video toggle in its bottom row. A
  * press puts that kind's chip at the start of the message, or takes it out,
  * and focuses the field; it never sends. Each shows pressed whenever its chip
  * is in the message, typed with `@` included, so the buttons always say what

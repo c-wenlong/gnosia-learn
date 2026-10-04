@@ -159,7 +159,7 @@ describe("the value's shape", () => {
   });
 });
 
-describe("a kind's toggle (D84)", () => {
+describe("a kind's toggle (D88)", () => {
   const empty = { text: "", mentions: [] };
 
   it("puts the chip at the start of an empty field, with a space to type after", () => {

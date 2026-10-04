@@ -41,7 +41,7 @@ export const MentionComposer = dynamic(
 ) as (props: MentionComposerProps<DraftKind>) => ReactNode;
 
 /**
- * The same composer in the box layout, for the studio home (D84 of
+ * The same composer in the box layout, for the studio home (D88 of
  * docs/STUDIO-CHAT-FIRST.md). Its own `dynamic` only so the frame that stands
  * in while the chunk loads is a box of the box's height rather than the row's
  * 52px, since `loading` is not shown the props. It loads the same module, so

@@ -6,7 +6,7 @@ import { Glyph } from "./Glyph";
 
 /**
  * The kit composers' box layout (`layout="box"` on `Composer` and
- * `MentionComposer`, D84 of docs/STUDIO-CHAT-FIRST.md): the field on top, and
+ * `MentionComposer`, D88 of docs/STUDIO-CHAT-FIRST.md): the field on top, and
  * under it, inside the same frame, a row of controls ending in a round Send,
  * the way Gauth's Atlas prompt box is laid out
  * (docs/design/reference/gauth/components.md, "Atlas prompt box"). The row
