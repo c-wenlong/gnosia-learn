@@ -1,8 +1,9 @@
 # Proposal: recall in the chat
 
-Status: proposed, 2026-10-04, for the owner to accept or turn down.
-Decisions R1 to R6 below are defaults the proposal chose; R2 in particular
-is one the owner may overturn. Step 1 of the same conversation, taking
+Status: accepted, 2026-10-04, and phase 1 is built. R2 is the owner's call
+(tap to record); R1 and R3 to R6 are the proposal's defaults, and open
+questions 2 and 3 take theirs until the owner says otherwise. Step 1 of the
+same conversation, taking
 Review out of the sidebar, shipped on its own
 ([#343](https://github.com/c-wenlong/self-learn/pull/343)) and is recorded
 in [DESIGN.md](../design/DESIGN.md), "Information architecture".
@@ -89,8 +90,10 @@ with the marker; when you are only conversing, do not.
 
 ### 2. The answer is judged (R5)
 
-When the learner replies to a turn that carried `check`, the route runs a
-second, short call beside the reply: the question, the note's matching
+When the learner replies to a turn that carried `check`, the page calls
+`POST /api/agent/judge` beside `POST /api/agent/chat`, so the tutor's reply
+and the verdict arrive independently and neither waits on the other. The
+judge is a second, short model call: the question, the note's matching
 check block if one exists (its `answer:` and `why:`), the learner's words,
 and a request for JSON `{ correct: boolean, feedback: string }`. The
 pattern is the one `POST /api/agent/session` uses for a question
@@ -187,7 +190,8 @@ under the learner lock in one transaction (layering rule 11: a page never
 assembles evidence). `POST /api/review/grade` and the four SM-2 ratings stay
 the review page's, and the chat never calls it. One write, one meaning.
 
-**R2. The model proposes, the learner commits with one tap.** The
+**R2. The model proposes, the learner commits with one tap.** The owner's
+call, 2026-10-04: tap to record. The
 alternative is to record the judge's verdict with no tap, as the terminal
 skill does when Claude judges an answer. Chosen against it, for two
 reasons. The web tutor runs on the owner's model chain
@@ -269,7 +273,7 @@ proposal.
 
 | Phase | Ships | Done when |
 | --- | --- | --- |
-| 1 | R1, R2, R4, R5: the marker, the judge and its `parseVerdict`, the verdict row, the observe write, on the concept tutor only | "Give me a check", an answer and one tap writes an `observation` event that shows under Recent answers on the concept page and moves its colour on the map; a thread with no check writes nothing; `observe --json` is byte-for-byte what it was |
+| 1 (built) | R1, R2, R4, R5: the marker, the judge and its `parseVerdict`, the verdict row, the observe write, on the concept tutor only. `lib/tutor-check.ts`, `lib/agent/judge.ts`, `app/api/agent/judge/route.ts`, `components/workspace/VerdictRow.tsx` | "Give me a check", an answer and one tap writes an `observation` event that shows under Recent answers on the concept page and moves its colour on the map; a thread with no check writes nothing; `observe --json` is byte-for-byte what it was |
 | 2 | R3 and R6: recall as the opening move, the session row | Opening a concept with a due card is met with a question; its answer reschedules the card; Home's threads list the concept; `learn session list` shows the chat |
 | 3 | The course topic tutor's exit ticket records against the topic's concepts; Home's "Recall these" opens the first concept's chat rather than `/review` | A course session's closing questions move mastery on the concepts the topic declares |
 
@@ -279,8 +283,7 @@ the one most likely to change shape.
 
 ## Open questions for the owner
 
-1. **R2.** Tap to record, or record on the judge's word? The row is the same
-   either way.
+1. **R2.** Answered 2026-10-04: tap to record.
 2. **Should `/review` go entirely** once phase 2 is in, leaving the terminal
    skill as the only whole-queue view? This proposal keeps it, reachable
    from two places, since it costs nothing and the phone layout exists.

@@ -92,3 +92,51 @@ describe("a hand-off's marker in the thread (D70 of STUDIO-TUTOR-HANDOFF.md)", (
     expect(trimForRequest(chatTurns(thread)).some((turn) => (turn.role as string) === "studio")).toBe(false);
   });
 });
+
+describe("a thread's checks and verdicts (docs/proposals/recall-in-chat.md)", () => {
+  const verdict = {
+    question: "Q?",
+    requestId: "chat-abc",
+    source: "probe",
+    judged: "ready",
+    suggested: true,
+    feedback: "Right.",
+    state: "open",
+    error: null,
+    recorded: null,
+  };
+
+  it("keeps a tutor turn's check and a learner turn's verdict through storage", () => {
+    const stored = JSON.stringify([
+      { role: "assistant", content: "Try one.", check: { question: "Q?" } },
+      { role: "user", content: "An answer", verdict },
+    ]);
+    const [asked, answered] = parseThread(stored) as TutorTurn[];
+    expect(asked.check).toEqual({ question: "Q?" });
+    expect(answered.verdict).toMatchObject({ requestId: "chat-abc", suggested: true });
+  });
+
+  it("drops a malformed check or verdict, and a check on a learner turn, but keeps the turn", () => {
+    const stored = JSON.stringify([
+      { role: "assistant", content: "A", check: { question: 3 } },
+      { role: "user", content: "B", check: { question: "Q?" }, verdict: { requestId: "x" } },
+    ]);
+    expect(parseThread(stored)).toEqual([
+      { role: "assistant", content: "A" },
+      { role: "user", content: "B" },
+    ]);
+  });
+
+  it("never sends a check or a verdict to a model", () => {
+    const items = parseThread(
+      JSON.stringify([
+        { role: "assistant", content: "Try one.", check: { question: "Q?" } },
+        { role: "user", content: "An answer", verdict },
+      ]),
+    );
+    expect(chatTurns(items)).toEqual([
+      { role: "assistant", content: "Try one." },
+      { role: "user", content: "An answer" },
+    ]);
+  });
+});

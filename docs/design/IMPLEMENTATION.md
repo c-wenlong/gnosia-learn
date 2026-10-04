@@ -391,8 +391,17 @@ bounds, 20 calls a minute per client), with `conceptSlug` in the body. When
   model: string; provider: string; providerLabel: string; fallbackAttempts: number;
   concept: { slug: string; title: string };
   sources: { n: number; label: string; href: string | null }[];  // [1] is always the note ("Your note: <title>", href /learn/<slug>); frontmatter sources follow from [2]
+  check: { question: string } | null;  // the reply asked a check: its `CHECK:` line, taken off `message.content`
 }
 ```
+
+A reply that asks a check (rule 6 of the concept prompt) ends with a
+`CHECK: <question>` line, which the route removes and returns as `check`
+(docs/proposals/recall-in-chat.md, phase 1). The learner's next message is
+its answer: the page calls `POST /api/agent/judge` with `{ conceptSlug,
+question, answer }` beside the chat call, which answers `{ verdict: {
+correct, feedback } }` or `UNSTRUCTURED_REPLY` and writes nothing, and the
+verdict row writes `POST /api/learner/observe` only on the learner's tap.
 
 Errors: 400 `BAD_REQUEST` (slug or messages malformed, checked before
 anything is read), 403 `ORIGIN_MISMATCH`, 413 and 429 from the guards, 404

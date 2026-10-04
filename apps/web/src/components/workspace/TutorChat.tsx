@@ -26,7 +26,12 @@ import {
   trimForRequest,
   type HandoffMarker,
   type ThreadItem,
+  type TutorTurn,
 } from "@/lib/tutor-thread";
+import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
+import { checkSource, newVerdict, pendingCheck, type TurnCheck, type Verdict } from "@/lib/tutor-check";
+
+import { VerdictRow } from "./VerdictRow";
 
 /**
  * The workspace's centre panel: a chat with the concept tutor
@@ -56,6 +61,15 @@ import {
  * goes to a new studio conversation about this concept, in this tab, and is
  * sent there on arrival (D64); the thread keeps it as a marker linking to
  * that conversation (D70), which is never sent to the tutor.
+ *
+ * **A check is evidence once the learner says so**
+ * (docs/proposals/recall-in-chat.md, phase 1). A tutor turn that asked a
+ * check arrives with `check`; the learner's next message is its answer, and
+ * gets a verdict row. The judge (`POST /api/agent/judge`) runs beside the
+ * tutor's reply and pre-selects a button; a tap writes the answer through
+ * `POST /api/learner/observe`, the session page's write, so mastery, the map
+ * and the review card move. No tap, nothing written (R2). "Why?" is a
+ * question about the last turn, never an answer to its check.
  */
 
 /** The longest question the input takes, well inside the route's payload bound. */
@@ -63,6 +77,7 @@ const INPUT_LIMIT = 4_000;
 
 interface ChatReply {
   message?: { content?: string };
+  check?: TurnCheck | null;
   sources?: CitationSource[];
   error?: string;
   code?: string;
@@ -116,6 +131,21 @@ function errorFor(status: number, data: ChatReply): string {
 }
 
 type Value = MentionValue<DraftKind>;
+
+/** A request id for one recorded answer, as the session page makes them. */
+function requestToken(): string {
+  // `randomUUID` needs a secure context; a LAN address over http is not one.
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `chat-${crypto.randomUUID().replace(/-/g, "")}`;
+  }
+  return `chat-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+}
+
+interface ObserveReply {
+  ok?: boolean;
+  error?: string;
+  result?: { correct: boolean; pLBefore: number; pLAfter: number; card: { intervalDays: number } | null };
+}
 type Kit = typeof import("./TutorStudioKit");
 
 const EMPTY: Value = { text: "", mentions: [] };
@@ -247,11 +277,105 @@ export function TutorChat({
     if (box) box.scrollTop = box.scrollHeight;
   }, [turns.length, busy]);
 
-  async function ask(question: string, history: ThreadItem[] = turns) {
+  /** The thread as stored right now: async work writes onto this, never onto a render's copy. */
+  const current = () => parseThread(readRaw(key));
+
+  /** Change the verdict with this request id, wherever its turn now sits. */
+  function patchVerdict(requestId: string, patch: Partial<Verdict>) {
+    writeTurns(
+      key,
+      current().map((item) =>
+        item.role === "user" && item.verdict?.requestId === requestId ? { ...item, verdict: { ...item.verdict, ...patch } } : item,
+      ),
+    );
+  }
+
+  async function judge(verdict: Verdict, answer: string) {
+    try {
+      const res = await fetch("/api/agent/judge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptSlug: slug, question: verdict.question, answer: answer.slice(0, SESSION_TEXT_LIMIT) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { verdict?: { correct?: unknown; feedback?: unknown } };
+      if (res.ok && typeof data.verdict?.correct === "boolean") {
+        patchVerdict(verdict.requestId, {
+          judged: "ready",
+          suggested: data.verdict.correct,
+          feedback: typeof data.verdict.feedback === "string" ? data.verdict.feedback : null,
+        });
+        return;
+      }
+    } catch {
+      // Unreachable or refused: the learner still chooses, with nothing pre-selected.
+    }
+    patchVerdict(verdict.requestId, { judged: "unavailable", suggested: null });
+  }
+
+  /** The learner's tap: one observation, replayed rather than doubled on a retry by its request id. */
+  async function record(requestId: string, correct: boolean) {
+    const turn = current().find(
+      (item): item is TutorTurn => item.role === "user" && item.verdict?.requestId === requestId,
+    );
+    const verdict = turn?.verdict;
+    if (!turn || !verdict || verdict.state === "saving" || verdict.state === "recorded") return;
+    patchVerdict(requestId, { state: "saving", error: null });
+    try {
+      const res = await fetch("/api/learner/observe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conceptSlug: slug,
+          correct,
+          source: verdict.source,
+          requestId,
+          question: verdict.question,
+          // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
+          chosen: turn.content.slice(0, SESSION_TEXT_LIMIT),
+        }),
+        keepalive: true,
+      });
+      const data = (await res.json().catch(() => null)) as ObserveReply | null;
+      if (!res.ok || !data?.ok || !data.result) {
+        throw new Error(
+          res.status === 429 ? "Too many answers in a minute." : (data?.error ?? `The answer was not recorded (HTTP ${res.status}).`),
+        );
+      }
+      const r = data.result;
+      patchVerdict(requestId, {
+        state: "recorded",
+        error: null,
+        recorded: { correct: r.correct, pLBefore: r.pLBefore, pLAfter: r.pLAfter, intervalDays: r.card?.intervalDays ?? null },
+      });
+      // The page's mastery dot, Recent answers and checks read the new state.
+      router.refresh();
+    } catch (e) {
+      patchVerdict(requestId, { state: "failed", error: e instanceof Error ? e.message : "The answer was not recorded." });
+    }
+  }
+
+  async function ask(
+    question: string,
+    history: ThreadItem[] = turns,
+    { answering = true, carried }: { answering?: boolean; carried?: TutorTurn } = {},
+  ) {
     const text = question.trim();
     if (!text || busy || opening) return;
-    const next: ThreadItem[] = [...history, { role: "user", content: text }];
+    // The learner's reply to a turn that asked a check is its answer, and gets a row.
+    const asked = answering && carried === undefined ? pendingCheck(history) : null;
+    const askedTurn = asked === null ? null : (history[asked] as TutorTurn);
+    const userTurn: TutorTurn =
+      carried ??
+      (askedTurn?.check
+        ? {
+            role: "user",
+            content: text,
+            verdict: newVerdict(askedTurn.check.question, requestToken(), checkSource(history, asked as number)),
+          }
+        : { role: "user", content: text });
+    const next: ThreadItem[] = [...history, userTurn];
     setTurns(next);
+    if (userTurn.verdict && userTurn.verdict.judged === "pending") void judge(userTurn.verdict, text);
     setValue(EMPTY);
     setRefusal(null);
     dropAsk();
@@ -270,7 +394,10 @@ export function TutorChat({
       const content = data.message?.content?.trim();
       if (!content) throw new Error("The tutor sent an empty reply. Try asking again.");
       if (Array.isArray(data.sources) && data.sources.length > 0) setSources(data.sources);
-      setTurns([...next, { role: "assistant", content }]);
+      // Onto the stored thread, not `next`: the judge may have written the verdict meanwhile.
+      const reply: TutorTurn = { role: "assistant", content };
+      if (data.check?.question) reply.check = { question: data.check.question };
+      setTurns([...current(), reply]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The request failed.");
     } finally {
@@ -285,7 +412,8 @@ export function TutorChat({
     const at = turns.findLastIndex((item) => item.role !== "studio");
     const unanswered = turns[at];
     if (unanswered?.role !== "user") return;
-    void ask(unanswered.content, [...turns.slice(0, at), ...turns.slice(at + 1)]);
+    // The same turn goes back, verdict and all, so an answer keeps its row and request id.
+    void ask(unanswered.content, [...turns.slice(0, at), ...turns.slice(at + 1)], { carried: unanswered });
   }
 
   function prefill(question: string) {
@@ -330,6 +458,26 @@ export function TutorChat({
   // question must not hide its Try again.
   const last = chatTurns(turns).at(-1);
   const note = byNumber.get(1);
+  // Where each verdict row is drawn: under the tutor's reply to the answer,
+  // or under the answer itself while that reply is missing. Only the newest
+  // answer's row stays open; an older untapped one folds.
+  const lastVerdict = turns.findLastIndex((t) => t.role === "user" && t.verdict);
+  const rowsAfter = new Map<number, { at: number; verdict: Verdict }>();
+  turns.forEach((t, i) => {
+    if (t.role !== "user" || !t.verdict) return;
+    rowsAfter.set(turns[i + 1]?.role === "assistant" ? i + 1 : i, { at: i, verdict: t.verdict });
+  });
+  const rowAfter = (i: number) => {
+    const row = rowsAfter.get(i);
+    return row ? (
+      <VerdictRow
+        key={`v${row.at}`}
+        verdict={row.verdict}
+        live={row.at === lastVerdict}
+        onRecord={(correct) => void record(row.verdict.requestId, correct)}
+      />
+    ) : null;
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
@@ -350,7 +498,7 @@ export function TutorChat({
           </TutorMessage>
         )}
 
-        {turns.map((turn, i) =>
+        {turns.flatMap((turn, i) => [
           turn.role === "studio" ? (
             <Handed key={i} marker={turn} />
           ) : turn.role === "user" ? (
@@ -368,7 +516,7 @@ export function TutorChat({
                 i === lastTutor && !busy ? (
                   // The hi-fi's "Save to note" joins Why? here once a turn can be
                   // written to the note (DESIGN.md: extend POST /api/learner/note).
-                  <Button variant="ghost" size="sm" onClick={() => void ask("Why?")}>
+                  <Button variant="ghost" size="sm" onClick={() => void ask("Why?", turns, { answering: false })}>
                     Why?
                   </Button>
                 ) : undefined
@@ -377,7 +525,8 @@ export function TutorChat({
               <NoteProse source={turn.content} idPrefix={`t${i}-`} />
             </TutorMessage>
           ),
-        )}
+          rowAfter(i),
+        ])}
 
         {busy && (
           <p className="px-1.5 text-[13px] text-text3" role="status">
