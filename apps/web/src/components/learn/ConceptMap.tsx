@@ -296,9 +296,13 @@ export function ConceptMap({
     selectedRef.current = selected;
   });
   // Declared after the refs are brought up to date, so a request made with a
-  // new selection fits that selection.
+  // new selection fits that selection. A request the map mounts with was
+  // answered by the map before it (the table in between unmounted it), so it
+  // is not replayed over the scope the URL names.
+  const answered = useRef(fitRequest?.n);
   useEffect(() => {
-    if (fitRequest === null) return;
+    if (fitRequest === null || fitRequest.n === answered.current) return;
+    answered.current = fitRequest.n;
     if (fitRequest.to === "center") centerRef.current(selectedRef.current);
     else fitRef.current(fitRequest.to);
   }, [fitRequest]);
