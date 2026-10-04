@@ -259,7 +259,7 @@ export function LibraryVideo({
             </div>
             <Collapse open={asking} id={askId}>
               <div className="pt-1">
-                <AskPanel assetId={assetId} position={() => state.current.last} />
+                <AskPanel assetId={assetId} subject="video" position={() => state.current.last} />
               </div>
             </Collapse>
             {notes}
