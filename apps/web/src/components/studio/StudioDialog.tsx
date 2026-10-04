@@ -10,9 +10,9 @@ import { cx } from "@/components/ui/classes";
  * The studio's one centred surface: a `<dialog>` opened with `showModal()`
  * over the dimmed grid (D31, D37 of docs/STUDIO-CHAT-FIRST.md).
  *
- * It holds whichever of four things the URL names: a conversation
- * (`?draft=`), an Extend press becoming one (`?extend=`), a job (`?job=`) or
- * a tile's panel (`?sel=`). The URL is the state, as it is for everything else on `/studio`,
+ * It holds whichever of the things the URL names: an Extend press becoming
+ * a conversation (`?extend=`), a job (`?job=`), a tile's panel (`?sel=`),
+ * the settings (`?settings=1`) or a video's preview (`?play=`). The URL is the state, as it is for everything else on `/studio`,
  * so closing is a navigation that drops those parameters, and a reload with
  * one of them comes straight back here.
  *
@@ -53,6 +53,7 @@ export function StudioDialog({
   label,
   tall = false,
   compact = false,
+  wide = false,
   children,
 }: {
   /** Where Close goes: the same view with the panel's parameters dropped. */
@@ -76,6 +77,11 @@ export function StudioDialog({
    * modal `<dialog>` with `height: auto` stretches between its insets.
    */
   compact?: boolean;
+  /**
+   * 960px from 1024px up, as tall as its content: a video's preview, whose
+   * picture is the point (D85 of docs/STUDIO-CHAT-FIRST.md).
+   */
+  wide?: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -156,7 +162,11 @@ export function StudioDialog({
           "h-dvh max-h-none w-full max-w-none rounded-none",
           // 768px up: the width less 32px of gutter, then 720px from 1024px.
           "md:max-h-[calc(100dvh-96px)] md:rounded-2xl md:border md:border-hair",
-          compact ? "md:h-fit md:w-[560px]" : "md:h-auto md:w-[calc(100vw-32px)] lg:w-[720px]",
+          compact
+            ? "md:h-fit md:w-[560px]"
+            : wide
+              ? "md:h-fit md:w-[calc(100vw-32px)] lg:w-[min(960px,calc(100vw-64px))]"
+              : "md:h-auto md:w-[calc(100vw-32px)] lg:w-[720px]",
           tall && "md:h-[calc(100dvh-96px)]",
           "transition-[opacity,translate] duration-150 ease-out starting:open:translate-y-2 starting:open:opacity-0",
           "motion-reduce:transition-none",

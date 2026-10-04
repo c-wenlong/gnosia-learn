@@ -1,6 +1,7 @@
 import type { JobState } from "@self-learn/schema/shared";
 
 import type { TranscriptCue, VideoChapter } from "@/components/media";
+import { assetFileHref, assetStatusHref } from "@/lib/library";
 import { isActive, type GateStep, type Job } from "@/lib/studio-jobs";
 
 /**
@@ -253,12 +254,32 @@ export function posterHref(videoAssetId: string): string {
   return `/api/assets/${encodeURIComponent(videoAssetId)}/poster`;
 }
 
+/** A landed studio video's asset id, which the library's routes take. */
+export function videoAssetId(slug: string): string {
+  return `video:${slug}`;
+}
+
+/**
+ * The bytes and the failure reason of a landed studio video, through the
+ * library's own routes, which the preview dialog plays from (D85 of
+ * docs/STUDIO-CHAT-FIRST.md). Neither path ends in an image extension, so
+ * the proxy's sign-in check covers both, and the session cookie goes with a
+ * same-origin `<video>` request.
+ */
+export function videoFileHref(slug: string): string {
+  return assetFileHref(videoAssetId(slug));
+}
+
+export function videoStatusHref(slug: string): string {
+  return assetStatusHref(videoAssetId(slug));
+}
+
 /**
  * Where the library plays a landed studio video. `from` is the studio view the
  * link sits on, which the asset page's back link returns to (`assetBackLink`).
  */
 export function libraryHref(slug: string, from?: string): string {
-  const page = `/library/${encodeURIComponent(`video:${slug}`)}`;
+  const page = `/library/${encodeURIComponent(videoAssetId(slug))}`;
   return from === undefined ? page : `${page}?${new URLSearchParams({ from })}`;
 }
 
@@ -1053,8 +1074,15 @@ export function readVideos(body: unknown): StudioVideo[] {
   });
 }
 
-/** The studio videos a filter keeps: the same topic chips and search the diagrams obey. */
-export function filterVideos(videos: readonly StudioVideo[], view: { topics: readonly string[]; query: string }): StudioVideo[] {
+/**
+ * The studio videos a filter keeps: the same topic chips and search the
+ * diagrams obey, and none when the kind filter says diagrams.
+ */
+export function filterVideos(
+  videos: readonly StudioVideo[],
+  view: { topics: readonly string[]; query: string; kind?: "all" | "diagram" | "video" },
+): StudioVideo[] {
+  if (view.kind === "diagram") return [];
   const query = view.query.trim().toLowerCase();
   return videos.filter((video) => {
     if (view.topics.length > 0 && !view.topics.includes(video.topic ?? "none")) return false;

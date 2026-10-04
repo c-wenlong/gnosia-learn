@@ -3,7 +3,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ASSET_PROBLEMS } from "@/lib/asset-problems";
+import { ASSET_PROBLEMS, STUDIO_SOURCE } from "@/lib/asset-problems";
 
 import { AssetCard } from "./AssetCard";
 import { DiagramView } from "./DiagramView";
@@ -111,6 +111,21 @@ describe("the video player", () => {
     await failAndSettle(host.querySelector("video")!);
     expect(host.textContent).toContain("npm run catalog -- asset upload --source revideokc");
     expect(host.textContent).not.toContain("--source manimkc");
+  });
+
+  it("tells a studio video missing from the store to be made again in the studio", async () => {
+    statusAnswers({ ok: false, code: "not-uploaded" }, 404);
+    const host = mount(
+      createElement(VideoPlayer, {
+        src: "/api/assets/video%3Aa/file",
+        statusHref: "/api/assets/video%3Aa/status",
+        sourceRepo: STUDIO_SOURCE,
+      }),
+    );
+    await failAndSettle(host.querySelector("video")!);
+    expect(panel(host)?.getAttribute("data-problem")).toBe("not-uploaded");
+    expect(host.textContent).toContain("Make it again from the studio");
+    expect(host.textContent).not.toContain("asset upload");
   });
 
   it("offers Try again when the server can serve the file, and puts the player back", async () => {

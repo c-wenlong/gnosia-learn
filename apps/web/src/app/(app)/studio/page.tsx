@@ -20,6 +20,7 @@ import { makeVideoTitle } from "@/lib/studio-extend";
 import { readVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
+  CLOSED,
   displayTitle,
   panelHref,
   panelSignature,
@@ -205,7 +206,7 @@ export default async function StudioPage({
     topicTitles,
   );
   // Close drops every parameter the panel reads, and keeps the filters.
-  const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null, settings: false });
+  const closeHref = panelHref(path, CLOSED);
   const titles = Object.fromEntries(listing.diagrams.map((diagram) => [diagram.name, displayTitle(diagram)]));
   // A video's title by slug, for a Change conversation's header. Its own map:
   // a diagram and a video can share a slug.
@@ -213,8 +214,9 @@ export default async function StudioPage({
   const dialog = view.shot !== null ? null : panelFor();
 
   function panelFor() {
-    // The settings, a conversation, a job and a tile are `PanelHost`'s, which
-    // opens and closes them in the browser without coming back here.
+    // The settings, a conversation, a job, a tile and a video's preview are
+    // `PanelHost`'s, which opens and closes them in the browser without
+    // coming back here.
     if (view.settings || view.draft !== null || view.job !== null) return null;
     if (view.extend !== null) {
       const title = titleOf(titles, view.extend) ?? view.extend;
@@ -251,6 +253,7 @@ export default async function StudioPage({
         video={videoState}
         diagramAgent={diagramState}
         diagrams={listing.diagrams}
+        videos={allVideos}
         jobs={jobRows}
         drafts={drafts}
       >
