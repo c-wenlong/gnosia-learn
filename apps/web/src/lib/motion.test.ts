@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   applyMotionToDocument,
@@ -80,10 +80,28 @@ describe("scrollBehavior", () => {
     delete document.documentElement.dataset.motion;
   });
 
-  it("glides unless either source asks for stillness", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const device = (reduce: boolean) =>
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: reduce && query === "(prefers-reduced-motion: reduce)", media: query }));
+
+  it("glides unless Settings asks for stillness", () => {
+    device(false);
     expect(scrollBehavior()).toBe("smooth");
     document.documentElement.dataset.motion = "reduce";
     expect(scrollBehavior()).toBe("auto");
+  });
+
+  it("jumps when the device asks for less movement", () => {
+    device(true);
+    expect(prefersReducedMotion()).toBe(true);
+    expect(scrollBehavior()).toBe("auto");
+  });
+
+  it("glides where there is no media query to ask", () => {
+    vi.stubGlobal("matchMedia", undefined);
+    expect(prefersReducedMotion()).toBe(false);
+    expect(scrollBehavior()).toBe("smooth");
   });
 });
 
@@ -101,7 +119,8 @@ describe("one place asks whether to keep still", () => {
         else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
           const text = readFileSync(path, "utf8");
           const rel = relative(src, path);
-          if (rel !== join("lib", "motion.ts") && /matchMedia\(\s*["'`]\(prefers-reduced-motion/.test(text)) offenders.push(rel);
+          // The query as a string anywhere, so one kept in a variable is caught too.
+          if (rel !== join("lib", "motion.ts") && /["'`]\(\s*prefers-reduced-motion/.test(text)) offenders.push(rel);
           if (/behavior:\s*["']smooth["']/.test(text)) offenders.push(`${rel} (a hard-coded smooth scroll; use scrollBehavior())`);
         }
       }
