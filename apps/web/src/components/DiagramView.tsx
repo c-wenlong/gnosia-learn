@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useAssetFailure } from "@/components/use-asset-failure";
+import { cx } from "@/components/ui/classes";
 import { WidgetFailure } from "@/components/WidgetFailure";
 
 /**
@@ -137,15 +138,18 @@ export function DiagramView({
         <div
           className={`relative bg-[#f7f6f3] p-3 ${status === "ready" ? "" : "min-h-48"}`}
         >
-          {status === "loading" && (
-            // Behind the picture, never over it: the diagram must be visible on
-            // its own, so that a page where this script never runs still shows
-            // one rather than a permanently empty frame.
-            <div
-              aria-hidden
-              className="absolute inset-3 rounded-lg bg-black/[0.06] motion-safe:animate-pulse"
-            />
-          )}
+          {/* Behind the picture, never over it: the diagram must be visible on
+              its own, so that a page where this script never runs still shows
+              one rather than a permanently empty frame. Kept mounted, so it
+              fades away under the picture as it lands instead of vanishing. */}
+          <div
+            aria-hidden
+            data-skeleton={status}
+            className={cx(
+              "absolute inset-3 rounded-lg bg-black/[0.06] transition-opacity duration-150 ease-out motion-reduce:transition-none",
+              status === "loading" ? "opacity-100 motion-safe:animate-pulse" : "opacity-0",
+            )}
+          />
           {/* eslint-disable-next-line @next/next/no-img-element -- an SVG the
               app serves as-is: next/image would rasterise a vector drawing
               whose whole job is to stay sharp at any zoom. */}

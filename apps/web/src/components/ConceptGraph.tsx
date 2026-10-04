@@ -86,7 +86,10 @@ export function ConceptGraph({
               d={`M ${from.x} ${y1} C ${from.x} ${mid}, ${to.x} ${mid}, ${to.x} ${y2}`}
               fill="none"
               // The selected concept's own lines in the accent, the rest quieter.
-              className={e.from === focus || e.to === focus ? "stroke-accent" : "stroke-text3 opacity-70"}
+              className={cx(
+                "transition-[stroke,opacity] duration-150 motion-reduce:transition-none",
+                e.from === focus || e.to === focus ? "stroke-accent" : "stroke-text3 opacity-70",
+              )}
               strokeWidth={e.kind === "assumes" ? 1 : 1.5}
               strokeDasharray={e.kind === "assumes" ? "4 4" : undefined}
             />
@@ -103,7 +106,13 @@ export function ConceptGraph({
             <>
               <title>{caption}</title>
               {isFocus && <circle cx={p.x} cy={p.y} r={16} fill="none" className="stroke-accent" strokeWidth={2} />}
-              <circle cx={p.x} cy={p.y} r={isFocus ? 10 : 8} className={DOT[n.bucket]} strokeWidth={2} />
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={isFocus ? 10 : 8}
+                className={cx(DOT[n.bucket], "transition-[fill,stroke] duration-150 motion-reduce:transition-none")}
+                strokeWidth={2}
+              />
               {lines.map((line, i) => (
                 <text
                   key={i}
@@ -112,7 +121,7 @@ export function ConceptGraph({
                   textAnchor="middle"
                   fontSize={fontSize}
                   fontWeight={isFocus ? 700 : 500}
-                  className={isFocus ? "fill-text" : "fill-text2"}
+                  className={cx("transition-[fill] duration-150 motion-reduce:transition-none", isFocus ? "fill-text" : "fill-text2")}
                 >
                   {line}
                 </text>

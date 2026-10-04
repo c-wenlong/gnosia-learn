@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
+import { Collapse } from "@/components/ui/Collapse";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { cx, TRACK } from "@/components/ui/classes";
+import { scrollBehavior } from "@/lib/reduced-motion";
 import {
   cardEyebrow,
   cardStats,
@@ -46,6 +48,15 @@ import { CitePill } from "./CitePill";
  * review silently lost is worse than one retried (layering rule 14). After each
  * write `router.refresh()` re-reads the layout, so the learner snapshot the
  * shell holds moves with the session.
+ *
+ * **Motion.** Each card's column is keyed on its place in the queue, so the
+ * next card rises in rather than being swapped in place, and the focus moves
+ * to its prompt, since the rating that was pressed went with the old column.
+ * The answer and the rating row rise in when they appear; when the control
+ * that revealed them (Show answer, I don't know, a picked option) has gone or
+ * gone dead, the focus moves to the answer, or to the rating row on a check
+ * card. Never to a rating button itself: Space on a focused button presses
+ * it, and Space must not rate a card the learner has only just seen answered.
  */
 
 type Phase = "ask" | "shown" | "answered";
@@ -89,6 +100,13 @@ export function ReviewSession({
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const [close, setClose] = useState<CloseData | null>(null);
   const ratingsRef = useRef<HTMLDivElement>(null);
+  /** The card's column, keyed on the card, so its prompt can take the focus. */
+  const columnRef = useRef<HTMLDivElement>(null);
+  /** The rating row (`role="group"`), a focus target after a check card is answered. */
+  const ratingGroupRef = useRef<HTMLDivElement>(null);
+  const answerRef = useRef<HTMLElement>(null);
+  /** The card whose prompt last had the focus moved to it: the first is left alone. */
+  const shownIndex = useRef(index);
   // `pending` is state, so two key presses inside one frame both read it as
   // false and would grade the card twice, skipping the next one. The ref is
   // the guard; the state is only for the disabled look.
@@ -168,7 +186,22 @@ export function ReviewSession({
   // fold; bring the ratings up so Continue is on screen. A no-op on a desktop,
   // where they are already in view.
   useEffect(() => {
-    if (phase === "answered") ratingsRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (phase === "answered") ratingsRef.current?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() });
+  }, [phase]);
+
+  // The next card (or the close screen) takes the focus to its heading.
+  useEffect(() => {
+    if (shownIndex.current === index) return;
+    shownIndex.current = index;
+    columnRef.current?.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
+  }, [index]);
+
+  // Show answer, I don't know and a picked option leave the focus on nothing:
+  // the first two unmount, the third is disabled. Move it to what appeared.
+  useEffect(() => {
+    if (phase === "ask" || !focusLost()) return;
+    const target = phase === "shown" ? answerRef.current : ratingGroupRef.current;
+    target?.focus({ preventScroll: true });
   }, [phase]);
 
   // The close screen's "next due" is read after the last grade, not before:
@@ -223,7 +256,7 @@ export function ReviewSession({
 
   if (!initial.reachable) {
     return (
-      <Frame percent={0} label="Review" exit={exit}>
+      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Reviews are unavailable"
           lead="The database could not be reached, so there is no queue to show and nothing could be graded. Start Postgres and reload."
@@ -234,7 +267,7 @@ export function ReviewSession({
 
   if (total === 0 && selected) {
     return (
-      <Frame percent={0} label="Review" exit={exit}>
+      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Already reviewed"
           lead="The cards picked for you are not due any more, so there is nothing to ask here. Any others that are due are under All reviews."
@@ -250,7 +283,7 @@ export function ReviewSession({
   if (total === 0) {
     const next = formatDue(initial.nextDue, now);
     return (
-      <Frame percent={0} label="Review" exit={exit}>
+      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Nothing due"
           lead={next === null ? "No review is scheduled yet. Cards appear here once a concept has been taught or probed." : `The next card is due ${next}.`}
@@ -263,7 +296,14 @@ export function ReviewSession({
     const again = outcomes.filter((o) => o.rating === 0).length;
     const next = close === null ? "…" : (formatDue(close.nextDue, new Date()) ?? "none");
     return (
-      <Frame percent={100} label={`Review · ${total} of ${total}`} short={`${total} of ${total}`} exit={exit}>
+      <Frame
+        percent={100}
+        label={`Review · ${total} of ${total}`}
+        short={`${total} of ${total}`}
+        exit={exit}
+        stepKey="done"
+        columnRef={columnRef}
+      >
         <Closing
           title="Review done"
           lead={`${outcomes.length} ${outcomes.length === 1 ? "card" : "cards"} reviewed${
@@ -273,7 +313,16 @@ export function ReviewSession({
           <div className="flex w-full gap-2.5 md:gap-3.5">
             <StatTile value={outcomes.length} label="Reviewed" tone="ok" />
             <StatTile value={again} label="Again" tone="streak" />
-            <StatTile value={<span className="text-[20px] md:text-[26px]">{next}</span>} label="Next due" tone="accent" />
+            <StatTile
+              // Keyed on the value, so the date fades in over the "…" it replaces once the queue has been read again.
+              value={
+                <span key={next} className="animate-fade-in text-[20px] motion-reduce:animate-none md:text-[26px]">
+                  {next}
+                </span>
+              }
+              label="Next due"
+              tone="accent"
+            />
           </div>
         </Closing>
       </Frame>
@@ -292,6 +341,8 @@ export function ReviewSession({
       label={`Review · ${position} of ${total}`}
       short={`${position} of ${total}`}
       exit={exit}
+      stepKey={index}
+      columnRef={columnRef}
     >
       {/* The frame above already says "Review · n of N", so this line keeps
           only what it adds: the queue's domain and the time left. */}
@@ -306,7 +357,7 @@ export function ReviewSession({
       >
         {/* Left out only when it would repeat the prompt; see `cardEyebrow`. */}
         {eyebrow !== null && <Eyebrow>{eyebrow}</Eyebrow>}
-        <h1 className="font-display text-[20px] leading-[1.3] font-bold text-text md:text-[24px]">
+        <h1 tabIndex={-1} className="font-display text-[20px] leading-[1.3] font-bold text-text outline-none md:text-[24px]">
           <MathText text={item.prompt} />
         </h1>
       </section>
@@ -323,7 +374,7 @@ export function ReviewSession({
         />
       ) : (
         answerShown && (
-          <AnswerPanel item={item} whyOpen={whyOpen} onWhy={() => setWhyOpen((open) => !open)} />
+          <AnswerPanel item={item} whyOpen={whyOpen} onWhy={() => setWhyOpen((open) => !open)} panelRef={answerRef} />
         )
       )}
 
@@ -332,11 +383,17 @@ export function ReviewSession({
         className="mt-auto flex scroll-mb-[calc(4.25rem+env(safe-area-inset-bottom))] flex-col gap-2.5 md:mt-0 md:scroll-mb-0"
       >
         {answerShown ? (
-          <>
+          <div className="flex animate-enter flex-col gap-2.5 motion-reduce:animate-none">
             <p className="hidden text-[13px] font-medium text-text2 md:block">
               {item.kind === "check" ? "Or rate it yourself" : "How well did you recall it?"}
             </p>
-            <div className="flex gap-1.5 md:gap-3" role="group" aria-label="Rate your recall">
+            <div
+              ref={ratingGroupRef}
+              tabIndex={-1}
+              className="flex gap-1.5 outline-none md:gap-3"
+              role="group"
+              aria-label="Rate your recall"
+            >
               {RATING_LABEL.map((label, rating) => (
                 <RatingButton
                   key={label}
@@ -350,7 +407,7 @@ export function ReviewSession({
                 />
               ))}
             </div>
-          </>
+          </div>
         ) : item.kind === "recall" ? (
           <Button block onClick={reveal} aria-keyshortcuts="Space">
             Show answer
@@ -377,6 +434,13 @@ export function ReviewSession({
   );
 }
 
+/** Whether the focus is on nothing a key press could reach: the page, a removed control or a disabled one. */
+function focusLost(): boolean {
+  const active = document.activeElement;
+  if (active === null || active === document.body || !active.isConnected) return true;
+  return active instanceof HTMLButtonElement && active.disabled;
+}
+
 function newRequestId(): string {
   // `randomUUID` needs a secure context; a LAN address over http is not one.
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -388,18 +452,26 @@ function keysHint(item: ReviewItem, phase: Phase): string {
   return phase === "ask" ? "Keys 1 to 4 pick an answer" : "Keys 1 to 4 rate · enter continues";
 }
 
-/** The focus-mode frame: the step bar, the label and exit row, the 720px column. */
+/**
+ * The focus-mode frame: the step bar, the label and exit row, the 720px column.
+ * The column is keyed on `stepKey`, so each card mounts afresh and rises in;
+ * the bar above it stays, and its fill slides to the new width.
+ */
 function Frame({
   percent,
   label,
   short,
   exit,
+  stepKey,
+  columnRef,
   children,
 }: {
   percent: number;
   label: string;
   short?: string;
   exit: { href: string; label: string };
+  stepKey: number | string;
+  columnRef: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }) {
   const value = Math.max(0, Math.min(100, percent));
@@ -417,7 +489,7 @@ function Frame({
         aria-valuemax={100}
       >
         <div
-          className="h-full rounded-r-[4px] bg-accent transition-[width] duration-300 md:rounded-r-md"
+          className="h-full rounded-r-[4px] bg-accent transition-[width] duration-300 ease-soft motion-reduce:transition-none md:rounded-r-md"
           style={{ width: `${value}%` }}
         />
       </div>
@@ -434,17 +506,42 @@ function Frame({
           <span className="hidden md:inline">{exit.label}</span>
         </Link>
       </div>
-      <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-3 px-3.5 pt-1 pb-3.5 md:flex-none md:gap-[22px] md:px-0 md:pt-0 md:pb-10">
+      <div
+        key={stepKey}
+        ref={columnRef}
+        data-step={stepKey}
+        className="mx-auto flex w-full max-w-[720px] flex-1 animate-enter flex-col gap-3 px-3.5 pt-1 pb-3.5 motion-reduce:animate-none md:flex-none md:gap-[22px] md:px-0 md:pt-0 md:pb-10"
+      >
         {children}
       </div>
     </div>
   );
 }
 
-/** The tinted answer panel: the answer, its citation, Why? and Open concept. */
-function AnswerPanel({ item, whyOpen, onWhy }: { item: ReviewItem; whyOpen: boolean; onWhy: () => void }) {
+/**
+ * The tinted answer panel: the answer, its citation, Why? and Open concept.
+ * It rises in as it appears, and can hold the focus (`tabIndex={-1}`) once
+ * Show answer has gone.
+ */
+function AnswerPanel({
+  item,
+  whyOpen,
+  onWhy,
+  panelRef,
+}: {
+  item: ReviewItem;
+  whyOpen: boolean;
+  onWhy: () => void;
+  panelRef: RefObject<HTMLElement | null>;
+}) {
+  const whyId = useId();
   return (
-    <section className="flex flex-col gap-1 rounded-2xl bg-tint p-4 md:gap-2.5 md:rounded-[20px] md:p-6">
+    <section
+      ref={panelRef}
+      tabIndex={-1}
+      aria-label="Answer"
+      className="flex animate-enter flex-col gap-1 rounded-2xl bg-tint p-4 outline-none motion-reduce:animate-none md:gap-2.5 md:rounded-[20px] md:p-6"
+    >
       <Eyebrow>Answer</Eyebrow>
       <p className="text-[15px] leading-[1.45] text-text md:text-[17px] md:leading-[26px]">
         {item.answer.trim() !== "" ? (
@@ -453,23 +550,38 @@ function AnswerPanel({ item, whyOpen, onWhy }: { item: ReviewItem; whyOpen: bool
           "This note has no summary yet. Open the concept and check yourself against the note."
         )}
       </p>
-      <Links item={item} whyOpen={whyOpen} onWhy={onWhy} />
-      {whyOpen && item.why !== null && (
-        <p className="text-[14px] leading-[1.5] text-text2">
-          <MathText text={item.why} />
-        </p>
-      )}
+      {/* One row of the panel, so a shut Why? adds no gap under the links. */}
+      <div className="flex flex-col">
+        <Links item={item} whyOpen={whyOpen} onWhy={onWhy} whyId={whyId} />
+        {item.why !== null && (
+          <Collapse open={whyOpen} id={whyId}>
+            <p className="pt-1 text-[14px] leading-[1.5] text-text2 md:pt-2.5">
+              <MathText text={item.why} />
+            </p>
+          </Collapse>
+        )}
+      </div>
     </section>
   );
 }
 
-function Links({ item, whyOpen, onWhy }: { item: ReviewItem; whyOpen: boolean; onWhy: () => void }) {
+function Links({
+  item,
+  whyOpen,
+  onWhy,
+  whyId,
+}: {
+  item: ReviewItem;
+  whyOpen: boolean;
+  onWhy: () => void;
+  whyId: string;
+}) {
   const hasAny = item.source !== null || item.why !== null;
   return (
     <div className={cx("flex flex-wrap items-center gap-2 pt-1", !hasAny && "hidden md:flex")}>
       {item.source !== null && <CitePill n={1} label={item.source} />}
       {item.why !== null && (
-        <Button variant="ghost" size="sm" onClick={onWhy} aria-expanded={whyOpen}>
+        <Button variant="ghost" size="sm" onClick={onWhy} aria-expanded={whyOpen} aria-controls={whyId}>
           Why?
         </Button>
       )}
@@ -547,7 +659,9 @@ function Closing({ title, lead, children }: { title: string; lead: string; child
   return (
     <div className="flex flex-col items-center gap-6 pt-6 text-center md:pt-10">
       <div className="flex flex-col items-center gap-1.5">
-        <h1 className="font-display text-[28px] font-bold text-text md:text-[32px]">{title}</h1>
+        <h1 tabIndex={-1} className="font-display text-[28px] font-bold text-text outline-none md:text-[32px]">
+          {title}
+        </h1>
         <p className="max-w-[480px] text-[14px] text-text2">{lead}</p>
       </div>
       {children}

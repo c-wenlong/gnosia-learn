@@ -109,8 +109,9 @@ export function LearnIndex({
       {view === "table" ? (
         // Sized by the width the page actually has, not the viewport's: the
         // sidebar takes 60 or 260px of it, so a viewport breakpoint docked the
-        // graph beside a table with no room left for the concept titles.
-        <div className="@container">
+        // graph beside a table with no room left for the concept titles. It
+        // fades in over the map it replaces.
+        <div className="@container animate-fade-in motion-reduce:animate-none">
           <div className="grid grid-cols-1 items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
             <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
             <GraphCard
@@ -174,7 +175,7 @@ function ConceptTable({
                 onClick={() => onSelect(r.id)}
                 aria-selected={r.id === selected}
                 className={cx(
-                  "cursor-pointer border-b border-hair last:border-b-0",
+                  "cursor-pointer border-b border-hair transition-colors duration-100 last:border-b-0 motion-reduce:transition-none",
                   r.id === selected ? "bg-surface2" : "hover:bg-surface2/60",
                 )}
               >
@@ -319,7 +320,10 @@ function GraphCard({
             </span>
           </p>
           <div className="min-h-[300px] rounded-xl bg-surface2 p-2">
+            {/* Keyed on what it draws, so a new concept's graph fades in rather than snapping into the old one's place. */}
             <ConceptGraph
+              key={`${focus.id}:${scope}`}
+              className="animate-fade-in motion-reduce:animate-none"
               nodes={shown.nodes}
               edges={shown.edges}
               focus={focus.id}
