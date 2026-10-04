@@ -99,6 +99,12 @@
   --m-mid: #a9b9ff;
   --m-lo: #e5e5e5;
   --lip-shade: #d4d4d4;
+  /* The ground behind an exported diagram or its thumbnail. Diagrams are
+     drawn for a light page (dark ink, white fills), so the matte stays this
+     light warm grey in every palette, dark ones included: recolouring the
+     ground would leave their ink unreadable. The same value in all four
+     blocks on purpose; it is a token so no component carries the literal. */
+  --diagram-matte: #f7f6f3;
 
   /* Button faces and lips the kit hard-codes rather than naming: the accent
      button's lip, the label on a green or yellow face, and the lips under a
@@ -203,6 +209,7 @@
   --m-mid-lip: #3a4a8f;
   --m-lo: #4c4c4c;
   --lip-shade: #0f0f0f;
+  --diagram-matte: #f7f6f3; /* stays light, see :root */
 
   --ok-on: #0b2e14;
 
@@ -257,6 +264,7 @@
   --m-mid-lip: #3b7475;
   --m-lo: #ddd5c4;
   --lip-shade: #cbc1ad;
+  --diagram-matte: #f7f6f3; /* stays light, see :root */
 
   /* The streak is the brand's gold: 3.1:1 on cream, the non-text minimum. */
   --streak: #b3842c; /* --brand-gold */
@@ -324,6 +332,7 @@
   --m-mid-lip: #025f5d;
   --m-lo: #3d4c5b;
   --lip-shade: #05101c;
+  --diagram-matte: #f7f6f3; /* stays light, see :root */
 
   /* The brand's bright gold, which clears 4.5:1 as text on navy too. */
   --streak: #e2b95e; /* --brand-gold in dark */
@@ -433,6 +442,7 @@
   --color-lip-shade: var(--lip-shade);
   --color-violet: var(--violet);
   --color-on-tone: var(--on-tone);
+  --color-diagram-matte: var(--diagram-matte);
 
   /* Gnosia brand colours (the block at the end of this file, and
      docs/design/BRAND.md): `bg-brand-cream`, `text-brand-teal` and so on. */
