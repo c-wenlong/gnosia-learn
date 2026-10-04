@@ -245,9 +245,6 @@ export default async function LibraryPage({
       options: [
         { value: OTHERS_KIND, label: "All companion files", short: "All" },
         ...facets.companion.map((f) => ({ value: f.kind, label: f.label, count: f.count })),
-        ...facets.primary
-          .filter((f) => isOtherKind(f.kind))
-          .map((f) => ({ value: f.kind, label: f.label, count: f.count })),
       ],
     });
   }

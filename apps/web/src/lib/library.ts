@@ -209,27 +209,31 @@ export const LIBRARY_TABS: readonly LibraryTab[] = [
   { value: "link", label: "Links" },
 ];
 
-const TAB_KINDS: ReadonlySet<string> = new Set(LIBRARY_TABS.map((t) => t.value).filter(Boolean));
-
-/** The tabs to draw for these counts: the six, and Others when any row has no tab of its own. */
+/** The tabs to draw for these counts: the six, and Others when any companion file exists. */
 export function libraryTabs(counts: readonly { kind: string; count: number }[]): LibraryTab[] {
-  const others = counts.some(({ kind, count }) => count > 0 && !TAB_KINDS.has(kind));
+  const others = counts.some(({ kind, count }) => count > 0 && isCompanionKind(kind));
   return others ? [...LIBRARY_TABS, { value: OTHERS_KIND, label: "Others" }] : [...LIBRARY_TABS];
 }
 
 /**
  * Which tab a `?kind=` selects: `""` for none, the kind for one with a tab,
- * Others for `other` and for any kind without a tab (a companion such as
- * `transcript`), so an old link lands on the tab that holds what it names.
+ * Others for `other` and for a companion kind such as `transcript`, so an old
+ * link lands on the tab that holds what it names. A standalone kind with no
+ * tab (none exists today: `asset_kind_check` allows only the ten) selects no
+ * tab, since its rows are in All and not in Others.
  */
 export function tabOf(kind: string | null): string {
   if (kind === null || kind === "") return "";
-  return TAB_KINDS.has(kind) ? kind : OTHERS_KIND;
+  if (kind === OTHERS_KIND || isCompanionKind(kind)) return OTHERS_KIND;
+  return kind;
 }
 
-/** Whether a row's kind is one the Others tab lists: any kind with no tab of its own. */
+/**
+ * Whether a row's kind is one the Others tab lists: exactly the companion
+ * kinds, the rows All leaves out, so no file is in both tabs.
+ */
 export function isOtherKind(kind: string): boolean {
-  return !TAB_KINDS.has(kind);
+  return isCompanionKind(kind);
 }
 
 /** "42 files", "1 file". */
@@ -512,8 +516,7 @@ export function searchHits(
  * The rows one filter state shows, before sorting.
  *
  * - No kind is the default view: every standalone row, companions left out.
- * - `other` (`OTHERS_KIND`) is the Others tab: every row whose kind has no
- *   tab, which is every companion file.
+ * - `other` (`OTHERS_KIND`) is the Others tab: every companion file.
  * - `courseTopics` is the chosen course's module topics, or null for none.
  * - `hits` is the search's answer, or null when nothing was searched. A hit
  *   still has to pass the other filters, so a video lifted in by its

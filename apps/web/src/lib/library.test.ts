@@ -259,6 +259,19 @@ describe("type tabs", () => {
     expect(isOtherKind("link")).toBe(false);
   });
 
+  it("keeps a standalone kind with no tab in All and out of Others, so no file is in both", () => {
+    expect(tabOf("hologram")).toBe("hologram");
+    expect(isOtherKind("hologram")).toBe(false);
+    expect(libraryTabs([{ kind: "hologram", count: 2 }]).map((t) => t.value)).not.toContain(OTHERS_KIND);
+    const rows = [
+      { id: "h", kind: "hologram", topics: [] },
+      { id: "c", kind: "captions", topics: [] },
+    ];
+    const none = { topic: null, courseTopics: null, hits: null };
+    expect(filterRows(rows, { ...none, kind: null }).map((r) => r.id)).toEqual(["h"]);
+    expect(filterRows(rows, { ...none, kind: OTHERS_KIND }).map((r) => r.id)).toEqual(["c"]);
+  });
+
   it("counts files in the header's words", () => {
     expect(filesNoun(1)).toBe("file");
     expect(filesNoun(0)).toBe("files");
