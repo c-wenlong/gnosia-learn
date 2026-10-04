@@ -700,6 +700,8 @@ async function main(argv) {
   const cutover = opts.cutover;
   const day = cutover ? 'the cut-over' : 'flip day';
   const stamp = `${process.pid}_${Date.now().toString(36)}`;
+  /** The throwaway copy the first import runs on, named in the report so a caller can check it was dropped. */
+  const preflight = `self_learn_preflight_${stamp}`;
   const from = opts.from ?? 'self_learn';
   const database = real ? opts.database.trim() : (opts.name ?? `self_learn_rehearsal_${stamp}`);
   if (!real && database === from) throw new Refusal(`--name ${database} is the template; a rehearsal never runs on its template.`);
@@ -742,6 +744,7 @@ async function main(argv) {
     checkout: null,
     blobRoot: null,
     copy: real ? null : { name: database, method: null, kept: opts.keep, dropped: false },
+    preflight,
     backup: null,
     backups: [],
     steps: [],
@@ -882,7 +885,7 @@ async function main(argv) {
      * would otherwise be the only way to undo.
      */
     importIntoCopy: async () => {
-      const name = `self_learn_preflight_${stamp}`;
+      const name = preflight;
       const home = mkdtempSync(join(tmpdir(), 'self-learn-flip-preflight-'));
       try {
         await copyDatabase(database, name, { env: maintenance, created: () => made.add(name) });

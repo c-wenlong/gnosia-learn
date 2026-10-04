@@ -79,6 +79,7 @@ interface Report {
   ok: boolean;
   tree: string;
   copy: { name: string; method: string; kept: boolean; dropped: boolean };
+  preflight: string;
   backup: { path: string; bytes: number; tables: number; restore: string; restoreArgv: string[][] } | null;
   steps: Step[];
   warnings: number;
@@ -138,6 +139,23 @@ function pgToolEnv(): NodeJS.ProcessEnv {
   if (at.username !== "") env["PGUSER"] = decodeURIComponent(at.username);
   if (at.password !== "") env["PGPASSWORD"] = decodeURIComponent(at.password);
   return env;
+}
+
+/**
+ * Whether the throwaway copy one rehearsal named in its report is still on
+ * the server. Never every preflight copy: another checkout's suite running at
+ * the same time has its own, alive while this one looks, and an interrupted
+ * run long ago may have left one behind.
+ */
+async function databaseExists(name: string): Promise<boolean> {
+  const admin = new pg.Client({ connectionString: url("postgres") });
+  await admin.connect();
+  try {
+    const found = await admin.query("select 1 from pg_database where datname = $1", [name]);
+    return found.rows.length > 0;
+  } finally {
+    await admin.end();
+  }
 }
 
 async function databasesLike(pattern: string): Promise<string[]> {
@@ -397,7 +415,12 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       }
 
       // The throwaway copy is gone, and the template is as it was: no content.
-      expect(await databasesLike("self_learn_preflight_%")).toEqual([]);
+      // The report names the copy, and the step says it imported into that one.
+      expect(report.preflight).toMatch(/^self_learn_preflight_\d+_[0-9a-z]+$/);
+      expect(report.steps.find((s) => s.name === "import into a throwaway copy")?.gist).toMatch(
+        new RegExp(`on ${report.preflight}; dropped$`),
+      );
+      expect(await databaseExists(report.preflight)).toBe(false);
       const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
       const assets = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from asset`);
@@ -460,7 +483,8 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
     // Both copies are dropped, without --keep.
     expect(report.copy).toMatchObject({ name, kept: false, dropped: true });
     expect(await databasesLike(`${name}%`)).toEqual([]);
-    expect(await databasesLike("self_learn_preflight_%")).toEqual([]);
+    expect(report.preflight).toMatch(/^self_learn_preflight_\d+_[0-9a-z]+$/);
+    expect(await databaseExists(report.preflight)).toBe(false);
   }, 120_000);
 });
 

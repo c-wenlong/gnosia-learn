@@ -1,5 +1,5 @@
 import { dayKey } from "@/lib/days";
-import type { MasteryBucket } from "@/lib/mastery-bucket";
+import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
  * The Learn index's rows and the rules for filtering them, pure so they can be
@@ -23,6 +23,49 @@ export const INDEX_FILTERS: readonly { key: IndexFilter; label: string }[] = [
   { key: "ready", label: "Ready to learn" },
   { key: "nocourse", label: "Not in a course" },
 ];
+
+/**
+ * The map's legend (D9 of docs/proposals/domain-map.md): the groups a chip
+ * over a domain's picture previews on hover and commits on a press. Each is a
+ * Status filter, so a chip and the menu are one state; the other filters
+ * (due, keeps slipping, not in a course) have no chip.
+ */
+export type LegendGroup = Extract<IndexFilter, "mastered" | "learning" | "untouched" | "ready">;
+
+export const LEGEND_GROUPS: readonly { key: LegendGroup; label: string }[] = [
+  { key: "mastered", label: MASTERY_BUCKET_LABEL.mastered },
+  { key: "learning", label: MASTERY_BUCKET_LABEL.learning },
+  { key: "untouched", label: MASTERY_BUCKET_LABEL.untouched },
+  { key: "ready", label: "Ready to learn" },
+];
+
+export function isLegendGroup(filter: IndexFilter): filter is LegendGroup {
+  return LEGEND_GROUPS.some((g) => g.key === filter);
+}
+
+/**
+ * Which of `ids` (the concepts the picture shows) are in each group, a
+ * concept ready to learn in its bucket's group as well. Counted over the rows
+ * whatever the search, as the Status menu counts, so a chip's number does not
+ * move as the learner types. An id with no row is skipped.
+ */
+export function legendMembers(
+  ids: Iterable<string>,
+  rows: ReadonlyMap<string, IndexRow>,
+): Record<LegendGroup, string[]> {
+  const out: Record<LegendGroup, string[]> = { mastered: [], learning: [], untouched: [], ready: [] };
+  for (const id of ids) {
+    const row = rows.get(id);
+    if (row === undefined) continue;
+    for (const g of LEGEND_GROUPS) if (matchesFilter(row, g.key)) out[g.key].push(id);
+  }
+  return out;
+}
+
+/** The filter a press on a chip leaves: its group, or all when it was the group already. */
+export function legendPress(current: IndexFilter, group: LegendGroup): IndexFilter {
+  return current === group ? "all" : group;
+}
 
 export type IndexView = "table" | "graph";
 /**
