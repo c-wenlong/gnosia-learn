@@ -216,6 +216,51 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(sent[0].content).toContain("Ask before telling");
   });
 
+  it("keeps a topic tutor's check only for a concept the topic declares", async () => {
+    const topic = { id: "t1", title: "Attention", concepts: ["dot-product", "softmax"], subtopics: [] };
+    const course = {
+      slug: "cp4284",
+      code: "CP4284",
+      title: "Transformers",
+      credits: 4,
+      capstone: "x",
+      tags: [],
+      modules: [{ id: "m1", slug: "m1", title: "Module", order: 1, topic: "attn", topics: [topic], resources: [] }],
+    };
+    const ask = { courseSlug: "cp4284", moduleSlug: "m1", topicId: "t1", messages: [{ role: "user", content: "hi" }] };
+    const reply = (content: string) => ({
+      ok: true,
+      attempts: [],
+      result: { content, model: "m", provider: "gemini", providerLabel: "Gemini" },
+    });
+
+    getCourses.mockResolvedValue([course]);
+    completeWithFallback.mockResolvedValueOnce(reply("Exit ticket, one.\nCHECK(softmax): Why exp?"));
+    const kept = await call(ask);
+    expect(kept.status).toBe(200);
+    expect(kept.json.message).toEqual({ role: "assistant", content: "Exit ticket, one." });
+    expect(kept.json.check).toEqual({ question: "Why exp?", concept: "softmax" });
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("   - dot-product");
+
+    completeWithFallback.mockResolvedValueOnce(reply("One.\nCHECK(attention): Q?"));
+    const foreign = await call(ask);
+    expect(foreign.json.check).toBeNull();
+    expect(foreign.json.message).toEqual({ role: "assistant", content: "One." });
+    getCourses.mockReset();
+  });
+
+  it("drops a concept the concept tutor's marker names: its checks are on its own concept", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    completeWithFallback.mockResolvedValue({
+      ok: true,
+      attempts: [],
+      result: { content: "Try.\nCHECK(softmax): Q?", model: "m", provider: "gemini", providerLabel: "Gemini" },
+    });
+    const res = await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "Check me" }] });
+    expect(res.json.check).toEqual({ question: "Q?" });
+  });
+
   it("still serves the topic path unchanged", async () => {
     const res = await call({ messages: [] });
     expect(res.status).toBe(400);

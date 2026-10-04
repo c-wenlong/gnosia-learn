@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Button } from "@/components/ui/Button";
 import { Card, CardAction } from "@/components/ui/Card";
 import { MasteryDot } from "@/components/ui/MasteryDot";
@@ -5,10 +7,12 @@ import { recallHref, type RecallPick } from "@/lib/home-core";
 
 /**
  * Worth a quick recall (docs/proposals/home-page.md, part 4): at most three
- * due cards, those nearest what the owner is doing first, and one button that
- * opens the review with just them. No queue count and no "overdue": a due
- * date that passed while the owner learnt something else is not a debt (H3).
- * The whole queue stays one link away. Drawn only when a card is due.
+ * due cards, those nearest what the owner is doing first. Each opens its
+ * concept's page, whose tutor asks a recall question first while the card is
+ * due, and the button opens the first (recall in the chat, phase 3). No queue
+ * count and no "overdue": a due date that passed while the owner learnt
+ * something else is not a debt (H3). The whole queue stays one link away.
+ * Drawn only when a card is due.
  */
 export function RecallCard({ picks }: { picks: RecallPick[] }) {
   return (
@@ -21,7 +25,12 @@ export function RecallCard({ picks }: { picks: RecallPick[] }) {
         {picks.map((pick) => (
           <li key={pick.conceptId} className="flex min-w-0 items-center gap-3">
             <MasteryDot bucket={pick.bucket} />
-            <span className="min-w-0 flex-1 truncate text-[14px] text-text">{pick.title}</span>
+            <Link
+              href={recallHref(pick)}
+              className="min-w-0 flex-1 truncate rounded-sm text-[14px] text-text underline-offset-4 transition-colors duration-100 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {pick.title}
+            </Link>
             {pick.lastSeen !== null && (
               <span className="shrink-0 text-[12px] text-text2">
                 <span className="md:hidden">{pick.lastSeen}</span>
@@ -32,8 +41,8 @@ export function RecallCard({ picks }: { picks: RecallPick[] }) {
         ))}
       </ul>
       <div>
-        <Button href={recallHref(picks)} className="max-md:w-full">
-          Recall these
+        <Button href={recallHref(picks[0])} className="max-md:w-full">
+          Start recall
         </Button>
       </div>
     </Card>

@@ -197,6 +197,17 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     expect(await state.readSession(scratch.db, answer.sessionId)).toMatchObject({ title: "Fixture module", goal: "fx-m1" });
   });
 
+  it("opens a chat's session under the title and goal it names, and refuses a bad one", async () => {
+    const { status } = await send({ ...answer, sessionTitle: "CP4284 · Attention", sessionGoal: "cp4284-m1-t1" });
+    expect(status).toBe(200);
+    expect(await state.readSession(scratch.db, answer.sessionId)).toMatchObject({
+      title: "CP4284 · Attention",
+      goal: "cp4284-m1-t1",
+    });
+    expect((await send({ ...answer, requestId: "req-bad-1", sessionTitle: "" })).status).toBe(400);
+    expect((await send({ ...answer, requestId: "req-bad-2", sessionGoal: "has space" })).status).toBe(400);
+  });
+
   it("writes no module key when the answer names none", async () => {
     await send(answer);
     expect(Object.keys((await state.readEvents(scratch.db))[1] ?? {})).not.toContain("module");
