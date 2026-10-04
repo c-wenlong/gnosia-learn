@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
+import { isPlainClick } from "@/lib/plain-click";
+
 /**
  * The strip's popover: a `<details>`, so it still opens with no JavaScript,
  * plus the three things a `<details>` does not do on its own.
@@ -49,7 +51,7 @@ export function MenuPopover({ label, children }: { label: string; children: Reac
 
   function onChoose(event: MouseEvent<HTMLDivElement>) {
     // A modified click opens the option in a new tab, and this one keeps its menu.
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!isPlainClick(event)) return;
     if ((event.target as Element).closest("a") !== null && ref.current !== null) ref.current.open = false;
   }
 

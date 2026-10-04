@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import type { TranscriptCue, VideoChapter } from "@/components/media";
 import { isActive, type StudioEvent } from "@/lib/studio-jobs";
+import { usePageVisible } from "@/lib/use-page-visible";
 import {
   asVideoJob,
   mediaFiles,
@@ -132,16 +133,6 @@ export function useJobEvents(job: VideoJob | null): StudioEvent[] {
 
 const EVENT_TYPES = ["phase", "step", "gate", "done", "error"] as const;
 const EMPTY: StudioEvent[] = [];
-
-function subscribeVisibility(change: () => void): () => void {
-  document.addEventListener("visibilitychange", change);
-  return () => document.removeEventListener("visibilitychange", change);
-}
-
-/** Whether the tab is showing. Nothing polls in a hidden tab. */
-export function usePageVisible(): boolean {
-  return !useSyncExternalStore(subscribeVisibility, () => document.hidden, () => false);
-}
 
 /**
  * The latest contact sheet per scene. Asked for every few seconds while the

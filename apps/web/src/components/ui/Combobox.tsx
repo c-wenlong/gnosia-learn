@@ -3,22 +3,12 @@
 import { useEffect, useId, useMemo, useRef, useState, type InputHTMLAttributes, type KeyboardEvent, type Ref } from "react";
 
 import { cx, inputClasses } from "./classes";
+import { isImeKey } from "./composer-keys";
 import { nextSuggestion, suggestionsFor } from "./suggestions";
 import type { FilterOption } from "./filter-menu";
 import { LIST_PANEL, ListOption } from "./FilterMenu";
 import { fieldListClasses, fieldListStyle, useFieldList } from "./use-field-list";
 import { usePresence } from "./use-presence";
-
-/**
- * A key an input method is composing with (Japanese, Chinese, Korean): an
- * arrow there moves between its candidates and an Enter confirms a word, so
- * neither is ours. Safari reports the Enter that commits a word with
- * `isComposing` already false and `keyCode` 229, the code every browser gives
- * a key the IME took, so 229 counts too (the rule `composerKey` follows).
- */
-function composing(event: KeyboardEvent<HTMLInputElement>): boolean {
-  return event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229;
-}
 
 /**
  * Kit `Combobox`: a text field with suggestions, for a value that may be one
@@ -33,8 +23,8 @@ function composing(event: KeyboardEvent<HTMLInputElement>): boolean {
  * own, so the words typed are what is submitted. Escape closes the list and
  * goes no further, so a dialog around the field stays open; with the list
  * shut it is the page's again. Tab, a blur and a click outside close it too.
- * Keys an input method is composing with are left alone. The chevron at the
- * right opens the whole list for a pointer; it takes no focus.
+ * Keys an input method is composing with are left alone (`isImeKey`). The
+ * chevron at the right opens the whole list for a pointer; it takes no focus.
  *
  * The rows are `FilterMenu`'s (`ListOption`: a tick on the value typed, the
  * detail as a second line), in the same top-layer list as `Select`
@@ -123,7 +113,9 @@ export function Combobox<V extends string>({
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     rest.onKeyDown?.(event);
-    if (event.defaultPrevented || composing(event)) return;
+    // An input method's arrows move between its candidates and its Enter
+    // confirms a word: neither is ours.
+    if (event.defaultPrevented || isImeKey(event.nativeEvent)) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       if (options.length === 0) return;
       event.preventDefault();

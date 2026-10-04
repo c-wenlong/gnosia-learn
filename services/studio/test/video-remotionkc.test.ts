@@ -28,6 +28,7 @@ import { combinedHash, readSources } from "../src/video/source-set";
 import type { WrapperCall } from "../src/video/calls";
 
 import { mp4Bytes, narratedBrief } from "./video-fixture";
+import { wrapperPorts } from "./wrapper-ports";
 
 /**
  * The remotionkc backend (phase 3 of docs/STUDIO-VIDEO-TOOLS.md) without
@@ -557,7 +558,7 @@ describe.skipIf(process.platform !== "darwin")("the remotionkc wrapper", () => {
     await writeFile(paths.sceneFile, "export default 1;\n");
     await writeFile(remotionkcPaths(paths).narration, "[]\n");
     const tools = { ...fixedTools(), sandboxExec: fake, node: process.execPath };
-    const base = await freePair(JOB_PORTS, 47900);
+    const base = await wrapperPorts("remotionkc");
     const config = remotionkcWrapperConfig({ tools, paths, home: "/Users/me", voice: "af_heart", base, scenes: ["TB1_A", "TB2_B"], apiNames: ["sceneCues", "defineTopic"] });
     await writeRemotionkcWrapper(process.execPath, paths, config);
   });
@@ -570,6 +571,12 @@ describe.skipIf(process.platform !== "darwin")("the remotionkc wrapper", () => {
       const failed = error as { code: number; stderr: string };
       return { code: failed.code, stderr: failed.stderr };
     }
+  }
+
+  /** A verb that must run: a refusal fails here, in the wrapper's own words, rather than later as a missing call. */
+  async function succeeds(args: string[]): Promise<void> {
+    const result = await video(args);
+    expect(result.code, result.stderr).toBe(0);
   }
 
   async function sandboxCalls(): Promise<{ argv: string[]; env: Record<string, string> }[]> {
@@ -593,7 +600,7 @@ describe.skipIf(process.platform !== "darwin")("the remotionkc wrapper", () => {
   });
 
   it("runs build as narrate, then a render with no narration, then the sidecars in the narration profile", async () => {
-    await video(["build"]);
+    await succeeds(["build"]);
     const ran = await sandboxCalls();
     expect(ran.map((call) => [call.argv[1], call.argv.slice(3).filter((arg) => !arg.startsWith("/")).join(" ")])).toEqual([
       [paths.narrateProfile, "--root narrate studio/two-boxes"],
@@ -610,8 +617,8 @@ describe.skipIf(process.platform !== "darwin")("the remotionkc wrapper", () => {
   });
 
   it("runs still as narrate and then a render that reads what narrate left, and lint as the native tsc", async () => {
-    await video(["still", "12", "3.5s"]);
-    await video(["lint"]);
+    await succeeds(["still", "12", "3.5s"]);
+    await succeeds(["lint"]);
     const ran = await sandboxCalls();
     expect(ran[1]!.argv.slice(-5)).toEqual(["still", "studio/two-boxes", "12", "3.5s", "--no-narrate"]);
     // tsc is a native program, started directly rather than through node.
@@ -620,8 +627,8 @@ describe.skipIf(process.platform !== "darwin")("the remotionkc wrapper", () => {
   });
 
   it("records a still of every scene as rendering them all, and a still of chosen moments as rendering none", async () => {
-    await video(["still"]);
-    await video(["still", "4.5s"]);
+    await succeeds(["still"]);
+    await succeeds(["still", "4.5s"]);
     expect((await calls()).map((call) => [call.verb, call.rendered])).toEqual([
       ["still", ["TB1_A", "TB2_B"]],
       ["still", []],

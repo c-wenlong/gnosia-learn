@@ -5,6 +5,8 @@ import {
   captionChunks,
   chapterSegments,
   formatTimecode,
+  nextSkip,
+  skipLabel,
   subtitleAt,
   type TranscriptCue,
   type VideoChapter,
@@ -148,5 +150,24 @@ describe("captionChunks", () => {
     expect(captionChunks({ start: 0, end: 2, text: "Short." })).toEqual([{ start: 0, end: 2, text: "Short." }]);
     expect(subtitleAt([paragraph], 10.1)).toBe("Every coding agent is a loop around a model.");
     expect(subtitleAt([paragraph], 19.9)).not.toBe("Every coding agent is a loop around a model.");
+  });
+});
+
+describe("nextSkip", () => {
+  it("adds a press to a flash still up in the same direction", () => {
+    const one = nextSkip(null, 1);
+    const two = nextSkip(one, 1);
+    expect(nextSkip(two, 1)).toEqual({ direction: 1, seconds: 15, shown: true });
+  });
+
+  it("starts over once the flash has gone, or when the direction turns", () => {
+    const ten = nextSkip(nextSkip(null, 1), 1);
+    expect(nextSkip({ ...ten, shown: false }, 1).seconds).toBe(5);
+    expect(nextSkip(ten, -1)).toEqual({ direction: -1, seconds: 5, shown: true });
+  });
+
+  it("reads with a sign and a true minus", () => {
+    expect(skipLabel({ direction: 1, seconds: 170, shown: true })).toBe("+ 170");
+    expect(skipLabel({ direction: -1, seconds: 5, shown: true })).toBe("\u2212 5");
   });
 });

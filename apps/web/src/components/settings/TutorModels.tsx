@@ -12,6 +12,7 @@ import { FormRow } from "@/components/ui/FormRow";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
 import { cx } from "@/components/ui/classes";
+import { sendJson } from "@/lib/send-json";
 import type { TutorModelsView } from "@/lib/tutor-models/settings";
 
 /**
@@ -43,20 +44,6 @@ interface Reply {
   served?: string;
   source?: string;
   status?: number | null;
-}
-
-async function send(method: "POST" | "DELETE" | "PATCH", path: string, body: unknown): Promise<{ status: number; data: Reply } | null> {
-  try {
-    const response = await fetch(path, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
-    return { status: response.status, data: (await response.json().catch(() => ({}))) as Reply };
-  } catch {
-    return null;
-  }
 }
 
 const keyOf = (e: Entry) => `${e.provider}/${e.model}`;
@@ -111,7 +98,7 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
   ) => {
     setBusy(keyOf(entry));
     setNotice({ kind: "busy", text: busyText });
-    const reply = await send(method, "/api/learner/tutor-model", { provider: entry.provider, model: entry.model, ...extra });
+    const reply = await sendJson<Reply>(method, "/api/learner/tutor-model", { provider: entry.provider, model: entry.model, ...extra });
     if (reply === null || reply.status !== 200 || reply.data.ok !== true || reply.data.chain === undefined) {
       focusNext.current = pressed;
       setNotice({
@@ -161,7 +148,7 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
     const key = keyOf(entry);
     setBusy(key);
     setNotice({ kind: "busy", text: `Testing ${entry.model}…` });
-    const reply = await send("POST", "/api/learner/tutor-model/test", { provider: entry.provider, model: entry.model });
+    const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model/test", { provider: entry.provider, model: entry.model });
     let result: { ok: boolean; text: string };
     if (reply === null) result = { ok: false, text: "Not tested: the server did not answer." };
     else if (reply.status === 200 && reply.data.ok === true) {
@@ -360,7 +347,7 @@ function AddModel({
     if (asked.current[id] === token) return;
     asked.current[id] = token;
     setLists((l) => ({ ...l, [id]: { state: "loading" } }));
-    const reply = await send("POST", "/api/learner/tutor-model/models", { provider: id });
+    const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model/models", { provider: id });
     if (asked.current[id] !== token) return;
     const next: ListState =
       reply === null
@@ -396,7 +383,7 @@ function AddModel({
     if (chosen === undefined) return;
     setSaving(true);
     setError(null);
-    const reply = await send("POST", "/api/learner/tutor-model", { provider: chosen.id, model });
+    const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", { provider: chosen.id, model });
     if (reply === null || reply.status !== 200 || reply.data.ok !== true || reply.data.chain === undefined) {
       // The Add button was disabled while the request was out, so focus went
       // nowhere; put it back in the field the person has to correct.

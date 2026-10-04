@@ -32,3 +32,4 @@ export { Textarea } from "./Textarea";
 export { buttonClasses, cardClasses, chipClasses, cx, inputClasses, LABEL, textareaClasses } from "./classes";
 export type { ButtonSize, ButtonVariant, ChipSize, InputSize } from "./classes";
 export type { FilterOption } from "./filter-menu";
+export { tabKeyIndex, type RovingOrientation } from "./roving";

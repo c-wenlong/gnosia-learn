@@ -4,8 +4,25 @@
     {
       "name": "self-learn-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "design-reference",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7311",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "docs/design/reference"
+      ],
+      "port": 7311
     }
   ]
 }

@@ -104,6 +104,36 @@ interface JobsValue {
 
 const JobsContext = createContext<JobsValue | null>(null);
 
+/**
+ * A POST to the studio runner, through the web app's proxy, without reading
+ * the job list after it: what `post` sends, for a caller that has to act on
+ * the answer before the list moves under it (the video panel's Revise). A
+ * runner that does not answer is `status` 0 with an `error` and its `detail`.
+ */
+export async function postJob(path: string, body?: unknown): Promise<PostResult> {
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      // The proxy refuses anything that is not JSON before it strips the
+      // headers that say a page sent it, so this is not decoration.
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+      cache: "no-store",
+    });
+    const data = ((await response.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
+    return { ok: response.ok, status: response.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: {
+        error: "the studio runner is not answering",
+        detail: (error as Error).message,
+      },
+    };
+  }
+}
+
 /** Every ten seconds even with a live stream: the record reconciles the cache. */
 const POLL_LIVE_MS = 10_000;
 /** The fallback, when the stream is off or gone and something is running. */
@@ -200,28 +230,11 @@ export function JobsProvider({
 
   const post = useCallback(
     async (path: string, body?: unknown): Promise<PostResult> => {
-      try {
-        const response = await fetch(path, {
-          method: "POST",
-          // The proxy refuses anything that is not JSON before it strips the
-          // headers that say a page sent it, so this is not decoration.
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-          cache: "no-store",
-        });
-        const data = ((await response.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
-        await refresh();
-        return { ok: response.ok, status: response.status, data };
-      } catch (error) {
-        return {
-          ok: false,
-          status: 0,
-          data: {
-            error: "the studio runner is not answering",
-            detail: (error as Error).message,
-          },
-        };
-      }
+      const result = await postJob(path, body);
+      // Read back only after an answer, as before the split. An unanswered
+      // request may still have committed; the next poll reconciles the list.
+      if (result.status !== 0) await refresh();
+      return result;
     },
     [refresh],
   );

@@ -12,6 +12,7 @@ import {
   inlinePieces,
   isBareTag,
   isEmptyValue,
+  isUsable,
   mapOffset,
   MENTION_NODE_TYPE,
   mentionQuery,
@@ -333,10 +334,21 @@ describe("the menu", () => {
   it("moves the active row with wrapping, skipping a disabled one", () => {
     const options = [OPTIONS[0]!, { ...OPTIONS[1]!, disabledReason: "Videos are unavailable: kokoro is missing" }];
     expect(firstActive(options)).toBe(0);
-    expect(moveActive(options, 0, 1)).toBe(0);
-    expect(moveActive(OPTIONS, 1, 1)).toBe(0);
-    expect(moveActive(OPTIONS, 0, -1)).toBe(1);
+    expect(moveActive(options, 0, 1, isUsable)).toBe(0);
+    expect(moveActive(OPTIONS, 1, 1, isUsable)).toBe(0);
+    expect(moveActive(OPTIONS, 0, -1, isUsable)).toBe(1);
     expect(firstActive([{ ...OPTIONS[1]!, disabledReason: "no" }])).toBe(-1);
+  });
+
+  it("moves through every row when told nothing is unusable, as the ask list does", () => {
+    const rows = ["a", "b", "c"];
+    expect(moveActive(rows, 0, 1)).toBe(1);
+    expect(moveActive(rows, 2, 1)).toBe(0);
+    expect(moveActive(rows, 0, -1)).toBe(2);
+    expect(moveActive([], 0, 1)).toBe(-1);
+    // Without the predicate a disabled mention row is a row like any other.
+    const options = [OPTIONS[0]!, { ...OPTIONS[1]!, disabledReason: "no" }];
+    expect(moveActive(options, 0, 1)).toBe(1);
   });
 
   it("says what a screen reader would otherwise miss", () => {

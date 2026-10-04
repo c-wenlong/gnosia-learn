@@ -6,12 +6,13 @@ import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "re
 import { formatTimecode, type TranscriptCue, type VideoChapter } from "@/components/media";
 import { JobLog } from "@/components/studio/JobPanel";
 import { Duration } from "@/components/studio/JobStrip";
-import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { postJob, useStudioJobs } from "@/components/studio/JobsProvider";
 import { FADE_IN } from "@/components/studio/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
+import { composerKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Textarea } from "@/components/ui/Textarea";
 import { VideoPlayer } from "@/components/VideoPlayer";
@@ -50,7 +51,7 @@ import {
   type VideoJob,
 } from "@/lib/studio-video";
 import { conversationHref, panelHref } from "@/lib/studio-view";
-import { prefersReducedMotion } from "@/lib/motion";
+import { scrollBehavior } from "@/lib/motion";
 
 /**
  * The video job view (docs/STUDIO-VIDEOS.md, "The job view"): the panel's
@@ -524,7 +525,7 @@ function StepMark({ status, live }: { status: StepRow["status"]; live: boolean }
   const base = "mt-1 flex size-3 shrink-0 items-center justify-center rounded-full";
   if (status === "done") {
     return (
-      <span aria-hidden className={cx(base, "bg-ok text-white")}>
+      <span aria-hidden className={cx(base, "bg-ok text-[var(--ok-on)]")}>
         <svg viewBox="0 0 12 12" className="size-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2.5 6.2 5 8.5 9.5 3.5" />
         </svg>
@@ -649,8 +650,7 @@ function Review({
   // A chapter pressed below the fold plays where the person can see it.
   const jump = (seconds: number): void => {
     setSeek((held) => ({ seconds, key: (held?.key ?? 0) + 1 }));
-    const still = prefersReducedMotion();
-    playerBox.current?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+    playerBox.current?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
   };
   const changes = changedLines(job, chapters);
   const actions = reviewActions(job);
@@ -956,26 +956,13 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
       return;
     }
     setBusy(true);
-    // Posted directly rather than through the provider's `post`, which reads
-    // the job list before it returns: on a job in review that list already
-    // says discarded, and the panel flashed "Discarded" before it moved on.
-    // The panel moves to the new job first and the list is read after.
-    let ok = false;
-    let status = 0;
-    let data: Record<string, unknown> = {};
-    try {
-      const response = await fetch(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/revise`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ changes: text.trim() }),
-        cache: "no-store",
-      });
-      ok = response.ok;
-      status = response.status;
-      data = ((await response.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
-    } catch (error) {
-      data = { error: `The studio runner is not answering: ${(error as Error).message}` };
-    }
+    // `postJob` rather than the provider's `post`, which reads the job list
+    // before it returns: on a job in review that list already says
+    // discarded, and the panel flashed "Discarded" before it moved on. The
+    // panel moves to the new job first and the list is read after.
+    const { ok, status, data } = await postJob(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/revise`, {
+      changes: text.trim(),
+    });
     const next = typeof data.jobId === "string" ? data.jobId : null;
     if (ok && next !== null) {
       router.push(panelHref(path, { job: next }), { scroll: false });
@@ -987,7 +974,13 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
     // A lost reply after the runner committed shows up on the next poll as
     // this job set aside with a link to its change (`childJob`).
     void refresh();
-    setProblem(typeof data.error === "string" ? data.error : `The runner answered ${status}.`);
+    setProblem(
+      status === 0
+        ? `The studio runner is not answering: ${String(data.detail)}`
+        : typeof data.error === "string"
+          ? data.error
+          : `The runner answered ${status}.`,
+    );
   };
 
   const talk = (): void => {
@@ -1025,7 +1018,8 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
             event.preventDefault();
             event.stopPropagation();
             onClose();
-          } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          } else if (composerKey(event.nativeEvent) === "mod-send") {
+            // Cmd or Ctrl+Enter, by the composer's rule: never an input method's Enter.
             event.preventDefault();
             void revise();
           }

@@ -1,5 +1,7 @@
 import type { MouseEvent } from "react";
 
+import { isPlainClick } from "@/lib/plain-click";
+
 /**
  * What a conversation row (or a search hit) does when pressed: close the
  * drawer, and on the studio open the conversation in the browser through the
@@ -11,7 +13,7 @@ export function rowClick(navigate: ((href: string) => boolean) | null, href: str
   return (event: MouseEvent<HTMLAnchorElement>) => {
     onPick();
     if (navigate === null) return;
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!isPlainClick(event)) return;
     if (navigate(href)) event.preventDefault();
   };
 }

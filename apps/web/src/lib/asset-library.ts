@@ -9,6 +9,7 @@ import {
   listAssets,
   readEvents,
   readPreference,
+  readPreferencesWithPrefix,
   topicTitles,
   type AssetDerivations,
   type AssetKindCount,
@@ -29,6 +30,7 @@ import {
   isCompanionKind,
 } from "@/lib/library";
 import { currentOwner, currentScope } from "@/lib/owner";
+import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
 import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
 import { parseTranscript } from "@/lib/transcript";
 
@@ -736,6 +738,43 @@ export async function loadPlayback(id: string): Promise<Playback | null> {
     return parsePlayback(await readPreference(await catalogDatabase(), playbackKey(id), owner));
   } catch (error) {
     warn("playback", error);
+    return null;
+  }
+}
+
+/**
+ * Whether the owner starred this asset, and when, or null for no star (or a
+ * store that could not be read, which draws the star empty and costs nothing
+ * else: pressing it writes through the route, which says if it failed).
+ */
+export async function loadFavorite(id: string): Promise<Favorite | null> {
+  await connection();
+  const owner = await currentOwner();
+  try {
+    return parseFavorite(await readPreference(await catalogDatabase(), favoriteKey(id), owner));
+  } catch (error) {
+    warn("favorite", error);
+    return null;
+  }
+}
+
+/**
+ * Every asset the owner starred, by id, for the Library's Favorites filter:
+ * the `favorite:` preferences and nothing else. Null when the store could not be read, which the page
+ * says rather than showing an empty list as though nothing were starred.
+ */
+export async function loadFavorites(): Promise<Set<string> | null> {
+  await connection();
+  const owner = await currentOwner();
+  try {
+    const all = await readPreferencesWithPrefix(await catalogDatabase(), FAVORITE_PREFIX, owner);
+    const ids = new Set<string>();
+    for (const [key, value] of Object.entries(all)) {
+      if (key.startsWith(FAVORITE_PREFIX) && parseFavorite(value) !== null) ids.add(key.slice(FAVORITE_PREFIX.length));
+    }
+    return ids;
+  } catch (error) {
+    warn("favorites", error);
     return null;
   }
 }

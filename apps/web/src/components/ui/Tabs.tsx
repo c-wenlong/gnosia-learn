@@ -3,6 +3,7 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { cx } from "@/components/ui/classes";
+import { tabKeyIndex } from "@/components/ui/roving";
 
 export type TabItem = {
   id: string;
@@ -34,11 +35,7 @@ export function Tabs({ items, label, className }: { items: TabItem[]; label: str
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const index = items.findIndex((item) => item.id === current);
-    let next = -1;
-    if (event.key === "ArrowRight") next = (index + 1) % items.length;
-    else if (event.key === "ArrowLeft") next = (index - 1 + items.length) % items.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = items.length - 1;
+    const next = tabKeyIndex(event.key, index, items.length, "horizontal", true);
     if (next < 0) return;
     event.preventDefault();
     setSelected(items[next].id);
