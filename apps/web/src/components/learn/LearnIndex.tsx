@@ -81,24 +81,37 @@ function placeOf(
   return { domain, topic };
 }
 
+/** A selection the place cannot show is let go: a concept in another domain, or outside the open topic. */
+function shownIn(map: DomainMapData, domainOf: Readonly<Record<string, string>>, place: Place, id: string | null): string | null {
+  if (id === null || place.domain === null) return id;
+  if (domainOf[id] !== place.domain) return null;
+  if (place.topic !== null && !map.layouts[place.domain].groups.some((g) => g.topic === place.topic && g.concepts.includes(id))) return null;
+  return id;
+}
+
 export function LearnIndex({
   rows,
   edges,
   map,
   initial,
+  foldersOnly = false,
 }: {
   rows: IndexRow[];
   edges: GraphEdge[];
   map: DomainMapData;
   initial: Initial;
+  /** The topic vocabulary could not be read, so the domains are the notes' folders. */
+  foldersOnly?: boolean;
 }) {
   const domainOf = useMemo(() => domainOfConcepts(map.tree), [map]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState(initial.filter);
   const [view, setView] = useState(initial.view);
   const [scope, setScope] = useState(initial.scope);
-  const [selected, setSelected] = useState(initial.selected);
   const [place, setPlace] = useState<Place>(() => placeOf(map, domainOf, initial));
+  const [selected, setSelected] = useState(() => shownIn(map, domainOf, placeOf(map, domainOf, initial), initial.selected));
+  /** Asked when a pick moves to another place, which mounts a new panel: its heading takes the focus. */
+  const [panelFocus, setPanelFocus] = useState(0);
 
   const state = { selected, view, scope, filter, domain: place.domain, topic: place.topic };
   useEffect(() => {
@@ -122,8 +135,9 @@ export function LearnIndex({
       setView(asked.view);
       setScope(parseScope(params.get("scope")));
       setFilter(parseFilter(params.get("filter")));
-      setSelected(asked.selected);
-      setPlace(placeOf(map, domainOf, asked));
+      const next = placeOf(map, domainOf, asked);
+      setSelected(shownIn(map, domainOf, next, asked.selected));
+      setPlace(next);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -131,11 +145,7 @@ export function LearnIndex({
 
   /** Move to another level, as a history entry. A selection outside the new place is let go. */
   const go = (next: Place, pick: string | null = selected) => {
-    const keep = pick !== null && next.domain !== null && domainOf[pick] === next.domain ? pick : null;
-    const kept =
-      keep !== null && next.topic !== null && !map.layouts[next.domain as string].groups.some((g) => g.topic === next.topic && g.concepts.includes(keep))
-        ? null
-        : keep;
+    const kept = next.domain === null ? null : shownIn(map, domainOf, next, pick);
     setPlace(next);
     setSelected(kept);
     const search = indexSearch({ ...state, selected: kept, domain: next.domain, topic: next.topic }, window.location.search);
@@ -171,7 +181,10 @@ export function LearnIndex({
     if (there === null) return;
     const inTopic = place.topic === null || (layout?.groups.some((g) => g.topic === place.topic && g.concepts.includes(id)) ?? false);
     if (there === place.domain && inTopic) setSelected(id);
-    else go({ domain: there, topic: null }, id);
+    else {
+      go({ domain: there, topic: null }, id);
+      setPanelFocus((n) => n + 1);
+    }
   };
 
   const toView = (next: IndexView) => {
@@ -223,6 +236,12 @@ export function LearnIndex({
         </div>
       </div>
 
+      {view === "graph" && foldersOnly && (
+        <p role="status" className="rounded-xl bg-warn-tint px-4 py-2 text-[13px] text-text">
+          Topics could not be read, so concepts are grouped by their note folders until they can.
+        </p>
+      )}
+
       {view === "table" ? (
         // Sized by the width the page actually has, not the viewport's: the
         // sidebar takes 60 or 260px of it, so a viewport breakpoint docked the
@@ -268,6 +287,8 @@ export function LearnIndex({
             onGo={(next) => go(next)}
             onSelect={setSelected}
             onPick={pick}
+            panelFocus={panelFocus}
+            onPanelFocused={() => setPanelFocus(0)}
           />
         </div>
       )}

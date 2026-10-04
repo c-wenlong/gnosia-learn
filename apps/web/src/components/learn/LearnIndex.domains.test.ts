@@ -182,6 +182,39 @@ describe("LearnIndex by domain", () => {
     expect(graph(host)?.querySelector('[data-concept="dot"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("lets go of a selection the URL names outside the domain it opens", () => {
+    window.history.replaceState(null, "", "/learn?domain=foundations&concept=merge");
+    const host = mountAtUrl();
+    expect(graph(host)?.getAttribute("aria-label")).toMatch(/^Foundations map/);
+    expect(host.querySelector('section[aria-label="Concept details"] h3')).toBeNull();
+    expect(url().get("concept")).toBeNull();
+  });
+
+  it("moves the focus to the new concept's name after a pick that crosses domains", () => {
+    window.history.replaceState(null, "", "/learn?domain=algorithms&concept=quick");
+    const host = mountAtUrl();
+    const dot = host.querySelector<HTMLButtonElement>('section[aria-label="Concept details"] button[data-concept="dot"]') as HTMLButtonElement;
+    act(() => dot.focus());
+    act(() => dot.click());
+    expect(document.activeElement?.tagName).toBe("H3");
+    expect(document.activeElement?.textContent).toBe("Dot");
+    // Served once: moving on from there does not pull the focus back to a panel.
+    const crumb = [...host.querySelectorAll('nav[aria-label="Breadcrumb"] button')].find((b) => b.textContent === "Learn") as HTMLButtonElement;
+    act(() => crumb.click());
+    act(() => cards(host)[1].focus());
+    act(() => cards(host)[1].click());
+    expect(document.activeElement?.tagName).not.toBe("H3");
+  });
+
+  it("leaves the topic titles in the picture to the pointer; the list's buttons are the keyboard's", () => {
+    window.history.replaceState(null, "", "/learn?domain=algorithms");
+    const host = mountAtUrl();
+    const title = host.querySelector('[data-topic-title="sorting"]') as Element;
+    expect(title.getAttribute("role")).toBeNull();
+    expect(title.getAttribute("aria-hidden")).toBe("true");
+    expect(host.querySelector('button[data-list-topic="sorting"]')).not.toBeNull();
+  });
+
   it("opens a concept's domain when the URL names only the concept", () => {
     window.history.replaceState(null, "", "/learn?concept=bfs");
     const host = mountAtUrl();

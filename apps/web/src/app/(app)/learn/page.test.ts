@@ -31,6 +31,10 @@ const recentCourses = vi.hoisted(() => vi.fn(async () => [] as string[]));
 vi.mock("@/lib/owner", () => ({ currentOwner: async () => "local" }));
 vi.mock("@/lib/recent-courses", () => ({ readRecentCourses: recentCourses }));
 
+// The topic vocabulary places concepts in domains (D1 of docs/proposals/domain-map.md).
+const getTopics = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
+vi.mock("@/data/topics", () => ({ getTopics }));
+
 async function render(params: Record<string, string> = {}): Promise<string> {
   const { default: LearnPage } = await import("./page");
   return renderToStaticMarkup(await LearnPage({ searchParams: Promise.resolve(params) }));
@@ -111,6 +115,25 @@ describe("/learn", () => {
     expect(table).toContain('href="/learn/alpha"');
     expect(table).toContain("Neighbourhood graph of Alpha");
     expect(table).not.toContain("data-domain-graph");
+  });
+
+  it("says so when the topics cannot be read, rather than passing folders off as domains", async () => {
+    loadKnowledgeBase.mockResolvedValue({
+      reachable: true,
+      kb: {
+        indexedAt: null,
+        stats: { total: 1, mastered: 0, learning: 0, untouched: 1 },
+        frontier: [],
+        edges: [],
+        concepts: [
+          { id: "alpha", title: "Alpha", summary: "", requires: [], assumes: [], pL: 0.1, mastery: "gap" as const, observations: 0, correct: 0, lastSeen: null, due: null, lapses: 0, leech: false, topics: [], domain: "fixtures", topic: "t" },
+        ],
+      },
+    });
+    getTopics.mockRejectedValueOnce(new Error("database down"));
+    const html = await render();
+    expect(html).toContain("Topics could not be read");
+    expect(await render()).not.toContain("Topics could not be read");
   });
 
   it("selects the concept the query string names", async () => {
