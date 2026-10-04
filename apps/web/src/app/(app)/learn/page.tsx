@@ -5,6 +5,9 @@ import { Card } from "@/components/ui/Card";
 import { getCourses } from "@/data/courses";
 import { defaultSelection, type GraphNode } from "@/lib/concept-graph";
 import { cachedMapLayout } from "@/lib/concept-map";
+import { readyConcepts } from "@/lib/map-reading";
+import { currentOwner } from "@/lib/owner";
+import { readRecentCourses } from "@/lib/recent-courses";
 import { courseSlugsOf, placeOf } from "@/lib/concept-workspace";
 import { appTimeZone } from "@/lib/time-zone";
 import { loadKnowledgeBase } from "@/lib/kb/load";
@@ -44,6 +47,7 @@ function toRow(
     courseLabel: place ? `${place.courseCode} M${place.moduleOrder}` : null,
     courses: courseSlugsOf(courses, concept.topics),
     domain: concept.domain,
+    ready: false,
   };
 }
 
@@ -59,7 +63,11 @@ function toRow(
  */
 export default async function LearnPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const [{ kb, reachable }, courses] = await Promise.all([loadKnowledgeBase(), getCourses()]);
+  const [{ kb, reachable }, courses, recentCourses] = await Promise.all([
+    loadKnowledgeBase(),
+    getCourses(),
+    currentOwner().then(readRecentCourses),
+  ]);
 
   if (kb.concepts.length === 0) {
     return <div data-layout="app">{reachable ? <EmptyState /> : <Unreachable />}</div>;
@@ -69,9 +77,12 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
   const timeZone = appTimeZone();
   // Studied first, then the untouched ones, alphabetical within each: the
   // untouched tail is long and says the least.
-  const rows = kb.concepts
+  const unmarked = kb.concepts
     .map((c) => toRow(c, courses, now, timeZone))
     .sort((a, b) => Number(a.bucket === "untouched") - Number(b.bucket === "untouched") || a.title.localeCompare(b.title));
+  // Ready to learn in the courses being worked through (G5 of docs/proposals/knowledge-map.md).
+  const ready = readyConcepts(unmarked, kb.edges, recentCourses);
+  const rows = unmarked.map((r) => (ready.has(r.id) ? { ...r, ready: true } : r));
 
   const asked = first(params.concept);
   const selected = asked !== null && rows.some((r) => r.id === asked) ? asked : defaultSelection(kb.concepts, kb.frontier, now);
