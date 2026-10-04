@@ -13,7 +13,8 @@ import { readReviewSession } from "@/lib/review-queue";
  * check blocks its note holds, the card built from the first one (a
  * multiple-choice check or a recall prompt), the SM-2 state, and the interval
  * each of the four ratings would give. `?concept=` puts that concept first,
- * due or not, the way "Review now" on a concept page asks for it.
+ * due or not (a link such as `/review?concept=<slug>`; the concept page's
+ * Review now button that made one was removed on 2026-10-05).
  *
  * A read, so it degrades rather than fails: an unreachable database is a 200
  * with `reachable: false` and no items, the same answer the page renders.

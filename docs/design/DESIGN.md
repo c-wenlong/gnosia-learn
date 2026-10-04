@@ -70,8 +70,8 @@ phone had a five-column tab bar. The streak and target the bar once carried
 went with the habit layer (H1 of docs/proposals/home-page.md).
 
 Review left the sidebar on 2026-10-04 (owner's call). `/review` stays as
-the full queue, reached from Review now on a concept page and All reviews
-on Home, and the `review` and `mastery` tables are untouched. The reason is
+the full queue, reached from All reviews on Home (a concept page's Review
+now button went on 2026-10-05, since it opened the whole queue), and the `review` and `mastery` tables are untouched. The reason is
 in [the recall proposal](../proposals/recall-in-chat.md): only the Teach
 session, a module's week check and the terminal's `/learn` skill make a
 review card, so the chat, the studio and the videos, the product's main
@@ -86,7 +86,6 @@ flowchart LR
   Path -->|topic row| Workspace
   Path -->|Guidebook| Workspace
   Workspace -->|Teach me| Session
-  Workspace -->|Review now| Review
   Session --> Close[Session close]
   Close -->|Back| Today
   Close -->|Keep going| Session
@@ -164,8 +163,8 @@ Tutor (centre): the thread, every claim with a citation chip, Save to note
 and Why on tutor turns, suggested question chips, the input. Studio
 (right): the mastery card with the observation history, the checks the
 note holds, the assets that explain this concept, the neighbourhood
-graph. The header carries the two ways out: Teach me (focus mode) and
-Review now.
+graph. The header carries the way out: Teach me (focus mode). Review now
+was the second until 2026-10-05; a due card's recall happens in the tutor.
 
 ### Session focus mode
 
