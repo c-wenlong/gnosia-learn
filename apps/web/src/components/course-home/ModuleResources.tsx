@@ -53,13 +53,35 @@ function ResourceAnchor({
 }
 
 /**
+ * One curated reading as an item row: its type's icon, its title, and a meta
+ * line saying what kind it is and where it lives. The module path draws a
+ * lesson's readings and the practice with it too.
+ */
+export function ResourceRow({ resource: r }: { resource: Resource }) {
+  const link = resourceLink(r.url);
+  return (
+    <li>
+      <ResourceAnchor href={r.url} internal={link.internal} className={cx(ROW, ROW_HOVER, FOCUS_RING)}>
+        <Glyph name={RESOURCE_GLYPH[r.type] ?? "link"} className="text-text2" />
+        <span className="min-w-0 flex-1 pl-1">
+          <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
+          <span className={ROW_META}>
+            {TYPE_LABEL[r.type] ?? "Link"} · {link.where}
+          </span>
+        </span>
+      </ResourceAnchor>
+    </li>
+  );
+}
+
+/**
  * A module's reading list as item rows: the curated resources from the course
  * file, then the learner's own (each with Remove), then a row that opens the
  * form to add one. An outside resource opens in a new tab and a link into this
  * app in the same one; the meta line says what kind it is and where it lives
  * (a host, "Library" or "This site"), the way Coursera's says "Reading".
  */
-export function ModuleResources({ moduleId, curated }: { moduleId: string; curated: Resource[] }) {
+export function ModuleResources({ moduleId, curated }: { moduleId: string; curated: readonly Resource[] }) {
   const { state, addResource, removeResource } = useLearner();
   const yours = state.userResources[moduleId] ?? [];
   const [adding, setAdding] = useState(false);
@@ -94,22 +116,9 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
 
   return (
     <ul className={ROW_LIST}>
-      {curated.map((r) => {
-        const link = resourceLink(r.url);
-        return (
-          <li key={r.id}>
-            <ResourceAnchor href={r.url} internal={link.internal} className={cx(ROW, ROW_HOVER, FOCUS_RING)}>
-              <Glyph name={RESOURCE_GLYPH[r.type] ?? "link"} className="text-text2" />
-              <span className="min-w-0 flex-1 pl-1">
-                <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
-                <span className={ROW_META}>
-                  {TYPE_LABEL[r.type] ?? "Link"} · {link.where}
-                </span>
-              </span>
-            </ResourceAnchor>
-          </li>
-        );
-      })}
+      {curated.map((r) => (
+        <ResourceRow key={r.id} resource={r} />
+      ))}
       {yours.map((r) => {
         const link = resourceLink(r.url);
         return (
