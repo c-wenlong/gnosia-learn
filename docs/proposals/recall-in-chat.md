@@ -1,6 +1,6 @@
 # Proposal: recall in the chat
 
-Status: accepted, 2026-10-04, and phases 1 and 2 are built. R2 is the owner's call
+Status: accepted, 2026-10-04, and all three phases are built. R2 is the owner's call
 (tap to record); R1 and R3 to R6 are the proposal's defaults, and open
 questions 2 and 3 take theirs until the owner says otherwise. Step 1 of the
 same conversation, taking
@@ -291,7 +291,7 @@ proposal.
 | --- | --- | --- |
 | 1 (built) | R1, R2, R4, R5: the marker, the judge and its `parseVerdict`, the verdict row, the observe write, on the concept tutor only. `lib/tutor-check.ts`, `lib/agent/judge.ts`, `app/api/agent/judge/route.ts`, `components/workspace/VerdictRow.tsx` | "Give me a check", an answer and one tap writes an `observation` event that shows under Recent answers on the concept page and moves its colour on the map; a thread with no check writes nothing; `observe --json` is byte-for-byte what it was |
 | 2 (built) | R3 and R6: recall as the opening move, the session row. `dueRecall` and `recallOpening` in `lib/tutor-check.ts`, `requestTurns` and `RECALL_SEED` in `lib/tutor-thread.ts` | Opening a concept with a due card is met with a question (the note's first check, or the model's when it has none); its answer reschedules the card; Home's threads list the concept; the chat's `session` row opens with the first recorded answer and closes when the page goes away |
-| 3 | The course topic tutor's exit ticket records against the topic's concepts; Home's "Recall these" opens the first concept's chat rather than `/review` | A course session's closing questions move mastery on the concepts the topic declares |
+| 3 (built) | The course topic tutor's exit ticket records against the topic's concepts; Home's recall card opens the concepts' chats rather than `/review`. The marker names the concept, `CHECK(<concept id>): ...`, and the route keeps it only for a concept the topic's course item declares (`topicCheck`); a topic with one concept takes an unnamed check as that one's. The judge, the write and the session handling moved into `lib/chat-recall.ts`, shared by both tutors | A course session's closing questions move mastery on the concepts the topic declares |
 
 Each phase is its own PR. Phase 3 depends on `concepts:` coverage on course
 items ([the course items proposal](course-items-declare-concepts.md)) and is
