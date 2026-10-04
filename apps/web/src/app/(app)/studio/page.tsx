@@ -11,7 +11,9 @@ import { StudioDialog } from "@/components/studio/StudioDialog";
 import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import { StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
+import { SHEET } from "@/components/studio/surfaces";
 import { Banner } from "@/components/ui/Banner";
+import { cx } from "@/components/ui/classes";
 import { StudioGrid, StudioToolbar, WhileOutcome } from "@/components/studio/StudioBrowse";
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
@@ -293,7 +295,7 @@ export default async function StudioPage({
             </section>
           )}
 
-          <div className={shot === null ? "relative mx-2 min-h-full rounded-t-3xl border border-b-0 border-hair bg-surface md:mx-4" : undefined}>
+          <div className={shot === null ? cx(SHEET, "relative min-h-full") : undefined}>
             <StudioStrip surface={shot === null}>
               <StudioToolbar chips={chips} />
             </StudioStrip>

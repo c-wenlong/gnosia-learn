@@ -1,11 +1,12 @@
-import Link from "next/link";
-
 import { FadeImg } from "@/components/studio/motion-parts";
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { PanelLink, SelectableFrame } from "@/components/studio/PanelLink";
 import { RowJob, TileJob } from "@/components/studio/GridJob";
-import { KindBadge, KindWord, TILE_LIFT } from "@/components/studio/KindBadge";
-import { Chip } from "@/components/studio/StudioChrome";
+import { KindBadge, KindWord } from "@/components/studio/KindBadge";
+import { TILE, TILE_ACTIONS, TILE_LIFT, TILE_WARNED } from "@/components/studio/surfaces";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { buttonClasses, cx } from "@/components/ui/classes";
 import {
   canvasHref,
   displayTitle,
@@ -59,11 +60,9 @@ export function DiagramTile({
   return (
     <SelectableFrame
       name={diagram.name}
-      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-[var(--surface)] ${TILE_LIFT} ${
-        untopiced ? "border-[var(--warn-border)]" : "border-[var(--border)]"
-      }`}
-      selectedClassName="ring-2 ring-[var(--accent)]"
-      idleClassName="hover:bg-[var(--surface-hover)]"
+      className={cx("group", untopiced ? TILE_WARNED : TILE, TILE_LIFT)}
+      selectedClassName="ring-2 ring-accent"
+      idleClassName="hover:bg-surface2"
     >
       <PanelLink href={selectHref} className="flex min-w-0 flex-col">
         <KindWord kind="diagram" />
@@ -71,24 +70,20 @@ export function DiagramTile({
         <div className="flex min-w-0 flex-col gap-1.5 p-3">
           <span className="line-clamp-2 text-sm font-medium">{displayTitle(diagram)}</span>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            {untopiced ? (
-              <Chip tone="warn">No topic</Chip>
-            ) : (
-              <Chip>{diagram.topic}</Chip>
-            )}
-            <span className="text-xs text-[var(--muted)]">
+            {untopiced ? <Badge tone="warn">No topic</Badge> : <Badge>{diagram.topic}</Badge>}
+            <span className="text-xs text-text2">
               {relativeTime(diagram.tldr.modified)}
             </span>
           </div>
           {showConcepts && diagram.concepts.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {diagram.concepts.map((slug) => (
-                <Chip key={slug}>{slug}</Chip>
+                <Badge key={slug}>{slug}</Badge>
               ))}
             </div>
           )}
           {untopiced && (
-            <p className="text-xs text-[var(--warn-text)]">
+            <p className="text-xs text-warn-text">
               The indexer refuses a diagram with no topic by name, so this one is in no catalog.
               Set one from the panel.
             </p>
@@ -113,29 +108,27 @@ export function DiagramTile({
           Separate targets, because a grid where one click does everything has
           no way to browse. Shown on hover, and on keyboard focus anywhere in
           the tile, so Tab reaches them, and while Extend is opening; invisible
-          controls take no clicks. */}
-      <div className="pointer-events-none absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
+          controls take no clicks (`TILE_ACTIONS`). */}
+      <div className={TILE_ACTIONS}>
         {/* The words are one text run. The old form put a screen-reader span
             between "Open" and "canvas" inside this flex link, and a flex
             container drops the space at the edge of each text run, so it read
             "Opencanvas". The accessible name starts with the visible words
             (WCAG 2.5.3, label in name), so "click Open canvas" works by voice,
             and then says which diagram. */}
-        <Link
+        <Button
           href={canvasHref(diagram.name)}
+          variant="overlay"
+          size="xs"
           aria-label={`Open canvas: ${displayTitle(diagram)}`}
-          className={HOVER_CONTROL}
         >
           Open canvas
-        </Link>
-        <ExtendLink href={extendHref} className={HOVER_CONTROL} diagram={displayTitle(diagram)} />
+        </Button>
+        <ExtendLink href={extendHref} className={buttonClasses({ variant: "overlay", size: "xs" })} diagram={displayTitle(diagram)} />
       </div>
     </SelectableFrame>
   );
 }
-
-const HOVER_CONTROL =
-  "flex h-8 items-center rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-2 text-xs font-medium text-[var(--foreground)] shadow-sm hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]";
 
 /**
  * The exported SVG, or what to do about there not being one.
@@ -174,9 +167,9 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
       {badges.length > 0 && (
         <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
           {badges.map((badge) => (
-            <Chip key={badge.key} tone="warn">
+            <Badge key={badge.key} tone="warn">
               {badge.label}
-            </Chip>
+            </Badge>
           ))}
         </div>
       )}
@@ -231,7 +224,7 @@ export function DiagramRow({
       </PanelLink>
       <RowJob target={diagram.tldr.path} title={displayTitle(diagram)} path={path} />
       {diagram.topic === null ? (
-        <Chip tone="warn">No topic</Chip>
+        <Badge tone="warn">No topic</Badge>
       ) : (
         <span className="hidden shrink-0 text-[var(--muted)] sm:inline">{diagram.topic}</span>
       )}

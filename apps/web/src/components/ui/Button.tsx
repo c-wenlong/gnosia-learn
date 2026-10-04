@@ -11,6 +11,11 @@ import { buttonClasses, cx, NOTE, type ButtonSize, type ButtonVariant } from "./
  * - `ghost`: accent text, no box. "Why?", "See all".
  * - `ok`, `warn`: the coloured 3D continue on a feedback footer.
  * - `accent`: the blue 3D pill, for the rare place black would compete.
+ * - `overlay`: a translucent, blurred face over a picture: a tile's actions.
+ *
+ * `size` is `md` (44px), `sm` (36px) or `xs` (28px). `xs` is the studio's
+ * density: its strips, a job's bar over its picture, a panel's row of verbs.
+ * There the 3D faces are flat (no lip) and `secondary`'s outline is 1px.
  *
  * Renders a `<Link>` when given `href`, a `<button type="button">` otherwise.
  * A link has no disabled state: an anchor marked `aria-disabled` still
@@ -49,6 +54,8 @@ export type ButtonAsLink = ButtonOwnProps &
     href: string;
     /** Passed to `next/link`. */
     prefetch?: boolean;
+    /** Passed to `next/link`: `false` keeps the scroll where it is (the studio's links). */
+    scroll?: boolean;
     disabledReason?: never;
   };
 
