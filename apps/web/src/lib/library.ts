@@ -210,6 +210,8 @@ export interface LibraryFilters {
   sort?: LibrarySort | null;
   /** The layout. Not a filter, but URL state like one, so a list view is linkable too. */
   view?: LibraryView | null;
+  /** Only the assets the owner starred (`?favorites=1`). */
+  favorites?: boolean | null;
 }
 
 /**
@@ -226,6 +228,7 @@ export function libraryHref(filters: LibraryFilters): string {
   if (filters.kind) params.set("kind", filters.kind);
   if (filters.topic) params.set("topic", filters.topic);
   if (filters.course) params.set("course", filters.course);
+  if (filters.favorites) params.set("favorites", "1");
   const q = filters.q?.trim();
   if (q) params.set("q", q);
   if (filters.sort === "title") params.set("sort", "title");
@@ -235,16 +238,18 @@ export function libraryHref(filters: LibraryFilters): string {
 }
 
 /** A URL parameter a library menu sets. */
-export type LibraryParam = "kind" | "course" | "topic" | "sort";
+export type LibraryParam = "kind" | "course" | "topic" | "sort" | "favorites";
 
 /**
  * The filters after one menu pick, every other parameter kept: what the
  * Library's toolbar pushes the `libraryHref` of. `""` is a menu's "All" and
  * clears that filter; the sort takes `parseSort`, so its default is dropped
- * from the URL like any other.
+ * from the URL like any other. Favorites is a toggle: `"1"` turns it on and
+ * `""` off.
  */
 export function withPick(filters: LibraryFilters, param: LibraryParam, value: string): LibraryFilters {
   if (param === "sort") return { ...filters, sort: parseSort(value) };
+  if (param === "favorites") return { ...filters, favorites: value === "1" || null };
   return { ...filters, [param]: value === "" ? null : value };
 }
 
@@ -470,12 +475,20 @@ export function filterRows<T extends { id: string; kind: string; topics: string[
     topic: string | null;
     courseTopics: ReadonlySet<string> | null;
     hits: ReadonlySet<string> | null;
+    /**
+     * The starred ids when the Favorites filter is on, else null. A starred
+     * companion file is shown with it even under All kinds: a star is a
+     * choice the owner made about that row, so hiding it would make the
+     * filter look like it lost one.
+     */
+    favorites?: ReadonlySet<string> | null;
   },
 ): T[] {
-  const { kind, topic, courseTopics, hits } = filters;
+  const { kind, topic, courseTopics, hits, favorites = null } = filters;
   return rows.filter(
     (row) =>
-      (kind === null ? !isCompanionKind(row.kind) : row.kind === kind) &&
+      (kind === null ? favorites !== null || !isCompanionKind(row.kind) : row.kind === kind) &&
+      (favorites === null || favorites.has(row.id)) &&
       (topic === null || row.topics.includes(topic)) &&
       (courseTopics === null || row.topics.some((slug) => courseTopics.has(slug))) &&
       (hits === null || hits.has(row.id)),

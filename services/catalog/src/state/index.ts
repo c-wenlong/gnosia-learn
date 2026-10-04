@@ -174,6 +174,7 @@ export {
   clearPreference,
   readPreference,
   readPreferences,
+  readPreferencesWithPrefix,
   writePreference,
 } from "./preference";
 export {
