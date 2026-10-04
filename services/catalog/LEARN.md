@@ -19,6 +19,13 @@ the schema is [`SCHEMA.md`](SCHEMA.md). This file is only the move.
 | `learn/concepts/**`, `learn/sessions/**`, `learn/assets/**` | `concept`, `session_log_entry`, `diagram` rows, and since the phase 3 cut-over nothing else: the folders are gone from the repository, kept at the tag `content-files-final` ([docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md)) | No: the rows are the notes. `catalog export` writes the tree back (the nightly export keeps a dated copy under `$SELF_LEARN_HOME/archive/`), and `learn vault pull` writes the notes, the logs and every diagram's SVG to `~/.self-learn/vault/` for Obsidian, where `learn vault push` takes edited notes back one revision each. |
 | `learn/map.md` | *(nothing)* | Yes: `learn map` renders it on demand, to stdout or to `--out <file>`. |
 
+`event` also holds two types the old file never did, both written by the
+web app and neither of them evidence: `watched` (an asset marked watched or
+read) and `visit` (a course or module page opened, migration 0025). Both
+replays skip them, so `learn model --rebuild` and `learn review rebuild` give
+the same answer with or without them. The table of types is in
+[SCHEMA.md](SCHEMA.md#event-types).
+
 The split used to be the one the rest of the catalog ran on: what a person or
 an agent *wrote* stayed in git, where it could be read, diffed and reverted;
 what the loop *observed* went in Postgres, where it can be joined and

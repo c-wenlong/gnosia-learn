@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { tabKeyIndex } from "./roving";
+import { tabIds, tabKeyIndex } from "./roving";
 
 describe("tabKeyIndex", () => {
   it("steps along a row with Left and Right, wrapping at either end", () => {
@@ -41,12 +41,18 @@ describe("tabKeyIndex", () => {
     expect(tabKeyIndex("ArrowRight", 0, 0, "both", true)).toBe(-1);
   });
 
-  it("is what the tab rows and the theme switch move by", () => {
+  it("is what the tab row and the segmented control move by", () => {
     const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
-    for (const file of ["components/ui/Tabs.tsx", "components/settings/SettingsTabs.tsx", "components/ThemeSwitch.tsx"]) {
+    for (const file of ["components/ui/TabList.tsx", "components/ui/SegmentedControl.tsx"]) {
       const text = readFileSync(join(src, file), "utf8");
       expect(text, file).toContain("tabKeyIndex(");
       expect(text, file).not.toMatch(/\+ 1\) % |- 1 \+ [a-z.]+\.length\) %/);
     }
+  });
+});
+
+describe("tabIds", () => {
+  it("names a tab and its panel from one base, so the two point at each other", () => {
+    expect(tabIds(":r1:", "tutor")).toEqual({ tab: ":r1:-tab-tutor", panel: ":r1:-panel-tutor" });
   });
 });
