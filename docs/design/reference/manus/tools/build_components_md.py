@@ -351,7 +351,9 @@ for cid, c in C.items():
         if r != "0px" and s["rect"]["w"] > 4:
             radii[r] += 1
         if st["transitionDuration"] not in ("0s", ""):
-            trans[f"{st['transitionDuration'].split(',')[0].strip()} {st['transitionTimingFunction'].split(',')[0].strip()}"] += 1
+            # the first duration and the first timing function; a cubic-bezier() carries commas of its own
+            tf = re.findall(r"cubic-bezier\([^)]*\)|steps\([^)]*\)|[a-z-]+", st["transitionTimingFunction"])
+            trans[f"{st['transitionDuration'].split(',')[0].strip()} {tf[0] if tf else st['transitionTimingFunction']}"] += 1
         if sname.endswith("focus-visible"):
             th = s["theme"]
             focus_n[th] += 1

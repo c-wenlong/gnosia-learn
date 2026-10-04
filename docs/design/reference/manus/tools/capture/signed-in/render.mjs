@@ -5,9 +5,11 @@
 // one from `.dark`, with every component colour a var() of those, so the same static copy
 // renders both themes and no account setting is touched.
 import fs from 'fs';
+import path from 'path';
 const pw = await import(process.env.PLAYWRIGHT || 'playwright');
 const { chromium } = pw.default ?? pw;
-const [,, dir, label, ...flags] = process.argv;
+const [,, dirArg, label, ...flags] = process.argv;
+const dir = path.resolve(dirArg); // file:// needs an absolute path, so a relative <dir> is resolved first
 const meta = JSON.parse(fs.readFileSync(`${dir}/${label}.json`));
 const light = flags.includes('light');
 const out = light ? label.replace(/-dark(?=-|$)/, '-light') : label;

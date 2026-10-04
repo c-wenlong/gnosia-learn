@@ -17,6 +17,8 @@
         "-m",
         "http.server",
         "7311",
+        "--bind",
+        "127.0.0.1",
         "--directory",
         "docs/design/reference"
       ],
