@@ -1,10 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
+import { AskButton, DownloadButton, FavoriteButton } from "@/components/library/AssetActions";
+import { AskPanel } from "@/components/library/AskPanel";
 import { WatchStatusContext, type WatchStatus } from "@/components/library/WatchProgress";
 import type { TranscriptCue, VideoChapter } from "@/components/media";
+import { Collapse } from "@/components/ui/Collapse";
 import type { TabItem } from "@/components/ui/Tabs";
 import { VideoPlayer, type PlaybackSignal } from "@/components/VideoPlayer";
 import { coverage, MAX_RANGES, mergeRanges, resumeAt, type Playback, type Range } from "@/lib/playback";
@@ -42,6 +45,11 @@ type SaveResult = {
  * puts its ranges back, so the next save carries them again; a beacon cannot
  * report back, which is why it is kept for the page being left.
  *
+ * Under the title sits a row of pill actions, as on a video site's watch
+ * page: Favorite (the star, `FavoriteButton`), Ask (an unsaved chat about
+ * this video, `AskPanel`, told where the player is when each question is
+ * sent), Download, then whatever the page adds (`actions`).
+ *
  * Its state belongs to one asset, so the page renders it with `key` set to
  * the asset id: a client navigation from one video to the next starts over
  * rather than carrying the first video's resume point and progress.
@@ -58,6 +66,8 @@ export function LibraryVideo({
   saved,
   heading,
   watchedDay,
+  favorite,
+  downloadName,
   actions,
   notes,
   tabs,
@@ -76,12 +86,19 @@ export function LibraryVideo({
   heading: ReactNode;
   /** The day `saved.watchedAt` falls on in the app's time zone, or null. */
   watchedDay: string | null;
+  /** Whether the owner has starred this video. */
+  favorite: boolean;
+  /** The name Download saves the file under, or the browser's choice when absent. */
+  downloadName?: string;
+  /** More actions after Favorite, Ask and Download. */
   actions?: ReactNode;
   /** Quiet lines under the facts: a sidecar that could not be read, say. */
   notes?: ReactNode;
   tabs?: TabItem[];
 }) {
   const router = useRouter();
+  const askId = useId();
+  const [asking, setAsking] = useState(false);
   const [startAt] = useState(() => resumeAt(saved));
   const [status, setStatus] = useState<WatchStatus>(() => ({
     coverage: saved === null ? 0 : coverage(saved.ranges, saved.duration),
@@ -233,10 +250,18 @@ export function LibraryVideo({
         onPlayback={onPlayback}
         header={
           <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-              {heading}
-              {actions !== undefined && <div className="flex shrink-0 gap-2">{actions}</div>}
+            {heading}
+            <div className="flex flex-wrap items-center gap-2">
+              <FavoriteButton assetId={assetId} initial={favorite} />
+              <AskButton open={asking} onToggle={() => setAsking((open) => !open)} controls={askId} />
+              <DownloadButton href={src} filename={downloadName} />
+              {actions}
             </div>
+            <Collapse open={asking} id={askId}>
+              <div className="pt-1">
+                <AskPanel assetId={assetId} position={() => state.current.last} />
+              </div>
+            </Collapse>
             {notes}
           </div>
         }
