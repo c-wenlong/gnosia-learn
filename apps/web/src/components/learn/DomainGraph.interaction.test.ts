@@ -363,5 +363,40 @@ describe("domain graph label culling", () => {
     expect(labelOf(host, "dfs")).toBe("hidden");
     expect(concept(host, "dfs").getAttribute("aria-label")).toMatch(/^Dfs, Learning/);
   });
-});
 
+  // Review of #385: a label's press area is the label's own box, so it never covers another concept's dot.
+  it("keeps every label's press area off the other concepts' dots, after a drag too", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 1);
+    // merge renders before dfs; drop it beside and just under dfs, inside the old 112-unit target under dfs's label.
+    const dfs = { x: cxOf(host, "dfs"), y: Number(dotOf(host, "dfs").getAttribute("cy")) };
+    const merge = { x: cxOf(host, "merge"), y: Number(dotOf(host, "merge").getAttribute("cy")) };
+    dragBy(host, svg, "merge", dfs.x + 50 - merge.x, dfs.y + 26 - merge.y);
+    expect(labelOf(host, "dfs")).toBe("shown");
+    const dots = ids.map((id) => ({ id, x: cxOf(host, id), y: Number(dotOf(host, id).getAttribute("cy")) }));
+    for (const id of ids) {
+      const rect = concept(host, id).querySelector('rect[data-press="label"]');
+      if (rect === null) continue;
+      const [x, y, w, h] = ["x", "y", "width", "height"].map((a) => Number(rect.getAttribute(a)));
+      for (const d of dots) {
+        if (d.id === id) continue;
+        expect(d.x >= x && d.x <= x + w && d.y >= y && d.y <= y + h, `${id}'s label covers ${d.id}'s dot`).toBe(false);
+      }
+    }
+  });
+
+  it("keeps the hover plate inside the picture, as it does the labels", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 0.15);
+    const view = viewBoxFor(layout, null);
+    for (const id of ids) {
+      enter(concept(host, id));
+      const plate = svg.querySelector("[data-plate] rect") as SVGRectElement;
+      const x = Number(plate.getAttribute("x"));
+      const w = Number(plate.getAttribute("width"));
+      expect(x, `${id}'s plate starts left of the picture`).toBeGreaterThanOrEqual(view.x);
+      expect(x + w, `${id}'s plate ends right of the picture`).toBeLessThanOrEqual(view.x + view.width + 1e-9);
+      leave(concept(host, id));
+    }
+  });
+});

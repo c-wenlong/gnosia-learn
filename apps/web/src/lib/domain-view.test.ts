@@ -21,6 +21,7 @@ import {
   toLayoutPoint,
   VIEW_PAD,
   viewBoxFor,
+  textEm,
   type LabelItem,
 } from "@/lib/domain-view";
 
@@ -186,7 +187,7 @@ describe("cullLabels (D10)", () => {
     x,
     y,
     lines: 1,
-    chars: 10,
+    em: 5.5,
     rank: labelRank({ hover: false, selected: false, related: false, bucket: "untouched", ready: false }),
     dependants: 0,
     ...over,
@@ -231,7 +232,7 @@ describe("cullLabels (D10)", () => {
   });
 
   it("culls more as the picture shrinks, since a label keeps its size on screen", () => {
-    const row = Array.from({ length: 6 }, (_, i) => item(`c${i}`, i * 128, 0, { chars: 15 }));
+    const row = Array.from({ length: 6 }, (_, i) => item(`c${i}`, i * 128, 0, { em: 8.25 }));
     expect(cullLabels(row, 1).size).toBe(6);
     expect(cullLabels(row, 0.36).size).toBeLessThan(6);
     expect(cullLabels(row, 0.36).size).toBeGreaterThan(0);
@@ -239,11 +240,11 @@ describe("cullLabels (D10)", () => {
 
   it("answers the same whatever order the items come in", () => {
     const items = Array.from({ length: 30 }, (_, i) =>
-      item(`c${String(i).padStart(2, "0")}`, (i % 6) * 90, Math.floor(i / 6) * 70, { dependants: i % 4, chars: 8 + (i % 9), lines: 1 + (i % 2) }),
+      item(`c${String(i).padStart(2, "0")}`, (i % 6) * 90, Math.floor(i / 6) * 70, { dependants: i % 4, em: (8 + (i % 9)) * 0.55, lines: 1 + (i % 2) }),
     );
     const forward = [...cullLabels(items, 0.5)].sort();
     const backward = [...cullLabels([...items].reverse(), 0.5)].sort();
-    const shuffled = [...cullLabels([...items].sort((a, b) => (a.dependants * 7 + a.chars) % 5 - (b.dependants * 7 + b.chars) % 5), 0.5)].sort();
+    const shuffled = [...cullLabels([...items].sort((a, b) => (a.dependants * 7 + a.em) % 5 - (b.dependants * 7 + b.em) % 5), 0.5)].sort();
     expect(backward).toEqual(forward);
     expect(shuffled).toEqual(forward);
     expect(forward.length).toBeGreaterThan(0);
@@ -253,16 +254,16 @@ describe("cullLabels (D10)", () => {
 
 describe("labelBox (D10)", () => {
   it("sits centred under its dot", () => {
-    const box = labelBox({ x: 100, y: 50, lines: 1, chars: 10 }, LABEL_SIZE);
+    const box = labelBox({ x: 100, y: 50, lines: 1, em: 5.5 }, LABEL_SIZE);
     expect(box.x + box.width / 2).toBeCloseTo(100);
     expect(box.y).toBe(66);
   });
 
   it("is pushed inside the frame rather than cut by it", () => {
     const frame = { x: 0, y: 0, width: 300, height: 300 };
-    const left = labelBox({ x: 5, y: 50, lines: 1, chars: 15 }, 30, frame);
+    const left = labelBox({ x: 5, y: 50, lines: 1, em: 8.25 }, 30, frame);
     expect(left.x).toBe(0);
-    const right = labelBox({ x: 295, y: 50, lines: 1, chars: 15 }, 30, frame);
+    const right = labelBox({ x: 295, y: 50, lines: 1, em: 8.25 }, 30, frame);
     expect(right.x + right.width).toBe(300);
   });
 
@@ -270,10 +271,38 @@ describe("labelBox (D10)", () => {
     // Two labels at the left edge: pushed in, they collide even though their dots are far apart.
     const frame = { x: 0, y: 0, width: 1000, height: 300 };
     const items: LabelItem[] = [
-      { id: "a", x: 0, y: 50, lines: 1, chars: 15, rank: 6, dependants: 0 },
-      { id: "b", x: 90, y: 50, lines: 1, chars: 4, rank: 6, dependants: 0 },
+      { id: "a", x: 0, y: 50, lines: 1, em: 8.25, rank: 6, dependants: 0 },
+      { id: "b", x: 90, y: 50, lines: 1, em: 2.2, rank: 6, dependants: 0 },
     ];
     expect(cullLabels(items, 1).size).toBe(2);
     expect([...cullLabels(items, 1, [], frame)]).toEqual(["a"]);
+  });
+});
+
+/** Written before the review fix on #385: a label's box is as wide as its text is drawn, wide letters included. */
+describe("textEm (D10)", () => {
+  it("measures a line by its letters, so wide letters take more room than narrow ones", () => {
+    expect(textEm("WWW")).toBeGreaterThan(2.8);
+    expect(textEm("iii")).toBeLessThan(0.8);
+  });
+
+  it("lines each width up with its character, first to last", () => {
+    expect(textEm(" ")).toBe(0.25);
+    expect(textEm("W")).toBe(0.97);
+    expect(textEm("\u2019")).toBe(0.2);
+  });
+
+  it("allows for bold, and for a letter it has no width for", () => {
+    expect(textEm("Heap", true)).toBeGreaterThan(textEm("Heap"));
+    expect(textEm("é")).toBeGreaterThanOrEqual(textEm("e"));
+  });
+
+  it("culls two labels of wide letters that a flat allowance per letter would keep", () => {
+    const wide = textEm("WWWWWWWW");
+    const items: LabelItem[] = [
+      { id: "a", x: 0, y: 0, lines: 1, em: wide, rank: 6, dependants: 0 },
+      { id: "b", x: 90, y: 0, lines: 1, em: wide, rank: 6, dependants: 0 },
+    ];
+    expect([...cullLabels(items, 1)]).toEqual(["a"]);
   });
 });

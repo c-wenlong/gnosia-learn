@@ -17,6 +17,7 @@ import {
   MIN_DRAW_SCALE,
   neighbours,
   NODE_HALF_WIDTH,
+  textEm,
   titleWidth,
   toLayoutPoint,
   viewBoxFor,
@@ -167,7 +168,7 @@ export function DomainGraph({
         x: p.x,
         y: p.y,
         lines: wrapped.length,
-        chars: Math.max(0, ...wrapped.map((l) => l.length)),
+        em: Math.max(0, ...wrapped.map((l) => textEm(l, id === selected))),
         rank: labelRank({
           hover: id === hover,
           selected: id === selected,
@@ -330,22 +331,25 @@ export function DomainGraph({
             />
           );
         })}
-        {plate !== undefined && <Plate node={plate} at={at(plate.id)} lines={lines(plate.id)} font={font} />}
+        {plate !== undefined && <Plate node={plate} at={at(plate.id)} lines={lines(plate.id)} font={font} frame={view} />}
       </svg>
     </div>
   );
 }
 
 /** The full title of the hovered concept on a plate over its label (D5), since a label is cut at two lines. */
-function Plate({ node, at, lines, font }: { node: DomainGraphNode; at: Point; lines: number; font: number }) {
-  const width = Math.ceil(node.title.length * font * 0.56 + 20);
+function Plate({ node, at, lines, font, frame }: { node: DomainGraphNode; at: Point; lines: number; font: number; frame: Box }) {
+  const width = Math.ceil(textEm(node.title, true) * font + 20);
+  // Centred on the dot, and pushed inside the frame as a label is (D10); one wider than the frame is centred on it.
+  const left =
+    width >= frame.width ? frame.x + (frame.width - width) / 2 : Math.max(frame.x, Math.min(at.x - width / 2, frame.x + frame.width - width));
   const top = at.y + 15;
   // Tall enough to cover the label it replaces, one line or two.
   const height = labelFoot(lines, font) - 15;
   return (
     <g data-plate pointerEvents="none" className="animate-fade-in motion-reduce:animate-none">
-      <rect x={at.x - width / 2} y={top} width={width} height={height} rx={6} className="fill-surface stroke-hair" strokeWidth={1} />
-      <text x={at.x} y={top + height / 2 + font * 0.36} textAnchor="middle" fontSize={font} fontWeight={700} className="fill-text">
+      <rect x={left} y={top} width={width} height={height} rx={6} className="fill-surface stroke-hair" strokeWidth={1} />
+      <text x={left + width / 2} y={top + height / 2 + font * 0.36} textAnchor="middle" fontSize={font} fontWeight={700} className="fill-text">
         {node.title}
       </text>
     </g>
@@ -425,9 +429,8 @@ function Concept({
 }) {
   const lines = wrapLabel(n.title, LABEL_CHARS);
   const arc = arcLength(n, ARC_RADIUS);
-  const label = labelBox({ x, y, lines: lines.length, chars: Math.max(0, ...lines.map((l) => l.length)) }, font, frame);
+  const label = labelBox({ x, y, lines: lines.length, em: Math.max(0, ...lines.map((l) => textEm(l, selected))) }, font, frame);
   const labelX = label.x + label.width / 2;
-  const pressWidth = Math.max(label.width, NODE_HALF_WIDTH * 2);
   const caption = [
     n.title,
     MASTERY_BUCKET_LABEL[n.bucket],
@@ -469,8 +472,11 @@ function Concept({
       <title>{caption}</title>
       {/* The whole dot and label take a press, not only the painted strokes: the dot's row, and the
           label's own box when it is drawn, so a wide label never covers the dot beside it. */}
-      <rect x={x - NODE_HALF_WIDTH} y={y - 18} width={NODE_HALF_WIDTH * 2} height={36} fill="transparent" />
-      {labelled && <rect x={labelX - pressWidth / 2} y={y + 18} width={pressWidth} height={label.y + label.height - (y + 18)} fill="transparent" />}
+      <rect data-press="dot" x={x - NODE_HALF_WIDTH} y={y - 18} width={NODE_HALF_WIDTH * 2} height={36} fill="transparent" />
+      {/* Exactly the box the culling kept clear of other dots, so it never takes another concept's press. */}
+      {labelled && (
+        <rect data-press="label" x={label.x} y={y + 18} width={label.width} height={label.y + label.height - (y + 18)} fill="transparent" />
+      )}
       {/* A knock-out under the dot, so the lines stop short of it rather than running into it. */}
       <circle cx={x} cy={y} r={13} className="fill-surface2" />
       {mark?.ready && <circle cx={x} cy={y} r={15} fill="none" className="stroke-accent" strokeWidth={1.5} strokeDasharray="3 2" />}

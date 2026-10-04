@@ -810,6 +810,11 @@ async function run() {
       await clickHydrated(page, main.locator('[data-moved]').getByRole('button', { name: 'Reset' }));
       await main.locator('[data-moved]').waitFor({ state: 'detached' });
     } finally {
+      // However the step ended, no later step inherits the drag: the session's moved positions go.
+      await page.mouse.up().catch(() => {});
+      await page.evaluate(() => {
+        for (const key of Object.keys(sessionStorage)) if (key.startsWith('learn-map:moved:')) sessionStorage.removeItem(key);
+      }).catch(() => {});
       await page.setViewportSize({ width: 1280, height: 860 });
     }
   });

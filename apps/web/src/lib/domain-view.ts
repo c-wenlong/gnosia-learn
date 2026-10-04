@@ -126,8 +126,31 @@ export const LABEL_SIZE = 12.5;
 export const LABEL_MIN_PX = 11;
 /** Room kept between two labels, in screen pixels. */
 const LABEL_GAP_PX = 2;
-/** Roughly how wide one character of a label is, as a share of its size. */
-const LABEL_CHAR_EM = 0.55;
+/**
+ * How wide each character of a label is drawn, in ems: Figtree at weight 500,
+ * measured in the built app with canvas `measureText` and rounded up. Real
+ * label lines run from 0.41 to 0.61 em a character, so a flat allowance
+ * either wastes room or lets a line of wide letters overrun its box.
+ */
+const GLYPH_CHARS = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u2026\u2019";
+const GLYPH_WIDTHS = [
+  0.25, 0.31, 0.35, 0.63, 0.57, 0.8, 0.65, 0.22, 0.36, 0.36, 0.49, 0.63, 0.24, 0.42, 0.22, 0.41, 0.65, 0.42, 0.57, 0.55, 0.63, 0.58, 0.57, 0.55,
+  0.62, 0.57, 0.27, 0.28, 0.63, 0.63, 0.63, 0.51, 0.99, 0.69, 0.62, 0.73, 0.7, 0.6, 0.55, 0.76, 0.76, 0.28, 0.53, 0.63, 0.53, 0.85, 0.78, 0.78,
+  0.59, 0.79, 0.64, 0.62, 0.57, 0.71, 0.71, 0.97, 0.64, 0.62, 0.64, 0.33, 0.41, 0.33, 0.56, 0.44, 0.24, 0.52, 0.59, 0.55, 0.59, 0.55, 0.38, 0.6,
+  0.57, 0.24, 0.28, 0.5, 0.23, 0.86, 0.57, 0.58, 0.6, 0.59, 0.35, 0.47, 0.39, 0.57, 0.53, 0.8, 0.5, 0.54, 0.49, 0.39, 0.26, 0.39, 0.6, 0.64, 0.2,
+];
+const GLYPH_EM = new Map([...GLYPH_CHARS].map((c, i) => [c, GLYPH_WIDTHS[i]]));
+/** A character the table has no width for (an accented or non-Latin letter): as wide as the wider capitals. */
+const GLYPH_UNKNOWN = 0.78;
+/** Bold against weight 500: 1.035 on average over the table, 1.094 at the 90th percentile. */
+const BOLD_EM = 1.1;
+
+/** How wide `line` is drawn, in ems of the label's size: the sum of its characters' widths. */
+export function textEm(line: string, bold = false): number {
+  let em = 0;
+  for (const c of line) em += GLYPH_EM.get(c) ?? GLYPH_UNKNOWN;
+  return bold ? em * BOLD_EM : em;
+}
 /** Half the box a dot keeps clear of other labels: its radius and half its stroke. */
 const DOT_CLEAR = 9;
 /** How far a label's descenders reach below its last baseline, as a share of its size. */
@@ -199,9 +222,9 @@ export interface LabelItem {
   /** The dot's centre, in layout units. */
   x: number;
   y: number;
-  /** How many lines the label wraps to, and how many characters its longest line has. */
+  /** How many lines the label wraps to, and how wide its widest line is in ems (`textEm`). */
   lines: number;
-  chars: number;
+  em: number;
   /** From `labelRank`: lower is placed first. */
   rank: number;
   /** How many of the drawn edges leave this concept for one that needs it. */
@@ -237,8 +260,8 @@ export function labelRank(c: {
  * dot, centred on it, and pushed sideways to stay inside `frame` when one is
  * given, so the picture's edge does not cut it.
  */
-export function labelBox(item: Pick<LabelItem, "x" | "y" | "lines" | "chars">, font: number, frame?: Box): Box {
-  const width = Math.max(1, item.chars) * font * LABEL_CHAR_EM;
+export function labelBox(item: Pick<LabelItem, "x" | "y" | "lines" | "em">, font: number, frame?: Box): Box {
+  const width = Math.max(0.5, item.em) * font;
   const top = item.y + 16;
   const bottom = item.y + labelBaseline(font, Math.max(1, item.lines) - 1) + font * LABEL_DESCENT;
   let x = item.x - width / 2;

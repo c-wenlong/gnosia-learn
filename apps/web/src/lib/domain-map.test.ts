@@ -258,7 +258,7 @@ describe("labels on a picture drawn at its smallest (D10)", () => {
     const chain = ["a", "b", "c", "d"].map((id) => node(id, "sorting"));
     const links = [req("a", "b"), req("b", "c"), req("c", "d")];
     const laid = domainLayout(chain, links, topics, "algorithms");
-    const items: LabelItem[] = chain.map((n) => ({ ...laid.positions[n.id], id: n.id, lines: 2, chars: 15, rank: 6, dependants: 0 }));
+    const items: LabelItem[] = chain.map((n) => ({ ...laid.positions[n.id], id: n.id, lines: 2, em: 8.25, rank: 6, dependants: 0 }));
     expect([...cullLabels(items, MIN_DRAW_SCALE)].sort()).toEqual(["a", "b", "c", "d"]);
   });
 });
