@@ -18,10 +18,10 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const KIT = join(SRC, "components", "ui") + sep;
 
 /**
- * Not yet on the kit, each with its reason. The recap form's fields belong
- * to a later wave of the same work, which ports the file whole.
+ * Not yet on the kit, each with its reason. Empty since the recap form moved
+ * onto `FormRow` and `Textarea` (#359, wave 3); keep it that way.
  */
-const WAITING = new Set(["components/TopicRecap.tsx"]);
+const WAITING = new Set<string>([]);
 
 function* sources(dir: string): Generator<string> {
   for (const name of readdirSync(dir)) {

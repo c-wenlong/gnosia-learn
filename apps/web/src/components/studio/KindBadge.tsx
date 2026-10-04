@@ -32,7 +32,7 @@ export function KindBadge({ kind, inline = false }: { kind: "diagram" | "video";
             inline
             ? "bg-black/75 text-white"
             : "bg-black/45 text-white backdrop-blur-sm"
-          : "border border-[var(--border)] bg-[var(--surface2)] text-[var(--text2)]",
+          : "border border-border bg-surface2 text-text2",
       )}
     >
       {kind === "video" ? "Video" : "Diagram"}

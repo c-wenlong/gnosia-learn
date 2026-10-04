@@ -72,7 +72,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
         aria-label={`Play video: ${title}`}
         className="flex min-w-0 flex-col"
       >
-        <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-black">
+        <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-border bg-black">
           {video.posterAssetId !== null ? (
             // A blob behind the asset route, which the optimiser cannot resize; it fades in once loaded.
             <FadeImg src={posterHref(video.posterAssetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
@@ -111,8 +111,8 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
   const { jobs, ended, dismissed } = useStudioJobs();
   const job = videoJobForSlug(jobs, slug, ended, dismissed);
   return (
-    <div className="relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)]">
-      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-black">
+    <div className="relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2">
+      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-black">
         {video.posterAssetId !== null && (
           <FadeImg src={posterHref(video.posterAssetId)} alt="" loading="lazy" className="h-full w-full object-contain" />
         )}
@@ -121,7 +121,7 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
       <PanelLink
         href={libraryHref(slug, gridHref(path))}
         panel={panelHref(path, { play: slug })}
-        className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
+        className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
       >
         <KindWord kind="video" />
         {title}
@@ -130,13 +130,13 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
         <PanelLink
           href={panelHref(path, { job: job.jobId })}
           scroll={false}
-          className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-[var(--surface-hover)]"
+          className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-surface2"
         >
           <RowWords job={job} />
         </PanelLink>
       )}
-      <span className="hidden shrink-0 text-[var(--muted)] sm:inline">{video.topic ?? ""}</span>
-      <span className="w-24 shrink-0 text-right tabular-nums text-[var(--muted)]">{spokenLength(video.durationSeconds)}</span>
+      <span className="hidden shrink-0 text-text2 sm:inline">{video.topic ?? ""}</span>
+      <span className="w-24 shrink-0 text-right tabular-nums text-text2">{spokenLength(video.durationSeconds)}</span>
       <span className="relative z-10 shrink-0">
         <VideoChangeButton slug={slug} title={title} path={path} className={linkClasses({ pending: true, className: "px-1.5 py-0.5" })} />
       </span>
@@ -236,7 +236,7 @@ function TileVideoJob({ slug, title, poster, path }: { slug: string; title: stri
   if (job === null) return null;
   return (
     // Fades in over the poster as the job starts, as a diagram's does (`TileJob`).
-    <div className={`absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-[var(--border)] ${FADE_IN}`}>
+    <div className={`absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border ${FADE_IN}`}>
       <VideoStage key={job.jobId} job={job} title={title} backdrop={poster} path={path} isNew={false} />
     </div>
   );
@@ -269,9 +269,9 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
         key={job.jobId}
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
-        className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)] ${FADE_IN}`}
+        className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2 ${FADE_IN}`}
       >
-        <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[var(--surface2)]">
+        <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-surface2">
           <Dot stage={videoTileStage(job)} />
         </span>
         <KindBadge kind="video" inline />
@@ -318,13 +318,13 @@ function VideoStage({
         : `${title}: ${headline}. Open the job`;
 
   return (
-    <div ref={frame} className="relative h-full w-full bg-[var(--surface2)]">
+    <div ref={frame} className="relative h-full w-full bg-surface2">
       <Backdrop job={job} stage={stage} live={live} backdrop={backdrop} />
       <PanelLink
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
         aria-label={label}
-        className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent)]"
+        className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
       />
       <Status job={job} stage={stage} headline={headline} path={path} />
     </div>
@@ -487,7 +487,7 @@ function StepAndTime({ job }: { job: VideoJob }) {
   const step = videoStepCount(job);
   const timed = job.state !== "queued";
   return (
-    <span className="block truncate tabular-nums text-[var(--muted)]">
+    <span className="block truncate tabular-nums text-text2">
       {step === null && !timed ? "Video" : step}
       {step !== null && timed ? " · " : ""}
       {timed && <Duration ms={elapsed} live={job.finished === null} />}
@@ -499,11 +499,11 @@ function RowWords({ job }: { job: VideoJob }) {
   const stage = videoTileStage(job);
   const elapsed = useElapsed(job);
   return (
-    <span className={`flex min-w-0 max-w-full items-center gap-1.5 ${stage === "failed" ? "text-[var(--danger)]" : "text-[var(--muted-strong)]"}`}>
+    <span className={`flex min-w-0 max-w-full items-center gap-1.5 ${stage === "failed" ? "text-danger" : "text-text2"}`}>
       <Dot stage={stage} />
       <span className="min-w-0 truncate">{stage === "failed" ? videoFailureLine(job) : videoHeadline(job)}</span>
       {stage === "working" && job.state !== "queued" && (
-        <span className="shrink-0 text-[var(--muted)]">
+        <span className="shrink-0 text-text2">
           <Duration ms={elapsed} live={job.finished === null} />
         </span>
       )}
@@ -512,7 +512,7 @@ function RowWords({ job }: { job: VideoJob }) {
 }
 
 function Dot({ stage }: { stage: VideoTileStage }) {
-  const tone = stage === "failed" ? "bg-[var(--danger)]" : stage === "review" ? "bg-[var(--ok)]" : "bg-[var(--accent)] studio-breathe";
+  const tone = stage === "failed" ? "bg-danger" : stage === "review" ? "bg-ok" : "bg-accent studio-breathe";
   return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone}`} />;
 }
 

@@ -36,7 +36,6 @@ function sources(): Array<{ path: string; text: string }> {
  */
 const NOT_YET: Record<string, string> = {
   "components/workspace/TutorChat.tsx": "another session was rewriting the tutor's chat when the kit landed",
-  "components/AgentSession.tsx": "another session was rewriting the agent session when the kit landed",
   "components/workspace/VerdictRow.tsx":
     "the tutor chat's recorded verdict, ok or warn, which Callout has no ok tone for; settled with the tutor chat's own work",
 };
@@ -135,7 +134,7 @@ function classExpressions(text: string): string[] {
   return found;
 }
 
-const WARN_TINT = /\b(?:bg-warn-tint|bg-\[var\(--warn-bg\)\])/;
+const WARN_TINT = /\bbg-warn-tint\b/;
 /** A box's radius: a pill (`rounded-full`) or a tag (`rounded-sm`) is not a box. */
 const BOX_RADIUS = /\brounded-(?:md|lg|xl|2xl|3xl)\b/;
 /** A fixed height is a control (a button, a chip), not a box of words. */

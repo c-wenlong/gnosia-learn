@@ -17,7 +17,7 @@ import { Glyph } from "@/components/ui/Glyph";
  *
  * Every size here comes from the design tokens table: 40px and 32px rows, 12px
  * as the type floor and 12px on cards. D22 is why there is no `text-[10px]` in
- * this file or in any other under `components/studio/` — at `--muted` on
+ * this file or in any other under `components/studio/`: at `--text2` on
  * `--surface` that size is under the contrast floor, and the studio's metadata
  * rows are denser than anything else in the app.
  *
@@ -32,8 +32,8 @@ import { Glyph } from "@/components/ui/Glyph";
  */
 
 /**
- * The 40px strip under the app header, and the head of the home view's
- * assets panel (`surface`). Sticky.
+ * The strip under the app header, and the head of the home view's assets
+ * panel (`surface`). Sticky.
  *
  * `min-w-0`, and the page under it too: the strip's controls do not shrink,
  * so its min-content width used to widen the whole page on a phone, and the
@@ -44,6 +44,10 @@ import { Glyph } from "@/components/ui/Glyph";
  * the toolbar there (`StudioToolbar`) lays its controls out on one row when
  * the panel is wide enough and on two when it is not, so every control stays
  * on screen at 390px. It does not change height while the page scrolls.
+ *
+ * Bare, under the app header, it is 40px and grows the same way: the canvas
+ * page's strip (`Strip` in `studio/d/[name]/page.tsx`) is one row where it
+ * has room and two on a phone.
  */
 export function StudioStrip({ children, surface = false }: { children: ReactNode; surface?: boolean }) {
   return (
@@ -52,7 +56,7 @@ export function StudioStrip({ children, surface = false }: { children: ReactNode
         surface
           ? // On the assets panel of the home view: its ground, inside its rounded top.
             "sticky top-0 z-10 flex min-h-12 min-w-0 shrink-0 items-center gap-2 rounded-t-3xl border-b border-border bg-surface px-3 py-2 md:px-5"
-          : "sticky top-0 z-10 flex h-10 min-w-0 shrink-0 items-center gap-2 border-b border-border bg-page px-3"
+          : "sticky top-0 z-10 flex min-h-10 min-w-0 shrink-0 items-center gap-2 border-b border-border bg-page px-3"
       }
     >
       {children}
@@ -74,10 +78,6 @@ export function BackToStudio() {
   );
 }
 
-export function Spacer() {
-  return <div className="flex-1" />;
-}
-
 /** A heading inside the right panel. */
 export function PanelHeading({ children }: { children: ReactNode }) {
   return (
@@ -90,9 +90,9 @@ export function PanelHeading({ children }: { children: ReactNode }) {
 /** One `label · value` row in the inspector. 32px, the dense rhythm. */
 export function MetaRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-8 items-start gap-3 border-b border-[var(--border)] py-1.5 last:border-b-0">
-      <span className="w-24 shrink-0 text-xs text-[var(--muted)]">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-xs text-[var(--muted-strong)]">{children}</span>
+    <div className="flex min-h-8 items-start gap-3 border-b border-border py-1.5 last:border-b-0">
+      <span className="w-24 shrink-0 text-xs text-text2">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-xs text-text">{children}</span>
     </div>
   );
 }
