@@ -58,7 +58,7 @@ export function CourseSidebar({
           aria-expanded={wideOpen}
           aria-controls={listId}
           className={cx(
-            "hidden min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg p-2 text-left text-[16px] leading-6 text-text lg:flex",
+            "hidden min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg p-2 text-left text-[16px] leading-6 text-text @3xl:flex",
             ROW_HOVER,
             FOCUS_RING,
           )}
@@ -73,7 +73,7 @@ export function CourseSidebar({
             aria-expanded={narrowOpen}
             aria-controls={listId}
             className={cx(
-              "flex min-h-12 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border-2 border-border px-3 py-2 text-left lg:hidden",
+              "flex min-h-12 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border-2 border-border px-3 py-2 text-left @3xl:hidden",
               FOCUS_RING,
             )}
           >
@@ -92,7 +92,7 @@ export function CourseSidebar({
           className={cx(
             "mt-1 flex-col gap-0.5",
             narrowOpen ? "flex" : "hidden",
-            wideOpen ? "lg:flex" : "lg:hidden",
+            wideOpen ? "@3xl:flex" : "@3xl:hidden",
           )}
         >
           {course.modules.map((m, i) => {

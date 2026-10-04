@@ -96,8 +96,12 @@ export function CourseHome({
     0,
   );
 
+  // The columns follow the width the page is given, not the window's: the
+  // app sidebar takes 260px, and window breakpoints left the module 280px at
+  // 1280. Two columns from 768px of page, the rail beside them from 1152px.
   return (
-    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+    <div className="@container">
+    <div className="grid grid-cols-1 items-start gap-4 @3xl:grid-cols-[272px_minmax(0,1fr)] @6xl:grid-cols-[300px_minmax(0,1fr)_360px]">
       <VisitTracker courseSlug={course.slug} moduleSlug={moduleSlug === undefined ? undefined : shown?.slug} />
 
       <CourseSidebar
@@ -105,7 +109,7 @@ export function CourseHome({
         status={status}
         selected={index}
         libraryHref={assetTotal > 0 ? libraryHref({ course: course.slug }) : null}
-        className="lg:sticky lg:top-6 lg:row-span-2 lg:max-h-[calc(100dvh-48px)] lg:overflow-y-auto xl:row-span-1"
+        className="@3xl:sticky @3xl:top-6 @3xl:row-span-2 @3xl:max-h-[calc(100dvh-48px)] @3xl:overflow-y-auto @6xl:row-span-1"
       />
 
       {shown ? (
@@ -119,10 +123,10 @@ export function CourseHome({
           mastery={mastery}
           activeTopicId={status.active?.moduleId === shown.id ? status.active.topicId : null}
           assetsReachable={assetsReachable}
-          className="lg:col-start-2"
+          className="@3xl:col-start-2"
         />
       ) : (
-        <Panel as="section" className="lg:col-start-2">
+        <Panel as="section" className="@3xl:col-start-2">
           <h1 className="px-4 py-2 text-[22px] font-semibold text-text">{course.title}</h1>
           <p className="px-4 text-[14px] text-text2">This course has no modules yet.</p>
         </Panel>
@@ -136,8 +140,9 @@ export function CourseHome({
         continueHref={activeHref}
         showNext={Boolean(activeModule && activeModule.id !== shown?.id)}
         related={related}
-        className="lg:col-start-2 xl:col-start-3 xl:row-start-1"
+        className="@3xl:col-start-2 @6xl:col-start-3 @6xl:row-start-1"
       />
+    </div>
     </div>
   );
 }
