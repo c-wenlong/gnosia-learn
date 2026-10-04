@@ -254,6 +254,16 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
     }
   });
 
+  it("accepts deleting an item that breaks no order, the purge of an archived item included", async () => {
+    await scratch.db.insert(curriculumItem).values({ id: "zz2000-m2-t3", collectionId: "zz2000-m2", position: 3, title: "t3" });
+    await scratch.db.insert(conceptCurriculumItem).values({ conceptSlug: "c", curriculumItemId: "zz2000-m2-t3", position: 1 });
+    await scratch.db.update(curriculumItem).set({ archivedAt: new Date() }).where(eq(curriculumItem.id, "zz2000-m2-t3"));
+    await scratch.db.transaction(async (t) => {
+      await t.delete(curriculumItem).where(eq(curriculumItem.id, "zz2000-m2-t3"));
+    });
+    expect(await scratch.db.select().from(curriculumItem).where(eq(curriculumItem.id, "zz2000-m2-t3"))).toEqual([]);
+  });
+
   it("accepts a reorder that keeps every requires edge", async () => {
     // b requires a, d requires c: putting m1-t2 [c] first keeps both.
     await scratch.db.transaction(async (t) => {
