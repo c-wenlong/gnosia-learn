@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useOptimistic, useRef, useTransition, type ReactNode } from "react";
 
+import { ViewOptions } from "@/components/library/ViewOptions";
 import { FilterMenu } from "@/components/ui/FilterMenu";
-import { chipClasses, cx } from "@/components/ui/classes";
-import { Glyph } from "@/components/ui/Glyph";
+import { cx } from "@/components/ui/classes";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import {
   libraryHref,
+  parseGroup,
   withPick,
   type LibraryFilters,
+  type LibraryGroup,
   type LibraryParam,
   type LibraryTab,
 } from "@/lib/library";
@@ -47,9 +49,10 @@ const TYPE = "Type";
  * plain click is taken in-page like a menu pick. On a phone the strip is one
  * chip ("All", "Videos") opening the same list, as Manus's is at 390.
  *
- * **The rest of the row.** The Favorites toggle (a chip with a star: on
- * shows only the assets the owner starred), the filter menus (Course, Topic
- * while one is set, and Kind inside Others), then the search, the sort and the grid or list
+ * **The rest of the row.** The filter menus (Course, Topic while one is set,
+ * and Kind inside Others), then the search, the sort, the view options (L4:
+ * group by day, course or concept, and show all or favorites only, which is
+ * where #372's Favorites chip went, `ViewOptions`) and the grid or list
  * switch, all at a chip's 34px, at the right of the title's line. From
  * 768px the title, the filters and the controls share that line, the search
  * shrinking from 260px to 120px before the filters and controls wrap whole
@@ -60,7 +63,7 @@ const TYPE = "Type";
  * URL.
  *
  * The URL stays the whole state: the page reads `?kind=`, `?course=`,
- * `?topic=`, `?q=`, `?sort=` and `?view=` and hands them over as `filters`,
+ * `?topic=`, `?q=`, `?sort=`, `?view=`, `?group=` and `?favorites=` and hands them over as `filters`,
  * and a pick pushes the `libraryHref` of those filters with the one parameter
  * changed. `router.push` rather than `replace`, so the back button still
  * undoes a filter. The chosen tab or trigger shows the pick at once
@@ -105,6 +108,7 @@ export function LibraryToolbar({
   );
 
   const [favoritesOn, setFavoritesOn] = useOptimistic(filters.favorites === true);
+  const [group, setGroup] = useOptimistic<LibraryGroup>(parseGroup(filters.group));
 
   const latest = useRef(filters);
   useEffect(() => {
@@ -120,12 +124,20 @@ export function LibraryToolbar({
     });
   };
 
-  const toggleFavorites = () => {
-    const next = !favoritesOn;
+  const setFavorites = (next: boolean) => {
     latest.current = withPick(latest.current, "favorites", next ? "1" : "");
     const href = libraryHref(latest.current);
     startTransition(() => {
       setFavoritesOn(next);
+      router.push(href, { scroll: false });
+    });
+  };
+
+  const pickGroup = (next: LibraryGroup) => {
+    latest.current = withPick(latest.current, "group", next);
+    const href = libraryHref(latest.current);
+    startTransition(() => {
+      setGroup(next);
       router.push(href, { scroll: false });
     });
   };
@@ -182,27 +194,18 @@ export function LibraryToolbar({
                 onChange={(next) => pick(TYPE, "kind", next)}
               />
             </div>
-            <button
-              type="button"
-              aria-pressed={favoritesOn}
-              onClick={toggleFavorites}
-              className={cx(
-                chipClasses({ active: favoritesOn }),
-                pending && favoritesOn !== (filters.favorites === true) && "opacity-60",
-              )}
-            >
-              <Glyph
-                name="star"
-                size={16}
-                className={cx("transition-[fill] duration-150 motion-reduce:transition-none", favoritesOn && "fill-current")}
-              />
-              Favorites
-            </button>
             {menus.map(menu)}
           </div>
           <div className="flex w-full min-w-0 items-center justify-end gap-2 md:w-auto">
             {search}
             {menu(sort)}
+            <ViewOptions
+              group={group}
+              favorites={favoritesOn}
+              busy={pending && (group !== parseGroup(filters.group) || favoritesOn !== (filters.favorites === true))}
+              onGroup={pickGroup}
+              onFavorites={setFavorites}
+            />
             {layout}
           </div>
         </section>

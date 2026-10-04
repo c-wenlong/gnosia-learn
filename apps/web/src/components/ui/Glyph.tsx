@@ -89,6 +89,8 @@ const PATHS = {
   open: "M11 4h5v5M16 4l-7 7M14 11.5V15a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3.5",
   // An arrow down onto a line: save the file.
   download: "M10 3.5v9M6 8.5l4 4 4-4M4 16h12",
+  // Three dots in a row: more actions, the row and card menu's button.
+  more: "M4.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0zM9.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0zM14.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0z",
   // Arrows up and down: move a row earlier or later.
   up: "M10 15.5v-11M5.5 9L10 4.5 14.5 9",
   down: "M10 4.5v11M5.5 11l4.5 4.5 4.5-4.5",
