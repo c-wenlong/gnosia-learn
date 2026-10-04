@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement, useRef } from "react";
+import { act, createElement, createRef, type RefObject } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,8 +54,8 @@ afterEach(() => {
 
 type Options = { glide?: boolean; onlyNearFoot?: boolean };
 
-function Log({ trigger, options }: { trigger: unknown; options?: Options }) {
-  const box = useRef<HTMLDivElement>(null);
+/** The box's ref is made outside, since the lint refuses a `useRef` handed to `createElement`. */
+function Log({ box, trigger, options }: { box: RefObject<HTMLDivElement | null>; trigger: unknown; options?: Options }) {
   useFollowFoot(box, trigger, options);
   return createElement("div", { ref: box });
 }
@@ -65,7 +65,8 @@ function mount(options?: Options) {
   document.body.append(host);
   const root = createRoot(host);
   let trigger = 0;
-  act(() => root.render(createElement(Log, { trigger, options })));
+  const ref = createRef<HTMLDivElement>();
+  act(() => root.render(createElement(Log, { box: ref, trigger, options })));
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
@@ -77,7 +78,7 @@ function mount(options?: Options) {
     grow: (by: number) => {
       height += by;
       trigger += 1;
-      act(() => root.render(createElement(Log, { trigger, options })));
+      act(() => root.render(createElement(Log, { box: ref, trigger, options })));
     },
     /** The reader scrolls to `top`. */
     scroll: (top: number) => {
