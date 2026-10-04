@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import Link from "next/link";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { providerLabel } from "@self-learn/schema/shared";
 import { MathText } from "@/components/Math";
-import { FIELD_TEXT, LABEL, PAGE_TITLE } from "@/components/ui/classes";
+import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
+import { Card } from "@/components/ui/Card";
+import { LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
+import { Collapse } from "@/components/ui/Collapse";
+import { Composer } from "@/components/ui/Composer";
+import { LiveStatus } from "@/components/ui/LiveStatus";
+import { TutorMessage, UserMessage } from "@/components/ui/Message";
+import { TextLink } from "@/components/ui/TextLink";
+import { TypingDots } from "@/components/ui/TypingDots";
+import { useCopied } from "@/components/ui/use-copied";
 import type {
   Course,
   KnowledgeInput,
@@ -96,7 +105,8 @@ export function AgentSession({
   const [error, setError] = useState("");
   const [started, setStarted] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
+  const promptId = useId();
+  const { copied, copy: copyText } = useCopied<"prompt" | "terminal">();
   const [activeModel, setActiveModel] = useState(session.model);
   const [summarizing, setSummarizing] = useState(false);
   const [recapError, setRecapError] = useState("");
@@ -112,13 +122,9 @@ export function AgentSession({
     bottomRef.current?.scrollIntoView({ behavior: scrollBehavior() });
   }, [messages, busy]);
 
-  async function copy(text: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(label);
-      window.setTimeout(() => setCopied(null), 1500);
-    } catch {
-      setError("Clipboard permission denied — select and copy manually.");
+  async function copy(text: string, key: "prompt" | "terminal") {
+    if (!(await copyText(text, key))) {
+      setError("Clipboard permission denied. Select the prompt and copy it by hand.");
     }
   }
 
@@ -163,7 +169,7 @@ export function AgentSession({
             : "";
         throw new Error(
           data.error +
-            (data.detail ? ` — ${data.detail}` : "") +
+            (data.detail ? `: ${data.detail}` : "") +
             attemptHint +
             (data.code === "MISSING_API_KEY"
               ? " Or use Copy system prompt or Terminal launch below."
@@ -236,7 +242,7 @@ export function AgentSession({
           openQuestions: [],
         });
         setRecapError(
-          `${data.error ?? "Could not generate a recap"} — write it by hand below; it saves to the same place.`,
+          `${data.error ?? "Could not generate a recap"}. Write it by hand below; it saves to the same place.`,
         );
         return;
       }
@@ -248,7 +254,7 @@ export function AgentSession({
       setRecapError(
         e instanceof Error
           ? e.message
-          : "Recap request failed — write it by hand.",
+          : "Recap request failed. Write it by hand.",
       );
       setRecapDraft({});
     } finally {
@@ -337,9 +343,9 @@ export function AgentSession({
     };
   }, [scope]);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
+  /** The composer's send: Enter, or the Send button. */
+  async function send(value: string) {
+    const text = value.trim();
     if (!text || busy) return;
     // A reply to a turn that asked a check is its answer, on the concept the check named.
     const asked = pendingCheck(messages);
@@ -379,31 +385,26 @@ export function AgentSession({
   const backHref = `/courses/${course.slug}/${module.slug}`;
 
   return (
-    <div className="space-y-6">
-      <nav className="text-sm text-[var(--muted)]">
-        <Link
-          href={backHref}
-          className="text-[var(--accent-strong)] hover:underline"
-        >
+    <div className="flex flex-col gap-6">
+      <nav>
+        <TextLink href={backHref} size="md">
           ← Back to module
-        </Link>
+        </TextLink>
       </nav>
 
-      <header className="space-y-3">
-        <p className="text-sm font-medium text-[var(--accent-strong)]">
+      <header className="flex flex-col gap-3">
+        <p className="text-[13px] font-medium text-accent-text">
           Micro-learning · {DEFAULT_AGENT_MODEL}
         </p>
-        <h1 className={PAGE_TITLE}>
-          {topic.title}
-        </h1>
-        <p className="text-sm text-[var(--muted-strong)]">
+        <h1 className={PAGE_TITLE}>{topic.title}</h1>
+        <p className="text-[14px] text-text2">
           {course.code} · M{module.order} {module.title}
         </p>
-        <p className="text-sm text-[var(--muted-strong)]">{session.angle}</p>
+        <p className="text-[14px] text-text2">{session.angle}</p>
       </header>
 
       {priorKnowledge && (
-        <section className="space-y-2">
+        <section className="flex flex-col gap-2">
           <RecapCard
             knowledge={priorKnowledge}
             course={course}
@@ -411,75 +412,69 @@ export function AgentSession({
             topic={topic}
             title="Recall from last time"
           />
-          <p className="text-xs text-[var(--muted)]">
+          <p className={NOTE}>
             This is in the tutor&apos;s context. It will resume from here rather
             than re-introducing the topic.
           </p>
         </section>
       )}
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <h2 className={LABEL}>
-          By the end you should be able to
-        </h2>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-[var(--muted-strong)]">
+      <Card tight gap={2}>
+        <h2 className={LABEL}>By the end you should be able to</h2>
+        <ol className="list-decimal space-y-1 pl-5 text-[14px] text-text2">
           {session.objectives.map((o) => (
             <li key={o}>{o}</li>
           ))}
         </ol>
-      </section>
+      </Card>
 
-      <section className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={startSession}
-          disabled={started || busy}
-          className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {started ? "Session running" : "Start Socratic dialogue"}
-        </button>
-        <button
-          type="button"
-          onClick={() => copy(session.systemPrompt, "prompt")}
-          className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
-        >
-          {copied === "prompt" ? "Copied" : "Copy system prompt"}
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            copy(
-              `${session.terminalCommand}\n\n--- SYSTEM PROMPT ---\n${session.systemPrompt}\n\n--- OPENING ---\n${session.openingUserSeed}`,
-              "terminal",
-            )
-          }
-          className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
-        >
-          {copied === "terminal" ? "Copied" : "Copy terminal launch pack"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowPrompt((v) => !v)}
-          className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
-        >
-          {showPrompt ? "Hide prompt" : "Show prompt"}
-        </button>
-      </section>
-
-      {showPrompt && (
-        <pre className="max-h-80 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)] p-3 text-xs leading-relaxed text-[var(--muted-strong)] whitespace-pre-wrap">
-          {session.systemPrompt}
-        </pre>
-      )}
-
-      <section className="flex min-h-[420px] flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <div className="border-b border-[var(--border)] px-4 py-2 text-xs text-[var(--muted)]">
-          Browser session · {activeModel}
+      <section>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={startSession} disabled={started || busy}>
+            {started ? "Session running" : "Start Socratic dialogue"}
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => void copy(session.systemPrompt, "prompt")}>
+            {copied === "prompt" ? "Copied" : "Copy system prompt"}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() =>
+              void copy(
+                `${session.terminalCommand}\n\n--- SYSTEM PROMPT ---\n${session.systemPrompt}\n\n--- OPENING ---\n${session.openingUserSeed}`,
+                "terminal",
+              )
+            }
+          >
+            {copied === "terminal" ? "Copied" : "Copy terminal launch pack"}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-expanded={showPrompt}
+            aria-controls={promptId}
+            onClick={() => setShowPrompt((v) => !v)}
+          >
+            {showPrompt ? "Hide prompt" : "Show prompt"}
+          </Button>
         </div>
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        {/* Glides open under the buttons; the space above it is inside the
+            fold, so a shut prompt leaves none behind. */}
+        <Collapse open={showPrompt} id={promptId}>
+          <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-surface2 p-3 font-mono text-[12px] leading-relaxed text-text2">
+            {session.systemPrompt}
+          </pre>
+        </Collapse>
+      </section>
+
+      <Card flush className="min-h-[420px]">
+        <p className={`${NOTE} border-b border-hair px-4 py-2`}>
+          Browser session · {activeModel}
+        </p>
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
           {!started && messages.length === 0 && (
-            <p className="text-sm text-[var(--muted)]">
-              Click <strong>Start Socratic dialogue</strong> to launch the agent
+            <p className="text-[14px] text-text2">
+              Press <strong className="font-semibold text-text">Start Socratic dialogue</strong> to launch the agent
               with the full topic system prompt. Production uses free providers:
               NVIDIA NIM → Gemini Flash → OpenRouter free.
             </p>
@@ -494,27 +489,21 @@ export function AgentSession({
                   : null;
             const lastVerdict = messages.findLastIndex((x) => x.verdict);
             return [
-              <div
-                key={m.id}
-                className={`rounded-lg px-3 py-2 text-sm leading-relaxed ${
-                  m.role === "assistant"
-                    ? "bg-[var(--sidebar-bg)] text-[var(--foreground)]"
-                    : "ml-6 border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]"
-                }`}
-              >
-                {/* No "Agent" or "You" over each turn: the two sides are told
-                  apart by their shape, so only the provider, when there is
-                  one, is shown. */}
-                {m.role === "assistant" && m.meta && (
-                  <p className="mb-1 text-xs text-[var(--muted)]">{m.meta}</p>
-                )}
-                <span className="sr-only">
-                  {m.role === "assistant" ? "Tutor: " : "You: "}
-                </span>
-                <div className="whitespace-pre-wrap">
+              // The kit's two voices: the tutor's bare prose and the learner's
+              // tinted bubble, told apart by shape, so no turn carries a
+              // speaker label; only the provider, when there is one, is shown.
+              m.role === "assistant" ? (
+                <TutorMessage key={m.id} className="animate-enter motion-reduce:animate-none">
+                  {m.meta && <p className={`${NOTE} mb-1`}>{m.meta}</p>}
+                  <div className="whitespace-pre-wrap">
+                    <MathText text={m.content} />
+                  </div>
+                </TutorMessage>
+              ) : (
+                <UserMessage key={m.id} className="animate-enter motion-reduce:animate-none">
                   <MathText text={m.content} />
-                </div>
-              </div>,
+                </UserMessage>
+              ),
               answered?.verdict ? (
                 <VerdictRow
                   key={`v-${answered.id}`}
@@ -526,100 +515,90 @@ export function AgentSession({
             ];
           })}
           {busy && (
-            <p className="text-sm text-[var(--muted)]">Agent is thinking…</p>
+            <p role="status" className="flex animate-fade-in items-center gap-2 px-1.5 text-[13px] text-text3 motion-reduce:animate-none">
+              <TypingDots />
+              The tutor is thinking…
+            </p>
           )}
           {error && (
-            <p className="rounded-md border border-danger/45 bg-danger/5 px-3 py-2 text-sm text-danger">
+            <Callout tone="danger" role="alert" className="animate-fade-in motion-reduce:animate-none">
               {error}
-            </p>
+            </Callout>
           )}
           <div ref={bottomRef} />
         </div>
-        <form
-          onSubmit={onSubmit}
-          className="flex gap-2 border-t border-[var(--border)] p-3"
-        >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={
-              started
-                ? "Reply to the tutor…"
-                : "Or type to begin without the auto seed…"
-            }
-            disabled={busy}
-            className={`min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 outline-none ring-[var(--accent)] focus:ring-2 ${FIELD_TEXT.sm}`}
-          />
-          <button
-            type="submit"
-            disabled={busy || !input.trim()}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-          >
-            Send
-          </button>
-        </form>
-      </section>
+        {/* The kit composer: Enter sends, as the one-line field did, and
+            Shift+Enter is a new line, as in the concept tutor. The whole
+            field waits while a reply is on its way, as it always has. */}
+        <Composer
+          value={input}
+          onChange={setInput}
+          onSubmit={(value) => void send(value)}
+          label="Reply to the tutor"
+          placeholder={
+            started
+              ? "Reply to the tutor…"
+              : "Or type to begin without the auto seed…"
+          }
+          disabled={busy}
+          className="border-t border-hair p-3"
+        />
+      </Card>
 
-      <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <div>
-          <h2 className={LABEL}>
-            Keep this session
-          </h2>
-          <p className="mt-1 text-sm text-[var(--muted-strong)]">
+      <Card tight>
+        <div className="flex flex-col gap-1">
+          <h2 className={LABEL}>Keep this session</h2>
+          <p className="text-[14px] text-text2">
             The dialogue itself is not stored. Save a recap and it becomes the
-            durable record for this topic — shown on the module page, and handed
+            durable record for this topic, shown on the module page and handed
             to the tutor the next time you open it.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={summarizeSession}
-            disabled={!hasDialogue || summarizing}
-            className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-          >
+          <Button size="sm" onClick={summarizeSession} disabled={!hasDialogue || summarizing}>
             {summarizing
               ? "Summarising…"
               : storedKnowledge
                 ? "Save recap (replaces saved)"
                 : "Save session recap"}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-expanded={recapDraft !== null}
             onClick={() =>
               setRecapDraft(recapDraft ? null : (storedKnowledge ?? {}))
             }
-            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
           >
             {recapDraft ? "Close editor" : "Write recap by hand"}
-          </button>
+          </Button>
         </div>
 
         {!hasDialogue && (
-          <p className="text-xs text-[var(--muted)]">
+          <p className={NOTE}>
             Run at least one exchange with the tutor to auto-summarise, or write
             the recap by hand.
           </p>
         )}
 
         {recapError && (
-          <p className="rounded-md border border-warn bg-warn-tint px-3 py-2 text-sm text-text">
+          <Callout role="status" className="animate-fade-in motion-reduce:animate-none">
             {recapError}
-          </p>
+          </Callout>
         )}
 
         {saveError && (
-          <p className="rounded-md border border-danger/45 bg-danger/5 px-3 py-2 text-sm text-danger">
+          <Callout tone="danger" role="alert" className="animate-fade-in motion-reduce:animate-none">
             {saveError}
-          </p>
+          </Callout>
         )}
 
         {recapDraft && (
           <RecapEditor
             initial={recapDraft}
             submitLabel="Save recap"
+            className="animate-fade-in motion-reduce:animate-none"
             onSave={(input) => {
               saveKnowledge(topic.id, input);
               setRecapDraft(null);
@@ -631,12 +610,11 @@ export function AgentSession({
         )}
 
         {storedKnowledge && !recapDraft && (
-          <div className="space-y-2">
-            {justSaved && (
-              <p className="text-xs font-medium text-[var(--accent-strong)]">
-                Saved — this now appears on the module page.
-              </p>
-            )}
+          <div className="flex flex-col gap-2 animate-fade-in motion-reduce:animate-none">
+            <LiveStatus
+              text={justSaved ? "Saved. This now appears on the module page." : null}
+              tone="ok"
+            />
             <RecapCard
               knowledge={storedKnowledge}
               course={course}
@@ -648,11 +626,11 @@ export function AgentSession({
           </div>
         )}
 
-        <p className="text-xs text-[var(--muted)]">
+        <p className={NOTE}>
           Recaps live in this browser and survive a progress reset. Use{" "}
-          <strong>Copy as Markdown</strong> to keep one outside it.
+          <strong className="font-semibold">Copy as Markdown</strong> to keep one outside it.
         </p>
-      </section>
+      </Card>
     </div>
   );
 }

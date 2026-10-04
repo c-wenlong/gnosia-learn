@@ -146,7 +146,7 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
   ].filter((badge) => badge !== null);
 
   return (
-    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-diagram-matte">
+    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-border bg-diagram-matte">
       {diagram.svg.exists ? (
         /* The runner streams a file from outside the app's tree, so there is
            nothing for the image optimiser to resolve, and an SVG is not a format
@@ -159,7 +159,7 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
           className="h-full w-full object-contain p-2"
         />
       ) : (
-        <div className="flex flex-col items-center gap-1 text-center text-[var(--muted)]">
+        <div className="flex flex-col items-center gap-1 text-center text-text2">
           <span className="text-xs font-medium">not exported</span>
           <span className="text-xs">{diagram.shapes} shapes</span>
         </div>
@@ -201,10 +201,10 @@ export function DiagramRow({
     <SelectableFrame
       name={diagram.name}
       className="relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors"
-      selectedClassName="bg-[var(--nav-active-bg)]"
-      idleClassName="hover:bg-[var(--surface-hover)]"
+      selectedClassName="bg-tint"
+      idleClassName="hover:bg-surface2"
     >
-      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-diagram-matte">
+      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-diagram-matte">
         {diagram.svg.exists && (
           <FadeImg
             src={thumbnailHref(diagram.name)}
@@ -217,7 +217,7 @@ export function DiagramRow({
       <KindBadge kind="diagram" inline />
       <PanelLink
         href={selectHref}
-        className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--accent)]"
+        className="min-w-[5rem] flex-1 truncate font-medium outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
       >
         <KindWord kind="diagram" />
         {displayTitle(diagram)}
@@ -226,19 +226,19 @@ export function DiagramRow({
       {diagram.topic === null ? (
         <Badge tone="warn">No topic</Badge>
       ) : (
-        <span className="hidden shrink-0 text-[var(--muted)] sm:inline">{diagram.topic}</span>
+        <span className="hidden shrink-0 text-text2 sm:inline">{diagram.topic}</span>
       )}
       {showConcepts && (
-        <span className="hidden shrink-0 text-[var(--muted)] lg:inline">
+        <span className="hidden shrink-0 text-text2 lg:inline">
           {diagram.concepts.join(", ")}
         </span>
       )}
       {/* Off on a phone, as the topic is: at 400px the size, the date, the
           thumbnail and a job's status left the name no room at all. */}
-      <span className="hidden w-20 shrink-0 text-right text-[var(--muted)] sm:inline">
+      <span className="hidden w-20 shrink-0 text-right text-text2 sm:inline">
         {formatBytes(diagram.svg.bytes) ?? `${diagram.shapes} shapes`}
       </span>
-      <span className="w-24 shrink-0 text-right text-[var(--muted)]">
+      <span className="w-24 shrink-0 text-right text-text2">
         {relativeTime(diagram.tldr.modified)}
       </span>
     </SelectableFrame>

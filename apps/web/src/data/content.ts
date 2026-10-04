@@ -9,15 +9,15 @@ import type { TagMeta } from "@/lib/types";
  * The app's view of the cross-course themes.
  *
  * Server only, for the same reason as `@/data/courses`: it reads content.
- * `TagChip` is rendered inside client components, so a server page resolves
- * the metadata here and passes the chip what it displays.
+ * The course cards that show a tag are client components, so a server page
+ * resolves the metadata here and passes them what they display.
  *
  * Once per request, through the content seam, like `getCourses`.
  */
 export const getTags = cache(async (): Promise<TagMeta[]> => contentSource().tags());
 
 /**
- * The theme with this id. An unknown id still renders: the chip falls back to
+ * The theme with this id. An unknown id still renders: the label falls back to
  * showing the raw id, which is what it did when the list was a TypeScript
  * array and `getTag` returned undefined. A tag typo should cost a label, not
  * a page.

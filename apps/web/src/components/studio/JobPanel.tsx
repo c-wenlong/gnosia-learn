@@ -95,7 +95,7 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
   if (row === undefined && (answer === null || (answer.lookup.kind === "failed" && answer.attempt !== attempt))) {
     return (
       <div className={props.embedded ? "px-5 py-4" : "p-3"}>
-        <p role="status" className="text-xs text-[var(--muted)]">
+        <p role="status" className="text-xs text-text2">
           Looking up <Mono>{props.jobId}</Mono>…
         </p>
       </div>
@@ -104,7 +104,7 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
   if (row === undefined && answer !== null && answer.lookup.kind === "failed") {
     return (
       <div className={props.embedded ? "px-5 py-4" : "p-3"}>
-        <p role="alert" className="text-xs text-[var(--muted-strong)]">
+        <p role="alert" className="text-xs text-text2">
           Could not look up <Mono>{props.jobId}</Mono>: {answer.lookup.reason}. It is asked again when this window
           regains focus.
         </p>
@@ -216,13 +216,13 @@ function DiagramJobPanel({
 
   const shell = embedded
     ? "flex flex-col px-5 py-4"
-    : "flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3";
+    : "flex h-full min-h-0 flex-col overflow-y-auto bg-surface-raised p-3";
 
   if (job === null) {
     return (
       <div className={shell}>
         <PanelHeading>Job</PanelHeading>
-        <p className="text-xs text-[var(--muted)]">
+        <p className="text-xs text-text2">
           {looking ? (
             <>
               Looking up <Mono>{jobId}</Mono>…
@@ -266,7 +266,7 @@ function DiagramJobPanel({
         <PanelLink
           href={panelHref(path, { job: null })}
           scroll={false}
-          className="shrink-0 text-xs text-[var(--muted)] underline underline-offset-2"
+          className="shrink-0 text-xs text-text2 underline underline-offset-2"
         >
           Close
         </PanelLink>
@@ -309,7 +309,7 @@ function DiagramJobPanel({
           the record of what was compared, and the `git add` line lives in it. */}
       {reviewing && <ComparisonPanel job={job} path={path} />}
       {job.state === "discarded" && (
-        <div className="mb-3 rounded-md border border-[var(--border)] bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
+        <div className="mb-3 rounded-md border border-border bg-surface2 p-2 text-xs text-text2">
           <p className="font-medium">The candidate is gone.</p>
           <p className="mt-1">
             The diagram in the catalog never changed, so there is nothing to undo.
@@ -376,7 +376,7 @@ function DiagramJobPanel({
       </div>
 
       {said !== null && (
-        <p className={`mt-2 text-xs ${said.ok ? "text-[var(--ok-text)]" : "text-[var(--danger)]"}`}>{said.text}</p>
+        <p className={`mt-2 text-xs ${said.ok ? "text-ok-text" : "text-danger"}`}>{said.text}</p>
       )}
 
       {/* The runner's `note` and the candidate's path were printed here as
@@ -384,7 +384,7 @@ function DiagramJobPanel({
           names the diagram was stored under, and neither path is anything a
           person acts on. The raw log above keeps every path for whoever needs one. */}
       {connection === "polling" && isActive(job.state) && (
-        <p className="mt-4 text-xs text-[var(--muted)]">
+        <p className="mt-4 text-xs text-text2">
           The event stream is not connected, so this panel is being driven by{" "}
           <Mono>GET /api/jobs</Mono>, which is the record either way.
         </p>
@@ -412,9 +412,9 @@ function PhaseList({ rows, live }: { rows: PhaseRow[]; live: boolean }) {
               row.status === "pending"
                 ? "opacity-40"
                 : row.status === "done"
-                  ? "text-[var(--muted)]"
+                  ? "text-text2"
                   : row.status === "failed"
-                    ? "text-[var(--danger)]"
+                    ? "text-danger"
                     : "font-medium"
             }`}
           >
@@ -423,7 +423,7 @@ function PhaseList({ rows, live }: { rows: PhaseRow[]; live: boolean }) {
             </span>
             <span className="min-w-0 flex-1 truncate">{row.label}</span>
             {row.status === "current" && live && <IndeterminateBar />}
-            <span className="shrink-0 tabular-nums text-[var(--muted)]">
+            <span className="shrink-0 tabular-nums text-text2">
               {row.status === "pending" ? "" : formatDuration(row.durationMs)}
             </span>
           </li>
@@ -446,7 +446,7 @@ function Narration({ events, job }: { events: StudioEvent[]; job: Job }) {
     <div className="mt-4">
       <PanelHeading>What the checks found</PanelHeading>
       {lines.length === 0 ? (
-        <p className="text-xs text-[var(--muted)]">
+        <p className="text-xs text-text2">
           {job.state === "queued"
             ? "Nothing yet: no runner has picked this up."
             : isActive(job.state)
@@ -456,7 +456,7 @@ function Narration({ events, job }: { events: StudioEvent[]; job: Job }) {
       ) : (
         <ul className="space-y-1">
           {lines.map((line) => (
-            <li key={`${line.at}-${line.note}`} className="text-xs text-[var(--muted-strong)]">
+            <li key={`${line.at}-${line.note}`} className="text-xs text-text2">
               {line.note}
             </li>
           ))}
@@ -552,7 +552,7 @@ export function JobLog({
         aria-expanded={open}
         aria-controls={region}
         onClick={() => setChoice({ job: jobId, open: !open })}
-        className="flex w-full items-center justify-between text-xs font-semibold text-[var(--muted-strong)]"
+        className="flex w-full items-center justify-between text-xs font-semibold text-text2"
       >
         <span>Raw log</span>
         <span>{open ? "Hide" : "Show"}</span>
@@ -561,11 +561,11 @@ export function JobLog({
       <Collapse open={open} id={region}>
           <pre
             ref={box}
-            className="mt-2 h-60 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 font-mono text-xs whitespace-pre-wrap break-all text-[var(--muted-strong)]"
+            className="mt-2 h-60 overflow-auto rounded-md border border-border bg-surface p-2 font-mono text-xs whitespace-pre-wrap break-all text-text2"
           >
             {lines.length === 0 ? "nothing on disk yet" : lines.join("\n")}
           </pre>
-          <p className="mt-1 text-xs text-[var(--muted)]">
+          <p className="mt-1 text-xs text-text2">
             the last {lines.length} of {total} lines
           </p>
       </Collapse>
@@ -578,15 +578,15 @@ const WINDOW = 200;
 
 function FailureMessage({ job, report }: { job: Job; report: ReturnType<typeof failureReport> }) {
   return (
-    <div className="mb-3 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] p-2 text-xs">
-      <p className="font-medium text-[var(--danger)]">
+    <div className="mb-3 rounded-md border border-danger/45 bg-danger/8 p-2 text-xs">
+      <p className="font-medium text-danger">
         {report.code !== null && <span className="font-mono">exit {report.code}: </span>}
         {report.headline}
       </p>
       {report.detail !== null && report.detail !== "" && (
-        <p className="mt-1 break-words text-[var(--danger)] opacity-90">{report.detail}</p>
+        <p className="mt-1 break-words text-danger opacity-90">{report.detail}</p>
       )}
-      <p className="mt-2 text-[var(--muted-strong)]">{failureFooter(job)}</p>
+      <p className="mt-2 text-text2">{failureFooter(job)}</p>
     </div>
   );
 }

@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { FIELD_TEXT } from "@/components/ui/classes";
+import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
+import { cx, LABEL, NOTE } from "@/components/ui/classes";
+import { FormRow } from "@/components/ui/FormRow";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
+import { Textarea } from "@/components/ui/Textarea";
+import { TextLink } from "@/components/ui/TextLink";
+import { useCopied } from "@/components/ui/use-copied";
 import type {
   Course,
   KnowledgeInput,
@@ -37,11 +43,9 @@ function fromLines(value: string): string[] {
 function RecapSection({ label, items }: { label: string; items: string[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="mt-3">
-      <p className="text-xs font-semibold text-[var(--muted-strong)]">
-        {label}
-      </p>
-      <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-[var(--muted-strong)]">
+    <div>
+      <p className={LABEL}>{label}</p>
+      <ul className="mt-1 list-disc space-y-1 pl-5 text-[14px] text-text2">
         {items.map((item) => (
           <li key={item}>{item}</li>
         ))}
@@ -50,7 +54,11 @@ function RecapSection({ label, items }: { label: string; items: string[] }) {
   );
 }
 
-/** Read-only view of a stored recap. */
+/**
+ * Read-only view of a stored recap: a neutral kit `Callout` with a ring, so it
+ * reads as one box on the session page's white card and on a topic's grey
+ * panel alike.
+ */
 export function RecapCard({
   knowledge,
   course,
@@ -67,88 +75,74 @@ export function RecapCard({
   onEdit?: () => void;
 }) {
   const { forgetKnowledge } = useLearner();
-  const [copied, setCopied] = useState(false);
-
-  async function copyMarkdown() {
-    try {
-      await navigator.clipboard.writeText(
-        formatKnowledgeMarkdown(knowledge, course, module, topic),
-      );
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  }
+  // A refused copy says nothing, as it always has: the Markdown is a
+  // convenience, and the recap is still on screen to select by hand.
+  const { copied, copy } = useCopied<"markdown">();
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)] p-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-semibold text-[var(--accent-strong)]">
-          {title}
-        </p>
-        <p className="text-[12px] text-[var(--muted)]">
-          {knowledge.sessions} session{knowledge.sessions === 1 ? "" : "s"} ·{" "}
-          {formatDate(knowledge.updatedAt)} ·{" "}
-          {knowledge.source === "agent" ? "agent recap" : "written by hand"}
-        </p>
-      </div>
+    <Callout
+      tone="neutral"
+      bordered
+      role="group"
+      aria-label={title}
+      actions={
+        <>
+          {onEdit && <TextLink onClick={onEdit}>Edit</TextLink>}
+          <TextLink onClick={() => void copy(formatKnowledgeMarkdown(knowledge, course, module, topic), "markdown")}>
+            {copied === "markdown" ? "Copied" : "Copy as Markdown"}
+          </TextLink>
+          {/* Asks in place, never in a browser dialog, which froze the page in a
+              box the app could not style or animate. */}
+          <InlineConfirm
+            size="text"
+            label="Forget"
+            question={`Delete the recap for "${topic.title}"? This cannot be undone.`}
+            confirmLabel="Forget it"
+            onConfirm={() => forgetKnowledge(topic.id)}
+          />
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="text-[14px] font-semibold text-text">{title}</p>
+          <p className={NOTE}>
+            {knowledge.sessions} session{knowledge.sessions === 1 ? "" : "s"} ·{" "}
+            {formatDate(knowledge.updatedAt)} ·{" "}
+            {knowledge.source === "agent" ? "agent recap" : "written by hand"}
+          </p>
+        </div>
 
-      {knowledge.summary && (
-        <p className="mt-2 text-sm leading-relaxed text-[var(--foreground)]">
-          {knowledge.summary}
-        </p>
-      )}
-
-      <RecapSection label="Key points" items={knowledge.keyPoints} />
-      <RecapSection
-        label="Misconceptions corrected"
-        items={knowledge.misconceptions}
-      />
-      <RecapSection label="Open questions" items={knowledge.openQuestions} />
-
-      <div className="mt-3 flex flex-wrap gap-3 text-xs">
-        {onEdit && (
-          <button
-            type="button"
-            onClick={onEdit}
-            className="font-medium text-[var(--accent-strong)] hover:underline"
-          >
-            Edit
-          </button>
+        {knowledge.summary && (
+          <p className="text-[14px] leading-relaxed text-text">
+            {knowledge.summary}
+          </p>
         )}
-        <button
-          type="button"
-          onClick={copyMarkdown}
-          className="font-medium text-[var(--accent-strong)] hover:underline"
-        >
-          {copied ? "Copied" : "Copy as Markdown"}
-        </button>
-        {/* Asks in place, never in a browser dialog, which froze the page in a
-            box the app could not style or animate. */}
-        <InlineConfirm
-          size="text"
-          label="Forget"
-          question={`Delete the recap for "${topic.title}"? This cannot be undone.`}
-          confirmLabel="Forget it"
-          onConfirm={() => forgetKnowledge(topic.id)}
+
+        <RecapSection label="Key points" items={knowledge.keyPoints} />
+        <RecapSection
+          label="Misconceptions corrected"
+          items={knowledge.misconceptions}
         />
+        <RecapSection label="Open questions" items={knowledge.openQuestions} />
       </div>
-    </div>
+    </Callout>
   );
 }
 
-/** Editable form for writing or correcting a recap by hand. */
+/** Editable form for writing or correcting a recap by hand: kit `FormRow`s over kit `Textarea`s. */
 export function RecapEditor({
   initial,
   submitLabel = "Save recap",
   onSave,
   onCancel,
+  className,
 }: {
   initial?: Partial<KnowledgeInput>;
   submitLabel?: string;
   onSave: (input: KnowledgeInput) => void;
   onCancel: () => void;
+  className?: string;
 }) {
   const [summary, setSummary] = useState(initial?.summary ?? "");
   const [keyPoints, setKeyPoints] = useState(
@@ -161,72 +155,69 @@ export function RecapEditor({
     toLines(initial?.openQuestions ?? []),
   );
 
-  const fieldClass =
-    `mt-1 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] outline-none ring-[var(--accent)] focus:ring-2 ${FIELD_TEXT.sm}`;
-  const labelClass =
-    "text-xs font-semibold text-[var(--muted-strong)]";
-
   const empty =
     !summary.trim() &&
     !keyPoints.trim() &&
     !misconceptions.trim() &&
     !openQuestions.trim();
 
+  // No ids of their own: two topics' editors can be open on one module page,
+  // so each row makes its own (`FormRow`).
+  const fields: Array<{
+    key: string;
+    label: string;
+    hint?: string;
+    value: string;
+    set: (value: string) => void;
+    rows: number;
+    placeholder?: string;
+  }> = [
+    {
+      key: "summary",
+      label: "Summary",
+      value: summary,
+      set: setSummary,
+      rows: 4,
+      placeholder: "What did you actually work out? Write it for yourself in six months.",
+    },
+    { key: "key-points", label: "Key points", hint: "One per line.", value: keyPoints, set: setKeyPoints, rows: 3 },
+    {
+      key: "misconceptions",
+      label: "Misconceptions corrected",
+      hint: "One per line.",
+      value: misconceptions,
+      set: setMisconceptions,
+      rows: 2,
+    },
+    {
+      key: "open-questions",
+      label: "Open questions",
+      hint: "One per line. These are handed to the tutor next time you launch this topic.",
+      value: openQuestions,
+      set: setOpenQuestions,
+      rows: 2,
+    },
+  ];
+
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-      <div>
-        <label className={labelClass} htmlFor="recap-summary">
-          Summary
-        </label>
-        <textarea
-          id="recap-summary"
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          rows={4}
-          placeholder="What did you actually work out? Write it for yourself in six months."
-          className={fieldClass}
-        />
-      </div>
-      <div>
-        <label className={labelClass} htmlFor="recap-key-points">
-          Key points — one per line
-        </label>
-        <textarea
-          id="recap-key-points"
-          value={keyPoints}
-          onChange={(e) => setKeyPoints(e.target.value)}
-          rows={3}
-          className={fieldClass}
-        />
-      </div>
-      <div>
-        <label className={labelClass} htmlFor="recap-misconceptions">
-          Misconceptions corrected — one per line
-        </label>
-        <textarea
-          id="recap-misconceptions"
-          value={misconceptions}
-          onChange={(e) => setMisconceptions(e.target.value)}
-          rows={2}
-          className={fieldClass}
-        />
-      </div>
-      <div>
-        <label className={labelClass} htmlFor="recap-open-questions">
-          Open questions — one per line
-        </label>
-        <textarea
-          id="recap-open-questions"
-          value={openQuestions}
-          onChange={(e) => setOpenQuestions(e.target.value)}
-          rows={2}
-          placeholder="These get handed to the tutor next time you launch this topic."
-          className={fieldClass}
-        />
-      </div>
+    <div className={cx("flex flex-col gap-4", className)}>
+      {fields.map((field) => (
+        <FormRow key={field.key} label={field.label} hint={field.hint}>
+          {({ id, describedBy }) => (
+            <Textarea
+              id={id}
+              value={field.value}
+              onChange={(e) => field.set(e.target.value)}
+              rows={field.rows}
+              placeholder={field.placeholder}
+              aria-describedby={describedBy}
+            />
+          )}
+        </FormRow>
+      ))}
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
+          size="sm"
           disabled={empty}
           onClick={() =>
             onSave({
@@ -237,17 +228,12 @@ export function RecapEditor({
               source: "manual",
             })
           }
-          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity duration-100 hover:opacity-90 disabled:opacity-50 motion-reduce:transition-none"
         >
           {submitLabel}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs transition-colors duration-100 hover:bg-[var(--surface-hover)] motion-reduce:transition-none"
-        >
+        </Button>
+        <Button size="sm" variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -285,15 +271,7 @@ export function TopicRecap({
   }
 
   if (!knowledge) {
-    return (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="text-xs font-medium text-[var(--accent-strong)] hover:underline"
-      >
-        Add recap
-      </button>
-    );
+    return <TextLink onClick={() => setEditing(true)}>Add recap</TextLink>;
   }
 
   return (

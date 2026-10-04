@@ -42,7 +42,7 @@ export function DiagramInspector({
   path: string;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-surface-raised p-3">
       {diagram === null ? (
         <DirectoryFacts listing={listing} />
       ) : (
@@ -57,8 +57,8 @@ function DirectoryFacts({ listing }: { listing: DiagramListing }) {
   return (
     <>
       <PanelHeading>Directory</PanelHeading>
-      <p className="mb-3 font-mono text-xs break-all text-[var(--muted-strong)]">{listing.dir}</p>
-      <p className="text-xs text-[var(--muted-strong)]">
+      <p className="mb-3 font-mono text-xs break-all text-text2">{listing.dir}</p>
+      <p className="text-xs text-text2">
         {total} diagram{total === 1 ? "" : "s"}, {withTopic} with a topic
         {unreadable > 0 ? `, ${unreadable} unreadable` : ""}
       </p>
@@ -66,7 +66,7 @@ function DirectoryFacts({ listing }: { listing: DiagramListing }) {
       {listing.errors.length > 0 && (
         <div className="mt-5">
           <PanelHeading>Errors</PanelHeading>
-          <p className="mb-2 text-xs text-[var(--muted)]">
+          <p className="mb-2 text-xs text-text2">
             These files are in the directory and not in the grid: nothing can draw a document that
             will not parse.
           </p>
@@ -74,17 +74,17 @@ function DirectoryFacts({ listing }: { listing: DiagramListing }) {
             {listing.errors.map((problem) => (
               <li
                 key={problem.path}
-                className="rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] p-2"
+                className="rounded-md border border-danger/45 bg-danger/8 p-2"
               >
-                <p className="font-mono text-xs break-all text-[var(--danger)]">{problem.path}</p>
-                <p className="mt-1 text-xs text-[var(--danger)]">{problem.message}</p>
+                <p className="font-mono text-xs break-all text-danger">{problem.path}</p>
+                <p className="mt-1 text-xs text-danger">{problem.message}</p>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      <p className="mt-6 text-xs text-[var(--muted)]">
+      <p className="mt-6 text-xs text-text2">
         Select a card to see its metadata, its SVG and the jobs that touched it.
       </p>
     </>
@@ -154,7 +154,7 @@ function SelectedDiagram({
   return (
     <>
       <div
-        className={`mb-3 flex items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-diagram-matte ${
+        className={`mb-3 flex items-center justify-center overflow-hidden rounded-xl border border-border bg-diagram-matte ${
           embedded ? "h-72 max-h-[40dvh]" : "aspect-[4/3]"
         }`}
       >
@@ -167,7 +167,7 @@ function SelectedDiagram({
             className="h-full w-full object-contain p-2"
           />
         ) : (
-          <span className="text-xs text-[var(--muted)]">not exported</span>
+          <span className="text-xs text-text2">not exported</span>
         )}
       </div>
 
@@ -184,7 +184,7 @@ function SelectedDiagram({
       </div>
 
       {diagram.topic === null && (
-        <p className="mt-2 text-xs text-[var(--warn-text)]">
+        <p className="mt-2 text-xs text-warn-text">
           The indexer refuses a document with no topic by name, so this one is in no catalog. Set
           one with{" "}
           <Mono>npm run --silent canvas -- meta set {diagram.tldr.path} --topic &lt;slug&gt;</Mono>,
@@ -196,7 +196,7 @@ function SelectedDiagram({
         <PanelHeading>Details</PanelHeading>
         <MetaRow label="Concepts">
           {diagram.concepts.length === 0 ? (
-            <span className="text-[var(--muted)]">none recorded</span>
+            <span className="text-text2">none recorded</span>
           ) : (
             <span className="flex flex-wrap gap-1">
               {diagram.concepts.map((slug) => (
@@ -215,12 +215,12 @@ function SelectedDiagram({
         <MetaRow label="Modified">
           {relativeTime(diagram.tldr.modified)}
           {diagram.tldr.modified !== null && (
-            <span className="block text-[var(--muted)]">{diagram.tldr.modified}</span>
+            <span className="block text-text2">{diagram.tldr.modified}</span>
           )}
         </MetaRow>
         <MetaRow label="Source note">
           {diagram.source === null ? (
-            <span className="text-[var(--muted)]">none</span>
+            <span className="text-text2">none</span>
           ) : (
             <Mono>{diagram.source}</Mono>
           )}
@@ -229,13 +229,13 @@ function SelectedDiagram({
           {diagram.svg.exists ? (
             <>
               <Mono>{diagram.svg.path}</Mono>
-              <span className="block text-[var(--muted)]">
+              <span className="block text-text2">
                 {formatBytes(diagram.svg.bytes)} · {relativeTime(diagram.svg.modified)}
                 {diagram.svgState === "stale" ? " · exported from an earlier version" : ""}
               </span>
             </>
           ) : (
-            <span className="text-[var(--warn-text)]">never exported</span>
+            <span className="text-warn-text">never exported</span>
           )}
         </MetaRow>
       </div>
@@ -251,7 +251,7 @@ function SelectedDiagram({
           <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
           <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" />
         </div>
-        <p className="mt-2 text-xs text-[var(--muted)]">
+        <p className="mt-2 text-xs text-text2">
           Each one runs in the studio runner and launches its own Chromium, so it takes a few
           seconds. Each runs on the diagram&apos;s checkout; Export SVG stores the SVG when the canvas
           holds no uncommitted edits, and Commit stores the canvas.
@@ -261,7 +261,7 @@ function SelectedDiagram({
       <div className="mt-5">
         <PanelHeading>Jobs</PanelHeading>
         {jobs.length === 0 ? (
-          <p className="text-xs text-[var(--muted)]">no jobs for this diagram</p>
+          <p className="text-xs text-text2">no jobs for this diagram</p>
         ) : (
           <ul className="space-y-1">
             {jobs.map((job) => (
@@ -271,9 +271,9 @@ function SelectedDiagram({
                 <PanelLink
                   href={panelHref(path, { job: job.jobId, selected: embedded ? null : undefined })}
                   scroll={false}
-                  className="flex h-8 items-center gap-2 rounded-md px-1 text-xs hover:bg-[var(--surface-hover)]"
+                  className="flex h-8 items-center gap-2 rounded-md px-1 text-xs hover:bg-surface2"
                 >
-                  <span className="w-20 shrink-0 text-[var(--muted)]">
+                  <span className="w-20 shrink-0 text-text2">
                     {job.requested.slice(0, 10)}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{job.title ?? job.jobId}</span>

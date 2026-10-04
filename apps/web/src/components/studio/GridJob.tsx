@@ -84,7 +84,7 @@ export function TileJob({
   return (
     // Fades in over the tile as the job starts; opacity only, since a scale
     // would show the thumbnail round its edges for a moment.
-    <div className={`absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-[var(--border)] ${FADE_IN}`}>
+    <div className={`absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border ${FADE_IN}`}>
       {/* Keyed by job, so a second job on the same diagram starts from its own pictures. */}
       <JobStage key={job.jobId} job={job} title={title} thumbnail={thumbnail} path={path} isNew={false} />
     </div>
@@ -109,7 +109,7 @@ export function RowJob({ target, title, path }: { target: string; title: string;
       aria-label={rowJobLabel(job, title)}
       // Shrinks before the title does, and never past about half the row:
       // the diagram's name is what identifies the row, the status is extra.
-      className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+      className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <RowWords job={job} />
     </PanelLink>
@@ -172,9 +172,9 @@ function NewDiagramRow({ job, path }: { job: Job; path: string }) {
     <PanelLink
       href={panelHref(path, { job: job.jobId })}
       scroll={false}
-      className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)] ${FADE_IN}`}
+      className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2 ${FADE_IN}`}
     >
-      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-[var(--surface2)]">
+      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-surface2">
         <Dot stage={tileStage(job)} />
       </span>
       <KindBadge kind="diagram" inline />
@@ -217,13 +217,13 @@ function JobStage({
         : `${title}: ${headline}. Open the job`;
 
   return (
-    <div ref={frame} className="relative h-full w-full bg-[var(--surface2)]">
+    <div ref={frame} className="relative h-full w-full bg-surface2">
       <Backdrop job={job} stage={stage} live={live} settle={settle} thumbnail={thumbnail} />
       <PanelLink
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
         aria-label={label}
-        className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent)]"
+        className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
       />
       <Status job={job} stage={stage} headline={headline} path={path} />
     </div>
@@ -421,7 +421,7 @@ function StepAndTime({ job }: { job: Job }) {
   const step = loaderStep(job);
   const time = <Duration ms={ms} live={job.finished === null} />;
   return (
-    <span className="block truncate tabular-nums text-[var(--muted)]">
+    <span className="block truncate tabular-nums text-text2">
       {step === null ? time : <>{step} · {time}</>}
     </span>
   );
@@ -434,12 +434,12 @@ function RowWords({ job }: { job: Job }) {
   // The words truncate first; the dot and the time never do.
   return (
     <span
-      className={`flex min-w-0 max-w-full items-center gap-1.5 ${stage === "failed" ? "text-[var(--danger)]" : "text-[var(--muted-strong)]"}`}
+      className={`flex min-w-0 max-w-full items-center gap-1.5 ${stage === "failed" ? "text-danger" : "text-text2"}`}
     >
       <Dot stage={stage} />
       <span className="min-w-0 truncate">{rowWords(job)}</span>
       {stage === "working" && (
-        <span className="shrink-0 text-[var(--muted)]">
+        <span className="shrink-0 text-text2">
           <Duration ms={ms} live={job.finished === null} />
         </span>
       )}
@@ -449,7 +449,7 @@ function RowWords({ job }: { job: Job }) {
 
 function Dot({ stage }: { stage: TileStage }) {
   const tone =
-    stage === "failed" ? "bg-[var(--danger)]" : stage === "review" ? "bg-[var(--ok)]" : "bg-[var(--accent)] studio-breathe";
+    stage === "failed" ? "bg-danger" : stage === "review" ? "bg-ok" : "bg-accent studio-breathe";
   return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone}`} />;
 }
 
