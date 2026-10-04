@@ -10,13 +10,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor, formatDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
-import { runFlip } from "../src/commands/flip";
+import { formatFlip, runFlip } from "../src/commands/flip";
 import { runImportCommand } from "../src/commands/index-command";
 import { runParity } from "../src/commands/parity";
 import { runRenumber } from "../src/commands/renumber";
 import { compare } from "../src/content/parity";
 import { contentOwnership } from "../src/content/ownership";
-import { triggerStates } from "../src/content/rules";
+import { COMPLETENESS_RULES, setTriggers, triggerStates } from "../src/content/rules";
 import { blockScalar, flowList } from "../src/content/yaml-out";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, type Fixture } from "./fixture-tree";
@@ -610,12 +610,13 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     );
     await runImportCommand({ dir: out });
     const result = await runFlip({ type: "courses", strict: true, readers: READERS });
-    expect(result.rulesArmed).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic"]);
+    expect(result.rulesArmed).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic", "course-order-respects-requires"]);
     const report = await doctor(scratch.db, "scratch");
     expect(report.rules.map((r) => [r.name, r.state, r.violators])).toEqual([
       ["module-has-item", "armed", 0],
       ["item-has-concept", "armed", 0],
       ["item-concept-in-module-topic", "armed", 0],
+      ["course-order-respects-requires", "armed", 0],
     ]);
     expect(report.ok).toBe(true);
   }, 60_000);
@@ -653,7 +654,7 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
       waived: { type: "courses", reason: "waived, to be armed by the next flip" },
     });
     const result = await runFlip({ type: "courses", strict: true, readers: READERS });
-    expect(result.rulesArmed).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic"]);
+    expect(result.rulesArmed).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic", "course-order-respects-requires"]);
     expect(result.waivers).toEqual([]);
     const report = await doctor(scratch.db, "scratch");
     expect(report.rules.find((r) => r.name === "item-has-concept")).toMatchObject({
@@ -661,6 +662,35 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
       violators: 0,
       waived: null,
     });
+  });
+
+  it("--rearm arms an owned type's rules, a rule added after its flip included, without reading its old tree", async () => {
+    // The tree the type was last imported from no longer matches the
+    // database, which owns the type: a re-flip's parity would refuse, and its
+    // hint ("import them") would undo the database's own edits.
+    const course = path.join(out, "content/courses/xx1000.yaml");
+    const original = await readFile(course, "utf8");
+    await writeFile(course, original.replace("title: Second item", "title: Edited in a tree nobody imports"));
+    const later = COMPLETENESS_RULES.find((r) => r.name === "course-order-respects-requires");
+    await setTriggers(scratch.db, later?.triggers ?? [], false);
+    try {
+      await expect(runFlip({ type: "courses", strict: true, readers: READERS })).rejects.toThrow(/is not the same in the database/);
+      const result = await runFlip({ type: "courses", strict: true, rearm: true, readers: READERS });
+      expect(result).toMatchObject({ already: true, rearmed: true, parity: null });
+      expect(result.export.recorded).toBe(false);
+      expect(result.rulesArmed).toContain("course-order-respects-requires");
+      const report = await doctor(scratch.db, "scratch");
+      expect(report.rules.filter((r) => r.type === "courses").every((r) => r.state === "armed")).toBe(true);
+      expect(formatFlip(result)).toMatch(/re-armed without reading a tree/);
+    } finally {
+      await writeFile(course, original);
+    }
+  });
+
+  it("--rearm refuses a type the database does not own yet", async () => {
+    await expect(runFlip({ type: "topics", strict: true, rearm: true, readers: new Set(["topics"]) })).rejects.toThrow(
+      /--rearm is for a type the database already owns/,
+    );
   });
 
   it("records no tree for an owned type when a later owned type refuses the import", async () => {
@@ -746,9 +776,9 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
 
   it("reports every rule as unsettled before a strict flip, the cut-over's distance", async () => {
     const report = await doctor(scratch.db, "scratch");
-    expect(report.unsettled).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic"]);
+    expect(report.unsettled).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic", "course-order-respects-requires"]);
     expect(formatDoctor(report)).toContain(
-      "neither armed nor waived: module-has-item, item-has-concept, item-concept-in-module-topic",
+      "neither armed nor waived: module-has-item, item-has-concept, item-concept-in-module-topic, course-order-respects-requires",
     );
   });
 
@@ -768,7 +798,7 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
       readers: READERS,
       waive: [{ rule: "item-has-concept", reason: "nine courses are still being filled in" }],
     });
-    expect(result.rulesArmed).toEqual(["module-has-item", "item-concept-in-module-topic"]);
+    expect(result.rulesArmed).toEqual(["module-has-item", "item-concept-in-module-topic", "course-order-respects-requires"]);
     const report = await doctor(scratch.db, "scratch");
     const rule = report.rules.find((r) => r.name === "item-has-concept");
     expect(rule).toMatchObject({

@@ -148,6 +148,13 @@
       "when": 1790760340153,
       "tag": "0020_tutor_model",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791088482716,
+      "tag": "0021_course_order",
+      "breakpoints": true
     }
   ]
 }

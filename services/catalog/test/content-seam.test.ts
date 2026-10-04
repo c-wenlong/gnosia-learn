@@ -868,6 +868,7 @@ describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
       ["module-has-item", "armed", 0],
       ["item-has-concept", "armed", 0],
       ["item-concept-in-module-topic", "armed", 0],
+      ["course-order-respects-requires", "armed", 0],
     ]);
     expect(report.ok).toBe(true);
   });

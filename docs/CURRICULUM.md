@@ -89,7 +89,10 @@ When writing the file itself:
 5. List each item's concept notes under `concepts:`, in teaching order. Every
    item needs at least one before `catalog flip courses --strict` can arm the
    rule that says so; `npm run catalog -- doctor` lists every item still
-   without one.
+   without one. Order them so no concept comes before one it `requires`
+   (each concept counts at its first appearance in the course): the
+   `course-order-respects-requires` rule refuses that once armed, and the
+   doctor warns about an `assumes` edge taught the wrong way round.
 6. Run the import with `--dry-run` first. It applies every rule the reader and
    the database have (unique ids across every course, every module topic and
    tag resolving, every item concept filed under its module's topic) and lists
