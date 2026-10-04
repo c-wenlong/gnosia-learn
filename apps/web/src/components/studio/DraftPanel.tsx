@@ -446,6 +446,10 @@ export function DraftPanel({
   const entries = useMemo(() => (view === null ? [] : visibleEntries(view.transcript)), [view]);
   /** The thread box the last scroll moved: a new one (opening, back from a job) jumps to its foot. */
   const scrolledBox = useRef<HTMLDivElement | null>(null);
+  // What sits at the thread's foot besides the entries: the reply being
+  // written, and a problem or refusal in its place when a turn fails
+  // without adding an entry.
+  const foot = view === null ? null : `${view.inFlight}|${threadProblem(view)?.case ?? ""}|${sendError !== null}`;
   useEffect(() => {
     // The thread scrolls, never the page. Something new in it (a message, a
     // reply, a banner) glides into view; the thread's first drawing jumps
@@ -457,7 +461,7 @@ export function DraftPanel({
     scrolledBox.current = box;
     if (typeof box.scrollTo === "function") box.scrollTo({ top: box.scrollHeight, behavior: glide ? "smooth" : "auto" });
     else box.scrollTop = box.scrollHeight;
-  }, [entries.length, pending, mode]);
+  }, [entries.length, pending, mode, foot]);
   const streamText = stream?.text ?? null;
   useEffect(() => {
     // A reply growing as it is written follows at once: a glide per word
