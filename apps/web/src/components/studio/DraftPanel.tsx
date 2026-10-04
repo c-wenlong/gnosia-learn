@@ -458,12 +458,16 @@ export function DraftPanel({
     if (typeof box.scrollTo === "function") box.scrollTo({ top: box.scrollHeight, behavior: glide ? "smooth" : "auto" });
     else box.scrollTop = box.scrollHeight;
   }, [entries.length, pending, mode]);
+  const streamText = stream?.text ?? null;
   useEffect(() => {
     // A reply growing as it is written follows at once: a glide per word
-    // would always be behind.
+    // would always be behind. Only while it grows: a reply that has landed
+    // clears the stream in the same read that adds its entry, and jumping
+    // then would cut short the glide above.
+    if (streamText === null) return;
     const box = thread.current;
     if (box !== null) box.scrollTop = box.scrollHeight;
-  }, [stream?.text]);
+  }, [streamText]);
 
   /* ---------------------------------------------------------------- */
   /* Verbs                                                             */
