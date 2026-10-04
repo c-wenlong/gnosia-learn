@@ -134,7 +134,12 @@ export async function migratedScratchDatabase(): Promise<Scratch> {
   const template = providedTemplate();
   if (template === null) {
     const scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    try {
+      await applyMigrations(scratch.db);
+    } catch (error) {
+      await scratch.drop();
+      throw error;
+    }
     return scratch;
   }
   const name = scratchName();
@@ -167,19 +172,22 @@ function providedTemplate(): string | null {
  */
 export async function createMigratedTemplate(): Promise<string> {
   const scratch = await createScratchDatabase(scratchName("test_template"));
+  let closed = false;
   try {
     await applyMigrations(scratch.db);
+    await scratch.close();
+    closed = true;
+    const admin = new pg.Client({ connectionString: maintenanceUrl() });
+    await admin.connect();
+    try {
+      await admin.query(`alter database ${quoteIdentifier(scratch.name)} with allow_connections false`);
+    } finally {
+      await admin.end();
+    }
   } catch (error) {
-    await scratch.drop();
+    // A pool's `end` rejects the second time, so `drop` is only for one still open.
+    await (closed ? dropDatabase(scratch.name) : scratch.drop());
     throw error;
-  }
-  await scratch.close();
-  const admin = new pg.Client({ connectionString: maintenanceUrl() });
-  await admin.connect();
-  try {
-    await admin.query(`alter database ${quoteIdentifier(scratch.name)} with allow_connections false`);
-  } finally {
-    await admin.end();
   }
   return scratch.name;
 }
