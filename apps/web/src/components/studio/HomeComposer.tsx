@@ -1,13 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { NEW_CHAT_EVENT } from "@/components/studio/panel-host";
-import { MentionComposer } from "@/components/studio/StudioComposer";
+import { MentionComposerBox } from "@/components/studio/StudioComposer";
 import { useStartDraft } from "@/components/studio/useStartDraft";
 import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
+import { cx } from "@/components/ui/classes";
+import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
-import { EMPTY_MENTION_VALUE, isEmptyValue, trimValue, type MentionValue } from "@/components/ui/mention-text";
+import {
+  EMPTY_MENTION_VALUE,
+  hasMention,
+  isEmptyValue,
+  isUsable,
+  toggleMentionEdit,
+  trimValue,
+  type MentionOption,
+  type MentionValue,
+} from "@/components/ui/mention-text";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
 import { DRAFT_KINDS, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 
@@ -28,6 +39,12 @@ type Value = MentionValue<DraftKind>;
  * Video in the sentence, and a message with neither is talk the planner
  * answers. A bare tag gives the planner nothing to go on in a conversation
  * with no turn yet (T15), so Send waits for words.
+ *
+ * The box (D88) also has a Diagram and a Video toggle in its bottom row. A
+ * press puts that kind's chip at the start of the message, or takes it out,
+ * and focuses the field; it never sends. Each shows pressed whenever its chip
+ * is in the message, typed with `@` included, so the buttons always say what
+ * Send will ask for.
  */
 export function HomeComposer({ path, video }: { path: string; video: VideoAvailability | null }) {
   const { start, busy, error } = useStartDraft(path);
@@ -45,6 +62,20 @@ export function HomeComposer({ path, video }: { path: string; video: VideoAvaila
   // with the reason.
   const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
   const block = valueSendBlock(value, true);
+  const [announcement, setAnnouncement] = useState("");
+
+  function toggle(option: MentionOption<DraftKind>) {
+    const tagged = hasMention(value, option.id);
+    // An unavailable kind can still be taken out, never put in.
+    if (!tagged && !isUsable(option)) return;
+    const { value: next, edit } = toggleMentionEdit(value, option.id);
+    if (edit === null) return;
+    // The caret, or a selection, stays where the person left it, moved by the chip.
+    composer.current?.keepCaretThrough(next, edit);
+    setValue(next);
+    setAnnouncement(`${option.name} tag ${tagged ? "removed" : "added"}.`);
+    composer.current?.focus();
+  }
 
   async function submit(next: Value) {
     const body = trimValue(next);
@@ -54,7 +85,7 @@ export function HomeComposer({ path, video }: { path: string; video: VideoAvaila
 
   return (
     <div className="flex w-full flex-col gap-1.5">
-      <MentionComposer
+      <MentionComposerBox
         handleRef={composer}
         value={value}
         onChange={setValue}
@@ -65,15 +96,67 @@ export function HomeComposer({ path, video }: { path: string; video: VideoAvaila
         mentionHint={MENTION_HINT}
         // Focus on arrival, unless the person has already gone elsewhere.
         autoFocus={focusIsUnclaimed}
-        fallbackNote="Tags could not load, so none can be added here."
+        fallbackNote="The @ menu could not load; the Diagram and Video buttons still add tags."
         sendDisabled={busy || block !== null}
         disabledReason={busy ? "Opening the conversation." : (block ?? undefined)}
+        toolbar={options.map((option) => (
+          <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
+        ))}
       />
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
       {error !== null && (
         <p role="alert" className="px-1 text-[13px] text-danger">
           The conversation could not start: {error}
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * A kind's toggle in the box's bottom row: a pill with the kind's glyph and
+ * name, tinted with the accent while its chip is in the message, the shape of
+ * Atlas's Search pill. An unavailable kind (the doctor turned videos off) is
+ * `aria-disabled` rather than `disabled`, so it keeps its focus and its reason
+ * can be read; a pressed one stays pressable, so its chip can still come out.
+ */
+function KindToggle({ option, pressed, onPress }: { option: MentionOption<DraftKind>; pressed: boolean; onPress: () => void }) {
+  const reasonId = useId();
+  const blocked = !pressed && !isUsable(option);
+  return (
+    <>
+      <button
+        type="button"
+        aria-pressed={pressed}
+        aria-disabled={blocked || undefined}
+        aria-describedby={blocked ? reasonId : undefined}
+        title={blocked ? (option.disabledReason ?? undefined) : option.description}
+        // The field keeps its focus and its caret, as the plus does.
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={onPress}
+        className={cx(
+          "relative inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium leading-none transition-colors duration-100",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+          // A 44px target under a finger, the face still 32px.
+          "pointer-coarse:after:absolute pointer-coarse:after:-inset-1.5 pointer-coarse:after:content-['']",
+          pressed
+            ? "border-accent bg-tint text-accent-text"
+            : blocked
+              ? "cursor-not-allowed border-border text-text3"
+              : "border-border text-text2 hover:bg-surface2 hover:text-text",
+        )}
+      >
+        <Glyph name={(option.icon ?? option.id) as GlyphName} size={16} />
+        {option.name}
+      </button>
+      {/* Beside the button, not in it, so the reason describes it rather than joining its name. */}
+      {blocked && (
+        <span id={reasonId} className="sr-only">
+          {option.disabledReason}
+        </span>
+      )}
+    </>
   );
 }
