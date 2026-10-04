@@ -487,13 +487,19 @@ export function LearnerProvider({
         // recreate the row, while the page went on showing it as cleared.
         topicIds.flatMap((id) => [`progress:${id}`, `note:${id}`]),
         (previous) => resetCourseProgress(previous, topicIds),
-        () => post("reset", { curriculumItemIds: topicIds }),
+        // The server moves the epoch up by one in the same statement as each
+        // stored reset, so the floor moves here, for every reset: the queue
+        // reports only the newest write on a key, and an overlapping reset of
+        // the same course still moved the database's epoch.
+        () =>
+          post("reset", { curriculumItemIds: topicIds }).then((response) => {
+            if (response.ok !== false) epochFloor.current += 1;
+            return response;
+          }),
         () => {
-          // The server moves the epoch up by one in the same statement, so a
-          // snapshot that shows this reset has at least the floor this reset
-          // raised (more if another tab reset). A reset with nothing to clear
-          // differs from the snapshot before it only here.
-          epochFloor.current += 1;
+          // A snapshot that shows this reset has at least the floor as it
+          // stands now (more if another tab reset). A reset with nothing to
+          // clear differs from the snapshot before it only here.
           const least = epochFloor.current;
           return (snapshot) =>
             snapshot.epoch >= least &&

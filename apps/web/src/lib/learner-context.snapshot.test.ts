@@ -224,6 +224,19 @@ describe("a snapshot during a write", () => {
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("counts an overlapping reset of the same course, which the queue does not report", async () => {
+    const { container, draw, answer } = setup({});
+    act(() => void held.learner!.resetCourse(["t1"]));
+    act(() => void held.learner!.resetCourse(["t1"]));
+    await answer();
+    await answer();
+    draw({ epoch: 1 });
+    expect(container.textContent).toBe("note=none tick=false epoch=2");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    draw({ epoch: 2 });
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("protects nothing for a refused write: the database never had it", async () => {
     const { container, draw, answer } = setup({});
     act(() => held.learner!.updateNote("t1", "three paragraphs"));
