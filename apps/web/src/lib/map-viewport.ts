@@ -136,3 +136,34 @@ export function scopeBox(
     y1: Math.max(...points.map((p) => p.y)) + BELOW_DOT,
   };
 }
+
+/** The scale from which an island `width` map units wide has room for its title on screen (`titleFits`). */
+export function titleMinScale(width: number, title: string): number {
+  return (title.length * TITLE_CHAR_PX) / width;
+}
+
+type Point = { x: number; y: number };
+
+/**
+ * A two-finger gesture between two moments: the map follows the fingers'
+ * midpoint, as a one-finger drag does, and zooms by how far they spread, about
+ * that midpoint. `rect` is the map's box on screen.
+ */
+export function pinchView(
+  view: View,
+  before: readonly [Point, Point] | Point[],
+  after: readonly [Point, Point] | Point[],
+  rect: { left: number; top: number; width: number; height: number },
+): View {
+  const mid = (p: readonly Point[]) => ({ x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 });
+  const spread = (p: readonly Point[]) => Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+  const [m0, m1] = [mid(before), mid(after)];
+  const panned = panView(view, m1.x - m0.x, m1.y - m0.y, rect.width);
+  const [d0, d1] = [spread(before), spread(after)];
+  if (d0 === 0 || d1 === 0) return panned;
+  const at = {
+    x: panned.x + ((m1.x - rect.left) / rect.width) * panned.w,
+    y: panned.y + ((m1.y - rect.top) / rect.height) * panned.h,
+  };
+  return zoomView(panned, d0 / d1, at, rect.width);
+}

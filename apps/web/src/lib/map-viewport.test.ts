@@ -12,6 +12,8 @@ import {
   scaleOf,
   scopeBox,
   titleFits,
+  titleMinScale,
+  pinchView,
   zoomView,
   type View,
 } from "@/lib/map-viewport";
@@ -140,5 +142,36 @@ describe("titleFits", () => {
     expect(titleFits(400, "CP4284, CP4282, CP4285")).toBe(true);
     expect(titleFits(40, "CS3230")).toBe(false);
     expect(titleFits(60, "CS3230")).toBe(true);
+  });
+});
+
+describe("titleMinScale", () => {
+  it("is the scale at which an island's title starts to fit, so the per-frame paint can show it without React", () => {
+    for (const [width, title] of [[400, "CS3230"], [60, "CP4284, CP4282, CP4285"], [3572, "CS4223"]] as const) {
+      const s = titleMinScale(width, title);
+      expect(titleFits(width * s, title)).toBe(true);
+      expect(titleFits(width * s * 0.99, title)).toBe(false);
+    }
+  });
+});
+
+describe("pinchView", () => {
+  const v: View = { x: 0, y: 0, w: 1000, h: 500 };
+  const rect = { left: 0, top: 0, width: 500, height: 250 };
+
+  it("pans with two fingers that move together, like one finger dragging", () => {
+    const moved = pinchView(v, [{ x: 100, y: 100 }, { x: 200, y: 100 }], [{ x: 120, y: 90 }, { x: 220, y: 90 }], rect);
+    close(moved.w, 1000);
+    // 2 map units a pixel: a 20 pixel move right shows what was 40 units to the left.
+    close(moved.x, -40);
+    close(moved.y, 20);
+  });
+
+  it("zooms about the midpoint when the fingers spread, and does both at once", () => {
+    const spread = pinchView(v, [{ x: 200, y: 100 }, { x: 300, y: 100 }], [{ x: 150, y: 100 }, { x: 350, y: 100 }], rect);
+    close(spread.w, 500);
+    // The map point under the midpoint (500, 200) stays under it.
+    close(spread.x + (250 / rect.width) * spread.w, 500);
+    close(spread.y + (100 / rect.height) * spread.h, 200);
   });
 });
