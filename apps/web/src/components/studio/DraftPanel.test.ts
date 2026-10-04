@@ -368,6 +368,16 @@ describe("a conversation opened with Change on a video (p2v-video on #203)", () 
   });
 });
 
+describe("the conversation's header", () => {
+  const heading = (host: HTMLElement) => host.querySelector("[data-header] h2")?.textContent;
+
+  it("is the name the owner gave it, over the planner's title, as the sidebar calls it", async () => {
+    expect(heading(await mount(draft({ title: "Attention weights" })))).toBe("Attention weights");
+    expect(heading(await mount(draft({ name: "My attention notes", title: "Attention weights" })))).toBe("My attention notes");
+    expect(heading(await mount(draft({ name: "   " })))).toBe("New conversation");
+  });
+});
+
 describe("a conversation opened from the concept tutor (docs/STUDIO-TUTOR-HANDOFF.md)", () => {
   const concept = { slug: "tcp-handshake", title: "The TCP handshake", topic: "tcp", tutorTurns: 6 };
 

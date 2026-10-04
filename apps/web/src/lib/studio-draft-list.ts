@@ -1,3 +1,4 @@
+import { conversationTitle } from "@/lib/conversation-title";
 import { isDraftKind, type DraftKind, type DraftState, type DraftSummary } from "@/lib/studio-drafts";
 
 /**
@@ -41,7 +42,7 @@ export function announceDraftChange(draftId: string): void {
 
 export interface DraftRow {
   draftId: string;
-  /** The brief's title, else the person's first message, else what it extends. */
+  /** `conversationTitle`'s: the owner's name, the brief's title, the concept or the first message; else what it extends. */
   heading: string;
   /** True when the heading is the person's own words rather than a title. */
   quoted: boolean;
@@ -87,27 +88,17 @@ export function draftRows(
     .filter((draft) => LISTED_STATES.includes(draft.state))
     .sort((a, b) => b.updated.localeCompare(a.updated))
     .map((draft) => {
-      const title = draft.title?.trim() ?? "";
-      const first = draft.firstMessage?.trim() ?? "";
-      const extending = draft.source === null ? null : (titles[draft.source] ?? draft.source);
       // A conversation opened from the concept tutor is about that concept,
       // which says more than its first message, often a bare "@diagram".
-      const concept = typeof draft.concept?.title === "string" ? draft.concept.title.trim() : "";
+      const called = conversationTitle(draft);
+      const extending = draft.source === null ? null : (titles[draft.source] ?? draft.source);
       const heading =
-        title !== ""
-          ? title
-          : concept !== ""
-            ? concept
-            : first !== ""
-              ? first
-              : extending !== null
-                ? `Extending ${extending}`
-                : "A conversation with no brief yet";
+        called !== null ? called.text : extending !== null ? `Extending ${extending}` : "A conversation with no brief yet";
       const kinds = Array.isArray(draft.kinds) ? [...new Set(draft.kinds.filter(isDraftKind))] : [];
       return {
         draftId: draft.draftId,
         heading,
-        quoted: title === "" && concept === "" && first !== "",
+        quoted: called?.quoted === true,
         state: stateWords(draft.state, kinds),
         briefed: draft.state === "briefed",
         updated: draft.updated,
@@ -176,22 +167,22 @@ function foldWithMap(text: string): { folded: string; starts: number[]; ends: nu
 }
 
 /**
- * Whether a draft is a hit for `q`: its title, first message or concept
- * title contains it, in any case. The runner filters by the same rule before
+ * Whether a draft is a hit for `q`: the name the owner gave it, its title,
+ * first message or concept title contains it, in any case. The runner filters by the same rule before
  * its limit; applying it here as well means a runner that predates `q`, which
  * ignores it, still shows only matches (of the page it sent).
  */
-export function draftMatches(draft: Pick<DraftSummary, "title" | "firstMessage" | "concept">, q: string): boolean {
+export function draftMatches(draft: Pick<DraftSummary, "name" | "title" | "firstMessage" | "concept">, q: string): boolean {
   const needle = searchText(q);
   if (needle === "") return true;
-  return [draft.title, draft.firstMessage, draft.concept?.title].some(
+  return [draft.name, draft.title, draft.firstMessage, draft.concept?.title].some(
     (field) => typeof field === "string" && searchText(field).includes(needle),
   );
 }
 
 /** A search hit: the row, and the words around the match when its heading does not hold it. */
 export interface SearchRow extends DraftRow {
-  /** The first message or the concept's title, cut around the match, when the heading is something else. Null when the heading holds the match. */
+  /** The title, the concept's title or the first message, cut around the match, when the heading is something else. Null when the heading holds the match. */
   snippet: string | null;
 }
 
@@ -201,7 +192,8 @@ const SNIPPET_LEAD = 24;
 /**
  * The drafts that match `q` as rows, newest first and in one run (a search
  * has no day headings): each with a snippet when the match is in words the
- * heading is not showing, such as a first message under a brief's title.
+ * heading is not showing, such as a first message under a brief's title, or
+ * the title under the name the owner gave it.
  */
 export function searchRows(
   drafts: readonly DraftSummary[],
@@ -214,7 +206,8 @@ export function searchRows(
   return draftRows(hits, titles).map((row) => {
     const draft = byId.get(row.draftId);
     if (draft === undefined || searchText(row.heading).includes(needle)) return { ...row, snippet: null };
-    const field = [draft.concept?.title, draft.firstMessage].find(
+    // A renamed conversation found by the title its name hides shows that title.
+    const field = [draft.title, draft.concept?.title, draft.firstMessage].find(
       (text): text is string => typeof text === "string" && searchText(text).includes(needle),
     );
     return { ...row, snippet: field === undefined ? null : excerpt(field, needle) };
