@@ -35,13 +35,17 @@ export interface Box {
   height: number;
 }
 
+/** Roughly how wide a topic's title is drawn, at 12.5px bold, with its inset either side. */
+export const titleWidth = (title: string) => Math.ceil(title.length * 7.4 + 2 * 12);
+
 /**
  * The box a topic's group is drawn in, from where its concepts' dots are: wide
- * enough for each label, with the title band above the top row. The server
- * packs groups by this box and the browser redraws it as concepts are
- * dragged, so a group always follows its concepts.
+ * enough for each label, at least `minWidth` (its title's width) and centred
+ * on its concepts when that is wider, with the title band above the top row.
+ * The server packs groups by this box and the browser redraws it as concepts
+ * are dragged, so a group always follows its concepts.
  */
-export function groupBox(points: readonly { x: number; y: number }[]): Box {
+export function groupBox(points: readonly { x: number; y: number }[], minWidth = 0): Box {
   if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
   let minX = Infinity;
   let minY = Infinity;
@@ -53,9 +57,12 @@ export function groupBox(points: readonly { x: number; y: number }[]): Box {
     maxX = Math.max(maxX, p.x);
     maxY = Math.max(maxY, p.y);
   }
-  const x = minX - NODE_HALF_WIDTH - GROUP_PAD;
+  const left = minX - NODE_HALF_WIDTH - GROUP_PAD;
+  const right = maxX + NODE_HALF_WIDTH + GROUP_PAD;
+  const width = Math.max(right - left, minWidth);
+  const x = (left + right) / 2 - width / 2;
   const y = minY - DOT_TOP - GROUP_PAD - GROUP_TITLE;
-  return { x, y, width: maxX + NODE_HALF_WIDTH + GROUP_PAD - x, height: maxY + LABEL_BELOW + GROUP_PAD - y };
+  return { x, y, width, height: maxY + LABEL_BELOW + GROUP_PAD - y };
 }
 
 /** Room kept round the picture, so a ring or a group's edge is not cut by the frame. */
@@ -73,14 +80,14 @@ export function viewBoxFor(
     width: number;
     height: number;
     positions: Readonly<Record<string, { x: number; y: number }>>;
-    groups: readonly { topic: string; concepts: readonly string[] }[];
+    groups: readonly { topic: string; title: string; concepts: readonly string[] }[];
   },
   topic: string | null,
   moved: Readonly<Record<string, { x: number; y: number }>> = {},
 ): Box {
   const at = (id: string) => moved[id] ?? layout.positions[id];
   const group = topic === null ? undefined : layout.groups.find((g) => g.topic === topic);
-  if (group !== undefined) return padded(groupBox(group.concepts.map(at)));
+  if (group !== undefined) return padded(groupBox(group.concepts.map(at), titleWidth(group.title)));
   const whole: Box = { x: 0, y: 0, width: layout.width, height: layout.height };
   const ids = Object.keys(moved).filter((id) => id in layout.positions);
   if (ids.length === 0) return padded(whole);

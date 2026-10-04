@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DOT_GAP, domainOfConcepts, edgeEnds, groupBox, labelFoot, matchCounts, VIEW_PAD, viewBoxFor } from "@/lib/domain-view";
+import { DOT_GAP, domainOfConcepts, edgeEnds, groupBox, labelFoot, matchCounts, titleWidth, VIEW_PAD, viewBoxFor } from "@/lib/domain-view";
 
 /** Written before the phase 2 additions to `domain-view.ts` (docs/proposals/domain-map.md, D2, D3, D8). */
 
@@ -20,7 +20,7 @@ describe("viewBoxFor (D2, D3)", () => {
   });
 
   it("frames one topic's group when a topic is open", () => {
-    const box = groupBox([layout.positions.a, layout.positions.b]);
+    const box = groupBox([layout.positions.a, layout.positions.b], titleWidth("Left"));
     expect(viewBoxFor(layout, "left")).toEqual({
       x: box.x - VIEW_PAD,
       y: box.y - VIEW_PAD,

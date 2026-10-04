@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphEdge } from "@/lib/concept-graph";
 import { cachedDomainLayout, domainLayout, domainOfNode, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
-import { domainTitle, groupBox, NODE_HALF_WIDTH } from "@/lib/domain-view";
+import { domainTitle, groupBox, NODE_HALF_WIDTH, titleWidth } from "@/lib/domain-view";
 
 /**
  * Written before `domain-map.ts` (phase 1 of docs/proposals/domain-map.md),
@@ -148,7 +148,7 @@ describe("domainLayout (D3, D4)", () => {
   it("gives every topic a group whose box holds its concepts and overlaps no other", () => {
     // Sorting is needed by both other topics; the stray topic needs nothing, so it waits behind Sorting only.
     expect(layout.groups.map((g) => g.topic)).toEqual(["sorting", "unknown-topic", "graphs", "dp"]);
-    const boxes = layout.groups.map((g) => ({ g, box: groupBox(g.concepts.map((id) => layout.positions[id])) }));
+    const boxes = layout.groups.map((g) => ({ g, box: groupBox(g.concepts.map((id) => layout.positions[id]), titleWidth(g.title)) }));
     for (const { g, box } of boxes) {
       for (const id of g.concepts) {
         const p = layout.positions[id];
@@ -170,6 +170,26 @@ describe("domainLayout (D3, D4)", () => {
         expect(apart, `${boxes[i].g.topic} and ${boxes[j].g.topic} overlap`).toBe(true);
       }
     }
+  });
+
+  it("keeps a prerequisite above what needs it in its topic when the reduced path runs through another topic", () => {
+    const vocab: DomainTopic[] = [
+      { slug: "t1", title: "T1", domain: "d" },
+      { slug: "t2", title: "T2", domain: "d" },
+    ];
+    const ns = [node("a", "t1"), node("b", "t1"), node("x", "t2")];
+    // a > b is implied by a > x > b over the domain, and both legs leave t1.
+    const l = domainLayout(ns, [req("a", "x"), req("x", "b"), req("a", "b")], vocab, "d");
+    expect(l.positions.a.y).toBeLessThan(l.positions.b.y);
+  });
+
+  it("makes a group wide enough for its topic's title", () => {
+    const vocab: DomainTopic[] = [{ slug: "long", title: "Transformer architecture and training stages", domain: "d" }];
+    const l = domainLayout([node("only", "long")], [], vocab, "d");
+    const box = groupBox([l.positions.only], titleWidth(vocab[0].title));
+    expect(box.width).toBeGreaterThanOrEqual(titleWidth(vocab[0].title));
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(l.width);
   });
 
   it("lays a prerequisite topic out before the topic that needs it", () => {

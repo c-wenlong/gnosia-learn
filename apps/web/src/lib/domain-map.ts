@@ -1,7 +1,7 @@
 import { Graph, layout as dagreLayout } from "@dagrejs/dagre";
 
 import { reduceEdges, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
-import { DOT_TOP, domainTitle, groupBox } from "@/lib/domain-view";
+import { DOT_TOP, domainTitle, groupBox, titleWidth } from "@/lib/domain-view";
 
 /**
  * The prerequisite graph grouped by domain, then by topic, and one domain
@@ -168,8 +168,8 @@ export function domainTree(
   );
 }
 
-/** One topic's concepts in layers, positioned so its group box starts at the origin. */
-function layoutTopic(ids: readonly string[], edges: readonly GraphEdge[]) {
+/** One topic's concepts in layers, positioned so its group box, as wide as its title at least, starts at the origin. */
+function layoutTopic(ids: readonly string[], edges: readonly GraphEdge[], title: string) {
   const g = new Graph({ multigraph: true });
   g.setGraph({ rankdir: "TB", nodesep: 16, ranksep: 40, marginx: 0, marginy: 0 });
   g.setDefaultEdgeLabel(() => ({}));
@@ -180,7 +180,7 @@ function layoutTopic(ids: readonly string[], edges: readonly GraphEdge[]) {
     const box = g.node(id);
     return { id, x: Math.round(box.x), y: Math.round(box.y - NODE_HEIGHT / 2 + DOT_TOP) };
   });
-  const box = groupBox(raw);
+  const box = groupBox(raw, titleWidth(title));
   return {
     width: Math.ceil(box.width),
     height: Math.ceil(box.height),
@@ -297,7 +297,9 @@ export function domainLayout(
   const laid = new Map(
     groups.map((g) => {
       const members = new Set(g.concepts);
-      return [g.slug, layoutTopic(g.concepts, drawn.filter((e) => members.has(e.from) && members.has(e.to)))];
+      // Reduced inside the topic, not over the domain: an edge the domain drops for a
+      // path through another topic still orders the two concepts it joins.
+      return [g.slug, layoutTopic(g.concepts, reduceEdges(own.filter((e) => members.has(e.from) && members.has(e.to))), g.title)];
     }),
   );
   const order = topicOrder(groups, topicOf, own);

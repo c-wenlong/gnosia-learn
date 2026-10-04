@@ -3,7 +3,7 @@
 import { cx } from "@/components/ui/classes";
 import { wrapLabel, type GraphEdge } from "@/lib/concept-graph";
 import type { DomainLayout } from "@/lib/domain-map";
-import { edgeEnds, groupBox, NODE_HALF_WIDTH, viewBoxFor } from "@/lib/domain-view";
+import { edgeEnds, groupBox, NODE_HALF_WIDTH, titleWidth, viewBoxFor } from "@/lib/domain-view";
 import { arcLength } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 
@@ -88,7 +88,7 @@ export function DomainGraph({
         style={{ maxWidth: view.width * MAX_SCALE, minWidth: view.width * 0.6 }}
       >
         {groups.map((g) => {
-          const box = groupBox(g.concepts.map(at));
+          const box = groupBox(g.concepts.map(at), titleWidth(g.title));
           return (
             <g key={g.topic} data-group={g.topic}>
               <rect x={box.x} y={box.y} width={box.width} height={box.height} rx={14} className="fill-surface2 stroke-hair" strokeWidth={1} />
