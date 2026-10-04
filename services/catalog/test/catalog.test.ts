@@ -287,8 +287,9 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     it("says how many of each course's rows list a concept", async () => {
       const status = await runStatus();
       // The seed's one course, cut to the two modules under its topics: three
-      // of its five rows list concepts (m1-t1 and m3-t1, m3-t2).
-      expect(status.coverage).toEqual([{ course: "cp4284", items: 5, withConcepts: 3 }]);
+      // of its five rows list concepts (m1-t1 and m3-t1, m3-t2), and one of
+      // its four readings (the ReAct paper) is placed on a lesson.
+      expect(status.coverage).toEqual([{ course: "cp4284", items: 5, withConcepts: 3, readings: 4, readingsOnLessons: 1 }]);
     });
 
     it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
@@ -471,7 +472,15 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
         const course = (report: typeof before) => report.coverage.find((c) => c.course === "cp4284");
         // Five rows, less m3-t1 (react-loop) and m1's two (one with concepts):
         // two left, and only m3-t2 (tool-calling) names a concept.
-        expect(course(after)).toEqual({ ...course(before), items: 5 - 1 - m1Items, withConcepts: 1 });
+        // m1's two readings go with their module, and the ReAct paper's one
+        // lesson is m3-t1, archived, so none of the two left is placed.
+        expect(course(after)).toEqual({
+          ...course(before),
+          items: 5 - 1 - m1Items,
+          withConcepts: 1,
+          readings: 2,
+          readingsOnLessons: 0,
+        });
 
         const tree = await runLs("cp4284");
         if (tree.kind !== "collection") throw new Error("not a collection");
@@ -516,6 +525,8 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
           course: "cp4284",
           items: 0,
           withConcepts: 0,
+          readings: 4,
+          readingsOnLessons: 0,
         });
       } finally {
         await scratch.db.execute(

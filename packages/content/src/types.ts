@@ -8,7 +8,7 @@
  * nothing would say so. One declaration, one parser, one meaning.
  */
 
-export type ResourceType = "paper" | "docs" | "video" | "book" | "other";
+export type ResourceType = "paper" | "docs" | "video" | "book" | "other" | "practice";
 
 /**
  * A cross-course theme id, e.g. `hci`. Deliberately a plain string: the set is
@@ -22,6 +22,13 @@ export interface Resource {
   title: string;
   url: string;
   type: ResourceType;
+  /**
+   * The lessons (item ids of the same module) this reading goes with, in the
+   * order written. Absent when the file lists none, which makes the reading
+   * module material (docs/proposals/module-learning-path.md). Stored as
+   * `curriculum_item_asset` rows.
+   */
+  lessons?: string[];
 }
 
 /**
@@ -41,6 +48,13 @@ export interface Topic {
   concepts: string[];
   /** The reading list under the row. Display only, never joined on. */
   subtopics: string[];
+  /**
+   * Videos this lesson lists, by catalog asset id, in the order written.
+   * Absent when it lists none. A reference, not a link: nothing checks the
+   * asset exists at import, since a video tool may be indexed after the
+   * course or not at all (docs/proposals/module-learning-path.md).
+   */
+  videos?: string[];
 }
 
 export interface Module {
@@ -52,6 +66,8 @@ export interface Module {
   topic: string;
   topics: Topic[];
   resources: Resource[];
+  /** Videos the module lists, by catalog asset id, as `Topic.videos`. Absent when none. */
+  videos?: string[];
 }
 
 /**

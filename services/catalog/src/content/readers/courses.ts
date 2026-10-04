@@ -37,16 +37,20 @@ import type { TypeReader } from "./reader";
  * - a module is a live child `collection`, in `position` order (`order:`),
  *   and its `topic` is its topic `collection_item` row;
  * - an item is a live `curriculum_item` of the module, in position order, with
- *   its `concept_curriculum_item` rows as `concepts` in their order;
+ *   its `concept_curriculum_item` rows as `concepts` in their order, and its
+ *   `videos` column as `videos` when it lists any;
+ * - a module's `videos` is `metadata.videos`, when it lists any;
  * - a resource is a curated `link` asset the module holds as a
  *   `collection_item`, in position order, its id without the `link:` prefix
- *   and its `type` the asset's `resource_type`;
+ *   and its `type` the asset's `resource_type`; its `lessons` are its
+ *   `curriculum_item_asset` rows to live items of the same module, in
+ *   position order, when it has any;
  * - a cover is the course's `cover_blob_key` and `metadata.coverCredit`, named
  *   as the export names its file (`<code>.cover.<ext>`, the key's extension).
  *   Read through `to_jsonb`, so a database that has not had 0016 yet reads
  *   as courses with no cover rather than failing the whole list.
  *
- * Six queries per call, whatever the number of courses, in one snapshot, each
+ * Seven queries per call, whatever the number of courses, in one snapshot, each
  * ordered the way the export orders it (`../export.ts`), so the reader and the
  * export cannot disagree about a list's order.
  */
@@ -67,6 +71,7 @@ interface ModuleRow extends Record<string, unknown> {
   title: string;
   position: number;
   topic: string | null;
+  metadata: Record<string, unknown>;
 }
 
 async function rows<T extends Record<string, unknown>>(db: CatalogDatabase, query: ReturnType<typeof sql>): Promise<T[]> {
@@ -128,7 +133,7 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
   const modules = groupBy(
     await rows<ModuleRow>(
       db,
-      sql`select c.id, c.parent_id, c.slug, c.title, c.position,
+      sql`select c.id, c.parent_id, c.slug, c.title, c.position, c.metadata,
                  (select m.topic_slug from collection_item m
                   where m.collection_id = c.id and m.topic_slug is not null${
                     owners === undefined
@@ -143,9 +148,11 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
     (r) => r.parent_id,
   );
   const items = groupBy(
-    await rows<{ id: string; collection_id: string; title: string; subtopics: unknown }>(
+    await rows<{ id: string; collection_id: string; title: string; subtopics: unknown; videos: unknown }>(
       db,
-      sql`select id, collection_id, title, subtopics from curriculum_item
+      // Through `to_jsonb`, so a database that has not had 0022 reads as
+      // items listing no video rather than failing the whole list.
+      sql`select id, collection_id, title, subtopics, to_jsonb(curriculum_item) -> 'videos' as videos from curriculum_item
           where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by collection_id collate "C", position, id collate "C"`,
     ),
     (r) => r.collection_id,
@@ -160,6 +167,10 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
           order by l.curriculum_item_id collate "C", l.position, l.concept_slug collate "C"`,
     ),
     (r) => r.curriculum_item_id,
+  );
+  const lessons = groupBy(
+    await lessonLinks(db, owners),
+    (r) => r.asset_id,
   );
   const resources = groupBy(
     await rows<{ collection_id: string; id: string; title: string | null; url: string | null; resource_type: string | null }>(
@@ -189,22 +200,30 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
         title: mod.title,
         order: mod.position,
         topic: mod.topic ?? "",
-        topics: (items.get(mod.id) ?? []).map(
-          (item): Topic => ({
+        topics: (items.get(mod.id) ?? []).map((item): Topic => {
+          const topic: Topic = {
             id: item.id,
             title: item.title,
             concepts: (concepts.get(item.id) ?? []).map((c) => c.concept_slug),
             subtopics: strings(item.subtopics),
-          }),
-        ),
-        resources: (resources.get(mod.id) ?? []).map(
-          (link): Resource => ({
+          };
+          // Last and only when listed, as the file reader adds it.
+          const videos = strings(item.videos);
+          if (videos.length > 0) topic.videos = videos;
+          return topic;
+        }),
+        resources: (resources.get(mod.id) ?? []).map((link): Resource => {
+          const resource: Resource = {
             id: link.id.slice(ASSET_PREFIX.courses.length),
             title: link.title ?? "",
             url: link.url ?? "",
             type: (link.resource_type ?? "other") as ResourceType,
-          }),
-        ),
+          };
+          const placed = (lessons.get(link.id) ?? []).filter((l) => l.collection_id === mod.id).map((l) => l.curriculum_item_id);
+          if (placed.length > 0) resource.lessons = placed;
+          return resource;
+        }),
+        ...moduleVideos(mod.metadata),
       })),
       capstone: String(meta["capstone"] ?? ""),
     };
@@ -225,6 +244,38 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
     }
     return course;
   });
+}
+
+/** `{ videos }` when a module's metadata lists any, else nothing: spread last, as the file reader adds the key. */
+function moduleVideos(metadata: Record<string, unknown> | null | undefined): { videos?: string[] } {
+  const videos = strings(metadata?.["videos"]);
+  return videos.length > 0 ? { videos } : {};
+}
+
+/**
+ * Every reading's lesson links to a live item, with the item's module so a
+ * caller keeps only the ones in the reading's own module, in `lessons:`
+ * order. Scoped at both ends: the item and the reading are the owners'.
+ * A database before 0022 has no such table, and reads as no lessons.
+ */
+async function lessonLinks(
+  db: CatalogDatabase,
+  owners: Owners,
+): Promise<{ asset_id: string; curriculum_item_id: string; collection_id: string }[]> {
+  const [present] = await rows<{ present: boolean }>(
+    db,
+    sql`select to_regclass('public.curriculum_item_asset') is not null as present`,
+  );
+  if (present?.present !== true) return [];
+  return rows(
+    db,
+    sql`select l.asset_id, l.curriculum_item_id, i.collection_id
+        from curriculum_item_asset l
+        join curriculum_item i on i.id = l.curriculum_item_id
+        join asset a on a.id = l.asset_id
+        where i.archived_at is null${andOwnedBy(sql`i.owner_id`, owners)}${andOwnedBy(sql`a.owner_id`, owners)}
+        order by l.asset_id collate "C", l.position, l.curriculum_item_id collate "C"`,
+  );
 }
 
 export const reader: TypeReader<"courses"> = {

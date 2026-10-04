@@ -160,7 +160,10 @@ export async function archiveItem(db: CatalogDatabase, options: ItemOptions): Pr
       owner: CLI_OWNER,
       type: "curriculum_item",
       id: options.id,
-      next: { row: { ...row, archivedAt: new Date() } },
+      // Its reading links go with it: a course file cannot list an archived
+      // item in a reading's `lessons:`, so the write-through could not write
+      // one back. A restore does not bring them back; the course file does.
+      next: { row: { ...row, archivedAt: new Date() }, links: { curriculum_item_asset: [] } },
       base: latest?.id ?? null,
       author: options.author ?? LOCAL_LEARNER_ID,
       authorKind: "person",

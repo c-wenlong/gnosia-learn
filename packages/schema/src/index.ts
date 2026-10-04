@@ -28,6 +28,7 @@ import {
   conceptCurriculumItem,
   conceptPrerequisite,
   curriculumItem,
+  curriculumItemAsset,
   curriculumItemTopic,
   diagram,
   manimkcTopic,
@@ -79,6 +80,7 @@ export const tables = {
   assetDerivation,
   curriculumItemTopic,
   conceptCurriculumItem,
+  curriculumItemAsset,
   session,
   sessionLogEntry,
   event,
@@ -127,6 +129,7 @@ export const CONTENT_TABLES = [
   "assetDerivation",
   "curriculumItemTopic",
   "conceptCurriculumItem",
+  "curriculumItemAsset",
   "sessionLogEntry",
   "contentRevision",
 ] as const satisfies readonly TableName[];
@@ -194,6 +197,8 @@ export type CurriculumItemTopic = typeof curriculumItemTopic.$inferSelect;
 export type NewCurriculumItemTopic = typeof curriculumItemTopic.$inferInsert;
 export type ConceptCurriculumItem = typeof conceptCurriculumItem.$inferSelect;
 export type NewConceptCurriculumItem = typeof conceptCurriculumItem.$inferInsert;
+export type CurriculumItemAsset = typeof curriculumItemAsset.$inferSelect;
+export type NewCurriculumItemAsset = typeof curriculumItemAsset.$inferInsert;
 export type BlobObject = typeof blobObject.$inferSelect;
 export type NewBlobObject = typeof blobObject.$inferInsert;
 export type Tag = typeof tag.$inferSelect;
