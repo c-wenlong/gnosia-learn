@@ -92,10 +92,13 @@ with the marker; when you are only conversing, do not.
 When the learner replies to a turn that carried `check`, the route runs a
 second, short call beside the reply: the question, the note's matching
 check block if one exists (its `answer:` and `why:`), the learner's words,
-and a request for JSON `{ correct: boolean, feedback: string }`. This is the
-shape `POST /api/agent/session` already uses for a question
-([session.ts](../../apps/web/src/lib/agent/session.ts)), with the same
-refusal: a reply the parser cannot read is `UNSTRUCTURED_REPLY`, and the
+and a request for JSON `{ correct: boolean, feedback: string }`. The
+pattern is the one `POST /api/agent/session` uses for a question
+([session.ts](../../apps/web/src/lib/agent/session.ts)): ask the model for
+JSON, parse it strictly, refuse what does not parse. The parser is new,
+since `parseSessionQuestion` reads options and a correct index and the
+verdict has neither: a small `parseVerdict` with the same clipping and the
+same test shape, and a reply it cannot read is `UNSTRUCTURED_REPLY`, so the
 route answers with no verdict rather than a guessed one. The judge is an
 archivist, not a teacher, as the recap prompt is: it reads the answer
 against the note and says one thing.
@@ -126,20 +129,28 @@ learner agreed to.
 
 `recordObservation` takes `source`, `probe` or `teach`, and a probe skips
 the learning step on purpose: being asked is not being taught
-([LEARN.md](../LEARN.md), "Phase 1"). A chat check is `probe` when it is the
-tutor's opening move on a return visit (nothing was taught yet this
-thread), and `teach` once the thread holds a tutor turn before the check.
-Both are values the route and the `--json` shapes already know; no new
-source is added, and nothing the `learning` plugin parses changes.
+([LEARN.md](../LEARN.md), "Phase 1"). A chat check is `teach` only when
+the thread holds a tutor turn before it that taught something, and `probe`
+otherwise. The test for "taught something" is mechanical: a tutor turn with
+no marker. A turn that carries a marker asked (the opening recall question
+with its one-line reflection is such a turn), and does not count; a turn
+with no marker explained, answered or worked an example. The rule errs
+towards `probe`, which is the safe side, since a probe never moves mastery
+upwards but still earns the card its review slot (`recordObservation`,
+"every answered question earns a review slot, whatever the source"). Both
+are values the route and the `--json` shapes already know; no new source is
+added, and nothing the `learning` plugin parses changes.
 
 ### 5. Recall as the opening move (R3)
 
 The tutor's prompt already says, on a return visit: open by reflecting back
 what was established, then ask one question that checks the ground still
 holds. With the marker, that opening question is a check, and with R4 it is
-a probe. So a learner who opens a concept whose card is due, or whose last
-observation is older than the card's interval, is asked first, in the
-conversation, and their answer reschedules the card. This is the review
+a probe. So a learner who opens a concept whose card is due is asked
+first, in the conversation, and their answer reschedules the card. The
+card's due date is the only trigger: a grade on `/review` moves the date
+without writing an observation, so a rule that also read the last
+observation's age would ask again right after a grade. This is the review
 queue, delivered one concept at a time at the moment the learner returns to
 it, instead of as a list. Home's "Worth a quick recall" (part 4 of
 [the Home proposal](home-page.md)) keeps proposing which concepts those are.
@@ -149,9 +160,14 @@ it, instead of as a list. Home's "Worth a quick recall" (part 4 of
 The first recorded answer in a thread opens a `session` row and its
 `session-start` event, in the same locked transaction as the answer, exactly
 as the session page's first answer does (`sessionId` on the observe route).
-A thread that records nothing leaves no row. The session is closed by the
-last observation's `closeSession` when the learner leaves the page, or by
-the catalog's own idle rule. Two things follow for free: Home's "Pick up
+A thread that records nothing leaves no row. Closing is best-effort, as
+the session page's is: the last answer is re-sent with `closeSession` on
+`pagehide` (its request id makes the resend a replay, not a second
+observation), and a tab killed before that leaves the session open, exactly
+as an abandoned Teach session does today. There is no idle rule in the
+catalog that closes one, and this proposal adds none; `learn session close`
+closes it from the terminal, and an open session costs nothing but an
+honest row. Two things follow for free: Home's "Pick up
 where you left off" lists the concept through its observation events (the
 limit called out under the Home proposal's "Tutor chats are not a thread"
 narrows to the text of the chat, which stays in the browser), and `learn
@@ -178,16 +194,19 @@ cannot be taken back except by voiding the whole session
 keeps the log honest. The owner may overturn this: the row is the same
 either way, only whether it waits.
 
-**R3. A return visit opens with recall when the card says so.** The tutor
-asks first when the concept's card is due, or the last observation is older
-than the card's interval. Otherwise the opening is the prompt's existing
-return-visit opening, a reflection and one question, which may or may not
-be a check. The due date the tutor already reads is the trigger; nothing
-new is computed.
+**R3. A return visit opens with recall when the card is due.** The tutor
+asks first when the concept's card is due, and only then. Otherwise the
+opening is the prompt's existing return-visit opening, a reflection and one
+question, which may or may not be a check. The due date the tutor already
+reads is the trigger; nothing new is computed, and the last observation's
+age is not consulted, since a `/review` grade moves the card without one.
 
-**R4. The source is `probe` before teaching, `teach` after.** The rule is
-mechanical: a check with no tutor turn before it in this thread is a probe.
-It keeps the BKT semantics the terminal set and adds no value to
+**R4. The source is `probe` unless a marker-less tutor turn came first.**
+The rule is mechanical: a check is `teach` only when an earlier tutor turn
+in this thread carried no marker, which is the turn that explained rather
+than asked. An opening recall question, reflection included, is a marker
+turn and so a probe. It keeps the BKT semantics the terminal set, errs
+towards the source that cannot inflate mastery, and adds no value to
 `OBSERVE_SOURCES`.
 
 **R5. Structure in prose, judged by a second call.** The marker and the
@@ -198,9 +217,10 @@ mode (a verdict with no marker, or a marker on a non-check) is silent. The
 cost of R5 is one short extra call per answered check, in the chat's own
 rate bucket, only on turns that follow a marker.
 
-**R6. The first recorded answer opens a session.** As the session page
-does. The thread's words stay in `sessionStorage`; storing chats on the
-server is a separate proposal.
+**R6. The first recorded answer opens a session, and closing is
+best-effort.** As the session page does, on both counts. The thread's words
+stay in `sessionStorage`; storing chats on the server is a separate
+proposal.
 
 ## What stays
 
@@ -244,7 +264,7 @@ server is a separate proposal.
 
 | Phase | Ships | Done when |
 | --- | --- | --- |
-| 1 | R1, R2, R4, R5: the marker, the judge, the verdict row, the observe write, on the concept tutor only | "Give me a check", an answer and one tap writes an `observation` event that shows under Recent answers on the concept page and moves its colour on the map; a thread with no check writes nothing; `observe --json` is byte-for-byte what it was |
+| 1 | R1, R2, R4, R5: the marker, the judge and its `parseVerdict`, the verdict row, the observe write, on the concept tutor only | "Give me a check", an answer and one tap writes an `observation` event that shows under Recent answers on the concept page and moves its colour on the map; a thread with no check writes nothing; `observe --json` is byte-for-byte what it was |
 | 2 | R3 and R6: recall as the opening move, the session row | Opening a concept with a due card is met with a question; its answer reschedules the card; Home's threads list the concept; `learn session list` shows the chat |
 | 3 | The course topic tutor's exit ticket records against the topic's concepts; Home's "Recall these" opens the first concept's chat rather than `/review` | A course session's closing questions move mastery on the concepts the topic declares |
 
