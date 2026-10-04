@@ -9,6 +9,7 @@ import { GnosiaWordmark } from "@/components/brand";
 import { useHistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
 import { activeDestination, DESTINATIONS, STUDIO_DESTINATION } from "@/lib/nav";
+import { isPlainClick } from "@/lib/plain-click";
 
 import mark from "../../../public/brand/mark.png";
 import { AccountMenu } from "./AccountMenu";
@@ -368,7 +369,7 @@ export function NewChatLink({
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onPick();
     if (chats === null) return;
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!isPlainClick(event)) return;
     event.preventDefault();
     chats.newChat();
   };
