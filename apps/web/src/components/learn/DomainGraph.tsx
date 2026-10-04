@@ -94,9 +94,8 @@ export function DomainGraph({
               <rect x={box.x} y={box.y} width={box.width} height={box.height} rx={14} className="fill-surface2 stroke-hair" strokeWidth={1} />
               <text
                 data-topic-title={g.topic}
-                role="button"
-                tabIndex={-1}
-                aria-label={`Open the ${g.title} topic`}
+                // A pointer's shortcut: the list's topic buttons are the keyboard's (D7).
+                aria-hidden="true"
                 x={box.x + 12}
                 y={box.y + 20}
                 fontSize={12.5}

@@ -149,6 +149,8 @@ export function DomainView({
   onGo,
   onSelect,
   onPick,
+  panelFocus = 0,
+  onPanelFocused,
 }: {
   domain: DomainSummary;
   layout: DomainLayout;
@@ -164,6 +166,9 @@ export function DomainView({
   onSelect: (id: string) => void;
   /** A concept chosen from the panel, maybe in another domain. */
   onPick: (id: string) => void;
+  /** Bumped when a pick moved here from another place: the new panel's heading takes the focus. */
+  panelFocus?: number;
+  onPanelFocused?: () => void;
 }) {
   const graphNodes = useMemo(() => new Map<string, DomainGraphNode>([...rows].map(([id, r]) => [id, r])), [rows]);
   const focus = selected === null ? null : (rows.get(selected) ?? null);
@@ -213,6 +218,8 @@ export function DomainView({
               onPick={onPick}
               domainOf={domainOf}
               domain={domain.slug}
+              focusRequest={panelFocus}
+              onFocused={onPanelFocused}
             />
             <ConceptList domain={domain} layout={layout} topic={topic} rows={rows} selected={selected} dimmed={dimmed} onGo={onGo} onSelect={onSelect} />
           </div>
@@ -301,6 +308,8 @@ export function MapPanel({
   onPick,
   domainOf = {},
   domain = null,
+  focusRequest = 0,
+  onFocused,
 }: {
   focus: IndexRow | null;
   nodes: GraphNode[];
@@ -309,6 +318,13 @@ export function MapPanel({
   domainOf?: Readonly<Record<string, string>>;
   /** The domain on screen; a related concept elsewhere names its own. */
   domain?: string | null;
+  /**
+   * Bumped by a pick that moved to another place. That mounts this panel
+   * afresh, so the button pressed is gone; the heading takes the focus.
+   */
+  focusRequest?: number;
+  /** The request was served, so a later remount does not take the focus again. */
+  onFocused?: () => void;
 }) {
   // A "Needs" or "Leads to" press redraws this panel for the concept it names,
   // and the button that had focus goes with it: focus moves to the new
@@ -316,6 +332,14 @@ export function MapPanel({
   const heading = useRef<HTMLHeadingElement | null>(null);
   const picked = useRef(false);
   const focusId = focus?.id ?? null;
+  useEffect(() => {
+    if (focusRequest === 0 || heading.current === null) return;
+    heading.current.focus({ preventScroll: true });
+    heading.current.scrollIntoView({ block: "nearest", behavior: scrollBehavior() });
+    onFocused?.();
+    // Asked once per request; `onFocused` is a new function every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest]);
   useEffect(() => {
     if (!picked.current) return;
     picked.current = false;

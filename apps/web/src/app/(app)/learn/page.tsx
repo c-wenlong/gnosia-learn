@@ -69,8 +69,12 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
     getCourses(),
     currentOwner().then(readRecentCourses),
     // The vocabulary places each concept in a domain (D1 of docs/proposals/domain-map.md).
-    // Without it every concept falls back to its folder, which still draws a map.
-    getTopics().catch(() => []),
+    // Without it every concept falls back to its folder, which still draws a map, and
+    // the page says so rather than passing folders off as the curated domains.
+    getTopics().then(
+      (list) => ({ list, read: true }),
+      () => ({ list: [], read: false }),
+    ),
   ]);
 
   if (kb.concepts.length === 0) {
@@ -108,7 +112,7 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
     domain: r.domain,
     topic: topicOf.get(r.id) ?? null,
   }));
-  const vocabulary: DomainTopic[] = topics.map((t) => ({ slug: t.slug, title: t.title, domain: t.domain }));
+  const vocabulary: DomainTopic[] = topics.list.map((t) => ({ slug: t.slug, title: t.title, domain: t.domain }));
   const tree = domainTree(domainNodes, kb.edges, vocabulary);
   const map: DomainMapData = {
     tree,
@@ -121,6 +125,7 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
         rows={rows}
         edges={kb.edges}
         map={map}
+        foldersOnly={!topics.read}
         initial={{
           selected,
           view,
