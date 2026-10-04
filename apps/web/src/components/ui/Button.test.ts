@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Button, type ButtonAsButton } from "./Button";
+import { Button, type ButtonAsButton, type ButtonAsLink } from "./Button";
 
 const render = (props: Omit<ButtonAsButton, "children">) =>
   renderToStaticMarkup(createElement(Button, props as ButtonAsButton, "Save"));
@@ -51,7 +51,7 @@ describe("Button at xs", () => {
 
   it("is a link with href, keeping the scroll when asked", () => {
     const html = renderToStaticMarkup(
-      createElement(Button, { href: "/studio", size: "xs", variant: "secondary", scroll: false, children: "Back to the grid" }),
+      createElement(Button, { href: "/studio", size: "xs", variant: "secondary", scroll: false } as ButtonAsLink, "Back to the grid"),
     );
     expect(html).toMatch(/^<a [^>]*href="\/studio"/);
     expect(html).toContain("h-7");
