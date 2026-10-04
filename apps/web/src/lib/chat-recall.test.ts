@@ -60,6 +60,7 @@ describe("chat recall", () => {
     expect(first.sessionId).toMatch(/^chat-\d{4}-\d{2}-\d{2}-dot-product-/);
     expect(second.sessionId).toBe(first.sessionId);
     expect(first.chosen).toBe("A");
+    expect(first).not.toHaveProperty("sessionTitle");
 
     closeChatSession(at.scope);
     const close = fetchMock.mock.calls.at(-1) as unknown[];
@@ -147,5 +148,19 @@ describe("chat recall's save queue", () => {
     const close = fetchMock.mock.calls.at(-1) as unknown[];
     expect(close[0]).toBe("/api/learner/observe");
     expect(bodyOf(close)).toMatchObject({ requestId: "chat-r1", closeSession: true });
+  });
+});
+
+describe("a chat that names its session", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sends the topic's title and goal for the session the answer may open", async () => {
+    fetchMock.mockResolvedValue(json(200, { ok: true, result: RESULT }));
+    await recordAnswer(input({ sessionTitle: "CP4284 · Attention", sessionGoal: "cp4284-m1-t1" }));
+    expect(bodyOf(fetchMock.mock.calls[0])).toMatchObject({ sessionTitle: "CP4284 · Attention", sessionGoal: "cp4284-m1-t1" });
   });
 });

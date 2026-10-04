@@ -451,6 +451,21 @@ export function TutorChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, recall, key, slug, title]);
 
+  /**
+   * Recall into a thread that already has turns: the card is due, but the
+   * learner came back to a conversation they had. The note's check is added
+   * as the tutor's next turn; with no check, the tutor is asked for one in a
+   * learner turn the thread shows.
+   */
+  function recallNow() {
+    if (recall === null || busy) return;
+    if (recall.question) {
+      writeTurns(key, [...current(), recallOpening(title, recall.question)]);
+      return;
+    }
+    void ask("Ask me one recall question about this concept.", current());
+  }
+
   async function ask(
     question: string,
     history: ThreadItem[] = turns,
@@ -638,6 +653,16 @@ export function TutorChat({
           </p>
         )}
 
+        {!busy && recall !== null && turns.length > 0 && pendingCheck(turns) === null && (
+          // R3 on a thread the learner already had: the card is due, so recall is one press away.
+          <div className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-surface2 px-4 py-3 text-[13px] text-text motion-reduce:animate-none">
+            <span className="min-w-0 flex-1">This concept&apos;s review is due.</span>
+            <Button variant="secondary" size="sm" onClick={recallNow}>
+              Recall now
+            </Button>
+          </div>
+        )}
+
         {!busy && openingFailed && turns.length === 0 && (
           // R3: the model could not open on a recall question; the learner can ask again.
           <div role="status" className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none">
@@ -674,6 +699,11 @@ export function TutorChat({
                 setTurns([]);
                 setRestored(0);
                 setError(null);
+                // A due card opens the new thread on recall, as an empty one does on arrival (R3).
+                if (recall !== null) {
+                  if (recall.question) writeTurns(key, [recallOpening(title, recall.question)]);
+                  else void askOpening();
+                }
               }}
               className="rounded-sm text-[12px] text-text3 underline-offset-4 transition-colors duration-100 hover:text-text2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >

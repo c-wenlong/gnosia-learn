@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { providerLabel } from "@self-learn/schema/shared";
 import { MathText } from "@/components/Math";
 import { FIELD_TEXT } from "@/components/ui/classes";
@@ -61,6 +62,7 @@ export function AgentSession({
   module: Module;
   topic: Topic;
 }) {
+  const router = useRouter();
   const { state, ready, saveKnowledge, saveError } = useLearner();
   const learnerNote = state.notes[topic.id] ?? "";
   const storedKnowledge = state.knowledge[topic.id];
@@ -308,8 +310,13 @@ export function AgentSession({
         requestId: verdict.requestId,
         question: verdict.question,
         answer: m.content,
+        // The session is the topic's: its answers span the concepts the topic declares.
+        sessionTitle: `${course.code} · ${topic.title}`,
+        sessionGoal: topic.id,
       });
       patchVerdict(messageId, { state: "recorded", error: null, recorded });
+      // The shell's learner snapshot (mastery, progress) reads the new state.
+      router.refresh();
     } catch (e) {
       patchVerdict(messageId, {
         state: "failed",

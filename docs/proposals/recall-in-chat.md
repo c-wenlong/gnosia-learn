@@ -254,7 +254,8 @@ proposal.
   one.
 - SM-2, the `review` table, `review grade` and `/review` with its four
   ratings. `/review` is reached from "Review now" on a concept page and
-  "Recall these" on Home.
+  All reviews on Home's recall card, whose rows and Start recall button
+  open the concepts' chats since phase 3.
 - The Teach session page and the week check. They are the structured path
   and stay the first thing "Teach me" opens; this proposal gives the
   unstructured path the same write.

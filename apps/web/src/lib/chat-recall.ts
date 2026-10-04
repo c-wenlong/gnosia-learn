@@ -142,6 +142,9 @@ export interface RecordInput {
   question: string;
   /** The learner's answer; the observation stores its first `SESSION_TEXT_LIMIT` characters as `chosen`. */
   answer: string;
+  /** What the session is called and aims at when this answer opens it; the concept's when absent. */
+  sessionTitle?: string;
+  sessionGoal?: string;
 }
 
 /**
@@ -169,6 +172,8 @@ export async function recordAnswer(input: RecordInput): Promise<RecordedResult> 
       question: input.question,
       // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
       chosen: input.answer.slice(0, SESSION_TEXT_LIMIT),
+      ...(input.sessionTitle ? { sessionTitle: input.sessionTitle } : {}),
+      ...(input.sessionGoal ? { sessionGoal: input.sessionGoal } : {}),
     };
     savingAnswer.set(input.scope, payload);
     return fetch("/api/learner/observe", {
