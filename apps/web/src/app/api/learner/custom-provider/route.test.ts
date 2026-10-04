@@ -110,6 +110,18 @@ describe.skipIf(!reachable.ok)("custom provider routes", () => {
     expect((await scratch.pool.query("select 1 from provider_key")).rowCount).toBe(0);
   });
 
+  it("refuses a custom provider's key pasted into a model field, as for a built-in's", async () => {
+    // Shaped like a model id, so only the key comparison can catch it.
+    const modelShaped = "gateway/llama-3-70b-instruct-q4";
+    expect((await route.POST(request("/api/learner/custom-provider", "POST", { label: "Gateway", baseUrl: "https://gw.example/v1", key: modelShaped }))).status).toBe(200);
+    const response = await chain.POST(request("/api/learner/tutor-model", "POST", { provider: "custom-gateway", model: modelShaped }));
+    expect(response.status).toBe(400);
+    const body = JSON.stringify(await json(response));
+    expect(body).toContain("one of your API keys");
+    expect(body).not.toContain(modelShaped);
+    expect((await scratch.pool.query("select 1 from tutor_model")).rowCount).toBe(0);
+  });
+
   it("calls a custom provider's models at its own base URL with its own key, and nothing else's", async () => {
     await route.POST(request("/api/learner/custom-provider", "POST", { label: "Gateway", baseUrl: "https://gw.example/v1", key: KEY }));
     expect((await chain.POST(request("/api/learner/tutor-model", "POST", { provider: "custom-gateway", model: "gw/fast" }))).status).toBe(200);

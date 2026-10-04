@@ -75,10 +75,15 @@ export async function POST(req: Request): Promise<NextResponse> {
 
 /** Whether `model` is, holds, or is a long part of any key the tutor could call with. */
 function echoesKey(model: string, saved: Partial<Record<ProviderName, string>>): boolean {
-  const keys = PROVIDER_IDS.flatMap((id) => {
-    const key = keyFor(id, saved);
-    return key === null ? [] : [key.apiKey];
-  });
+  // The server's keys come through `keyFor`; every saved key is checked as
+  // well, a custom provider's included, which `PROVIDER_IDS` does not name.
+  const keys = [
+    ...PROVIDER_IDS.flatMap((id) => {
+      const key = keyFor(id, saved);
+      return key === null ? [] : [key.apiKey];
+    }),
+    ...Object.values(saved).filter((key): key is string => typeof key === "string" && key !== ""),
+  ];
   return keys.some((key) => model.includes(key) || (model.length >= 12 && key.includes(model)));
 }
 
