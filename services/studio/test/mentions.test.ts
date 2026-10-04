@@ -47,10 +47,12 @@ vi.mock("../src/catalog", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/catalog")>()),
   ...catalogMock,
 }));
-const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
+const canvasMock = vi.hoisted(() => ({ doctor: vi.fn(), canvas: vi.fn() }));
 vi.mock("../src/canvas", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/canvas")>()),
   doctor: canvasMock.doctor,
+  // Only a draft opened on a diagram calls it here, for its `inspect`.
+  canvas: canvasMock.canvas,
 }));
 
 const { Drafts } = await import("../src/drafts");
@@ -60,7 +62,7 @@ const { CLAUDE_BIN } = await import("../src/config");
 if (CLAUDE_BIN !== fake!.bin) throw new Error(`the planner would spawn ${CLAUDE_BIN}, not the fake`);
 const { JobStore, RecordStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
-const { draftJsonPath, plannerSystemPath } = await import("../src/paths");
+const { draftJsonPath, plannerSystemPath, workDir, workPath } = await import("../src/paths");
 
 type DraftsT = InstanceType<typeof Drafts>;
 const ok = (json: unknown = {}) => ({ ok: true, json, error: null, offline: false });
@@ -98,6 +100,17 @@ function chips(text: string, ...kinds: ("diagram" | "video")[]): [string, { kind
   return [`${prefix}${text}`, mentions];
 }
 
+/** `canvas inspect --json` of a two-box diagram, as the EXTENDING block reads it. */
+const inspected = {
+  shapes: [
+    { id: "shape:a", text: "Sender" },
+    { id: "shape:b", text: "Receiver" },
+    { id: "shape:ab", text: "sends segments" },
+  ],
+  bindings: [{ arrow: "shape:ab", from: "shape:a", to: "shape:b" }],
+  meta: { title: "TCP congestion window", topic: "tcp-congestion-control", concepts: [] },
+};
+
 let store: InstanceType<typeof JobStore>;
 let videoStore: InstanceType<typeof RecordStore>;
 let drafts: DraftsT;
@@ -127,6 +140,7 @@ beforeEach(async () => {
   catalogMock.videoList.mockReset().mockResolvedValue(ok({ videos: [] }));
   catalogMock.videoShow.mockReset().mockResolvedValue(ok({ video: null }));
   canvasMock.doctor.mockReset().mockResolvedValue({ code: 0, stdout: "", stderr: "", json: null, signal: null, timedOut: false });
+  canvasMock.canvas.mockReset().mockResolvedValue({ code: 0, stdout: "", stderr: "", json: inspected, signal: null, timedOut: false });
   store = new JobStore();
   videoStore = new RecordStore("video");
   runner = {
@@ -581,6 +595,93 @@ describe("a video in review (D52)", () => {
     expect(after.slots.video).toMatchObject({ state: "drawing", jobId: pressed.jobId });
     expect(after.transcript.some((entry) => entry.text.includes("was discarded; nothing landed"))).toBe(false);
     expect(after.transcript.some((entry) => entry.text.includes("was discarded and replaced by the new brief"))).toBe(true);
+  });
+});
+
+describe("a video of a diagram (D86 of STUDIO-CHAT-FIRST.md)", () => {
+  /** A draft opened on `tcp-congestion-window` as Make a video of this opens one: `source`, no `sourceKind`. */
+  async function openOnDiagram(): Promise<string> {
+    // A canvas open on the checkout is used as it is, so no catalog checkout runs.
+    runner.canvasOpen = () => true;
+    await mkdir(workDir(), { recursive: true });
+    await writeFile(workPath("tcp-congestion-window"), JSON.stringify({ records: [] }), "utf8");
+    const { record } = await drafts.create({ source: "tcp-congestion-window" });
+    return record.id;
+  }
+
+  it("carries the diagram as EXTENDING beside the video section, and makes a new video from a Video tag", async () => {
+    const id = await openOnDiagram();
+    expect(drafts.get(id)).toMatchObject({ sourceKind: "diagram", source: "tcp-congestion-window", plannerKinds: ["diagram", "video"] });
+    const system = await readFile(plannerSystemPath(id), "utf8");
+    expect(system).toContain("# A video brief");
+    expect(system).toContain("-----BEGIN EXTENDING-----\nslug: tcp-congestion-window");
+    expect(system).toContain("  Sender -> Receiver (sends segments)");
+    expect(system).not.toContain("-----BEGIN CHANGING-----");
+
+    // The composer's prefill, sent by the person: a video brief, mode new, on the diagram's slug.
+    await fake.script([{ text: videoOnly({ kind: "video", ...videoBrief, slug: "tcp-congestion-window", mode: "new" }) }]);
+    await send(id, "Make a video that explains this diagram.", "video");
+    expect(await prompt(0)).toBe("-----BEGIN TAGS-----\nvideo\n-----END TAGS-----\n\n@video Make a video that explains this diagram.");
+    const view = await drafts.view(id);
+    expect(view.slots.video).toMatchObject({ state: "briefed", live: true });
+    expect(view.slots.diagram).toBeUndefined();
+
+    await expect(drafts.drawOne(id, "v", "video")).resolves.toMatchObject({ kind: "video", created: true });
+    expect(videoRunner.enqueue).toHaveBeenCalledTimes(1);
+    expect(videoRunner.enqueue.mock.calls[0]![0]).toMatchObject({ slug: "tcp-congestion-window", mode: "new" });
+    // Nothing is drawn: the diagram the conversation opened on is only material.
+    expect(runner.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("steers the planner to another slug when a studio video has the diagram's, never to a change it cannot make (#305 review)", async () => {
+    const id = await openOnDiagram();
+    // The real runner's refusal for a new video on a taken slug, offering a change.
+    videoRunner.admit.mockRejectedValueOnce(
+      new JobRefused(409, 'a studio video called tcp-congestion-window already exists, and this brief says mode "new": make it a change, or pick another slug', {
+        reason: "slug-taken",
+        slug: "tcp-congestion-window",
+      }),
+    );
+    await fake.script([
+      { text: videoOnly({ kind: "video", ...videoBrief, slug: "tcp-congestion-window", mode: "new" }) },
+      { text: videoOnly({ kind: "video", ...videoBrief, slug: "tcp-congestion-window-explained", mode: "new" }) },
+    ]);
+    await send(id, "Make a video that explains this diagram.", "video");
+    await expect(drafts.drawOne(id, "v1", "video")).rejects.toMatchObject({
+      status: 409,
+      detail: { reason: "slug-taken", slug: "tcp-congestion-window", field: "slug" },
+    });
+    const refused = (await drafts.view(id)).transcript.at(-1)!;
+    expect(refused.text).toContain("this conversation did not open on it or make it");
+    expect(refused.text).toContain("give the new video a slug no video uses");
+    expect(refused.text).not.toContain("make it a change");
+
+    // The next turn carries that note to the planner, whose new slug is pressable.
+    await send(id, "Use another name.", "video");
+    expect(await prompt(1)).toContain("give the new video a slug no video uses");
+    await expect(drafts.drawOne(id, "v2", "video")).resolves.toMatchObject({ kind: "video", created: true });
+    expect(videoRunner.enqueue.mock.calls[0]![0]).toMatchObject({ slug: "tcp-congestion-window-explained", mode: "new" });
+  });
+
+  it("keeps the runner's words where the conversation could change that video", async () => {
+    catalogMock.videoShow.mockResolvedValue(ok({ video: { slug: "two-boxes", title: "x", topic: "tcp-congestion-control", durationSeconds: 61, sourceHash: "h", revision: 1, brief: narratedBrief() } }));
+    const opened = await drafts.create({ source: "two-boxes", sourceKind: "video" });
+    const runnerWords = 'a studio video called two-boxes already exists, and this brief says mode "new": make it a change, or pick another slug';
+    videoRunner.admit.mockRejectedValueOnce(new JobRefused(409, runnerWords, { reason: "slug-taken", slug: "two-boxes" }));
+    await fake.script([{ text: videoOnly({ kind: "video", ...videoBrief, slug: "two-boxes", mode: "new" }) }]);
+    await send(opened.record.id, "again, from scratch", "video");
+    await expect(drafts.drawOne(opened.record.id, "v", "video")).rejects.toMatchObject({ status: 409, message: runnerWords });
+  });
+
+  it("cannot change a video by the diagram's name: a diagram is not a video the conversation opened on", async () => {
+    const id = await openOnDiagram();
+    await fake.script([{ text: videoOnly({ kind: "video", ...videoBrief, slug: "tcp-congestion-window", mode: "change" }) }]);
+    await send(id, "Make a video that explains this diagram.", "video");
+    await expect(drafts.drawOne(id, "v", "video")).rejects.toMatchObject({
+      status: 409,
+      detail: { reason: "change-not-in-conversation", slug: "tcp-congestion-window" },
+    });
+    expect(videoRunner.enqueue).not.toHaveBeenCalled();
   });
 });
 

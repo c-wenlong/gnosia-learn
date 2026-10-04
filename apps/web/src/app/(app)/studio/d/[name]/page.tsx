@@ -21,6 +21,7 @@ import {
   VerbNotice,
 } from "@/components/studio/StudioChrome";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
+import { videoAvailability } from "@/lib/studio-drafts";
 import { vocabularyBanner, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   canvasHref,
@@ -94,6 +95,8 @@ interface Health {
   checks: DoctorLine[];
   /** Where the topic list stands (D13). Optional: an older runner does not send it. */
   vocabulary?: VocabularyState;
+  /** The video doctor's block, read with `videoAvailability`. Absent from a runner before videos. */
+  video?: unknown;
 }
 
 export default async function CanvasPage({
@@ -199,7 +202,7 @@ export default async function CanvasPage({
 
   return (
     <Shell>
-      <Strip diagram={diagram} path={path} uncommitted={checkout?.dirty === true} />
+      <Strip diagram={diagram} path={path} uncommitted={checkout?.dirty === true} videos={videoAvailability(health.data.video).ok} />
       <JobStrip path={path} stream={panel.stream} />
       {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
       {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
@@ -270,7 +273,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Strip({ diagram, path, uncommitted }: { diagram: Diagram; path: string; uncommitted: boolean }) {
+function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path: string; uncommitted: boolean; videos: boolean }) {
   const pill = freshness(diagram.svgState);
   return (
     <StudioStrip>
@@ -329,6 +332,16 @@ function Strip({ diagram, path, uncommitted }: { diagram: Diagram; path: string;
       {/* A change is asked for in a conversation on the grid, which opens on
           this diagram with its thumbnail pinned (docs/STUDIO-CHAT-FIRST.md,
           "Extend from a tile"). */}
+      {/* The same conversation, with the Video chip waiting in its composer
+          (D86). Left out when the video doctor fails: the strip has no room
+          for the reason, and the diagram's panel on the grid says it. */}
+      {videos && (
+        <ExtendLink
+          href={extendHref(diagram.name, { video: true })}
+          label="Make a video"
+          className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium transition-colors hover:bg-[var(--surface-hover)]"
+        />
+      )}
       <ExtendLink
         href={extendHref(diagram.name)}
         className="inline-flex h-8 shrink-0 items-center rounded-md bg-[var(--accent)] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-strong)]"
