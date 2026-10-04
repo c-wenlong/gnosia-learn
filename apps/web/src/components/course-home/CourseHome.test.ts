@@ -344,6 +344,7 @@ describe("CourseHome: the module as one path", () => {
       "/library/diagram%3Atheta",
       "https://example.com/docs",
       "https://leetcode.com/problems/x/",
+      "/courses/pc/p1/check",
       "/library?topic=growth",
     ]);
     expect(main(host).textContent).toContain("All 7 in the library");
@@ -368,6 +369,14 @@ describe("CourseHome: the module as one path", () => {
     // big-omega's note has no checks: no count, no sentence, and no Quiz me.
     const omega = [...main(host).querySelectorAll("a")].find((a) => a.getAttribute("href") === "/learn/big-omega")!;
     expect(omega.closest("li")!.textContent).toBe("Concept big-omegaNote · Not started");
+  });
+
+  it("ends the path on the week check, after practice: one row with its counts, not a heading over it", () => {
+    const host = renderPath();
+    const check = [...main(host).querySelectorAll("a")].find((a) => a.getAttribute("href") === "/courses/pc/p1/check")!;
+    expect(check.textContent).toBe("Week check3 concepts · up to 9 questions");
+    const groups = [...main(host).querySelectorAll("h2")].map((h) => h.textContent);
+    expect(groups).not.toContain("Week check");
   });
 
   it("keeps the learner's own resources and the add form under read alongside", () => {

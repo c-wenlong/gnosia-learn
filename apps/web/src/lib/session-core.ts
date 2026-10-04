@@ -17,6 +17,15 @@ import { buildChoices, formatDue } from "@/lib/review-core";
 export const OBSERVE_SOURCES = ["probe", "teach"] as const;
 export type ObserveSource = (typeof OBSERVE_SOURCES)[number];
 
+/**
+ * A question as two readings of it are compared: lowercase, runs of space
+ * collapsed, trimmed. How the workspace finds which check an observation
+ * asked, and how the week check finds when a check was last asked.
+ */
+export function normaliseQuestion(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 /** The longest question or answer text an observation stores. */
 export const SESSION_TEXT_LIMIT = 2_000;
 
@@ -111,7 +120,9 @@ export interface DistractorPool {
  * cannot supply three.
  */
 export function distractorPool(
-  workspace: Pick<ConceptWorkspace, "slug" | "domain" | "requires" | "assumes" | "dependants" | "backlinks">,
+  workspace: Pick<ConceptWorkspace, "slug" | "domain"> & {
+    [edge in "requires" | "assumes" | "dependants" | "backlinks"]: readonly { slug: string }[];
+  },
   summaries: readonly ConceptSummary[],
 ): DistractorPool {
   const others = summaries.filter((s) => s.conceptId !== workspace.slug && s.summary.trim() !== "");
@@ -166,12 +177,36 @@ export interface SessionStep {
    * says so and lets the learner continue.
    */
   fallback: SessionQuestion | null;
+  /**
+   * A week check's step only: the concept it asks about and where it sits in
+   * the check. A concept session's steps are all about the page's concept.
+   */
+  place?: StepPlace;
 }
 
-/** `?mode=check` is the Studio card's Quiz me: straight to the checks. */
-export type SessionMode = "learn" | "check";
+/** Where a week check's question sits: which concept, the how-manyth of it, and which question of that concept. */
+export interface StepPlace {
+  slug: string;
+  title: string;
+  /** 1-based, in the order the check asks the concepts. */
+  position: number;
+  /** How many concepts the check holds. */
+  of: number;
+  /** 1-based: the how-manyth question about this concept. */
+  question: number;
+}
 
-export function parseMode(value: unknown): SessionMode {
+/**
+ * `?mode=check` is the Studio card's Quiz me: straight to the checks.
+ * `module` is a module's week check (`/courses/<slug>/<module>/check`), which
+ * no `?mode=` names: its page is the mode.
+ */
+export type SessionMode = ConceptSessionMode | "module";
+
+/** The two modes a concept's own session page takes. */
+export type ConceptSessionMode = "learn" | "check";
+
+export function parseMode(value: unknown): ConceptSessionMode {
   return value === "check" ? "check" : "learn";
 }
 
@@ -191,7 +226,7 @@ export const MAX_QUIZ_CHECKS = 5;
  */
 export function buildSessionPlan(input: {
   slug: string;
-  mode: SessionMode;
+  mode: ConceptSessionMode;
   checks: readonly ConceptCheck[];
   /** Other concepts' summaries, as wrong options. */
   pool: DistractorPool;
@@ -237,6 +272,11 @@ export function buildSessionPlan(input: {
  */
 export const NOTHING_TO_ASK =
   "This note has no check the session can ask, and the tutor has no model provider key to write one. Add one in Settings, under Provider keys.";
+
+/** The week check's two reasons for asking nothing. */
+export const NOTHING_TO_ASK_MODULE =
+  "No note in this module has a check the session can ask, and the tutor has no model provider key to write one. Add one in Settings, under Provider keys.";
+export const NO_CONCEPTS_TO_CHECK = "This module names no concept in your knowledge base, so there is nothing to check.";
 
 /**
  * A reason and what follows from it, as one paragraph: "The tutor could not
@@ -442,6 +482,8 @@ export interface RecordedAnswer {
   correct: boolean;
   pLBefore: number;
   pLAfter: number;
+  /** p(L) after the answer is at the mastery threshold. The route always says; a test's fixture may not. */
+  mastered?: boolean;
   propagated: { concept: string; title: string; hops: number; pLBefore?: number; pLAfter?: number }[];
   card: { due: string; intervalDays: number; created: boolean } | null;
   replayed: boolean;
@@ -489,26 +531,38 @@ export interface MovedRow {
 }
 
 /**
- * The close screen's What moved: the session's concept from its first
+ * The close screen's What moved: each concept answered, from its first
  * answer's prior to its last answer's posterior, then every prerequisite a
  * correct answer spread to, the same way. A replayed answer carries no numbers
  * for its propagation, so a prerequisite seen only there is left out rather
- * than drawn as a guess.
+ * than drawn as a guess. A concept first reached by propagation and then
+ * asked about itself (a week check asks several) is a concept answered.
+ *
+ * `titles` names the concepts a week check asked; a concept session's own
+ * concept is `slug`, titled `title`.
  */
-export function whatMoved(slug: string, title: string, answers: readonly RecordedAnswer[]): MovedRow[] {
+export function whatMoved(
+  slug: string,
+  title: string,
+  answers: readonly RecordedAnswer[],
+  titles: Readonly<Record<string, string>> = {},
+): MovedRow[] {
+  const titleOf = (concept: string) => titles[concept] ?? (concept === slug ? title : concept);
   const rows = new Map<string, MovedRow>();
   for (const a of answers) {
     const own = rows.get(a.concept);
     if (own === undefined) {
       rows.set(a.concept, {
         slug: a.concept,
-        title: a.concept === slug ? title : a.concept,
+        title: titleOf(a.concept),
         before: a.pLBefore,
         after: a.pLAfter,
         prerequisite: false,
       });
     } else {
       own.after = a.pLAfter;
+      own.prerequisite = false;
+      own.title = titleOf(a.concept);
     }
     for (const p of a.propagated) {
       if (p.pLBefore === undefined || p.pLAfter === undefined) continue;
@@ -542,15 +596,28 @@ export function formatTotalsMove(totals: Pick<SessionTotals, "before" | "after">
   return totals.before === null || totals.after === null ? "–" : formatMove(totals.before, totals.after);
 }
 
-export function sessionTotals(slug: string, answers: readonly RecordedAnswer[]): SessionTotals {
-  const own = answers.filter((a) => a.concept === slug);
-  const first = own[0];
-  const last = own[own.length - 1];
+/**
+ * The close screen's numbers. `slug` is the session's concept, or a week
+ * check's concepts: then before and after are the means, over the concepts
+ * answered, of each one's first prior and last posterior, so the tile shows
+ * the average move and a single concept reads exactly as it always did.
+ */
+export function sessionTotals(slug: string | readonly string[], answers: readonly RecordedAnswer[]): SessionTotals {
+  const wanted = new Set(typeof slug === "string" ? [slug] : slug);
+  const ends = new Map<string, { before: number; after: number }>();
+  for (const a of answers) {
+    if (!wanted.has(a.concept)) continue;
+    const seen = ends.get(a.concept);
+    if (seen === undefined) ends.set(a.concept, { before: a.pLBefore, after: a.pLAfter });
+    else seen.after = a.pLAfter;
+  }
+  const mean = (pick: (e: { before: number; after: number }) => number) =>
+    ends.size === 0 ? null : [...ends.values()].reduce((sum, e) => sum + pick(e), 0) / ends.size;
   return {
     answered: answers.length,
     right: answers.filter((a) => a.correct).length,
-    before: first?.pLBefore ?? null,
-    after: last?.pLAfter ?? null,
+    before: mean((e) => e.before),
+    after: mean((e) => e.after),
     cards: new Set(answers.filter((a) => a.card !== null).map((a) => a.concept)).size,
   };
 }
@@ -563,14 +630,19 @@ export interface ScheduledRow {
 }
 
 /** The close screen's Scheduled card: each concept's card as the last answer left it. */
-export function scheduledCards(slug: string, title: string, answers: readonly RecordedAnswer[]): ScheduledRow[] {
+export function scheduledCards(
+  slug: string,
+  title: string,
+  answers: readonly RecordedAnswer[],
+  titles: Readonly<Record<string, string>> = {},
+): ScheduledRow[] {
   const rows = new Map<string, ScheduledRow>();
   for (const a of answers) {
     if (a.card === null) continue;
     const prior = rows.get(a.concept);
     rows.set(a.concept, {
       slug: a.concept,
-      title: a.concept === slug ? title : a.concept,
+      title: titles[a.concept] ?? (a.concept === slug ? title : a.concept),
       due: a.card.due,
       created: (prior?.created ?? false) || a.card.created,
     });
@@ -595,4 +667,26 @@ export function tutorPrefill(question: SessionQuestion, picked: number | null): 
   const tail =
     picked === question.correct ? "Why is that right, and what would make it wrong?" : `The answer was: ${bare(right)}. Why?`;
   return clip(`I was asked: ${clip(question.prompt, 400)} ${mine} ${tail}`, PREFILL_LIMIT);
+}
+
+/**
+ * Whether a question step the tutor was asked to fill can be asked again:
+ * the request came back with no question (a rate limit, an error, the
+ * network), the note had none and there is no fallback. Asked only when a
+ * tutor model is set up, so asking again has someone to ask. Without it a
+ * failed request ended the step, and in a week check its concept, untested.
+ */
+export function canAskAgain(input: {
+  modelAvailable: boolean;
+  hasOwnQuestion: boolean;
+  hasFallback: boolean;
+  resolved: { question: unknown | null } | undefined;
+}): boolean {
+  return (
+    input.modelAvailable &&
+    !input.hasOwnQuestion &&
+    !input.hasFallback &&
+    input.resolved !== undefined &&
+    input.resolved.question === null
+  );
 }

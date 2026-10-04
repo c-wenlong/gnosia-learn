@@ -4,6 +4,7 @@ import type { ConceptPromptInput, ConceptPromptNeighbour } from "@/lib/agent/pro
 import { backlinksOf, dependantsOf, neighbourhood, type GraphNode, type GraphSelection } from "@/lib/concept-graph";
 import type { ConceptCheck } from "@/lib/concept-note-core";
 import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import { normaliseQuestion } from "@/lib/session-core";
 
 /**
  * Everything the concept workspace shows about one concept, assembled from
@@ -126,7 +127,7 @@ function refOf(concept: KbConcept): NeighbourRef {
   return { slug: concept.id, title: concept.title, bucket: bucketOf(concept), pL: concept.pL };
 }
 
-const normalise = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
+const normalise = normaliseQuestion;
 
 const num = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
 const str = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
