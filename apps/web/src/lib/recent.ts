@@ -5,16 +5,16 @@ import {
   asLastVisited,
   asRecentModules,
   assetsByIds,
-  readEvents,
-  readKnowledgeBase,
   readLearnerSnapshot,
   readPreferences,
   draftsByIds,
+  recentActivity,
+  recentConcepts,
   recentDrafts,
   recentTutorSessions,
   type CatalogDatabase,
   type EventRecord,
-  type KbConcept,
+  type RecentConcept,
   type RecentDraft,
   type RecentSession,
 } from "@self-learn/catalog/state";
@@ -59,13 +59,19 @@ import type { Course } from "@/lib/types";
 
 const PLAYBACK_PREFIX = "playback:";
 
-/** The rows Recent is built from, as `readRecent` and Home read them. */
+/**
+ * The rows Recent is built from, as `readRecent` and Home read them. `events`
+ * is the log as `recentActivity` folds it (one record per module and per
+ * concept), or the whole log, which folds to the same rows. `concepts` holds
+ * at least the concepts those events and the sessions' goals name: Home
+ * passes every note it read for the rest of its page, the sidebar only those.
+ */
 export interface RecentRows {
   events: readonly EventRecord[];
   preferences: Record<string, unknown>;
   drafts: readonly RecentDraft[];
   sessions: readonly RecentSession[];
-  concepts: readonly KbConcept[];
+  concepts: readonly RecentConcept[];
   courses: readonly Course[];
 }
 
@@ -276,10 +282,11 @@ export async function readRecent(options: RecentOptions = {}): Promise<RecentMod
   const wantDrafts = studioEnabled() && options.withoutDrafts !== true;
   try {
     const db = await catalogDatabase();
-    const [events, preferences, kb, snapshot, drafts, sessions, courses] = await Promise.all([
-      readEvents(db, owner),
+    const [events, preferences, snapshot, drafts, sessions, courses] = await Promise.all([
+      // The newest `limit` concepts are enough for the pages asked for; a
+      // search looks through all of them, as it looks through every module.
+      recentActivity(db, owner, q === "" ? { limit } : {}),
       readPreferences(db, owner),
-      readKnowledgeBase(db, owner),
       readLearnerSnapshot(db, owner),
       wantDrafts ? orNone("drafts", recentDrafts(db, owner, limit)) : Promise.resolve([]),
       orNone("tutor sessions", recentTutorSessions(db, owner, limit)),
@@ -297,9 +304,10 @@ export async function readRecent(options: RecentOptions = {}): Promise<RecentMod
             .map(([key]) => key.slice("draft:".length))
         : [];
     const found = renamed.length === 0 ? [] : await orNone("renamed drafts", draftsByIds(db, owner, renamed));
+    const concepts = await recentConcepts(db, owner, conceptsNamed(events, sessions));
     const sources = await recentSources(
       db,
-      { events, preferences, drafts: [...drafts, ...found], sessions, concepts: kb.concepts, courses },
+      { events, preferences, drafts: [...drafts, ...found], sessions, concepts, courses },
       scope,
     );
     const all = named(recentItems(sources), names);
@@ -316,6 +324,14 @@ export async function readRecent(options: RecentOptions = {}): Promise<RecentMod
     console.warn(`recent: unavailable, ${error instanceof Error ? error.message : String(error)}`);
     return emptyRecent();
   }
+}
+
+/** The concepts Recent titles: those answered on, and the tutor sessions' goals. */
+export function conceptsNamed(events: readonly EventRecord[], sessions: readonly RecentSession[]): string[] {
+  const ids = new Set<string>();
+  for (const e of events) if (e.type === "observation" && typeof e.concept === "string" && e.concept !== "") ids.add(e.concept);
+  for (const s of sessions) if (s.goal !== null && s.goal !== "") ids.add(s.goal);
+  return [...ids];
 }
 
 async function orNone<T>(what: string, read: Promise<T[]>): Promise<T[]> {

@@ -78,6 +78,9 @@ const REQUIRED = [
   // The poster recipe the upload command and the web app's ffmpeg fallback share.
   "ffmpegArgs",
   "POSTER_OFFSETS_SECONDS",
+  // Recent, bounded: the event log folded per module and concept, and the concepts it names.
+  "recentActivity",
+  "recentConcepts",
 ] as const;
 
 describe("the state barrel", () => {

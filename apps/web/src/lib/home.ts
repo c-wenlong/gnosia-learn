@@ -3,10 +3,10 @@ import "server-only";
 import { connection } from "next/server";
 import {
   dueReviews,
-  readEvents,
   readKnowledgeBase,
   readLearnerSnapshot,
   readPreferences,
+  recentActivity,
   recentDrafts,
   recentTutorSessions,
   type CatalogDatabase,
@@ -161,7 +161,9 @@ async function readAll(db: CatalogDatabase, now: Date, owner: string) {
   // not ask for them.
   const [kb, events, preferences, due, snapshot, courses, drafts, sessions, topics] = await Promise.all([
     readKnowledgeBase(db, owner),
-    readEvents(db, owner),
+    // The log folded per module and concept, the newest few concepts only:
+    // Home lists the first `THREAD_ROWS` of Recent and reads it for nothing else.
+    recentActivity(db, owner, { limit: THREAD_ROWS }),
     readPreferences(db, owner),
     dueReviews(db, { now, learnerId: owner }),
     readLearnerSnapshot(db, owner),

@@ -25,7 +25,7 @@ vi.mock("@self-learn/catalog/state", () => ({
   asRecentModules: vi.fn(() => undefined),
   assetsByIds: vi.fn(async () => []),
   dueReviews: vi.fn(async () => []),
-  readEvents: vi.fn(async () => []),
+  recentActivity: vi.fn(async () => []),
   readKnowledgeBase: vi.fn(async () => ({ concepts: [], frontier: [] })),
   readLearnerSnapshot,
   readPreferences: vi.fn(async () => ({})),
@@ -94,5 +94,13 @@ describe("readHome", () => {
     expect(home.reachable).toBe(true);
     expect(home.threads).toEqual([]);
     vi.unstubAllEnvs();
+  });
+
+  it("reads the event log folded per module and concept, bounded by the threads it lists", async () => {
+    getCourses.mockResolvedValueOnce([]);
+    const state = await import("@self-learn/catalog/state");
+    const { readHome } = await import("./home");
+    await readHome();
+    expect(state.recentActivity).toHaveBeenCalledWith(expect.anything(), "local", { limit: 5 });
   });
 });
