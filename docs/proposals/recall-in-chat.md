@@ -136,7 +136,8 @@ no marker. A turn that carries a marker asked (the opening recall question
 with its one-line reflection is such a turn), and does not count; a turn
 with no marker explained, answered or worked an example. The rule errs
 towards `probe`, which is the safe side: a probe still updates p(L) from
-the answer itself (a correct answer raises it, a wrong one lowers it) and
+the answer itself (with the model's guess and slip rates, a correct answer
+raises it and a wrong one lowers it; see `posterior` in `bkt.mjs`) and
 earns the card its review slot (`recordObservation`, "every answered
 question earns a review slot, whatever the source"), and skips only the
 learning step, the extra credit for having been taught. Mislabelling a
