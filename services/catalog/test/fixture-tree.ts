@@ -42,6 +42,7 @@ export async function makeFixture(): Promise<Fixture> {
       knownConcepts: async () => new Set<string>(),
       knownCurriculumItems: async () => new Set<string>(),
       knownAssets: async () => new Map<string, string>(),
+      storedAssetPaths: async () => [],
       knownDiagrams: async () => new Map(),
       knownCovers: async () => new Map(),
       ...overrides,

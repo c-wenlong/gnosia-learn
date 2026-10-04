@@ -287,6 +287,33 @@ export interface VideoToolRowOptions {
   owner?: string;
   /** Concept slugs the owner can read: their own and the commons'. Absent means none. */
   knownConcepts?: ReadonlySet<string>;
+  /**
+   * The `out/…` paths the owner's rows from this tool name now. When there
+   * are some and the report's data root holds none of them, the run is
+   * refused: that is a data root resolved to the wrong place, not every
+   * render deleted. Absent means none, which checks nothing.
+   */
+  storedPaths?: readonly string[];
+}
+
+/**
+ * The refusal for a data root that holds none of the files the stored rows
+ * name, or null when it holds one or there are none. On 2026-10-04 an
+ * import with `$REMOTIONKC_HOME` unset read the checkout, which holds no
+ * renders, as the data root, and removed every remotionkc row. A data root
+ * that still holds one stored file is believed, so a render deleted on
+ * purpose is still pruned.
+ */
+function emptyDataRoot(tool: VideoTool, root: string, outRoot: string, stored: readonly string[]): IndexError | null {
+  if (stored.length === 0) return null;
+  if (stored.some((file) => existsSync(path.join(outRoot, file)))) return null;
+  const first = path.join(outRoot, [...stored].sort()[0] as string);
+  return new IndexError(
+    `${tool.name}'s data root ${outRoot} holds none of the ${stored.length} files this owner's ${tool.name} ` +
+      `rows name (${first} is one), so this import would delete every one of them. The data root is ` +
+      `${tool.homeEnv}, which falls back to the checkout when it is unset: set it, in the environment or ` +
+      `in ${path.join(root, ".env")}, to where the renders are, and run again.`,
+  );
 }
 
 export type TopicResolution =
@@ -424,6 +451,8 @@ export async function buildToolRows(
   // The fallback is for a report from a CLI predating the field; it is also
   // what the value would be anyway on a checkout with no data root configured.
   const outRoot = str(report.outRoot) ?? root;
+  const empty = emptyDataRoot(tool, root, outRoot, options.storedPaths ?? []);
+  if (empty !== null) throw empty;
 
   let videos = 0;
   let sidecars = 0;
@@ -586,6 +615,7 @@ export function declaredToolIndexer(
       return buildToolRows(tool, report, root, { by: "declared", bySlug: context.vocabulary.bySlug }, {
         store: context.blobsRequired === true,
         knownConcepts: await context.knownConcepts(),
+        storedPaths: await context.storedAssetPaths(tool.name),
         ...(context.owner === undefined ? {} : { owner: context.owner }),
       });
     },

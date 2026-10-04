@@ -828,6 +828,15 @@ not have to be worked out again.
   one run reports all of them. A skipped row is an asset that is silently
   missing from the catalog, and the audit in #27 recorded that happening once
   already.
+- **A video tool's import refuses a data root that holds none of its rows'
+  files.** Each tool's `*_HOME` falls back to its checkout when unset, and a
+  checkout holds no renders, so its report lists every video as unrendered.
+  On 2026-10-04 that pruned all 33 remotionkc rows: the main checkout's
+  `tools/remotionkc/.env` had no `REMOTIONKC_HOME` line where revideokc's had
+  one, and a worktree's submodule has no `.env` at all. `emptyDataRoot` in
+  `services/catalog/src/index/video-tool.ts` now refuses, naming the data
+  root and one file, while the data root still holds none of them; one
+  file present and the run prunes as before.
 - **The web app reads authored content from the database only, and refuses
   a type sent to files.** `apps/web/src/data/source.ts` builds the reader
   seam with no file reader: a type whose `content_source` row says `files`,
