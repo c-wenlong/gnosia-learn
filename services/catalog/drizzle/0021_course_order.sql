@@ -39,7 +39,7 @@ BEGIN
 		-- finds no item to name the course by; the item's row still does.
 		SELECT array_agg(DISTINCT m.parent_id) INTO courses
 		FROM public.collection m
-		WHERE m.id IN (NEW.collection_id, OLD.collection_id);
+		WHERE m.id IN (CASE WHEN TG_OP = 'DELETE' THEN OLD.collection_id ELSE NEW.collection_id END, OLD.collection_id);
 	ELSE
 		-- A module names its course in parent_id; a course has none and is its own.
 		courses := ARRAY[COALESCE(NEW.parent_id, NEW.id), OLD.parent_id];
