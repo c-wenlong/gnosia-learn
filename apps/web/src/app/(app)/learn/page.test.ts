@@ -87,14 +87,21 @@ describe("/learn", () => {
         ],
       },
     });
+    // The map is the default view (G1 of docs/proposals/knowledge-map.md),
+    // with the frontier concept selected and its panel open.
     const html = await render();
-
-    // The row, its link to the workspace, and the graph card with the frontier
-    // concept selected by default.
-    expect(html).toContain("Alpha");
-    expect(html).toContain('href="/learn/alpha"');
     expect(html).toContain("1 concept · 0 mastered · 1 learning · 0 untouched");
-    expect(html).toContain("Neighbourhood graph of Alpha");
+    expect(html).toContain('aria-label="Concept map, 1 concept in 1 island"');
+    expect(html).toMatch(/data-concept="alpha"[^>]*aria-pressed="true"/);
+    expect(html).toContain('href="/learn/alpha"');
+
+    // The table is one press away, and `view=table` opens it: the row, its link
+    // to the workspace, and the graph card.
+    const table = await render({ view: "table" });
+    expect(table).toContain("Alpha");
+    expect(table).toContain('href="/learn/alpha"');
+    expect(table).toContain("Neighbourhood graph of Alpha");
+    expect(table).not.toContain("Concept map");
   });
 
   it("selects the concept the query string names", async () => {
