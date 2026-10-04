@@ -1,6 +1,7 @@
 import {
   asset,
   assetConcept,
+  assetName,
   assetTopic,
   collection,
   collectionItem,
@@ -19,6 +20,7 @@ import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { cliScope } from "../content/scope";
 import { withDatabase } from "../db";
 import {
+  assetNamesExist,
   assetDerivations,
   assetsForCollection,
   assetsForConcept,
@@ -400,6 +402,15 @@ async function showCurriculumItem(db: Db, id: string): Promise<ShowCurriculumIte
 async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
   const found = (await db.select().from(asset).where(eq(asset.id, id)).limit(1))[0];
   if (found === undefined) return null;
+  // The CLI owner's own name for it, as every page shows (`asset_name`).
+  const named = (await assetNamesExist(db))
+    ? (
+        await db
+          .select({ title: assetName.title })
+          .from(assetName)
+          .where(and(eq(assetName.assetId, id), eq(assetName.learnerId, cliScope().owner)))
+      )[0]
+    : undefined;
 
   const topics = await db
     .select({ slug: assetTopic.topicSlug })
@@ -441,7 +452,7 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
     url: found.url,
     contentHash: found.contentHash,
     bytes: found.bytes,
-    title: found.title,
+    title: named?.title ?? found.title,
     sourceRepo: found.sourceRepo,
     topics: topics.map((t) => t.slug),
     concepts: concepts.map((c) => c.slug),

@@ -174,6 +174,7 @@ export {
   clearPreference,
   readPreference,
   readPreferences,
+  readPreferencesWithPrefix,
   writePreference,
 } from "./preference";
 export {
@@ -221,6 +222,7 @@ export {
   type AssetWithTopics,
   type ListAssetsOptions,
 } from "./assets";
+export { readAssetNaming, writeAssetName, type AssetNaming } from "./asset-names";
 export {
   domainOf,
   dueConcepts,
