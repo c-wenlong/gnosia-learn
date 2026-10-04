@@ -54,7 +54,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
     await seedContent(scratch.db);
     process.env.DATABASE_URL = scratch.url;
 
-    const [progress, note, reset, recap, preference, importRoute, name, state] = await Promise.all([
+    const [progress, note, reset, recap, preference, importRoute, name, avatar, state] = await Promise.all([
       import("./progress/route"),
       import("./note/route"),
       import("./reset/route"),
@@ -62,6 +62,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       import("./preference/route"),
       import("./import/route"),
       import("./name/route"),
+      import("./avatar/route"),
       import("@self-learn/catalog/state"),
     ]);
     routes = {
@@ -72,6 +73,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       preference: preference.POST,
       import: importRoute.POST,
       name: name.POST,
+      avatar: avatar.POST,
     };
     readLearnerSnapshot = state.readLearnerSnapshot;
   }, 60_000);
@@ -313,6 +315,29 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       await expect(writeDisplayName(scratch.db, "x".repeat(61))).rejects.toThrow(RangeError);
       expect((await snapshot()).displayName).toBe("Ada");
       await call("name", { name: null });
+    });
+  });
+
+  describe("avatar", () => {
+    it("has one from the start, stores a new one, and answers with it", async () => {
+      const { AVATARS } = await import("@self-learn/schema/shared");
+      expect(AVATARS).toContain((await snapshot()).avatar);
+      const set = await call("avatar", { avatar: "fox" });
+      expect(set.status).toBe(200);
+      expect(set.body.result).toBe("fox");
+      expect((await snapshot()).avatar).toBe("fox");
+    });
+
+    it("refuses a name outside the list, or none, and keeps the one stored", async () => {
+      await call("avatar", { avatar: "owl" });
+      expect((await call("avatar", { avatar: "dragon" })).status).toBe(400);
+      expect((await call("avatar", { avatar: null })).status).toBe(400);
+      expect((await call("avatar", {})).status).toBe(400);
+      expect((await snapshot()).avatar).toBe("owl");
+      // The catalog's writer refuses too, for a caller that is not this route.
+      const { writeAvatar } = await import("@self-learn/catalog/state");
+      await expect(writeAvatar(scratch.db, "dragon")).rejects.toThrow(RangeError);
+      expect((await snapshot()).avatar).toBe("owl");
     });
   });
 

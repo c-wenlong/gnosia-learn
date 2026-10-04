@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { cleanDisplayName, LEGACY_STORAGE_KEY } from "@self-learn/schema/shared";
+import { cleanDisplayName, LEGACY_STORAGE_KEY, type AvatarId } from "@self-learn/schema/shared";
 
 import type {
   KnowledgeInput,
@@ -90,6 +90,8 @@ interface LearnerContextValue {
   setCourseActive: (courseSlug: string, active: boolean) => void;
   /** Set the name the sidebar shows, or clear it with "". Resolves true once stored. */
   setDisplayName: (name: string) => Promise<boolean>;
+  /** Set the pixel sprite the sidebar shows. Resolves true once stored. */
+  setAvatar: (avatar: AvatarId) => Promise<boolean>;
 }
 
 const LearnerContext = createContext<LearnerContextValue | null>(null);
@@ -394,6 +396,17 @@ export function LearnerProvider({
     [commit],
   );
 
+  const setAvatar = useCallback(
+    (avatar: AvatarId) =>
+      commit(
+        "avatar",
+        (previous) => ({ ...previous, avatar }),
+        () => post("avatar", { avatar }),
+        same((state) => state.avatar ?? null),
+      ),
+    [commit],
+  );
+
   const toggleTopicCompletion = useCallback(
     (topicId: string) => {
       commit(
@@ -563,6 +576,7 @@ export function LearnerProvider({
       markVisited,
       setCourseActive: setActive,
       setDisplayName,
+      setAvatar,
     }),
     [
       state,
@@ -579,6 +593,7 @@ export function LearnerProvider({
       markVisited,
       setActive,
       setDisplayName,
+      setAvatar,
     ],
   );
 

@@ -1,5 +1,5 @@
 import { learner, LOCAL_LEARNER_ID } from "@self-learn/schema";
-import { cleanDisplayName, DISPLAY_NAME_MAX } from "@self-learn/schema/shared";
+import { cleanDisplayName, DISPLAY_NAME_MAX, isAvatar, type AvatarId } from "@self-learn/schema/shared";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -50,6 +50,32 @@ export async function writeDisplayName(
   await ensureLearner(db, learnerId);
   await db.update(learner).set({ displayName: cleaned, updatedAt: new Date() }).where(eq(learner.id, learnerId));
   return cleaned;
+}
+
+/**
+ * The learner's pixel sprite (`learner.avatar`), or null when there is no
+ * row yet. The database draws one when the row is made, so a learner who
+ * exists always has one.
+ */
+export async function readAvatar(db: CatalogDatabase, learnerId: string = LOCAL_LEARNER_ID): Promise<AvatarId | null> {
+  const rows = await db.select({ avatar: learner.avatar }).from(learner).where(eq(learner.id, learnerId));
+  const avatar = rows[0]?.avatar;
+  return isAvatar(avatar) ? avatar : null;
+}
+
+/**
+ * Set the learner's pixel sprite. Refuses a name outside `AVATARS` (a
+ * `RangeError`) before the check constraint would, whoever the caller is.
+ */
+export async function writeAvatar(
+  db: CatalogDatabase,
+  avatar: string,
+  learnerId: string = LOCAL_LEARNER_ID,
+): Promise<AvatarId> {
+  if (!isAvatar(avatar)) throw new RangeError(`"${avatar}" is not an avatar.`);
+  await ensureLearner(db, learnerId);
+  await db.update(learner).set({ avatar, updatedAt: new Date() }).where(eq(learner.id, learnerId));
+  return avatar;
 }
 
 /**
