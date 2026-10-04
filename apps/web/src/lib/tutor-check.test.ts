@@ -10,6 +10,7 @@ import {
   recordedLine,
   restoreCheck,
   restoreVerdict,
+  topicCheck,
   settleInterrupted,
   splitCheck,
 } from "./tutor-check";
@@ -178,5 +179,31 @@ describe("dueRecall (R3)", () => {
     expect(dueRecall(null, checks, now)).toBeNull();
     expect(dueRecall({ due: "2026-10-05T00:00:00Z" }, checks, now)).toBeNull();
     expect(dueRecall({ due: "soon" }, checks, now)).toBeNull();
+  });
+});
+
+describe("a check that names its concept (phase 3)", () => {
+  it("reads CHECK(<concept>): from the topic tutor, and leaves it off a plain marker", () => {
+    expect(splitCheck("Text.\nCHECK(dot-product): What is zero?").check).toEqual({
+      question: "What is zero?",
+      concept: "dot-product",
+    });
+    expect(splitCheck("Text.\n**CHECK( softmax ):** Why exp?").check).toEqual({ question: "Why exp?", concept: "softmax" });
+    expect(splitCheck("Text.\nCHECK: Q?").check).toEqual({ question: "Q?" });
+  });
+
+  it("keeps a check only for a concept the topic declares", () => {
+    const concepts = ["dot-product", "softmax"];
+    expect(topicCheck({ question: "Q?", concept: "softmax" }, concepts)).toEqual({ question: "Q?", concept: "softmax" });
+    expect(topicCheck({ question: "Q?", concept: "attention" }, concepts)).toBeNull();
+    expect(topicCheck({ question: "Q?" }, concepts)).toBeNull();
+    expect(topicCheck({ question: "Q?" }, ["softmax"])).toEqual({ question: "Q?", concept: "softmax" });
+    expect(topicCheck({ question: "Q?", concept: "softmax" }, [])).toBeNull();
+    expect(topicCheck(null, concepts)).toBeNull();
+  });
+
+  it("restores a stored concept only when it is shaped like one", () => {
+    expect(restoreCheck({ question: "Q?", concept: "softmax" })).toEqual({ question: "Q?", concept: "softmax" });
+    expect(restoreCheck({ question: "Q?", concept: "../x" })).toEqual({ question: "Q?" });
   });
 });

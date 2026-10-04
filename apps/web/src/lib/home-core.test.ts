@@ -288,7 +288,10 @@ describe("next from here", () => {
     // Near first (dot was never seen, so it leads), then the far ones by age.
     expect(picks.map((p) => p.conceptId)).toEqual(["dot", "topic-bound", "other"]);
     expect(picks[1].lastSeen).toBe("25 days ago");
-    expect(recallHref(picks)).toBe("/review?only=dot,topic-bound,other");
+    // Recall happens in the first pick's chat, which opens on a question while its card is due.
+    expect(recallHref(picks[0])).toBe("/learn/dot");
+    expect(recallHref({ conceptId: "a b" })).toBe("/learn/a%20b");
+    expect(recallHref(undefined)).toBe("/review");
   });
 });
 
