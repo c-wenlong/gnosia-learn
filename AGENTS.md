@@ -693,10 +693,14 @@ failed is a real failure, and is fixed like any other.
 
 On a billing block, merge when all three hold:
 
-1. The local gate passes in the PR's worktree, scoped to what changed at the
-   least: `npm run lint`, `npm run typecheck`, the tests that touch the
-   change, and `npm run build` for anything under `apps/web`. Say in the PR
-   body which of these ran.
+1. The local gate CI would have run passes in the PR's worktree: `npm run
+   lint`, `npm run typecheck`, `npm run test:coverage` (the coverage
+   thresholds in `vitest.config.ts` are part of the gate, so a run of only
+   the touched tests is not enough), and `npm run build`. Postgres must be up
+   for the test run, and its output must show the catalog suites ran rather
+   than skipped: without a database they skip themselves and the run stays
+   green, which proves nothing about the schema. A docs-only change needs
+   none of this. Say in the PR body which of these ran.
 2. Greptile has posted its review (Workflow 5).
 3. Every review thread is resolved, each with a reply saying what changed or
    why not.
