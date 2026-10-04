@@ -3,7 +3,10 @@ import { createRequire } from "node:module";
 import path from "node:path";
 
 import { REPO_ROOT } from "../../paths";
+import { scriptShells } from "../script-shells";
 import { discoverToolchain, programAt, toolchainProblems, type Program, type Toolchain } from "../toolchain";
+
+export { scriptShells };
 
 /**
  * What a remotionkc job renders with on this machine (phase 3 of
@@ -159,18 +162,6 @@ function ownerDataRoot(root: string): string | null {
   return resolveOr(expanded) ?? path.resolve(expanded);
 }
 
-/** The shells a console script's first line needs, resolved; none for a script that names its interpreter. */
-export function scriptShells(script: string): string[] {
-  let first = "";
-  try {
-    first = readFileSync(script, "utf8").split("\n", 1)[0] ?? "";
-  } catch {
-    return [];
-  }
-  if (!/^#!\s*\/bin\/sh\s*$/.test(first)) return [];
-  // /bin/sh runs the shell /private/var/select/sh names, by exec.
-  return [...new Set(["/bin/sh", resolveOr("/private/var/select/sh")].filter((shell): shell is string => shell !== null))];
-}
 
 /** The studio's own TypeScript, for the gate's parse. */
 function studioTypeScript(): string | null {
