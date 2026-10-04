@@ -4,7 +4,13 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { key as blobKey } from "@self-learn/blob";
-import { LOCAL_LEARNER_ID, type NewAsset, type NewAssetDerivation, type NewAssetTopic } from "@self-learn/schema";
+import {
+  LOCAL_LEARNER_ID,
+  type NewAsset,
+  type NewAssetConcept,
+  type NewAssetDerivation,
+  type NewAssetTopic,
+} from "@self-learn/schema";
 
 import {
   MANIMKC_DIR,
@@ -47,6 +53,15 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * Both strategies refuse rather than skip: a video with no topic is one
  * nothing in the catalog can find (AGENTS.md, "A catalog indexer must never
  * `continue` past an unresolved slug").
+ *
+ * A topic.yml may also name the concepts its video teaches, `concepts:`,
+ * which every tool's report carries on the topic entry. Each slug becomes an
+ * `asset_concept` row on the video and on each sidecar beside it, the way a
+ * diagram's concepts go on its SVG and its source, and must be a concept the
+ * importing owner can read (their own or the commons'), which the run says
+ * through `knownConcepts`. An unknown slug, or a value that is not a list of
+ * slugs, refuses the run by folder and slug, collected with every other
+ * refusal so one run names them all. A missing or empty list links nothing.
  *
  * The long reasoning behind the two roots (the checkout, and the report's
  * `outRoot` the rendered files are under) is on `manimkc.ts`, where it was
@@ -264,6 +279,16 @@ function str(value: unknown): string | null {
  * and checks a declared topic against it; `remotionkc` and `revideokc` read
  * the declared topic alone.
  */
+/** What `buildToolRows` is told beyond the report and the topic lookups. */
+export interface VideoToolRowOptions {
+  /** Store each file as a blob first (the database is under phase 2's contract). */
+  store?: boolean;
+  /** Whose rows these are; absent means the CLIs' owner, `local`. */
+  owner?: string;
+  /** Concept slugs the owner can read: their own and the commons'. Absent means none. */
+  knownConcepts?: ReadonlySet<string>;
+}
+
 export type TopicResolution =
   | { by: "vocabulary"; byPath: ReadonlyMap<string, string>; bySlug: ReadonlyMap<string, unknown> }
   | { by: "declared"; bySlug: ReadonlyMap<string, unknown> };
@@ -319,6 +344,51 @@ function resolveTopic(
   return { slug };
 }
 
+/** Where a topic folder's `concepts:` is written, for a refusal to point at. */
+const topicYml = (topicPath: string) => `topics/${topicPath}/topic.yml`;
+
+/**
+ * The concepts a topic entry names, checked: each a slug the owner can read,
+ * in the order written, each once. Returns null, with every reason recorded,
+ * when any does not hold up; the caller files nothing from that folder.
+ *
+ * A missing field and YAML's empty `concepts:` (null) both mean none, which
+ * is what every topic.yml written before this field was read says.
+ */
+function resolveConcepts(
+  tool: VideoTool,
+  topicPath: string,
+  raw: unknown,
+  known: ReadonlySet<string>,
+  problems: IndexErrors,
+): string[] | null {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.some((item) => typeof item !== "string" || item.trim() === "")) {
+    problems.add(
+      `${tool.name} topic "${topicPath}" has \`concepts:\` ${JSON.stringify(raw)} in ${topicYml(topicPath)}, ` +
+        `which is not a list of concept slugs. Write it as a list, \`concepts: [slug, ...]\`.`,
+    );
+    return null;
+  }
+  const concepts: string[] = [];
+  let ok = true;
+  for (const item of raw as string[]) {
+    const slug = item.trim();
+    if (!known.has(slug)) {
+      // The foreign key would refuse this too, later, by constraint name and
+      // with no file, halfway through the run.
+      problems.add(
+        `${tool.name} topic "${topicPath}" names concept "${slug}" in ${topicYml(topicPath)}, which is not ` +
+          `a concept this owner can read. Write the note (\`learn concept add\`) or fix the slug.`,
+      );
+      ok = false;
+      continue;
+    }
+    if (!concepts.includes(slug)) concepts.push(slug);
+  }
+  return ok ? concepts : null;
+}
+
 /**
  * The pure half: a report plus the topic lookups become rows. Separated from
  * the subprocess so either tool's indexer is testable against a captured
@@ -329,17 +399,23 @@ function resolveTopic(
  * content-addressed key those bytes land under (a re-render lands under a new
  * one). Before the contract the rows name no blob and `catalog asset upload`
  * stores the bytes later, which is flip day's order.
+ *
+ * `knownConcepts`: the concept slugs the importing owner can read, which a
+ * topic's `concepts:` is checked against. Absent means none, so a report
+ * naming any concept is refused rather than linked unchecked.
  */
 export async function buildToolRows(
   tool: VideoTool,
   report: TopicsReport,
   root: string,
   resolution: TopicResolution,
-  options: { store?: boolean; owner?: string } = {},
+  options: VideoToolRowOptions = {},
 ): Promise<{ rows: SourceRows; notes: string[]; metadata: { outRoot: string }; blobs: SourceBlob[] }> {
   const owner = options.owner ?? LOCAL_LEARNER_ID;
+  const knownConcepts = options.knownConcepts ?? new Set<string>();
   const assets: NewAsset[] = [];
   const assetTopics: NewAssetTopic[] = [];
+  const assetConcepts: NewAssetConcept[] = [];
   const derivations: NewAssetDerivation[] = [];
   const problems = new IndexErrors();
   const seenPaths = new Set<string>();
@@ -376,11 +452,16 @@ export async function buildToolRows(
     seenPaths.add(topicPath);
 
     const resolved = resolveTopic(tool, resolution, topicPath, str(entry.topic));
-    if ("problem" in resolved) {
-      problems.add(resolved.problem);
-      continue;
-    }
+    if ("problem" in resolved) problems.add(resolved.problem);
+    // Checked even when the topic was refused, so one run names both.
+    const concepts = resolveConcepts(tool, topicPath, entry.concepts, knownConcepts, problems);
+    if ("problem" in resolved || concepts === null) continue;
     const slug = resolved.slug;
+    /** The folder's topic and concepts, on one of its files. */
+    const file = (assetId: string) => {
+      assetTopics.push({ assetId, topicSlug: slug });
+      for (const conceptSlug of concepts) assetConcepts.push({ assetId, conceptSlug });
+    };
 
     const title = str(entry.title);
     for (const rawSection of Array.isArray(entry.sections) ? entry.sections : []) {
@@ -407,7 +488,7 @@ export async function buildToolRows(
         title: title === null ? videoPath : sectionName === null ? title : `${title} (${sectionName})`,
         sourceRepo: tool.name,
       }, videoFile));
-      assetTopics.push({ assetId: videoId, topicSlug: slug });
+      file(videoId);
       videos += 1;
 
       for (const [name, kind] of Object.entries(SIDECAR_KINDS)) {
@@ -428,7 +509,9 @@ export async function buildToolRows(
           title: title === null ? sidecarPath : `${title} (${name})`,
           sourceRepo: tool.name,
         }, sidecarFile));
-        assetTopics.push({ assetId: sidecarId, topicSlug: slug });
+        // The sidecar teaches what its video does, so a search by concept
+        // finds the transcript as it finds the video.
+        file(sidecarId);
         // The sidecar came out of the video's narration. This edge is what
         // bundle 6's drift check reads to spot a transcript left behind by a
         // re-render.
@@ -468,7 +551,7 @@ export async function buildToolRows(
   if (unrendered.length > 0) notes.push(`${unrendered.length} topic(s) not rendered in this checkout`);
 
   return {
-    rows: { asset: assets, assetTopic: assetTopics, assetDerivation: derivations },
+    rows: { asset: assets, assetTopic: assetTopics, assetConcept: assetConcepts, assetDerivation: derivations },
     notes,
     // The one fact about this run that a later reader cannot recompute: every
     // `asset.path` here is `out/…`, relative to a base that is not in the row
@@ -502,6 +585,7 @@ export function declaredToolIndexer(
       const report = await readToolReport(tool, context.toolsRoot ?? context.repoRoot, root);
       return buildToolRows(tool, report, root, { by: "declared", bySlug: context.vocabulary.bySlug }, {
         store: context.blobsRequired === true,
+        knownConcepts: await context.knownConcepts(),
         ...(context.owner === undefined ? {} : { owner: context.owner }),
       });
     },

@@ -159,6 +159,12 @@ Rules of engagement:
   and every `lib/` helper with a real usage line), `example`, `new` (scaffold a
   topic), `lint`, `preview`, `build`, `topics`, `mirrors`. Run it from any
   checkout, or install with `uv tool install -e tools/cli`.
+- **A topic.yml's `concepts:` is read by the catalog, for all three video
+  tools.** Each slug becomes an `asset_concept` row on the video and its
+  sidecars, which is how a video lands on a concept's step of a module path.
+  A slug the importing owner cannot read, or a `concepts:` that is not a list
+  of slugs, refuses the import naming the topic.yml and the slug; an empty
+  list links nothing (`services/catalog/src/index/video-tool.ts`).
 - `tools/manimkc/server/` is a portable job server meant to run locally on macOS or
   Linux, keeping its state under `$MANIMKC_HOME/state/server/`. See
   [`tools/manimkc/server/DESIGN.md`](tools/manimkc/server/DESIGN.md) for what it needs from a machine and how it decides one can take a job.
@@ -195,7 +201,8 @@ Rules of engagement:
 - **There is no `maps.remotionkc`.** Each topic.yml's `topic:` is required and
   names the catalog topic its video is filed under, one the owner can read.
   An import refuses a folder with none, or with a slug nobody holds, naming
-  the file and the slug; it never skips one.
+  the file and the slug; it never skips one. Its optional `concepts:` is read
+  as manimkc's is.
 - **`REMOTIONKC_ROOT` is the checkout, `REMOTIONKC_HOME` the data root.** The
   first is remotionkc's own variable with the same meaning here, read by
   `services/catalog/src/env.ts`, defaulting to `tools/remotionkc`. The second
@@ -243,7 +250,7 @@ Rules of engagement:
   posters. A bare import with no CLI skips revideokc, and refuses once it has
   rows here, as for the other two.
 - **Each topic.yml's `topic:` is required**, as for remotionkc; there is no
-  maps vocabulary.
+  maps vocabulary. Its optional `concepts:` is read as manimkc's is.
 - **`REVIDEOKC_ROOT` is the checkout, `REVIDEOKC_HOME` the data root**, with
   the same split as remotionkc's pair: the catalog reads the first
   (`services/catalog/src/env.ts`, defaulting to `tools/revideokc`) and takes
