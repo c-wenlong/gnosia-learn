@@ -486,6 +486,13 @@ export async function runIndex(
       }
       return cached;
     },
+    storedAssetPaths: async (sourceRepo) => {
+      const rows = await db
+        .select({ path: asset.path })
+        .from(asset)
+        .where(and(eq(asset.sourceRepo, sourceRepo), eq(asset.ownerId, owner), isNotNull(asset.path)));
+      return rows.map((r) => r.path).filter((p): p is string => p !== null);
+    },
   };
 
   // The optional sources: their reader is a video tool's CLI (manimkc's at
