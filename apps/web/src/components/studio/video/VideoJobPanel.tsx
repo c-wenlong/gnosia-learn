@@ -50,7 +50,7 @@ import {
   type VideoJob,
 } from "@/lib/studio-video";
 import { conversationHref, panelHref } from "@/lib/studio-view";
-import { prefersReducedMotion } from "@/lib/motion";
+import { scrollBehavior } from "@/lib/motion";
 
 /**
  * The video job view (docs/STUDIO-VIDEOS.md, "The job view"): the panel's
@@ -649,8 +649,7 @@ function Review({
   // A chapter pressed below the fold plays where the person can see it.
   const jump = (seconds: number): void => {
     setSeek((held) => ({ seconds, key: (held?.key ?? 0) + 1 }));
-    const still = prefersReducedMotion();
-    playerBox.current?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+    playerBox.current?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
   };
   const changes = changedLines(job, chapters);
   const actions = reviewActions(job);

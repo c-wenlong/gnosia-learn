@@ -3,10 +3,11 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { ENTER, reducedMotion } from "@/components/studio/motion";
+import { ENTER } from "@/components/studio/motion";
 import { PaneContext, usePaneLayout } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
 import { rememberFocus } from "@/lib/focus";
+import { prefersReducedMotion } from "@/lib/motion";
 
 import "./motion.css";
 
@@ -135,7 +136,7 @@ export function StudioDialog({
         shutEarly.current = true;
       }
     };
-    if (reducedMotion()) {
+    if (prefersReducedMotion()) {
       go();
       return;
     }

@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode, type RefObject } from "react";
 
-import { ENTER, FOLD_MS, reducedMotion } from "@/components/studio/motion";
+import { ENTER, FOLD_MS } from "@/components/studio/motion";
 import { Collapse } from "@/components/ui/Collapse";
 import { usePresence } from "@/components/ui/use-presence";
 import { cx } from "@/components/ui/classes";
+import { prefersReducedMotion } from "@/lib/motion";
 
 /** The studio's motion pieces that hold state; the classes are in `motion.ts`. */
 
@@ -118,7 +119,7 @@ export function useFadeOnChange(ref: RefObject<HTMLElement | null>, key: string)
     if (last.current === key) return;
     last.current = key;
     const box = ref.current;
-    if (box === null || typeof box.animate !== "function" || reducedMotion()) return;
+    if (box === null || typeof box.animate !== "function" || prefersReducedMotion()) return;
     box.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: "ease-out" });
   }, [ref, key]);
 }

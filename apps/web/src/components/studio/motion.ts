@@ -4,13 +4,11 @@
  * mounts animates in, something with height folds, and nothing moves for a
  * reader who asked for less.
  *
- * Plain strings and a function, in a module with no `"use client"`, so a
+ * Plain strings, in a module with no `"use client"`, so a
  * server component (the studio page, the canvas page) can use the classes
  * too: imported from a client module they would be client references, not
  * strings. The pieces that hold state are in `motion-parts.tsx`.
  */
-
-import { prefersReducedMotion } from "@/lib/motion";
 
 /** How long `Collapse` takes to fold (its `duration-300`). */
 export const FOLD_MS = 300;
@@ -21,11 +19,3 @@ export const ENTER = "animate-enter motion-reduce:animate-none";
 export const FADE_IN = "animate-fade-in motion-reduce:animate-none";
 /** A fade and a slight scale, for a menu, a popover or a card that appears. */
 export const POP_IN = "animate-pop-in motion-reduce:animate-none";
-
-/**
- * Whether to keep still: the device's setting or Settings' "Always reduce
- * motion" (`prefersReducedMotion` in lib/motion.ts). False on the server.
- */
-export function reducedMotion(): boolean {
-  return prefersReducedMotion();
-}
