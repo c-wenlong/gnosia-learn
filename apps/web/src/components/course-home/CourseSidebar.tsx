@@ -19,10 +19,11 @@ import { FOCUS_RING, ROW_HOVER } from "./rows";
  * it, the course's assets in the library when there are any (the top bar's
  * Library is every course's).
  *
- * Below 1024px it becomes a compact picker over the module: the toggle names
- * the module on screen, and the list opens under it. The two toggles are two
- * buttons, one per width, because which one shows is a media query and the
- * list's open state has to be separate for each.
+ * Below 768px of page (the course grid's container query, the same one that
+ * puts it beside the module) it becomes a compact picker over the module:
+ * the toggle names the module on screen, and the list opens under it. The
+ * two toggles are two buttons, one per width, because which one shows is a
+ * container query and the list's open state has to be separate for each.
  */
 export function CourseSidebar({
   course,

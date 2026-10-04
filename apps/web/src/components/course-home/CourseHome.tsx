@@ -30,8 +30,10 @@ import type { ModuleData, RelatedCourse } from "./types";
  * with, and keeps it: finishing the module's last topic moves Continue to the
  * next module without pulling the page out from under the learner.
  *
- * From 1280px the three columns sit side by side (sidebar 300, rail 360, the
- * module between), from 1024px the rail drops under the module, and below
+ * The columns follow the width the page is given (container queries), not
+ * the window's, since the app sidebar takes part of the window: from 1152px
+ * of page the three columns sit side by side (sidebar 300, rail 360, the
+ * module between), from 768px the rail drops under the module, and below
  * that the sidebar turns into a picker above the module and the rail follows
  * it.
  */
