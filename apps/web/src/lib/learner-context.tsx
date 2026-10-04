@@ -218,8 +218,10 @@ export function LearnerProvider({
   const stored = useRef(new Map<string, Stored>());
   /** A snapshot that arrived while writes were in flight, waiting for them. */
   const held = useRef<LearnerState | null>(null);
-  /** Snapshots read again since `stored` was last confirmed. */
+  /** Snapshots read again since the last write was stored. */
   const rereads = useRef(0);
+  /** The epoch of the last snapshot adopted: the database's, never an optimistic one. */
+  const serverEpoch = useRef(initialState.epoch);
 
   /**
    * The server is the authority. When a navigation or a `router.refresh()`
@@ -265,6 +267,7 @@ export function LearnerProvider({
       }
       stored.current.clear();
       rereads.current = 0;
+      serverEpoch.current = snapshot.epoch;
       current.current = snapshot;
       setState(snapshot);
     },
@@ -316,6 +319,8 @@ export function LearnerProvider({
                 pick,
                 value: pick(next),
               });
+              // A new write gets its own re-reads, whatever earlier ones used.
+              rereads.current = 0;
             }
             if (queue.current.pending === 0 && held.current !== null) receive(held.current);
             resolve(response.ok !== false);
@@ -466,11 +471,12 @@ export function LearnerProvider({
 
   const resetCourse = useCallback(
     (topicIds: string[]) => {
-      // The server moves the epoch up by one in the same statement, so a
-      // snapshot that shows this reset has at least the epoch it made (more
-      // if another tab reset since). A reset with nothing to clear differs
-      // from the snapshot before it only here.
-      const epoch = current.current.epoch + 1;
+      // The server moves the epoch up in the same statement, so a snapshot
+      // that shows this reset has a higher epoch than the last one adopted. A
+      // reset with nothing to clear differs from the snapshot before it only
+      // here. Not the optimistic epoch: a refused reset raised that and the
+      // database never did.
+      const epoch = serverEpoch.current;
       return commit(
         // A barrier over every row the reset deletes. Without it a note still
         // in flight for one of these topics could land after the delete and
@@ -479,7 +485,7 @@ export function LearnerProvider({
         (previous) => resetCourseProgress(previous, topicIds),
         () => post("reset", { curriculumItemIds: topicIds }),
         (state) => [
-          state.epoch >= epoch,
+          state.epoch > epoch,
           topicIds.map((id) => [state.completed[id] === true, state.notes[id] ?? null]),
         ],
       );

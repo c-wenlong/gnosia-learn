@@ -182,6 +182,33 @@ describe("a snapshot during a write", () => {
     expect(router.refresh).not.toHaveBeenCalled();
   });
 
+  it("gives a new write its own re-reads, whatever an earlier one used", async () => {
+    const { container, draw, answer } = setup({ notes: { t1: "old" } });
+    act(() => held.learner!.updateNote("t1", "new"));
+    await answer();
+    draw({ notes: { t1: "old" } });
+    draw({ notes: { t1: "old" } });
+    expect(router.refresh).toHaveBeenCalledTimes(2);
+    act(() => held.learner!.updateNote("t1", "newer"));
+    await answer();
+    draw({ notes: { t1: "new" } });
+    expect(container.textContent).toBe("note=newer tick=false");
+    expect(router.refresh).toHaveBeenCalledTimes(3);
+  });
+
+  it("checks a reset against the database's epoch, not one a refused reset raised", async () => {
+    const { container, draw, answer } = setup({});
+    act(() => void held.learner!.resetCourse(["t1"]));
+    await answer(503);
+    act(() => void held.learner!.resetCourse(["t1"]));
+    expect(container.textContent).toBe("note=none tick=false epoch=2");
+    await answer();
+    // The database moved its epoch once, from 0 to 1.
+    draw({ epoch: 1 });
+    expect(container.textContent).toBe("note=none tick=false epoch=1");
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
   it("protects nothing for a refused write: the database never had it", async () => {
     const { container, draw, answer } = setup({});
     act(() => held.learner!.updateNote("t1", "three paragraphs"));
