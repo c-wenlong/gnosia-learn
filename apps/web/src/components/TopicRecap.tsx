@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FIELD_TEXT } from "@/components/ui/classes";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import type {
   Course,
   KnowledgeInput,
@@ -123,21 +124,15 @@ export function RecapCard({
         >
           {copied ? "Copied" : "Copy as Markdown"}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (
-              window.confirm(
-                `Delete the recap for "${topic.title}"? This cannot be undone.`,
-              )
-            ) {
-              forgetKnowledge(topic.id);
-            }
-          }}
-          className="font-medium text-[var(--muted)] hover:text-danger hover:underline"
-        >
-          Forget
-        </button>
+        {/* Asks in place, never in a browser dialog, which froze the page in a
+            box the app could not style or animate. */}
+        <InlineConfirm
+          size="text"
+          label="Forget"
+          question={`Delete the recap for "${topic.title}"? This cannot be undone.`}
+          confirmLabel="Forget it"
+          onConfirm={() => forgetKnowledge(topic.id)}
+        />
       </div>
     </div>
   );

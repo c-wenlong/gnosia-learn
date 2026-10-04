@@ -74,6 +74,26 @@ describe.skipIf(!reachable.ok)("catalog draft", () => {
     expect(await scratch.db.select().from(draft)).toHaveLength(1);
   });
 
+  it("keeps the owner's name beside the planner's title, trimmed to one line, and clears it with null", async () => {
+    const named = await runDraftUpsert(doc("d-name", { title: "Tunnels", name: "  Transport \n layer  " }));
+    expect(named.draft).toMatchObject({ title: "Tunnels", name: "Transport layer" });
+    expect((await runDraftShow("d-name")).draft.name).toBe("Transport layer");
+    const blank = await runDraftUpsert(doc("d-name", { title: "Tunnels", name: "   " }));
+    expect(blank.draft.name).toBeNull();
+    expect(draftRow(doc("d-name", { name: "x".repeat(300) })).name).toHaveLength(200);
+    expect(() => draftRow(doc("d-name", { name: 7 }))).toThrow(/"name" must be a string or null/);
+  });
+
+  it("keeps the runner's updatedAt when the record carries one, so a rename does not move a conversation up", async () => {
+    const at = "2026-10-01T08:00:00.000Z";
+    await runDraftUpsert(doc("d-time", { updatedAt: at }));
+    const renamed = await runDraftUpsert(doc("d-time", { name: "Mine", updatedAt: at }));
+    expect(renamed.draft.updatedAt).toBe(at);
+    const moved = await runDraftUpsert(doc("d-time", { name: "Mine" }));
+    expect(Date.parse(moved.draft.updatedAt)).toBeGreaterThan(Date.parse(at));
+    expect(() => draftRow(doc("d-time", { updatedAt: "yesterday" }))).toThrow(/updatedAt/);
+  });
+
   it("refuses a transcript anywhere but the draft's own, a cost with no figure, and a pending topic with no brief", () => {
     expect(() => draftRow(doc("d-two", { transcriptPath: "drafts/other/transcript.ndjson" }))).toThrow(/not this draft's transcript/);
     expect(() => draftRow(doc("d-two", { costSource: "result" }))).toThrow(/costUsd/);
@@ -206,7 +226,7 @@ describe.skipIf(!reachable.ok)("catalog draft", () => {
         transcriptPath: "drafts/d-raw/transcript.ndjson",
         ...values,
       });
-    for (const bad of [{ state: "thinking" }, { costSource: "result" }, { pendingTopic: { slug: "x" } }, { turns: -1 }, { errorKind: "gate" }]) {
+    for (const bad of [{ state: "thinking" }, { costSource: "result" }, { pendingTopic: { slug: "x" } }, { turns: -1 }, { errorKind: "gate" }, { name: "" }, { name: "x".repeat(201) }]) {
       const error = await insert(bad).catch((caught: unknown) => caught);
       expect(sqlstate(error), JSON.stringify(bad)).toBe("23514");
     }

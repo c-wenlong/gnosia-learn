@@ -500,4 +500,58 @@ describe("VideoPlayer", () => {
     press(document.activeElement as HTMLElement, "ArrowRight");
     expect(video(host).currentTime).toBe(5);
   });
+
+  it("shows the big play button until the first play, then flashes play and pause for a second", async () => {
+    vi.useFakeTimers();
+    try {
+      const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+      const el = video(host);
+      let paused = true;
+      Object.defineProperty(el, "paused", { get: () => paused, configurable: true });
+      el.play = () => {
+        paused = false;
+        el.dispatchEvent(new Event("play"));
+        return Promise.resolve();
+      };
+      el.pause = () => {
+        paused = true;
+        el.dispatchEvent(new Event("pause"));
+      };
+      const big = () => host.querySelector("[data-big-play]")?.getAttribute("data-big-play");
+      const flash = () => host.querySelector("[data-toggle-flash]")?.getAttribute("data-toggle-flash");
+      const frame = el.parentElement as HTMLElement;
+
+      expect(big()).toBe("shown");
+      // The first play answers with the big button going, not a flash.
+      press(frame, "k");
+      expect(big()).toBe("away");
+      expect(flash()).toBeUndefined();
+
+      // A pause after that flashes pause and leaves the big button away.
+      press(frame, "k");
+      expect(big()).toBe("away");
+      expect(flash()).toBe("pause");
+      act(() => vi.advanceTimersByTime(1000));
+      expect(flash()).toBe("away");
+
+      await act(async () => el.click());
+      expect(flash()).toBe("play");
+      act(() => vi.advanceTimersByTime(1000));
+      expect(flash()).toBe("away");
+
+      // A resume the browser refuses flashes nothing.
+      press(frame, "k");
+      act(() => vi.advanceTimersByTime(1000));
+      el.play = () => Promise.reject(new Error("NotAllowedError"));
+      await act(async () => el.click());
+      expect(flash()).toBe("away");
+
+      // A new video starts over with the big button.
+      rerender(host, createElement(VideoPlayer, { src: "/w.mp4", chapters }));
+      expect(big()).toBe("shown");
+      expect(flash()).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

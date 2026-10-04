@@ -19,9 +19,10 @@ const mocks = vi.hoisted(() => ({
   displayName: undefined as string | undefined,
   fetchRecent: vi.fn(),
   changeRecent: vi.fn(),
+  renameDraft: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
-vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
+vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
 vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
@@ -59,9 +60,10 @@ beforeEach(() => {
   mocks.listDrafts.mockReset().mockResolvedValue({ ok: true, data: { drafts: [DRAFT], note: "" } });
   mocks.fetchRecent.mockReset().mockResolvedValue(EMPTY);
   mocks.changeRecent.mockReset().mockResolvedValue(true);
+  mocks.renameDraft.mockReset().mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", name: null, title: null, changed: true, note: "" } });
 });
 
-const EMPTY: RecentModel = { reachable: true, items: [], more: false, pinned: [], names: {}, courses: [] };
+const EMPTY: RecentModel = { reachable: true, items: [], more: false, pinned: [], courses: [] };
 
 const mounted: Array<() => void> = [];
 afterEach(() => {
@@ -159,6 +161,23 @@ describe("the sidebar", () => {
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
+    expect(nav(container).getAttribute("role")).toBeNull();
+  });
+
+  it("closes the account menu on Escape and leaves the drawer around it open, until the next Escape", async () => {
+    const container = await mount(true);
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    const account = nav(container).querySelector<HTMLButtonElement>(ACCOUNT)!;
+    act(() => account.click());
+    expect(account.getAttribute("aria-expanded")).toBe("true");
+    const escape = () =>
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      });
+    escape();
+    expect(account.getAttribute("aria-expanded")).toBe("false");
+    expect(nav(container).getAttribute("role")).toBe("dialog");
+    escape();
     expect(nav(container).getAttribute("role")).toBeNull();
   });
 
@@ -264,14 +283,23 @@ describe("the fold", () => {
     expect(label.className).toContain("transition-opacity");
   });
 
-  it("keeps the account menu mounted, invisible and inert until opened, so it can fade", () => {
+  it("pops the account menu in as a kit Popover, and keeps it inert for its way out so it can fade", () => {
+    vi.useFakeTimers();
     const { container } = mountFolded(false);
-    const menu = nav(container).querySelector<HTMLElement>("[id]:has(> ul)")!;
+    const account = nav(container).querySelector<HTMLButtonElement>(ACCOUNT)!;
+    expect(nav(container).querySelector("[popover]")).toBeNull();
+    act(() => account.click());
+    const menu = nav(container).querySelector<HTMLElement>("[popover]")!;
+    expect(menu.getAttribute("popover")).toBe("manual");
+    expect(menu.className).toContain("animate-pop-in");
+    expect(account.getAttribute("aria-controls")).toBe(menu.id);
+    act(() => account.click());
     expect(menu.hasAttribute("inert")).toBe(true);
-    expect(menu.className).toContain("invisible");
-    act(() => nav(container).querySelector<HTMLButtonElement>(ACCOUNT)!.click());
-    expect(menu.hasAttribute("inert")).toBe(false);
-    expect(menu.className).toContain("opacity-100");
+    expect(menu.className).toContain("animate-pop-out");
+    expect(account.hasAttribute("aria-controls")).toBe(false);
+    act(() => vi.advanceTimersByTime(120));
+    expect(nav(container).querySelector("[popover]")).toBeNull();
+    vi.useRealTimers();
   });
 
   it("carries the studio sidebar's saved fold into the cookie once", () => {
@@ -489,20 +517,89 @@ describe("the sections", () => {
     expect(document.activeElement).toBe(more);
   });
 
-  it("renames a conversation in place", async () => {
-    const container = await mount(true);
+  /** Rename on the "TCP vs UDP" row, typed and kept with Enter. */
+  async function renameTo(container: HTMLElement, name: string) {
     act(() => moreFor(container, "TCP vs UDP").click());
     const rename = [...moreFor(container, "TCP vs UDP").parentElement!.querySelectorAll("ul button")].find((b) => b.textContent === "Rename")!;
     act(() => (rename as HTMLButtonElement).click());
     const field = nav(container).querySelector<HTMLInputElement>('input[aria-label="Name this conversation"]')!;
     act(() => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Transport layer");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, name);
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
       field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
-    expect(mocks.changeRecent).toHaveBeenCalledWith({ action: "rename", key: "draft:d1", name: "Transport layer" });
+  }
+
+  it("renames a conversation on its draft, through the runner, showing the name at once and keeping it", async () => {
+    const container = await mount(true);
+    let answer!: (value: unknown) => void;
+    mocks.renameDraft.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    await renameTo(container, "  Transport   layer ");
+    // Kept on the draft by the runner, never as a preference.
+    expect(mocks.renameDraft).toHaveBeenCalledWith("d1", "Transport layer");
+    expect(mocks.changeRecent).not.toHaveBeenCalled();
+    // Shown before the runner has answered.
+    expect(recentRows(container)).toContain("Conversation: Transport layer");
+    // The runner's list carries the name from here on, and the row keeps it.
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [{ ...DRAFT, name: "Transport layer" }], note: "" } });
+    await act(async () => {
+      answer({ ok: true, status: 200, data: { draftId: "d1", name: "Transport layer", title: "TCP vs UDP", changed: true, note: "" } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(recentRows(container)).toContain("Conversation: Transport layer");
+    expect(recentRows(container)).not.toContain("Conversation: TCP vs UDP");
+  });
+
+  it("takes a name off when the field is emptied, and the planner's title shows again", async () => {
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [{ ...DRAFT, name: "Transport layer" }], note: "" } });
+    const container = await mount(true);
+    expect(recentRows(container)).toContain("Conversation: Transport layer");
+    act(() => moreFor(container, "Transport layer").click());
+    const rename = [...moreFor(container, "Transport layer").parentElement!.querySelectorAll("ul button")].find((b) => b.textContent === "Rename")!;
+    act(() => (rename as HTMLButtonElement).click());
+    const field = nav(container).querySelector<HTMLInputElement>('input[aria-label="Name this conversation"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "   ");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [DRAFT], note: "" } });
+    await act(async () => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.renameDraft).toHaveBeenCalledWith("d1", null);
+    expect(recentRows(container)).toContain("Conversation: TCP vs UDP");
+  });
+
+  it("keeps a saved name shown when the read after it fails, rather than the old title", async () => {
+    const container = await mount(true);
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    mocks.renameDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", name: "Transport layer", title: "TCP vs UDP", changed: true, note: "" } });
+    await renameTo(container, "Transport layer");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(recentRows(container)).toContain("Conversation: Transport layer");
+    // And once a read carries it, the list's own name is what shows.
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [{ ...DRAFT, name: "Transport layer" }], note: "" } });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(recentRows(container)).toContain("Conversation: Transport layer");
+  });
+
+  it("puts the old title back when the runner refuses the rename", async () => {
+    mocks.renameDraft.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    const container = await mount(true);
+    await renameTo(container, "Transport layer");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(recentRows(container)).toContain("Conversation: TCP vs UDP");
+    expect(recentRows(container)).not.toContain("Conversation: Transport layer");
   });
 
   it("keeps Courses and its add button for someone who has opened no course", async () => {
@@ -522,9 +619,9 @@ describe("the sections", () => {
     expect(section(container, "sidebar-recent").textContent).not.toContain("show here");
   });
 
-  it("finds a renamed conversation by its new name, which the runner's search does not know", async () => {
-    mocks.listDrafts.mockImplementation(async (query: { q?: string }) => ({ ok: true, data: { drafts: query.q === undefined ? [DRAFT] : [], note: "" } }));
-    mocks.fetchRecent.mockImplementation(async (options: { q?: string }) => ({ ...EMPTY, names: { "draft:d1": "Transport layer" }, items: options.q === undefined ? [] : [] }));
+  it("finds a renamed conversation by its name through the runner's search, headed by the name", async () => {
+    const renamed = { ...DRAFT, name: "Transport layer" };
+    mocks.listDrafts.mockImplementation(async (query: { q?: string }) => ({ ok: true, data: { drafts: query.q === undefined ? [renamed] : query.q === "transport" ? [renamed] : [], note: "" } }));
     const container = await mount(true);
     const field = container.querySelector<HTMLInputElement>('input[type="search"]')!;
     act(() => {
@@ -534,8 +631,11 @@ describe("the sections", () => {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
     });
-    const hits = [...nav(container).querySelectorAll("[data-peek-hold] li a")].map((a) => a.getAttribute("href"));
-    expect(hits).toEqual(["/studio?draft=d1"]);
+    const hits = [...nav(container).querySelectorAll("[data-peek-hold] li a")];
+    expect(hits.map((a) => a.getAttribute("href"))).toEqual(["/studio?draft=d1"]);
+    expect(hits[0]?.textContent).toContain("Transport layer");
+    // The runner was asked with the words, and the catalog left the conversations to it.
+    expect(mocks.listDrafts).toHaveBeenCalledWith(expect.objectContaining({ q: "transport" }));
   });
 
   it("says Recent could not be read, rather than that it is empty, when the catalog did not answer", async () => {

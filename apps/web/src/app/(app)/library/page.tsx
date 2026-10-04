@@ -6,8 +6,10 @@ import { AssetCard, type CardConcept } from "@/components/AssetCard";
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetRow } from "@/components/library/AssetRow";
 import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryToolbar";
-import { Notice } from "@/components/library/Notice";
+import { Previewer } from "@/components/library/Previewer";
+import { loadPreview } from "@/components/library/preview-content";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { Notice } from "@/components/ui/Notice";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx } from "@/components/ui/classes";
@@ -50,6 +52,7 @@ import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-probl
 import { dayGroups, editedLabel, timeOfDay } from "@/lib/day-groups";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { conceptGroups, courseGroups, type RowGroup } from "@/lib/library-groups";
+import { parseOpen } from "@/lib/library-preview";
 import { conceptOrder, rowSource } from "@/lib/library-source";
 import { bucketOf } from "@/lib/mastery-bucket";
 import { ownValue } from "@/lib/own-key";
@@ -135,13 +138,17 @@ export default async function LibraryPage({
   const favorites = firstParam(params.favorites) === "1";
   const group = parseGroup(firstParam(params.group));
   const filters: LibraryFilters = { kind, topic, course, q, sort, view, favorites, group };
+  // The asset open in the previewer (L6), when the page is loaded with one:
+  // its body is in the first paint rather than a skeleton.
+  const open = parseOpen(params.open);
 
-  const [library, { kb }, courses, starred] = await Promise.all([
+  const [library, { kb }, courses, starred, preview] = await Promise.all([
     loadLibrary(),
     loadKnowledgeBase(),
     getCourses(),
     // The filter reads them, and so does every row's menu (Favorite or Unfavorite).
     loadFavorites(),
+    open === null ? Promise.resolve(null) : loadPreview(open),
   ]);
   // A store that could not be read filters to nothing rather than to
   // everything, and the page says why below.
@@ -432,12 +439,13 @@ export default async function LibraryPage({
             </p>
           )}
 
+          {/* A press on a row or a card opens it in the previewer over the
+              list (L6); `?open=` names the one open, so a reload or a link
+              reopens it, a filter that now matches nothing included. */}
+          <Previewer initial={preview} initialOpen={open}>
           {matching.length === 0 ? (
-            <Notice title="No assets match">
+            <Notice title="No assets match" actions={<TextLink href="/library">Clear every filter</TextLink>}>
               <p>{noMatchSentence}</p>
-              <p className="mt-3">
-                <TextLink href="/library">Clear every filter</TextLink>
-              </p>
             </Notice>
           ) : (
             <section
@@ -493,6 +501,7 @@ export default async function LibraryPage({
               ))}
             </section>
           )}
+          </Previewer>
 
           {truncated && (
             <p className="text-[12px] text-text3">

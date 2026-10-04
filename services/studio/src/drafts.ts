@@ -211,6 +211,12 @@ export interface DraftRecord {
   /** The latest brief's title. */
   title: string | null;
   /**
+   * The name the owner gave the conversation with Rename, shown before
+   * `title` everywhere; null or absent for none (a draft from before it).
+   * Set only by `PUT /api/drafts/{id}/name` (`rename`), never by a turn.
+   */
+  name?: string | null;
+  /**
    * The concept a hand-off from the concept tutor opened the draft on (D65 of
    * docs/STUDIO-TUTOR-HANDOFF.md). Absent or null on every other draft. The
    * note itself is kept only in the system prompt.
@@ -410,6 +416,8 @@ export interface DraftView {
   /** The revision the EXTENDING block summarised; null when unknown or not an extend draft. */
   sourceRevision: number | null;
   title: string | null;
+  /** The owner's name for the conversation, which every page shows before `title`. */
+  name: string | null;
   transcript: TranscriptEntry[];
   /** The newest brief of any kind, kept one release for the web app from before (D61). */
   brief: AnyDraftBrief | null;
@@ -436,6 +444,8 @@ export interface DraftSummaryView {
   kinds: BriefKind[];
   state: DraftState;
   title: string | null;
+  /** The owner's name for the conversation, which every page shows before `title`. */
+  name: string | null;
   /** The person's first message, for a row with no title yet. */
   firstMessage: string | null;
   source: string | null;
@@ -905,7 +915,7 @@ export class Drafts {
    * `state` may name several, comma-separated (`open,briefed`). `before` is
    * the last row of the page before, by its `updated` and id, so a history
    * longer than one page can be read a page at a time. `q` keeps the drafts
-   * whose title, first message or concept title contains it (`draftMatches`),
+   * whose name, title, first message or concept title contains it (`draftMatches`),
    * before the cursor and the limit, so a page of matches is full and the
    * paging reads the matches and nothing else.
    */
@@ -941,6 +951,7 @@ export class Drafts {
         }),
         state: record.state,
         title: record.title,
+        name: record.name ?? null,
         firstMessage: record.firstMessage ?? null,
         source: record.source,
         concept: record.concept == null ? null : { slug: record.concept.slug, title: record.concept.title },
@@ -985,6 +996,7 @@ export class Drafts {
       sourceChanged: await sourceChanged(record),
       sourceRevision: record.source === null ? null : record.sourceRevision,
       title: record.title,
+      name: record.name ?? null,
       transcript: transcriptOf(await this.events(id)),
       brief: record.brief,
       briefSeq: record.brief === null ? null : (record.briefSeq ?? null),
@@ -1022,11 +1034,15 @@ export class Drafts {
     return next;
   }
 
-  /** Merge a patch into the record, write `draft.json`, then mirror it. Call inside `write`. */
-  private async save(id: string, patch: Partial<DraftRecord>, options: { mirror?: boolean } = {}): Promise<DraftRecord> {
+  /**
+   * Merge a patch into the record, write `draft.json`, then mirror it. Call
+   * inside `write`. `touch: false` keeps `updatedAt`, for a change (a rename)
+   * that should not move the conversation up the lists or put off its pruning.
+   */
+  private async save(id: string, patch: Partial<DraftRecord>, options: { mirror?: boolean; touch?: boolean } = {}): Promise<DraftRecord> {
     const record = this.require(id);
     const merged: DraftRecord = { ...record, ...patch };
-    const next: DraftRecord = { ...merged, ...summarize(merged), updatedAt: new Date().toISOString() };
+    const next: DraftRecord = { ...merged, ...summarize(merged), updatedAt: options.touch === false ? record.updatedAt : new Date().toISOString() };
     this.records.set(id, next);
     await mkdir(draftDir(id), { recursive: true });
     await atomicWrite(draftJsonPath(id), `${JSON.stringify(next, null, 1)}\n`);
@@ -3102,6 +3118,30 @@ export class Drafts {
   }
 
   /* ------------------------------------------------------------------ */
+  /* Rename                                                             */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * `PUT /api/drafts/{id}/name`: the owner's name for the conversation, or
+   * none (`null`, or a name with nothing in it). Written to `draft.json` and
+   * mirrored like every other change, on the draft's write chain, so it lands
+   * in order with a turn's writes and `drain` waits for it. It leaves
+   * `updatedAt` alone: naming a conversation is not using it, so it neither
+   * moves up the lists nor outlives its pruning. The planner is not told; a
+   * name is the owner's label, not part of the conversation.
+   */
+  async rename(id: string, rawName: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
+    this.require(id);
+    const name = cleanName(rawName);
+    if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
+    return this.write(id, async () => {
+      const current = this.require(id);
+      if ((current.name ?? null) === name) return { record: current, changed: false };
+      return { record: await this.save(id, { name }, { touch: false }), changed: true };
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Abandon and shutdown                                               */
   /* ------------------------------------------------------------------ */
 
@@ -3815,18 +3855,38 @@ export function searchText(text: string): string {
   return [...text.replace(/\s+/g, " ").trim()].map((char) => char.toLowerCase().replace("ς", "σ")).join("");
 }
 
+/** The longest name a conversation keeps, as the catalog's `draft.name` holds it. */
+export const DRAFT_NAME_LIMIT = 200;
+
 /**
- * Whether a draft is a hit for `needle` (already `searchText`): its title, the
- * first message the list shows for it (cut to `LIST_LINE_LIMIT`, so a match
- * past the cut is not found), or the title of the concept a hand-off from the
- * tutor opened it on. The web app's `draftMatches` applies the same rule, so
- * a runner from before this one, which ignores `q`, still shows only matches.
+ * A name as `rename` keeps it: one line (whitespace runs as one space),
+ * trimmed, cut to `DRAFT_NAME_LIMIT` characters; null when nothing is left,
+ * which clears the name. The sidebar's `cleanTitle` and the catalog's
+ * `draft upsert` keep a name by the same rule. Anything but a string or null
+ * is refused.
+ */
+export function cleanName(raw: unknown): string | null {
+  if (raw === null) return null;
+  if (typeof raw !== "string") {
+    throw new JobRefused(400, `"name" is a string, or null to clear the name`, { field: "name" });
+  }
+  const line = raw.replace(/\s+/g, " ").trim().slice(0, DRAFT_NAME_LIMIT).trim();
+  return line === "" ? null : line;
+}
+
+/**
+ * Whether a draft is a hit for `needle` (already `searchText`): the name the
+ * owner gave it, its title, the first message the list shows for it (cut to
+ * `LIST_LINE_LIMIT`, so a match past the cut is not found), or the title of
+ * the concept a hand-off from the tutor opened it on. The web app's
+ * `draftMatches` applies the same rule, so a runner from before this one,
+ * which ignores `q`, still shows only matches.
  */
 export function draftMatches(
-  record: { title: string | null; firstMessage?: string | null; concept?: { title: string } | null },
+  record: { name?: string | null; title: string | null; firstMessage?: string | null; concept?: { title: string } | null },
   needle: string,
 ): boolean {
-  return [record.title, record.firstMessage, record.concept?.title].some(
+  return [record.name, record.title, record.firstMessage, record.concept?.title].some(
     (field) => typeof field === "string" && searchText(field).includes(needle),
   );
 }

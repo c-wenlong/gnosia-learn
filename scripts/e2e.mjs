@@ -542,12 +542,31 @@ async function run() {
     await page.waitForURL(`${base}/home`);
   });
 
-  await step('review: Recall these on Home, reveal, rate Good, move on', page, async () => {
+  await step('review: Start recall on Home opens the due concept, and All reviews rates it Good and moves on', page, async () => {
     await go('/home');
     // Home offers a few due cards, never the queue's count (H3 of
-    // docs/proposals/home-page.md); the button opens the review with just them.
-    await page.getByRole('link', { name: /^Recall these/ }).click();
-    await page.waitForURL(/\/review\?only=[^&]+$/);
+    // docs/proposals/home-page.md). Since recall-in-chat phase 3 (#381) each
+    // opens its concept, and Start recall the first, whose tutor opens on a
+    // recall question: the note's check, or one asked of the model, which
+    // with no provider key in this run fails and says so.
+    const recall = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Worth a quick recall' }) });
+    const start = recall.getByRole('link', { name: 'Start recall', exact: true });
+    const href = await start.getAttribute('href');
+    assert(href !== null && /^\/learn\/[^/?]+$/.test(href), `Start recall links to ${href}`);
+    assert((await recall.locator('li a').first().getAttribute('href')) === href, `the first due card does not link to ${href}`);
+    await clickHydrated(page, start);
+    await page.waitForURL(`${base}${href}`);
+    // The seed's due concept (tool-calling) has a check, so the tutor must open
+    // on it; a copy's due concept may have none, and then the model is asked.
+    const opening = SEED
+      ? /Its review is due, so one question before anything else/
+      : /Its review is due, so one question before anything else|This review is due, but the tutor could not open on a recall question/;
+    await main.getByText(opening).first().waitFor();
+
+    // The whole queue stays one link away, and grades as it always did.
+    await go('/home');
+    await clickHydrated(page, recall.getByRole('link', { name: 'All reviews', exact: true }));
+    await page.waitForURL(`${base}/review`);
     const bar = page.getByRole('progressbar', { name: 'Review progress' });
     await bar.waitFor();
     const before = await progressValue(bar);
@@ -573,7 +592,8 @@ async function run() {
     await done.or(show).or(options).first().waitFor();
   });
 
-  await step('review: a Recall these whose cards are no longer due says so', page, async () => {
+  // `?only=` outlived Home's old Recall these link (#381); an old link still lands somewhere honest.
+  await step('review: an ?only= link whose cards are no longer due says so', page, async () => {
     await go('/review?only=not-a-due-card');
     await main.getByRole('heading', { name: 'Already reviewed' }).waitFor();
     await main.getByRole('link', { name: 'All reviews' }).waitFor();
@@ -767,7 +787,7 @@ async function run() {
     await page.waitForFunction(() => document.querySelectorAll('svg[data-domain-graph] [data-faded="true"]').length === 0);
 
     const status = main.getByRole('button', { name: /^Status:/ });
-    const menuLabel = { mastered: 'Mastered', learning: 'Learning', untouched: 'Untouched', ready: 'Ready to learn' }[key];
+    const menuLabel = { mastered: 'Mastered', learning: 'Learning', untouched: 'Not started', ready: 'Ready to learn' }[key];
     await chip.click();
     await page.waitForFunction((k) => new URL(location.href).searchParams.get('filter') === k, key);
     assert((await chip.getAttribute('aria-pressed')) === 'true', 'the pressed chip is not pressed');
@@ -1054,9 +1074,10 @@ async function run() {
     const card = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Pick up where you left off' }) });
     await card.waitFor();
     await card.locator(`a[href^="/courses/${slug}"]`).first().waitFor();
-    // The concept, and since the visit event (#379) its tutor session too:
-    // both open /learn/<concept>, so either link will do.
-    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).first().waitFor();
+    // The concept's own row. Since #379 the session the step above walked is
+    // a row too, and one with no log opens the same concept page, so the
+    // concept is told apart by the kind a screen reader hears first.
+    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).filter({ hasText: /^Concept: / }).waitFor();
     // What the threads open up: at least one group, each a heading over links.
     const next = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Next from here' }) });
     await next.getByRole('heading', { level: 3, name: /^After / }).first().waitFor();
@@ -1090,12 +1111,13 @@ async function run() {
     await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('sort') === 'title');
     assert(new URL(page.url()).searchParams.get('kind') === 'note', `the list lost the type: ${page.url()}`);
     // The rows are grouped by the day they arrived, and the sort orders the
-    // rows inside each day. A row's name is its first line, after a
-    // screen-reader-only "Note: ".
+    // rows inside each day. A row's name follows a screen-reader-only "Note: ".
     const days = await main.getByRole('region', { name: 'Assets' }).locator('section ul').evaluateAll((lists) =>
       lists.map((list) =>
-        [...list.querySelectorAll(':scope > li a > span > span:nth-child(2) > span:first-child')].map((name) =>
-          [...name.childNodes]
+        // Since Library phase 2 (#390) the name is the row's link itself, the
+        // first in the row (a source line can link too, after it).
+        [...list.querySelectorAll(':scope > li')].map((item) =>
+          [...(item.querySelector('a')?.childNodes ?? [])]
             .filter((n) => !(n instanceof Element && n.classList.contains('sr-only')))
             .map((n) => n.textContent)
             .join('')

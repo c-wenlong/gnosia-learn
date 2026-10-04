@@ -397,6 +397,62 @@ export function textareaClasses({ className }: { className?: string } = {}): str
   return cx("block min-h-20 w-full min-w-0 resize-y rounded-lg border-2 px-3.5 py-2.5 leading-5", FIELD_TEXT.px14, FIELD_FACE, className);
 }
 
+/**
+ * The box of every menu and list that opens over the page: radius 16, a 2px
+ * border on the surface, 6px inside, rows 2px apart, scrolling past
+ * min(30rem, 70vh). No shadow: the kit draws its layers with the border, as
+ * a `Card` does. The kit `Popover` draws it for a filter, a field, the
+ * account menu and the studio's menus; a list that keeps the focus in its own
+ * field (Home's Ask box, the @ menu) takes it as well. Width is the caller's:
+ * a list as wide as its words (`w-max`), a field's list as wide as the field,
+ * a suggestion list as wide as its box. `menu-kit.test.ts` fails a second
+ * copy drawn by hand.
+ */
+export const MENU_PANEL = cx(
+  "flex flex-col gap-0.5 overflow-y-auto overscroll-contain max-h-[min(30rem,70vh)]",
+  "rounded-2xl border-2 border-border bg-surface p-1.5 text-text outline-none",
+);
+
+/** A run of a menu's rows under a heading, a hairline above all but the first. */
+export const MENU_GROUP =
+  "mt-1 flex flex-col gap-0.5 border-t border-hair pt-1.5 first:mt-0 first:border-t-0 first:pt-0";
+
+/** A menu group's heading: the `LABEL` size, inset to line up with the rows' text. */
+export const MENU_HEADING = "px-3 pt-1 pb-0.5 text-[12px] font-semibold text-text2";
+
+/**
+ * One row of a menu: 40px at least, radius 12, 14px medium text, the
+ * `--surface2` face under the highlight.
+ *
+ * Two kinds of row. One the list points at with `aria-activedescendant`
+ * while the focus stays on the list or its field (`FilterMenu`, `Combobox`,
+ * the Ask box, the @ menu) is told: `active` puts the face on it, and
+ * `keyboard`, while the keys moved the highlight there, adds the accent
+ * outline the list itself does not draw. A row that takes the focus itself (a
+ * link, a button: the account menu, the studio's menus) leaves both out and
+ * highlights under the pointer and outlines under the keyboard on its own.
+ * `disabled` is a row that cannot be picked (an @ menu entry with a reason):
+ * no face, the not-allowed cursor.
+ */
+export function menuRowClasses({
+  active,
+  keyboard = false,
+  disabled = false,
+  className,
+}: { active?: boolean; keyboard?: boolean; disabled?: boolean; className?: string } = {}): string {
+  const focusable = active === undefined;
+  return cx(
+    "flex min-h-10 w-full items-center gap-2.5 rounded-xl py-1.5 pr-3 pl-2 text-left text-[14px] font-medium text-text select-none",
+    "transition-colors duration-100 motion-reduce:transition-none",
+    disabled ? "cursor-not-allowed" : "cursor-pointer",
+    focusable && !disabled && "hover:bg-surface2 focus-visible:bg-surface2",
+    focusable && "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
+    active === true && !disabled && "bg-surface2",
+    active === true && keyboard && !disabled && "outline-2 -outline-offset-2 outline-accent",
+    className,
+  );
+}
+
 /** Kit `Card`: 2px border, radius 20, padding 20 (14 when `tight`). */
 export function cardClasses({ tight = false, className }: { tight?: boolean; className?: string } = {}): string {
   return cx(
@@ -405,3 +461,66 @@ export function cardClasses({ tight = false, className }: { tight?: boolean; cla
     className,
   );
 }
+
+export type CalloutTone = "warn" | "neutral" | "danger";
+
+/**
+ * Kit `Callout`: an inline tinted box in the flow of a page or a thread, one
+ * shape for every tone: radius 12, padding 12 by 16, 13px words. `warn` is the
+ * `--warn-tint` box (a failure with what to do, a caveat, a confirm), `neutral`
+ * the `--surface2` one (a status that is not a problem), `danger` a red tint
+ * for something lost. `bordered` adds a 2px ring in the tone, for a box that
+ * sits on a card of the same pale ground (a confirm, a settings card's status).
+ *
+ * The words stay `--text` on every tint, never the tone's own text colour: the
+ * amber on its tint clears 4.5:1 but is the lightest text on the page, fine for
+ * a verdict and harder going for a sentence (the store banner's reasoning).
+ */
+export function calloutClasses({
+  tone = "warn",
+  bordered = false,
+  className,
+}: { tone?: CalloutTone; bordered?: boolean; className?: string } = {}): string {
+  return cx(
+    "flex min-w-0 flex-col gap-2 rounded-xl px-4 py-3 text-[13px] leading-5 text-text",
+    CALLOUT_TONE[tone],
+    bordered && cx("border-2", CALLOUT_BORDER[tone]),
+    className,
+  );
+}
+
+const CALLOUT_TONE: Record<CalloutTone, string> = {
+  warn: "bg-warn-tint",
+  neutral: "bg-surface2",
+  danger: "bg-danger/8",
+};
+
+const CALLOUT_BORDER: Record<CalloutTone, string> = {
+  warn: "border-warn",
+  neutral: "border-border",
+  danger: "border-danger/45",
+};
+
+export type BannerTone = "warn" | "danger" | "ok";
+
+/**
+ * Kit `Banner`: a full-width strip across the top of a region, under a 2px
+ * rule in its tone, with a dot in the tone before the words. `--text` words
+ * for the same reason as the callout's.
+ */
+export function bannerClasses({ tone = "warn", className }: { tone?: BannerTone; className?: string } = {}): string {
+  return cx("flex items-start gap-3 border-b-2 px-4 py-2 text-[13px] leading-5 text-text", BANNER_TONE[tone], className);
+}
+
+const BANNER_TONE: Record<BannerTone, string> = {
+  warn: "border-warn bg-warn-tint",
+  danger: "border-danger/45 bg-danger/8",
+  ok: "border-ok bg-ok-tint",
+};
+
+/** The banner's dot: the tone's strongest colour, which the tint cannot drown. */
+export const BANNER_MARK: Record<BannerTone, string> = {
+  warn: "bg-warn-lip",
+  danger: "bg-danger",
+  ok: "bg-ok-lip",
+};

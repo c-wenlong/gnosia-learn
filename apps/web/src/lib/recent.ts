@@ -7,7 +7,6 @@ import {
   assetsByIds,
   readLearnerSnapshot,
   readPreferences,
-  draftsByIds,
   recentActivity,
   recentConcepts,
   recentDrafts,
@@ -26,10 +25,8 @@ import { bucketOf } from "@/lib/mastery-bucket";
 import { currentOwner, ownerScope, type OwnerScope } from "@/lib/owner";
 import { parsePlayback } from "@/lib/playback";
 import {
-  asNames,
   asPinned,
   moduleVisits,
-  named,
   recentItems,
   recentPage,
   RECENT_PAGE,
@@ -252,7 +249,7 @@ export function sidebarCourses(
 }
 
 export function emptyRecent(): RecentModel {
-  return { reachable: false, items: [], more: false, pinned: [], names: {}, courses: [] };
+  return { reachable: false, items: [], more: false, pinned: [], courses: [] };
 }
 
 export interface RecentOptions {
@@ -292,32 +289,18 @@ export async function readRecent(options: RecentOptions = {}): Promise<RecentMod
       orNone("tutor sessions", recentTutorSessions(db, owner, limit)),
       orNone("courses", getCourses()),
     ]);
-    const names = asNames(preferences[PREFERENCE_KEYS.recentNames]);
-    // A search finds a conversation by the name the owner gave it, titled or
-    // not, even when the runner holds the rest of the conversations (whose
-    // search does not know the names); only those renamed drafts join the
-    // search's window then, so drafts cannot crowd out the other kinds.
-    const renamed =
-      q !== "" && studioEnabled()
-        ? Object.entries(names)
-            .filter(([key, name]) => titleMatches(name, q) && !drafts.some((d) => `draft:${d.id}` === key))
-            .map(([key]) => key.slice("draft:".length))
-        : [];
-    const found = renamed.length === 0 ? [] : await orNone("renamed drafts", draftsByIds(db, owner, renamed));
+    // A conversation is called by its name, else its title (`recentItems`),
+    // so a search here finds a renamed one by its name; with a studio, the
+    // sidebar asks the runner instead, which matches the name too.
     const concepts = await recentConcepts(db, owner, conceptsNamed(events, sessions));
-    const sources = await recentSources(
-      db,
-      { events, preferences, drafts: [...drafts, ...found], sessions, concepts, courses },
-      scope,
-    );
-    const all = named(recentItems(sources), names);
+    const sources = await recentSources(db, { events, preferences, drafts, sessions, concepts, courses }, scope);
+    const all = recentItems(sources);
     const page = q === "" ? recentPage(all, pages) : recentPage(all.filter((item) => titleMatches(item.title, q)), 1);
     return {
       reachable: true,
       items: page.items,
       more: page.more,
       pinned: asPinned(preferences[PREFERENCE_KEYS.pinned]),
-      names,
       courses: sidebarCourses(courses, sources.modules, snapshot),
     };
   } catch (error) {

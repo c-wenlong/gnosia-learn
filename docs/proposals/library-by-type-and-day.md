@@ -169,6 +169,13 @@ Home's threads read the same query from then on. Section labels are 13 px grey, 
 scrolls, as Manus's are ([nav-section-header](../design/reference/manus/components.md#nav-section-header)).
 Hovering a row shows a more button; its menu has Pin, Rename (for a
 conversation), Open in course (for a module), Archive (for a conversation).
+A conversation's name is kept on its draft, in the `draft.name` column the
+studio runner writes (`PUT /api/drafts/{id}/name`), so every page that reads
+the draft calls it the same: the owner's name, else the planner's title,
+else the first message (`conversationTitle` in
+`apps/web/src/lib/conversation-title.ts`), and the runner's search finds it
+by its name. (It was first built as a `recentNames` preference, which only
+the sidebar and Home read; the owner moved it onto the draft on 2026-10-05.)
 Pinned rows sit under the Courses section in a Pinned section. The Chats
 list and its search stay, with the search now over everything in Recent. On
 a phone the same column is the drawer, as today.

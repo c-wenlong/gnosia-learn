@@ -366,12 +366,9 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect(await stored("pinned")).toBeUndefined();
     });
 
-    it("names a conversation and nothing else, and an empty name takes the name off", async () => {
-      expect((await call("recent", { action: "rename", key: "draft:d1", name: " Transport  layer " })).status).toBe(200);
-      expect(await stored("recentNames")).toEqual({ "draft:d1": "Transport layer" });
-      expect((await call("recent", { action: "rename", key: "concept:dot-product", name: "Mine" })).status).toBe(400);
-      expect((await call("recent", { action: "rename", key: "draft:d1", name: "" })).status).toBe(200);
-      expect(await stored("recentNames")).toEqual({});
+    it("names nothing: a conversation's name is kept on its draft, by the studio runner", async () => {
+      expect((await call("recent", { action: "rename", key: "draft:d1", name: "Transport layer" })).status).toBe(400);
+      expect(await stored("recentNames")).toBeUndefined();
     });
 
     it("refuses a write from another origin", async () => {

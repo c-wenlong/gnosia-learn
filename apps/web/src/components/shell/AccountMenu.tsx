@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { PixelAvatar } from "@/components/avatar/PixelAvatar";
-import { cx } from "@/components/ui/classes";
+import { cx, MENU_HEADING, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
+import { Popover } from "@/components/ui/Popover";
 import { FADE, FADE_IN } from "./motion";
 import { useLearner } from "@/lib/learner-context";
 
@@ -24,54 +25,33 @@ import { useLearner } from "@/lib/learner-context";
  *
  * A disclosure (a button that shows a list of links), not an ARIA `menu`:
  * a menu role promises arrow-key navigation, and three items do not need it.
- * It closes on Escape (focus back on the row), on a click outside, and on
- * choosing an item.
+ * Tab walks from the row into it. It is a kit `Popover`, in the top layer
+ * over the sidebar's edge: it closes on Escape (focus back on the row, and
+ * the press goes no further, so the phone drawer around it stays open), on a
+ * click outside, on Tab out of it, and on choosing an item.
  */
 export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick: () => void }) {
   const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
   const themeLabel = useId();
   const { displayName, avatar } = useLearner().state;
   const name = displayName ?? "Account";
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        // The menu's Escape, not the drawer's.
-        event.stopPropagation();
-        setOpen(false);
-        button.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey, true);
-    };
-  }, [open]);
-
   const pick = () => {
     setOpen(false);
     onPick();
   };
 
-  const item =
-    "flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-medium text-text hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent";
+  const item = menuRowClasses();
 
   return (
-    <div ref={root} className="relative">
+    <div className="relative">
       <button
         ref={button}
         type="button"
         aria-expanded={open}
-        aria-controls={id}
+        aria-controls={open ? id : undefined}
         aria-label={collapsed ? `${name}, account and settings` : undefined}
         title={collapsed ? name : undefined}
         onClick={() => setOpen((v) => !v)}
@@ -99,46 +79,40 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
           </svg>
         </span>
       </button>
-      {/* Mounted throughout so it can fade and rise from the row; closed, it
-          is invisible (no focus, no clicks) once the fade has run. */}
-      <div
-          id={id}
-          inert={!open}
-          className={cx(
-            "absolute z-50 w-60 rounded-2xl border-2 border-border bg-surface p-1.5 shadow-lg",
-            // `translate` and `scale` are their own properties in Tailwind 4, not `transform`.
-            // Visibility transitions only as it closes, so the opened menu is
-            // focusable from its first frame.
-            "duration-150 ease-soft motion-reduce:transition-none",
-            collapsed ? "bottom-0 left-full ml-2 origin-bottom-left" : "inset-x-0 bottom-full mb-2 w-auto origin-bottom",
-            open
-              ? "visible translate-y-0 scale-100 opacity-100 transition-[opacity,translate,scale]"
-              : "invisible translate-y-1 scale-[0.97] opacity-0 transition-[opacity,translate,scale,visibility]",
-          )}
-        >
-          <ul className="flex flex-col gap-0.5">
-            <li className="px-1.5 pt-1 pb-2">
-              <p id={themeLabel} className="mb-1.5 px-1.5 text-[12px] font-semibold text-text2">
-                Theme
-              </p>
-              <ThemeSwitch size="sm" labelledBy={themeLabel} />
-            </li>
-            <li>
-              <Link href="/settings" className={item} onClick={pick}>
-                <Glyph d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4M15.3 15.3l-1.4-1.4M6.1 6.1 4.7 4.7" />
-                Settings
-              </Link>
-            </li>
-            <li>
-              <form method="post" action="/api/auth/sign-out">
-                <button type="submit" className={item}>
-                  <Glyph d="M8 3.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1H8M13 13.5 16.5 10 13 6.5M16.5 10H7.5" />
-                  Sign out
-                </button>
-              </form>
-            </li>
-          </ul>
-        </div>
+      {/* Over the row, as wide as it, in the open sidebar; beside the avatar,
+          bottoms flush, on the rail. */}
+      <Popover
+        anchorRef={button}
+        open={open}
+        onOpenChange={() => setOpen(false)}
+        placement={collapsed ? "right-end" : "top-start"}
+        minWidthFromAnchor={!collapsed}
+        id={id}
+        className={cx(MENU_PANEL, collapsed && "w-60")}
+      >
+        <ul className="flex flex-col gap-0.5">
+          <li className="pb-2">
+            <p id={themeLabel} className={MENU_HEADING}>
+              Theme
+            </p>
+            <ThemeSwitch size="sm" labelledBy={themeLabel} className="px-1.5 pt-1" />
+          </li>
+          <li>
+            <Link href="/settings" className={item} onClick={pick}>
+              <Glyph d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4M15.3 15.3l-1.4-1.4M6.1 6.1 4.7 4.7" />
+              Settings
+            </Link>
+          </li>
+          <li>
+            <form method="post" action="/api/auth/sign-out">
+              <button type="submit" className={item}>
+                <Glyph d="M8 3.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1H8M13 13.5 16.5 10 13 6.5M16.5 10H7.5" />
+                Sign out
+              </button>
+            </form>
+          </li>
+        </ul>
+      </Popover>
     </div>
   );
 }

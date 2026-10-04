@@ -9,6 +9,7 @@ import { Collapse } from "@/components/ui/Collapse";
 import { Panel } from "@/components/ui/Panel";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TextLink } from "@/components/ui/TextLink";
+import { Callout } from "@/components/ui/Callout";
 import { doneWord, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
 import type { Course, Module, Topic } from "@/lib/types";
 
@@ -118,10 +119,10 @@ export function CourseRail({
           </div>
         )}
         {course.inferred && (
-          <p className="rounded-xl border-l-4 border-warn bg-warn-tint px-3 py-2 text-[13px] leading-5 text-text">
-            <strong className="font-semibold">Inferred roadmap.</strong> The official syllabus is not published yet, so
-            these topics are inferred from the course announcement and may change.
-          </p>
+          <Callout title="Inferred roadmap">
+            The official syllabus is not published yet, so these topics are inferred from the course announcement and
+            may change.
+          </Callout>
         )}
       </RailCard>
 

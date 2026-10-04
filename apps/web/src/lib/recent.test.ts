@@ -1,19 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  asNames,
   asPinned,
   isAppPath,
   mergeStreams,
   moduleVisits,
-  named,
   recentGroups,
   recentItems,
   recentPage,
   RECENT_PAGE,
   splitPinned,
   titleMatches,
-  withName,
   withPin,
   type PinnedRow,
   type RecentItem,
@@ -210,12 +207,22 @@ describe("pins and names", () => {
     expect(split.pinned[0].title).toBe("Renamed upstream");
   });
 
-  it("names conversations only, and a cleared name goes", () => {
-    expect(asNames({ "draft:a": "  Transport  layer ", "video:b": "No", "draft:c": "   " })).toEqual({ "draft:a": "Transport layer" });
-    const names = withName({ "draft:a": "One" }, "draft:b", "Two");
-    expect(withName(names, "draft:a", null)).toEqual({ "draft:b": "Two" });
-    const rows: RecentItem[] = [{ key: "draft:b", kind: "draft", title: "Planner's title", detail: null, href: "/", at: AT(1), quoted: true }];
-    expect(named(rows, names)[0]).toMatchObject({ title: "Two", quoted: false });
+  it("calls a conversation by its name, else its title, and leaves out one with neither", () => {
+    const items = recentItems({
+      modules: [],
+      place: () => null,
+      videos: [],
+      concepts: [],
+      drafts: [
+        { id: "named", kind: "diagram", name: "Transport layer", title: "Planner's title", updatedAt: AT(3) },
+        { id: "titled", kind: "video", name: null, title: "Planner's title", updatedAt: AT(2) },
+        { id: "blank", kind: "diagram", name: "  ", title: null, updatedAt: AT(1) },
+      ],
+    });
+    expect(items.map((r) => [r.key, r.title, r.detail])).toEqual([
+      ["draft:named", "Transport layer", "Diagram draft"],
+      ["draft:titled", "Planner's title", "Video draft"],
+    ]);
   });
 
   it("searches titles in any case", () => {
@@ -235,7 +242,6 @@ const state = vi.hoisted(() => ({
   readLearnerSnapshot: vi.fn(),
   recentDrafts: vi.fn(),
   recentTutorSessions: vi.fn(),
-  draftsByIds: vi.fn(),
   assetsByIds: vi.fn(),
   getCourses: vi.fn(),
   catalogDatabase: vi.fn(),
@@ -249,7 +255,6 @@ vi.mock("@self-learn/catalog/state", () => ({
   readLearnerSnapshot: state.readLearnerSnapshot,
   recentDrafts: state.recentDrafts,
   recentTutorSessions: state.recentTutorSessions,
-  draftsByIds: state.draftsByIds,
   assetsByIds: state.assetsByIds,
 }));
 vi.mock("@/data/courses", () => ({ getCourses: state.getCourses }));
@@ -287,11 +292,10 @@ describe("readRecent", () => {
       "playback:video:abc": { position: 300, duration: 600, watchedAt: null, updatedAt: AT(4) },
       "playback:video:done": { position: 300, duration: 600, watchedAt: AT(4), updatedAt: AT(4) },
       pinned: [{ key: "concept:recurrences", kind: "concept", title: "Recurrences", href: "/learn/recurrences", at: AT(4) }],
-      recentNames: { "draft:d1": "My name" },
     });
     state.recentConcepts.mockResolvedValue([{ id: "recurrences", title: "Recurrences", pL: 0.5, mastery: "weak", observations: 2 }]);
     state.readLearnerSnapshot.mockResolvedValue({ completed: {}, inactiveCourses: [] });
-    state.recentDrafts.mockResolvedValue([{ id: "d1", kind: "diagram", state: "open", title: "Planner title", updatedAt: AT(5) }]);
+    state.recentDrafts.mockResolvedValue([{ id: "d1", kind: "diagram", state: "open", name: "My name", title: "Planner title", updatedAt: AT(5) }]);
     state.recentTutorSessions.mockResolvedValue([
       { id: "2026-08-19-react-agents", title: null, goal: null, logAssetId: null, state: "closed", updatedAt: AT(1, 6) },
       { id: "web-x", title: null, goal: "recurrences", logAssetId: null, state: "closed", updatedAt: AT(1, 5) },
@@ -357,14 +361,15 @@ describe("readRecent", () => {
     expect(state.recentActivity).toHaveBeenCalledWith(expect.anything(), "local", {});
   });
 
-  it("finds a renamed conversation by its name, untitled or not, while leaving the rest to the runner", async () => {
-    state.readPreferences.mockResolvedValue({ recentNames: { "draft:untitled": "Transport layer", "draft:other": "Elsewhere" } });
-    state.draftsByIds.mockResolvedValue([{ id: "untitled", kind: "diagram", state: "open", title: "", updatedAt: AT(2) }]);
+  it("finds a renamed conversation by its name without a runner, and leaves conversations to the runner with one", async () => {
     const { readRecent } = await import("./recent");
-    const recent = await readRecent({ withoutDrafts: true, q: "transport" });
+    expect((await readRecent({ q: "my name" })).items.map((r) => [r.key, r.title])).toEqual([["draft:d1", "My name"]]);
+    // The planner's title is under the name, and no longer what the row is called.
+    expect((await readRecent({ q: "planner" })).items).toEqual([]);
+    state.recentDrafts.mockClear();
+    const withRunner = await readRecent({ withoutDrafts: true, q: "my name" });
     expect(state.recentDrafts).not.toHaveBeenCalled();
-    expect(state.draftsByIds).toHaveBeenCalledWith(expect.anything(), "local", ["untitled"]);
-    expect(recent.items.map((r) => [r.key, r.title])).toEqual([["draft:untitled", "Transport layer"]]);
+    expect(withRunner.items).toEqual([]);
   });
 
   it("falls back to the courses with a tick when none was opened, leaving a course set aside out", async () => {
@@ -388,7 +393,7 @@ describe("readRecent", () => {
     expect((await readRecent()).reachable).toBe(false);
 
     state.catalogDatabase.mockRejectedValue(new Error("connect ECONNREFUSED"));
-    expect(await readRecent()).toEqual({ reachable: false, items: [], more: false, pinned: [], names: {}, courses: [] });
+    expect(await readRecent()).toEqual({ reachable: false, items: [], more: false, pinned: [], courses: [] });
   });
 });
 

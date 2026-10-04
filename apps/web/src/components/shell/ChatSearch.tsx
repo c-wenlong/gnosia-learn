@@ -10,7 +10,7 @@ import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField as KitSearchField } from "@/components/ui/SearchField";
 import { isCurrentRow } from "@/lib/nav";
-import { titleMatches, type RecentItem } from "@/lib/recent-core";
+import type { RecentItem } from "@/lib/recent-core";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
@@ -93,8 +93,6 @@ export function SearchField({
 export function SearchResults({
   search,
   studio,
-  names,
-  renamed,
   path,
   active,
   navigate,
@@ -103,10 +101,6 @@ export function SearchResults({
   search: HistorySearch;
   /** Whether the runner's conversations are searched too. */
   studio: boolean;
-  /** The owner's names for conversations, by row key. */
-  names: Readonly<Record<string, string>>;
-  /** The runner's loaded conversations the owner renamed, which its search cannot find by their names. */
-  renamed: readonly RecentItem[];
   path: string;
   active: string | null;
   /** The studio page's browser move, or null off the studio. */
@@ -114,21 +108,11 @@ export function SearchResults({
   onPick: () => void;
 }) {
   const recent = useRecentSearch(search.words, studio);
-  const conversations =
-    search.found === null
-      ? []
-      : searchRows(search.found.drafts, {}, search.words).map((row) =>
-          names[`draft:${row.draftId}`] === undefined ? row : { ...row, heading: names[`draft:${row.draftId}`], quoted: false },
-        );
-  // The runner searches a conversation's own words, not the name the owner
-  // gave it in the sidebar, so a conversation found by its name alone comes
-  // from the catalog's search (which reads names) or from the rows loaded here.
-  const fromRunner = new Set(conversations.map((row) => `draft:${row.draftId}`));
-  const byName = [
-    ...(recent.found ?? []).filter((item) => item.kind === "draft" && names[item.key] !== undefined),
-    ...renamed.filter((item) => titleMatches(item.title, search.words)),
-  ].filter((item, at, all) => !fromRunner.has(item.key) && all.findIndex((other) => other.key === item.key) === at);
-  const others = [...(recent.found ?? []).filter((item) => !(studio && item.kind === "draft")), ...(studio ? byName : [])];
+  // The runner matches a conversation's name as well as its own words, and
+  // heads each row by `conversationTitle`, so a renamed one is found and
+  // shown by its name.
+  const conversations = search.found === null ? [] : searchRows(search.found.drafts, {}, search.words);
+  const others = (recent.found ?? []).filter((item) => !(studio && item.kind === "draft"));
   const hits: ({ type: "draft"; at: string; row: SearchRow } | { type: "item"; at: string; item: RecentItem })[] = [
     ...conversations.map((row) => ({ type: "draft" as const, at: row.updated, row })),
     ...others.map((item) => ({ type: "item" as const, at: item.at, item })),

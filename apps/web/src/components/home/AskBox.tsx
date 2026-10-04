@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
-import { cx } from "@/components/ui/classes";
+import { cx, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { moveActive } from "@/components/ui/mention-text";
+import { usePresence } from "@/components/ui/use-presence";
 import { ASK_START_KEY, askTutorHref, MAX_ASK_QUERY, type AskEntry, type AskKind } from "@/lib/ask-core";
 
 /** How long typing pauses before the box asks. */
@@ -28,6 +29,8 @@ type Option = { key: string; href: string; entry: AskEntry | null };
  *
  * An ARIA combobox: the input owns a listbox, arrows move
  * `aria-activedescendant`, Escape closes the list and then clears the text.
+ * The list is the kit's menu box and rows (`MENU_PANEL`, `menuRowClasses`),
+ * popping in and, kept for its way out (`usePresence`), out again.
  * Matches are drawn only for the text they were asked for, so an Enter while
  * the next answer is on its way opens the tutor rather than the last text's
  * match. Choosing the tutor marks the subject as asked from here, which is
@@ -47,13 +50,18 @@ export function AskBox() {
   const trimmed = query.trim();
   // The tutor is offered for any subject ("R" is a language); the title
   // search waits for two characters, since one would list half the catalog.
-  const options: Option[] =
-    trimmed.length === 0
-      ? []
-      : [
-          ...(found.query === trimmed ? found.results : []).map((entry) => ({ key: entry.key, href: entry.href, entry })),
-          { key: "tutor", href: askTutorHref(trimmed), entry: null },
-        ];
+  // Memoised, so the rows kept for the list's way out (below) change only
+  // when the rows do.
+  const options = useMemo<Option[]>(
+    () =>
+      trimmed.length === 0
+        ? []
+        : [
+            ...(found.query === trimmed ? found.results : []).map((entry) => ({ key: entry.key, href: entry.href, entry })),
+            { key: "tutor", href: askTutorHref(trimmed), entry: null },
+          ],
+    [trimmed, found],
+  );
 
   useEffect(() => {
     const mine = ++latest.current;
@@ -93,6 +101,18 @@ export function AskBox() {
   const showList = open && options.length > 0;
   const activeOption = showList ? options[Math.min(active, options.length - 1)] : undefined;
   const activeId = activeOption ? `${id}-${activeOption.key}` : undefined;
+  // The rows last shown, kept while the list leaves, so a list closed by
+  // clearing the box does not empty before it fades.
+  const [kept, setKept] = useState<{ options: Option[]; active: Option | undefined; asked: string }>({
+    options,
+    active: activeOption,
+    asked: trimmed,
+  });
+  if (showList && (kept.options !== options || kept.active !== activeOption || kept.asked !== trimmed)) {
+    setKept({ options, active: activeOption, asked: trimmed });
+  }
+  const presence = usePresence(showList, 120);
+  const shown = showList ? { options, active: activeOption, asked: trimmed } : kept;
 
   // The highlighted option stays in view as the arrows move it or new
   // matches reset it, so Enter never opens one the list has scrolled past.
@@ -110,7 +130,7 @@ export function AskBox() {
         maxLength={MAX_ASK_QUERY}
         role="combobox"
         aria-expanded={showList}
-        aria-controls={listId}
+        aria-controls={showList ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={activeId}
         value={query}
@@ -144,15 +164,21 @@ export function AskBox() {
           }
         }}
       />
-      {showList && (
+      {presence.mounted && (
         <ul
-          id={listId}
+          id={presence.leaving ? undefined : listId}
           role="listbox"
           aria-label="Matches"
-          className="absolute inset-x-0 top-full z-40 mt-2 flex max-h-[min(30rem,70vh)] origin-top animate-pop-in flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-2xl border-2 border-border bg-surface p-1.5 motion-reduce:animate-none"
+          inert={presence.leaving}
+          className={cx(
+            "absolute inset-x-0 top-full z-40 mt-2 origin-top",
+            MENU_PANEL,
+            presence.leaving ? "pointer-events-none animate-pop-out" : "animate-pop-in",
+            "motion-reduce:animate-none",
+          )}
         >
-          {options.map((option, i) => {
-            const on = option === activeOption;
+          {shown.options.map((option, i) => {
+            const on = option === shown.active;
             return (
               <li
                 key={option.key}
@@ -162,25 +188,22 @@ export function AskBox() {
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => go(option)}
-                className={cx(
-                  "flex min-w-0 cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition-colors duration-100 motion-reduce:transition-none",
-                  on && "bg-surface2",
-                  option.entry === null && options.length > 1 && "mt-1 border-t border-hair",
-                )}
+                className={menuRowClasses({
+                  active: on,
+                  className: cx(option.entry === null && shown.options.length > 1 && "mt-1 border-t border-hair"),
+                })}
               >
                 {option.entry === null ? (
                   <>
                     <Glyph name="concepts" className="text-accent-text" />
-                    <span className="min-w-0 flex-1 truncate text-[14px] text-text">
-                      Ask the tutor about &ldquo;{trimmed}&rdquo;
-                    </span>
+                    <span className="min-w-0 flex-1 truncate">Ask the tutor about &ldquo;{shown.asked}&rdquo;</span>
                   </>
                 ) : (
                   <>
                     <Glyph name={GLYPH[option.entry.kind]} className="text-text2" />
-                    <span className="min-w-0 flex-1 truncate text-[14px] text-text">{option.entry.title}</span>
+                    <span className="min-w-0 flex-1 truncate">{option.entry.title}</span>
                     {option.entry.detail !== null && (
-                      <span className="shrink-0 text-[12px] text-text3">{option.entry.detail}</span>
+                      <span className="shrink-0 text-[12px] font-normal text-text3">{option.entry.detail}</span>
                     )}
                   </>
                 )}
