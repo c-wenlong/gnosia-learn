@@ -506,6 +506,8 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(kb.concepts.find((c) => c.id === "alpha")?.leech).toBe(true);
       // Domain is read off the path, the way `store.mjs` always did it.
       expect(kb.concepts.find((c) => c.id === "alpha")?.domain).toBe("fixtures");
+      // The topic it is filed under, which the Learn map groups domains by.
+      expect(kb.concepts.find((c) => c.id === "alpha")?.topic).toBe(TOPIC_SLUG);
       expect(kb.stats.total).toBe(CONCEPTS.length);
       // Nothing is mastered, and only `alpha` has no unmet prerequisite.
       expect(kb.frontier).toEqual(["alpha"]);
