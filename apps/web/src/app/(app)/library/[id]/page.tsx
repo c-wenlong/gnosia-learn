@@ -273,6 +273,8 @@ export default async function AssetPage({
       key="heading"
       assetId={asset.id}
       text={name.text}
+      // What it is called with no name of the learner's, for the field's reset.
+      fallback={assetDisplayTitle({ ...asset, title: naming?.original ?? null }).text}
       naming={naming}
       headingClassName={cx(
         "break-words text-text",

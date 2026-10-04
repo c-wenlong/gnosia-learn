@@ -31,12 +31,18 @@ const QUIET: Status = { text: null, tone: "muted" };
 export function AssetTitle({
   assetId,
   text,
+  fallback,
   headingClassName,
   naming,
 }: {
   assetId: string;
   /** What the page calls the asset now (`assetDisplayTitle`). */
   text: string;
+  /**
+   * What the page would call it with no name of the learner's: the source's
+   * title, or for an asset with none, its filename or URL host.
+   */
+  fallback: string;
   headingClassName: string;
   naming: { name: string | null; original: string | null } | null;
 }) {
@@ -66,7 +72,6 @@ export function AssetTitle({
   }, [editing]);
 
   if (naming === null) return <h1 className={headingClassName}>{shown}</h1>;
-  const original = naming.original;
 
   function close() {
     setEditing(false);
@@ -80,7 +85,8 @@ export function AssetTitle({
       setStatus({ text: `At most ${ASSET_NAME_MAX} characters.`, tone: "danger" });
       return;
     }
-    if (cleaned === (named ?? original)) {
+    // Nothing to change: the name shown already, or clearing a name never given.
+    if (cleaned === shown || (cleaned === null && named === null)) {
       close();
       return;
     }
@@ -101,7 +107,7 @@ export function AssetTitle({
         setStatus({ text: payload.error ?? `Not saved (HTTP ${response.status}).`, tone: "danger" });
         return;
       }
-      const next = payload.result.title ?? text;
+      const next = payload.result.name ?? fallback;
       setShown(next);
       setNamed(payload.result.name);
       setDraft(next);
@@ -151,7 +157,7 @@ export function AssetTitle({
               type="text"
               value={draft}
               maxLength={ASSET_NAME_MAX + 20}
-              placeholder={original ?? "A name for this"}
+              placeholder={fallback}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
@@ -168,9 +174,9 @@ export function AssetTitle({
               Cancel
             </Button>
           </div>
-          {named !== null && original !== null && (
+          {named !== null && (
             <p className="flex flex-wrap items-baseline gap-x-2 text-[13px] text-text3">
-              <span className="min-w-0 break-words">Original name: {original}</span>
+              <span className="min-w-0 break-words">Original name: {fallback}</span>
               <button
                 type="button"
                 disabled={saving}
