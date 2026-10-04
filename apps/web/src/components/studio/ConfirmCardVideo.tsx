@@ -12,6 +12,7 @@ import { Chip } from "@/components/ui/Chip";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
+import { Callout } from "@/components/ui/Callout";
 import type { TopicOption } from "@/data/topics";
 import {
   abbreviations,
@@ -174,7 +175,7 @@ export function ConfirmCardVideo({
 
           <Storyboard brief={brief} charsPerSecond={charsPerSecond} />
 
-          {warning !== null && <p className="rounded-lg bg-warn-tint px-3 py-2 text-[13px] leading-5 text-text">{warning}</p>}
+          {warning !== null && <Callout>{warning}</Callout>}
         </div>
 
         <Reveal open={onHold}>

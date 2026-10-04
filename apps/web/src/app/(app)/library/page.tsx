@@ -7,7 +7,7 @@ import { AssetCard, type CardConcept } from "@/components/AssetCard";
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetRow } from "@/components/library/AssetRow";
 import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryToolbar";
-import { Notice } from "@/components/library/Notice";
+import { Notice } from "@/components/ui/Notice";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
@@ -398,11 +398,8 @@ export default async function LibraryPage({
           )}
 
           {matching.length === 0 ? (
-            <Notice title="No assets match">
+            <Notice title="No assets match" actions={<TextLink href="/library">Clear every filter</TextLink>}>
               <p>{noMatchSentence}</p>
-              <p className="mt-3">
-                <TextLink href="/library">Clear every filter</TextLink>
-              </p>
             </Notice>
           ) : (
             <section

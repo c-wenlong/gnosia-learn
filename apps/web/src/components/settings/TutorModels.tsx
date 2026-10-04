@@ -12,6 +12,7 @@ import { FormRow } from "@/components/ui/FormRow";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
 import { cx } from "@/components/ui/classes";
+import { Callout } from "@/components/ui/Callout";
 import { sendJson } from "@/lib/send-json";
 import type { TutorModelsView } from "@/lib/tutor-models/settings";
 
@@ -190,9 +191,9 @@ export function TutorModels({ view }: { view: TutorModelsView }) {
         </p>
       )}
       {!view.reachable && (
-        <p role="status" className="rounded-lg border-2 border-warn bg-warn-tint px-3.5 py-2.5 text-[14px] text-text">
+        <Callout role="status" bordered>
           Your models could not be read: the database is unreachable. The tutor is using the built-in defaults.
-        </p>
+        </Callout>
       )}
       {chain.length > 0 && (
         <ol className="flex flex-col divide-y-2 divide-border">

@@ -20,9 +20,11 @@ import { Arrive } from "@/components/studio/motion-parts";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { MentionComposer } from "@/components/studio/StudioComposer";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { Chip } from "@/components/ui/Chip";
 import { chipClasses, cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
   EMPTY_MENTION_VALUE,
@@ -1000,20 +1002,23 @@ export function DraftPanel({
         )}
 
         {sendError !== null && (
-          <p role="alert" className={cx("rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text", ENTER)}>
+          <Callout role="alert" className={ENTER}>
             {sendError}
-          </p>
+          </Callout>
         )}
 
         {view.turnCap > 0 && view.turns >= view.turnCap && (
-          <Arrive animate={liveTurn} className="flex flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
-            <span className="min-w-0 flex-1">
+          <Arrive animate={liveTurn}>
+            <Callout
+              actions={
+                <Button size="sm" variant="secondary" onClick={() => void startDraft()} disabled={starting}>
+                  New conversation
+                </Button>
+              }
+            >
               This conversation has reached its {view.turnCap}-turn limit.
               {cards.length > 0 ? " The last brief can still be made." : ""}
-            </span>
-            <Button size="sm" variant="secondary" onClick={() => void startDraft()} disabled={starting}>
-              New conversation
-            </Button>
+            </Callout>
           </Arrive>
         )}
       </div>
@@ -1054,23 +1059,18 @@ export function DraftPanel({
           onModEnter={cards.length > 0 ? () => modEnter(null) : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
-          {/* The question and the button swap in place, each fading in. */}
-          {confirmStartOver ? (
-            <span className={cx("flex items-center gap-2", FADE_IN)}>
-              <span className="text-text2">Close this conversation for good?</span>
-              <TextLink onClick={() => void startOver()} tone="danger">
-                Start over
-              </TextLink>
-              <TextLink onClick={() => setConfirmStartOver(false)} tone="muted" weight="normal">
-                Keep it
-              </TextLink>
-            </span>
-          ) : (
-            view.transcript.length > 0 && (
-              <TextLink onClick={() => setConfirmStartOver(true)} tone="muted" weight="normal" className={FADE_IN}>
-                Start over
-              </TextLink>
-            )
+          {/* The question and the press swap in place, each fading in. The
+              problem card's Start over opens the question too. */}
+          {(confirmStartOver || view.transcript.length > 0) && (
+            <InlineConfirm
+              size="text"
+              label="Start over"
+              question="Close this conversation for good?"
+              confirmLabel="Start over"
+              onConfirm={() => void startOver()}
+              open={confirmStartOver}
+              onOpenChange={setConfirmStartOver}
+            />
           )}
           {downReason !== null && <span className="text-danger">The runner stopped answering: {downReason}</span>}
           <Failure text={startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)} className="basis-full" />
@@ -1436,47 +1436,52 @@ function Problem({
       </div>
     );
   }
+  const title =
+    problem.case === "E1" ? (
+      <>The planner&apos;s request was refused.</>
+    ) : problem.case === "E6" ? (
+      <>The planner&apos;s {kind === null ? "" : `${kind} `}brief did not pass the studio&apos;s checks twice.</>
+    ) : undefined;
   return (
-    <div role="alert" className="flex flex-col gap-3 rounded-xl bg-warn-tint px-4 py-3.5 text-[14px] text-text">
+    <Callout
+      role="alert"
+      title={title}
+      actions={
+        problem.case !== "E6" && onRetry === null ? undefined : (
+          <>
+            {problem.case !== "E6" && onRetry !== null && (
+              <Button size="sm" variant="secondary" onClick={onRetry} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
+                Try again
+              </Button>
+            )}
+            {problem.case === "E6" && (
+              <>
+                {onAskAgain !== null && (
+                  <Button size="sm" variant="secondary" onClick={onAskAgain} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
+                    Ask again
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={onStartOver}>
+                  Start over
+                </Button>
+              </>
+            )}
+          </>
+        )
+      }
+    >
       {problem.case === "E1" && (
         <>
-          <p className="font-semibold">The planner&apos;s request was refused.</p>
-          <p className="break-words text-[13px] text-text2">{problem.text}</p>
-          <p className="text-[13px] text-text2">
+          <p>{problem.text}</p>
+          <p className="mt-1">
             The planner runs on this machine&apos;s <span className="font-mono">claude</span> login. Check it with{" "}
             <span className="font-mono">claude doctor</span>, then try again.
           </p>
         </>
       )}
       {problem.case === "E2" && <p>{problem.text}</p>}
-      {problem.case === "E6" && (
-        <>
-          <p className="font-semibold">
-            The planner&apos;s {kind === null ? "" : `${kind} `}brief did not pass the studio&apos;s checks twice.
-          </p>
-          <p className="break-words font-mono text-[12px] text-text2">{problem.text}</p>
-        </>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        {problem.case !== "E6" && onRetry !== null && (
-          <Button size="sm" variant="secondary" onClick={onRetry} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
-            Try again
-          </Button>
-        )}
-        {problem.case === "E6" && (
-          <>
-            {onAskAgain !== null && (
-              <Button size="sm" variant="secondary" onClick={onAskAgain} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
-                Ask again
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={onStartOver}>
-              Start over
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
+      {problem.case === "E6" && <p className="font-mono text-[12px]">{problem.text}</p>}
+    </Callout>
   );
 }
 

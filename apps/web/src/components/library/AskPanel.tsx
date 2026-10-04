@@ -5,6 +5,7 @@ import { useState } from "react";
 import { MathText } from "@/components/Math";
 import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { Composer } from "@/components/ui/Composer";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
@@ -104,15 +105,17 @@ export function AskPanel({
         <p className="animate-fade-in px-1.5 text-[14px] text-text2 motion-reduce:animate-none">The tutor is thinking…</p>
       )}
       {error !== null && (
-        <div
+        <Callout
           role="alert"
-          className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none"
+          className="animate-fade-in motion-reduce:animate-none"
+          actions={
+            <Button variant="secondary" size="sm" onClick={() => void send(turns)}>
+              Try again
+            </Button>
+          }
         >
-          <span className="min-w-0 flex-1">{error}</span>
-          <Button variant="secondary" size="sm" onClick={() => void send(turns)}>
-            Try again
-          </Button>
-        </div>
+          {error}
+        </Callout>
       )}
       <Composer
         value={draft}

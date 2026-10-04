@@ -6,11 +6,13 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
+import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow } from "@/components/ui/FormRow";
 import { Input } from "@/components/ui/Input";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { usePresence } from "@/components/ui/use-presence";
 import { cx } from "@/components/ui/classes";
+import { Callout } from "@/components/ui/Callout";
 import type { ProviderKeyView } from "@/lib/provider-keys/settings";
 import { sendJson } from "@/lib/send-json";
 
@@ -62,9 +64,9 @@ export function ProviderKeys({ rows, reachable }: { rows: ProviderKeyRow[]; reac
         provider, stored encrypted, and never shown again once saved: only the last four characters are.
       </p>
       {!reachable && (
-        <p role="status" className="rounded-lg border-2 border-warn bg-warn-tint px-3.5 py-2.5 text-[14px] text-text">
+        <Callout role="status" bordered>
           Your saved keys could not be read: the database is unreachable. The server&apos;s keys still work.
-        </p>
+        </Callout>
       )}
       <ul className="flex flex-col divide-y-2 divide-border">
         {rows.map((row) => (
@@ -92,8 +94,6 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
   const editButton = useRef<HTMLButtonElement>(null);
   const removeButton = useRef<HTMLButtonElement>(null);
   const keyField = useRef<HTMLInputElement>(null);
-  const removeConfirm = useRef<HTMLButtonElement>(null);
-  const cancelRemove = useRef<HTMLButtonElement>(null);
   // The control to focus once the change it follows has rendered (a fold
   // that was inert takes no focus before then): a ref, so setting it renders
   // nothing by itself.
@@ -137,15 +137,14 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
   const remove = async () => {
     setStatus({ kind: "busy", what: "Removing…" });
     const reply = await sendJson<Reply>("DELETE", "/api/learner/provider-key", { provider: row.id });
+    // Focus after either answer is the fold's (`ConfirmFold`): back to Remove
+    // key when the removal failed, to the add button once it has gone.
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-      after(removeConfirm);
       return setStatus({
         kind: "error",
         message: reply === null ? "Not removed: the server did not answer." : (reply.data.error ?? `Not removed (HTTP ${reply.status}).`),
       });
     }
-    // Remove goes with the key; the button that adds one is where focus lands.
-    after(editButton);
     setConfirmingRemove(false);
     setStatus({ kind: "done", message: "Removed." });
     router.refresh();
@@ -230,7 +229,6 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
                   size="sm"
                   disabled={busy || disabled}
                   onClick={() => {
-                    after(cancelRemove);
                     setConfirmingRemove(true);
                     setStatus({ kind: "idle" });
                   }}
@@ -287,31 +285,19 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
               </form>
             )}
           </Collapse>
-          <Collapse open={confirmingRemove} className="pt-2.5">
-            <div role="group" aria-label={`Confirm removing the ${row.label} key`} className="flex flex-col gap-3 rounded-2xl border-2 border-warn bg-warn-tint p-4">
-              <p className="text-[14px] text-text">
-                Remove your {row.label} key?{" "}
-                {row.server ? "The tutor goes back to the server's key." : "The tutor stops using this provider."}
-              </p>
-              <div className="flex flex-wrap gap-2.5">
-                <Button ref={removeConfirm} variant="warn" size="sm" disabled={busy} onClick={() => void remove()}>
-                  Remove key
-                </Button>
-                <Button
-                  ref={cancelRemove}
-                  variant="secondary"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => {
-                    after(removeButton);
-                    setConfirmingRemove(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </Collapse>
+          <ConfirmFold
+            open={confirmingRemove}
+            id={`${id}-remove`}
+            className="pt-2.5"
+            label={`Confirm removing the ${row.label} key`}
+            message={`Remove your ${row.label} key? ${row.server ? "The tutor goes back to the server's key." : "The tutor stops using this provider."}`}
+            confirmLabel="Remove key"
+            onConfirm={() => void remove()}
+            onCancel={() => setConfirmingRemove(false)}
+            busy={busy}
+            // Remove goes with the key; once it has, the button that adds one is where focus lands.
+            returnFocusTo={status.kind === "done" ? editButton : removeButton}
+          />
           <LiveStatus
             text={status.kind === "busy" ? status.what : status.kind === "idle" ? null : status.message}
             tone={status.kind === "done" ? "ok" : status.kind === "error" ? "danger" : "muted"}

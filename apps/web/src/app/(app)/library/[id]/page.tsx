@@ -13,7 +13,7 @@ import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
 import { WatchProgress } from "@/components/library/WatchProgress";
 import { MarkWatched } from "@/components/library/MarkWatched";
-import { Notice } from "@/components/library/Notice";
+import { Notice } from "@/components/ui/Notice";
 import { NoteProse } from "@/components/NoteProse";
 import { formatTimecode, type VideoChapter } from "@/components/media";
 import { Button } from "@/components/ui/Button";
