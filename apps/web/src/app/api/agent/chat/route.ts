@@ -11,6 +11,7 @@ import {
   buildAgentSessionContext,
   buildConceptSessionContext,
   buildOpenTutorPrompt,
+  buildVideoAskPrompt,
   OPEN_SUBJECT_LIMIT,
   type CitationSource,
 } from "@/lib/agent/prompt";
@@ -26,7 +27,11 @@ import {
   skippedEntries,
   type ChatMessage,
 } from "@/lib/agent/providers";
+import { MAX_ASSET_ID_CHARS } from "@/app/api/learner/watched/route";
+import { assetDisplayTitle } from "@/components/asset-meta";
+import { readAssetDetail, readAssetText, withCatalog } from "@/lib/asset-library";
 import { requestOwner } from "@/lib/learner-api";
+import { parseTranscript } from "@/lib/transcript";
 import { KNOWLEDGE_LIMITS } from "@/lib/storage";
 import type { TopicKnowledge } from "@/lib/types";
 
@@ -37,7 +42,8 @@ export const runtime = "nodejs";
  * `courseSlug`, `moduleSlug` and `topicId`. The concept tutor (the workspace)
  * sends `conceptSlug` instead, and when it is present the three topic fields
  * are ignored. The open tutor (`/ask`, from Home's Ask box) sends `subject`,
- * the text the owner typed, and nothing else. The request and response shapes are written down in
+ * the text the owner typed, and nothing else. Ask on a library video sends
+ * `assetId` and, when known, `at`, the player's position in seconds. The request and response shapes are written down in
  * docs/design/IMPLEMENTATION.md under "The concept tutor API".
  */
 interface ChatBody {
@@ -46,6 +52,8 @@ interface ChatBody {
   topicId?: string;
   conceptSlug?: unknown;
   subject?: unknown;
+  assetId?: unknown;
+  at?: unknown;
   messages: ChatMessage[];
   learnerNote?: string;
   priorKnowledge?: Partial<TopicKnowledge>;
@@ -125,6 +133,7 @@ export async function POST(req: Request) {
   }
   if (body.conceptSlug !== undefined) return conceptTurn(req, body, owner);
   if (body.subject !== undefined) return openTurn(req, body, owner);
+  if (body.assetId !== undefined) return videoTurn(req, body, owner);
 
   const { courseSlug, moduleSlug, topicId, messages, learnerNote, priorKnowledge } =
     body;
@@ -278,6 +287,62 @@ async function openTurn(req: Request, body: ChatBody, owner: string) {
 
   const style = await readTutorStyle();
   return completeTurn(owner, buildOpenTutorPrompt(text, { style }), messages);
+}
+
+/**
+ * A turn of Ask on a library video: a quick question about the video the
+ * learner is watching. The video and its transcript are read on the server
+ * from `assetId`, under the owner's scope, so nothing about the video is taken
+ * from the browser but its id and the player's position. Nothing is recorded:
+ * the thread lives in the page and goes when it closes.
+ */
+async function videoTurn(req: Request, body: ChatBody, owner: string) {
+  const { assetId, at, messages } = body;
+  const position = typeof at === "number" && Number.isFinite(at) && at >= 0 ? at : null;
+  if (
+    typeof assetId !== "string" ||
+    assetId.trim() === "" ||
+    assetId.length > MAX_ASSET_ID_CHARS ||
+    (at !== undefined && at !== null && position === null) ||
+    !wellFormedTurns(messages)
+  ) {
+    return NextResponse.json(
+      {
+        error: `assetId must be a library asset id (at most ${MAX_ASSET_ID_CHARS} characters), at a number of seconds if given, and messages an array of { role, content } turns`,
+        code: "BAD_REQUEST",
+      },
+      { status: 400 },
+    );
+  }
+
+  const tooLarge = enforcePayloadBounds(messages, undefined);
+  if (tooLarge) return tooLarge;
+
+  // Before the lookup, as on the other paths: an unknown id must not be a
+  // free way to spin the limiter.
+  const rateLimited = enforceRateLimit(req, "chat", CHAT_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
+
+  const { asset, derivations, reachable } = await readAssetDetail(assetId);
+  if (!reachable) {
+    return NextResponse.json(
+      { error: "The catalog could not be reached, so the tutor has no video to work from.", code: "ASSET_UNAVAILABLE" },
+      { status: 503 },
+    );
+  }
+  if (asset === null || asset.kind !== "video") {
+    return NextResponse.json({ error: "Video not found", code: "ASSET_NOT_FOUND" }, { status: 404 });
+  }
+
+  // A transcript that is missing or unreadable costs the prompt its
+  // narration, not the turn: the prompt says it has none.
+  const sidecar = derivations.derived.find((row) => row.kind === "transcript");
+  const raw = sidecar === undefined ? null : await withCatalog((db) => readAssetText(db, sidecar.id));
+  const transcript = raw === null ? null : (parseTranscript(raw)?.cues ?? null);
+
+  const style = await readTutorStyle();
+  const title = assetDisplayTitle(asset).text;
+  return completeTurn(owner, buildVideoAskPrompt({ title, transcript }, position, { style }), messages);
 }
 
 /** Send the turn to the provider cascade and shape the answer both tutors share. */

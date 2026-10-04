@@ -29,6 +29,7 @@ import {
   isCompanionKind,
 } from "@/lib/library";
 import { currentOwner, currentScope } from "@/lib/owner";
+import { favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
 import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
 import { parseTranscript } from "@/lib/transcript";
 
@@ -736,6 +737,22 @@ export async function loadPlayback(id: string): Promise<Playback | null> {
     return parsePlayback(await readPreference(await catalogDatabase(), playbackKey(id), owner));
   } catch (error) {
     warn("playback", error);
+    return null;
+  }
+}
+
+/**
+ * Whether the owner starred this asset, and when, or null for no star (or a
+ * store that could not be read, which draws the star empty and costs nothing
+ * else: pressing it writes through the route, which says if it failed).
+ */
+export async function loadFavorite(id: string): Promise<Favorite | null> {
+  await connection();
+  const owner = await currentOwner();
+  try {
+    return parseFavorite(await readPreference(await catalogDatabase(), favoriteKey(id), owner));
+  } catch (error) {
+    warn("favorite", error);
     return null;
   }
 }
