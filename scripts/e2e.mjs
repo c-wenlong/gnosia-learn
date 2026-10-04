@@ -745,6 +745,8 @@ async function run() {
     await search.press('Enter');
     await page.waitForFunction(() => new URL(location.href).searchParams.get('concept') === 'self-attention');
     await page.waitForFunction(() => document.querySelector('[aria-label^="Concept map"]')?.getAttribute('data-fit') === 'neighbourhood');
+    // The URL says the neighbourhood too, so a reload shows what the search showed.
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('scope') === 'neighbourhood');
     await search.fill('');
 
     // A learning concept carries its p(L) arc.
@@ -758,6 +760,13 @@ async function run() {
     );
     assert(marks.some((m) => !m.dim), 'Not in a course left nothing undimmed');
     for (const m of marks) assert(m.dim === (m.courses !== ''), 'a concept in a course was left undimmed, or one in none dimmed');
+    // Enter searches only what the filter shows: a concept in a course is not found while it is dimmed.
+    const chosen = new URL(page.url()).searchParams.get('concept');
+    await search.fill('self attention');
+    await search.press('Enter');
+    await page.waitForTimeout(300);
+    assert(new URL(page.url()).searchParams.get('concept') === chosen, 'Enter selected a concept the filter dims');
+    await search.fill('');
     await clickHydrated(page, main.getByRole('button', { name: /^Status:/ }));
     await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^All\b/ }).click();
     assert((await map.locator('[data-concept][data-dim="true"]').count()) === 0, 'All left concepts dimmed');

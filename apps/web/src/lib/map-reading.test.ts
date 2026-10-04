@@ -107,6 +107,11 @@ describe("firstMatch", () => {
     expect(firstMatch(rows, "  BIG o ")).toBe("big-o");
     expect(firstMatch(rows, "theta")).toBe("theta");
     expect(firstMatch(rows, "nothing like it")).toBeNull();
+    // The search box's list matches summaries too, so Enter lands on what the list shows.
+    const withSummary = [...rows.filter((r) => r.id !== "dot"), { id: "dot", title: "dot", summary: "Measures alignment." }];
+    expect(firstMatch(withSummary, "alignment")).toBe("dot");
+    // A title match still wins over a summary one.
+    expect(firstMatch([{ id: "a", title: "x", summary: "theta" }, ...rows], "theta")).toBe("theta");
     expect(firstMatch(rows, "")).toBeNull();
   });
 });
