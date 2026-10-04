@@ -16,7 +16,7 @@ and points there.
 | S3 | The blob store moves as files without its `.owner` marker, and the server's copy is claimed by its own database. | The `fs` store is content-addressed, so the bytes are the same on both machines and every key still resolves. Its `.owner` marker names the database by name, `pg_database` oid and port (`services/catalog/src/content/blob-owner.ts`), and a restored database has a new oid, so a copied marker would name a database that is not there and the root would refuse uploads and `--fix`. Left out of the copy, `blob audit --fix` or the first upload claims the root by writing a new one (`claimRoot` in that module); a plain audit only reads. |
 | S4 | `AUTH_SECRET` is the same on both machines. | The provider key saved in Settings is encrypted under a key derived from it ([BYOK.md](BYOK.md)). A different secret makes the restored row read as "re-enter this key". `OWNER_PASSWORD` can differ freely; it is checked, not used to encrypt anything. |
 | S5 | The studio runs diagram jobs on the homeserver and no video jobs. | Diagram jobs are bounded by the Claude Code permission file and the `PreToolUse` hook in `services/studio/src/diagram-guard.ts`, which run anywhere `claude` does. Video jobs run inside a Seatbelt profile through `/usr/bin/sandbox-exec`, and the runner refuses them on any other platform (`toolchainProblems` in `services/studio/src/video/toolchain.ts`, decision V4 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)). The Linux boundary, bubblewrap, is designed there and not measured, and there is no unsandboxed fallback. Videos stay a Mac job until someone builds and measures that profile. |
-| S6 | Plain http over Tailscale, no TLS terminator. | The session cookie is `Secure` only when the request arrived over https (`apps/web/src/app/api/auth/shared.ts`), so sign-in works on `http://<tailnet name>:3000`. Tailscale encrypts the hop. A reverse proxy is an addition, not a requirement. |
+| S6 | `tailscale serve` in front of port 3000, tailnet only, no Funnel. | The owner's setup (2026-10-04): every served port on the machine is `tailscale serve` with tailnet-only access and an empty `AllowFunnel`. Serve terminates TLS with the machine's tailnet certificate, keeps the incoming `Host` (`r.Out.Host = r.In.Host` in `ipn/ipnlocal/serve.go`) and sets `X-Forwarded-Proto: https`, which is exactly what the app reads: the session cookie goes `Secure` on that header (`apps/web/src/app/api/auth/shared.ts`) and the same-origin check builds the origin from `Host` plus that header (`originFromHeaders` in `apps/web/src/lib/auth/core.ts`), so sign-in and every POST work with no app-side setting. The 600 ms per wrong password stays the only brake on `/api/auth/sign-in`, which is proportionate while the tailnet is the perimeter; turning Funnel on would need a per-IP rate limit in front first (see Open). Plain `http://<machine>:3000` inside the tailnet also works, since the cookie is `Secure` only over https. |
 | S7 | The nightly export runs on the homeserver too, under a systemd timer. | It is the readable copy of the content ([DEPLOYMENT.md](DEPLOYMENT.md#the-nightly-export)), and a database that diverges from the laptop's needs its own. The launchd wrapper's logic (pull, `npm ci` when the commit moved, export) ports as a shell script; only the scheduler changes. |
 
 ## What moves, what stays
@@ -124,7 +124,7 @@ and points there.
    DATABASE_URL=postgres://catalog:catalog@localhost:5432/self_learn
    OWNER_PASSWORD=<yours>
    AUTH_SECRET=<the laptop's, S4>
-   NEXT_PUBLIC_SITE_URL=http://<tailnet name>:3000
+   NEXT_PUBLIC_SITE_URL=https://<machine>.<tailnet>.ts.net
    STUDIO_ENABLED=1
    ```
 
@@ -178,7 +178,16 @@ and points there.
     sudo systemctl daemon-reload && sudo systemctl enable --now gnosia
     ```
 
-    Then open `http://<tailnet name>:3000`, sign in, and load `/home`,
+    Then put serve in front of it, from any shell on the machine:
+
+    ```bash
+    tailscale serve --bg --https=443 http://127.0.0.1:3000
+    tailscale serve status
+    ```
+
+    `--bg` makes it persistent across reboots, and `status` prints the
+    `https://<machine>.<tailnet>.ts.net` URL, which is what step 8's
+    `NEXT_PUBLIC_SITE_URL` should say. Then open that URL, sign in, and load `/home`,
     `/learn`, `/courses` and a video in `/library`. A page saying its
     content could not be read means the app connected to a database that
     has not flipped a type, or none at all: check `DATABASE_URL` in
@@ -328,8 +337,18 @@ and points there.
       `catalog`, the laptop's two `DATABASE_URL` values pointed at it, its
       own instance marked `copy`, and its blob store `rsync`ed from the
       server rather than the other way.
-- [ ] A reverse proxy with TLS, if the app is ever reached from outside the
-      tailnet. Then the per-IP rate limit on `/api/auth/sign-in` that
-      [DEPLOYMENT.md](DEPLOYMENT.md#signing-in) names becomes necessary too;
-      today the 600 ms delay per wrong password is the only brake, and the
-      tailnet is the perimeter.
+- [ ] Funnel, if the app is ever reached from outside the tailnet. Serve
+      already terminates TLS, so the one thing missing is the per-IP rate
+      limit on `/api/auth/sign-in` that [DEPLOYMENT.md](DEPLOYMENT.md#signing-in)
+      names, which Funnel does not provide: an nginx `limit_req` or Caddy
+      rate limiter between serve and port 3000, before `AllowFunnel` is set.
+      Every connection that limiter sees comes from serve over loopback, so
+      a limit keyed on the connection's address is one bucket for every
+      visitor; it has to key on the client address serve forwards in
+      `X-Forwarded-For`, and trust that header only from `127.0.0.1`
+      (nginx: `set_real_ip_from 127.0.0.1` with `real_ip_header
+      X-Forwarded-For`, then `limit_req_zone $binary_remote_addr`; Caddy:
+      `trusted_proxies 127.0.0.1` on the server, then `client_ip` in the
+      limiter), since a client can send that header itself and would
+      otherwise pick its own bucket. Today the 600 ms delay per wrong
+      password is the only brake, and the tailnet is the perimeter.
