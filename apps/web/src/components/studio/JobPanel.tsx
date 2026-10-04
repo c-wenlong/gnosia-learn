@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { PanelLink } from "@/components/studio/PanelLink";
 import { Collapse } from "@/components/ui/Collapse";
+import { useFollowFoot } from "@/components/ui/use-follow-foot";
 import { ComparisonPanel } from "@/components/studio/ComparisonPanel";
 import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
@@ -536,9 +537,9 @@ export function JobLog({
     };
   }, [jobId, open, live]);
 
-  useEffect(() => {
-    if (box.current !== null) box.current.scrollTop = box.current.scrollHeight;
-  }, [lines]);
+  // Each read follows the log's foot, unless the reader has scrolled up to
+  // read something: a poll every four seconds must not pull them back down.
+  useFollowFoot(box, lines, { onlyNearFoot: true });
 
   return (
     <div className="mt-4">
