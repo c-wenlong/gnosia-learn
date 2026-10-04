@@ -78,8 +78,9 @@ describe("setDisplayName", () => {
       saved = held.setDisplayName!("Grace");
     });
     // A refresh with some other row: the one from before, or another tab's.
+    // It is held back while the save is in flight, so the name stays.
     draw("Hopper");
-    expect(container.textContent).toBe("Hopper");
+    expect(container.textContent).toBe("Grace");
     await settle(saved);
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
