@@ -342,5 +342,13 @@ and points there.
       limit on `/api/auth/sign-in` that [DEPLOYMENT.md](DEPLOYMENT.md#signing-in)
       names, which Funnel does not provide: an nginx `limit_req` or Caddy
       rate limiter between serve and port 3000, before `AllowFunnel` is set.
-      Today the 600 ms delay per wrong password is the only brake, and the
-      tailnet is the perimeter.
+      Every connection that limiter sees comes from serve over loopback, so
+      a limit keyed on the connection's address is one bucket for every
+      visitor; it has to key on the client address serve forwards in
+      `X-Forwarded-For`, and trust that header only from `127.0.0.1`
+      (nginx: `set_real_ip_from 127.0.0.1` with `real_ip_header
+      X-Forwarded-For`, then `limit_req_zone $binary_remote_addr`; Caddy:
+      `trusted_proxies 127.0.0.1` on the server, then `client_ip` in the
+      limiter), since a client can send that header itself and would
+      otherwise pick its own bucket. Today the 600 ms delay per wrong
+      password is the only brake, and the tailnet is the perimeter.
