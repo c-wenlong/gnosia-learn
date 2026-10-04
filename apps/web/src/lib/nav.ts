@@ -62,3 +62,35 @@ export function activeDestination(pathname: string | null | undefined): NavKey |
   }
   return null;
 }
+
+/** A path with its escapes undone, or as it is when one is malformed. */
+function decoded(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
+/**
+ * Whether a row in the sidebar's Courses, Pinned or Recent sections is the
+ * page on screen, which draws it on `--surface2` as the current destination
+ * is drawn. Compared with the escapes undone on both sides, since a row's
+ * link escapes an asset id (`/library/video%3Aabc`) and a path may arrive
+ * either way.
+ *
+ * `within` also counts the pages under the row's: a module's row stays
+ * current on its week check. A course page's row and a library or concept
+ * row are current on that page alone, so opening a module does not leave its
+ * course's row lit as well.
+ *
+ * A studio conversation is not decided here: `/studio?draft=` is one path
+ * for every conversation, and the studio page says which is open
+ * (`StudioChats.active`).
+ */
+export function isCurrentRow(href: string, pathname: string | null | undefined, within = false): boolean {
+  if (!pathname) return false;
+  const path = decoded(pathname.split(/[?#]/)[0]);
+  const target = decoded(href.split(/[?#]/)[0]);
+  return path === target || (within && path.startsWith(`${target}/`));
+}

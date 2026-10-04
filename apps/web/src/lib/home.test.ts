@@ -30,6 +30,7 @@ vi.mock("@self-learn/catalog/state", () => ({
   readLearnerSnapshot,
   readPreferences: vi.fn(async () => ({})),
   recentDrafts,
+  recentTutorSessions: vi.fn(async () => []),
 }));
 
 describe("readHome", () => {

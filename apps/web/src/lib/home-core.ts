@@ -19,7 +19,7 @@ import type { MasteryLabel } from "@self-learn/catalog/state";
 import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import { dayKey, type LogEvent } from "@/lib/days";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
-import { resumeAt } from "@/lib/playback";
+import { recentItems, type ConceptTouch, type RecentItem, type RecentKind, type RecentSources } from "@/lib/recent-core";
 
 /* -------------------------------------------------------------------------- */
 /* The model                                                                  */
@@ -38,29 +38,16 @@ export interface NextUp {
   eyebrowShort: string;
 }
 
-export type ThreadKind = "module" | "video" | "draft" | "concept";
+export type ThreadKind = RecentKind;
 
-/** One thing to go back to, under "Pick up where you left off". */
-export interface Thread {
-  key: string;
-  kind: ThreadKind;
-  title: string;
-  /** "CS3230 · Module 6", "2:17 of 11:36", "Video draft"; null for a concept, which shows its mastery instead. */
-  detail: string | null;
-  href: string;
-  /** ISO instant it was last touched. */
-  at: string;
+/**
+ * One thing to go back to, under "Pick up where you left off": a row of
+ * Recent (`recent-core.ts`, the list the sidebar shows too) with the day it
+ * was touched.
+ */
+export interface Thread extends RecentItem {
   /** "Today", "Yesterday", "Mon", "20 Aug". */
   day: string;
-  /** How far into a video, 0 to 100. */
-  percent?: number;
-  /** A concept's mastery. */
-  bucket?: MasteryBucket;
-  pL?: number;
-  /** What the thread is about, for "Next from here" and the recall picks. */
-  courseSlug?: string;
-  moduleSlug?: string;
-  conceptId?: string;
 }
 
 /** One step on from a thread: a concept to learn or a course topic to take. */
@@ -174,57 +161,8 @@ export function lastSeenLabel(at: string | null, now: Date, timeZone?: string): 
 /* Pick up where you left off                                                 */
 /* -------------------------------------------------------------------------- */
 
-/** A module page the owner opened: an entry of the `recentModules` preference. */
-export interface ModuleVisit {
-  courseSlug: string;
-  moduleSlug?: string;
-  at: string;
-}
-
-/** Where a visit points, read from the courses; null when the course or module is gone. */
-export interface ModulePlace {
-  courseCode: string;
-  courseTitle: string;
-  moduleTitle: string | null;
-  moduleOrder: number | null;
-}
-
-/** A library video with a saved position: a `playback:<asset>` preference and the asset's title. */
-export interface VideoProgress {
-  assetId: string;
-  /** Null when the asset row is gone, which leaves nothing to open. */
-  title: string | null;
-  position: number;
-  duration: number;
-  watchedAt: string | null;
-  updatedAt: string;
-}
-
-/** A studio draft with a title (`recentDrafts`). */
-export interface DraftTouch {
-  id: string;
-  kind: string;
-  title: string;
-  updatedAt: string;
-}
-
-/** A concept the owner answered questions on, and when they last did. */
-export interface ConceptTouch {
-  id: string;
-  title: string;
-  bucket: MasteryBucket;
-  pL: number;
-  at: string;
-}
-
-/** "2:17", "1:02:03". */
-export function clock(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const rest = String(s % 60).padStart(2, "0");
-  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${rest}` : `${m}:${rest}`;
-}
+export type { ConceptTouch, DraftTouch, ModulePlace, ModuleVisit, SessionTouch, VideoProgress } from "@/lib/recent-core";
+export { clock } from "@/lib/recent-core";
 
 /**
  * The latest answer per concept, from the event log: `observation` events
@@ -258,94 +196,19 @@ export function conceptTouches(
 }
 
 /**
- * What to go back to, newest first: module pages, videos stopped partway,
- * studio drafts and concepts answered on, merged into one list.
- *
- * A video is a thread only while it has somewhere to resume: not marked
- * watched, and not so near either end that the player would start it from
- * the top (`resumeAt`). A module whose course or module is gone, and a video
- * whose asset row is gone, are left out rather than linked to a 404.
+ * What to go back to, newest first: the first `limit` rows of Recent
+ * (`recentItems`, which the sidebar's Recent section shows too), each with
+ * the day it was touched.
  */
-export function homeThreads(
-  sources: {
-    modules: readonly ModuleVisit[];
-    place: (visit: ModuleVisit) => ModulePlace | null;
-    videos: readonly VideoProgress[];
-    drafts: readonly DraftTouch[];
-    concepts: readonly ConceptTouch[];
-  },
-  options: { now: Date; timeZone?: string; limit?: number },
-): Thread[] {
+export function homeThreads(sources: RecentSources, options: { now: Date; timeZone?: string; limit?: number }): Thread[] {
   const { now, timeZone, limit = 5 } = options;
   const today = dayKey(now, timeZone);
-  const out: Omit<Thread, "day">[] = [];
-
-  for (const visit of sources.modules) {
-    const place = sources.place(visit);
-    if (place === null) continue;
-    const inModule = visit.moduleSlug !== undefined && place.moduleTitle !== null;
-    out.push({
-      key: `module:${visit.courseSlug}/${visit.moduleSlug ?? ""}`,
-      kind: "module",
-      title: inModule ? (place.moduleTitle as string) : place.courseTitle,
-      detail:
-        inModule && place.moduleOrder !== null ? `${place.courseCode} · Module ${place.moduleOrder}` : place.courseCode,
-      href: inModule
-        ? `/courses/${encodeURIComponent(visit.courseSlug)}/${encodeURIComponent(visit.moduleSlug as string)}`
-        : `/courses/${encodeURIComponent(visit.courseSlug)}`,
-      at: visit.at,
-      courseSlug: visit.courseSlug,
-      ...(inModule ? { moduleSlug: visit.moduleSlug } : {}),
-    });
-  }
-
-  for (const video of sources.videos) {
-    if (video.title === null || video.watchedAt !== null) continue;
-    if (resumeAt(video) === 0) continue;
-    out.push({
-      key: `video:${video.assetId}`,
-      kind: "video",
-      title: video.title,
-      detail: `${clock(video.position)} of ${clock(video.duration)}`,
-      href: `/library/${encodeURIComponent(video.assetId)}`,
-      at: video.updatedAt,
-      percent: Math.min(100, Math.round((video.position / video.duration) * 100)),
-    });
-  }
-
-  for (const draft of sources.drafts) {
-    out.push({
-      key: `draft:${draft.id}`,
-      kind: "draft",
-      title: draft.title,
-      detail: draft.kind === "video" ? "Video draft" : "Diagram draft",
-      href: `/studio?draft=${encodeURIComponent(draft.id)}`,
-      at: draft.updatedAt,
-    });
-  }
-
-  for (const c of sources.concepts) {
-    out.push({
-      key: `concept:${c.id}`,
-      kind: "concept",
-      title: c.title,
-      detail: null,
-      href: `/learn/${encodeURIComponent(c.id)}`,
-      at: c.at,
-      bucket: c.bucket,
-      pL: c.pL,
-      conceptId: c.id,
-    });
-  }
-
-  const time = (t: { at: string }) => {
-    const ms = new Date(t.at).getTime();
-    return Number.isNaN(ms) ? 0 : ms;
-  };
-  return out
-    .sort((a, b) => time(b) - time(a))
+  return recentItems(sources)
     .slice(0, limit)
-    .map((t) => ({ ...t, day: pastDayLabel(dayKey(new Date(time(t)), timeZone), today) }));
+    .map((t) => {
+      const ms = new Date(t.at).getTime();
+      return { ...t, day: pastDayLabel(dayKey(new Date(Number.isNaN(ms) ? 0 : ms), timeZone), today) };
+    });
 }
 
 /* -------------------------------------------------------------------------- */

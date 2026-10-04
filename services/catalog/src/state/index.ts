@@ -91,7 +91,9 @@ export {
   endSession,
   ensureSession,
   readSession,
+  recentTutorSessions,
   touchSession,
+  type RecentSession,
   type SessionEndInput,
   type SessionInput,
 } from "./sessions";
@@ -163,7 +165,7 @@ export {
   setProgress,
   type ProgressRow,
 } from "./progress";
-export { recentDrafts, type RecentDraft } from "./drafts";
+export { draftsByIds, recentDrafts, type RecentDraft } from "./drafts";
 export { clearRecap, isEmptyRecap, readRecaps, upsertRecap } from "./recap";
 export {
   importLegacyState,
