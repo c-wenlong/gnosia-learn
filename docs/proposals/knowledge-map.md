@@ -121,8 +121,8 @@ same course sit next to each other, largest first, so CS3230's two clusters
 read as one region. The 23 small clusters pack in rows beside their course's
 largest island instead of scattering.
 
-**G8. The Status filter can show the concepts in no course.** It gains a
-"Not in a course" option, which dims every concept that is in one. The map
+**G8. The Status filter can show the concepts in no course.** It keeps
+every option it has today and gains a "Not in a course" option, which dims every concept that is in one. The map
 already places these concepts beside the courses that use them (G7), so
 nothing on it says they are outside every course; the filter finds them, and
 the panel's course line ("No course") says it for one. Filing each under a
@@ -142,7 +142,7 @@ map.
 | Labels when zoomed out | Below a zoom level the node labels hide and the island titles stay, so the zoomed-out map is a set of named regions |
 | Click a node | Selects it: its own lines in the accent, the rest dimmed, and a side panel with mastery, p(L), due, last seen, course, "Open in workspace" and "Start a session" |
 | Search | The existing search box zooms to the match and selects it |
-| Status filter | All, studied, untouched, ready, and not in a course (G8). Dims the nodes that do not match, rather than removing them, so the structure stays readable |
+| Status filter | The table's options as they are (all, due, learning, mastered, untouched, keeps slipping), plus two the map adds: ready to learn (G5) and not in a course (G8). Dims the nodes that do not match, rather than removing them, so the structure stays readable |
 | URL | `?concept=` and `?view=` as today, so a link to a concept on the map still works |
 
 ## Phases
