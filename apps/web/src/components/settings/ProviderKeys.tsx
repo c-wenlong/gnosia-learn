@@ -1,11 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Collapse } from "@/components/ui/Collapse";
 import { Input } from "@/components/ui/Input";
+import { LiveStatus } from "@/components/ui/LiveStatus";
+import { usePresence } from "@/components/ui/use-presence";
 import { cx } from "@/components/ui/classes";
 import type { ProviderKeyView } from "@/lib/provider-keys/settings";
 
@@ -25,6 +28,12 @@ export type ProviderKeyRow = ProviderKeyView & { test: { model: string; modelFro
  * knows is what the server handed it: the last four characters, the day it
  * was saved, whether it still decrypts, and whether the server has a key of
  * its own for the provider.
+ *
+ * A row's buttons, its key form and its remove confirm take turns in one
+ * place, each in a `Collapse`, so one folds away as the next unfolds rather
+ * than swapping in a frame. Focus follows: into the field or onto the
+ * confirm's Cancel when one opens, and back to the button that opened it
+ * when it closes, since that button was inside the fold that shut.
  */
 
 type Status =
@@ -86,6 +95,31 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const busy = status.kind === "busy";
+  // The key form is in the page only while it is open, and for its fold's
+  // 300ms on the way out: a password field kept in the page all along is one
+  // a browser may autofill with the sign-in password nobody meant for it.
+  const form = usePresence(editing, 300);
+
+  const testButton = useRef<HTMLButtonElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const removeButton = useRef<HTMLButtonElement>(null);
+  const keyField = useRef<HTMLInputElement>(null);
+  const removeConfirm = useRef<HTMLButtonElement>(null);
+  const cancelRemove = useRef<HTMLButtonElement>(null);
+  // The control to focus once the change it follows has rendered (a fold
+  // that was inert takes no focus before then): a ref, so setting it renders
+  // nothing by itself.
+  // The ref itself, not its element: the key field is not mounted yet when
+  // the button that opens its form is pressed.
+  const focusNext = useRef<{ current: HTMLElement | null } | null>(null);
+  useEffect(() => {
+    if (focusNext.current === null || busy) return;
+    focusNext.current.current?.focus();
+    focusNext.current = null;
+  }, [editing, confirmingRemove, busy]);
+  const after = (target: { current: HTMLElement | null }) => {
+    focusNext.current = target;
+  };
 
   const saved = row.saved;
   const unreadable = saved !== null && !saved.readable;
@@ -98,10 +132,15 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
     setDraft("");
     setStatus({ kind: "busy", what: "Saving…" });
     const reply = await send("POST", "/api/learner/provider-key", { provider: row.id, key });
-    if (reply === null) return setStatus({ kind: "error", message: "Not saved: the server did not answer." });
-    if (reply.status !== 200 || reply.data.ok !== true) {
-      return setStatus({ kind: "error", message: reply.data.error ?? `Not saved (HTTP ${reply.status}).` });
+    if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+      // Save was disabled while the request was out; back to the field.
+      after(keyField);
+      return setStatus({
+        kind: "error",
+        message: reply === null ? "Not saved: the server did not answer." : (reply.data.error ?? `Not saved (HTTP ${reply.status}).`),
+      });
     }
+    after(editButton);
     setEditing(false);
     setStatus({ kind: "done", message: "Saved. Test it to check the provider accepts it." });
     router.refresh();
@@ -110,16 +149,23 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
   const remove = async () => {
     setStatus({ kind: "busy", what: "Removing…" });
     const reply = await send("DELETE", "/api/learner/provider-key", { provider: row.id });
-    if (reply === null) return setStatus({ kind: "error", message: "Not removed: the server did not answer." });
-    if (reply.status !== 200 || reply.data.ok !== true) {
-      return setStatus({ kind: "error", message: reply.data.error ?? `Not removed (HTTP ${reply.status}).` });
+    if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+      after(removeConfirm);
+      return setStatus({
+        kind: "error",
+        message: reply === null ? "Not removed: the server did not answer." : (reply.data.error ?? `Not removed (HTTP ${reply.status}).`),
+      });
     }
+    // Remove goes with the key; the button that adds one is where focus lands.
+    after(editButton);
     setConfirmingRemove(false);
     setStatus({ kind: "done", message: "Removed." });
     router.refresh();
   };
 
   const test = async () => {
+    // Disabled while the request is out, so focus would drop; it comes back.
+    after(testButton);
     setStatus({ kind: "busy", what: "Testing…" });
     const reply = await send("POST", "/api/learner/provider-key/test", { provider: row.id });
     if (reply === null) return setStatus({ kind: "error", message: "Not tested: the server did not answer." });
@@ -155,26 +201,34 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
           </p>
           <p className="text-[12px] break-all text-text2">{row.test.model}</p>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+        <div className="flex min-w-0 flex-1 flex-col">
           <p className={cx("text-[14px]", unreadable ? "text-danger" : "text-text")}>{state}</p>
           {row.inUse !== null && !row.test.used && (
-            <p className="text-[12px] text-text2">
+            <p className="mt-2.5 text-[12px] text-text2">
               Your models don&apos;t include {row.label}, so the tutor isn&apos;t using this key. Test sends the built-in
               default, {row.test.model}.
             </p>
           )}
-          {!editing && !confirmingRemove && (
+          <Collapse open={!editing && !confirmingRemove} className="pt-2.5">
             <div className="flex flex-wrap items-center gap-2.5">
               {row.inUse !== null && (
-                <Button variant="secondary" size="sm" disabled={busy || (disabled && row.inUse === "saved")} onClick={() => void test()}>
+                <Button
+                  ref={testButton}
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy || (disabled && row.inUse === "saved")}
+                  onClick={() => void test()}
+                >
                   Test
                 </Button>
               )}
               <Button
+                ref={editButton}
                 variant="secondary"
                 size="sm"
                 disabled={busy || disabled}
                 onClick={() => {
+                  after(keyField);
                   setEditing(true);
                   setStatus({ kind: "idle" });
                 }}
@@ -183,10 +237,12 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
               </Button>
               {saved !== null && (
                 <Button
+                  ref={removeButton}
                   variant="secondary"
                   size="sm"
                   disabled={busy || disabled}
                   onClick={() => {
+                    after(cancelRemove);
                     setConfirmingRemove(true);
                     setStatus({ kind: "idle" });
                   }}
@@ -195,66 +251,79 @@ function ProviderRow({ row, disabled }: { row: ProviderKeyRow; disabled: boolean
                 </Button>
               )}
             </div>
-          )}
-          {editing && (
-            <form onSubmit={(e) => void save(e)} className="flex flex-col gap-2.5" aria-label={`${row.label} key`}>
-              <label htmlFor={`${id}-key`} className="text-[12px] text-text2">
-                Paste the key from your {row.label} account. It is sent once and cannot be shown again.
-              </label>
-              <Input
-                id={`${id}-key`}
-                type="password"
-                name={`${row.id}-api-key`}
-                autoComplete="off"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="API key"
-              />
-              <div className="flex flex-wrap gap-2.5">
-                <Button type="submit" size="sm" disabled={busy || draft.trim() === ""}>
-                  Save key
-                </Button>
-                {/* Not while a save is in flight: the request has left, so
-                    closing the editor would say "cancelled" about a key that
-                    is about to be stored. */}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => {
-                    setDraft("");
-                    setEditing(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          )}
-          {confirmingRemove && (
+          </Collapse>
+          <Collapse open={editing} className="pt-2.5">
+            {form.mounted && (
+              <form onSubmit={(e) => void save(e)} className="flex flex-col gap-2.5" aria-label={`${row.label} key`}>
+                <label htmlFor={`${id}-key`} className="text-[12px] text-text2">
+                  Paste the key from your {row.label} account. It is sent once and cannot be shown again.
+                </label>
+                <Input
+                  ref={keyField}
+                  id={`${id}-key`}
+                  type="password"
+                  name={`${row.id}-api-key`}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="API key"
+                />
+                <div className="flex flex-wrap gap-2.5">
+                  <Button type="submit" size="sm" disabled={busy || draft.trim() === ""}>
+                    Save key
+                  </Button>
+                  {/* Not while a save is in flight: the request has left, so
+                      closing the editor would say "cancelled" about a key that
+                      is about to be stored. */}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => {
+                      setDraft("");
+                      after(editButton);
+                      setEditing(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
+          </Collapse>
+          <Collapse open={confirmingRemove} className="pt-2.5">
             <div role="group" aria-label={`Confirm removing the ${row.label} key`} className="flex flex-col gap-3 rounded-2xl border-2 border-warn bg-warn-tint p-4">
               <p className="text-[14px] text-text">
                 Remove your {row.label} key?{" "}
                 {row.server ? "The tutor goes back to the server's key." : "The tutor stops using this provider."}
               </p>
               <div className="flex flex-wrap gap-2.5">
-                <Button variant="warn" size="sm" disabled={busy} onClick={() => void remove()}>
+                <Button ref={removeConfirm} variant="warn" size="sm" disabled={busy} onClick={() => void remove()}>
                   Remove key
                 </Button>
-                <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirmingRemove(false)}>
+                <Button
+                  ref={cancelRemove}
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    after(removeButton);
+                    setConfirmingRemove(false);
+                  }}
+                >
                   Cancel
                 </Button>
               </div>
             </div>
-          )}
-          <p aria-live="polite" className={cx("text-[12px]", status.kind === "idle" && "sr-only")}>
-            {status.kind === "busy" && <span className="text-text3">{status.what}</span>}
-            {status.kind === "done" && <span className="text-ok-text">{status.message}</span>}
-            {status.kind === "error" && <span className="text-danger">{status.message}</span>}
-          </p>
+          </Collapse>
+          <LiveStatus
+            text={status.kind === "busy" ? status.what : status.kind === "idle" ? null : status.message}
+            tone={status.kind === "done" ? "ok" : status.kind === "error" ? "danger" : "muted"}
+            className="pt-2.5"
+          />
         </div>
       </div>
     </li>

@@ -44,7 +44,7 @@ export function ThreadsCard({ threads, reachable }: { threads: Thread[]; reachab
             <li key={t.key}>
               <Link
                 href={t.href}
-                className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
+                className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
               >
                 <Glyph name={KIND[t.kind].glyph} className="text-text2" />
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">

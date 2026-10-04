@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { assetDisplayTitle, assetKindLabel, assetMetaLine, familyOf, type AssetCardRef } from "@/components/asset-meta";
 import type { CardConcept } from "@/components/AssetCard";
 import { Glyph } from "@/components/ui/Glyph";
@@ -44,8 +46,9 @@ export function AssetRow({
         ? "font-semibold text-text2"
         : "font-mono text-[13px] font-medium text-text2";
 
+  // `next/link`: an in-app navigation, not a reload of the whole document.
   return (
-    <a
+    <Link
       href={href}
       className={cx(
         "flex min-w-0 items-center gap-3 px-3.5 py-2.5 transition-colors duration-100 hover:bg-surface2",
@@ -82,6 +85,6 @@ export function AssetRow({
       <span className="hidden w-[88px] shrink-0 text-right text-[12px] text-text3 tabular-nums sm:block">
         {added ?? ""}
       </span>
-    </a>
+    </Link>
   );
 }

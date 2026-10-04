@@ -242,14 +242,14 @@ export function RecapEditor({
               source: "manual",
             })
           }
-          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity duration-100 hover:opacity-90 disabled:opacity-50 motion-reduce:transition-none"
         >
           {submitLabel}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs hover:bg-[var(--surface-hover)]"
+          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs transition-colors duration-100 hover:bg-[var(--surface-hover)] motion-reduce:transition-none"
         >
           Cancel
         </button>
@@ -272,9 +272,11 @@ export function TopicRecap({
   const knowledge = state.knowledge[topic.id];
   const [editing, setEditing] = useState(false);
 
+  // The editor and the card take turns in place; each fades in rather than
+  // swapping in a frame.
   if (editing) {
     return (
-      <div className="w-full">
+      <div className="w-full animate-fade-in motion-reduce:animate-none">
         <RecapEditor
           initial={knowledge}
           onSave={(input) => {
@@ -300,7 +302,7 @@ export function TopicRecap({
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full animate-fade-in motion-reduce:animate-none">
       <RecapCard
         knowledge={knowledge}
         course={course}

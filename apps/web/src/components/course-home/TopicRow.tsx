@@ -80,7 +80,7 @@ export function TopicRow({
           <Button
             href={continueHref}
             size="sm"
-            className="relative z-10 col-start-1 row-start-2 ml-8 mt-2 justify-self-start sm:col-start-2 sm:row-start-1 sm:ml-0 sm:mt-1"
+            className="relative z-10 col-start-1 row-start-2 ml-8 mt-2 animate-fade-in justify-self-start motion-reduce:animate-none sm:col-start-2 sm:row-start-1 sm:ml-0 sm:mt-1"
           >
             Continue
           </Button>

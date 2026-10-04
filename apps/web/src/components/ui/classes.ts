@@ -126,7 +126,7 @@ export function chipClasses({
   className?: string;
 } = {}): string {
   return cx(
-    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border font-medium transition-colors duration-100",
+    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border font-medium transition-[color,background-color,border-color,opacity] duration-100 motion-reduce:transition-none",
     size === "md" ? "h-[34px] px-3.5 text-[13px]" : "h-7 px-2.5 text-[12px]",
     active ? "border-accent bg-accent text-white" : "border-border bg-surface text-text",
     interactive && !active && "hover:bg-surface2",
