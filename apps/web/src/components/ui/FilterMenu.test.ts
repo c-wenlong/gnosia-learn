@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { FilterMenu } from "./FilterMenu";
+import { Select } from "./Select";
 import type { FilterOption } from "./filter-menu";
 
 /**
@@ -37,5 +38,35 @@ describe("FilterMenu, closed", () => {
     const html = render("video");
     expect(html).toContain("Type: Video");
     expect(html).toContain("bg-accent");
+  });
+});
+
+describe("Select, closed", () => {
+  const field = (value: string) =>
+    renderToStaticMarkup(
+      createElement(Select<string>, { id: "motion", label: "Motion", options: OPTIONS, value, placeholder: "Pick one", onChange: () => {} }),
+    );
+
+  it("is a field the label points at, printing the value alone and never filled", () => {
+    const html = field("video");
+    expect(html).toContain('id="motion"');
+    expect(html).toContain('aria-label="Motion: Video"');
+    expect(html).toContain(">Video</span>");
+    expect(html).toContain("h-11");
+    expect(html).not.toContain("bg-accent");
+  });
+
+  it("points a screen reader at why a refused value was refused, not only at its border", () => {
+    const html = renderToStaticMarkup(
+      createElement(Select<string>, { label: "Arrow 1 from", options: OPTIONS, value: "", invalid: true, describedBy: "why", onChange: () => {} }),
+    );
+    expect(html).toContain('aria-describedby="why"');
+    expect(html).toContain("border-danger");
+  });
+
+  it("prints its placeholder, muted, while the value is none of the options", () => {
+    const html = field("missing");
+    expect(html).toContain(">Pick one</span>");
+    expect(html).toContain("text-text3");
   });
 });

@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import { FilterMenu } from "./FilterMenu";
 import { LiveStatus } from "./LiveStatus";
+import { Select } from "./Select";
 
 /**
  * The kit's moving parts: a FilterMenu's list stays for its way out (inert,
@@ -79,6 +80,24 @@ describe("FilterMenu", () => {
     act(() => trigger.click());
     act(() => trigger.click());
     expect(container.querySelector('[role="listbox"]')).toBeNull();
+  });
+});
+
+describe("Select", () => {
+  it("puts its list in the top layer as a manual popover, at least as wide as the field", () => {
+    const shown: Element[] = [];
+    HTMLElement.prototype.showPopover ??= function (this: HTMLElement) {
+      shown.push(this);
+    };
+    const { container } = mount(
+      createElement(Select<string>, { label: "Motion", options: [{ value: "a", label: "A" }], value: "a", onChange: () => undefined }),
+    );
+    act(() => container.querySelector("button")!.click());
+    const list = container.querySelector('[role="listbox"]')!;
+    expect(list.getAttribute("popover")).toBe("manual");
+    expect(list.className).toContain("fixed");
+    expect(shown).toContain(list);
+    expect(document.activeElement).toBe(list);
   });
 });
 

@@ -665,7 +665,7 @@ describe("the settings", () => {
     expect(container.querySelector("dialog[open]")?.getAttribute("aria-label")).toBe("Settings");
     expect(container.querySelector("[aria-busy]")).not.toBeNull();
     await act(async () => answer(rows("default")));
-    expect(container.querySelectorAll("dialog[open] select")).toHaveLength(4);
+    expect(container.querySelectorAll('dialog[open] [aria-haspopup="listbox"]')).toHaveLength(4);
 
     close(container);
     expect(pushState).toHaveBeenCalledWith(null, "", "/studio?topic=graphs");
@@ -675,7 +675,7 @@ describe("the settings", () => {
 
     // Opened again: the rows it read, not a second read.
     go("topic=graphs&settings=1");
-    expect(container.querySelectorAll("dialog[open] select")).toHaveLength(4);
+    expect(container.querySelectorAll('dialog[open] [aria-haspopup="listbox"]')).toHaveLength(4);
     expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
   });
 
@@ -684,7 +684,7 @@ describe("the settings", () => {
     const { container, go } = mount();
     await act(async () => grabbed.controls!.warmSettings());
     go("settings=1");
-    expect(container.querySelector<HTMLSelectElement>("dialog[open] select")?.value).toBe("opus");
+    expect(container.querySelector<HTMLElement>('dialog[open] [aria-haspopup="listbox"]')?.dataset.value).toBe("opus");
     expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
   });
 
@@ -729,7 +729,7 @@ describe("the settings", () => {
     await act(async () => go("settings=1"));
     expect(mocks.loadSettings).toHaveBeenCalledTimes(2);
     expect(container.textContent).not.toContain("The catalog is not answering");
-    expect(container.querySelector<HTMLSelectElement>("dialog[open] select")?.value).toBe("opus");
+    expect(container.querySelector<HTMLElement>('dialog[open] [aria-haspopup="listbox"]')?.dataset.value).toBe("opus");
   });
 
   it("say so when the studio does not answer, and try again on a press", async () => {
@@ -740,6 +740,6 @@ describe("the settings", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("could not be read");
 
     await act(async () => container.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
-    expect(container.querySelectorAll("dialog[open] select")).toHaveLength(4);
+    expect(container.querySelectorAll('dialog[open] [aria-haspopup="listbox"]')).toHaveLength(4);
   });
 });
