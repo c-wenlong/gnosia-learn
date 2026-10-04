@@ -34,6 +34,7 @@ const row = (over: Partial<IndexRow> = {}): IndexRow => ({
   courseLabel: null,
   courses: [],
   domain: "foundations",
+  ready: false,
   ...over,
 });
 
@@ -144,7 +145,22 @@ describe("statusFilterOptions", () => {
       ["mastered", 1],
       ["untouched", 1],
       ["leeches", 1],
+      ["ready", 0],
+      ["nocourse", 3],
     ]);
+  });
+
+  // Phase 3 of docs/proposals/knowledge-map.md: the map adds two options and keeps every other (G5, G8).
+  it("adds Ready to learn and Not in a course after the options the table already had", () => {
+    expect(INDEX_FILTERS.map((f) => f.key)).toEqual(["all", "due", "learning", "mastered", "untouched", "leeches", "ready", "nocourse"]);
+    expect(INDEX_FILTERS.find((f) => f.key === "ready")?.label).toBe("Ready to learn");
+    expect(INDEX_FILTERS.find((f) => f.key === "nocourse")?.label).toBe("Not in a course");
+    expect(matchesFilter(row({ ready: true }), "ready")).toBe(true);
+    expect(matchesFilter(row({ ready: false }), "ready")).toBe(false);
+    expect(matchesFilter(row({ courses: [] }), "nocourse")).toBe(true);
+    expect(matchesFilter(row({ courses: ["cs3230"] }), "nocourse")).toBe(false);
+    expect(parseFilter("nocourse")).toBe("nocourse");
+    expect(parseFilter("ready")).toBe("ready");
   });
 
   it("calls a leech what it means, and keeps the key the URL carries", () => {
