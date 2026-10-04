@@ -8,7 +8,7 @@ import { StoreBanner } from "@/components/shell/StoreBanner";
  * banner and the page, under a header on a phone.
  *
  * The sidebar (`AppSidebar`) is the app's only navigation: New chat when this
- * deployment has a studio, the five learning destinations, the studio's
+ * deployment has a studio, the four learning destinations, the studio's
  * conversations, and the account at the foot. It replaced the top bar, the
  * phone tab bar and the studio's own conversation list. `ShellFrame` is the
  * client half that holds it; this stays a server component so the page is
