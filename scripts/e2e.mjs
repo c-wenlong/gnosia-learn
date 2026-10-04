@@ -684,6 +684,37 @@ async function run() {
     assert(marks.length > 0 && marks.every((m) => m.dim === !m.untouched), 'the filter dimmed the wrong concepts');
   });
 
+  // D5 and D6: hover lights a concept's edges and fades the rest, the list
+  // follows, and a concept drags, its place kept for the session until Reset.
+  await step('learn: hover lights a concept\'s edges, and a dragged concept stays until Reset', page, async () => {
+    await go('/learn?domain=machine-learning');
+    const graph = main.getByRole('group', { name: /^Machine learning map/ });
+    const dot = graph.locator('[data-concept="self-attention"] circle[data-dot]');
+    await hydrated(page, graph.locator('[data-concept="self-attention"]'));
+    const box = await dot.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await graph.locator('[data-concept="self-attention"][data-hover="true"]').waitFor();
+    assert((await graph.locator('[data-concept="attention-weights"]').getAttribute('data-related')) === 'true', 'a prerequisite is not lit');
+    assert((await graph.locator('[data-faded="true"]').count()) > 0, 'nothing faded');
+    assert((await graph.locator('[data-edge][data-hot="true"]').count()) > 0, 'no edge lit');
+    assert((await main.locator('[data-list-concept="self-attention"]').getAttribute('data-hover')) === 'true', 'the list did not follow the hover');
+
+    // Drag it 80px right and 40px down; the press does not select.
+    const cx = Number(await dot.getAttribute('cx'));
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width / 2 + i * 8, box.y + box.height / 2 + i * 4);
+    await page.mouse.up();
+    await main.locator('[data-moved]').getByText('Positions moved').waitFor();
+    assert(Number(await dot.getAttribute('cx')) > cx + 40, 'the concept did not move');
+    assert(!new URL(page.url()).searchParams.has('concept'), 'the drag selected the concept');
+    await page.reload({ waitUntil: 'load' });
+    await main.locator('[data-moved]').waitFor();
+    assert(Number(await dot.getAttribute('cx')) > cx + 40, 'the move did not survive a reload');
+    await clickHydrated(page, main.locator('[data-moved]').getByRole('button', { name: 'Reset' }));
+    await main.locator('[data-moved]').waitFor({ state: 'detached' });
+    await page.waitForFunction((x) => Number(document.querySelector('[data-concept="self-attention"] circle[data-dot]')?.getAttribute('cx')) === x, cx);
+  });
+
   // D7: every concept in a domain is a button in the list, reached by Tab.
   await step('learn: a domain can be walked with the keyboard alone', page, async () => {
     await go('/learn?domain=machine-learning');

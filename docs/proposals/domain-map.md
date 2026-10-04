@@ -1,7 +1,7 @@
 # Proposal: the Learn map is grouped by domain
 
 Status: accepted by the owner on 2026-10-04, being built in four phases.
-Phase 1 (the tree and the layout) and phase 2 (the views, and the island map removed) are built. It replaces the island map
+Phases 1 (the tree and the layout), 2 (the views, and the island map removed) and 3 (hover and drag) are built. It replaces the island map
 of [knowledge-map.md](knowledge-map.md), decisions G2 to G8; G1 (the graph
 is what `/learn` opens on, the table at `?view=table`) stands.
 
@@ -116,3 +116,10 @@ things, fixed in this phase:
   Edges now start under the prerequisite's label and stop above the dot.
 - Labels were about 9 px at a 1,100 px row. Rows are 900 px, so a domain is
   drawn near full size and grows down the page.
+
+Phase 3, on `self_learn`, in the built app at 1440 by 900: hovering a
+concept in algorithms lights it, its neighbours and its 6 edges and fades
+the other 49 concepts within 6 ms of the pointer arriving; a 30-step drag
+held every frame at 16.7 ms; the moved position was in `sessionStorage`,
+survived a reload, and Reset cleared both. Reset glides the concepts home
+over 300 ms, or at once with reduced motion.
