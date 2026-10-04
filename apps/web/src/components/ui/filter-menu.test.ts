@@ -125,6 +125,11 @@ describe("fieldPlacement", () => {
     expect(at.maxHeight).toBe(432);
   });
 
+  it("sits flush on the field when a long list opens above, by the height its cap lets it show", () => {
+    const at = fieldPlacement({ trigger: { top: 700, bottom: 744, left: 300 }, width: 300, height: 2000, cap: 480, viewport });
+    expect(at).toEqual({ top: 212, left: 300, above: true, maxHeight: 676 });
+  });
+
   it("shifts left to stay on screen, as a chip's list does", () => {
     expect(fieldPlacement({ trigger: { top: 100, bottom: 144, left: 1000 }, width: 300, height: 100, viewport }).left).toBe(884);
   });

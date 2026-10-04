@@ -189,8 +189,10 @@ export function FilterMenu<V extends string>({
         return;
       }
       const width = Math.max(box.offsetWidth, at.width);
+      // The list's own cap, min(30rem, 70vh), as max-h-[min(30rem,70vh)] has it.
+      const cap = Math.min(30 * parseFloat(getComputedStyle(root).fontSize), 0.7 * window.innerHeight);
       setPlace({
-        ...fieldPlacement({ trigger: at, width, height: box.scrollHeight, viewport: { width: root.clientWidth, height: root.clientHeight } }),
+        ...fieldPlacement({ trigger: at, width, height: box.scrollHeight, cap, viewport: { width: root.clientWidth, height: root.clientHeight } }),
         minWidth: at.width,
       });
     };
@@ -272,6 +274,8 @@ export function FilterMenu<V extends string>({
         data-field={dataField}
         data-value={value}
         aria-label={bare || field ? `${label}: ${shown}` : undefined}
+        // No aria-invalid: ARIA does not support it on a button. A refused
+        // value is heard through describedBy, the message the check printed.
         aria-describedby={describedBy}
         onClick={() => (open ? close(false) : show(Math.max(selected, 0), false))}
         onKeyDown={onTriggerKey}

@@ -140,22 +140,27 @@ export function fieldPlacement({
   trigger,
   width,
   height,
+  cap = Infinity,
   viewport,
   gap = 8,
   gutter = 16,
 }: {
   trigger: { top: number; bottom: number; left: number };
   width: number;
+  /** The list's full content height. */
   height: number;
+  /** The tallest the list's own CSS lets it be (`30rem` or `70vh`), so a long list opening above sits flush on the field. */
+  cap?: number;
   viewport: { width: number; height: number };
   gap?: number;
   gutter?: number;
 }): { top: number; left: number; above: boolean; maxHeight: number } {
   const roomBelow = viewport.height - gutter - (trigger.bottom + gap);
   const roomAbove = trigger.top - gap - gutter;
-  const above = height > roomBelow && roomAbove > roomBelow;
+  const tall = Math.min(height, cap);
+  const above = tall > roomBelow && roomAbove > roomBelow;
   const room = Math.max(above ? roomAbove : roomBelow, 0);
-  const shown = Math.min(height, room);
+  const shown = Math.min(tall, room);
   return {
     top: above ? trigger.top - gap - shown : trigger.bottom + gap,
     left: trigger.left + popoverShift({ triggerLeft: trigger.left, width, viewport: viewport.width, gutter }),

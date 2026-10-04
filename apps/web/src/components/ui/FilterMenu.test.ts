@@ -56,6 +56,14 @@ describe("Select, closed", () => {
     expect(html).not.toContain("bg-accent");
   });
 
+  it("points a screen reader at why a refused value was refused, not only at its border", () => {
+    const html = renderToStaticMarkup(
+      createElement(Select<string>, { label: "Arrow 1 from", options: OPTIONS, value: "", invalid: true, describedBy: "why", onChange: () => {} }),
+    );
+    expect(html).toContain('aria-describedby="why"');
+    expect(html).toContain("border-danger");
+  });
+
   it("prints its placeholder, muted, while the value is none of the options", () => {
     const html = field("missing");
     expect(html).toContain(">Pick one</span>");
