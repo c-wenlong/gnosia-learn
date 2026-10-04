@@ -836,7 +836,11 @@ not have to be worked out again.
   one, and a worktree's submodule has no `.env` at all. `emptyDataRoot` in
   `services/catalog/src/index/video-tool.ts` now refuses, naming the data
   root and one file, while the data root still holds none of them; one
-  file present and the run prunes as before.
+  file present and the run prunes as before. `movedDataRoot` beside it
+  catches a checkout left with one old render: when the data root differs
+  from the `outRoot` the last import recorded on `index_run.metadata`, a
+  stored file missing from the new root and still in the old one refuses
+  the run. A file gone from both is pruned.
 - **The web app reads authored content from the database only, and refuses
   a type sent to files.** `apps/web/src/data/source.ts` builds the reader
   seam with no file reader: a type whose `content_source` row says `files`,
