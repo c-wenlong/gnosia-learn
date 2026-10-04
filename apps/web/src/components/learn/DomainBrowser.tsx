@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { DomainGraph, type DomainGraphNode, type MapMark } from "@/components/learn/DomainGraph";
 import { Button } from "@/components/ui/Button";
@@ -10,11 +10,11 @@ import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
 import type { DomainLayout, DomainMapData, DomainSummary } from "@/lib/domain-map";
-import { domainTitle } from "@/lib/domain-view";
+import { domainTitle, movedKey, readMoved } from "@/lib/domain-view";
 import type { IndexRow } from "@/lib/learn-index";
 import { relatedTo, standingLine } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
-import { scrollBehavior } from "@/lib/motion";
+import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
 import { LEECH_LABEL } from "@/lib/review-core";
 
 /**
@@ -167,9 +167,32 @@ export function DomainView({
 }) {
   const graphNodes = useMemo(() => new Map<string, DomainGraphNode>([...rows].map(([id, r]) => [id, r])), [rows]);
   const focus = selected === null ? null : (rows.get(selected) ?? null);
+  const [hover, setHover] = useState<string | null>(null);
+  const [hoverTopic, setHoverTopic] = useState<string | null>(null);
+  const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
+  // The pill goes as Reset starts, not when the glide home ends.
+  const anyMoved = Object.keys(moved).length > 0 && !gliding;
   return (
     <div className="flex flex-col gap-3">
-      <Breadcrumb domain={domain} topic={topic} onGo={onGo} />
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
+        <Breadcrumb domain={domain} topic={topic} onGo={onGo} />
+        {anyMoved && (
+          <div
+            role="status"
+            data-moved
+            className="flex animate-fade-in items-center gap-2 rounded-full bg-warn-tint px-3 py-1 text-[12px] text-text motion-reduce:animate-none"
+          >
+            Positions moved
+            <button
+              type="button"
+              onClick={reset}
+              className="rounded-sm font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              Reset
+            </button>
+          </div>
+        )}
+      </div>
       {/* Sized by the room the page has: the list docks beside the picture when it fits, under it otherwise. */}
       <div className="@container">
         <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -182,8 +205,18 @@ export function DomainView({
               selected={selected}
               dimmed={dimmed}
               marks={marks}
+              hover={hover}
+              hoverTopic={hoverTopic}
+              moved={moved}
               onSelect={onSelect}
-              onTopic={(t) => onGo({ domain: domain.slug, topic: t })}
+              onTopic={(t) => {
+                setHoverTopic(null);
+                onGo({ domain: domain.slug, topic: t });
+              }}
+              onHover={setHover}
+              onHoverTopic={setHoverTopic}
+              onMove={move}
+              onMoveEnd={save}
             />
             {domain.links.length > 0 && (
               <p data-outside className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-text2">
@@ -214,12 +247,124 @@ export function DomainView({
               domainOf={domainOf}
               domain={domain.slug}
             />
-            <ConceptList domain={domain} layout={layout} topic={topic} rows={rows} selected={selected} dimmed={dimmed} onGo={onGo} onSelect={onSelect} />
+            <ConceptList
+              domain={domain}
+              layout={layout}
+              topic={topic}
+              rows={rows}
+              selected={selected}
+              dimmed={dimmed}
+              hover={hover}
+              onGo={onGo}
+              onSelect={onSelect}
+              onHover={setHover}
+              onHoverTopic={setHoverTopic}
+            />
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+type Point = { x: number; y: number };
+
+/** How long Reset takes to glide the moved concepts home. */
+const RESET_MS = 300;
+
+/** Told when this tab writes a domain's moved concepts, since `storage` only fires in other tabs. */
+const MOVED_EVENT = "learn-map-moved";
+
+function subscribeMoved(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(MOVED_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(MOVED_EVENT, onChange);
+  };
+}
+
+function readSaved(domain: string): string | null {
+  try {
+    return window.sessionStorage.getItem(movedKey(domain));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The concepts dragged in one domain (D6), kept in `sessionStorage` under the
+ * domain so a reload in the same session draws them where they were left.
+ * Read through `useSyncExternalStore`, which is null on the server and while
+ * hydrating, so the page hydrates as it was sent. A drag in progress and
+ * Reset's glide home are held in `live` and written when they end. Storage
+ * can be missing or refuse a write (a private window); the drag still works,
+ * it is only not remembered.
+ */
+function useMoved(domain: string, layout: DomainLayout) {
+  const raw = useSyncExternalStore(
+    subscribeMoved,
+    () => readSaved(domain),
+    () => null,
+  );
+  const known = useMemo(() => new Set(Object.keys(layout.positions)), [layout]);
+  const saved = useMemo(() => readMoved(raw, known), [raw, known]);
+  const [live, setLive] = useState<Record<string, Point> | null>(null);
+  const [gliding, setGliding] = useState(false);
+  const moved = live ?? saved;
+  const frame = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
+  const write = (value: Record<string, Point>) => {
+    try {
+      if (Object.keys(value).length === 0) window.sessionStorage.removeItem(movedKey(domain));
+      else window.sessionStorage.setItem(movedKey(domain), JSON.stringify(value));
+    } catch {
+      // Not remembered, still moved.
+    }
+    window.dispatchEvent(new Event(MOVED_EVENT));
+  };
+  const move = (id: string, to: Point) => setLive((m) => ({ ...(m ?? saved), [id]: to }));
+  const save = () => {
+    write(moved);
+    setLive(null);
+  };
+  /** Back to the layout's places, gliding there unless motion is reduced. */
+  const reset = () => {
+    const from = moved;
+    write({});
+    if (prefersReducedMotion() || typeof requestAnimationFrame === "undefined") {
+      setLive(null);
+      return;
+    }
+    setGliding(true);
+    const began = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - began) / RESET_MS);
+      if (t >= 1) {
+        frame.current = null;
+        setLive(null);
+        setGliding(false);
+        return;
+      }
+      const ease = 1 - (1 - t) ** 3;
+      setLive(
+        Object.fromEntries(
+          Object.entries(from).map(([id, p]) => {
+            const home = layout.positions[id] ?? p;
+            return [id, { x: p.x + (home.x - p.x) * ease, y: p.y + (home.y - p.y) * ease }];
+          }),
+        ),
+      );
+      frame.current = requestAnimationFrame(step);
+    };
+    frame.current = requestAnimationFrame(step);
+  };
+  return { moved, gliding, move, save, reset };
 }
 
 /** The domain's topics and concepts as buttons, in the picture's reading order (D7). */
@@ -230,8 +375,11 @@ function ConceptList({
   rows,
   selected,
   dimmed,
+  hover,
   onGo,
   onSelect,
+  onHover,
+  onHoverTopic,
 }: {
   domain: DomainSummary;
   layout: DomainLayout;
@@ -239,8 +387,12 @@ function ConceptList({
   rows: ReadonlyMap<string, IndexRow>;
   selected: string | null;
   dimmed: ReadonlySet<string>;
+  hover: string | null;
   onGo: (place: Place) => void;
   onSelect: (id: string) => void;
+  /** Hover and focus here light the graph, as the graph's hover lights a row (D5, D7). */
+  onHover: (id: string | null) => void;
+  onHoverTopic: (topic: string | null) => void;
 }) {
   const groups = topic === null ? layout.groups : layout.groups.filter((g) => g.topic === topic);
   const at = (id: string) => layout.positions[id] ?? { x: 0, y: 0 };
@@ -253,7 +405,12 @@ function ConceptList({
             type="button"
             data-list-topic={g.topic}
             disabled={topic !== null}
-            onClick={() => onGo({ domain: domain.slug, topic: g.topic })}
+            onClick={() => {
+              onHoverTopic(null);
+              onGo({ domain: domain.slug, topic: g.topic });
+            }}
+            onMouseEnter={() => onHoverTopic(g.topic)}
+            onMouseLeave={() => onHoverTopic(null)}
             className="rounded-sm px-1.5 py-0.5 text-left text-[12px] font-semibold text-text2 enabled:hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
           >
             {g.title}
@@ -267,11 +424,17 @@ function ConceptList({
                   <button
                     type="button"
                     data-list-concept={id}
+                    data-hover={id === hover}
                     aria-pressed={id === selected}
                     onClick={() => onSelect(id)}
+                    onMouseEnter={() => onHover(id)}
+                    onMouseLeave={() => onHover(null)}
+                    onFocus={() => onHover(id)}
+                    onBlur={() => onHover(null)}
                     className={cx(
-                      "flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent",
+                      "flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text transition-colors duration-100 hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent motion-reduce:transition-none",
                       id === selected && "bg-surface font-semibold",
+                      id === hover && id !== selected && "bg-surface",
                       dimmed.has(id) && "opacity-40",
                     )}
                   >
