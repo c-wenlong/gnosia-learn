@@ -162,22 +162,51 @@ export function LearnerProvider({
     current.current = state;
   }, [state]);
 
-  // The server is the authority. When a navigation or a `router.refresh()`
-  // brings back a newer snapshot, adopt it — otherwise a reset in one tab, or
-  // a `learn observe` at the terminal, would be invisible until a full reload.
-  const seen = useRef(initialState);
-  useEffect(() => {
-    if (seen.current === initialState) return;
-    seen.current = initialState;
-    setState(initialState);
-  }, [initialState]);
-
   /**
    * Writes are ordered per target: see `createWriteQueue`. Without it two
    * edits to the same note can reach the server in the wrong order, and only
    * the last one to arrive is what Postgres keeps.
    */
   const queue = useRef(createWriteQueue<ApiResponse>());
+
+  /**
+   * The server is the authority. When a navigation or a `router.refresh()`
+   * brings back a newer snapshot, adopt it: otherwise a reset in one tab, or a
+   * `learn observe` at the terminal, would be invisible until a full reload.
+   *
+   * Except while a write is in flight. A snapshot rendered then was read
+   * before the write landed, so adopting it would put the old row back over
+   * the optimistic value, and nothing would restore it when the write is
+   * stored. So it is held back (`held`), and once every write has settled the
+   * snapshot is read again (`settled` below), which by then includes them.
+   */
+  const seen = useRef(initialState);
+  const held = useRef(false);
+  useEffect(() => {
+    if (seen.current === initialState) return;
+    seen.current = initialState;
+    if (queue.current.pending > 0) {
+      held.current = true;
+      return;
+    }
+    setState(initialState);
+  }, [initialState]);
+
+  /** True when a write that settled since the queue was last idle was refused. */
+  const refused = useRef(false);
+
+  /**
+   * The queue has gone idle. If a snapshot was held back meanwhile, read it
+   * again, unless a write was refused: then the unsaved value stays on screen
+   * with the banner, as it does with no refresh in the way, and the next
+   * navigation brings the database's version.
+   */
+  const settled = useCallback(() => {
+    const reread = held.current && !refused.current;
+    held.current = false;
+    refused.current = false;
+    if (reread) router.refresh();
+  }, [router]);
 
   /**
    * Apply the reducer, then write. `send` receives the reducer's output, so
@@ -207,12 +236,14 @@ export function LearnerProvider({
           () => send(next),
           (response) => {
             setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
+            if (response.ok === false) refused.current = true;
+            if (queue.current.pending === 0) settled();
             resolve(response.ok !== false);
           },
         );
       });
     },
-    [],
+    [settled],
   );
 
   // The root layout can only read the theme cookie, so a browser without one
