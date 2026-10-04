@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
+import { Collapse } from "@/components/ui/Collapse";
 import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
@@ -32,6 +33,7 @@ import {
   type WeekCheckOutcome,
   type WeekCheckPlan,
 } from "@/lib/week-check";
+import { scrollBehavior } from "@/lib/reduced-motion";
 
 import { SessionClose } from "./SessionClose";
 
@@ -54,6 +56,13 @@ import { SessionClose } from "./SessionClose";
  * pressing Check again retries the same answer rather than recording a second.
  * After each write `router.refresh()` re-reads the layout, so the learner
  * snapshot the shell holds moves with the session.
+ *
+ * **Moving between steps.** Each step's column is keyed on its index, so a
+ * new step rises in (`animate-enter`) rather than being swapped in place, and
+ * the focus moves to its heading: the Continue that was pressed has gone with
+ * the old column, and a focus left on nothing would start the next Tab from
+ * the top of the page. The page glides back to the top, or jumps under
+ * reduced motion.
  *
  * **A week check** (`weekCheck`, mode `module`) walks a module's concepts
  * rather than one: its steps are not fixed in advance but grow by one after
@@ -169,6 +178,11 @@ export function SessionFocus({
   /** The body of the answer being saved, if any: leaving resends it with the close. */
   const saving = useRef<Record<string, unknown> | null>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
+  /** The step's column, keyed on the step, so its heading can take the focus. */
+  const columnRef = useRef<HTMLDivElement>(null);
+  /** The step whose heading last had the focus moved to it: the first is left alone. */
+  const shownIndex = useRef(index);
+  const whyId = useId();
 
   // What each step of a week check came to, in order, as far as they are decided.
   const outcomes = useMemo((): WeekCheckOutcome[] => {
@@ -397,13 +411,20 @@ export function SessionFocus({
       setClosedAt(Date.now());
       void closeSession(false).then(() => router.refresh());
     }
-    window.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0, behavior: scrollBehavior() });
   }, [index, steps, router, closeSession, checkPlan, graded, skipped, outcomes, conceptOf]);
 
   // On a phone the verdict lands under the options; bring it up.
   useEffect(() => {
-    if (answered !== undefined) feedbackRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (answered !== undefined) feedbackRef.current?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() });
   }, [answered]);
+
+  // A new step takes the focus to its heading; the page opening on the first does not.
+  useEffect(() => {
+    if (shownIndex.current === index) return;
+    shownIndex.current = index;
+    columnRef.current?.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
+  }, [index]);
 
   useEffect(() => {
     if (step === undefined || step.kind === "close") return;
@@ -450,7 +471,15 @@ export function SessionFocus({
       .sort((a, b) => a - b)
       .map((i) => (graded[i] as Graded).recorded);
     return (
-      <Frame percent={100} label={checkPlan === null ? label : "Week check"} short={checkPlan === null ? short : "Week check"} exitHref={exitHref} exitLabel={exitLabel}>
+      <Frame
+        percent={100}
+        label={checkPlan === null ? label : "Week check"}
+        short={checkPlan === null ? short : "Week check"}
+        exitHref={exitHref}
+        exitLabel={exitLabel}
+        stepKey={index}
+        columnRef={columnRef}
+      >
         <SessionClose
           slug={slug}
           title={title}
@@ -473,8 +502,8 @@ export function SessionFocus({
   }
 
   return (
-    <Frame percent={percent} label={label} short={short} exitHref={exitHref} exitLabel={exitLabel}>
-      <h1 className="font-display text-[20px] leading-tight font-bold text-text md:text-[28px]">
+    <Frame percent={percent} label={label} short={short} exitHref={exitHref} exitLabel={exitLabel} stepKey={index} columnRef={columnRef}>
+      <h1 tabIndex={-1} className="font-display text-[20px] leading-tight font-bold text-text outline-none md:text-[28px]">
         {step.place?.title ?? title}
         {step.place === undefined && <span className="hidden md:inline"> · {STEP_NAME[step.kind]}</span>}
       </h1>
@@ -507,11 +536,11 @@ export function SessionFocus({
           {step.kind === "check" && assetCompact !== null && mode === "learn" && assetCompact}
 
           {current.status === "loading" && (
-            <Placeholder label="The tutor is writing a question…" height={180} className="animate-pulse" />
+            <Placeholder label="The tutor is writing a question…" height={180} className="motion-safe:animate-pulse" />
           )}
 
           {noQuestion !== null && (
-            <div role="status" className="flex flex-col gap-2 rounded-2xl bg-surface2 p-5">
+            <div role="status" className="flex animate-enter flex-col gap-2 rounded-2xl bg-surface2 p-5 motion-reduce:animate-none">
               <p className="text-[15px] font-semibold text-text">No question for this step</p>
               <p className="text-[14px] leading-[1.5] text-text2">
                 {noQuestion}
@@ -536,12 +565,16 @@ export function SessionFocus({
               answered={answered}
               locked={pending || index in sent}
               onSelect={setSelected}
+              // A question the tutor wrote replaces its placeholder: it rises in, at
+              // least as tall as the placeholder was, so nothing under it jumps up.
+              className={step.question === null && modelAvailable ? "min-h-[180px] animate-enter motion-reduce:animate-none" : undefined}
             />
           )}
 
           <div ref={feedbackRef} className="mt-auto flex scroll-mb-[calc(4.25rem+env(safe-area-inset-bottom))] flex-col gap-3 md:mt-0 md:scroll-mb-0">
             {question !== null && answered !== undefined ? (
-              <>
+              // One item in the column, so a shut Why? adds no gap under the bar.
+              <div className="flex flex-col">
                 <FeedbackBar
                   ok={answered.correct}
                   title={answered.correct ? "Correct" : answered.picked === null ? "Here is the answer" : "Not quite"}
@@ -550,7 +583,12 @@ export function SessionFocus({
                   actions={
                     <>
                       {question.explanation !== null && (
-                        <Button variant="ghost" onClick={() => setWhyOpen((open) => !open)} aria-expanded={whyOpen}>
+                        <Button
+                          variant="ghost"
+                          onClick={() => setWhyOpen((open) => !open)}
+                          aria-expanded={whyOpen}
+                          aria-controls={whyId}
+                        >
                           Why?
                         </Button>
                       )}
@@ -563,15 +601,17 @@ export function SessionFocus({
                     </>
                   }
                 />
-                {whyOpen && question.explanation !== null && (
-                  <div className="rounded-2xl bg-surface2 p-4 text-[14px] leading-[1.55] text-text">
-                    <p>
-                      <MathText text={question.explanation} />
-                    </p>
-                    {question.source !== null && <p className="mt-1.5 text-[12px] text-text2">Source: {question.source}</p>}
-                  </div>
+                {question.explanation !== null && (
+                  <Collapse open={whyOpen} id={whyId}>
+                    <div className="mt-3 rounded-2xl bg-surface2 p-4 text-[14px] leading-[1.55] text-text">
+                      <p>
+                        <MathText text={question.explanation} />
+                      </p>
+                      {question.source !== null && <p className="mt-1.5 text-[12px] text-text2">Source: {question.source}</p>}
+                    </div>
+                  </Collapse>
                 )}
-              </>
+              </div>
             ) : question !== null ? (
               <div className="flex items-center gap-3">
                 <span className="md:hidden">
@@ -617,6 +657,7 @@ function Question({
   answered,
   locked,
   onSelect,
+  className,
 }: {
   question: SessionQuestion;
   selected: number | null;
@@ -624,6 +665,7 @@ function Question({
   /** Saving, or sent and waiting to be retried: the pick cannot change. */
   locked: boolean;
   onSelect: (i: number) => void;
+  className?: string;
 }) {
   const stateOf = (i: number): ChoiceState => {
     if (answered === undefined) return i === selected ? "selected" : "idle";
@@ -632,7 +674,7 @@ function Question({
     return "idle";
   };
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cx("flex flex-col gap-2", className)}>
       <p id="session-question" className="text-[15px] font-semibold leading-snug text-text md:text-[16px]">
         <MathText text={question.prompt} />
       </p>
@@ -653,13 +695,19 @@ function Question({
   );
 }
 
-/** Focus mode's frame: the step bar, the label and exit row, the 720px column. */
+/**
+ * Focus mode's frame: the step bar, the label and exit row, the 720px column.
+ * The column is keyed on `stepKey`, so each step mounts afresh and rises in;
+ * the bar above it stays, and its fill slides to the new width.
+ */
 function Frame({
   percent,
   label,
   short,
   exitHref,
   exitLabel,
+  stepKey,
+  columnRef,
   children,
 }: {
   percent: number;
@@ -668,6 +716,8 @@ function Frame({
   exitHref: string;
   /** What the exit link says from 768px up; "Exit" on a phone. */
   exitLabel: string;
+  stepKey: number;
+  columnRef: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }) {
   const value = Math.max(0, Math.min(100, percent));
@@ -684,7 +734,10 @@ function Frame({
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className="h-full rounded-r-[4px] bg-accent transition-[width] duration-300 md:rounded-r-md" style={{ width: `${value}%` }} />
+        <div
+          className="h-full rounded-r-[4px] bg-accent transition-[width] duration-300 ease-soft motion-reduce:transition-none md:rounded-r-md"
+          style={{ width: `${value}%` }}
+        />
       </div>
       <div className="flex items-center justify-between gap-4 px-3.5 py-2 text-[12px] font-medium text-text2 md:px-6 md:py-3">
         <p className="min-w-0 truncate">
@@ -700,8 +753,11 @@ function Frame({
         </Link>
       </div>
       <div
+        key={stepKey}
+        ref={columnRef}
+        data-step={stepKey}
         className={cx(
-          "mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-3 px-3.5 pt-1 pb-3.5",
+          "mx-auto flex w-full max-w-[720px] flex-1 animate-enter flex-col gap-3 px-3.5 pt-1 pb-3.5 motion-reduce:animate-none",
           "md:flex-none md:gap-[22px] md:px-0 md:pt-0 md:pb-10",
         )}
       >

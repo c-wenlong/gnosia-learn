@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
+import { cx } from "@/components/ui/classes";
 import { Cite } from "@/components/ui/Cite";
 import { Composer } from "@/components/ui/Composer";
 import { MathText } from "@/components/Math";
@@ -15,6 +16,7 @@ import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import type { MentionValue } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { CitationSource } from "@/lib/agent/prompt";
+import { prefersReducedMotion } from "@/lib/reduced-motion";
 import type { DraftKind } from "@/lib/studio-drafts";
 import { HEALTH_READ_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-studio";
 import {
@@ -56,6 +58,13 @@ import {
  * goes to a new studio conversation about this concept, in this tab, and is
  * sent there on arrival (D64); the thread keeps it as a marker linking to
  * that conversation (D70), which is never sent to the tutor.
+ *
+ * **Motion.** A turn added here rises in (`animate-enter`); turns restored
+ * from storage, which arrive in the render after hydration, only fade in, as
+ * the greeting does, and the greeting is not drawn at all until the client
+ * knows whether a thread replaces it, so neither flashes for a frame. The
+ * thread glides to its newest turn, except on its first paint and under
+ * reduced motion, where it jumps.
  */
 
 /** The longest question the input takes, well inside the route's payload bound. */
@@ -91,6 +100,9 @@ function readRaw(key: string): string | null {
     return null;
   }
 }
+
+/** True once the client has hydrated; false on the server and the hydrating render. */
+const noSubscribe = () => () => undefined;
 
 function writeTurns(key: string, turns: ThreadItem[]): void {
   const raw = turns.length === 0 ? null : JSON.stringify(turns);
@@ -145,6 +157,18 @@ export function TutorChat({
     () => null,
   );
   const turns = useMemo(() => parseThread(raw), [raw]);
+  const hydrated = useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
+  /**
+   * How many turns were already stored when the page opened: those were said
+   * before, and fade in; a turn at this index or later is new, and rises in.
+   * Read from storage once, on the client, where the server's empty thread is
+   * not the truth. "Start a new thread" puts it back to zero.
+   */
+  const [restored, setRestored] = useState(() => (typeof window === "undefined" ? 0 : parseThread(readRaw(key)).length));
   const setTurns = (next: ThreadItem[]) => writeTurns(key, next);
   const [sources, setSources] = useState(initialSources);
   // `?ask=` fills the field once. Its first send takes it off the URL
@@ -240,11 +264,16 @@ export function TutorChat({
     swapIfIdle();
   };
 
+  const scrolledOnce = useRef(false);
   useEffect(() => {
     // The thread box scrolls, never the page: on a phone the page is where the
     // learner is reading.
     const box = threadRef.current;
-    if (box) box.scrollTop = box.scrollHeight;
+    if (!box) return;
+    const glide = scrolledOnce.current && turns.length > 0 && !prefersReducedMotion();
+    scrolledOnce.current = turns.length > 0;
+    if (glide) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+    else box.scrollTop = box.scrollHeight;
   }, [turns.length, busy]);
 
   async function ask(question: string, history: ThreadItem[] = turns) {
@@ -342,7 +371,11 @@ export function TutorChat({
         aria-busy={busy}
       >
         {turns.length === 0 && (
-          <TutorMessage cites={note && <Cite n={note.n} label={note.label} href={note.href} />}>
+          <TutorMessage
+            cites={note && <Cite n={note.n} label={note.label} href={note.href} />}
+            // Unseen until hydration has said there is no stored thread to show instead.
+            className={hydrated ? "animate-fade-in motion-reduce:animate-none" : "opacity-0"}
+          >
             <p className="max-w-[60ch]">
               Ask me anything about {title}. I answer from your note and cite it as [1], and I will check you as we
               go.
@@ -350,16 +383,18 @@ export function TutorChat({
           </TutorMessage>
         )}
 
-        {turns.map((turn, i) =>
-          turn.role === "studio" ? (
-            <Handed key={i} marker={turn} />
+        {turns.map((turn, i) => {
+          const enter = i < restored ? "animate-fade-in motion-reduce:animate-none" : "animate-enter motion-reduce:animate-none";
+          return turn.role === "studio" ? (
+            <Handed key={i} marker={turn} className={enter} />
           ) : turn.role === "user" ? (
-            <UserMessage key={i}>
+            <UserMessage key={i} className={enter}>
               <MathText text={turn.content} />
             </UserMessage>
           ) : (
             <TutorMessage
               key={i}
+              className={enter}
               cites={citedNumbers(turn.content, known).map((n) => {
                 const s = byNumber.get(n);
                 return s ? <Cite key={n} n={n} label={s.label} href={s.href} /> : null;
@@ -376,11 +411,11 @@ export function TutorChat({
             >
               <NoteProse source={turn.content} idPrefix={`t${i}-`} />
             </TutorMessage>
-          ),
-        )}
+          );
+        })}
 
         {busy && (
-          <p className="px-1.5 text-[13px] text-text3" role="status">
+          <p className="animate-fade-in px-1.5 text-[13px] text-text3 motion-reduce:animate-none" role="status">
             The tutor is thinking…
           </p>
         )}
@@ -388,7 +423,10 @@ export function TutorChat({
         {!busy && (error || last?.role === "user") && (
           // An error, or a thread restored after a reload that cut a request
           // off: either way the last question has no answer, so offer it again.
-          <div role={error ? "alert" : "status"} className="flex flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
+          <div
+            role={error ? "alert" : "status"}
+            className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none"
+          >
             <span className="min-w-0 flex-1">{error ?? "Your last question has no answer yet."}</span>
             {last?.role === "user" && (
               <Button variant="secondary" size="sm" onClick={retry}>
@@ -399,14 +437,15 @@ export function TutorChat({
         )}
 
         {turns.length > 0 && !busy && (
-          <div className="flex justify-center">
+          <div className="flex animate-fade-in justify-center motion-reduce:animate-none">
             <button
               type="button"
               onClick={() => {
                 setTurns([]);
+                setRestored(0);
                 setError(null);
               }}
-              className="rounded-sm text-[12px] text-text3 underline-offset-4 hover:text-text2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="rounded-sm text-[12px] text-text3 underline-offset-4 transition-colors duration-100 hover:text-text2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               Start a new thread
             </button>
@@ -433,18 +472,21 @@ export function TutorChat({
         className="flex flex-col gap-1.5 max-md:sticky max-md:bottom-[env(safe-area-inset-bottom)] max-md:z-10 max-md:-mx-4 max-md:bg-surface max-md:px-4 max-md:pt-1.5 max-md:pb-2"
       >
         {kit !== null && swapped ? (
-          <kit.TutorMentionField
-            handleRef={richRef}
-            value={value}
-            onChange={setValue}
-            onSubmit={submitTagged}
-            label={`Ask the tutor about ${title}`}
-            health={health}
-            disabled={opening}
-            sendDisabled={busy}
-            disabledReason={opening ? kit.OPENING_THE_STUDIO : undefined}
-            autoFocus={focusOnSwap}
-          />
+          // The @ field fades in over the plain one it replaces.
+          <div className="flex animate-fade-in flex-col motion-reduce:animate-none">
+            <kit.TutorMentionField
+              handleRef={richRef}
+              value={value}
+              onChange={setValue}
+              onSubmit={submitTagged}
+              label={`Ask the tutor about ${title}`}
+              health={health}
+              disabled={opening}
+              sendDisabled={busy}
+              disabledReason={opening ? kit.OPENING_THE_STUDIO : undefined}
+              autoFocus={focusOnSwap}
+            />
+          </div>
         ) : (
           <Composer
             value={value.text}
@@ -459,7 +501,7 @@ export function TutorChat({
           />
         )}
         {refusal !== null && (
-          <p role="alert" className="rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
+          <p role="alert" className="animate-fade-in rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none">
             {refusal}
           </p>
         )}
@@ -488,9 +530,9 @@ const KIND_NAMES: Record<string, string> = { diagram: "Diagram", video: "Video" 
  * A tagged message the studio took (D70): the words with their chips, as the
  * studio draws a sent message, and a link to the conversation it opened.
  */
-function Handed({ marker }: { marker: HandoffMarker }) {
+function Handed({ marker, className }: { marker: HandoffMarker; className?: string }) {
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className={cx("flex flex-col items-end gap-1", className)}>
       <UserMessage className="w-full">
         {markerPieces(marker).map((piece, at) =>
           "text" in piece ? (
