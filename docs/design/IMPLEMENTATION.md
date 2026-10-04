@@ -272,6 +272,28 @@ A redesigned page starts `<div data-layout="app">`, puts its title in
 reference. Once every page has moved, `app` becomes the default and the old
 values go.
 
+## Motion
+
+The owner's call on 2026-10-04, after the folded sidebar popped open on a
+hover: every change that opens, closes, expands, collapses, appears or moves
+is animated, and nothing moves for a reader who asked for less.
+
+| Rule | How |
+| --- | --- |
+| One easing | `ease-soft`, `cubic-bezier(0.2, 0, 0, 1)` (`--ease-soft` in `globals.css`), the curve `ui/Collapse` already used. `ease-out` is fine for a plain fade |
+| Durations | 100ms for colour on hover; 150ms for a fade, a menu or a popover; 200ms for a panel, a width or a dialog; 300ms for a fold (`Collapse`) or a drawer |
+| Height | `ui/Collapse` (grid rows 0fr to 1fr, `inert` while shut). Never a bare `{open && …}` for something with height |
+| Something that mounts | `animate-enter` (fade and a 6px rise: a message, a step, a page), `animate-pop-in` (a menu, a popover), `animate-fade-in` (a swap in place). They fill `backwards`, so no transform is left behind |
+| Something that also leaves | Keep it mounted: `invisible opacity-0` and `inert` when closed, `transition-[opacity,translate,scale,visibility]`. Visibility waits for the fade, so it takes no focus once gone |
+| Tailwind 4 | `translate-*` and `scale-*` set the `translate` and `scale` properties, so transition those by name: `transition-[transform]` does nothing for them |
+| Reduced motion | `motion-reduce:transition-none` or `motion-reduce:animate-none` beside each, and a global rule at the end of `globals.css` that finishes every transition and animation at once under `prefers-reduced-motion: reduce`, for anything that forgot or whose responsive variant outranks it |
+| Checking it | A screenshot of the end state does not show motion. Sample the element's size or opacity every 25ms while it changes (the sidebar's PR did, in Playwright), or look at the computed `transition` |
+
+The sidebar (`components/shell/AppSidebar.tsx`) is the worked example: one
+element whose width animates, icons at a fixed place so only the labels fade
+(`components/shell/motion.ts`), the account menu kept mounted and faded, the
+phone drawer slid in by `translate`.
+
 ## Habit data
 
 Removed 2026-10-04 (H1 of [the Home proposal](../proposals/home-page.md)):

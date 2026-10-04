@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { cx } from "@/components/ui/classes";
+import { FADE, FADE_IN } from "./motion";
 import { useLearner } from "@/lib/learner-context";
 
 /**
@@ -70,10 +71,11 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
         aria-label={collapsed ? `${name}, account and settings` : undefined}
         title={collapsed ? name : undefined}
         onClick={() => setOpen((v) => !v)}
+        // 3px in: on the rail's 38px row that centres the 32px avatar, and the
+        // avatar stays put as the sidebar widens; the name fades in beside it.
         className={cx(
-          "flex h-12 w-full items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-surface2",
+          "flex h-12 w-full items-center gap-2.5 overflow-hidden rounded-lg px-[3px] text-left transition-colors hover:bg-surface2",
           "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-          collapsed && "justify-center px-0",
         )}
       >
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-border text-text2">
@@ -82,21 +84,24 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
             <path d="M3.5 17.5c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5z" />
           </svg>
         </span>
-        {!collapsed && (
-          <>
-            <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-text">{name}</span>
-            <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0 text-text3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6.5 8 10 4.5 13.5 8M6.5 12l3.5 3.5 3.5-3.5" />
-            </svg>
-          </>
-        )}
+        <span aria-hidden={collapsed ? true : undefined} className={cx("flex min-w-0 flex-1 items-center gap-2.5 pr-2", FADE, collapsed ? "opacity-0" : FADE_IN)}>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-text">{name}</span>
+          <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0 text-text3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6.5 8 10 4.5 13.5 8M6.5 12l3.5 3.5 3.5-3.5" />
+          </svg>
+        </span>
       </button>
-      {open && (
-        <div
+      {/* Mounted throughout so it can fade and rise from the row; closed, it
+          is invisible (no focus, no clicks) once the fade has run. */}
+      <div
           id={id}
+          inert={!open}
           className={cx(
             "absolute z-50 w-60 rounded-2xl border-2 border-border bg-surface p-1.5 shadow-lg",
-            collapsed ? "bottom-0 left-full ml-2" : "inset-x-0 bottom-full mb-2 w-auto",
+            // `translate` and `scale` are their own properties in Tailwind 4, not `transform`.
+            "transition-[opacity,translate,scale,visibility] duration-150 ease-soft motion-reduce:transition-none",
+            collapsed ? "bottom-0 left-full ml-2 origin-bottom-left" : "inset-x-0 bottom-full mb-2 w-auto origin-bottom",
+            open ? "visible translate-y-0 scale-100 opacity-100" : "invisible translate-y-1 scale-[0.97] opacity-0",
           )}
         >
           <ul className="flex flex-col gap-0.5">
@@ -122,7 +127,6 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
             </li>
           </ul>
         </div>
-      )}
     </div>
   );
 }

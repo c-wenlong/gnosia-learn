@@ -323,6 +323,40 @@
 }
 
 /*
+ * Motion (docs/design/IMPLEMENTATION.md, "Motion"). One easing, the curve
+ * `Collapse` has always used, and three ways in for something that mounts:
+ * `animate-enter` (fade and a 6px rise, for content: a new message, a step,
+ * a page), `animate-pop-in` (fade and a slight scale, for a menu or a
+ * popover) and `animate-fade-in` (opacity only, for a swap in place). Each
+ * fills `backwards`, never `both`, so no transform is left on the element
+ * afterwards to become a containing block for its fixed descendants.
+ */
+@theme {
+  --ease-soft: cubic-bezier(0.2, 0, 0, 1);
+  --animate-enter: enter 200ms var(--ease-soft) backwards;
+  --animate-pop-in: pop-in 150ms var(--ease-soft) backwards;
+  --animate-fade-in: fade-in 150ms ease-out backwards;
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      translate: 0 6px;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      scale: 0.97;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+/*
  * Every token is also a Tailwind colour of the same name, so a component can
  * write `bg-surface2 text-text2 border-border` instead of
  * `bg-[var(--surface2)]`. `inline` keeps the utility pointing at the variable,
@@ -702,5 +736,25 @@ body {
 
   .gnosia-rise-3 {
     animation-delay: 0.24s;
+  }
+}
+
+/* The safety net under every `motion-reduce:` in the components: a reader who
+   asked for less movement gets every transition and animation finished at
+   once, including one a component forgot to guard, or whose responsive
+   variant (`md:transition-[width]`) outranks its `motion-reduce:` class.
+   0.01ms rather than none, so `transitionend` and `animationend` still fire
+   for code that waits on them. A still bar that means "running" opts out on
+   its own, above. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
