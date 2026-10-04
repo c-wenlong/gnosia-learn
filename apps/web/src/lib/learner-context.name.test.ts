@@ -64,4 +64,29 @@ describe("setDisplayName", () => {
     });
     expect(container.textContent).toBe("Grace");
   });
+
+  it("leaves a name saved elsewhere meanwhile, which is newer than this one", async () => {
+    let answer: (response: Response) => void = () => undefined;
+    const fetcher = vi.fn(() => new Promise<Response>((resolve) => (answer = resolve)));
+    vi.stubGlobal("fetch", fetcher);
+    const container = document.createElement("div");
+    root = createRoot(container);
+    const draw = (state: LearnerState) =>
+      act(() => root!.render(createElement(LearnerProvider, { initialState: state, reachable: true } as ComponentProps<typeof LearnerProvider>, createElement(Name))));
+    draw({ ...emptyLearnerState(), displayName: "Ada" });
+
+    let saved: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      saved = held.setDisplayName!("Grace");
+    });
+    // Another tab saved after this write, and a refresh brought it here.
+    draw({ ...emptyLearnerState(), displayName: "Hopper" });
+
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      answer(new Response(JSON.stringify({ ok: true, result: "Grace" }), { status: 200 }));
+      expect(await saved).toBe(true);
+    });
+    expect(container.textContent).toBe("Hopper");
+  });
 });

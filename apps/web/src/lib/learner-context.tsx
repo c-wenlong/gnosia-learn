@@ -249,6 +249,7 @@ export function LearnerProvider({
     (name: string) => {
       const cleaned = cleanDisplayName(name);
       const mine = ++nameWrites.current;
+      const before = current.current.displayName ?? null;
       const named = (previous: LearnerState) => {
         const next = { ...previous };
         if (cleaned === null) delete next.displayName;
@@ -258,8 +259,11 @@ export function LearnerProvider({
       return commit("name", named, () => post("name", { name: cleaned })).then((ok) => {
         // A refresh that landed while the write was in flight carried the row
         // from before it, and the provider adopted that. The write is the
-        // newer fact, so the newest save puts its name back once it is stored.
-        if (ok && mine === nameWrites.current && (current.current.displayName ?? null) !== cleaned) {
+        // newer fact, so the newest save puts its name back once it is stored,
+        // but only over the name from before it: any other name came from a
+        // save elsewhere (another tab) and is newer still.
+        const shown = current.current.displayName ?? null;
+        if (ok && mine === nameWrites.current && shown === before && shown !== cleaned) {
           const next = named(current.current);
           current.current = next;
           setState(next);
