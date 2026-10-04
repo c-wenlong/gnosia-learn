@@ -10,6 +10,7 @@ import { cx } from "@/components/ui/classes";
 import { AssetThumb } from "@/components/workspace/AssetThumb";
 import type { CheckStatus, ConceptWorkspace } from "@/lib/concept-workspace-core";
 import { historyBars } from "@/lib/concept-workspace-core";
+import { courseGraphHref } from "@/lib/learn-index";
 import { assetHref } from "@/lib/library";
 
 /**
@@ -158,7 +159,7 @@ export function StudioCards({
           />
         </div>
         <span className="mt-1">
-          <Button variant="secondary" size="sm" href={`/learn?concept=${w.slug}&view=graph`}>
+          <Button variant="secondary" size="sm" href={courseGraphHref(w.slug)}>
             Open full course graph
           </Button>
         </span>

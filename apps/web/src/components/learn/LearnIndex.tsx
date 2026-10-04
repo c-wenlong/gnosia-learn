@@ -18,6 +18,7 @@ import type { MapLayout } from "@/lib/concept-map";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
   bucketCounts,
+  indexSearch,
   matchesFilter,
   matchesQuery,
   statusFilterOptions,
@@ -34,8 +35,9 @@ import {
  * The rows arrive with every label worked out on the server; filtering,
  * searching and picking a row happen here, with no round trip. The selection,
  * the view and the scope are mirrored into the query string with
- * `history.replaceState`, so "Open full course graph" in the workspace can
- * link straight to a concept's course graph and a reload keeps the place.
+ * `history.replaceState` (`indexSearch`), so "Open full course graph" in the
+ * workspace can link straight to a concept's course on the map and a reload
+ * keeps the place.
  */
 
 export function LearnIndex({
@@ -56,13 +58,7 @@ export function LearnIndex({
   const [selected, setSelected] = useState(initial.selected);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const set = (key: string, value: string | null) => (value === null ? params.delete(key) : params.set(key, value));
-    set("concept", selected);
-    set("view", view === "table" ? null : view);
-    set("scope", scope === (view === "graph" ? "course" : "neighbourhood") ? null : scope);
-    set("filter", filter === "all" ? null : filter);
-    const search = params.toString();
+    const search = indexSearch({ selected, view, scope, filter }, window.location.search);
     const next = `${window.location.pathname}${search ? `?${search}` : ""}`;
     if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(null, "", next);
   }, [selected, view, scope, filter]);
@@ -104,7 +100,7 @@ export function LearnIndex({
           <Chip active={view === "table"} onClick={() => { setView("table"); setScope("neighbourhood"); }}>
             Table
           </Chip>
-          <Chip active={view === "graph"} onClick={() => { setView("graph"); setScope("course"); }}>
+          <Chip active={view === "graph"} onClick={() => { setView("graph"); setScope("island"); }}>
             Graph
           </Chip>
         </div>
@@ -123,7 +119,7 @@ export function LearnIndex({
           />
         </div>
       ) : (
-        <MapCard layout={map} nodes={nodes} focus={focus} onSelect={setSelected} />
+        <MapCard layout={map} nodes={nodes} edges={edges} focus={focus} scope={scope} onScope={setScope} onSelect={setSelected} />
       )}
     </div>
   );
@@ -219,18 +215,25 @@ function ConceptTable({
 }
 
 /**
- * The Graph view: every concept on one map (phase 1 of
- * docs/proposals/knowledge-map.md), the selected one ringed.
+ * The Graph view: every concept on one map (docs/proposals/knowledge-map.md),
+ * the selected one ringed, opened fitted to its island, neighbourhood or
+ * course (the URL's `scope`).
  */
 function MapCard({
   layout,
   nodes,
+  edges,
   focus,
+  scope,
+  onScope,
   onSelect,
 }: {
   layout: MapLayout;
   nodes: GraphNode[];
+  edges: GraphEdge[];
   focus: IndexRow | null;
+  scope: GraphScope;
+  onScope: (scope: GraphScope) => void;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -247,7 +250,15 @@ function MapCard({
           </Link>
         </p>
       )}
-      <ConceptMap layout={layout} nodes={nodes} selected={focus?.id ?? null} onSelect={onSelect} className="max-h-[70vh] min-h-[440px]" />
+      <ConceptMap
+        layout={layout}
+        nodes={nodes}
+        edges={edges}
+        selected={focus?.id ?? null}
+        onSelect={onSelect}
+        scope={scope}
+        onScope={onScope}
+      />
       <ConceptGraphKey />
     </Card>
   );
