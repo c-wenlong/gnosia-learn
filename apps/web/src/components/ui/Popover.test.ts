@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import { Dialog, type DialogProps } from "./Dialog";
 import { FilterMenu } from "./FilterMenu";
+import { Menu as KitMenu, MenuItem } from "./Menu";
 import { Popover, type PopoverCloseReason } from "./Popover";
 import { Select } from "./Select";
 
@@ -264,12 +265,17 @@ describe("Popover's placement", () => {
 
 describe("Popover's Escape inside the kit Dialog", () => {
   // jsdom's dialog neither opens itself nor turns an Escape into a close
-  // request. A browser does both: `showModal()` opens it, and an Escape
-  // keydown nobody cancelled is followed by a `cancel` event on the open
-  // modal dialog, which the kit Dialog answers with `onClose`.
-  const closeRequest = (event: KeyboardEvent) => {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
-    document.querySelector("dialog[open]")?.dispatchEvent(new Event("cancel", { cancelable: true }));
+  // request. A browser does both: `showModal()` opens it, and once an Escape
+  // keydown has been dispatched, its default action, when nobody cancelled it
+  // (stopping it does not count), is a `cancel` event on the open modal
+  // dialog, which the kit Dialog answers with `onClose`.
+  const escapeAsBrowser = () => {
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => {
+      (document.activeElement ?? document.body).dispatchEvent(event);
+      if (!event.defaultPrevented) document.querySelector("dialog[open]")?.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+    return event;
   };
   beforeAll(() => {
     // Left in place: the dialogs are unmounted, and closed, after this block's hooks.
@@ -281,35 +287,42 @@ describe("Popover's Escape inside the kit Dialog", () => {
       this.removeAttribute("open");
     };
   });
-  beforeEach(() => window.addEventListener("keydown", closeRequest));
-  afterEach(() => window.removeEventListener("keydown", closeRequest));
 
   const options = [
     { value: "a", label: "A" },
     { value: "b", label: "B" },
   ];
-  const cases: Array<[string, ReactNode]> = [
-    ["a Select", createElement(Select<string>, { label: "Motion", options, value: "a", onChange: () => undefined })],
-    ["a FilterMenu", createElement(FilterMenu<string>, { label: "Type", options, value: "a", defaultValue: "a", onChange: () => undefined })],
+  const cases: Array<[string, ReactNode, "listbox" | "menu"]> = [
+    ["a Select", createElement(Select<string>, { label: "Motion", options, value: "a", onChange: () => undefined }), "listbox"],
+    ["a FilterMenu", createElement(FilterMenu<string>, { label: "Type", options, value: "a", defaultValue: "a", onChange: () => undefined }), "listbox"],
+    [
+      "a Menu",
+      createElement(
+        KitMenu,
+        { label: "More actions", trigger: "More", triggerClassName: "" } as ComponentProps<typeof KitMenu>,
+        createElement(MenuItem, { onSelect: () => undefined } as ComponentProps<typeof MenuItem>, "Copy link"),
+      ),
+      "menu",
+    ],
   ];
 
-  for (const [name, menu] of cases) {
+  for (const [name, menu, role] of cases) {
     it(`closes ${name} on the first Escape and leaves the dialog open; the next one asks the dialog to close`, () => {
       const onClose = vi.fn();
-      const { escape } = mount(createElement(Dialog, { label: "Settings", onClose, children: menu } satisfies DialogProps));
+      mount(createElement(Dialog, { label: "Settings", onClose, children: menu } satisfies DialogProps));
       const dialog = document.querySelector("dialog")!;
-      const trigger = dialog.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
+      const trigger = dialog.querySelector<HTMLButtonElement>(`button[aria-haspopup="${role}"]`)!;
       act(() => trigger.click());
-      const list = dialog.querySelector('[role="listbox"]')!;
-      expect(document.activeElement).toBe(list);
+      const list = dialog.querySelector(`[role="${role}"]`)!;
+      expect(list.contains(document.activeElement)).toBe(true);
 
-      expect(escape().defaultPrevented).toBe(true);
+      expect(escapeAsBrowser().defaultPrevented).toBe(true);
       expect(trigger.getAttribute("aria-expanded")).toBe("false");
       expect(document.activeElement).toBe(trigger);
       expect(onClose).not.toHaveBeenCalled();
       expect(dialog.open).toBe(true);
 
-      escape();
+      escapeAsBrowser();
       expect(onClose).toHaveBeenCalledTimes(1);
     });
   }

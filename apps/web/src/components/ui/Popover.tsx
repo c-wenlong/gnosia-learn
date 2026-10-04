@@ -83,6 +83,7 @@ function usePlace(
   panel: RefObject<HTMLElement | null>,
   placement: PopoverPlacement,
   minWidthFromAnchor: boolean,
+  leastWidth: number | undefined,
 ): Placed | null {
   const [place, setPlace] = useState<Placed | null>(null);
 
@@ -102,7 +103,8 @@ function usePlace(
       const at = anchor.current?.getBoundingClientRect();
       if (at === undefined || box === null) return;
       const root = document.documentElement;
-      const minWidth = minWidthFromAnchor ? at.width : undefined;
+      const fromAnchor = minWidthFromAnchor ? at.width : undefined;
+      const minWidth = leastWidth === undefined ? fromAnchor : Math.max(leastWidth, fromAnchor ?? 0);
       // The panel's own cap, min(30rem, 70vh), as MENU_PANEL's max-h has it.
       const rem = parseFloat(getComputedStyle(root).fontSize) || 16;
       const cap = Math.min(30 * rem, 0.7 * window.innerHeight);
@@ -139,7 +141,7 @@ function usePlace(
       window.removeEventListener("scroll", measure, { capture: true });
       sized?.disconnect();
     };
-  }, [open, anchor, panel, placement, minWidthFromAnchor]);
+  }, [open, anchor, panel, placement, minWidthFromAnchor, leastWidth]);
 
   return place;
 }
@@ -150,8 +152,9 @@ function usePlace(
 
 /**
  * Kit `Popover`: the box every menu opens in. `FilterMenu`'s list (chip and
- * field faces, so `Select` too), `Combobox`'s suggestions, the account menu
- * and the studio's Sort, Display and topic menus.
+ * field faces, so `Select` too), `Combobox`'s suggestions, the kit `Menu`
+ * (the Library's view options and row and card menus), the account menu and
+ * the studio's Sort, Display and topic menus.
  *
  * It owns where the box is and when it goes, and nothing about what is in
  * it: the caller renders the trigger, the rows and their keyboard, and holds
@@ -191,6 +194,7 @@ export function Popover({
   onOpenChange,
   placement = "bottom-start",
   minWidthFromAnchor = false,
+  minWidth,
   returnFocusRef,
   ref,
   id,
@@ -208,6 +212,8 @@ export function Popover({
   placement?: PopoverPlacement;
   /** At least as wide as the anchor: a field's list. */
   minWidthFromAnchor?: boolean;
+  /** At least this wide, in px: a `Menu`'s 192 or a row menu's 240. */
+  minWidth?: number;
   /** Where Escape sends the focus back to, when the anchor is not focusable itself (a field's wrapper). */
   returnFocusRef?: RefObject<HTMLElement | null>;
   ref?: Ref<HTMLDivElement>;
@@ -222,7 +228,7 @@ export function Popover({
     [ref],
   );
   const presence = usePresence(open, EXIT_MS);
-  const place = usePlace(open, anchorRef, panel, placement, minWidthFromAnchor);
+  const place = usePlace(open, anchorRef, panel, placement, minWidthFromAnchor, minWidth);
 
   const close = useEffectEvent((reason: PopoverCloseReason) => onOpenChange(false, reason));
   const escape = useEffectEvent(() => {
@@ -256,7 +262,7 @@ export function Popover({
   const asked = placementParts(placement);
   const style: CSSProperties =
     place === null
-      ? { top: 0, left: 0 }
+      ? { top: 0, left: 0, minWidth }
       : {
           top: place.top,
           left: place.left,

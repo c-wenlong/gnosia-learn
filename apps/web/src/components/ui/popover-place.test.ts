@@ -100,3 +100,37 @@ describe("popoverOrigin", () => {
     expect(placementParts("bottom-start")).toEqual({ side: "bottom", align: "start" });
   });
 });
+
+describe("popoverPlacement, a menu button's at the kit Menu's old 6px gap and 8px gutter", () => {
+  // The cases `menuPlacement` was tested with before the kit `Menu` moved onto
+  // the `Popover`: the same numbers come out of `popoverPlacement`.
+  const viewport = { width: 1000, height: 800 };
+  const button = { top: 100, bottom: 132, left: 900, right: 932 };
+  const place = (anchor: typeof button, placement: "bottom-end" | "bottom-start", height = 300) =>
+    popoverPlacement({ anchor, placement, width: 240, height, viewport, gap: 6, gutter: 8 });
+
+  it("opens under the button with its end edge on the button's", () => {
+    expect(place(button, "bottom-end")).toEqual({ top: 138, left: 692, side: "bottom", align: "end", maxHeight: 800 - 8 - 138 });
+  });
+
+  it("lines up its start edge for bottom-start, and moves in from either edge of the screen", () => {
+    expect(place(button, "bottom-start").left).toBe(1000 - 8 - 240);
+    expect(place({ ...button, left: 0, right: 32 }, "bottom-end").left).toBe(8);
+  });
+
+  it("opens above when it does not fit under and there is more room above", () => {
+    expect(place({ top: 700, bottom: 732, left: 900, right: 932 }, "bottom-end")).toEqual({
+      top: 700 - 6 - 300,
+      left: 692,
+      side: "top",
+      align: "end",
+      maxHeight: 700 - 6 - 8,
+    });
+  });
+
+  it("stays under when neither side fits but under has more room, and caps its height there", () => {
+    const placed = place(button, "bottom-end", 2000);
+    expect(placed.side).toBe("bottom");
+    expect(placed.maxHeight).toBe(654);
+  });
+});
