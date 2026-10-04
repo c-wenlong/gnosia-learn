@@ -146,17 +146,20 @@ function ConceptTable({
 }) {
   const th = cx("px-3 py-2.5 sm:px-4 text-left", LABEL);
   return (
-    <div className="min-w-0 overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+    // The columns follow the table's own width, not the window's: beside the
+    // app sidebar and the graph panel a 1280px window leaves the table about
+    // 570px, and window breakpoints squeezed the concept column to nothing.
+    <div className="@container min-w-0 overflow-hidden rounded-[20px] border-2 border-border bg-surface">
       <div className="overflow-x-auto">
         <table className="w-full table-fixed border-collapse">
           <caption className="sr-only">Concepts, {rows.length} of {total} shown. Choose a row to show its graph.</caption>
           <thead>
             <tr className="border-b border-hair">
               <th scope="col" className={th}>Concept</th>
-              <th scope="col" className={cx(th, "w-[64px] sm:w-[236px]")}>Mastery</th>
+              <th scope="col" className={cx(th, "w-[64px] @lg:w-[236px]")}>Mastery</th>
               <th scope="col" className={cx(th, "w-[92px]")}>Due</th>
-              <th scope="col" className={cx(th, "hidden w-[112px] md:table-cell")}>Last seen</th>
-              <th scope="col" className={cx(th, "hidden w-[124px] md:table-cell")}>Course</th>
+              <th scope="col" className={cx(th, "hidden w-[112px] @3xl:table-cell")}>Last seen</th>
+              <th scope="col" className={cx(th, "hidden w-[124px] @3xl:table-cell")}>Course</th>
             </tr>
           </thead>
           <tbody>
@@ -197,7 +200,7 @@ function ConceptTable({
                     {/* The width goes on the wrapper, not the bar: the bar's own
                         w-full wins over a width passed in className, and inside
                         a flex row that left this span sized to nothing. */}
-                    <span className="hidden w-[160px] shrink-0 sm:block">
+                    <span className="hidden w-[160px] shrink-0 @lg:block">
                       <ProgressBar
                         percent={r.bucket === "untouched" ? 0 : r.pL * 100}
                         size="sm"
@@ -211,8 +214,8 @@ function ConceptTable({
                 <td className={cx("px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap", r.overdue ? "text-danger" : "text-text2")}>
                   {r.dueLabel}
                 </td>
-                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 md:table-cell">{r.lastSeenLabel}</td>
-                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 md:table-cell">{r.courseLabel ?? "–"}</td>
+                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 @3xl:table-cell">{r.lastSeenLabel}</td>
+                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 @3xl:table-cell">{r.courseLabel ?? "–"}</td>
               </tr>
             ))}
           </tbody>

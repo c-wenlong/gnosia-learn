@@ -826,7 +826,9 @@ async function run() {
 
   await step('sign out: /home answers 307 afterwards', page, async () => {
     await go('/home');
-    await clickHydrated(page, page.getByRole('button', { name: 'Account and settings' }));
+    // The sidebar's account row: named "Account" when the sidebar is open and
+    // "Account and settings" when it is folded to a rail.
+    await clickHydrated(page, page.getByRole('button', { name: /account/i }).first());
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL(`${base}/`);
     const after = await page.request.get(`${base}/home`, { maxRedirects: 0 });
