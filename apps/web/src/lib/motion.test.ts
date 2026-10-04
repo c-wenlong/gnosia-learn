@@ -8,6 +8,7 @@ import {
   motionAttribute,
   prefersReducedMotion,
   readMotionCookie,
+  scrollBehavior,
   writeMotionCookie,
 } from "@/lib/motion";
 
@@ -71,5 +72,41 @@ describe("globals.css", () => {
     expect(css).toMatch(/@custom-variant motion-safe \{[^]*?:not\(\[data-motion="reduce"\]\)/);
     // The safety net that finishes every transition and animation at once.
     expect(css).toMatch(/:root\[data-motion="reduce"\] \*,[^{]*\{[^}]*transition-duration: 0\.01ms !important/);
+  });
+});
+
+describe("scrollBehavior", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.motion;
+  });
+
+  it("glides unless either source asks for stillness", () => {
+    expect(scrollBehavior()).toBe("smooth");
+    document.documentElement.dataset.motion = "reduce";
+    expect(scrollBehavior()).toBe("auto");
+  });
+});
+
+describe("one place asks whether to keep still", () => {
+  it("leaves no script reading the device's setting alone, which would ignore Settings' Always", async () => {
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join, relative } = await import("node:path");
+    const src = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
+          const text = readFileSync(path, "utf8");
+          const rel = relative(src, path);
+          if (rel !== join("lib", "motion.ts") && /matchMedia\(\s*["'`]\(prefers-reduced-motion/.test(text)) offenders.push(rel);
+          if (/behavior:\s*["']smooth["']/.test(text)) offenders.push(`${rel} (a hard-coded smooth scroll; use scrollBehavior())`);
+        }
+      }
+    };
+    walk(src);
+    expect(offenders).toEqual([]);
   });
 });

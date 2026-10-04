@@ -10,6 +10,8 @@
  * strings. The pieces that hold state are in `motion-parts.tsx`.
  */
 
+import { prefersReducedMotion } from "@/lib/motion";
+
 /** How long `Collapse` takes to fold (its `duration-300`). */
 export const FOLD_MS = 300;
 
@@ -20,8 +22,10 @@ export const FADE_IN = "animate-fade-in motion-reduce:animate-none";
 /** A fade and a slight scale, for a menu, a popover or a card that appears. */
 export const POP_IN = "animate-pop-in motion-reduce:animate-none";
 
-/** Whether the reader asked for less motion. False where there is no window to ask. */
+/**
+ * Whether to keep still: the device's setting or Settings' "Always reduce
+ * motion" (`prefersReducedMotion` in lib/motion.ts). False on the server.
+ */
 export function reducedMotion(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return prefersReducedMotion();
 }

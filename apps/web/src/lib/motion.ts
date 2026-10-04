@@ -90,3 +90,8 @@ export function prefersReducedMotion(
   if (env.root?.dataset.motion === "reduce") return true;
   return env.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
+
+/** `smooth`, or `auto` (an instant jump) while still (`prefersReducedMotion`): for `scrollTo` and `scrollIntoView`. */
+export function scrollBehavior(): ScrollBehavior {
+  return prefersReducedMotion() ? "auto" : "smooth";
+}

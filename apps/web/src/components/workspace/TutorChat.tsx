@@ -16,7 +16,7 @@ import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import type { MentionValue } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { CitationSource } from "@/lib/agent/prompt";
-import { prefersReducedMotion } from "@/lib/reduced-motion";
+import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
 import type { DraftKind } from "@/lib/studio-drafts";
 import { HEALTH_READ_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-studio";
 import {
@@ -272,7 +272,7 @@ export function TutorChat({
     if (!box) return;
     const glide = scrolledOnce.current && turns.length > 0 && !prefersReducedMotion();
     scrolledOnce.current = turns.length > 0;
-    if (glide) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+    if (glide) box.scrollTo({ top: box.scrollHeight, behavior: scrollBehavior() });
     else box.scrollTop = box.scrollHeight;
   }, [turns.length, busy]);
 

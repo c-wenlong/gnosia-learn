@@ -33,7 +33,7 @@ import {
   type WeekCheckOutcome,
   type WeekCheckPlan,
 } from "@/lib/week-check";
-import { scrollBehavior } from "@/lib/reduced-motion";
+import { scrollBehavior } from "@/lib/motion";
 
 import { SessionClose } from "./SessionClose";
 
