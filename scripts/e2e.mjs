@@ -1109,12 +1109,13 @@ async function run() {
     await page.waitForURL((url) => url.searchParams.get('view') === 'list' && url.searchParams.get('sort') === 'title');
     assert(new URL(page.url()).searchParams.get('kind') === 'note', `the list lost the type: ${page.url()}`);
     // The rows are grouped by the day they arrived, and the sort orders the
-    // rows inside each day. A row's name is its first line, after a
-    // screen-reader-only "Note: ".
+    // rows inside each day. A row's name follows a screen-reader-only "Note: ".
     const days = await main.getByRole('region', { name: 'Assets' }).locator('section ul').evaluateAll((lists) =>
       lists.map((list) =>
-        [...list.querySelectorAll(':scope > li a > span > span:nth-child(2) > span:first-child')].map((name) =>
-          [...name.childNodes]
+        // Since Library phase 2 (#390) the name is the row's link itself, the
+        // first in the row (a source line can link too, after it).
+        [...list.querySelectorAll(':scope > li')].map((item) =>
+          [...(item.querySelector('a')?.childNodes ?? [])]
             .filter((n) => !(n instanceof Element && n.classList.contains('sr-only')))
             .map((n) => n.textContent)
             .join('')
