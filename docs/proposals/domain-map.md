@@ -90,6 +90,21 @@ search counts matches per domain and dims the cards with none; Enter opens
 the best match in its domain. Inside a domain, a filter or a search dims the
 concepts it would hide, as the island map did.
 
+**D9. The legend's chips preview, and a press commits.** Over the picture
+sits a chip per group: Mastered, Learning, Not started and Ready to learn,
+each with its swatch (the mastery dot, or the dashed ready ring) and how many
+of the concepts on screen are in it, the domain's or the open topic's,
+counted whatever the search, as the Status menu counts. Hovering or focusing
+a chip keeps that group lit and fades the rest, as a topic's title does
+(D5), and writes nothing to the URL; a chip whose count is 0 previews
+nothing rather than fading the whole picture. Pressing it sets the Status filter to
+that group, so the menu, the chip's pressed state and the URL are one state;
+pressing it again clears the filter to all. A filter with no chip (due,
+keeps slipping, not in a course) leaves none pressed. A press settles the
+preview, so what shows after it is the filter alone, until the pointer or
+the focus comes back. The chips wrap, so a phone does not scroll sideways.
+Taken from [ResearchRabbit's legend](../design/reference/researchrabbit/graph.md).
+
 ## Phases
 
 | Phase | What ships | Done when |
