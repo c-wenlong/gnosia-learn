@@ -627,7 +627,7 @@ function Field<K extends string>({
       const current = menuRef.current;
       if (current === null) return false;
       event.preventDefault();
-      openMenu({ ...current, active: moveActive(current.options, current.active, delta) });
+      openMenu({ ...current, active: moveActive(current.options, current.active, delta, isUsable) });
       return true;
     };
     const choose = (event: KeyboardEvent | null) => {

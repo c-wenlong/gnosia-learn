@@ -5,6 +5,7 @@ import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "rea
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { cx } from "@/components/ui/classes";
+import { tabKeyIndex } from "@/components/ui/roving";
 import { useMediaQuery } from "@/components/ui/use-media-query";
 
 import { parseSettingsTab, settingsHref, type SettingsTab } from "./tabs";
@@ -50,11 +51,8 @@ export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const index = sections.findIndex((section) => section.id === selected);
-    let next = -1;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % sections.length;
-    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + sections.length) % sections.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = sections.length - 1;
+    // Either pair of arrows, since the row turns into a column at `xl`.
+    const next = tabKeyIndex(event.key, index, sections.length, "both", true);
     if (next < 0) return;
     event.preventDefault();
     choose(sections[next].id);
