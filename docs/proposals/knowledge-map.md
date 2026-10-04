@@ -1,9 +1,8 @@
 # Proposal: the Learn page is a map of what you know
 
-Status: being built in phases, 2026-10-04. Phases 1 (the layout) and 2 (the
-viewer) are built.
-Decisions G1 to G8 are the build's defaults; G1 revises decision 13 of
-[DESIGN.md](../design/DESIGN.md) and is the owner's to confirm.
+Status: built, 2026-10-04: all four phases. Decisions G1 to G8 stand as
+written; G1 revised decision 13 of [DESIGN.md](../design/DESIGN.md), whose
+row now says so.
 
 ## The problem
 

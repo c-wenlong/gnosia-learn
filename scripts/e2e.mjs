@@ -579,8 +579,22 @@ async function run() {
     await main.getByRole('link', { name: 'All reviews' }).waitFor();
   });
 
-  await step('learn: /learn renders the concept table', page, async () => {
+  // G1 of docs/proposals/knowledge-map.md: the map is the default view, the
+  // table one press away, and each says so in the URL.
+  await step('learn: /learn opens on the map, and the table is one press away', page, async () => {
     await go('/learn');
+    await main.getByRole('group', { name: /^Concept map/ }).waitFor();
+    assert(!new URL(page.url()).searchParams.has('view'), 'the default view wrote view= into the URL');
+    await clickHydrated(page, main.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Table' }));
+    await main.getByRole('table').waitFor();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('view') === 'table');
+    await page.reload({ waitUntil: 'load' });
+    await main.getByRole('table').waitFor();
+    assert((await main.getByRole('group', { name: /^Concept map/ }).count()) === 0, 'the table view also drew the map');
+  });
+
+  await step('learn: /learn renders the concept table', page, async () => {
+    await go('/learn?view=table');
     const table = main.getByRole('table');
     await table.getByRole('columnheader', { name: 'Concept' }).waitFor();
     // The Status menu opens on its listbox and closes on Escape, focus back on the trigger.
@@ -747,6 +761,56 @@ async function run() {
     await clickHydrated(page, main.getByRole('button', { name: /^Status:/ }));
     await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^All\b/ }).click();
     assert((await map.locator('[data-concept][data-dim="true"]').count()) === 0, 'All left concepts dimmed');
+  });
+
+  // Phase 4: every concept on the map can be reached with the keyboard alone.
+  await step('learn: the map can be walked with the keyboard alone', page, async () => {
+    await go('/learn?concept=vector-as-a-list-of-numbers');
+    const map = main.getByRole('group', { name: /^Concept map/ });
+    await map.waitFor();
+    await hydrated(page, map.locator('[data-island-focus]').first());
+    const active = () =>
+      page.evaluate(() => {
+        const el = document.activeElement;
+        return { island: el?.hasAttribute('data-island-focus') ?? false, concept: el?.getAttribute('data-concept') ?? null };
+      });
+    // Tab from the top of the page until an island takes the focus.
+    await page.locator('body').click({ position: { x: 1, y: 1 } });
+    let at = await active();
+    for (let i = 0; i < 60 && !at.island; i++) {
+      await page.keyboard.press('Tab');
+      at = await active();
+    }
+    assert(at.island, 'Tab never reached an island');
+    await page.waitForFunction(() => document.querySelector('[aria-label^="Concept map"]')?.getAttribute('data-fit') === 'island');
+    // A screen reader hears what the map holds and how to move on it.
+    const summary = await map.evaluate((el) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent ?? '');
+    assert(/Tab/.test(summary) && /table/i.test(summary), `the map's description is ${JSON.stringify(summary)}`);
+
+    // Enter goes in at the first concept; the arrows walk from there.
+    await page.keyboard.press('Enter');
+    at = await active();
+    assert(at.concept === 'vector-as-a-list-of-numbers', `Enter went in at ${at.concept}, not the top concept`);
+    await page.keyboard.press('ArrowDown');
+    at = await active();
+    assert(['dot-product', 'softmax', 'query-key-value-projections'].includes(at.concept), `ArrowDown went to ${at.concept}`);
+    await page.keyboard.press('ArrowUp');
+    assert((await active()).concept === 'vector-as-a-list-of-numbers', 'ArrowUp did not come back to the prerequisite');
+    const seen = new Set(['vector-as-a-list-of-numbers']);
+    for (let i = 0; i < 30; i++) {
+      await page.keyboard.press('ArrowRight');
+      seen.add((await active()).concept);
+    }
+    const total = await map.locator('[data-concept]').count();
+    assert(seen.size === total, `the arrow keys reached ${seen.size} of ${total} concepts`);
+
+    // Enter on a concept selects it and opens its panel; Escape goes back to the island.
+    const last = (await active()).concept;
+    await page.keyboard.press('Enter');
+    await page.waitForFunction((slug) => new URL(location.href).searchParams.get('concept') === slug, last);
+    await main.getByRole('region', { name: 'Concept details' }).getByRole('heading').first().waitFor();
+    await page.keyboard.press('Escape');
+    assert((await active()).island, 'Escape did not go back to the island');
   });
 
   await step('learn: the map works on a phone', page, async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
@@ -9,6 +9,7 @@ import { wrapLabel, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
 import type { MapLayout } from "@/lib/concept-map";
 import type { GraphScope } from "@/lib/learn-index";
 import { fitView, labelsShown, panView, scaleOf, scopeBox, titleFits, zoomView, type View } from "@/lib/map-viewport";
+import { firstConcept, keyTarget, mapSummary } from "@/lib/map-keys";
 import { arcLength } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 
@@ -118,6 +119,7 @@ export function ConceptMap({
   className?: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const summaryId = useId();
   const boxOf = useCallback(
     (to: GraphScope | "all") => scopeBox(layout, nodes, edges, to, selected),
     [layout, nodes, edges, selected],
@@ -193,6 +195,65 @@ export function ConceptMap({
     },
     [layout, animateTo],
   );
+
+  /** Fit one island, whichever concept is selected: where Tab lands. */
+  const fitIsland = useCallback(
+    (islandId: string) => {
+      const first = firstConcept(layout, islandId);
+      if (first === null) return;
+      setFit("island");
+      animateTo(fitView(scopeBox(layout, nodes, edges, "island", first), aspect(), 40, widthPx()));
+    },
+    [layout, nodes, edges, animateTo],
+  );
+
+  /** Move the keyboard focus to a concept, panning only when it is off screen. */
+  const focusConcept = useCallback(
+    (id: string) => {
+      const el = svgRef.current?.querySelector<SVGGElement>(`[data-concept="${CSS.escape(id)}"]`);
+      el?.focus({ preventScroll: true });
+      const p = layout.positions[id];
+      const v = live.current;
+      const margin = v.w * 0.08;
+      if (p && (p.x < v.x + margin || p.x > v.x + v.w - margin || p.y < v.y + margin || p.y > v.y + v.h - margin)) {
+        setFit("");
+        animateTo({ ...v, x: p.x - v.w / 2, y: p.y - v.h / 2 });
+      }
+    },
+    [layout, animateTo],
+  );
+
+  const focusIsland = (islandId: string) =>
+    svgRef.current?.querySelector<SVGGElement>(`[data-island-focus="${CSS.escape(islandId)}"]`)?.focus({ preventScroll: true });
+
+  const onConceptKey = (event: React.KeyboardEvent, id: string) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect(id);
+      return;
+    }
+    const islandId = layout.islandOf[id];
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (islandId !== undefined) focusIsland(islandId);
+      return;
+    }
+    if (event.key === "Tab") {
+      // Tab leaves the island for the next one; Shift Tab goes back to this island's title.
+      const index = layout.islands.findIndex((i) => i.id === islandId);
+      const next = event.shiftKey ? layout.islands[index] : layout.islands[index + 1];
+      if (next !== undefined) {
+        event.preventDefault();
+        focusIsland(next.id);
+      }
+      return;
+    }
+    if (event.key.startsWith("Arrow")) {
+      event.preventDefault();
+      const to = keyTarget(layout, edges, id, event.key);
+      if (to !== id) focusConcept(to);
+    }
+  };
 
   // The first frame was drawn at an assumed shape; fit again at the real one,
   // and keep the scale and centre when the box is resized.
@@ -362,6 +423,7 @@ export function ConceptMap({
           ref={svgRef}
           viewBox={viewBoxOf(view)}
           role="group"
+          aria-describedby={summaryId}
           aria-label={`Concept map, ${count} concept${count === 1 ? "" : "s"} in ${layout.islands.length} island${layout.islands.length === 1 ? "" : "s"}`}
           data-fit={fit}
           data-labels={labelsShown(scale) ? "shown" : "hidden"}
@@ -377,6 +439,33 @@ export function ConceptMap({
           {layout.islands.map((i) => (
             <g key={i.id} data-island={i.id}>
               <title>{i.title}</title>
+              {/* One tab stop per island (phase 4): focusing it fits the island, Enter goes in. */}
+              <g
+                data-island-focus={i.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`${i.title}, ${i.nodes.length} concept${i.nodes.length === 1 ? "" : "s"}. Enter to go in.`}
+                className="outline-none [&:focus-visible>rect]:stroke-accent"
+                onFocus={() => fitIsland(i.id)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  const first = firstConcept(layout, i.id);
+                  if (first !== null) focusConcept(first);
+                }}
+              >
+                <rect
+                  x={i.x - 4}
+                  y={i.y - layout.titleHeight}
+                  width={i.width + 8}
+                  height={i.height + layout.titleHeight + 4}
+                  rx={18}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={3}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </g>
               <rect x={i.x} y={i.y} width={i.width} height={i.height} rx={16} className="fill-surface stroke-hair" strokeWidth={1} />
               <text
                 data-island-title
@@ -442,7 +531,8 @@ export function ConceptMap({
                 data-overdue={mark?.overdue ?? false}
                 data-leech={mark?.leech ?? false}
                 role="button"
-                tabIndex={0}
+                // Out of the tab order: Tab moves between islands, the arrows between concepts.
+                tabIndex={-1}
                 aria-label={caption}
                 aria-pressed={isFocus}
                 className={cx(
@@ -450,12 +540,7 @@ export function ConceptMap({
                   dim && "opacity-20",
                 )}
                 onClick={() => onSelect(id)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onSelect(id);
-                  }
-                }}
+                onKeyDown={(event) => onConceptKey(event, id)}
               >
                 <title>{caption}</title>
                 {mark?.ready && (
@@ -496,6 +581,9 @@ export function ConceptMap({
             );
           })}
         </svg>
+        <p id={summaryId} className="sr-only">
+          {mapSummary(layout)}
+        </p>
         <div className="absolute bottom-3 left-3 flex gap-1.5">
           <Button variant="secondary" size="sm" aria-label="Zoom in" onClick={() => zoomBy(BUTTON_ZOOM)}>
             +
