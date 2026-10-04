@@ -302,7 +302,10 @@ export interface VideoToolRowOptions {
  * import with `$REMOTIONKC_HOME` unset read the checkout, which holds no
  * renders, as the data root, and removed every remotionkc row. A data root
  * that still holds one stored file is believed, so a render deleted on
- * purpose is still pruned.
+ * purpose is still pruned. Retiring every video of a tool at once is the
+ * one case this refuses on purpose: remove the topic folders first and
+ * import while the renders are still there (the report lists them as
+ * orphans and the rows are pruned), then delete the files.
  */
 function emptyDataRoot(tool: VideoTool, root: string, outRoot: string, stored: readonly string[]): IndexError | null {
   if (stored.length === 0) return null;
