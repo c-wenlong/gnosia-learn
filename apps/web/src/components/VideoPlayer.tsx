@@ -135,6 +135,10 @@ export function VideoPlayer({
   const [scrubbing, setScrubbing] = useState(false);
   const [skip, setSkip] = useState<SkipFlash | null>(null);
   const skipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The icon a press on play or pause flashes in the middle. `n` counts
+  // presses, so each one is a new element that fades in afresh.
+  const [toggleFlash, setToggleFlash] = useState<{ icon: "play" | "pause"; n: number; shown: boolean } | null>(null);
+  const toggleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subtitles = useSyncExternalStore(subscribeSubtitles, readSubtitles, () => false);
   // Off on the server, so the first client render matches it.
   const canPip = useSyncExternalStore(noSubscription, pipSupported, () => false);
@@ -166,7 +170,12 @@ export function VideoPlayer({
     setBuffered(0);
     setPaused(true);
     setSkip(null);
+    setToggleFlash(null);
   }
+
+  // Which load, and which attempt at it, has played. The big play button is
+  // for starting a video, so it shows until then and not on every pause.
+  const [playedOn, setPlayedOn] = useState<string | null>(null);
 
   // A jump from outside goes through `seek`, the same path as a click on the
   // bar, so a jump pressed before the metadata has loaded is held and applied
@@ -215,6 +224,7 @@ export function VideoPlayer({
     () => () => {
       if (idle.current) clearTimeout(idle.current);
       if (skipTimer.current) clearTimeout(skipTimer.current);
+      if (toggleTimer.current) clearTimeout(toggleTimer.current);
     },
     [],
   );
@@ -297,10 +307,23 @@ export function VideoPlayer({
     }
   }
 
+  function flashToggle(icon: "play" | "pause") {
+    setToggleFlash((prev) => ({ icon, n: (prev?.n ?? 0) + 1, shown: true }));
+    if (toggleTimer.current) clearTimeout(toggleTimer.current);
+    toggleTimer.current = setTimeout(
+      () => setToggleFlash((prev) => (prev === null ? null : { ...prev, shown: false })),
+      SKIP_FLASH_MS,
+    );
+  }
+
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused || video.ended) {
+    const starting = video.paused || video.ended;
+    // The first play has the big button fading away as its answer.
+    if (!starting) flashToggle("pause");
+    else if (started) flashToggle("play");
+    if (starting) {
       void video.play()?.catch(() => {
         // Refused (autoplay policy, a source that failed). The element's own
         // events keep `paused` honest, and a failure has its own panel.
@@ -398,6 +421,8 @@ export function VideoPlayer({
   const activeChapter = chapters ? activeChapterIndex(chapters, time) : -1;
   const chapterTitle = activeChapter >= 0 ? chapters?.[activeChapter]?.title : undefined;
   const controlsUp = paused || awake || scrubbing;
+  const started = playedOn === `${source.load}:${attempt}`;
+  const bigPlay = paused && !scrubbing && !started;
   const hasSubtitles = transcript !== undefined && transcript.length > 0;
   const subtitle = subtitles && transcript !== undefined ? subtitleAt(transcript, time) : null;
 
@@ -450,6 +475,7 @@ export function VideoPlayer({
           onProgress={(e) => setBuffered(bufferedEnd(e.currentTarget))}
           onPlay={() => {
             setPaused(false);
+            setPlayedOn(`${source.load}:${attempt}`);
             wake();
           }}
           onPause={(e) => {
@@ -525,6 +551,25 @@ export function VideoPlayer({
           </div>
         )}
 
+        {toggleFlash !== null && (
+          <div
+            key={toggleFlash.n}
+            aria-hidden
+            data-toggle-flash={toggleFlash.shown ? toggleFlash.icon : "away"}
+            className={cx(
+              "pointer-events-none absolute top-1/2 left-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm sm:size-16",
+              "transition-[opacity,scale] duration-200 ease-soft starting:scale-90 starting:opacity-0 motion-reduce:transition-none",
+              toggleFlash.shown ? "scale-100 opacity-100" : "scale-110 opacity-0",
+            )}
+          >
+            {toggleFlash.icon === "play" ? (
+              <Glyph name="play" className="size-6 translate-x-0.5 fill-current sm:size-7" />
+            ) : (
+              <Icon name="pause" className="size-6 sm:size-7" />
+            )}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => {
@@ -534,13 +579,13 @@ export function VideoPlayer({
             frameRef.current?.focus({ preventScroll: true });
           }}
           aria-label="Play"
-          inert={!(paused && !scrubbing)}
-          data-big-play={paused && !scrubbing ? "shown" : "away"}
+          inert={!bigPlay}
+          data-big-play={bigPlay ? "shown" : "away"}
           className={cx(
             "absolute top-1/2 left-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm sm:size-16 focus-visible:outline-2 focus-visible:outline-white",
             "duration-150 ease-soft motion-reduce:transition-none",
             // Visibility waits for the fade out, not in, so the button is reachable the moment it shows.
-            paused && !scrubbing
+            bigPlay
               ? "scale-100 opacity-100 transition-[opacity,scale] hover:scale-105"
               : "invisible scale-90 opacity-0 transition-[opacity,scale,visibility]",
           )}
