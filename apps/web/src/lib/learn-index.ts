@@ -7,7 +7,7 @@ import type { MasteryBucket } from "@/lib/mastery-bucket";
  * learner's time zone) and the browser (which filters as the learner types).
  */
 
-export type IndexFilter = "all" | "due" | "learning" | "mastered" | "untouched" | "leeches";
+export type IndexFilter = "all" | "due" | "learning" | "mastered" | "untouched" | "leeches" | "ready" | "nocourse";
 
 export const INDEX_FILTERS: readonly { key: IndexFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -18,6 +18,10 @@ export const INDEX_FILTERS: readonly { key: IndexFilter; label: string }[] = [
   // "Leech" is Anki's word and stays the key, the URL value and the catalog's
   // field; the reader sees what it means (the owner's call, 2026-09-29).
   { key: "leeches", label: "Keeps slipping" },
+  // The two the map added (docs/proposals/knowledge-map.md, G5 and G8); the
+  // table offers them too, since both views share one filter.
+  { key: "ready", label: "Ready to learn" },
+  { key: "nocourse", label: "Not in a course" },
 ];
 
 export type IndexView = "table" | "graph";
@@ -48,6 +52,8 @@ export interface IndexRow {
   courseLabel: string | null;
   courses: string[];
   domain: string | null;
+  /** Ready to learn in a course opened recently (G5 of docs/proposals/knowledge-map.md). */
+  ready: boolean;
 }
 
 /**
@@ -110,6 +116,10 @@ export function matchesFilter(row: IndexRow, filter: IndexFilter): boolean {
       return row.isDue;
     case "leeches":
       return row.leech;
+    case "ready":
+      return row.ready;
+    case "nocourse":
+      return row.courses.length === 0;
     default:
       return row.bucket === filter;
   }

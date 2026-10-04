@@ -9,6 +9,7 @@ import { wrapLabel, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
 import type { MapLayout } from "@/lib/concept-map";
 import type { GraphScope } from "@/lib/learn-index";
 import { fitView, labelsShown, panView, scaleOf, scopeBox, titleFits, zoomView, type View } from "@/lib/map-viewport";
+import { arcLength } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
@@ -46,6 +47,22 @@ const SCOPES: { key: GraphScope; label: string }[] = [
 
 type Fit = GraphScope | "all" | "";
 
+/** What a concept carries on the map beyond its bucket (G4, G5). */
+export interface MapMark {
+  ready: boolean;
+  overdue: boolean;
+  leech: boolean;
+}
+
+/** A request from outside to move the map: fit a scope, or centre the selected concept at the present zoom. */
+export interface FitRequest {
+  to: GraphScope | "center";
+  /** A new number asks again, even for the same target. */
+  n: number;
+}
+
+const ARC_RADIUS = 12;
+
 const routeKey = (e: { from: string; to: string; kind: string }) => `${e.from}>${e.to}>${e.kind}`;
 
 /**
@@ -81,6 +98,9 @@ export function ConceptMap({
   onSelect,
   scope,
   onScope,
+  dimmed,
+  marks,
+  fitRequest = null,
   className,
 }: {
   layout: MapLayout;
@@ -91,6 +111,10 @@ export function ConceptMap({
   onSelect: (id: string) => void;
   scope: GraphScope;
   onScope: (scope: GraphScope) => void;
+  /** Concepts the filter or the search leaves out, drawn faint rather than removed. */
+  dimmed?: ReadonlySet<string>;
+  marks?: Readonly<Record<string, MapMark>>;
+  fitRequest?: FitRequest | null;
   className?: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -159,14 +183,36 @@ export function ConceptMap({
     [boxOf, animateTo, paint],
   );
 
+  const centerOn = useCallback(
+    (id: string | null) => {
+      const p = id === null ? undefined : layout.positions[id];
+      if (p === undefined) return;
+      const v = live.current;
+      setFit("");
+      animateTo({ ...v, x: p.x - v.w / 2, y: p.y - v.h / 2 });
+    },
+    [layout, animateTo],
+  );
+
   // The first frame was drawn at an assumed shape; fit again at the real one,
   // and keep the scale and centre when the box is resized.
   const fitRef = useRef(fitTo);
   const scopeRef = useRef(scope);
+  const centerRef = useRef(centerOn);
+  const selectedRef = useRef(selected);
   useEffect(() => {
     fitRef.current = fitTo;
     scopeRef.current = scope;
+    centerRef.current = centerOn;
+    selectedRef.current = selected;
   });
+  // Declared after the refs are brought up to date, so a request made with a
+  // new selection fits that selection.
+  useEffect(() => {
+    if (fitRequest === null) return;
+    if (fitRequest.to === "center") centerRef.current(selectedRef.current);
+    else fitRef.current(fitRequest.to);
+  }, [fitRequest]);
   useLayoutEffect(() => {
     const el = svgRef.current;
     if (el === null) return;
@@ -289,6 +335,13 @@ export function ConceptMap({
   const count = Object.keys(layout.positions).length;
   const scale = scaleOf(view, boxWidth);
   const selectedIsland = selected === null ? null : (layout.islandOf[selected] ?? null);
+  const related = new Set<string>();
+  if (selected !== null) {
+    for (const e of edges) {
+      if (e.from === selected) related.add(e.to);
+      if (e.to === selected) related.add(e.from);
+    }
+  }
 
   return (
     <div className={cx("flex flex-col gap-3", className)}>
@@ -347,12 +400,13 @@ export function ConceptMap({
             const route = layout.routes[routeKey(e)];
             if (!route) return null;
             const touches = e.from === selected || e.to === selected;
+            const faint = dimmed !== undefined && (dimmed.has(e.from) || dimmed.has(e.to));
             return (
               <path
                 key={routeKey(e)}
                 d={routePath(route)}
                 fill="none"
-                className={touches ? "stroke-accent" : "stroke-text3 opacity-60"}
+                className={touches ? "stroke-accent" : faint ? "stroke-text3 opacity-15" : "stroke-text3 opacity-60"}
                 strokeWidth={e.kind === "assumes" ? 1 : 1.5}
                 strokeDasharray={e.kind === "assumes" ? "4 4" : undefined}
               />
@@ -364,16 +418,37 @@ export function ConceptMap({
             if (n === undefined) return null;
             const isFocus = id === selected;
             const lines = labels.get(id) ?? [n.title];
-            const caption = `${n.title}, ${MASTERY_BUCKET_LABEL[n.bucket]}${n.bucket === "untouched" ? "" : `, p(L) ${n.pL.toFixed(2)}`}`;
+            const mark = marks?.[id];
+            const dim = dimmed?.has(id) ?? false;
+            const arc = arcLength(n, ARC_RADIUS);
+            const caption = [
+              n.title,
+              MASTERY_BUCKET_LABEL[n.bucket],
+              n.bucket === "untouched" ? null : `p(L) ${n.pL.toFixed(2)}`,
+              mark?.ready ? "ready to learn" : null,
+              mark?.overdue ? "review overdue" : null,
+              mark?.leech ? "keeps slipping" : null,
+            ]
+              .filter(Boolean)
+              .join(", ");
             return (
               <g
                 key={id}
                 data-concept={id}
+                data-courses={n.courses.join(",")}
+                data-dim={dim}
+                data-related={related.has(id)}
+                data-ready={mark?.ready ?? false}
+                data-overdue={mark?.overdue ?? false}
+                data-leech={mark?.leech ?? false}
                 role="button"
                 tabIndex={0}
                 aria-label={caption}
                 aria-pressed={isFocus}
-                className="cursor-pointer outline-none [&:focus-visible>circle:last-of-type]:stroke-accent"
+                className={cx(
+                  "cursor-pointer outline-none transition-opacity duration-150 [&:focus-visible>circle[data-dot]]:stroke-accent",
+                  dim && "opacity-20",
+                )}
                 onClick={() => onSelect(id)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -383,8 +458,27 @@ export function ConceptMap({
                 }}
               >
                 <title>{caption}</title>
-                {isFocus && <circle cx={p.x} cy={p.y} r={16} fill="none" className="stroke-accent" strokeWidth={2} />}
-                <circle cx={p.x} cy={p.y} r={isFocus ? 10 : 8} className={DOT[n.bucket]} strokeWidth={2} />
+                {mark?.ready && (
+                  <circle cx={p.x} cy={p.y} r={15} fill="none" className="stroke-accent" strokeWidth={1.5} strokeDasharray="3 2" />
+                )}
+                {mark?.leech && <circle cx={p.x} cy={p.y} r={18} fill="none" className="stroke-danger" strokeWidth={1.5} />}
+                {isFocus && <circle cx={p.x} cy={p.y} r={16} fill="none" className="stroke-accent" strokeWidth={2.5} />}
+                {arc > 0 && (
+                  <circle
+                    data-arc
+                    cx={p.x}
+                    cy={p.y}
+                    r={ARC_RADIUS}
+                    fill="none"
+                    className="stroke-m-hi"
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    strokeDasharray={`${arc} ${2 * Math.PI * ARC_RADIUS}`}
+                    transform={`rotate(-90 ${p.x} ${p.y})`}
+                  />
+                )}
+                <circle data-dot cx={p.x} cy={p.y} r={isFocus ? 9 : 8} className={DOT[n.bucket]} strokeWidth={2} />
+                {mark?.overdue && <circle cx={p.x + 9} cy={p.y - 9} r={3.5} className="fill-danger" />}
                 {lines.map((line, k) => (
                   <text
                     key={k}

@@ -703,6 +703,77 @@ async function run() {
     assert((await svg.getAttribute('data-labels')) === 'shown', 'the labels did not come back when zoomed in');
   });
 
+  // Phase 3 of docs/proposals/knowledge-map.md: reading the map. A concept's
+  // panel, search, the filters, and the p(L) arc.
+  await step('learn: a concept on the map opens its panel, and search and filters work on the map', page, async () => {
+    await go('/learn?view=graph&concept=vector-as-a-list-of-numbers');
+    const map = main.getByRole('group', { name: /^Concept map/ });
+    await map.waitFor();
+    const panel = main.getByRole('region', { name: 'Concept details' });
+    await panel.getByRole('heading', { name: 'Vector as a list of numbers' }).waitFor();
+    const leads = panel.getByRole('list', { name: 'Leads to' }).getByRole('button');
+    const leadIds = await leads.evaluateAll((els) => els.map((el) => el.getAttribute('data-concept')));
+    assert(leadIds.length === 3, `Leads to lists ${leadIds.length} concepts, not the seed's 3`);
+    for (const id of leadIds) {
+      assert((await map.locator(`[data-concept="${id}"]`).getAttribute('data-related')) === 'true', `${id} is not marked on the map`);
+    }
+    assert(
+      (await panel.getByRole('link', { name: 'Open in workspace' }).getAttribute('href')) === '/learn/vector-as-a-list-of-numbers',
+      'the panel does not open the concept',
+    );
+    // Following a link in the panel selects that concept.
+    await clickHydrated(page, leads.first());
+    await page.waitForFunction((slug) => new URL(location.href).searchParams.get('concept') === slug, leadIds[0]);
+
+    // Search selects the best match and fits the map to its neighbourhood.
+    const search = main.getByRole('searchbox', { name: 'Search concepts' });
+    await search.fill('self attention');
+    await search.press('Enter');
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('concept') === 'self-attention');
+    await page.waitForFunction(() => document.querySelector('[aria-label^="Concept map"]')?.getAttribute('data-fit') === 'neighbourhood');
+    await search.fill('');
+
+    // A learning concept carries its p(L) arc.
+    assert((await map.locator('[data-concept="tool-calling"] [data-arc]').count()) === 1, 'tool-calling has no p(L) arc');
+
+    // Not in a course dims every concept that is in one, and only those.
+    await clickHydrated(page, main.getByRole('button', { name: /^Status:/ }));
+    await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^Not in a course\b/ }).click();
+    const marks = await map.locator('[data-concept]').evaluateAll((els) =>
+      els.map((el) => ({ dim: el.getAttribute('data-dim') === 'true', courses: el.getAttribute('data-courses') ?? '' })),
+    );
+    assert(marks.some((m) => !m.dim), 'Not in a course left nothing undimmed');
+    for (const m of marks) assert(m.dim === (m.courses !== ''), 'a concept in a course was left undimmed, or one in none dimmed');
+    await clickHydrated(page, main.getByRole('button', { name: /^Status:/ }));
+    await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^All\b/ }).click();
+    assert((await map.locator('[data-concept][data-dim="true"]').count()) === 0, 'All left concepts dimmed');
+  });
+
+  await step('learn: the map works on a phone', page, async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await go('/learn?view=graph&concept=vector-as-a-list-of-numbers');
+      const map = main.getByRole('group', { name: /^Concept map/ });
+      await map.waitFor();
+      const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
+      assert(overflow <= 0, `the page scrolls sideways by ${overflow}px on a phone`);
+      const box = await map.boundingBox();
+      assert(box.width <= 390 && box.width > 300, `the map is ${box.width}px wide on a 390px phone`);
+      // The island is fitted on open, so its concepts are on screen to tap.
+      await clickHydrated(page, map.locator('[data-concept="dot-product"]'));
+      await page.waitForFunction(() => new URL(location.href).searchParams.get('concept') === 'dot-product');
+      await main.getByRole('region', { name: 'Concept details' }).getByRole('heading', { name: 'Dot product' }).waitFor();
+      const before = (await map.getAttribute('viewBox')).split(/\s+/).map(Number);
+      await clickHydrated(page, main.getByRole('button', { name: 'Zoom in' }));
+      await page.waitForFunction(
+        (w) => Number(document.querySelector('[aria-label^="Concept map"]')?.getAttribute('viewBox')?.split(/\s+/)[2]) < w,
+        before[2],
+      );
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   await step('workspace: Open full course graph lands on the course scope of the map', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go(`/learn/${state.concept}`);
@@ -806,6 +877,21 @@ async function run() {
     assert((await next.getByRole('link').count()) > 0, 'Next from here lists nothing');
     // No streak or target anywhere in the shell (H1).
     assert((await page.getByText(/day streak|Today's target/).count()) === 0, 'a streak or target is still drawn');
+  });
+
+  // G5: with a course opened (the step above), its ready concepts are marked,
+  // the background it builds on included, and nothing outside it.
+  await step('learn: the map marks the ready concepts of the course opened recently', page, async () => {
+    await go('/learn?view=graph');
+    const map = main.getByRole('group', { name: /^Concept map/ });
+    await map.waitFor();
+    const ready = await map.locator('[data-concept][data-ready="true"]').evaluateAll((els) =>
+      els.map((el) => ({ id: el.getAttribute('data-concept'), courses: el.getAttribute('data-courses') ?? '' })),
+    );
+    assert(ready.some((r) => r.id === 'vector-as-a-list-of-numbers'), 'the background of the course (vector) is not marked ready');
+    for (const r of ready) assert(r.courses === '' || r.courses.split(',').includes('cp4284'), `${r.id} is marked ready outside the recent course`);
+    // dot-product needs vector, which nobody has mastered.
+    assert((await map.locator('[data-concept="dot-product"]').getAttribute('data-ready')) !== 'true', 'dot-product is marked ready before its prerequisite');
   });
 
   await step('library: a type, a sort and the list layout all land in the URL', page, async () => {
