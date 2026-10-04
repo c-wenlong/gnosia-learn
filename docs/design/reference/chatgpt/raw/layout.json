@@ -1,0 +1,6566 @@
+{
+ "home-dark@1440": {
+  "label": "home-dark",
+  "url": "https://chatgpt.com/",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "What’s on the agenda today?",
+   "font": "",
+   "x": 696.5,
+   "y": 314,
+   "w": 307,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "home-dark-chat-menu@1440": {
+  "label": "home-dark-chat-menu",
+  "url": "https://chatgpt.com/",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "How can I help, Learner?",
+   "font": "",
+   "x": 720.4,
+   "y": 314,
+   "w": 259.2,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   {
+    "el": "div#radix-_r_ju_.z-50.popover.bg-token-main-surface-primary",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 206,
+    "y": 445.5,
+    "w": 205.9,
+    "h": 270
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "630px",
+    "z": "50",
+    "x": 206,
+    "y": 445.5,
+    "w": 205.9,
+    "h": 270
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#radix-_r_ju_.z-50.popover.bg-token-main-surface-primary",
+    "role": "menu",
+    "x": 206,
+    "y": 445.5,
+    "w": 205.9,
+    "h": 270,
+    "radius": "20px",
+    "bg": "rgb(53, 53, 53)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset"
+   }
+  ],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "home-dark-composer-typed@1440": {
+  "label": "home-dark-composer-typed",
+  "url": "https://chatgpt.com/",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "How can I help, Learner?",
+   "font": "",
+   "x": 720.4,
+   "y": 314,
+   "w": 259.2,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Send prompt",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "home-dark-plus-menu@1440": {
+  "label": "home-dark-plus-menu",
+  "url": "https://chatgpt.com/",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "How can I help, Learner?",
+   "font": "",
+   "x": 720.4,
+   "y": 314,
+   "w": 259.2,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   {
+    "el": "div.z-50.popover.bg-token-main-surface-primary",
+    "max": "1428px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 438,
+    "w": 768,
+    "h": 376
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div.z-50.popover.bg-token-main-surface-primary",
+    "role": null,
+    "x": 466,
+    "y": 438,
+    "w": 768,
+    "h": 376,
+    "radius": "20px",
+    "bg": "rgb(33, 33, 33)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset"
+   }
+  ],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "home-dark-search@1440": {
+  "label": "home-dark-search",
+  "url": "https://chatgpt.com/",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "How can I help, Learner?",
+   "font": "",
+   "x": 720.4,
+   "y": 314,
+   "w": 259.2,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   {
+    "el": "div.popover.F_cuGW_dialogPanel",
+    "max": "720px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 360,
+    "y": 194.7,
+    "w": 720,
+    "h": 462
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.F_cuGW_dialog",
+    "cols": "10px 1420px 10px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900,
+    "firstChild": {
+     "x": 360,
+     "y": 194.7,
+     "w": 720,
+     "h": 462
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   },
+   {
+    "el": "div.F_cuGW_dialog",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "50",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div.popover.F_cuGW_dialogPanel",
+    "role": null,
+    "x": 360,
+    "y": 194.7,
+    "w": 720,
+    "h": 462,
+    "radius": "16px",
+    "bg": "rgb(33, 33, 33)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.25) 0px 14px 62px 0px"
+   }
+  ],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "home-dark-sidebar-collapsed@1440": {
+  "label": "home-dark-sidebar-collapsed",
+  "url": "https://chatgpt.com/",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "How can I help, Learner?",
+   "font": "",
+   "x": 720.4,
+   "y": 314,
+   "w": 259.2,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "home-dark-user-menu@1440": {
+  "label": "home-dark-user-menu",
+  "url": "https://chatgpt.com/",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "How can I help, Learner?",
+   "font": "",
+   "x": 720.4,
+   "y": 314,
+   "w": 259.2,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   {
+    "el": "div#radix-_r_is_.z-50.popover.bg-token-main-surface-primary",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 6,
+    "y": 523,
+    "w": 248,
+    "h": 321.1
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "578.859px",
+    "z": "50",
+    "x": 6,
+    "y": 523,
+    "w": 248,
+    "h": 321.1
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#radix-_r_is_.z-50.popover.bg-token-main-surface-primary",
+    "role": "menu",
+    "x": 6,
+    "y": 523,
+    "w": 248,
+    "h": 321.1,
+    "radius": "20px",
+    "bg": "rgb(53, 53, 53)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset"
+   }
+  ],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "images-dark@1440": {
+  "label": "images-dark",
+  "url": "https://chatgpt.com/images",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header.max-w-app-content.mx-auto.flex",
+   "x": 450,
+   "y": 172,
+   "w": 800,
+   "h": 19.7,
+   "position": "static",
+   "items": []
+  },
+  "h1": {
+   "text": "Images",
+   "font": "",
+   "x": 450,
+   "y": 176,
+   "w": 119.9,
+   "h": 19.7
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 223.7,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 236.2,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 231.7,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 231.7,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 231.7,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 231.7,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": null
+  },
+  "maxWidths": [
+   {
+    "el": "header.max-w-app-content.mx-auto.flex",
+    "max": "800px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 450,
+    "y": 172,
+    "w": 800,
+    "h": 19.7
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 223.7,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 231.7,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.group/scroll-root.relative.flex",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 900,
+    "scrollHeight": 3694,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  },
+  "imageCards": {
+   "card": {
+    "x": 466,
+    "y": 379.7,
+    "w": 186,
+    "h": 232.5
+   },
+   "radius": "24px",
+   "next": null,
+   "gapX": null
+  }
+ },
+ "library-dark@1440": {
+  "label": "library-dark",
+  "url": "https://chatgpt.com/library",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": null,
+  "h1": {
+   "text": "Library",
+   "font": "",
+   "x": 308,
+   "y": 80,
+   "w": 74.1,
+   "h": 36
+  },
+  "maxWidths": [
+   {
+    "el": "div.Cx1Nqq_refreshedStickyHeaderContent.ps-12!",
+    "max": "1440px",
+    "padL": "48px",
+    "padR": "40px",
+    "x": 260,
+    "y": 68,
+    "w": 1180,
+    "h": 120
+   },
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "1440px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 308,
+    "y": 128,
+    "w": 1092,
+    "h": 60
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.Cx1Nqq_refreshedStickyHeaderContent.ps-12!",
+    "cols": "74.1094px 1001.89px",
+    "colGap": "16px",
+    "rowGap": "normal",
+    "x": 260,
+    "y": 68,
+    "w": 1180,
+    "h": 120,
+    "firstChild": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    }
+   },
+   {
+    "el": "div.text-token-text-secondary.group.relative",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 189,
+    "w": 1078,
+    "h": 42,
+    "firstChild": {
+     "x": 277,
+     "y": 190,
+     "w": 24,
+     "h": 41
+    }
+   },
+   {
+    "el": "div.group.EhAptG_selectableRow.artifacts-surface-library-selectable-row",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 231,
+    "w": 1078,
+    "h": 60,
+    "firstChild": {
+     "x": 277,
+     "y": 231,
+     "w": 24,
+     "h": 59
+    }
+   },
+   {
+    "el": "div.group.EhAptG_selectableRow.artifacts-surface-library-selectable-row",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 291,
+    "w": 1078,
+    "h": 60,
+    "firstChild": {
+     "x": 277,
+     "y": 291,
+     "w": 24,
+     "h": 59
+    }
+   },
+   {
+    "el": "div.group.EhAptG_selectableRow.artifacts-surface-library-selectable-row",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 351,
+    "w": 1078,
+    "h": 60,
+    "firstChild": {
+     "x": 277,
+     "y": 351,
+     "w": 24,
+     "h": 59
+    }
+   },
+   {
+    "el": "div.group.EhAptG_selectableRow.artifacts-surface-library-selectable-row",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 411,
+    "w": 1078,
+    "h": 60,
+    "firstChild": {
+     "x": 277,
+     "y": 411,
+     "w": 24,
+     "h": 59
+    }
+   },
+   {
+    "el": "div.group.EhAptG_selectableRow.artifacts-surface-library-selectable-row",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 471,
+    "w": 1078,
+    "h": 60,
+    "firstChild": {
+     "x": 277,
+     "y": 471,
+     "w": 24,
+     "h": 59
+    }
+   },
+   {
+    "el": "div.group.EhAptG_selectableRow.artifacts-surface-library-selectable-row",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 531,
+    "w": 1078,
+    "h": 60,
+    "firstChild": {
+     "x": 277,
+     "y": 531,
+     "w": 24,
+     "h": 59
+    }
+   },
+   {
+    "el": "div.group.EhAptG_selectableRow.artifacts-surface-library-selectable-row",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 591,
+    "w": 1078,
+    "h": 60,
+    "firstChild": {
+     "x": 277,
+     "y": 591,
+     "w": 24,
+     "h": 59
+    }
+   },
+   {
+    "el": "div.group.EhAptG_selectableRow.artifacts-surface-library-selectable-row",
+    "cols": "814px 160px 64px",
+    "colGap": "16px",
+    "rowGap": "16px",
+    "x": 322,
+    "y": 651,
+    "w": 1078,
+    "h": 60,
+    "firstChild": {
+     "x": 277,
+     "y": 651,
+     "w": 24,
+     "h": 59
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-bg-primary.sticky.top-0",
+    "pos": "sticky",
+    "top": "-16px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 52,
+    "w": 1180,
+    "h": 137
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.group/scroll-root.relative.flex",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 900,
+    "scrollHeight": 1515,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  },
+  "libraryRows": {
+   "header": {
+    "x": 322,
+    "y": 189,
+    "w": 1078,
+    "h": 42
+   },
+   "headerCols": "814px 160px 64px",
+   "row": {
+    "x": 322,
+    "y": 231,
+    "w": 1078,
+    "h": 60
+   },
+   "pitch": 60,
+   "name": {
+    "x": 366,
+    "y": 250.5,
+    "w": 770,
+    "h": 20
+   },
+   "icon": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0
+   },
+   "count": 20,
+   "toolbar": {
+    "x": 260,
+    "y": 52,
+    "w": 1180,
+    "h": 137
+   }
+  }
+ },
+ "mobile-home-dark@390": {
+  "label": "mobile-home-dark",
+  "url": "https://chatgpt.com/",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": null,
+  "rail": null,
+  "main": {
+   "x": 0,
+   "y": 53,
+   "w": 390,
+   "h": 791,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 0,
+   "y": 1,
+   "w": 390,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "",
+     "x": 8,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Model selector",
+     "x": 44,
+     "y": 9,
+     "w": 115.2,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 239.8,
+     "y": 10,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 346,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87
+   },
+   "radius": "26px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 31,
+    "y": 743.5,
+    "w": 329,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 24,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 286,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 330,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 0,
+    "y": 717,
+    "w": 390,
+    "h": 127,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "640px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 226px 80px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87,
+    "firstChild": {
+     "x": 24,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.h-px",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 1
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 1,
+    "w": 390,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 0,
+    "y": 717,
+    "w": 390,
+    "h": 127
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "mobile-home-dark-drawer@390": {
+  "label": "mobile-home-dark-drawer",
+  "url": "https://chatgpt.com/",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": null,
+  "rail": null,
+  "main": {
+   "x": 0,
+   "y": 53,
+   "w": 390,
+   "h": 791,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 0,
+   "y": 1,
+   "w": 390,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "",
+     "x": 8,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Model selector",
+     "x": 44,
+     "y": 9,
+     "w": 115.2,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 239.8,
+     "y": 10,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 346,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87
+   },
+   "radius": "26px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 31,
+    "y": 743.5,
+    "w": 329,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 24,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 286,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 330,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 0,
+    "y": 717,
+    "w": 390,
+    "h": 127,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "640px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87
+   },
+   {
+    "el": "div#stage-popover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.fixed",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 844
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 226px 80px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87,
+    "firstChild": {
+     "x": 24,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.h-px",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 1
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 1,
+    "w": 390,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 0,
+    "y": 717,
+    "w": 390,
+    "h": 127
+   },
+   {
+    "el": "div.fixed.inset-0.z-10",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "10",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 844
+   },
+   {
+    "el": "div#stage-popover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.fixed",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "50",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 844
+   },
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#stage-popover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.fixed",
+    "role": "dialog",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 844,
+    "radius": "0px",
+    "bg": "rgb(0, 0, 0)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.07) 0px 0px 64px 0px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "nav.group/scrollport.relative.flex",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 777.9,
+    "scrollHeight": 840,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "mobile-thread-dark@390": {
+  "label": "mobile-thread-dark",
+  "url": "https://chatgpt.com/c/<id>",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": null,
+  "rail": null,
+  "main": {
+   "x": 0,
+   "y": -4347,
+   "w": 390,
+   "h": 791,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 0,
+   "y": 1,
+   "w": 390,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "",
+     "x": 8,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Model selector",
+     "x": 44,
+     "y": 9,
+     "w": 115.2,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 195.8,
+     "y": 10,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "New chat",
+     "x": 302,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "More",
+     "x": 346,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87
+   },
+   "radius": "26px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 31,
+    "y": 743.5,
+    "w": 329,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 24,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 286,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 330,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 0,
+    "y": 733,
+    "w": 390,
+    "h": 111,
+    "bottom": "0px"
+   }
+  },
+  "thread": {
+   "turns": 5,
+   "renderedTurns": 5,
+   "turn": {
+    "x": 0,
+    "y": -1007,
+    "w": 390,
+    "h": 1084
+   },
+   "markdown": {
+    "x": 16,
+    "y": -1007,
+    "w": 358,
+    "h": 1038
+   },
+   "markdownFont": "",
+   "userBubble": {
+    "x": 123.4,
+    "y": 125,
+    "w": 250.6,
+    "h": 236,
+    "radius": "22px",
+    "padding": "10px 16px",
+    "bg": "rgb(23, 62, 118)",
+    "maxWidth": "70%"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.group/turn-messages",
+    "max": "640px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 16,
+    "y": -1007,
+    "w": 358,
+    "h": 1084
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 226px 80px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87,
+    "firstChild": {
+     "x": 24,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.h-px",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 1
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 1,
+    "w": 390,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 0,
+    "y": 733,
+    "w": 390,
+    "h": 111
+   },
+   {
+    "el": "div.fixed.inset-0.z-10",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "10",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 844
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.group/scroll-root.relative.flex",
+    "x": 0,
+    "y": 1,
+    "w": 390,
+    "h": 843,
+    "scrollHeight": 8321,
+    "scrollTop": 4400
+   },
+   {
+    "el": "nav.group/scrollport.relative.flex",
+    "x": -260,
+    "y": 0,
+    "w": 260,
+    "h": 777.9,
+    "scrollHeight": 840,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "mobile-thread-dark-model-menu@390": {
+  "label": "mobile-thread-dark-model-menu",
+  "url": "https://chatgpt.com/c/<id>",
+  "vw": 390,
+  "vh": 844,
+  "sidebar": null,
+  "rail": null,
+  "main": {
+   "x": 0,
+   "y": -4347,
+   "w": 390,
+   "h": 791,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 0,
+   "y": 1,
+   "w": 390,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "",
+     "x": 8,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Model selector",
+     "x": 44,
+     "y": 9,
+     "w": 115.2,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 195.8,
+     "y": 10,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "New chat",
+     "x": 302,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "More",
+     "x": 346,
+     "y": 9,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "composer": {
+   "box": {
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87
+   },
+   "radius": "26px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 31,
+    "y": 743.5,
+    "w": 329,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 24,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 286,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 330,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 0,
+    "y": 733,
+    "w": 390,
+    "h": 111,
+    "bottom": "0px"
+   }
+  },
+  "thread": {
+   "turns": 5,
+   "renderedTurns": 5,
+   "turn": {
+    "x": 0,
+    "y": -1007,
+    "w": 390,
+    "h": 1084
+   },
+   "markdown": {
+    "x": 16,
+    "y": -1007,
+    "w": 358,
+    "h": 1038
+   },
+   "markdownFont": "",
+   "userBubble": {
+    "x": 123.4,
+    "y": 125,
+    "w": 250.6,
+    "h": 236,
+    "radius": "22px",
+    "padding": "10px 16px",
+    "bg": "rgb(23, 62, 118)",
+    "maxWidth": "70%"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.group/turn-messages",
+    "max": "640px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 16,
+    "y": -1007,
+    "w": 358,
+    "h": 1084
+   },
+   {
+    "el": "div#radix-_r_49_.z-50.popover.bg-token-main-surface-primary",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 46,
+    "y": 49,
+    "w": 318.1,
+    "h": 122.3
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 226px 80px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 16,
+    "y": 733,
+    "w": 358,
+    "h": 87,
+    "firstChild": {
+     "x": 24,
+     "y": 776,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.h-px",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "auto",
+    "x": 0,
+    "y": 0,
+    "w": 390,
+    "h": 1
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 1,
+    "w": 390,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 0,
+    "y": 733,
+    "w": 390,
+    "h": 111
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "721.719px",
+    "z": "50",
+    "x": 46,
+    "y": 49,
+    "w": 318.1,
+    "h": 122.3
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#radix-_r_49_.z-50.popover.bg-token-main-surface-primary",
+    "role": "menu",
+    "x": 46,
+    "y": 49,
+    "w": 318.1,
+    "h": 122.3,
+    "radius": "20px",
+    "bg": "rgb(53, 53, 53)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.group/scroll-root.relative.flex",
+    "x": 0,
+    "y": 1,
+    "w": 390,
+    "h": 843,
+    "scrollHeight": 8321,
+    "scrollTop": 4400
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "plugins-dark@1440": {
+  "label": "plugins-dark",
+  "url": "https://chatgpt.com/plugins",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": null,
+  "h1": {
+   "text": "Plugins",
+   "font": "",
+   "x": 466,
+   "y": 168,
+   "w": 464,
+   "h": 36
+  },
+  "maxWidths": [
+   {
+    "el": "div.max-w-app-content.mx-auto.flex",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 450,
+    "y": 52,
+    "w": 800,
+    "h": 5508
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.-ms-2.grid.grid-cols-1",
+    "cols": "384px 384px",
+    "colGap": "8px",
+    "rowGap": "16px",
+    "x": 458,
+    "y": 404,
+    "w": 776,
+    "h": 200,
+    "firstChild": {
+     "x": 458,
+     "y": 404,
+     "w": 384,
+     "h": 56
+    }
+   },
+   {
+    "el": "div.-ms-2.grid.grid-cols-1",
+    "cols": "384px 384px",
+    "colGap": "8px",
+    "rowGap": "16px",
+    "x": 458,
+    "y": 728,
+    "w": 776,
+    "h": 200,
+    "firstChild": {
+     "x": 458,
+     "y": 728,
+     "w": 384,
+     "h": 56
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.group/scroll-root.relative.flex",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 900,
+    "scrollHeight": 5560,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  },
+  "pluginRows": {
+   "row": {
+    "x": 458,
+    "y": 404,
+    "w": 384,
+    "h": 56
+   },
+   "radius": "16px",
+   "gapX": 8,
+   "pitchY": 72,
+   "icon": {
+    "x": 466,
+    "y": 412,
+    "w": 40,
+    "h": 40
+   },
+   "search": {
+    "x": 946,
+    "y": 168,
+    "w": 240,
+    "h": 36
+   }
+  }
+ },
+ "project-dark@1440": {
+  "label": "project-dark",
+  "url": "https://chatgpt.com/g/<project>/project",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.p-2",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1325.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    }
+   ]
+  },
+  "h1": {
+   "text": "Research",
+   "font": "",
+   "x": 508,
+   "y": 116,
+   "w": 577.8,
+   "h": 36
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 176,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 188.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 184,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 184,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 184,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 184,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 466,
+    "y": 160,
+    "w": 768,
+    "h": 138,
+    "bottom": "auto"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex.w-full",
+    "max": "800px",
+    "padL": "16px",
+    "padR": "16px",
+    "x": 450,
+    "y": 0,
+    "w": 800,
+    "h": 152
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 176,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 184,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.p-2",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div.offset-padding-top-4.sticky.top-0",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "10",
+    "x": 466,
+    "y": 160,
+    "w": 768,
+    "h": 138
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  },
+  "projectRows": {
+   "row": {
+    "x": 478,
+    "y": 326,
+    "w": 744,
+    "h": 40
+   },
+   "date": {
+    "x": 1184.2,
+    "y": 336,
+    "w": 37.8,
+    "h": 20
+   },
+   "title": {
+    "x": 508,
+    "y": 116,
+    "w": 577.8,
+    "h": 36
+   }
+  }
+ },
+ "settings-dark-accent-menu@1440": {
+  "label": "settings-dark-accent-menu",
+  "url": "https://chatgpt.com/#settings",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "How can I help, Learner?",
+   "font": "",
+   "x": 720.4,
+   "y": 314,
+   "w": 259.2,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   {
+    "el": "div#radix-_r_ls_.popover.bg-token-bg-primary.relative",
+    "max": "680px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 380,
+    "y": 133.3,
+    "w": 680,
+    "h": 600
+   },
+   {
+    "el": "div#radix-_r_ml_.z-50.popover.bg-token-main-surface-primary",
+    "max": "320px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 945.5,
+    "y": 365,
+    "w": 220,
+    "h": 300
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.z-50.h-full.w-full",
+    "cols": "10px 1420px 10px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900,
+    "firstChild": {
+     "x": 380,
+     "y": 133.3,
+     "w": 680,
+     "h": 600
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   },
+   {
+    "el": "div.fixed.inset-0.z-50",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "50",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "el": "div",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "600px",
+    "z": "50",
+    "x": 945.5,
+    "y": 365,
+    "w": 220,
+    "h": 300
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#radix-_r_ls_.popover.bg-token-bg-primary.relative",
+    "role": "dialog",
+    "x": 380,
+    "y": 133.3,
+    "w": 680,
+    "h": 600,
+    "radius": "16px",
+    "bg": "rgb(33, 33, 33)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.32) 0px 8px 16px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset, rgba(0, 0, 0, 0.62) 0px 0px 1px 0px"
+   },
+   {
+    "el": "div#radix-_r_ml_.z-50.popover.bg-token-main-surface-primary",
+    "role": "listbox",
+    "x": 945.5,
+    "y": 365,
+    "w": 220,
+    "h": 300,
+    "radius": "16px",
+    "bg": "rgb(53, 53, 53)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.32) 0px 8px 16px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset, rgba(0, 0, 0, 0.62) 0px 0px 1px 0px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.border-token-border-extra-light.flex.shrink-0",
+    "x": 380,
+    "y": 237.3,
+    "w": 209,
+    "h": 496,
+    "scrollHeight": 576,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "settings-dark-general@1440": {
+  "label": "settings-dark-general",
+  "url": "https://chatgpt.com/#settings",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": 52,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Chat",
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Work",
+     "x": 850,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    },
+    {
+     "label": "Upgrade",
+     "x": 1289.8,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Temporary chat",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "h1": {
+   "text": "How can I help, Learner?",
+   "font": "",
+   "x": 720.4,
+   "y": 314,
+   "w": 259.2,
+   "h": 42
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 390.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 386,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522,
+    "bottom": "0px"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.pointer-events-auto",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52
+   },
+   {
+    "el": "div#radix-_r_ls_.popover.bg-token-bg-primary.relative",
+    "max": "680px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 380,
+    "y": 133.3,
+    "w": 680,
+    "h": 600
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.pointer-events-none.absolute.inset-0",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.2,
+     "y": 8,
+     "w": 139.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.relative.z-10.grid",
+    "cols": "130.281px 130.281px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 719.7,
+    "y": 8,
+    "w": 260.6,
+    "h": 36,
+    "firstChild": {
+     "x": 719.7,
+     "y": 8,
+     "w": 130.3,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 378,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 386,
+     "w": 36,
+     "h": 36
+    }
+   },
+   {
+    "el": "div.z-50.h-full.w-full",
+    "cols": "10px 1420px 10px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900,
+    "firstChild": {
+     "x": 380,
+     "y": 133.3,
+     "w": 680,
+     "h": 600
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 378,
+    "w": 1180,
+    "h": 522
+   },
+   {
+    "el": "div.fixed.inset-0.z-50",
+    "pos": "fixed",
+    "top": "0px",
+    "bottom": "0px",
+    "z": "50",
+    "x": 0,
+    "y": 0,
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "dialogs": [
+   {
+    "el": "div#radix-_r_ls_.popover.bg-token-bg-primary.relative",
+    "role": "dialog",
+    "x": 380,
+    "y": 133.3,
+    "w": 680,
+    "h": 600,
+    "radius": "16px",
+    "bg": "rgb(33, 33, 33)",
+    "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.32) 0px 8px 16px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset, rgba(0, 0, 0, 0.62) 0px 0px 1px 0px"
+   }
+  ],
+  "scrollers": [
+   {
+    "el": "div.border-token-border-extra-light.flex.shrink-0",
+    "x": 380,
+    "y": 237.3,
+    "w": 209,
+    "h": 496,
+    "scrollHeight": 576,
+    "scrollTop": 0
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "thread-dark-bottom@1440": {
+  "label": "thread-dark-bottom",
+  "url": "https://chatgpt.com/c/<id>",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": -4840,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Upgrade",
+     "x": 1193.6,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Share",
+     "x": 1299.8,
+     "y": 8,
+     "w": 88.2,
+     "h": 36
+    },
+    {
+     "label": "More",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 824,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 836.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 832,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 824,
+    "w": 1180,
+    "h": 76,
+    "bottom": "0px"
+   }
+  },
+  "thread": {
+   "turns": 5,
+   "renderedTurns": 5,
+   "turn": {
+    "x": 260,
+    "y": -122,
+    "w": 1180,
+    "h": 180
+   },
+   "markdown": {
+    "x": 466,
+    "y": -2652,
+    "w": 768,
+    "h": 636
+   },
+   "markdownFont": "",
+   "userBubble": {
+    "x": 696.4,
+    "y": -1922,
+    "w": 537.6,
+    "h": 116,
+    "radius": "22px",
+    "padding": "10px 16px",
+    "bg": "rgb(23, 62, 118)",
+    "maxWidth": "70%"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.group/turn-messages",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": -74,
+    "w": 768,
+    "h": 132
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 824,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div.visible.sticky.col-start-1",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "24px",
+    "z": "auto",
+    "x": 260,
+    "y": 784,
+    "w": 1180,
+    "h": 40
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 824,
+    "w": 1180,
+    "h": 76
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.group/scroll-root.relative.flex",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 900,
+    "scrollHeight": 5792,
+    "scrollTop": 4892
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "thread-dark-table@1440": {
+  "label": "thread-dark-table",
+  "url": "https://chatgpt.com/c/<id>",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": -2098,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Upgrade",
+     "x": 1193.6,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Share",
+     "x": 1299.8,
+     "y": 8,
+     "w": 88.2,
+     "h": 36
+    },
+    {
+     "label": "More",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 824,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 836.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 832,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 824,
+    "w": 1180,
+    "h": 76,
+    "bottom": "0px"
+   }
+  },
+  "thread": {
+   "turns": 5,
+   "renderedTurns": 5,
+   "turn": {
+    "x": 260,
+    "y": 90,
+    "w": 1180,
+    "h": 682
+   },
+   "markdown": {
+    "x": 466,
+    "y": 90,
+    "w": 768,
+    "h": 636
+   },
+   "markdownFont": "",
+   "userBubble": {
+    "x": 696.4,
+    "y": 820,
+    "w": 537.6,
+    "h": 116,
+    "radius": "22px",
+    "padding": "10px 16px",
+    "bg": "rgb(23, 62, 118)",
+    "maxWidth": "70%"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.group/turn-messages",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": 90,
+    "w": 768,
+    "h": 682
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 824,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 824,
+    "w": 1180,
+    "h": 76
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.group/scroll-root.relative.flex",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 900,
+    "scrollHeight": 5792,
+    "scrollTop": 2150
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ },
+ "thread-dark-user-turn@1440": {
+  "label": "thread-dark-user-turn",
+  "url": "https://chatgpt.com/c/<id>",
+  "vw": 1440,
+  "vh": 900,
+  "sidebar": {
+   "el": "div#stage-slideover-sidebar.border-token-border-extra-light.bg-token-sidebar-surface-primary.relative",
+   "x": 0,
+   "y": 0,
+   "w": 260,
+   "h": 900,
+   "bg": "rgb(0, 0, 0)",
+   "borderEnd": "1px rgba(255, 255, 255, 0.1)",
+   "transform": "none"
+  },
+  "rail": {
+   "x": 0,
+   "y": 0,
+   "w": 52,
+   "h": 900,
+   "bg": "rgba(0, 0, 0, 0)",
+   "buttons": [
+    {
+     "label": "Open sidebar",
+     "x": 8,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 8,
+     "y": 60,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 96,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 132,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "",
+     "x": 6,
+     "y": 168,
+     "w": 40,
+     "h": 36
+    },
+    {
+     "label": "Open profile menu",
+     "x": 6,
+     "y": 848,
+     "w": 40,
+     "h": 40
+    }
+   ]
+  },
+  "sidebarRows": {
+   "first": {
+    "x": 6,
+    "y": 60,
+    "w": 248,
+    "h": 36
+   },
+   "second": {
+    "x": 6,
+    "y": 96,
+    "w": 248,
+    "h": 36
+   },
+   "count": 18,
+   "labels": [
+    {
+     "text": "Pinned",
+     "x": 16,
+     "y": 330,
+     "w": 45.5,
+     "h": 20
+    },
+    {
+     "text": "Projects",
+     "x": 16,
+     "y": 490,
+     "w": 54.3,
+     "h": 20
+    },
+    {
+     "text": "Chats",
+     "x": 16,
+     "y": 686,
+     "w": 38.5,
+     "h": 20
+    }
+   ],
+   "header": {
+    "x": 8,
+    "y": 0,
+    "w": 244,
+    "h": 52
+   },
+   "account": {
+    "x": 6,
+    "y": 841.9,
+    "w": 248,
+    "h": 52.1
+   }
+  },
+  "main": {
+   "x": 260,
+   "y": -2698,
+   "w": 1180,
+   "h": 848,
+   "bg": "rgba(0, 0, 0, 0)"
+  },
+  "header": {
+   "el": "header#page-header.draggable.no-draggable-children.sticky",
+   "x": 260,
+   "y": 0,
+   "w": 1180,
+   "h": 52,
+   "position": "sticky",
+   "items": [
+    {
+     "label": "Upgrade",
+     "x": 1193.6,
+     "y": 9,
+     "w": 106.2,
+     "h": 34
+    },
+    {
+     "label": "Share",
+     "x": 1299.8,
+     "y": 8,
+     "w": 88.2,
+     "h": 36
+    },
+    {
+     "label": "More",
+     "x": 1396,
+     "y": 8,
+     "w": 36,
+     "h": 36
+    }
+   ]
+  },
+  "composer": {
+   "box": {
+    "x": 466,
+    "y": 824,
+    "w": 768,
+    "h": 52
+   },
+   "radius": "28px",
+   "bg": "rgb(33, 33, 33)",
+   "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 0px 1px 0px inset",
+   "editor": {
+    "x": 517,
+    "y": 836.5,
+    "w": 523,
+    "h": 42
+   },
+   "buttons": [
+    {
+     "label": "Add files and more",
+     "x": 474,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Think",
+     "x": 1050,
+     "y": 832,
+     "w": 92,
+     "h": 36
+    },
+    {
+     "label": "Start dictation",
+     "x": 1146,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    },
+    {
+     "label": "Start Voice",
+     "x": 1190,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    }
+   ],
+   "sticky": {
+    "x": 260,
+    "y": 824,
+    "w": 1180,
+    "h": 76,
+    "bottom": "0px"
+   }
+  },
+  "thread": {
+   "turns": 5,
+   "renderedTurns": 5,
+   "turn": {
+    "x": 260,
+    "y": -510,
+    "w": 1180,
+    "h": 682
+   },
+   "markdown": {
+    "x": 466,
+    "y": -510,
+    "w": 768,
+    "h": 636
+   },
+   "markdownFont": "",
+   "userBubble": {
+    "x": 696.4,
+    "y": 220,
+    "w": 537.6,
+    "h": 116,
+    "radius": "22px",
+    "padding": "10px 16px",
+    "bg": "rgb(23, 62, 118)",
+    "maxWidth": "70%"
+   }
+  },
+  "maxWidths": [
+   {
+    "el": "div.mx-auto.flex-1.group/turn-messages",
+    "max": "768px",
+    "padL": "0px",
+    "padR": "0px",
+    "x": 466,
+    "y": -510,
+    "w": 768,
+    "h": 682
+   }
+  ],
+  "grids": [
+   {
+    "el": "div.row-start-3.row-end-4.col-start-1",
+    "cols": "36px 536.031px 179.969px",
+    "colGap": "normal",
+    "rowGap": "normal",
+    "x": 466,
+    "y": 824,
+    "w": 768,
+    "h": 52,
+    "firstChild": {
+     "x": 474,
+     "y": 832,
+     "w": 36,
+     "h": 36
+    }
+   }
+  ],
+  "fixed": [
+   {
+    "el": "div.sticky.top-0.z-30",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "30",
+    "x": 0,
+    "y": 0,
+    "w": 260,
+    "h": 52
+   },
+   {
+    "el": "div.bg-token-sidebar-surface-primary",
+    "pos": "sticky",
+    "top": "52px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 0,
+    "y": 52,
+    "w": 260,
+    "h": 44
+   },
+   {
+    "el": "header#page-header.draggable.no-draggable-children.sticky",
+    "pos": "sticky",
+    "top": "0px",
+    "bottom": "auto",
+    "z": "20",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 52
+   },
+   {
+    "el": "div#thread-bottom-container.sticky.bottom-0.z-10",
+    "pos": "sticky",
+    "top": "auto",
+    "bottom": "0px",
+    "z": "10",
+    "x": 260,
+    "y": 824,
+    "w": 1180,
+    "h": 76
+   }
+  ],
+  "dialogs": [],
+  "scrollers": [
+   {
+    "el": "div.group/scroll-root.relative.flex",
+    "x": 260,
+    "y": 0,
+    "w": 1180,
+    "h": 900,
+    "scrollHeight": 5792,
+    "scrollTop": 2750
+   }
+  ],
+  "body": {
+   "font": "-apple-system-body, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, \"sans-serif\", \"Segoe UI Emoji\", \"Segoe UI Symb",
+   "size": "16px",
+   "bg": "rgb(0, 0, 0)",
+   "color": "rgb(255, 255, 255)"
+  }
+ }
+}
