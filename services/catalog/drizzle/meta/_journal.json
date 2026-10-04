@@ -176,6 +176,13 @@
       "when": 1791125752876,
       "tag": "0024_asset_name",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791129326723,
+      "tag": "0025_visit_event",
+      "breakpoints": true
     }
   ]
 }

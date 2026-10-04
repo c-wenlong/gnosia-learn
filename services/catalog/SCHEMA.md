@@ -268,6 +268,25 @@ actually being changed still raises — and drops the false positive.
 `event` carries no `updated_at`. A column that can never change would only
 invite someone to try.
 
+### Event types
+
+`event.type` is one of `EVENT_TYPES` in `packages/schema/src/shared.ts`, and
+the `event_type_check` constraint repeats the list, so a new type is a
+migration as well as an edit there.
+
+| Type | Written by | Payload | Read by |
+| --- | --- | --- | --- |
+| `session-start`, `observation`, `review`, `session-close`, `void` | the `learn` CLI and the web app's session and tutor routes | per type; `observation` and `review` carry the concept and the grade | both replays (`observation` and `review` only), session close, `void` |
+| `watched` (0008) | the library asset page's Mark watched, and the player at 90% played | `{ asset, kind }`, no concept | the asset page's "Watched on"; never evidence |
+| `visit` (0025) | `POST /api/learner/preference`, each time a course or module page opens, beside the `lastVisited` and `recentModules` preferences | `{ course, module? }`, no concept, no session | the sidebar's Recent and Home's "Pick up where you left off" (`apps/web/src/lib/recent.ts`); neither study nor evidence |
+
+`visit` replaces the `recentModules` preference, which keeps the last five
+visits only. The route writes both for one release, and Recent merges the two
+by course and module meanwhile, so the five modules a list held before the
+first event are not lost; then the preference is left unread, as H1 of
+docs/proposals/home-page.md left the streak's rows. A visit is a row per page
+open, a repeat included, the way a second review is a second row.
+
 ### What is derived and what is not
 
 `mastery` and `review` are projections. Replaying `event` from the beginning
