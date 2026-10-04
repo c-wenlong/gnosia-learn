@@ -24,7 +24,11 @@ services:
       POSTGRES_PASSWORD: catalog
       POSTGRES_DB: self_learn
     ports:
-      - "5432:5432"
+      # Loopback only. Docker publishes a port past ufw, so "5432:5432" would
+      # open the catalog:catalog database to every interface the host has,
+      # LAN included. docs/HOMESERVER.md step 6; a laptop that should reach
+      # it over the tailnet binds the Tailscale address here instead.
+      - "127.0.0.1:5432:5432"
     volumes:
       - catalog-data:/var/lib/postgresql/data
     healthcheck:
