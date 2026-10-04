@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useStudioPath } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { Button } from "@/components/ui/Button";
 import { Collapse } from "@/components/ui/Collapse";
 import {
   failureReport,
@@ -30,6 +31,7 @@ import { useElapsed } from "@/lib/use-elapsed";
  *
  * Left to right: a status dot, the diagram name, the phase in words,
  * `step 4 of 7`, elapsed counting up, and Cancel. There is no percentage here or anywhere else (D23).
+ * Cancel and Dismiss are the kit's `Button` at `xs`, 28px inside the 32px strip.
  *
  * Slimmer since the job moved into the grid ("The job in the grid" in
  * docs/STUDIO-CHAT-FIRST.md). The tile or the new-diagram card now carries the
@@ -106,26 +108,22 @@ function Strip({
             </span>
           )}
           {job.state !== "awaiting_review" && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="xs"
               onClick={() => void post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/cancel`)}
               disabled={job.cancelRequestedAt !== null}
-              className="inline-flex h-6 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50"
             >
               {job.cancelRequestedAt === null ? "Cancel" : "Stopping"}
-            </button>
+            </Button>
           )}
         </>
       ) : (
         <>
           <Elapsed job={job} />
-          <button
-            type="button"
-            onClick={() => dismiss(job.jobId)}
-            className="inline-flex h-6 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs hover:bg-[var(--surface-hover)]"
-          >
+          <Button variant="secondary" size="xs" onClick={() => dismiss(job.jobId)}>
             Dismiss
-          </button>
+          </Button>
         </>
       )}
     </div>

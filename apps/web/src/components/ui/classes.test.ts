@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  badgeClasses,
   buttonClasses,
   cardClasses,
   chipClasses,
@@ -66,6 +67,85 @@ describe("buttonClasses", () => {
   it("keeps the ghost padding tight and adds width and extra classes on request", () => {
     expect(buttonClasses({ variant: "ghost" })).toContain("px-2");
     expect(buttonClasses({ block: true, className: "mt-4" })).toMatch(/w-full mt-4$/);
+  });
+});
+
+describe("buttonClasses at xs", () => {
+  it("is 28px at 12px, a pill like the others", () => {
+    const c = buttonClasses({ size: "xs" });
+    expect(c).toContain("h-7");
+    expect(c).toContain("text-[12px]");
+    expect(c).toContain("rounded-full");
+    expect(c).not.toContain("h-11");
+  });
+
+  it("draws the 3D faces flat, with no lip and no room kept for one", () => {
+    for (const variant of ["primary", "ok", "warn", "accent", "brand"] as const) {
+      const c = buttonClasses({ variant, size: "xs" });
+      expect(c).not.toContain("shadow-[");
+      expect(c).not.toContain("mb-1");
+      expect(c).not.toContain("translate-y-1");
+      expect(c).toContain("not-disabled:active:opacity-80");
+    }
+    // The face is the same one the larger sizes put over their lip.
+    expect(buttonClasses({ size: "xs" })).toContain("bg-btn-face");
+    expect(buttonClasses({ variant: "warn", size: "xs" })).toContain("bg-warn");
+  });
+
+  it("gives secondary a 1px outline at xs and 2px above it", () => {
+    const xs = buttonClasses({ variant: "secondary", size: "xs" }).split(" ");
+    expect(xs).toContain("border");
+    expect(xs).not.toContain("border-2");
+    expect(buttonClasses({ variant: "secondary", size: "sm" }).split(" ")).toContain("border-2");
+  });
+
+  it("keeps the kit's focus ring and disabled state at every size and variant", () => {
+    for (const size of ["md", "sm", "xs"] as const) {
+      for (const variant of ["primary", "secondary", "ghost", "ok", "warn", "accent", "brand", "overlay"] as const) {
+        const c = buttonClasses({ variant, size });
+        expect(c).toContain(FOCUS);
+        expect(c).toContain("disabled:opacity-50");
+        for (const token of reactive(c)) expect(token).toMatch(/^not-disabled:/);
+      }
+    }
+  });
+
+  it("lays the overlay face over a picture: translucent, blurred, edged, no shadow", () => {
+    const c = buttonClasses({ variant: "overlay", size: "xs" });
+    expect(c).toContain("bg-surface/90");
+    expect(c).toContain("backdrop-blur-sm");
+    expect(c.split(" ")).toContain("border");
+    expect(c.split(" ").filter((token) => /^shadow/.test(token))).toEqual([]);
+  });
+});
+
+describe("badgeClasses", () => {
+  it("is a 24px pill of 12px words that may shrink", () => {
+    const c = badgeClasses();
+    expect(c).toContain("h-6");
+    expect(c).toContain("rounded-full");
+    expect(c).toContain("text-[12px]");
+    expect(c).toContain("min-w-0");
+    expect(c).toContain("overflow-hidden");
+  });
+
+  it("is never a control: no focus ring, no hover", () => {
+    for (const tone of ["muted", "accent", "warn", "danger", "ok"] as const) {
+      const c = badgeClasses({ tone });
+      expect(c).not.toContain("focus-visible:");
+      expect(c).not.toContain("hover:");
+    }
+  });
+
+  it("takes each tone's text role, never a legacy alias", () => {
+    expect(badgeClasses()).toContain("text-text2");
+    expect(badgeClasses({ tone: "accent" })).toContain("text-accent-text");
+    expect(badgeClasses({ tone: "warn" })).toContain("text-warn-text");
+    expect(badgeClasses({ tone: "danger" })).toContain("text-danger");
+    expect(badgeClasses({ tone: "ok" })).toContain("text-ok-text");
+    for (const tone of ["muted", "accent", "warn", "danger", "ok"] as const) {
+      expect(badgeClasses({ tone })).not.toContain("var(--");
+    }
   });
 });
 

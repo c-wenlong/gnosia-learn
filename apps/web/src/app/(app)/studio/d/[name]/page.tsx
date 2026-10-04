@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { commitDiagram, exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/(app)/studio/actions";
@@ -10,18 +9,14 @@ import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
 import { FADE_IN } from "@/components/studio/motion";
 import { ShotView } from "@/components/studio/ShotView";
+import { Badge } from "@/components/ui/Badge";
 import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/classes";
 import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
-import {
-  Button,
-  ButtonLink,
-  Chip,
-  Spacer,
-  StudioStrip,
-  VerbNotice,
-} from "@/components/studio/StudioChrome";
+import { BackToStudio, Spacer, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { videoAvailability } from "@/lib/studio-drafts";
 import { vocabularyBanner, type VocabularyState } from "@/lib/studio-vocabulary";
@@ -280,39 +275,21 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
   const pill = freshness(diagram.svgState);
   return (
     <StudioStrip>
-      <Link
-        href="/studio"
-        className="inline-flex h-8 shrink-0 items-center rounded-md px-2 text-xs hover:bg-[var(--surface-hover)]"
-        aria-label="Back to the studio"
-      >
-        ← Studio
-      </Link>
+      <BackToStudio />
       <span className="min-w-0 truncate text-sm font-medium">{displayTitle(diagram)}</span>
-      {diagram.topic === null ? (
-        <Chip tone="warn">No topic</Chip>
-      ) : (
-        <Chip>{diagram.topic}</Chip>
-      )}
+      {diagram.topic === null ? <Badge tone="warn">No topic</Badge> : <Badge>{diagram.topic}</Badge>}
       {/* The pill is a button, not a badge: its whole job when it says stale is
-          to be the thing that fixes it. */}
+          to be the thing that fixes it. Stale or missing, it is the warn face;
+          current, a quiet one with the ok dot. */}
       <form action={exportSvg} className="shrink-0">
         <input type="hidden" name="name" value={diagram.name} />
         <input type="hidden" name="path" value={path} />
-        <button
-          type="submit"
-          title={`${pill.title} Click to export it again.`}
-          className={`inline-flex h-7 items-center rounded-md border px-2 text-xs transition-colors ${
-            pill.tone === "ok"
-              ? "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok-text)]"
-              : "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)]"
-          }`}
-        >
+        <Button type="submit" variant={pill.tone === "ok" ? "secondary" : "warn"} size="xs" title={`${pill.title} Click to export it again.`}>
+          {pill.tone === "ok" && <span aria-hidden className="size-2 rounded-full bg-ok" />}
           {pill.label}
-        </button>
+        </Button>
       </form>
-      {uncommitted && (
-        <Chip tone="warn">Uncommitted edits</Chip>
-      )}
+      {uncommitted && <Badge tone="warn">Uncommitted edits</Badge>}
       <Spacer />
       {/* The canvas saves to a checkout; this is how its edits reach the
           database, with a reason, the way a commit message used to. */}
@@ -328,7 +305,9 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
           aria-label="Why this change"
           className="w-44"
         />
-        <Button type="submit">Commit</Button>
+        <Button type="submit" variant="secondary" size="xs">
+          Commit
+        </Button>
       </form>
       <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" />
       <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
@@ -343,13 +322,10 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
         <ExtendLink
           href={extendHref(diagram.name, { video: true })}
           label="Make a video"
-          className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium transition-colors hover:bg-[var(--surface-hover)]"
+          className={buttonClasses({ variant: "secondary", size: "xs" })}
         />
       )}
-      <ExtendLink
-        href={extendHref(diagram.name)}
-        className="inline-flex h-8 shrink-0 items-center rounded-md bg-[var(--accent)] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-strong)]"
-      />
+      <ExtendLink href={extendHref(diagram.name)} className={buttonClasses({ size: "xs" })} />
     </StudioStrip>
   );
 }
@@ -369,7 +345,9 @@ function VerbForm({
     <form action={action} className="shrink-0">
       <input type="hidden" name="name" value={name} />
       <input type="hidden" name="path" value={path} />
-      <Button type="submit">{label}</Button>
+      <Button type="submit" variant="secondary" size="xs">
+        {label}
+      </Button>
     </form>
   );
 }
@@ -397,11 +375,13 @@ function MirrorProblem({
             <form action={restartMirror}>
               <input type="hidden" name="file" value={file} />
               <input type="hidden" name="path" value={path} />
-              <Button type="submit" filled>
+              <Button type="submit" size="xs">
                 Restart canvas
               </Button>
             </form>
-            <ButtonLink href="/studio">Back to the grid</ButtonLink>
+            <Button href="/studio" variant="secondary" size="xs" scroll={false}>
+              Back to the grid
+            </Button>
           </>
         }
       >

@@ -44,13 +44,3 @@ export function KindBadge({ kind, inline = false }: { kind: "diagram" | "video";
 export function KindWord({ kind }: { kind: "diagram" | "video" }) {
   return <span className="sr-only">{kind === "video" ? "Video: " : "Diagram: "}</span>;
 }
-
-/**
- * A tile's lift: a few pixels up under the pointer or keyboard focus, as
- * Gauth's story card does, still under reduced motion. No shadow with it: the
- * kit has none besides the button's lip (docs/design/IMPLEMENTATION.md), and a
- * black one does not show on a dark ground. box-shadow stays in the
- * transition so a selected tile's ring still eases in.
- */
-export const TILE_LIFT =
-  "transition-[translate,box-shadow,background-color] duration-200 ease-out hover:-translate-y-[3px] focus-within:-translate-y-[3px] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:focus-within:translate-y-0";

@@ -8,10 +8,12 @@ import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Duration } from "@/components/studio/JobStrip";
-import { KindBadge, KindWord, TILE_LIFT } from "@/components/studio/KindBadge";
+import { KindBadge, KindWord } from "@/components/studio/KindBadge";
 import { usePanelHost } from "@/components/studio/panel-host";
-import { Chip } from "@/components/studio/StudioChrome";
-import { linkClasses } from "@/components/ui/classes";
+import { JOB_BAR, JOB_CONTROL, TILE, TILE_ACTIONS, TILE_LIFT } from "@/components/studio/surfaces";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { buttonClasses, cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { useSheets } from "@/components/studio/video/use-video-job";
@@ -63,7 +65,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
   const slug = video.slug;
   const title = video.title ?? slug;
   return (
-    <div className={`group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] ${TILE_LIFT}`}>
+    <div className={cx("group hover:bg-surface2", TILE, TILE_LIFT)}>
       <PanelLink
         href={libraryHref(slug, gridHref(path))}
         panel={panelHref(path, { play: slug })}
@@ -87,16 +89,16 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
         <div className="flex min-w-0 flex-col gap-1.5 p-3">
           <span className="line-clamp-2 text-sm font-medium">{title}</span>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            {video.topic !== null && <Chip>{video.topic}</Chip>}
-            {video.updated !== "" && <span className="text-xs text-[var(--muted)]">{relativeTime(video.updated)}</span>}
+            {video.topic !== null && <Badge>{video.topic}</Badge>}
+            {video.updated !== "" && <span className="text-xs text-text2">{relativeTime(video.updated)}</span>}
           </div>
         </div>
       </PanelLink>
       <TileVideoJob slug={slug} title={title} poster={video.posterAssetId === null ? null : posterHref(video.posterAssetId)} path={path} />
       {/* After a change job's loader, so the job does not hide what the tile is. */}
       <KindBadge kind="video" />
-      <div className="pointer-events-none absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
-        <VideoChangeButton slug={slug} title={title} path={path} className={HOVER_CONTROL} />
+      <div className={TILE_ACTIONS}>
+        <VideoChangeButton slug={slug} title={title} path={path} className={buttonClasses({ variant: "overlay", size: "xs" })} />
       </div>
     </div>
   );
@@ -141,9 +143,6 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
     </div>
   );
 }
-
-const HOVER_CONTROL =
-  "flex h-8 items-center rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-2 text-xs font-medium text-[var(--foreground)] shadow-sm hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]";
 
 function PlayMark() {
   return (
@@ -253,15 +252,15 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
   const making = newVideoJobs(jobs, existing, ended, dismissed);
   return making.map((job) =>
     layout === "grid" ? (
-      <div key={job.jobId} className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${TILE_LIFT} ${POP_IN}`}>
-        <div className="relative aspect-[4/3] overflow-hidden border-b border-[var(--border)]">
+      <div key={job.jobId} className={cx(TILE, TILE_LIFT, POP_IN)}>
+        <div className="relative aspect-[4/3] overflow-hidden border-b border-border">
           <VideoStage job={job} title={job.title ?? "New video"} backdrop={null} path={path} isNew />
           <KindBadge kind="video" />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5 p-3">
           <span className="line-clamp-2 text-sm font-medium">{job.title ?? "New video"}</span>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <Chip>{job.topic}</Chip>
+            <Badge>{job.topic}</Badge>
           </div>
         </div>
       </div>
@@ -409,44 +408,42 @@ function Backdrop({
   );
 }
 
+/** The bar at the foot of the picture, as a diagram job's (`Status` in `GridJob.tsx`). */
 function Status({ job, stage, headline, path }: { job: VideoJob; stage: VideoTileStage; headline: string; path: string }) {
   const { post, dismiss } = useStudioJobs();
   const [cancelling, setCancelling] = useState(false);
-  const bar =
-    "studio-glass pointer-events-none absolute inset-x-2 bottom-2 flex min-w-0 items-center gap-2 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs shadow-sm";
-  const control =
-    "pointer-events-auto inline-flex h-7 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--surface-hover)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]";
 
   if (stage === "review") {
     const seconds = job.gate?.durationSeconds ?? null;
     return (
-      <div className={bar}>
+      <div className={JOB_BAR}>
         <Dot stage={stage} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-[var(--foreground)]">{headline}</span>
-          <span className="block truncate text-[var(--muted)]">
+          <span className="block truncate font-medium text-text">{headline}</span>
+          <span className="block truncate text-text2">
             {seconds === null ? "Built and checked" : `${spokenLength(seconds)}, built and checked`}
           </span>
         </span>
-        <span className="inline-flex h-7 shrink-0 items-center rounded-md bg-[var(--accent)] px-2 text-xs font-medium text-white">Review</span>
+        {/* Not a control: the whole picture is the link to the review. */}
+        <span className={buttonClasses({ size: "xs" })}>Review</span>
       </div>
     );
   }
 
   if (stage === "failed") {
     return (
-      <div className={`${bar} flex-wrap`}>
+      <div className={cx(JOB_BAR, "flex-wrap")}>
         <Dot stage={stage} />
-        <span className="min-w-0 flex-1 truncate font-medium text-[var(--danger)]">{videoFailureLine(job)}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-danger">{videoFailureLine(job)}</span>
         <span className="flex w-full justify-end gap-1.5">
           {typeof job.draftId === "string" && (
-            <PanelLink href={conversationHref(path, job.draftId)} scroll={false} className={control}>
+            <PanelLink href={conversationHref(path, job.draftId)} scroll={false} className={JOB_CONTROL}>
               Talk it through
             </PanelLink>
           )}
-          <button type="button" onClick={() => dismiss(job.jobId)} className={control}>
+          <Button variant="secondary" size="xs" onClick={() => dismiss(job.jobId)} className="pointer-events-auto">
             Dismiss
-          </button>
+          </Button>
         </span>
       </div>
     );
@@ -455,29 +452,30 @@ function Status({ job, stage, headline, path }: { job: VideoJob; stage: VideoTil
   const stopping = cancelling || job.cancelRequestedAt !== null;
   return (
     <>
-      <div className={bar}>
+      <div className={JOB_BAR}>
         <Dot stage={stage} />
         <span className="min-w-0 flex-1">
-          <span role="status" className="block truncate font-medium text-[var(--foreground)]">
+          <span role="status" className="block truncate font-medium text-text">
             {headline}
           </span>
           <StepAndTime job={job} />
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="xs"
           disabled={stopping}
           onClick={async () => {
             setCancelling(true);
             const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/cancel`);
             if (!result.ok) setCancelling(false);
           }}
-          className={control}
+          className="pointer-events-auto"
         >
           {stopping ? "Stopping" : "Cancel"}
-        </button>
+        </Button>
       </div>
-      <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-[var(--chip-bg)]">
-        <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] bg-[var(--accent)]" />
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-surface2">
+        <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] bg-accent" />
       </span>
     </>
   );

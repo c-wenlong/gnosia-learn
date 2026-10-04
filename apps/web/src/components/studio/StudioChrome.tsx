@@ -1,9 +1,9 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { PanelLink } from "@/components/studio/PanelLink";
 import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
 
 /**
  * The small, shared pieces of the studio's own chrome.
@@ -16,20 +16,34 @@ import { cx, LABEL } from "@/components/ui/classes";
  * repo's existing answer to the same problem).
  *
  * Every size here comes from the design tokens table: 40px and 32px rows, 12px
- * as the type floor, 6px on controls and 12px on cards. D22 is why there is no
- * `text-[10px]` in this file or in any other under `components/studio/` — at
- * `--muted` on `--surface` that size is under the contrast floor, and the
- * studio's metadata rows are denser than anything else in the app.
+ * as the type floor and 12px on cards. D22 is why there is no `text-[10px]` in
+ * this file or in any other under `components/studio/` — at `--muted` on
+ * `--surface` that size is under the contrast floor, and the studio's metadata
+ * rows are denser than anything else in the app.
+ *
+ * The controls are the kit's, at the studio's density: a `Button` at `xs`
+ * (28px, a flat face, `href` for a link), a `Badge` for a label in a tone, a
+ * small `Chip` (or `chipClasses` on a `PanelLink`) for a topic filter, an
+ * `IconButton` for a mark. This file used to export its own `Button`,
+ * `ButtonLink`, `Chip` and `ChipLink`, which shadowed the kit's names and
+ * drew a 6px box with no focus ring; `studio-kit.test.ts` fails if a studio
+ * file exports one of those names again or hand-builds such a control. The
+ * tile and the home view's sheet are studio-local surfaces, in `surfaces.ts`.
  */
 
 /**
- * The 40px strip under the app header, 48px as the head of the home view's
- * assets panel (`surface`). Sticky, and its height never changes.
+ * The 40px strip under the app header, and the head of the home view's
+ * assets panel (`surface`). Sticky.
  *
  * `min-w-0`, and the page under it too: the strip's controls do not shrink,
  * so its min-content width used to widen the whole page on a phone, and the
  * grid laid out two columns for a screen that shows one. Now the topic chips
  * give up their room first, as their overflow already allows.
+ *
+ * On the assets panel it is at least 48px and grows to fit what it holds:
+ * the toolbar there (`StudioToolbar`) lays its controls out on one row when
+ * the panel is wide enough and on two when it is not, so every control stays
+ * on screen at 390px. It does not change height while the page scrolls.
  */
 export function StudioStrip({ children, surface = false }: { children: ReactNode; surface?: boolean }) {
   return (
@@ -37,8 +51,8 @@ export function StudioStrip({ children, surface = false }: { children: ReactNode
       className={
         surface
           ? // On the assets panel of the home view: its ground, inside its rounded top.
-            "sticky top-0 z-10 flex h-12 min-w-0 shrink-0 items-center gap-2 rounded-t-3xl border-b border-[var(--border)] bg-surface px-3 md:px-5"
-          : "sticky top-0 z-10 flex h-10 min-w-0 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3"
+            "sticky top-0 z-10 flex min-h-12 min-w-0 shrink-0 items-center gap-2 rounded-t-3xl border-b border-border bg-surface px-3 py-2 md:px-5"
+          : "sticky top-0 z-10 flex h-10 min-w-0 shrink-0 items-center gap-2 border-b border-border bg-page px-3"
       }
     >
       {children}
@@ -46,110 +60,22 @@ export function StudioStrip({ children, surface = false }: { children: ReactNode
   );
 }
 
+/**
+ * The way back to the grid from a canvas, first on its strip: a ghost kit
+ * `Button` at `xs`, drawn by the canvas page and by its loading frame, so it
+ * works before the canvas does.
+ */
+export function BackToStudio() {
+  return (
+    <Button href="/studio" variant="ghost" size="xs" aria-label="Back to the studio">
+      <Glyph name="previous" size={16} className="-ml-0.5" />
+      Studio
+    </Button>
+  );
+}
+
 export function Spacer() {
   return <div className="flex-1" />;
-}
-
-/** A label-role chip. `tone` is the only thing that varies. */
-export function Chip({
-  children,
-  tone = "muted",
-  title,
-}: {
-  children: ReactNode;
-  tone?: "muted" | "accent" | "warn" | "danger" | "ok";
-  title?: string;
-}) {
-  const tones = {
-    muted: "border-[var(--border)] bg-[var(--chip-bg)] text-[var(--muted-strong)]",
-    accent: "border-[var(--accent)]/40 bg-[var(--nav-active-bg)] text-[var(--accent-strong)]",
-    warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)]",
-    danger: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
-    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok-text)]",
-  } as const;
-  return (
-    <span
-      title={title}
-      className={`inline-flex max-w-full items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-xs ${tones[tone]}`}
-    >
-      {children}
-    </span>
-  );
-}
-
-/** A chip that is also a link: the topic filter, and the topic on the strip. */
-export function ChipLink({
-  href,
-  children,
-  active = false,
-  title,
-}: {
-  href: string;
-  children: ReactNode;
-  active?: boolean;
-  title?: string;
-}) {
-  return (
-    <PanelLink
-      href={href}
-      title={title}
-      className={`inline-flex h-7 max-w-full shrink-0 items-center gap-1 truncate rounded-md border px-2 text-xs transition-colors ${
-        active
-          ? "border-[var(--accent)] bg-[var(--nav-active-bg)] text-[var(--accent-strong)]"
-          : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted-strong)] hover:bg-[var(--surface-hover)]"
-      }`}
-    >
-      {children}
-    </PanelLink>
-  );
-}
-
-/** A 32px-tall control. Bordered by default, filled when it is the one action. */
-export function Button({
-  children,
-  filled = false,
-  ...rest
-}: { children: ReactNode; filled?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...rest}
-      className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-        filled
-          ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"
-          : "border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** The same shape as `Button`, for the places navigation is the action. */
-export function ButtonLink({
-  href,
-  children,
-  filled = false,
-  title,
-}: {
-  href: string;
-  children: ReactNode;
-  filled?: boolean;
-  title?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      scroll={false}
-      title={title}
-      className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
-        filled
-          ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"
-          : "border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
-      }`}
-    >
-      {children}
-    </Link>
-  );
 }
 
 /** A heading inside the right panel. */

@@ -1,4 +1,5 @@
-import { ButtonLink, Mono } from "@/components/studio/StudioChrome";
+import { Mono } from "@/components/studio/StudioChrome";
+import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 
 /**
@@ -41,7 +42,13 @@ export function BlockedCard({
         level={1}
         title={title}
         commands={commands}
-        actions={retryHref === undefined ? undefined : <ButtonLink href={retryHref}>Recheck</ButtonLink>}
+        actions={
+          retryHref === undefined ? undefined : (
+            <Button href={retryHref} variant="secondary" size="xs" scroll={false}>
+              Recheck
+            </Button>
+          )
+        }
         className="w-full max-w-[520px]"
       >
         <p>{lead}</p>

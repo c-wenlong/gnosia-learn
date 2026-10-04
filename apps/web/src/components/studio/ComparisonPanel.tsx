@@ -6,8 +6,11 @@ import { useState } from "react";
 
 import { FadeImg } from "@/components/studio/motion-parts";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import {
   catalogErrorLine,
@@ -127,7 +130,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
 
       {reviewable && (
         <div className="mt-4 flex flex-wrap gap-1.5">
-          <Button type="button" filled disabled={busy !== null} onClick={() => void act("accept")}>
+          <Button size="xs" disabled={busy !== null} onClick={() => void act("accept")}>
             {busy === "accept" ? "Accepting…" : "Accept"}
           </Button>
           <InlineConfirm
@@ -155,7 +158,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
           <p className="break-words">{said.text}</p>
           {said.recompare === true && (
             <div className="mt-2">
-              <Button type="button" disabled={busy !== null} onClick={() => void act("compare")}>
+              <Button variant="secondary" size="xs" disabled={busy !== null} onClick={() => void act("compare")}>
                 {busy === "compare" ? "Reading the file…" : "Compare with the file as it is now"}
               </Button>
               <p className="mt-1.5 text-[var(--muted-strong)]">
@@ -214,7 +217,7 @@ function Accepted({
         <Callout
           title={<Mono>indexed: false</Mono>}
           actions={
-            <Button type="button" disabled={busy} onClick={onReindex}>
+            <Button variant="secondary" size="xs" disabled={busy} onClick={onReindex}>
               {busy ? "Reindexing…" : "Reindex"}
             </Button>
           }
@@ -275,14 +278,14 @@ function Thumbnail({
     <figure className="min-w-0">
       <figcaption className="mb-1 flex items-center gap-1 text-xs text-[var(--muted)]">
         <span>{label}</span>
-        {which === "before" && comparison.before === null && <Chip>none</Chip>}
+        {which === "before" && comparison.before === null && <Badge>none</Badge>}
       </figcaption>
       {has ? (
         <Link
           href={panelHref(path, { shot: which })}
           scroll={false}
           title={`Open the ${label.toLowerCase()} picture full width`}
-          className="block aspect-[4/3] w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]"
+          className={cx("block aspect-[4/3] w-full overflow-hidden rounded-md border border-border bg-surface transition-colors duration-100 hover:border-accent motion-reduce:transition-none", FOCUS)}
         >
           <FadeImg
             src={shotSrc(job.jobId, which)}

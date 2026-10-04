@@ -39,3 +39,22 @@ describe("Button's disabledReason", () => {
     expect(html).toMatch(/^<span class="flex w-full /);
   });
 });
+
+describe("Button at xs", () => {
+  it("renders the studio's 28px button with the kit's ring", () => {
+    const html = render({ size: "xs", variant: "secondary" });
+    expect(html).toMatch(/^<button type="button" class="[^"]*\bh-7\b[^"]*"/);
+    expect(html).toContain("text-[12px]");
+    expect(html).toContain("focus-visible:outline-accent");
+    expect(html).not.toContain("shadow-[");
+  });
+
+  it("is a link with href, keeping the scroll when asked", () => {
+    const html = renderToStaticMarkup(
+      createElement(Button, { href: "/studio", size: "xs", variant: "secondary", scroll: false, children: "Back to the grid" }),
+    );
+    expect(html).toMatch(/^<a [^>]*href="\/studio"/);
+    expect(html).toContain("h-7");
+    expect(html).not.toContain("scroll=");
+  });
+});

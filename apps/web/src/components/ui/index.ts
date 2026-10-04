@@ -9,6 +9,7 @@
  * page may render in its `links` mode, where no function crosses. The
  * contract (names and props) is written down in docs/design/IMPLEMENTATION.md.
  */
+export { Badge } from "./Badge";
 export { Banner } from "./Banner";
 export { Button, type ButtonProps } from "./Button";
 export { Callout } from "./Callout";
@@ -52,6 +53,7 @@ export { Textarea } from "./Textarea";
 export { TextLink, type TextLinkProps } from "./TextLink";
 export { TypingDots } from "./TypingDots";
 export {
+  badgeClasses,
   bannerClasses,
   buttonClasses,
   calloutClasses,
@@ -70,6 +72,7 @@ export {
   textareaClasses,
 } from "./classes";
 export type {
+  BadgeTone,
   BannerTone,
   ButtonSize,
   CalloutTone,

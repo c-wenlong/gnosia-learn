@@ -4,8 +4,7 @@ import { useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNod
 
 import { usePanelHost } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
-import { ChipLink } from "@/components/studio/StudioChrome";
-import { cx, FOCUS, MENU_GROUP, MENU_HEADING, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
+import { buttonClasses, chipClasses, cx, MENU_GROUP, MENU_HEADING, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { Popover } from "@/components/ui/Popover";
 import { SearchField } from "@/components/ui/SearchField";
@@ -87,7 +86,8 @@ export function KindSegments({ view }: { view: StudioView }) {
 
 /**
  * The kit's search field at the strip's 32px, 240px wide as the design gives
- * it, in a plain form so it needs no JS.
+ * it, in a plain form so it needs no JS. Where the toolbar stacks its two
+ * halves (`StudioToolbar`), it takes the rest of the row beside the kind.
  */
 export function StudioSearch({ view }: { view: StudioView }) {
   const host = usePanelHost();
@@ -96,7 +96,7 @@ export function StudioSearch({ view }: { view: StudioView }) {
     if (host?.navigate(studioHref(view, { query, selected: null }))) event.preventDefault();
   }
   return (
-    <form action="/studio" method="get" onSubmit={onSubmit} className="shrink-0">
+    <form action="/studio" method="get" onSubmit={onSubmit} className="min-w-0 flex-1 @[52rem]:flex-none">
       <ViewFields view={view} />
       <SearchField
         size="compact"
@@ -104,7 +104,7 @@ export function StudioSearch({ view }: { view: StudioView }) {
         defaultValue={view.query}
         placeholder={SEARCH_WORDS[view.kind]}
         label={SEARCH_WORDS[view.kind]}
-        className="w-40 sm:w-60"
+        className="w-full @[52rem]:w-60"
       />
     </form>
   );
@@ -118,6 +118,16 @@ export function StudioSearch({ view }: { view: StudioView }) {
  * The menu is in the top layer, so the row's own clipping (it never wraps)
  * cannot cut it off. `No topic` is never in the overflow: its whole job is
  * to be noticed.
+ *
+ * The chips scroll sideways when they have less room than they need, and
+ * "+N" sits after them outside the scrolling box, so it is always on screen;
+ * the row used to clip both, and on a phone "+N" sat under the search field
+ * where no press could reach it. `No topic` ends the scrolling run. The
+ * padding keeps a chip's focus ring inside the scrolling box, which clips.
+ *
+ * Each chip is the kit's small `Chip` drawn on a `PanelLink` (`chipClasses`),
+ * so a press moves the URL in the browser as every control here does. A
+ * chosen topic is `aria-current`, as its row in the overflow menu is.
  */
 export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioView }) {
   const named = chips.filter((chip) => chip.slug !== NO_TOPIC);
@@ -126,17 +136,29 @@ export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioVi
   const overflow = named.slice(5);
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-      {shown.map((chip) => (
-        <ChipLink
-          key={chip.slug}
-          href={studioHref(toggleTopic(view, chip.slug), { selected: null })}
-          active={view.topics.includes(chip.slug)}
-          title={`${chip.label} (${chip.count})`}
-        >
-          {chip.label}
-        </ChipLink>
-      ))}
+    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <div className="-mx-1 flex min-w-0 items-center gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none]">
+        {shown.map((chip) => (
+          <TopicChip
+            key={chip.slug}
+            href={studioHref(toggleTopic(view, chip.slug), { selected: null })}
+            active={view.topics.includes(chip.slug)}
+            title={`${chip.label} (${chip.count})`}
+          >
+            {chip.label}
+          </TopicChip>
+        ))}
+        {/* At zero it would filter to nothing; shown while on, so it can be turned off. */}
+        {untopiced !== undefined && (untopiced.count > 0 || view.topics.includes(NO_TOPIC)) && (
+          <TopicChip
+            href={studioHref(toggleTopic(view, NO_TOPIC), { selected: null })}
+            active={view.topics.includes(NO_TOPIC)}
+            title={`${untopiced.count} diagram${untopiced.count === 1 ? "" : "s"} with no topic`}
+          >
+            No topic ({untopiced.count})
+          </TopicChip>
+        )}
+      </div>
       {overflow.length > 0 && (
         <StripMenu label={`+${overflow.length}`} name={`${overflow.length} more ${overflow.length === 1 ? "topic" : "topics"}`} placement="bottom-start">
           <MenuGroup title="More topics">
@@ -153,17 +175,16 @@ export function TopicChips({ chips, view }: { chips: TopicChip[]; view: StudioVi
           </MenuGroup>
         </StripMenu>
       )}
-      {/* At zero it would filter to nothing; shown while on, so it can be turned off. */}
-      {untopiced !== undefined && (untopiced.count > 0 || view.topics.includes(NO_TOPIC)) && (
-        <ChipLink
-          href={studioHref(toggleTopic(view, NO_TOPIC), { selected: null })}
-          active={view.topics.includes(NO_TOPIC)}
-          title={`${untopiced.count} diagram${untopiced.count === 1 ? "" : "s"} with no topic`}
-        >
-          No topic ({untopiced.count})
-        </ChipLink>
-      )}
     </div>
+  );
+}
+
+/** One topic filter: a small kit chip that is a panel link, filled while it is on. */
+function TopicChip({ href, active, title, children }: { href: string; active: boolean; title: string; children: ReactNode }) {
+  return (
+    <PanelLink href={href} title={title} aria-current={active ? "true" : undefined} className={chipClasses({ active, size: "sm" })}>
+      {children}
+    </PanelLink>
   );
 }
 
@@ -245,9 +266,9 @@ export function SortMenu({ view }: { view: StudioView }) {
 /* -------------------------------------------------------------------------- */
 
 /**
- * One of the strip's menus: a 32px button and a kit `Popover` of links under
- * it, the account menu's disclosure pattern (Tab walks from the button into
- * the rows; no arrow keys are promised). A row is a `PanelLink`, so a plain
+ * One of the strip's menus: a secondary kit `Button` at `xs` and a kit
+ * `Popover` of links under it, the account menu's disclosure pattern (Tab
+ * walks from the button into the rows; no arrow keys are promised). A row is a `PanelLink`, so a plain
  * click moves the URL in the browser and a modified one opens a new tab.
  *
  * A plain click on a row closes the menu with the focus back on the button.
@@ -287,11 +308,7 @@ function StripMenu({
         aria-controls={open ? id : undefined}
         aria-label={name}
         onClick={() => setOpen((was) => !was)}
-        className={cx(
-          "inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-surface pr-2 pl-2.5 text-xs font-medium text-text",
-          "transition-colors duration-100 hover:bg-surface2 aria-expanded:bg-surface2 motion-reduce:transition-none",
-          FOCUS,
-        )}
+        className={buttonClasses({ variant: "secondary", size: "xs", className: "aria-expanded:bg-surface2" })}
       >
         {label}
         <Glyph
