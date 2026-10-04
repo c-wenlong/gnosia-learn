@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { FADE_IN, POP_IN } from "@/components/studio/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
@@ -32,6 +32,7 @@ import {
 } from "@/lib/studio-tile-jobs";
 import { conversationHref, panelHref } from "@/lib/studio-view";
 import { useElapsed } from "@/lib/use-elapsed";
+import { usePageVisible } from "@/lib/use-page-visible";
 import { prefersReducedMotion } from "@/lib/motion";
 
 /**
@@ -490,7 +491,7 @@ function useLivePicture(
 ): { pictures: LivePictures; settle: () => void } {
   const [pictures, setPictures] = useState<LivePictures>(NO_PICTURES);
   const visible = useOnScreen(frame);
-  const pageHidden = useSyncExternalStore(subscribeVisibility, () => document.hidden, () => false);
+  const pageHidden = !usePageVisible();
   const tag = useRef<string | null>(null);
   const urls = useRef<string[]>([]);
   const issued = useRef(0);
@@ -562,11 +563,6 @@ function useLivePicture(
 
   const settle = useCallback(() => setPictures(settlePicture), []);
   return { pictures, settle };
-}
-
-function subscribeVisibility(change: () => void): () => void {
-  document.addEventListener("visibilitychange", change);
-  return () => document.removeEventListener("visibilitychange", change);
 }
 
 /** Whether the element is on screen, or within a screen's margin of it. */

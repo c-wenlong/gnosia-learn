@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState } from "react";
 
-const noSubscribe = () => () => undefined;
+import { useHydrated } from "@/lib/use-hydrated";
 
 /**
  * A picture that fades in once its bytes arrive, instead of painting in
@@ -27,11 +27,7 @@ export function useImageReveal(src: string | null | undefined): {
   onLoad: () => void;
   className: string;
 } {
-  const hydrated = useSyncExternalStore(
-    noSubscribe,
-    () => true,
-    () => false,
-  );
+  const hydrated = useHydrated();
   const [loaded, setLoaded] = useState<string | null>(null);
   const key = src ?? null;
 

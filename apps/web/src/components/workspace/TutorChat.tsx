@@ -18,6 +18,7 @@ import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { CitationSource } from "@/lib/agent/prompt";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
 import type { DraftKind } from "@/lib/studio-drafts";
+import { useHydrated } from "@/lib/use-hydrated";
 import { HEALTH_READ_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-studio";
 import {
   chatTurns,
@@ -124,9 +125,6 @@ function readRaw(key: string): string | null {
   }
 }
 
-/** True once the client has hydrated; false on the server and the hydrating render. */
-const noSubscribe = () => () => undefined;
-
 function writeTurns(key: string, turns: ThreadItem[]): void {
   const raw = turns.length === 0 ? null : JSON.stringify(turns);
   memory.set(key, raw);
@@ -195,11 +193,7 @@ export function TutorChat({
     () => null,
   );
   const turns = useMemo(() => parseThread(raw), [raw]);
-  const hydrated = useSyncExternalStore(
-    noSubscribe,
-    () => true,
-    () => false,
-  );
+  const hydrated = useHydrated();
   /**
    * How many turns were already stored when the page opened: those were said
    * before, and fade in; a turn at this index or later is new, and rises in.

@@ -1,10 +1,11 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { cx } from "@/components/ui/classes";
+import { useMediaQuery } from "@/components/ui/use-media-query";
 
 import { parseSettingsTab, settingsHref, type SettingsTab } from "./tabs";
 
@@ -39,7 +40,7 @@ export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
     setSeen(asked);
     setSelected(asked);
   }
-  const vertical = useSyncExternalStore(onWideChange, isWide, () => false);
+  const vertical = useMediaQuery(WIDE, false);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
   function choose(id: SettingsTab) {
@@ -121,13 +122,3 @@ export function SettingsTabs({ sections }: { sections: SettingsSection[] }) {
 
 /** The `xl` breakpoint, where the tab row becomes a column. */
 const WIDE = "(min-width: 1280px)";
-
-function isWide(): boolean {
-  return window.matchMedia(WIDE).matches;
-}
-
-function onWideChange(callback: () => void): () => void {
-  const query = window.matchMedia(WIDE);
-  query.addEventListener("change", callback);
-  return () => query.removeEventListener("change", callback);
-}
