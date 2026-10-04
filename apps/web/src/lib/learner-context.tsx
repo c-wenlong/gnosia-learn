@@ -243,19 +243,29 @@ export function LearnerProvider({
     [commit],
   );
 
+  /** How many name saves have started, so only the newest restores its name. */
+  const nameWrites = useRef(0);
   const setDisplayName = useCallback(
     (name: string) => {
       const cleaned = cleanDisplayName(name);
-      return commit(
-        "name",
-        (previous) => {
-          const next = { ...previous };
-          if (cleaned === null) delete next.displayName;
-          else next.displayName = cleaned;
-          return next;
-        },
-        () => post("name", { name: cleaned }),
-      );
+      const mine = ++nameWrites.current;
+      const named = (previous: LearnerState) => {
+        const next = { ...previous };
+        if (cleaned === null) delete next.displayName;
+        else next.displayName = cleaned;
+        return next;
+      };
+      return commit("name", named, () => post("name", { name: cleaned })).then((ok) => {
+        // A refresh that landed while the write was in flight carried the row
+        // from before it, and the provider adopted that. The write is the
+        // newer fact, so the newest save puts its name back once it is stored.
+        if (ok && mine === nameWrites.current && (current.current.displayName ?? null) !== cleaned) {
+          const next = named(current.current);
+          current.current = next;
+          setState(next);
+        }
+        return ok;
+      });
     },
     [commit],
   );
