@@ -268,7 +268,7 @@ and points there.
 
     ```bash
     sudo systemctl stop gnosia gnosia-studio gnosia-export.timer \
-      && while systemctl is-active -q gnosia-export.service; do sleep 10; done \
+      && while systemctl show -p ActiveState --value gnosia-export.service | grep -Eqx 'active|activating'; do sleep 10; done \
       && git pull --ff-only && npm ci && npm run catalog -- migrate && npm run build \
       && sudo systemctl start gnosia gnosia-studio gnosia-export.timer
     ```
@@ -282,7 +282,10 @@ and points there.
     mid-install and run from a half-replaced `node_modules`; the `while`
     lets one already running finish rather than killing it, since a
     killed export is that night's archive lost, where a wait of a few
-    seconds costs nothing. Stopping before the pull matters because
+    seconds costs nothing. It reads `ActiveState` rather than calling
+    `is-active`, because a `Type=oneshot` unit is `activating`, not
+    `active`, for as long as its command runs, and `is-active` answers
+    no for that state. Stopping before the pull matters because
     `npm ci` replaces `node_modules` under a running `next start`, and
     `next build` rewrites `.next/` while it is being served.
 
