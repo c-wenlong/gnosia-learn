@@ -273,7 +273,10 @@ export function LearnerProvider({
         return;
       }
       held.current = null;
-      const shown = [...stored.current.values()].every((shows) => shows(snapshot));
+      // Below the floor, the snapshot predates a stored reset, whose own
+      // check a write stored after it on the same keys replaced.
+      const shown =
+        snapshot.epoch >= epochFloor.current && [...stored.current.values()].every((shows) => shows(snapshot));
       if (!shown && rereads.current < MAX_REREADS) {
         rereads.current += 1;
         router.refresh();
@@ -315,9 +318,10 @@ export function LearnerProvider({
    * its own outcome: a stored reset was stored even when a note queued
    * behind it is refused. Only the newest write sets `saveError` and hands
    * over a held snapshot, as before. A superseded write that was stored
-   * records its confirmation too, which the newer one replaces once it is
-   * stored: when the newer one is refused, the database still holds the
-   * older, and a snapshot from before it must not be adopted.
+   * records its confirmation too, which a newer write on any of its keys
+   * replaces once that one is stored: when the newer one is refused, the
+   * database still holds the older, and a snapshot from before it must not
+   * be adopted.
    */
   const commit = useCallback(
     (
@@ -329,9 +333,17 @@ export function LearnerProvider({
       const next = reduce(current.current);
       current.current = next;
       setState(next);
+      const keys = typeof key === "string" ? [key] : key;
       const record = (response: ApiResponse) => {
         if (response.ok === false) return;
-        stored.current.set(typeof key === "string" ? key : key.join("\n"), confirm(next));
+        // A write recorded on any of these keys is older, since the queue
+        // runs a key's writes in order, and a snapshot that shows this one
+        // was read after it too. Kept, a reset's check (the note gone) would
+        // contradict a note stored after it, and no snapshot could pass both.
+        for (const recorded of stored.current.keys()) {
+          if (recorded.split("\n").some((k) => keys.includes(k))) stored.current.delete(recorded);
+        }
+        stored.current.set(keys.join("\n"), confirm(next));
         // A new write gets its own re-reads, whatever earlier ones used.
         rereads.current = 0;
       };

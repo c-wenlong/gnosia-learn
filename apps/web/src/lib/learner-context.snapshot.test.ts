@@ -270,6 +270,37 @@ describe("a snapshot during a write", () => {
     expect(container.textContent).toBe("note=none tick=false epoch=1");
   });
 
+  it("adopts a snapshot with a reset and the writes stored after it on its keys", async () => {
+    const { container, draw, answer } = setup({ completed: { t1: true }, notes: { t1: "old" } });
+    act(() => {
+      void held.learner!.resetCourse(["t1"]);
+      held.learner!.toggleTopicCompletion("t1");
+      held.learner!.updateNote("t1", "again");
+    });
+    await answer();
+    await answer();
+    await answer();
+    draw({ completed: { t1: true }, notes: { t1: "again" }, epoch: 1 });
+    expect(container.textContent).toBe("note=again tick=true epoch=1");
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("reads again a snapshot from before a reset that later writes on its keys replaced", async () => {
+    const { container, draw, answer } = setup({ notes: { t1: "same" } });
+    act(() => {
+      void held.learner!.resetCourse(["t1"]);
+      held.learner!.updateNote("t1", "same");
+    });
+    await answer();
+    await answer();
+    // Its note matches the one stored after the reset, but its epoch is older.
+    draw({ notes: { t1: "same" } });
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    draw({ notes: { t1: "same" }, epoch: 1 });
+    expect(container.textContent).toBe("note=same tick=false epoch=1");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("protects nothing for a refused write: the database never had it", async () => {
     const { container, draw, answer } = setup({});
     act(() => held.learner!.updateNote("t1", "three paragraphs"));
