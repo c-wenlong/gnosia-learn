@@ -91,6 +91,30 @@ describe("the Providers card", () => {
     expect(container.textContent).toContain("2 models from OpenRouter");
   });
 
+  it("asks for the list again when the key changes while the row is open, and keeps only the newest answer", async () => {
+    let answer!: (r: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    act(() => root.render(createElement(Providers, { view: view() })));
+    await act(async () => button(container, "Show OpenRouter models").click());
+    // The key is replaced while the first ask is still out: the row asks again.
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, models: [{ id: "new-account" }] }), { status: 200 }));
+    await act(async () =>
+      root.render(createElement(Providers, { view: view({ rows: [row({ saved: { last4: "wxyz", savedOn: "5 Oct 2026", readable: true } })] }) })),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("1 model from OpenRouter");
+    // The first, slower answer arrives last and is dropped.
+    await act(async () => answer(new Response(JSON.stringify({ ok: true, models: [{ id: "old-1" }, { id: "old-2" }] }), { status: 200 })));
+    expect(container.textContent).toContain("1 model from OpenRouter");
+  });
+
   it("opens Edit into its key field, and Cancel gives focus back to Edit and drops the field", () => {
     const container = mount(createElement(Providers, { view: view() }));
     expect(container.querySelector('input[type="password"]')).toBeNull();

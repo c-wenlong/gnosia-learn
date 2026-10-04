@@ -2,11 +2,11 @@ import "server-only";
 
 import {
   addTutorModel,
+  deleteTutorProvider,
   moveTutorModel,
   moveTutorProvider,
   readTutorModels,
   removeTutorModel,
-  removeTutorProvider,
 } from "@self-learn/catalog/state";
 import { groupByProvider } from "@self-learn/schema/shared";
 
@@ -34,8 +34,13 @@ export async function readChain(owner: string): Promise<ChainEntry[]> {
   return entries(await readTutorModels(await catalogDatabase(), owner));
 }
 
-export async function addChainEntry(owner: string, provider: unknown, model: unknown): Promise<ChainEntry[]> {
-  return entries(await addTutorModel(await catalogDatabase(), owner, provider, model));
+/**
+ * `serverKey` says whether the environment holds a key for the provider; with
+ * none, the catalog checks inside the learner lock that a saved key is still
+ * there, so an add that raced the provider's Delete is refused, not stranded.
+ */
+export async function addChainEntry(owner: string, provider: unknown, model: unknown, serverKey: boolean): Promise<ChainEntry[]> {
+  return entries(await addTutorModel(await catalogDatabase(), owner, provider, model, { requireKey: { server: serverKey } }));
 }
 
 export async function removeChainEntry(owner: string, provider: unknown, model: unknown): Promise<ChainEntry[]> {
@@ -56,7 +61,8 @@ export async function moveChainProvider(owner: string, provider: unknown, direct
   return entries(await moveTutorProvider(await catalogDatabase(), owner, provider, direction));
 }
 
-/** Remove every model of a provider. */
-export async function removeChainProvider(owner: string, provider: unknown): Promise<ChainEntry[]> {
-  return entries(await removeTutorProvider(await catalogDatabase(), owner, provider));
+/** A provider's Delete: its models and the owner's saved key for it, in one transaction. */
+export async function deleteChainProvider(owner: string, provider: unknown): Promise<{ chain: ChainEntry[]; keyRemoved: boolean }> {
+  const { chain, keyRemoved } = await deleteTutorProvider(await catalogDatabase(), owner, provider);
+  return { chain: entries(chain), keyRemoved };
 }

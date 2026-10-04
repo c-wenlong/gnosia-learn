@@ -25,7 +25,9 @@ export interface ProvidersView {
   /**
    * The providers the card lists, in the order the tutor tries them: those
    * with models in the chain's order, then the rest that have a key (or a
-   * model, but no key) in the built-in order.
+   * model, but no key). With no models at all the tutor walks the built-in
+   * defaults, your saved keys before the server's (`orderCredentials`), and
+   * the rows follow that order; otherwise the rest follow the built-in order.
    */
   rows: ProviderRowView[];
   /** The providers not listed yet, for Add provider. */
@@ -41,7 +43,12 @@ export function providersView(keys: ProvidersKeysInput, chain: readonly ChainEnt
     const row = byId.get(id);
     return row !== undefined && (row.saved !== null || row.server || withModels.includes(id));
   };
-  const order = [...withModels, ...PROVIDER_IDS.filter((id) => !withModels.includes(id) && listed(id))];
+  const rest = PROVIDER_IDS.filter((id) => !withModels.includes(id) && listed(id));
+  const rank = (id: ProviderId) => {
+    const use = byId.get(id)?.inUse;
+    return use === "saved" ? 0 : use === "server" ? 1 : 2;
+  };
+  const order = [...withModels, ...(chain.length === 0 ? [...rest].sort((a, b) => rank(a) - rank(b)) : rest)];
   const rows = order.flatMap((id): ProviderRowView[] => {
     const row = byId.get(id);
     return row === undefined ? [] : [{ ...row, models: chain.filter((e) => e.provider === id).map((e) => e.model) }];

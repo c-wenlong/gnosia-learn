@@ -11,6 +11,7 @@ import { asc, eq } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { StateError } from "./errors";
 import { withLearnerLock } from "./learner";
+import { deleteProviderKey, readProviderKeys } from "./provider-keys";
 
 /**
  * The tutor's model chain (docs/TUTOR-MODELS.md): an owner's ordered list of
@@ -45,7 +46,7 @@ export interface StoredTutorModel extends TutorModelEntry {
   createdAt: Date;
 }
 
-export type TutorModelErrorCode = "INVALID" | "DUPLICATE" | "FULL" | "NOT_FOUND";
+export type TutorModelErrorCode = "INVALID" | "DUPLICATE" | "FULL" | "NOT_FOUND" | "NO_KEY";
 
 /** A chain change the chain refused: a bad entry, one already there, a full chain, or an entry that is not there. */
 export class TutorModelError extends StateError {
@@ -92,8 +93,10 @@ async function rewrite(
   db: CatalogDatabase,
   owner: string,
   change: (current: StoredTutorModel[]) => TutorModelEntry[],
+  hooks: { before?: (tx: CatalogDatabase) => Promise<void>; after?: (tx: CatalogDatabase) => Promise<void> } = {},
 ): Promise<StoredTutorModel[]> {
   return withLearnerLock(db, owner, async (tx) => {
+    await hooks.before?.(tx);
     const current = groupByProvider(await readTutorModels(tx, owner));
     const next = groupByProvider(change(current));
     const createdAt = new Map(current.map((row) => [`${row.provider}\u0000${row.model}`, row.createdAt]));
@@ -109,6 +112,7 @@ async function rewrite(
         })),
       );
     }
+    await hooks.after?.(tx);
     return readTutorModels(tx, owner);
   });
 }
@@ -116,14 +120,31 @@ async function rewrite(
 /**
  * Add an entry at the end of its provider's models (the end of the chain for
  * a provider with none yet). Refuses a duplicate and a full chain.
+ *
+ * `requireKey` checks, inside the learner lock, that the provider still has a
+ * key: the server's (`server: true`, which the caller reads from the
+ * environment) or a saved one. The caller checks first too; checking again
+ * here is what stops an add that raced a provider's Delete
+ * (`deleteTutorProvider`, which takes the same lock) from leaving a model
+ * with no key behind (NO_KEY).
  */
 export async function addTutorModel(
   db: CatalogDatabase,
   owner: string,
   provider: unknown,
   model: unknown,
+  options: { requireKey?: { server: boolean } } = {},
 ): Promise<StoredTutorModel[]> {
   const entry = tutorModelEntry(provider, model);
+  const before =
+    options.requireKey === undefined || options.requireKey.server
+      ? undefined
+      : async (tx: CatalogDatabase) => {
+          const saved = await readProviderKeys(tx, owner);
+          if (!saved.some((row) => row.provider === entry.provider)) {
+            throw new TutorModelError("NO_KEY", "That provider has no key any more. Add its key first.");
+          }
+        };
   return rewrite(db, owner, (current) => {
     if (current.some((row) => same(row, entry))) {
       throw new TutorModelError("DUPLICATE", "That model is already in the chain.");
@@ -132,7 +153,7 @@ export async function addTutorModel(
       throw new TutorModelError("FULL", `The chain holds at most ${TUTOR_MODEL_LIMITS.maxEntries} models. Remove one first.`);
     }
     return [...current, entry];
-  });
+  }, { before });
 }
 
 /** Remove an entry; the ones below it move up, so the positions stay 0 to n-1. */
@@ -195,12 +216,24 @@ export async function moveTutorProvider(
   });
 }
 
-/** Remove every model of a provider; the chain's other models keep their order. None is not an error. */
-export async function removeTutorProvider(
+/**
+ * A provider's Delete in Settings: every model of the provider leaves the
+ * chain and the owner's saved key for it goes, in one transaction under the
+ * learner lock, so a concurrent add (`addTutorModel` with `requireKey`) sees
+ * either both or neither. A provider with no models or no saved key is not
+ * an error; `keyRemoved` says whether there was a key.
+ */
+export async function deleteTutorProvider(
   db: CatalogDatabase,
   owner: string,
   provider: unknown,
-): Promise<StoredTutorModel[]> {
+): Promise<{ chain: StoredTutorModel[]; keyRemoved: boolean }> {
   if (!isProviderId(provider)) throw new TutorModelError("INVALID", `"${String(provider).slice(0, 40)}" is not a model provider.`);
-  return rewrite(db, owner, (current) => current.filter((row) => row.provider !== provider));
+  let keyRemoved = false;
+  const chain = await rewrite(db, owner, (current) => current.filter((row) => row.provider !== provider), {
+    after: async (tx) => {
+      keyRemoved = await deleteProviderKey(tx, owner, provider);
+    },
+  });
+  return { chain, keyRemoved };
 }

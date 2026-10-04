@@ -40,6 +40,18 @@ describe("providersView", () => {
     expect(view.addable.map((a) => a.id)).toEqual(["openrouter"]);
   });
 
+  it("orders rows as the defaults are tried while there are no models: saved keys before the server's", () => {
+    const view = providersView(
+      {
+        reachable: true,
+        rows: [row("nvidia", { server: true, inUse: "server" }), row("gemini"), row("openrouter", { saved: SAVED, inUse: "saved" })],
+      },
+      [],
+      true,
+    );
+    expect(view.rows.map((r) => r.id)).toEqual(["openrouter", "nvidia"]);
+  });
+
   it("says when the tutor is on the built-in defaults, and when the chain is full", () => {
     expect(providersView({ reachable: true, rows: [row("nvidia", { saved: SAVED })] }, [], true).usingDefaults).toBe(true);
     const ten = Array.from({ length: 10 }, (_, i) => ({ provider: "nvidia" as const, model: `m${i}` }));

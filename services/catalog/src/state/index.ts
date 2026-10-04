@@ -186,11 +186,11 @@ export {
 } from "./provider-keys";
 export {
   addTutorModel,
+  deleteTutorProvider,
   moveTutorModel,
   moveTutorProvider,
   readTutorModels,
   removeTutorModel,
-  removeTutorProvider,
   TutorModelError,
   tutorModelEntry,
   type StoredTutorModel,

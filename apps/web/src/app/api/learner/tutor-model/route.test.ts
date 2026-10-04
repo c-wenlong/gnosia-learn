@@ -236,7 +236,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
   it("refuses a model id that is, holds or is part of one of the owner's keys, and never repeats it", async () => {
     // A key with no key-like shape, so only the comparison with the stored key can catch it.
     const plain = "my-own-gateway-token-for-gemini";
-    await store.addChainEntry("local", "nvidia", "a/one");
+    await store.addChainEntry("local", "nvidia", "a/one", true);
     const { saveProviderKey } = await import("@/lib/provider-keys/store");
     await saveProviderKey("local", "gemini", plain);
     for (const model of [plain, `prefix/${plain}`, plain.slice(3, 20), SERVER_NVIDIA, KEY]) {
@@ -275,7 +275,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
 
   it("keeps owner B off owner A's chain: B reads none of it, and B's tutor uses the defaults", async () => {
     await scratch.pool.query("insert into learner (id) values ('owner-b') on conflict do nothing");
-    await store.addChainEntry("local", "nvidia", "a/one");
+    await store.addChainEntry("local", "nvidia", "a/one", true);
     expect(await store.readChain("owner-b")).toEqual([]);
     await expect(store.removeChainEntry("owner-b", "nvidia", "a/one")).rejects.toMatchObject({ code: "NOT_FOUND" });
     const steps = await credentials.tutorCredentials("owner-b");

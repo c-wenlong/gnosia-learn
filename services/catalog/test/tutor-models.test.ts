@@ -4,11 +4,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   addTutorModel,
+  deleteTutorProvider,
   moveTutorModel,
   moveTutorProvider,
   readTutorModels,
   removeTutorModel,
-  removeTutorProvider,
   type StoredTutorModel,
   TutorModelError,
 } from "../src/state";
@@ -137,14 +137,26 @@ describe.skipIf(!reachable.ok)("tutor_model", () => {
     ]);
     // Already last: nothing changes.
     expect(shape(await moveTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia", "down"))).toHaveLength(4);
-    expect(shape(await removeTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia"))).toEqual(["0:openrouter/x", "1:gemini/g"]);
-    // A provider with no models: removing is a no-op, moving is NOT_FOUND.
-    expect(await removeTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia")).toHaveLength(2);
+    const deleted = await deleteTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia");
+    expect(shape(deleted.chain)).toEqual(["0:openrouter/x", "1:gemini/g"]);
+    expect(deleted.keyRemoved).toBe(false);
+    // A provider with no models: deleting is a no-op, moving is NOT_FOUND.
+    expect((await deleteTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia")).chain).toHaveLength(2);
     await expect(moveTutorProvider(scratch.db, LOCAL_LEARNER_ID, "nvidia", "up")).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(moveTutorProvider(scratch.db, LOCAL_LEARNER_ID, "bogus", "up")).rejects.toMatchObject({ code: "INVALID" });
     // Another owner's providers are not touched.
-    expect(await removeTutorProvider(scratch.db, OTHER, "openrouter")).toEqual([]);
+    expect((await deleteTutorProvider(scratch.db, OTHER, "openrouter")).chain).toEqual([]);
     expect(await readTutorModels(scratch.db, LOCAL_LEARNER_ID)).toHaveLength(2);
+  });
+
+  it("refuses an add whose provider lost its saved key by the time it holds the lock", async () => {
+    await expect(
+      addTutorModel(scratch.db, LOCAL_LEARNER_ID, "openrouter", "x", { requireKey: { server: false } }),
+    ).rejects.toMatchObject({ code: "NO_KEY" });
+    // A server key needs no saved row.
+    expect(shape(await addTutorModel(scratch.db, LOCAL_LEARNER_ID, "nvidia", "a", { requireKey: { server: true } }))).toEqual([
+      "0:nvidia/a",
+    ]);
   });
 
   it("stays contiguous when many changes race", async () => {

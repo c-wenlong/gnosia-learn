@@ -222,8 +222,14 @@ Providers card (`Providers.tsx`) in place of Provider keys and Models.
 - **A provider with no models is skipped** once any provider has one: T1
   already said the chain alone is tried. Until the chain holds a model, the
   built-in defaults apply (T3) and each row names its default.
-- **Delete** removes the provider's models, then the owner's saved key, in
-  one request, in that order: a failure between them leaves a key with no
-  models, which the tutor skips and Delete finishes, never models with no
-  key. A server key is the environment's and stays, so the row stays listed.
+- **Delete** removes the provider's models and the owner's saved key in one
+  transaction under the learner lock (`deleteTutorProvider`). An add checks
+  for the key again inside the same lock (`addTutorModel`'s `requireKey`),
+  so an add racing a Delete is refused with NO_KEY rather than left behind
+  as a model with no key. A server key is the environment's and stays, so
+  the row stays listed.
+- **Order with no models.** While the chain is empty the rows follow the
+  order the built-in defaults are tried in, saved keys before the server's
+  (`orderCredentials`), so the card never lists a provider ahead of one the
+  tutor calls first.
 

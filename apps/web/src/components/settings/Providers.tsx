@@ -74,6 +74,9 @@ export function Providers({ view }: { view: ProvidersView }) {
   const base = useId();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [adding, setAdding] = useState(false);
+  // While a new key is on its way the form must stay open: the toggle would
+  // shut it under a save that is still going to land.
+  const [addSaving, setAddSaving] = useState(false);
   const addButton = view.addable.length === 0 ? undefined : (
     <Button
       id={`${base}-add`}
@@ -81,7 +84,7 @@ export function Providers({ view }: { view: ProvidersView }) {
       size="sm"
       aria-expanded={adding}
       aria-controls={`${base}-add-form`}
-      disabled={!view.keysReachable}
+      disabled={!view.keysReachable || addSaving}
       onClick={() => setAdding((was) => !was)}
     >
       <Glyph name="add" size={16} />
@@ -110,6 +113,7 @@ export function Providers({ view }: { view: ProvidersView }) {
         <AddProvider
           open={adding}
           addable={view.addable}
+          onSaving={setAddSaving}
           onClose={() => {
             setAdding(false);
             document.getElementById(`${base}-add`)?.focus();
@@ -149,11 +153,13 @@ export function Providers({ view }: { view: ProvidersView }) {
 function AddProvider({
   open,
   addable,
+  onSaving,
   onClose,
   onAdded,
 }: {
   open: boolean;
   addable: ProvidersView["addable"];
+  onSaving: (saving: boolean) => void;
   onClose: () => void;
   onAdded: (label: string) => void;
 }) {
@@ -172,9 +178,11 @@ function AddProvider({
     const key = draft;
     setDraft("");
     setSaving(true);
+    onSaving(true);
     setError(null);
     const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen.id, key });
     setSaving(false);
+    onSaving(false);
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
     onAdded(chosen.label);
   };
@@ -522,14 +530,20 @@ function Models({
   const keyed = row.inUse !== null;
 
   /**
-   * The provider's model list, asked once each time the row opens: a key
-   * replaced since is another account, and the server's cache is keyed by
-   * the key. A list that failed is asked again on Try again.
+   * The provider's model list, asked once each time the row opens, and again
+   * when its key changes while it is open: a replaced key is another
+   * account, and the server's cache is keyed by the key. A list that failed
+   * is asked again on Try again. Only the newest ask's answer is shown, so a
+   * slow earlier one cannot put an old list or an old error back.
    */
-  const asked = useRef(false);
+  const asked = useRef<string | null>(null);
+  const latest = useRef(0);
+  const keyStamp = `${row.inUse ?? "none"}:${row.saved?.last4 ?? ""}:${row.saved?.savedOn ?? ""}`;
   const load = async () => {
+    const ask = ++latest.current;
     setList({ state: "loading" });
     const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model/models", { provider: row.id });
+    if (ask !== latest.current) return;
     setList(
       reply === null
         ? { state: "error", message: "the server did not answer" }
@@ -546,15 +560,15 @@ function Models({
   };
   useEffect(() => {
     if (!visible) {
-      asked.current = false;
+      asked.current = null;
       return;
     }
-    if (asked.current || !keyed) return;
-    asked.current = true;
+    if (asked.current === keyStamp || !keyed) return;
+    asked.current = keyStamp;
     void load();
     // `load` reads only the row's id, which a row never changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, keyed]);
+  }, [visible, keyed, keyStamp]);
 
   const change = async (method: "DELETE" | "PATCH", m: string, extra: Record<string, unknown>, busyText: string, pressed: string, done: (next: ChainEntry[]) => { text: string; focus: string }) => {
     setStatus({ kind: "busy", text: busyText });
