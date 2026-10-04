@@ -1,4 +1,5 @@
 import { manimkcBackend } from "./backends/manimkc";
+import { remotionkcBackend } from "./backends/remotionkc";
 import { revideokcBackend } from "./backends/revideokc";
 import type { ValidVideoBrief } from "./brief";
 import type { Scaffold } from "./checkout";
@@ -45,7 +46,7 @@ export interface VideoProfile {
 /**
  * A contact sheet the job view lists and the runner keeps after a verdict:
  * one per scene for manimkc, the stills sheet and the build's sheet for
- * revideokc.
+ * revideokc and remotionkc.
  */
 export interface SheetEntry {
   /** What the sheet's route names it by: a scene class, or a fixed word. Pattern-safe, never from a request. */
@@ -111,7 +112,7 @@ export interface VideoBackend extends VideoGateChecks {
   /**
    * The hash the wrapper records on every call as `sceneSha256`, and the gate
    * holds the build to: the scene file's sha256 for manimkc, a combined hash
-   * of the topic's source files for revideokc. Null when there is no source.
+   * of the topic's source files for revideokc and remotionkc. Null when there is no source.
    */
   sourceHash(paths: VideoPaths): Promise<string | null>;
   /** The source files that exist now, `topic.yml` included: what is kept in `source/` at every verdict. */
@@ -129,6 +130,7 @@ export interface VideoBackend extends VideoGateChecks {
 const BACKENDS: Partial<Record<VideoToolName, VideoBackend>> = {
   manimkc: manimkcBackend,
   revideokc: revideokcBackend,
+  remotionkc: remotionkcBackend,
 };
 
 /** The tools the studio has a backend for, in VIDEO_TOOLS' order. */

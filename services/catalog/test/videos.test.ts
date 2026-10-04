@@ -314,6 +314,32 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     expect(await readFile(path.join(out, "scene.tsx"), "utf8")).toBe(files["source/scene.tsx"]);
   });
 
+  it("lands a remotionkc video with its composition and narration as the source, and refuses one without its composition (phase 3)", async () => {
+    const slug = "chart-from-data";
+    const files = {
+      "source/composition.tsx": "export default defineTopic({ component: Video });\n",
+      "source/narration.json": '[{"scene":"CF1_Why","title":"Why","lines":["A line."]}]\n',
+      "source/series.ts": "export const SERIES = [1, 2, 3];\n",
+      "source/topic.yml": `topic: ${TOPIC}\n`,
+    };
+    const { job: queued } = await jobReady(slug, briefOf(slug, { tool: "remotionkc" }));
+    const result = await put({ slug, dir: await candidate(slug, { source: files }), jobId: queued.id, base: null });
+    expect(result).toMatchObject({ ok: true, slug, jobState: "accepted" });
+    const [row] = await scratch.db.select().from(video).where(eq(video.slug, slug));
+    expect(Object.keys((row?.source as { files: object }).files).sort()).toEqual(["composition.tsx", "narration.json", "series.ts", "topic.yml"]);
+    expect((row?.source as { brief: { tool?: string } }).brief.tool).toBe("remotionkc");
+    const out = path.join(work, "checkout-remotionkc");
+    const checked = await checkoutVideo(scratch.db, LOCAL, slug, out);
+    expect(checked.files.map((f) => f.name).sort()).toEqual(["composition.tsx", "narration.json", "series.ts", "topic.yml"]);
+
+    const sceneOnly = "scene-for-remotionkc";
+    const { job: other } = await jobReady(sceneOnly, briefOf(sceneOnly, { tool: "remotionkc" }));
+    const revideokcShaped = { "source/scene.tsx": "export default 1;\n", "source/narration.json": "[]\n", "source/topic.yml": `topic: ${TOPIC}\n` };
+    await expect(put({ slug: sceneOnly, dir: await candidate(sceneOnly, { source: revideokcShaped }), jobId: other.id, base: null })).rejects.toMatchObject({
+      message: expect.stringMatching(/needs topic\.yml and composition\.tsx and narration\.json for a remotionkc video/),
+    });
+  });
+
   it("holds each tool's source to its own files: a revideokc video needs its scene and narration, a manimkc one a .py", async () => {
     const revideokc = "no-scene-tsx";
     const { job: one } = await jobReady(revideokc, briefOf(revideokc, { tool: "revideokc" }));
