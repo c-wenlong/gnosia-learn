@@ -116,6 +116,99 @@ export function draftRows(
     });
 }
 
+/**
+ * A search text as the runner compares it (`searchText` in the runner's
+ * `drafts.ts`): whitespace runs as one space, trimmed, lower-cased.
+ */
+export function searchText(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Whether a draft is a hit for `q`: its title, first message or concept
+ * title contains it, in any case. The runner filters by the same rule before
+ * its limit; applying it here as well means a runner that predates `q`, which
+ * ignores it, still shows only matches (of the page it sent).
+ */
+export function draftMatches(draft: Pick<DraftSummary, "title" | "firstMessage" | "concept">, q: string): boolean {
+  const needle = searchText(q);
+  if (needle === "") return true;
+  return [draft.title, draft.firstMessage, draft.concept?.title].some(
+    (field) => typeof field === "string" && searchText(field).includes(needle),
+  );
+}
+
+/** A search hit: the row, and the words around the match when its heading does not hold it. */
+export interface SearchRow extends DraftRow {
+  /** The first message or the concept's title, cut around the match, when the heading is something else. Null when the heading holds the match. */
+  snippet: string | null;
+}
+
+/** How many characters of a snippet come before the match, so a long first message shows it. */
+const SNIPPET_LEAD = 24;
+
+/**
+ * The drafts that match `q` as rows, newest first and in one run (a search
+ * has no day headings): each with a snippet when the match is in words the
+ * heading is not showing, such as a first message under a brief's title.
+ */
+export function searchRows(
+  drafts: readonly DraftSummary[],
+  titles: Readonly<Record<string, string>>,
+  q: string,
+): SearchRow[] {
+  const needle = searchText(q);
+  const hits = drafts.filter((draft) => draftMatches(draft, needle));
+  const byId = new Map(hits.map((draft) => [draft.draftId, draft]));
+  return draftRows(hits, titles).map((row) => {
+    const draft = byId.get(row.draftId);
+    if (draft === undefined || searchText(row.heading).includes(needle)) return { ...row, snippet: null };
+    const field = [draft.concept?.title, draft.firstMessage].find(
+      (text): text is string => typeof text === "string" && searchText(text).includes(needle),
+    );
+    return { ...row, snippet: field === undefined ? null : excerpt(field, needle) };
+  });
+}
+
+/** `text` on one line, starting a little before the first match, with an ellipsis when that cut something. */
+function excerpt(text: string, needle: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  const at = line.toLowerCase().indexOf(needle);
+  return at > SNIPPET_LEAD ? `…${line.slice(at - SNIPPET_LEAD)}` : line;
+}
+
+/** A run of text, and whether it is the part that matched. */
+export interface TextPart {
+  text: string;
+  hit: boolean;
+}
+
+/**
+ * `text` cut into the parts that match `q` (in any case) and the parts that
+ * do not, in order, so a row can mark what was found. No match gives the
+ * whole text as one part that is not a hit.
+ */
+export function matchParts(text: string, q: string): TextPart[] {
+  const needle = searchText(q);
+  if (needle === "") return [{ text, hit: false }];
+  // Each space in the search is any run of whitespace in the text, as the
+  // runner's comparison treats it.
+  const source = needle
+    .split(" ")
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  const parts: TextPart[] = [];
+  let from = 0;
+  for (const found of text.matchAll(new RegExp(source, "gi"))) {
+    if (found[0] === "") continue;
+    if (found.index > from) parts.push({ text: text.slice(from, found.index), hit: false });
+    parts.push({ text: found[0], hit: true });
+    from = found.index + found[0].length;
+  }
+  if (from < text.length) parts.push({ text: text.slice(from), hit: false });
+  return parts.length === 0 ? [{ text, hit: false }] : parts;
+}
+
 /** A run of rows under one heading: the day they were last touched. */
 export interface HistoryGroup {
   label: string;

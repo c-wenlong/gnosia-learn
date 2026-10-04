@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
+import { useHistorySearch, SEARCH_MAX, type HistorySearch } from "@/components/studio/history-search";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { useSidebarCollapsed } from "@/components/studio/sidebar-collapse";
@@ -12,8 +13,11 @@ import {
   historyGroups,
   LIST_LIMIT,
   LISTED_STATES,
+  matchParts,
   readHistory,
+  searchRows,
   type DraftRow,
+  type SearchRow,
 } from "@/lib/studio-draft-list";
 import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
@@ -32,6 +36,13 @@ import { conversationHref, relativeTime } from "@/lib/studio-view";
  * conversation started in another tab. A conversation that is open but not
  * listed yet (it is being made, or nothing in it has reached the runner) is
  * drawn at the top anyway, so the one on screen is always marked here.
+ *
+ * Under New chat, a search field (D87). It asks the runner, which looks in
+ * every conversation's title, first message and concept, loaded here or not
+ * (`useHistorySearch`), and shows the matches as one flat list with the
+ * matched words marked, in place of the day groups. Escape or the clear
+ * button puts the groups back. On the collapsed rail a search button slides
+ * the sidebar out with the field focused.
  *
  * The runner answers a page at a time (`LIST_LIMIT`), so a full page ends in
  * "Show older conversations", which shows one more. Every read is every page
@@ -84,6 +95,7 @@ export function StudioSidebar({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
   const panel = useRef<HTMLElement | null>(null);
+  const search = useHistorySearch();
 
   // Reads can overlap, and an older answer landing after a newer one would
   // put the list back a step. Each read takes a number, and an answer older
@@ -164,7 +176,7 @@ export function StudioSidebar({
       }
       // Tab stays inside the drawer: the page behind it is covered.
       if (event.key !== "Tab" || panel.current === null) return;
-      const stops = [...panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")];
+      const stops = [...panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled])")];
       const first = stops[0];
       const last = stops.at(-1);
       if (first === undefined || last === undefined) return;
@@ -212,6 +224,17 @@ export function StudioSidebar({
     [],
   );
   const peeking = collapsed && peek;
+  const room = useRef<HTMLDivElement | null>(null);
+  const searchField = useRef<HTMLInputElement | null>(null);
+  /** The pointer left the sidebar while the search field was in use: it stays slid out until the field is let go. */
+  const holdPeek = useRef(false);
+  /** The rail's search button was pressed: the field takes focus once the sidebar is out. */
+  const focusSearch = useRef(false);
+  useEffect(() => {
+    if (!peeking || !focusSearch.current) return;
+    focusSearch.current = false;
+    searchField.current?.focus();
+  }, [peeking]);
   useEffect(() => {
     if (!peeking) return;
     const onKey = (event: KeyboardEvent) => {
@@ -230,6 +253,15 @@ export function StudioSidebar({
     if (peekTimer.current !== null) clearTimeout(peekTimer.current);
     setPeek(false);
     setCollapsed(!collapsed);
+  }
+  function openSearch() {
+    if (peekTimer.current !== null) clearTimeout(peekTimer.current);
+    if (peeking) {
+      searchField.current?.focus();
+      return;
+    }
+    focusSearch.current = true;
+    setPeek(true);
   }
   function newChat() {
     // A hover that began just before the press must not slide it out after.
@@ -255,6 +287,7 @@ export function StudioSidebar({
       {/* From 768px up: the sidebar's room, 260px open and 52px as a rail. A
           phone takes no room, since its sidebar is a drawer over the page. */}
       <div
+        ref={room}
         className={cx(
           "contents md:relative md:block md:shrink-0 md:transition-[width] md:duration-200 md:ease-out motion-reduce:md:transition-none",
           collapsed ? "md:w-[52px]" : "md:w-[260px]",
@@ -263,7 +296,7 @@ export function StudioSidebar({
           if (collapsed && event.pointerType === "mouse") peekAfter(true, 120);
         }}
         onPointerLeave={() => {
-          if (collapsed) peekAfter(false, 200);
+          if (collapsed && !holdPeek.current) peekAfter(false, 200);
         }}
       >
         {collapsed && (
@@ -273,6 +306,9 @@ export function StudioSidebar({
             </RailButton>
             <RailButton label="New chat" onClick={newChat} newChat>
               <ComposeIcon />
+            </RailButton>
+            <RailButton label="Search conversations" onClick={openSearch}>
+              <SearchIcon />
             </RailButton>
           </div>
         )}
@@ -318,47 +354,66 @@ export function StudioSidebar({
           </span>
         </div>
 
+        <SearchField
+          search={search}
+          inputRef={searchField}
+          onFocus={() => {
+            holdPeek.current = true;
+          }}
+          onBlur={() => {
+            holdPeek.current = false;
+            // The pointer left while the field was in use: nothing else will say it may slide back.
+            if (collapsed && room.current?.matches(":hover") !== true) peekAfter(false, 200);
+          }}
+        />
+
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-          {unlisted && (
-            <ul className="mb-3 flex flex-col">
-              <li>
-                <span aria-current="page" className={cx(ROW, "bg-surface2 font-medium")}>
-                  <span className="min-w-0 flex-1 truncate">{pending ?? "New conversation"}</span>
-                </span>
-              </li>
-            </ul>
-          )}
-          {groups.map((group) => (
-            <section key={group.label} className="mb-3" aria-label={group.label}>
-              <h2 className={cx(LABEL, "px-2.5 pb-1 pt-2 text-text3")}>{group.label}</h2>
-              <ul className="flex flex-col">
-                {group.rows.map((row) => (
-                  <li key={row.draftId}>
-                    <HistoryRow row={row} href={conversationHref(path, row.draftId)} current={row.draftId === active} onPick={pick} />
-                  </li>
-                ))}
+          {search.words !== "" ? (
+            <SearchResults search={search} titles={titles} path={path} active={active} onPick={pick} />
+          ) : (
+            <>
+            {unlisted && (
+              <ul className="mb-3 flex flex-col">
+                <li>
+                  <span aria-current="page" className={cx(ROW, "bg-surface2 font-medium")}>
+                    <span className="min-w-0 flex-1 truncate">{pending ?? "New conversation"}</span>
+                  </span>
+                </li>
               </ul>
-            </section>
-          ))}
-          {more && rows.length > 0 && (
-            <div className="px-1 pt-1">
-              <button
-                type="button"
-                onClick={() => void showOlder()}
-                disabled={loadingOlder}
-                className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
-              >
-                {loadingOlder ? "Reading older conversations…" : "Show older conversations"}
-              </button>
-              {olderError !== null && (
-                <p role="alert" className="px-1.5 text-[12px] text-danger">
-                  {olderError}
-                </p>
-              )}
-            </div>
-          )}
-          {rows.length === 0 && !unlisted && (
-            <p className="px-2.5 pt-2 text-[13px] leading-5 text-text3">Conversations you start show here.</p>
+            )}
+            {groups.map((group) => (
+              <section key={group.label} className="mb-3" aria-label={group.label}>
+                <h2 className={cx(LABEL, "px-2.5 pb-1 pt-2 text-text3")}>{group.label}</h2>
+                <ul className="flex flex-col">
+                  {group.rows.map((row) => (
+                    <li key={row.draftId}>
+                      <HistoryRow row={row} href={conversationHref(path, row.draftId)} current={row.draftId === active} onPick={pick} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+            {more && rows.length > 0 && (
+              <div className="px-1 pt-1">
+                <button
+                  type="button"
+                  onClick={() => void showOlder()}
+                  disabled={loadingOlder}
+                  className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  {loadingOlder ? "Reading older conversations…" : "Show older conversations"}
+                </button>
+                {olderError !== null && (
+                  <p role="alert" className="px-1.5 text-[12px] text-danger">
+                    {olderError}
+                  </p>
+                )}
+              </div>
+            )}
+            {rows.length === 0 && !unlisted && (
+              <p className="px-2.5 pt-2 text-[13px] leading-5 text-text3">Conversations you start show here.</p>
+            )}
+            </>
           )}
         </div>
       </nav>
@@ -399,6 +454,198 @@ function PanelIcon() {
 
 const ROW = cx(
   "flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[14px] text-text",
+  "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
+);
+
+/** A magnifying glass, the search field's and the rail's. */
+function SearchIcon({ className = "size-[18px]" }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <circle cx="9" cy="9" r="5.5" />
+      <path d="m13.2 13.2 3.3 3.3" />
+    </svg>
+  );
+}
+
+/**
+ * The search field under New chat. Escape clears it when it holds words and
+ * does nothing else, so a drawer or a slid-out sidebar is not closed by the
+ * same press; with the field empty Escape goes on to close them.
+ */
+function SearchField({
+  search,
+  inputRef,
+  onFocus,
+  onBlur,
+}: {
+  search: HistorySearch;
+  inputRef: RefObject<HTMLInputElement | null>;
+  onFocus: () => void;
+  onBlur: () => void;
+}) {
+  return (
+    <div className="shrink-0 px-2 pb-2">
+      <div
+        className={cx(
+          "relative flex h-9 items-center rounded-lg bg-surface2 text-text2 transition-colors",
+          "focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
+        )}
+      >
+        <SearchIcon className="pointer-events-none absolute left-2.5 size-4 shrink-0" />
+        <input
+          ref={inputRef}
+          type="search"
+          name="history-search"
+          value={search.query}
+          maxLength={SEARCH_MAX}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="Search conversations"
+          aria-label="Search conversations"
+          onChange={(event) => search.setQuery(event.target.value)}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || search.query === "") return;
+            event.stopPropagation();
+            search.clear();
+          }}
+          className={cx(
+            "h-full min-w-0 flex-1 appearance-none rounded-lg bg-transparent pl-8 pr-8 text-[16px] text-text outline-none md:text-[14px]",
+            "placeholder:text-text3 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",
+          )}
+        />
+        {search.query !== "" && (
+          <button
+            type="button"
+            aria-label="Clear the search"
+            title="Clear the search"
+            onClick={() => {
+              search.clear();
+              inputRef.current?.focus();
+            }}
+            className="absolute right-1 inline-flex size-7 items-center justify-center rounded-md text-text3 transition-colors hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <svg aria-hidden viewBox="0 0 20 20" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+              <path d="m5.5 5.5 9 9m0-9-9 9" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** What the field found, in place of the grouped history: one flat list, or why there is none. */
+function SearchResults({
+  search,
+  titles,
+  path,
+  active,
+  onPick,
+}: {
+  search: HistorySearch;
+  titles: Readonly<Record<string, string>>;
+  path: string;
+  active: string | null;
+  onPick: () => void;
+}) {
+  const rows = search.found === null ? [] : searchRows(search.found.drafts, titles, search.words);
+  return (
+    <div className="pt-1">
+      {search.error !== null && (
+        <p role="alert" className="px-2.5 pt-1 text-[13px] leading-5 text-danger">
+          {search.error}
+        </p>
+      )}
+      {search.searching && (
+        <p role="status" className="px-2.5 pt-1 text-[13px] leading-5 text-text3">
+          Searching…
+        </p>
+      )}
+      {search.found !== null && rows.length === 0 && !search.found.more && (
+        <p role="status" className="px-2.5 pt-1 text-[13px] leading-5 text-text3">
+          No conversations match
+        </p>
+      )}
+      {rows.length > 0 && (
+        <>
+          <p role="status" className="sr-only">
+            {rows.length} {rows.length === 1 ? "conversation matches" : "conversations match"}
+          </p>
+          <ul className="flex flex-col">
+            {rows.map((row) => (
+              <li key={row.draftId}>
+                <SearchHit row={row} words={search.words} href={conversationHref(path, row.draftId)} current={row.draftId === active} onPick={onPick} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {search.found?.more === true && (
+        <div className="px-1 pt-2">
+          <button
+            type="button"
+            onClick={search.showMore}
+            disabled={search.loadingMore}
+            className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline disabled:cursor-progress disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            {search.loadingMore ? "Reading more matches…" : "Show more matches"}
+          </button>
+          {search.moreError !== null && (
+            <p role="alert" className="px-1.5 text-[12px] text-danger">
+              {search.moreError}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The matched words, in bold and the accent's text colour. */
+function Marked({ text, words }: { text: string; words: string }) {
+  return (
+    <>
+      {matchParts(text, words).map((part, at) =>
+        part.hit ? (
+          <mark key={at} className="bg-transparent font-semibold text-accent-text">
+            {part.text}
+          </mark>
+        ) : (
+          part.text
+        ),
+      )}
+    </>
+  );
+}
+
+function SearchHit({ row, words, href, current, onPick }: { row: SearchRow; words: string; href: string; current: boolean; onPick: () => void }) {
+  return (
+    <PanelLink
+      href={href}
+      onClick={onPick}
+      aria-current={current ? "page" : undefined}
+      title={`${row.heading}\n${row.state} · ${relativeTime(row.updated)}`}
+      suppressHydrationWarning
+      className={cx(SEARCH_ROW, "transition-colors", current ? "bg-surface2 font-medium" : "hover:bg-surface2")}
+    >
+      <span className={cx("block w-full min-w-0 truncate", row.quoted && !current && "text-text2")}>
+        <Marked text={row.heading} words={words} />
+      </span>
+      {row.snippet !== null && (
+        <span className="block w-full min-w-0 truncate text-[12px] font-normal leading-4 text-text3">
+          <Marked text={row.snippet} words={words} />
+        </span>
+      )}
+      <span className="sr-only">, {row.state}</span>
+    </PanelLink>
+  );
+}
+
+/** A hit is two lines (the heading, and the words around the match), so it stacks where `ROW` centres. */
+const SEARCH_ROW = cx(
+  "flex min-h-9 w-full flex-col items-start justify-center rounded-lg px-2.5 py-1.5 text-[14px] text-text",
   "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
 );
 
