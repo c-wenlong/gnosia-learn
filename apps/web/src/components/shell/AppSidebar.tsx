@@ -21,7 +21,7 @@ import { useShell } from "./shell-context";
 /**
  * The app's one sidebar, laid out the way a chat app's is: the wordmark and
  * the fold at the top, New chat (the studio, when this deployment has one),
- * the five learning destinations, the studio's conversations, and the account
+ * the four learning destinations, the studio's conversations, and the account
  * at the foot. It replaced the top bar, the phone tab bar and the studio's
  * own conversation list, so moving between making something and learning
  * from it is one column of links.

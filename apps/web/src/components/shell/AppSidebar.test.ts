@@ -92,11 +92,11 @@ function mountFoldedForClip() {
 }
 
 describe("the sidebar", () => {
-  it("lists only the five destinations, and reads no conversations, without a studio", async () => {
+  it("lists only the four destinations, and reads no conversations, without a studio", async () => {
     const container = await mount(false);
     // The account menu's links are mounted too, inert while it is closed.
     const labels = [...nav(container).querySelectorAll("a")].filter((a) => a.closest("[inert]") === null).map((a) => a.textContent);
-    expect(labels).toEqual(["Gnosia", "Home", "Courses", "Learn", "Library", "Review"]);
+    expect(labels).toEqual(["Gnosia", "Home", "Courses", "Learn", "Library"]);
     expect(mocks.listDrafts).not.toHaveBeenCalled();
     expect(nav(container).textContent).not.toContain("Chats");
   });

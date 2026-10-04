@@ -211,8 +211,9 @@ conversation list beside its pages.
 - **Sidebar**, from 768px up, 260px on `--surface` with a hairline at its
   right, sticky beside a page that scrolls the window: the wordmark and the
   fold at the top; New chat (`/studio`, the studio's home and composer, only
-  when `STUDIO_ENABLED` is set); the five destinations (`DESTINATIONS` in
-  `lib/nav.ts`: Home, Courses, Learn, Library, Review; the current one on
+  when `STUDIO_ENABLED` is set); the four destinations (`DESTINATIONS` in
+  `lib/nav.ts`: Home, Courses, Learn, Library; Review left the list on
+  2026-10-04, see DESIGN.md "Information architecture"; the current one on
   `--surface2`); the studio's conversations under "Chats", newest first by
   day; and the account row at the foot, showing the learner's name
   (`learner.display_name`, set under Settings, Profile, through
