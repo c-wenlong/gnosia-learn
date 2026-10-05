@@ -45,6 +45,7 @@ import {
 } from "@/lib/tutor-check";
 
 import { VerdictRow } from "./VerdictRow";
+import { NOTE_HASH } from "./WorkspacePanels";
 
 /**
  * The workspace's centre panel: a chat with the concept tutor
@@ -588,6 +589,7 @@ export function TutorChat({
         verdict={row.verdict}
         live={row.at === lastVerdict}
         onRecord={(correct) => void record(row.verdict.requestId, correct)}
+        concept={{ title, noteHref: NOTE_HASH }}
       />
     ) : null;
   };

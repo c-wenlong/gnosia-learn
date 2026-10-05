@@ -1538,6 +1538,61 @@ that idea); Atlas's glow shadow (the kit has no shadows, DESIGN.md); and a
 second composer component for the home view, which would have forked the
 keys, the menu and the fallback that `MentionComposer` already has.
 
+### D89. A conversation shows what it made, as cards read from the catalog
+
+**Verdict (2026-10-05):** once a job's asset lands (a diagram accepted, a
+video accepted after its review), the conversation shows a card for it under
+the studio line that says it landed: its picture (the SVG, or the video's
+stored poster, through the Library's own `/api/assets/<id>/file` and
+`/poster` routes), its title, its kind as the tile's badge (D85), when it was
+made, Open (the Library's previewer, `/library?open=<id>`, #389) and the
+studio's own next step for it (Extend on a diagram, Change on a video). At
+the end of the thread, "Everything made in this conversation (N)" folds open
+a list of every one, each opening the previewer; with nothing made it is not
+there. The cards come from `conversationMade` in
+`services/catalog/src/state/conversation-made.ts` (draft, its jobs,
+`asset_job`, the asset, scoped to the reader at every hop), served by the
+app at `GET /studio/made/<draft>`, not from the runner's job state, so a
+conversation reopened next month shows them too. Only the video and the
+diagram SVG are cards; the transcript, chapters, captions, poster and `.tldr`
+a job also writes are their companions in the Library. An asset the
+conversation wrote twice (an extend redrawn) is one card, at the later write.
+A card that lands while the panel is open rises in as a new turn does
+(`Arrive`, reduced motion respected); one there on opening stands still. The
+job panels are unchanged.
+
+The concept tutor gets the same idea for what its turns leave behind: a
+committed check verdict (recall-in-chat's R2) is a card naming the verdict,
+the concept, the mastery's move and the next review, with "Open the note",
+which brings the note into view on the concept page (`#note`, which
+`WorkspacePanels` answers by showing the note's tab or unfolding its panel).
+
+**Why:** Manus's task page ends each piece of work with a deliverable card
+(thumbnail, title, Open and the file's actions) and closes the thread with
+"View all files in this task" (docs/design/reference/manus/components.md).
+Ours ended a job with a sentence and a job panel whose state is the runner's,
+so the thing made could only be found again from the grid or the Library,
+and a conversation reopened later said that something was accepted without
+offering it. Reading the catalog rather than the runner is what makes the
+card true later: an asset is what landed in the database, and `asset_job` is
+already the record of which job wrote it (the reverse of `assetParents`'
+conversation branch). Placing the card by time and slug, under the first
+studio line at or after the write that names the asset's slug ("saved as
+tcp-vs-udp"), needs nothing new from the runner: it writes the asset and then
+that line, milliseconds apart, and the slug keeps a card off another job's
+line that landed in between. A read that finds the catalog unreachable keeps
+the cards already shown, and a picture the route will not serve falls back to
+the kind's glyph.
+
+**Rejected:** a card driven by the job's terminal state (it would vanish with
+the job list, and say nothing about an accept that failed to land); a card
+per file the job wrote (four sidecars of a video are not four things made);
+a Dialog for the list (the panel is already a dialog, and a fold is how the
+thread shows more, as the note's disclosure does); and the studio's
+`/studio/api/diagrams/<name>/svg` for the picture, which is keyed by name and
+served by the runner, where the catalog's read already says whether the blob
+is present.
+
 ## Later: other kinds of asset
 
 Diagrams first. The owner wants to chat to launch manimkc videos too, through
