@@ -445,6 +445,19 @@ describe("the sections", () => {
     expect(modules.className).toContain("motion-reduce:transition-none");
   });
 
+  it("shows a module's whole title in one truncating line, the tooltip holding all of it", async () => {
+    withRows({ courses: [{ ...COURSE, modules: [{ slug: "m2", title: "Week 2: MapReduce", order: 2, href: "/courses/cs3230/m2" }] }] });
+    const container = await mount(false);
+    const folder = section(container, "sidebar-courses").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    act(() => folder.click());
+    const link = container.querySelector<HTMLAnchorElement>(`#${folder.getAttribute("aria-controls")} a`)!;
+    const title = [...link.querySelectorAll("span")].find((s) => s.textContent === "Week 2: MapReduce")!;
+    expect(title).toBeDefined();
+    expect(title.getAttribute("title")).toBe("Week 2: MapReduce");
+    expect(title.className).toContain("truncate");
+    expect(title.className).toContain("min-w-0");
+  });
+
   it("opens the course of the page on screen by itself, its module marked", async () => {
     mocks.pathname = "/courses/cs3230/m2/check";
     withRows();

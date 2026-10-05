@@ -389,7 +389,11 @@ function CoursesSection({
                           className={cx(ROW, "ps-9 text-[13px]", on ? "bg-surface2 font-medium text-text" : "text-text2 hover:bg-surface2/60 hover:text-text")}
                         >
                           <span className="w-5 shrink-0 text-right text-[12px] tabular-nums text-text3">{m.order}</span>
-                          <span className="min-w-0 flex-1 truncate">{m.title}</span>
+                          {/* The whole title, "Week 2: MapReduce", in one line: an ellipsis
+                              when it runs out of room, the tooltip with all of it. */}
+                          <span title={m.title} className="min-w-0 flex-1 truncate">
+                            {m.title}
+                          </span>
                         </Link>
                       </li>
                     );
