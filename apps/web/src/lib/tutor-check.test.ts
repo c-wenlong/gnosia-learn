@@ -7,6 +7,7 @@ import {
   newVerdict,
   pendingCheck,
   recallOpening,
+  recordedCard,
   recordedLine,
   restoreCheck,
   restoreVerdict,
@@ -131,6 +132,20 @@ describe("verdict state", () => {
     expect(recordedLine({ correct: false, pLBefore: 0.5, pLAfter: 0.3, intervalDays: null }, days)).toBe(
       "Recorded as incorrect · p(L) 0.50 → 0.30",
     );
+  });
+
+  it("words the recorded-answer card with the same facts (D89)", () => {
+    const days = (d: number) => `${d} ${d === 1 ? "day" : "days"}`;
+    expect(recordedCard({ correct: true, pLBefore: 0.25, pLAfter: 0.4123, intervalDays: 1 }, days)).toEqual({
+      verdict: "Recorded as correct",
+      mastery: "Mastery moved: p(L) 0.25 → 0.41",
+      review: "review in 1 day",
+    });
+    expect(recordedCard({ correct: false, pLBefore: 0.5, pLAfter: 0.3, intervalDays: null }, days)).toEqual({
+      verdict: "Recorded as incorrect",
+      mastery: "Mastery moved: p(L) 0.50 → 0.30",
+      review: null,
+    });
   });
 });
 

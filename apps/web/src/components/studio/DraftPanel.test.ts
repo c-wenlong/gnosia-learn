@@ -44,6 +44,8 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => createElement("a", { href, ...rest }, children),
+  // Extend's label, on a card of something the conversation made.
+  useLinkStatus: () => ({ pending: false }),
 }));
 vi.mock("next/dynamic", () => ({
   default: () =>
@@ -587,5 +589,123 @@ describe("focus on opening", () => {
     await handOver();
     expect(mocks.focus).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(search);
+  });
+});
+
+describe("what the conversation made (D89)", () => {
+  const ACCEPTED = "2026-09-30T02:25:41.703Z";
+  const made = (over: Record<string, unknown> = {}) => ({
+    id: "diagram:learn/assets/tcp-vs-udp.svg",
+    kind: "diagram_svg",
+    title: "TCP vs UDP",
+    name: "tcp-vs-udp",
+    jobId: "j1",
+    madeAt: "2026-09-30T02:25:41.686Z",
+    thumbnail: true,
+    ...over,
+  });
+  const accepted = () =>
+    draft({
+      state: "done",
+      transcript: [
+        entry(1, "person", "A diagram for TCP vs UDP.", { at: "2026-09-29T06:16:53Z" }),
+        entry(2, "planner", "A comparison.", { at: "2026-09-29T06:17:30Z" }),
+        entry(3, "studio", 'The diagram "TCP vs UDP" was accepted.', { at: ACCEPTED }),
+        entry(4, "person", "Thanks.", { at: "2026-09-30T03:00:00Z" }),
+      ],
+    });
+
+  function stubMade(items: unknown[]) {
+    const reads: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        reads.push(input);
+        return new Response(JSON.stringify({ ok: true, reachable: true, made: items }), { status: 200 });
+      }),
+    );
+    mounted.push(() => vi.unstubAllGlobals());
+    return reads;
+  }
+
+  it("reads the catalog route and puts the card under the line that says the job landed", async () => {
+    const reads = stubMade([made()]);
+    const host = await mount(accepted());
+    expect(reads).toContain("/studio/made/d1");
+    const card = host.querySelector<HTMLElement>('[data-made="diagram:learn/assets/tcp-vs-udp.svg"]');
+    expect(card).not.toBeNull();
+    // After the accepted line, before the person's next turn.
+    const log = host.querySelector('[role="log"]')!;
+    const text = log.textContent ?? "";
+    expect(text.indexOf("was accepted")).toBeLessThan(text.indexOf("TCP vs UDP", text.indexOf("was accepted")));
+    expect(text.indexOf("TCP vs UDP", text.indexOf("was accepted"))).toBeLessThan(text.indexOf("Thanks."));
+    const open = [...card!.querySelectorAll("a")].find((a) => a.textContent === "Open");
+    expect(open?.getAttribute("href")).toBe("/library?open=diagram%3Alearn%2Fassets%2Ftcp-vs-udp.svg");
+    expect(card!.querySelector("img")?.getAttribute("src")).toBe("/api/assets/diagram%3Alearn%2Fassets%2Ftcp-vs-udp.svg/file");
+    expect([...card!.querySelectorAll("a")].some((a) => a.getAttribute("href")?.includes("extend=tcp-vs-udp"))).toBe(true);
+    // A card the panel opened with is not new, so it does not rise in.
+    expect(card!.parentElement?.className ?? "").not.toContain("animate-enter");
+  });
+
+  it("lists everything made at the end of the thread, and opens each in the previewer", async () => {
+    stubMade([
+      made({ id: "video:dengue", kind: "video", title: "How dengue moves", name: "dengue", jobId: "j2", madeAt: "2026-10-03T18:28:43Z", thumbnail: false }),
+      made(),
+    ]);
+    const host = await mount(accepted());
+    const toggle = [...host.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Everything made in this conversation"));
+    expect(toggle?.textContent).toBe("Everything made in this conversation (2)");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => toggle!.click());
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    const list = host.querySelector(`#${CSS.escape(toggle!.getAttribute("aria-controls")!)}`)!;
+    const links = [...list.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["/library?open=video%3Adengue", "/library?open=diagram%3Alearn%2Fassets%2Ftcp-vs-udp.svg"]);
+  });
+
+  it("keeps its cards when a later read finds the catalog unreachable", async () => {
+    const answers = [
+      { ok: true, reachable: true, made: [made()] },
+      { ok: true, reachable: false, made: [] },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(answers.shift() ?? { ok: true, reachable: false, made: [] }), { status: 200 })),
+    );
+    mounted.push(() => vi.unstubAllGlobals());
+    const view = accepted();
+    const host = await mount(view);
+    expect(host.querySelector("[data-made]")).not.toBeNull();
+    // The thread moves (a new entry), which reads again: the catalog is down now.
+    mocks.getDraft.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ...view, transcript: [...view.transcript, entry(5, "planner", "Anything else?", { at: "2026-09-30T03:00:05Z" })] },
+    });
+    await act(async () => mocks.events?.onEvent({ type: "turn", data: {} }));
+    // The panel gathers a burst of events into one read, 60ms later.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 120)));
+    await settle();
+    expect(host.textContent).toContain("Anything else?");
+    // The unreachable answer was read, and changed nothing on screen.
+    expect(answers).toEqual([]);
+    expect(host.querySelector("[data-made]")).not.toBeNull();
+    expect(host.textContent).toContain("Everything made in this conversation (1)");
+  });
+
+  it("draws the kind's glyph when the picture will not load", async () => {
+    stubMade([made()]);
+    const host = await mount(accepted());
+    const img = host.querySelector<HTMLImageElement>("[data-made] img")!;
+    await act(async () => img.dispatchEvent(new Event("error")));
+    expect(host.querySelector("[data-made] img")).toBeNull();
+    expect(host.querySelector("[data-made] svg")).not.toBeNull();
+  });
+
+  it("shows neither a card nor the list when nothing was made", async () => {
+    stubMade([]);
+    const host = await mount(accepted());
+    expect(host.querySelector("[data-made]")).toBeNull();
+    expect(host.textContent).not.toContain("Everything made");
   });
 });
