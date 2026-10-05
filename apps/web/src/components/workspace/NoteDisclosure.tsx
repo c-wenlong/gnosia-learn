@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState, type ReactNode } from "react";
 
-import { linkClasses } from "@/components/ui/classes";
+import { cx, linkClasses } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { useHydrated } from "@/lib/use-hydrated";
 
@@ -47,7 +47,7 @@ export function NoteDisclosure({ children }: { children: ReactNode }) {
         }}
         className="group"
       >
-        <summary className={`${TOGGLE} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
+        <summary className={cx(TOGGLE, "cursor-pointer list-none [&::-webkit-details-marker]:hidden")}>
           <span className="group-open:hidden">Read the whole note</span>
           <span className="hidden group-open:inline">Hide the note</span>
         </summary>

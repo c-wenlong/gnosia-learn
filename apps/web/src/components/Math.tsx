@@ -1,3 +1,4 @@
+import { cx } from "@/components/ui/classes";
 import { renderMath, splitMath } from "@/lib/math";
 
 /**
@@ -45,10 +46,10 @@ export function InlineMath({ source, className }: { source: string; className?: 
  * its own box instead of pushing the page wider, which on a phone is the
  * difference between a scrollable matrix and a page that pans.
  */
-export function DisplayMath({ source, className = "" }: { source: string; className?: string }) {
+export function DisplayMath({ source, className }: { source: string; className?: string }) {
   return (
     <span
-      className={`block max-w-full overflow-x-auto overflow-y-hidden py-1 [&>.katex-display]:m-0 ${className}`}
+      className={cx("block max-w-full overflow-x-auto overflow-y-hidden py-1 [&>.katex-display]:m-0", className)}
       dangerouslySetInnerHTML={{ __html: renderMath(source, true) }}
     />
   );

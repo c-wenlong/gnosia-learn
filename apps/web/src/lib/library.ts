@@ -260,18 +260,20 @@ export function parseView(value: string | null | undefined): LibraryView {
 /**
  * How the rows are grouped (L4 of docs/proposals/library-by-type-and-day.md):
  * by the day each was made, the default, by the course and module it sits in,
- * or by the topic its concept is filed under. URL state like the layout, so a
- * link carries it; there is no stored preference.
+ * by the topic its concept is filed under, or by the studio conversation that
+ * made it (Manus's Group by task). URL state like the layout, so a link
+ * carries it; there is no stored preference.
  */
-export type LibraryGroup = "day" | "course" | "topic";
+export type LibraryGroup = "day" | "course" | "topic" | "conversation";
 
 /**
- * Anything but `course` or `topic` is the day, so a hand-typed `?group=`
- * cannot break the page. `concept` reads as `topic`: the third grouping was by
- * concept until 2026-10-05, and a link saved then still groups.
+ * Anything but `course`, `topic` or `conversation` is the day, so a
+ * hand-typed `?group=` cannot break the page. `concept` reads as `topic`: the
+ * third grouping was by concept until 2026-10-05, and a link saved then still
+ * groups.
  */
 export function parseGroup(value: string | null | undefined): LibraryGroup {
-  if (value === "course" || value === "topic") return value;
+  if (value === "course" || value === "topic" || value === "conversation") return value;
   return value === "concept" ? "topic" : "day";
 }
 
@@ -311,7 +313,8 @@ export function libraryHref(filters: LibraryFilters): string {
   if (q) params.set("q", q);
   if (filters.sort === "title") params.set("sort", "title");
   if (filters.view === "list") params.set("view", "list");
-  if (filters.group === "course" || filters.group === "topic") params.set("group", filters.group);
+  const group = filters.group ?? "day";
+  if (group !== "day") params.set("group", group);
   const query = params.toString();
   return query === "" ? "/library" : `/library?${query}`;
 }

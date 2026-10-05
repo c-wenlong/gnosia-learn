@@ -12,6 +12,7 @@ import {
   type Inline,
 } from "@/components/markdown";
 import { EmbedImage } from "@/components/EmbedImage";
+import { cx } from "@/components/ui/classes";
 import { DisplayMath, InlineMath } from "@/components/Math";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import type { AssetProblemCode } from "@/lib/asset-problems";
@@ -130,8 +131,10 @@ export function NoteProse({
   const ids = headingIds(blocks, idPrefix);
 
   if (blocks.length === 0) {
+    // `leading-5` is `text-sm`'s own 20px line, written out so it stays when
+    // a caller's size replaces `text-sm` (the note panel's `text-[14px]`).
     return (
-      <p className={`text-sm text-text2 ${className}`}>
+      <p className={cx("text-sm leading-5 text-text2", className)}>
         This note has no body yet, only the metadata at the top of the file.
       </p>
     );
@@ -139,7 +142,7 @@ export function NoteProse({
 
   return (
     <article
-      className={`max-w-[72ch] text-[15px] leading-[1.7] text-text [&>*:first-child]:mt-0 ${className}`}
+      className={cx("max-w-[72ch] text-[15px] leading-[1.7] text-text [&>*:first-child]:mt-0", className)}
     >
       <Blocks blocks={blocks} links={links} ids={ids} />
     </article>
@@ -262,7 +265,7 @@ function BlockView({
       const figure = standaloneFigure(nodes);
       if (figure) return <Figure node={figure} links={links} className={space.figure} />;
       return (
-        <p className={`${space.paragraph} text-pretty`}>
+        <p className={cx(space.paragraph, "text-pretty")}>
           <Inlines nodes={nodes} links={links} />
         </p>
       );
@@ -272,7 +275,7 @@ function BlockView({
       return <CodeBlock info={block.info} text={block.text} className={space.code} />;
 
     case "rule":
-      return <hr className={`${space.rule} h-px border-0 bg-border`} />;
+      return <hr className={cx(space.rule, "h-px border-0 bg-border")} />;
 
     case "list":
       return <ListView block={block} links={links} ids={ids} className={space.list} tight={tight} />;
@@ -324,7 +327,7 @@ function Heading({
   switch (block.level) {
     case 1:
       return (
-        <h1 id={id} className={`${space.h1} group scroll-mt-20 text-[1.625rem] font-semibold ${balance}`}>
+        <h1 id={id} className={cx(space.h1, "group scroll-mt-20 text-[1.625rem] font-semibold", balance)}>
           {children}
           {anchor}
         </h1>
@@ -333,7 +336,7 @@ function Heading({
       return (
         <h2
           id={id}
-          className={`${space.h2} group scroll-mt-20 border-b border-border pb-2 text-[1.25rem] font-semibold ${balance}`}
+          className={cx(space.h2, "group scroll-mt-20 border-b border-border pb-2 text-[1.25rem] font-semibold", balance)}
         >
           {children}
           {anchor}
@@ -343,7 +346,7 @@ function Heading({
       return (
         <h3
           id={id}
-          className={`${space.h3} group scroll-mt-20 text-[1.0625rem] font-semibold ${balance}`}
+          className={cx(space.h3, "group scroll-mt-20 text-[1.0625rem] font-semibold", balance)}
         >
           {children}
           {anchor}
@@ -353,7 +356,7 @@ function Heading({
       return (
         <h4
           id={id}
-          className={`${space.h4} group scroll-mt-20 text-[0.9375rem] font-semibold text-text2`}
+          className={cx(space.h4, "group scroll-mt-20 text-[0.9375rem] font-semibold text-text2")}
         >
           {children}
           {anchor}
@@ -411,7 +414,7 @@ function HeadingAnchor({ id, text }: { id: string; text: string }) {
 function CodeBlock({ info, text, className }: { info: string; text: string; className: string }) {
   return (
     <div
-      className={`${className} overflow-hidden rounded-lg border border-border bg-surface2`}
+      className={cx(className, "overflow-hidden rounded-lg border border-border bg-surface2")}
     >
       {info !== "" && (
         <p className="border-b border-border px-3 py-1.5 font-mono text-xs text-text2">
@@ -445,7 +448,7 @@ function ListView({
   className: string;
   tight: boolean;
 }) {
-  const shared = `${className} ${tight ? "space-y-1" : "space-y-2"} pl-5 marker:text-text2`;
+  const shared = cx(className, tight ? "space-y-1" : "space-y-2", "pl-5 marker:text-text2");
   const items = block.items.map((item, i) => (
     <li key={i} className="pl-1 [&>*:first-child]:mt-0">
       <Blocks blocks={item} links={links} ids={ids} tight />
@@ -453,11 +456,11 @@ function ListView({
   ));
 
   return block.ordered ? (
-    <ol start={block.start} className={`${shared} list-decimal marker:tabular-nums`}>
+    <ol start={block.start} className={cx(shared, "list-decimal marker:tabular-nums")}>
       {items}
     </ol>
   ) : (
-    <ul className={`${shared} list-disc`}>{items}</ul>
+    <ul className={cx(shared, "list-disc")}>{items}</ul>
   );
 }
 
@@ -513,7 +516,7 @@ function QuoteView({
   if (block.callout === null) {
     return (
       <blockquote
-        className={`${className} border-l border-border pl-4 text-text2 [&>*:first-child]:mt-0`}
+        className={cx(className, "border-l border-border pl-4 text-text2 [&>*:first-child]:mt-0")}
       >
         <Blocks blocks={block.blocks} links={links} ids={ids} tight={tight} />
       </blockquote>
@@ -527,7 +530,10 @@ function QuoteView({
   return (
     <aside
       style={{ "--tone": tone } as React.CSSProperties}
-      className={`${className} rounded-xl border border-[color-mix(in_srgb,var(--tone)_32%,var(--border))] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)] px-4 py-3`}
+      className={cx(
+        className,
+        "rounded-xl border border-[color-mix(in_srgb,var(--tone)_32%,var(--border))] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)] px-4 py-3",
+      )}
     >
       <p className="text-[13px] font-semibold tracking-[-0.01em] text-[color-mix(in_srgb,var(--tone)_55%,var(--text))]">
         {block.title}
@@ -564,7 +570,7 @@ function Figure({
   if (node.kind === "image" && links.imagesAsLinks === true) {
     const href = safeHref(node.src);
     return (
-      <p className={`${className} text-sm text-text2`}>
+      <p className={cx(className, "text-sm text-text2")}>
         Image:{" "}
         {href === null ? (
           <span className="font-mono">{node.alt || node.src}</span>
@@ -602,7 +608,7 @@ function Figure({
   if (problem === null && src === null) {
     return (
       <p
-        className={`${className} rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-text2`}
+        className={cx(className, "rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-text2")}
       >
         Embedded asset <span className="font-mono text-text">{name}</span> is not
         available on this page.
@@ -613,7 +619,7 @@ function Figure({
   const isVector = /\.svgz?(?:[?#]|$)/i.test(src ?? name);
 
   return (
-    <figure className={`${className} overflow-hidden rounded-xl border border-border`}>
+    <figure className={cx(className, "overflow-hidden rounded-xl border border-border")}>
       {problem !== null ? (
         <WidgetFailure
           inset

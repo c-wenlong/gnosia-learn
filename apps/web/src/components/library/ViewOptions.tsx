@@ -5,10 +5,11 @@ import { Menu, MenuDivider, MenuGroup, MenuItem } from "@/components/ui/Menu";
 import { chipClasses, cx } from "@/components/ui/classes";
 import type { LibraryGroup } from "@/lib/library";
 
-const GROUPS: { value: LibraryGroup; label: string; icon: "assets" | "book" | "concepts" }[] = [
+const GROUPS: { value: LibraryGroup; label: string; icon: "assets" | "book" | "concepts" | "compose" }[] = [
   { value: "day", label: "Day", icon: "assets" },
   { value: "course", label: "Course", icon: "book" },
   { value: "topic", label: "Topic", icon: "concepts" },
+  { value: "conversation", label: "Conversation", icon: "compose" },
 ];
 
 /**
@@ -16,7 +17,7 @@ const GROUPS: { value: LibraryGroup; label: string; icon: "assets" | "book" | "c
  * Manus's `view-options-button` and `view-options-menu`): a button with the
  * sliders glyph beside the grid and list switch, opening a small menu.
  *
- * "Group by" is Day (the default), Course or Topic, and "Show" is All or
+ * "Group by" is Day (the default), Course, Topic or Conversation, and "Show" is All or
  * Favorites only, each a set of choices with a tick on the one in use. Both
  * are URL state (`?group=`, `?favorites=1`), so a link carries them; a pick
  * goes through the toolbar's `pick`, which pushes the URL and dims the

@@ -7,7 +7,7 @@ import {
   transcriptCounter,
   type TranscriptCue,
 } from "@/components/media";
-import { cardClasses } from "@/components/ui/classes";
+import { cardClasses, cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { CARD_TITLE } from "@/components/ui/classes";
 
@@ -126,7 +126,7 @@ export function TranscriptPanel({
           ref={scrollerRef}
           onScroll={onScroll}
           aria-label="Transcript"
-          className={`relative overflow-y-auto overscroll-contain ${scrollerClassName}`}
+          className={cx("relative overflow-y-auto overscroll-contain", scrollerClassName)}
         >
           {cues.map((cue, i) => {
             const isActive = i === active;
@@ -152,14 +152,20 @@ export function TranscriptPanel({
                     type="button"
                     onClick={() => seekTo(cue.start)}
                     aria-current={isActive ? "true" : undefined}
-                    className={`grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-left text-[14px] leading-[22px] transition-colors duration-150 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent motion-reduce:transition-none ${tone}`}
+                    className={cx(
+                      "grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-left text-[14px] leading-[22px] transition-colors duration-150 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent motion-reduce:transition-none",
+                      tone,
+                    )}
                   >
                     {content}
                   </button>
                 ) : (
                   <p
                     aria-current={isActive ? "true" : undefined}
-                    className={`grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] transition-colors duration-150 motion-reduce:transition-none ${tone}`}
+                    className={cx(
+                      "grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] transition-colors duration-150 motion-reduce:transition-none",
+                      tone,
+                    )}
                   >
                     {content}
                   </p>

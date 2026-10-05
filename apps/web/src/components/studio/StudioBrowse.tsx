@@ -146,7 +146,7 @@ export function StudioGrid({
     return (
       <div ref={box} className="space-y-6">
         {/* Empty, with no job making anything: no frame at all. */}
-        <div className={`${frame} empty:hidden`}>{lead}</div>
+        <div className={cx(frame, "empty:hidden")}>{lead}</div>
         {diagrams.length === 0 && unreadable === 0 && videos.length === 0 ? (
           <EmptyDirectory dir={dir} />
         ) : (

@@ -1,6 +1,7 @@
-import type { AssetParents, AssetPlace } from "@self-learn/catalog/state";
+import type { AssetConversation, AssetParents, AssetPlace } from "@self-learn/catalog/state";
 
 import { assignLayers, type GraphEdge } from "@/lib/concept-graph";
+import { conversationTitle } from "@/lib/conversation-title";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
@@ -101,6 +102,27 @@ export function orderedConcepts(slugs: readonly string[], order: ReadonlyMap<str
 }
 
 /**
+ * The one conversation an asset is located in: the one whose studio job wrote
+ * it most recently (`assetParents` lists them that way). The row menu's
+ * Locate in conversation, the previewer's Conversation link, the source line
+ * and the group by conversation all take this one, so an asset two
+ * conversations touched is shown once and points one way.
+ */
+export function latestConversation(parents: AssetParents | undefined): AssetConversation | null {
+  return parents?.conversations[0] ?? null;
+}
+
+/**
+ * A conversation's name as every page shows it (`conversationTitle`, the rule
+ * from #395): the name the owner gave it, else the planner's title. The
+ * catalog's row has no first message, so a conversation with neither reads
+ * "Studio conversation".
+ */
+export function conversationLabel(conversation: Pick<AssetConversation, "name" | "title">): string {
+  return conversationTitle({ name: conversation.name, title: conversation.title })?.text ?? "Studio conversation";
+}
+
+/**
  * What the row's second line says, or null when the asset has no parent at
  * all (the page then names its topic, as the card does).
  */
@@ -129,9 +151,9 @@ export function rowSource(
   if (place !== null || concept !== undefined) {
     return { ...(place === null ? {} : { place: placeLabel(place) }), ...(concept === undefined ? {} : { concept }) };
   }
-  const conversation = parents.conversations[0];
-  if (conversation !== undefined) {
-    return { origin: { kind: "conversation", title: conversation.title?.trim() || "Studio conversation" } };
+  const conversation = latestConversation(parents);
+  if (conversation !== null) {
+    return { origin: { kind: "conversation", title: conversationLabel(conversation) } };
   }
   const session = parents.sessions[0];
   if (session !== undefined) {
