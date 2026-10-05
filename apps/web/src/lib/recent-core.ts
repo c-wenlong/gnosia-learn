@@ -54,6 +54,12 @@ export interface RecentItem {
   quoted?: boolean;
   /** A conversation with a brief waiting to be drawn. */
   briefed?: boolean;
+  /**
+   * The tutor sessions folded into this row because they open its page
+   * (`recentItems`): Recent's search still finds one by its title, and a pin
+   * made of one before it was folded still stands for this row.
+   */
+  folded?: { key: string; title: string }[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -264,6 +270,7 @@ export function recentItems(sources: RecentSources): RecentItem[] {
     const same = byHref.get(s.href);
     if (same !== undefined) {
       if (same.kind === "concept" && time(s.updatedAt) > time(same.at)) same.at = s.updatedAt;
+      same.folded = [...(same.folded ?? []), { key: `session:${s.id}`, title: s.title }];
       continue;
     }
     const row: RecentItem = {
@@ -498,14 +505,20 @@ export function splitPinned(
   pinned: readonly PinnedRow[],
   known: readonly RecentItem[] = items,
 ): { pinned: PinnedRow[]; recent: RecentItem[] } {
-  const live = new Map([...known, ...items].map((item) => [item.key, item]));
+  const live = new Map<string, { title: string; href: string }>();
+  for (const item of [...known, ...items]) {
+    live.set(item.key, item);
+    // A session pinned before it was folded into its page's row keeps its
+    // own title, and that row leaves Recent as the page it pins.
+    for (const f of item.folded ?? []) live.set(f.key, { title: f.title, href: item.href });
+  }
   const keys = new Set(pinned.map((p) => p.key));
   return {
     pinned: pinned.map((p) => {
       const now = live.get(p.key);
       return now === undefined ? p : { ...p, title: now.title, href: now.href };
     }),
-    recent: items.filter((item) => !keys.has(item.key)),
+    recent: items.filter((item) => !keys.has(item.key) && !(item.folded ?? []).some((f) => keys.has(f.key))),
   };
 }
 
@@ -516,6 +529,11 @@ export function splitPinned(
 /** Lower case, whitespace runs as one space, trimmed: how Recent's search compares. */
 function fold(text: string): string {
   return text.replace(/\s+/g, " ").trim().toLowerCase().replaceAll("ς", "σ");
+}
+
+/** Whether a row's title, or a folded session's (`RecentItem.folded`), holds `words`. */
+export function rowMatches(item: Pick<RecentItem, "title" | "folded">, words: string): boolean {
+  return titleMatches(item.title, words) || (item.folded ?? []).some((f) => titleMatches(f.title, words));
 }
 
 /** Whether `title` holds `words`, in any case. Empty words match everything. */

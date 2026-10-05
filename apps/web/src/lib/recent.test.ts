@@ -10,6 +10,7 @@ import {
   recentItems,
   recentPage,
   RECENT_PAGE,
+  rowMatches,
   splitPinned,
   titleMatches,
   withPin,
@@ -106,6 +107,15 @@ describe("the five sources", () => {
       ["session:d", "/learn/theta", AT(5)],
       ["concept:big-o", "/learn/big-o", AT(3)],
     ]);
+    // The folded sessions stay findable by their own titles and keys.
+    expect(rows.map((r) => r.folded?.map((f) => f.key))).toEqual([["session:c"], ["session:a", "session:b"]]);
+    expect(rowMatches(rows[1], "witness")).toBe(true);
+    expect(rowMatches(rows[1], "theta")).toBe(false);
+    // A session pinned before it was folded keeps its title, and its page's row leaves Recent.
+    const pin: PinnedRow = { key: "session:a", kind: "session", title: "Old", href: "/learn/big-o", at: AT(1) };
+    const split = splitPinned(rows, [pin]);
+    expect(split.pinned).toEqual([{ ...pin, title: "Big-O: the witness definition", href: "/learn/big-o" }]);
+    expect(split.recent.map((r) => r.key)).toEqual(["session:d"]);
     // A session with a log opens the log, a page of its own, and stays.
     const logged = recentItems({ ...none, sessions: [session("e", 2, "/library/session%3Ae"), session("f", 1, "/library/session%3Af")] });
     expect(logged.map((r) => r.key)).toEqual(["session:e", "session:f"]);
