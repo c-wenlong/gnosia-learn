@@ -206,4 +206,56 @@ describe("WorkspacePanels tabs on a phone", () => {
     expect(beside(false).querySelectorAll('[role="tabpanel"]')).toHaveLength(3);
     expect(beside(true).querySelector('[role="tabpanel"]')).toBeNull();
   });
+
+  it("follows a fold of the sidebar on the same page: tab roles and a folded panel's inert both move", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(min-width: 960px)",
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    vi.stubGlobal("requestAnimationFrame", (task: FrameRequestCallback) => {
+      task(0);
+      return 0;
+    });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const draw = (collapsed: boolean) =>
+      act(() =>
+        root.render(
+          createElement(
+            ShellContext.Provider,
+            { value: { collapsed } as ShellControls },
+            createElement(WorkspacePanels, {
+              note: createElement("p", null, "note body"),
+              tutor: createElement("p", null, "tutor body"),
+              studio: createElement("p", null, "studio body"),
+              initialPanel: "tutor",
+            }),
+          ),
+        ),
+      );
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    const note = () => (host.querySelector('section[aria-label="Note & sources"]') as HTMLElement).parentElement as HTMLElement;
+
+    // Folded to the rail at 1000px: side by side, so the note can fold away, and is inert while it is.
+    draw(true);
+    expect(host.querySelector('[role="tabpanel"]')).toBeNull();
+    act(() => (host.querySelector('button[aria-label="Collapse Note & sources"]') as HTMLButtonElement).click());
+    expect(note().hasAttribute("inert")).toBe(true);
+
+    // The sidebar opens on the same page: tabs again, and no panel is left inert behind one.
+    draw(false);
+    expect(host.querySelectorAll('[role="tabpanel"]')).toHaveLength(3);
+    expect(note().hasAttribute("inert")).toBe(false);
+
+    // Folded once more: side by side, and the note's own fold is kept.
+    draw(true);
+    expect(host.querySelector('[role="tabpanel"]')).toBeNull();
+    expect(note().hasAttribute("inert")).toBe(true);
+  });
 });

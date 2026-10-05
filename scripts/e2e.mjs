@@ -1004,23 +1004,16 @@ async function run() {
     }
   });
 
-  await step('workspace: a folded sidebar makes room for the three panels at 1000px', page, async () => {
-    // `ws:` (globals.css): the panels sit side by side once the tutor keeps
-    // 300px beside them, which the space beside the app sidebar decides.
+  await step('workspace: the three panels turn on where the tutor keeps 300px, by the sidebar', page, async () => {
+    // `ws:` (globals.css): side by side once the tutor keeps 300px beside the
+    // app sidebar, which is 1160px with it open and 960px on its rail. Each
+    // edge is checked a pixel either side.
     assert(state.concept !== null, 'no concept: the /learn step found none');
-    await page.setViewportSize({ width: 1000, height: 800 });
-    try {
-      await go(`/learn/${state.concept}`);
-      // Beside the open sidebar the tutor would be too narrow: the panels are tabs.
-      const tabs = main.getByRole('tablist');
-      await tabs.waitFor();
-      await clickHydrated(page, page.getByRole('button', { name: 'Collapse the sidebar' }));
-      await tabs.waitFor({ state: 'hidden' });
-      // Off the rail, so it does not peek out, then past the sidebar's and the columns' slide.
-      await page.mouse.move(700, 400);
-      const tutor = main.locator('section[aria-label="Tutor"]');
-      await tutor.waitFor();
-      const width = await tutor.evaluate(async (el) => {
+    const tabs = main.getByRole('tablist');
+    const tutor = main.locator('section[aria-label="Tutor"]');
+    // The tutor's width once the sidebar's and the columns' slides are done.
+    const settled = () =>
+      tutor.evaluate(async (el) => {
         let last = -1;
         for (let i = 0; i < 40; i += 1) {
           const now = Math.round(el.getBoundingClientRect().width);
@@ -1030,7 +1023,28 @@ async function run() {
         }
         return last;
       });
-      assert(width >= 300, `the tutor is ${width}px wide beside the rail`);
+    const at = async (width, sidebar) => {
+      await page.setViewportSize({ width, height: 800 });
+      // Off the rail, so it does not peek out over the page.
+      await page.mouse.move(width - 40, 400);
+      if (width === edge[sidebar]) {
+        await tabs.waitFor({ state: 'hidden' });
+        const w = await settled();
+        assert(w >= 300, `with the sidebar ${sidebar} at ${width}px the tutor is ${w}px wide`);
+      } else {
+        await tabs.waitFor();
+      }
+    };
+    const edge = { open: 1160, rail: 960 };
+    try {
+      await page.setViewportSize({ width: 1159, height: 800 });
+      await go(`/learn/${state.concept}`);
+      await at(1159, 'open');
+      await at(1160, 'open');
+      await page.setViewportSize({ width: 1000, height: 800 });
+      await clickHydrated(page, page.getByRole('button', { name: 'Collapse the sidebar' }));
+      await at(959, 'rail');
+      await at(960, 'rail');
     } finally {
       const expand = page.getByRole('button', { name: 'Expand the sidebar' });
       if (await expand.count()) await expand.click();
