@@ -12,7 +12,7 @@ import { ShotView } from "@/components/studio/ShotView";
 import { Badge } from "@/components/ui/Badge";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
-import { buttonClasses, menuRowClasses } from "@/components/ui/classes";
+import { buttonClasses, cx, menuRowClasses } from "@/components/ui/classes";
 import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
@@ -266,7 +266,7 @@ export default async function CanvasPage({
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     // Fades in over the loading frame it replaces: opacity only.
-    <div data-layout="full" className={`flex min-h-0 flex-1 flex-col ${FADE_IN}`}>
+    <div data-layout="full" className={cx("flex min-h-0 flex-1 flex-col", FADE_IN)}>
       {children}
     </div>
   );
