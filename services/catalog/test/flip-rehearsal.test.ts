@@ -29,8 +29,9 @@ import { storedBlob } from "./stored-blob";
  * the seed with one manimkc topic folder mapped,
  * and the manimkc CLI a stand-in reporting one rendered video and its
  * transcript, so the two uploads have something to store and the second has
- * nothing left to. No ffmpeg (`FFMPEG_PATH` names none), so posters are
- * skipped and said so. The script copies the template, runs every step, and
+ * nothing left to. ffmpeg is the suites' stand-in (vitest.setup.ts): since
+ * 2026-10-05 the import cuts each render's poster and fails without one, so
+ * the uploads find the poster already there. The script copies the template, runs every step, and
  * drops the copy; the template is read and nothing else.
  *
  * The `--real` switch is tested only for its refusals. It runs flip day
@@ -314,7 +315,6 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
     // --keep, so the backup is still there to restore; the test drops what it kept.
     const ran = await rehearse(["--from", template.name, "--name", name, "--tree-from", tree, "--keep", "--json"], {
       MANIMKC_ROOT: manimkc,
-      FFMPEG_PATH: "none",
     });
     const report = reportOf(ran);
     try {
@@ -366,16 +366,15 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       // neither has a CLI to run.
       expect(skipped).toEqual(["concepts", "courses", "diagrams", "remotionkc", "revideokc", "sessions", "tags", "topics"]);
       // Under the contract the import stored the render and its transcript
-      // before their rows, so the upload has nothing left but posters.
-      expect(step("asset upload")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0 });
-      // No ffmpeg: posters are skipped, and that is a warning, not a failure.
-      expect(step("asset upload")["postersSkipped"]).toMatch(/ffmpeg was not found/);
-      expect(report.steps.find((s) => s.name === "asset upload")?.warning).toMatch(/^no posters were made: ffmpeg was not found/);
-      expect(report.warnings).toBe(1);
+      // before their rows, and cut the render's poster, so the upload has
+      // nothing left at all.
+      expect(step("asset upload")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0, postersSkipped: null });
+      expect(step("asset upload")["counts"]).toMatchObject({ videos: 1, posters: 1 });
+      expect(report.warnings).toBe(0);
       expect(step("asset upload again")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0 });
-      // The seed's diagram SVG and course cover, the render and its
-      // transcript: all four the import's.
-      expect(step("blob audit")).toMatchObject({ rows: 4, objects: 4, outstanding: 0 });
+      // The seed's diagram SVG and course cover, the render, its transcript
+      // and its poster: all five the import's.
+      expect(step("blob audit")).toMatchObject({ rows: 5, objects: 5, outstanding: 0 });
       expect(step("doctor again")["blobContract"]).toEqual({ inForce: true, unstored: [], unkeyed: [] });
       expect(step("migrate the contract")).toMatchObject({ applied: [], head: latestTag(), held: [] });
 
@@ -468,7 +467,6 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
     const name = `${template.name}_removes`;
     const ran = await rehearse(["--from", template.name, "--name", name, "--tree-from", tree, "--json"], {
       MANIMKC_ROOT: manimkc,
-      FFMPEG_PATH: "none",
     });
     const report = reportOf(ran);
     expect(ran.code).toBe(1);
@@ -516,7 +514,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
     const reason = "the seed's two items name no concept yet";
     const ran = await rehearse(
       ["--cutover", "--from", template.name, "--name", name, "--tree-from", tree, "--keep", "--waive-reason", reason, "--json"],
-      { MANIMKC_ROOT: manimkc, FFMPEG_PATH: "none" },
+      { MANIMKC_ROOT: manimkc },
     );
     const report = reportOf<
       Report & {
@@ -670,7 +668,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
     const files = path.join(work, "files");
     await git(repo, "worktree", "add", "-q", files, "content-files-final");
     const script = path.join(repo, "scripts", "flip-rehearsal.mjs");
-    const env = { MANIMKC_ROOT: manimkc, FFMPEG_PATH: "none" };
+    const env = { MANIMKC_ROOT: manimkc };
 
     // Flip day, from the worktree's tree, kept: the copy is the database flip
     // day ran on, and its temp tree holds the export it wrote.

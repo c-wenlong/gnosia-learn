@@ -267,32 +267,32 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
   const derivedFrom = async (id: string) =>
     (await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, id))).map((d) => d.sourceAssetId);
 
-  it("leaves the upload only the poster to make", async () => {
+  it("cuts the poster itself, so the upload finds nothing left to do", async () => {
+    // The import above cut and stored it (2026-10-05): every rendered video
+    // leaves the import with a poster.
+    expect(await derivedFrom(posterId("manimkc:out/demo/one/one.mp4"))).toEqual(["manimkc:out/demo/one/one.mp4"]);
     const first = await upload();
     expect(first.items.map((i) => [i.kind, i.action])).toEqual([
       ["video", "present"],
       ["transcript", "present"],
-      ["poster", "made"],
+      ["poster", "present"],
     ]);
-    expect(await derivedFrom(posterId("manimkc:out/demo/one/one.mp4"))).toEqual(["manimkc:out/demo/one/one.mp4"]);
+    expect(first.rowsWritten).toBe(0);
   });
 
-  it("stores a re-render under its own key, unhooks the old render's poster, and a second import stores and writes nothing", async () => {
+  it("stores a re-render under its own key, recuts its poster, and a second import stores and writes nothing", async () => {
+    const poster = posterId("manimkc:out/demo/one/one.mp4");
+    const posterKey = async () => (await scratch.db.select().from(asset).where(eq(asset.id, poster)))[0]?.blobKey;
+    const oldPoster = await posterKey();
     await writeFile(videoFile, "second render");
     const moved = await runImportCommand({ dir: tree, only: ["manimkc"] });
     const manimkcWrite = moved.sources.find((s) => s.source === "manimkc");
-    // The video's revision; the poster's is written through the seam beside it.
+    // The video's revision; the poster's are written through the seam beside it.
     expect(manimkcWrite?.revisions).toEqual({ asset: 1 });
-    expect(manimkcWrite?.notes).toContain("1 poster(s) unhooked from a re-rendered video; the next `catalog asset upload` cuts new ones");
+    expect(manimkcWrite?.notes).toContain("1 poster(s) unhooked from a re-rendered video; this import cuts new ones");
+    // The same import then cuts the new render's poster and hooks it back up.
+    expect(manimkcWrite?.notes).toContain("1 poster(s) cut and stored, 0 linked to their video again");
     expect((await video())?.blobKey).toBe(`local/${sha("second render")}.mp4`);
-    const poster = posterId("manimkc:out/demo/one/one.mp4");
-    expect(await derivedFrom(poster)).toEqual([]);
-    const posterKey = async () => (await scratch.db.select().from(asset).where(eq(asset.id, poster)))[0]?.blobKey;
-    const oldPoster = await posterKey();
-
-    // The next upload cuts the new render's poster and hooks it back up.
-    const recut = await upload();
-    expect(recut.items.find((i) => i.kind === "poster")?.action).toBe("made");
     expect(await derivedFrom(poster)).toEqual(["manimkc:out/demo/one/one.mp4"]);
     expect(await posterKey()).not.toBe(oldPoster);
     expect((await upload()).rowsWritten).toBe(0);
@@ -301,7 +301,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     const manimkcRun = again.sources.find((s) => s.source === "manimkc");
     expect(manimkcRun?.revisions).toEqual({});
     expect(manimkcRun?.notes).toContain("2 file(s) in the blob store, 0 uploaded by this run");
-    expect(manimkcRun?.notes.some((n) => n.includes("unhooked"))).toBe(false);
+    expect(manimkcRun?.notes.some((n) => n.includes("unhooked") || n.includes("cut and stored"))).toBe(false);
   });
 
   it("unhooks a stale poster an earlier import left derived, from the revisions alone", async () => {
@@ -354,13 +354,19 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
         reason: "a title edit, not a new cut",
       },
     ]);
-    // The next import changes no row, and still finds the poster was cut from other bytes.
+    const stale = (await scratch.db.select().from(asset).where(eq(asset.id, poster)))[0]?.blobKey;
+    // The next import changes no row, still finds the poster was cut from
+    // other bytes, and cuts the right one in its place.
     const retry = await runImportCommand({ dir: tree, only: ["manimkc"] });
     expect(retry.sources.find((s) => s.source === "manimkc")?.revisions).toEqual({});
-    expect(retry.sources.find((s) => s.source === "manimkc")?.notes).toContain(
-      "1 poster(s) unhooked from a re-rendered video; the next `catalog asset upload` cuts new ones",
+    expect(retry.sources.find((s) => s.source === "manimkc")?.notes).toEqual(
+      expect.arrayContaining([
+        "1 poster(s) unhooked from a re-rendered video; this import cuts new ones",
+        "1 poster(s) cut and stored, 0 linked to their video again",
+      ]),
     );
-    expect(await derivedFrom(poster)).toEqual([]);
+    expect(await derivedFrom(poster)).toEqual([id]);
+    expect((await scratch.db.select().from(asset).where(eq(asset.id, poster)))[0]?.blobKey).not.toBe(stale);
   });
 
   it("leaves a poster an upload relinked after the import's snapshot as the upload made it, and does not fail", async () => {

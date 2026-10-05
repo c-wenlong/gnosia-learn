@@ -116,6 +116,8 @@ export interface AssetUploadOptions {
   /** Absolute path to ffmpeg, or null when there is none: posters are then skipped and said so. */
   ffmpeg: string | null;
   author?: string;
+  /** The kind of author the row writes carry. Defaults to `person`; `catalog import` passes `import`. */
+  authorKind?: "person" | "import";
   reason?: string;
   /** A captured report, for tests; otherwise the CLI is run. */
   report?: TopicsReport;
@@ -355,6 +357,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
   const reindex = `npm run catalog -- import --only ${source}`;
   const { store } = options;
   const author = options.author ?? LOCAL_LEARNER_ID;
+  const authorKind = options.authorKind ?? "person";
   const readable = readableOwners(options.owner ?? CLI_OWNER);
   /** Why a row is not this upload's to write, or null when it is. */
   const foreign = (row: Asset): string | null =>
@@ -577,7 +580,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         next: { row: { ...contentRow(row), blobKey: key } },
         base: null,
         author,
-        authorKind: "person",
+        authorKind,
         reason,
       });
 
@@ -599,7 +602,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     for (const write of writes) write.base = bases.get(write.id) ?? null;
     try {
       const written = await writeContents(db, writes);
-      result.rowsWritten += written.filter((w) => w.changed).length;
+      result.rowsWritten += written.filter((w) => w.changed || w.repaired === true).length;
     } catch (error) {
       if (!(error instanceof ContentWriteError) || error.code !== "stale-base") throw error;
       // The bytes are stored and confirmed; only the rows are refused. A rerun
@@ -667,7 +670,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         next: { row: contentRow(existing), links: { asset_derivation: [] } },
         base: null,
         author,
-        authorKind: "person",
+        authorKind,
         reason,
       };
     };
@@ -713,10 +716,35 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       return null;
     }
     if (options.ffmpeg === null) return detach("no ffmpeg to cut a poster from the new render");
+    // The file must still be the bytes the row names, before the cut and
+    // after it: a video answered `present` was not read again, and a render
+    // that changed on disk since its import would otherwise give the stored
+    // video a poster of other bytes.
+    const indexed = async (): Promise<string | null> => {
+      let facts;
+      try {
+        facts = await fileFacts(video.file);
+      } catch (error) {
+        return `${video.row.path} cannot be read under ${outRoot}: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`;
+      }
+      return facts.contentHash === video.row.contentHash
+        ? null
+        : `${video.row.path} has changed since it was indexed, so no poster was cut from it. Run \`${reindex}\`, then upload again.`;
+    };
+    const before = await indexed();
+    if (before !== null) {
+      refuse(id, "poster", before);
+      return detach(before);
+    }
     const frame = await extractPoster(options.ffmpeg, video.file);
     if (!frame.ok) {
       refuse(id, "poster", `no poster could be cut from ${video.row.path}: ${frame.reason}`);
       return detach(`no poster could be cut from the new render: ${frame.reason}`);
+    }
+    const after = await indexed();
+    if (after !== null) {
+      refuse(id, "poster", after);
+      return detach(after);
     }
     const sha256 = createHash("sha256").update(frame.body).digest("hex");
     const dir = await mkdtemp(path.join(os.tmpdir(), "self-learn-poster-"));
@@ -743,7 +771,12 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         result.uploadedBytes += done.bytes;
       }
       result.counts.posters += 1;
-      items.push({ id, kind: "poster", action: "made", key: done.key, bytes: done.bytes });
+      // The same picture its row already names, only not hooked to its video
+      // (a prune deleted the video and the derivation cascaded away with it,
+      // and the video came back with the same id): the write below restores
+      // the link, and nothing new was cut into the store.
+      const relinked = existing !== undefined && existing.blobKey === done.key && !done.uploaded;
+      items.push({ id, kind: "poster", action: relinked ? "linked" : "made", key: done.key, bytes: done.bytes });
       return {
         // The poster is its video's owner's, as its key's prefix already says.
         owner: video.row.ownerId,
@@ -770,7 +803,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         },
         base: null,
         author,
-        authorKind: "person",
+        authorKind,
         reason,
       };
     } finally {

@@ -7,6 +7,7 @@ import {
   diagram,
   indexRun,
   INDEX_SOURCES,
+  ownerScope,
   readableOwners,
   type IndexSource,
   type SourceRepo,
@@ -20,7 +21,7 @@ import path from "node:path";
 import type { BlobStore } from "@self-learn/blob";
 
 import { openBlobStore, uploadBlob } from "../content/blob";
-import { unhookPosters } from "../content/asset-upload";
+import { unhookPosters, uploadAssets } from "../content/asset-upload";
 import { type CoverCredit, storedCredit } from "../content/cover-image";
 import { blobContractInForce } from "../content/blob-contract";
 import { databaseIdentity, recordRoot } from "../content/import-root";
@@ -31,6 +32,8 @@ import { renderType } from "../content/export";
 import { readTopicEntries } from "../content/topics";
 import { CLI_OWNER } from "../content/scope";
 import type { CatalogDatabase } from "../db";
+import { findFfmpeg } from "../poster/extract";
+import { videosWithStoredPoster } from "../state/blobs";
 import { sqlstate } from "../state/errors";
 import { REPO_ROOT, resolveManimkcRoot, resolveRemotionkcRoot, resolveRevideokcRoot } from "../env";
 import { conceptsIndexer } from "./concepts";
@@ -217,6 +220,11 @@ export interface RunOptions {
    * `catalog course cover` would take; nothing else passes it.
    */
   afterRead?: (source: IndexSource) => Promise<void> | void;
+  /**
+   * The ffmpeg the poster step cuts with: an absolute path, or null for none.
+   * Absent, `findFfmpeg()` answers (`$FFMPEG_PATH`, else `ffmpeg` on `PATH`).
+   */
+  ffmpeg?: string | null;
 }
 
 /** The folders an import reads under its root, as git pathspecs. */
@@ -361,6 +369,7 @@ export async function runIndex(
 ): Promise<RunResult> {
   const repoRoot = options.repoRoot ?? REPO_ROOT;
   const afterRead = options.afterRead;
+  const ffmpegOption = options.ffmpeg;
   const toolsRoot = options.toolsRoot ?? repoRoot;
   // The flag, else $MANIMKC_ROOT, else the submodule. The middle step is the
   // resolver's, so this line is the whole precedence rule.
@@ -570,8 +579,11 @@ export async function runIndex(
 
   const sources: SourceWrite[] = [];
   let store: BlobStore | undefined;
+  /** Videos of this run left with no stored poster, by source, with why; refused once every source has run. */
+  const posterless: string[] = [];
+  let ffmpeg: Promise<string | null> | undefined;
   for (const indexer of runnable) {
-    const { rows, notes = [], scope, metadata, logs, blobs = [], coversRead } =
+    const { rows, notes = [], scope, metadata, logs, blobs = [], coversRead, report } =
       preread.get(indexer.source) ?? (await indexer.read(context));
     await afterRead?.(indexer.source);
     // The bytes before the rows that name them, each upload committed on its
@@ -606,8 +618,8 @@ export async function runIndex(
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);
     sources.push(write);
     // Under the contract the import links a re-render's bytes itself, so a
-    // poster cut from a video's earlier bytes is unhooked here, for the next
-    // upload to recut. Every video in the run is asked, not only the ones this
+    // poster cut from a video's earlier bytes is unhooked here, and the poster
+    // step below recuts it. Every video in the run is asked, not only the ones this
     // write changed, so a run that failed between the two is repaired.
     if (isVideoToolName(indexer.source) && context.blobsRequired === true) {
       const videos = (rows.asset ?? []).filter((row) => row.kind === "video").map((row) => row.id);
@@ -618,13 +630,73 @@ export async function runIndex(
       });
       if (unhooked.length > 0) {
         write.notes.push(
-          `${unhooked.length} poster(s) unhooked from a re-rendered video; the next \`catalog asset upload\` cuts new ones`,
+          `${unhooked.length} poster(s) unhooked from a re-rendered video; this import cuts new ones`,
         );
       }
       if (moved.length > 0) {
         // Written since this import read them, by an upload that recut them:
         // left as that write made them, and the next import asks again.
         write.notes.push(`${moved.length} poster(s) changed while this import ran, so left as they are: ${moved.join(", ")}`);
+      }
+      // Every rendered video leaves the import with a poster (2026-10-05).
+      // The upload's own poster step, run over the report this read used:
+      // the files are already stored and the rows name them, so the videos
+      // and sidecars answer `present` without being read again, and only a
+      // poster that is missing, unhooked or cut from older bytes is cut and
+      // stored, in one transaction with its row. A poster row a prune left
+      // with no link to its video (the cascade) is linked again.
+      if (videos.length > 0 && report !== undefined && isVideoToolName(indexer.source)) {
+        ffmpeg ??= ffmpegOption !== undefined ? Promise.resolve(ffmpegOption) : findFfmpeg();
+        store ??= openBlobStore();
+        let cut: Awaited<ReturnType<typeof uploadAssets>> | undefined;
+        let failed: string | null = null;
+        try {
+          cut = await uploadAssets(db, {
+            store,
+            source: indexer.source,
+            repoRoot: toolsRoot,
+            manimkcRoot,
+            remotionkcRoot,
+            revideokcRoot,
+            report,
+            ffmpeg: await ffmpeg,
+            owner,
+            author,
+            authorKind: "import",
+            reason: `catalog import of ${displayPath(repoRoot)}: a poster for each rendered ${indexer.source} video`,
+          });
+        } catch (error) {
+          // The tool's rows are written; its posters are said with the rest,
+          // naming the videos still without one, and the sources after it
+          // still run.
+          failed = error instanceof Error ? error.message : String(error);
+        }
+        if (cut !== undefined) {
+          const made = cut.items.filter((i) => i.kind === "poster" && i.action === "made").length;
+          const linked = cut.items.filter((i) => i.kind === "poster" && i.action === "linked").length;
+          if (made + linked > 0) write.notes.push(`${made} poster(s) cut and stored, ${linked} linked to their video again`);
+        }
+        const have = await videosWithStoredPoster(db, videos, ownerScope(owner));
+        const missing = videos.filter((id) => !have.has(id));
+        if (missing.length > 0 || failed !== null) {
+          const why =
+            failed !== null
+              ? `the poster step failed: ${failed}`
+              : (cut?.postersSkipped ??
+                (cut?.items ?? [])
+                  .filter((i) => i.action === "refused")
+                  .map((i) => `${i.id}: ${i.detail ?? "refused"}`)
+                  .join("; "));
+          posterless.push(
+            missing.length === 0
+              ? // Every video still has its poster: the failure is the step's
+                // own, and saying "0 videos have no poster" would send the
+                // reader looking for a poster to repair.
+                `the ${indexer.source} poster step failed, though every video has a poster: ${failed}`
+              : `${missing.length} ${indexer.source} video(s) have no poster (${missing.join(", ")})` +
+                  (why === "" ? "" : `: ${why}`),
+          );
+        }
       }
     }
 
@@ -655,6 +727,16 @@ export async function runIndex(
       ranConcepts = true;
       conceptCache = null;
     }
+  }
+
+  // After every source, so one video without a poster does not keep the
+  // rest of the import from landing; but the run fails, naming each, rather
+  // than leaving a grey card for someone to notice in the Library.
+  if (posterless.length > 0) {
+    throw new IndexError(
+      `${posterless.join(". ")}. Every other row of this import was written. Fix the cause (for ffmpeg, set ` +
+        `FFMPEG_PATH or put ffmpeg on PATH), then run the import again: it cuts what is missing.`,
+    );
   }
 
   return {
