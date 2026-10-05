@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { wrapLabel, type GraphEdge } from "@/lib/concept-graph";
@@ -137,6 +137,8 @@ export function DomainGraph({
   const [drawn, setDrawn] = useState<number | null>(null);
   /** The topic whose cut title has a plate, kept mounted for the beat it takes to fade after the pointer leaves. */
   const [titleHeld, setTitleHeld] = useState<string | null>(null);
+  /** The topic whose title in the picture the pointer is on: the list's buttons hover a topic too, and show no plate. */
+  const [overTitle, setOverTitle] = useState<string | null>(null);
   useLayoutEffect(() => {
     const el = svg.current;
     if (el === null) return;
@@ -210,7 +212,7 @@ export function DomainGraph({
     const g = topicSlug === null ? undefined : groups.find((x) => x.topic === topicSlug);
     return g === undefined ? null : titlePlate(boxOf(g), g.title, heading, view);
   };
-  const titleCut = hoverTopic !== null && plateFor(hoverTopic) !== null ? hoverTopic : null;
+  const titleCut = overTitle !== null && overTitle === hoverTopic && plateFor(overTitle) !== null ? overTitle : null;
   if (titleCut !== null && titleCut !== titleHeld) setTitleHeld(titleCut);
   const held = plateFor(titleHeld);
 
@@ -314,8 +316,14 @@ export function DomainGraph({
                   topic === null && "cursor-pointer",
                 )}
                 onClick={() => onTopic(g.topic)}
-                onMouseEnter={() => onHoverTopic(g.topic)}
-                onMouseLeave={() => onHoverTopic(null)}
+                onMouseEnter={() => {
+                  setOverTitle(g.topic);
+                  onHoverTopic(g.topic);
+                }}
+                onMouseLeave={() => {
+                  setOverTitle(null);
+                  onHoverTopic(null);
+                }}
               >
                 {/* The whole title, for a pointer resting on one cut short; the list beside the picture names it too. */}
                 <title>{g.title}</title>
@@ -394,9 +402,12 @@ function Plate({ node, at, lines, font, frame }: { node: DomainGraphNode; at: Po
   );
 }
 
+/** How long the plate takes to fade out (`duration-150` below). */
+const PLATE_FADE_MS = 150;
+
 /**
  * The whole of a cut topic title on a plate over its line (D10), in the concept plate's style. It fades in
- * when it mounts and out when `shown` goes false, then asks to be unmounted; the pointer passes through it,
+ * when it mounts and out when `shown` goes false, then asks to be unmounted after the fade; the pointer passes through it,
  * so the title under it keeps the hover that lights its group.
  */
 function TitlePlate({
@@ -411,6 +422,16 @@ function TitlePlate({
   onGone: () => void;
 }) {
   const { box, textX, baseline, lines, step } = plate;
+  // Unmounted once it has faded: a timer rather than `transitionend`, which a reduced-motion setting never sends.
+  const gone = useRef(onGone);
+  useEffect(() => {
+    gone.current = onGone;
+  });
+  useEffect(() => {
+    if (shown) return;
+    const timer = setTimeout(() => gone.current(), PLATE_FADE_MS + 50);
+    return () => clearTimeout(timer);
+  }, [shown]);
   return (
     <g
       data-title-plate
@@ -421,9 +442,6 @@ function TitlePlate({
         "animate-fade-in transition-opacity duration-150 motion-reduce:animate-none motion-reduce:transition-none",
         shown ? "opacity-100" : "opacity-0",
       )}
-      onTransitionEnd={() => {
-        if (!shown) onGone();
-      }}
     >
       <rect x={box.x} y={box.y} width={box.width} height={box.height} rx={6} className="fill-surface stroke-hair" strokeWidth={1} />
       <text x={textX} y={baseline} fontSize={font} fontWeight={700} className="fill-text">

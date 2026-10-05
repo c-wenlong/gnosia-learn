@@ -551,6 +551,43 @@ describe("domain graph label culling", () => {
       expect((host.querySelector(`svg [data-group="${t.slug}"] rect`) as Element).getAttribute("class")).toContain("stroke-accent");
     });
 
+    // Review of #425: the list's topic buttons set the same hover, and the pointer is not on the picture then.
+    it("shows no plate when the topic is hovered from the list beside the picture", () => {
+      const { host, svg } = mount(longMap);
+      drawAt(svg, MIN_DRAW_SCALE, longLayout);
+      const t = cutTopics(host)[0];
+      const button = host.querySelector(`button[data-list-topic="${t.slug}"]`) as Element;
+      enter(button);
+      expect(plateOf(host)).toBeNull();
+      // The group is lit all the same.
+      expect((host.querySelector(`svg [data-group="${t.slug}"] rect`) as Element).getAttribute("class")).toContain("stroke-accent");
+      leave(button);
+    });
+
+    // Review of #425: with reduced motion no transition runs, so nothing else would unmount the plate.
+    it("unmounts the plate shortly after the pointer leaves, with or without a transition", () => {
+      vi.useFakeTimers();
+      try {
+        const { host, svg } = mount(longMap);
+        drawAt(svg, MIN_DRAW_SCALE, longLayout);
+        const t = cutTopics(host)[0];
+        enter(titleOf(host, t.slug));
+        leave(titleOf(host, t.slug));
+        expect(plateOf(host)?.dataset.shown).toBe("false");
+        act(() => void vi.advanceTimersByTime(400));
+        expect(plateOf(host)).toBeNull();
+        // Back on the title before it went: it stays.
+        enter(titleOf(host, t.slug));
+        leave(titleOf(host, t.slug));
+        act(() => void vi.advanceTimersByTime(100));
+        enter(titleOf(host, t.slug));
+        act(() => void vi.advanceTimersByTime(400));
+        expect(plateOf(host)?.dataset.shown).toBe("true");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("lets the pointer through, so the title under it keeps the hover", () => {
       const { host, svg } = mount(longMap);
       drawAt(svg, MIN_DRAW_SCALE, longLayout);
