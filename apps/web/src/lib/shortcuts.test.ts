@@ -52,6 +52,10 @@ describe("the platform", () => {
     expect(isMacUserAgent("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)")).toBe(true);
     expect(isMacUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe(false);
     expect(isMacUserAgent(null)).toBe(false);
+    // Chrome's client hint says "macOS", in lower case at the front.
+    expect(isMacUserAgent("macOS")).toBe(true);
+    expect(isMacUserAgent("MacIntel")).toBe(true);
+    expect(isMacUserAgent("Windows")).toBe(false);
   });
 
   it("draws the modifier as ⌘ and ⇧ on a Mac and Ctrl and Shift elsewhere, a letter in capitals", () => {

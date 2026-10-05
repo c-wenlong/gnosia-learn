@@ -61,7 +61,7 @@ export function shortcutsFor(studio: boolean): readonly Shortcut[] {
 
 /** Whether a user agent string is Apple's, whose shortcuts use Command. */
 export function isMacUserAgent(userAgent: string | null | undefined): boolean {
-  return /Mac|iPhone|iPad|iPod/.test(userAgent ?? "");
+  return /mac|iphone|ipad|ipod/i.test(userAgent ?? "");
 }
 
 /** Whether this browser is on Apple's platforms. Server side, false. */
