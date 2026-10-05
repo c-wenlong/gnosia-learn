@@ -1,7 +1,19 @@
 import { Graph, layout as dagreLayout } from "@dagrejs/dagre";
 
 import { reduceEdges, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
-import { DOT_TOP, domainTitle, groupBox, TITLE_RESERVE, titleWidth } from "@/lib/domain-view";
+import {
+  AXES_TOP,
+  AXIS_BAND,
+  axesGeometry,
+  DOT_TOP,
+  domainTitle,
+  GROUP_PAD,
+  groupBox,
+  labelFoot,
+  TITLE_RESERVE,
+  titleWidth,
+  type AxesLayout,
+} from "@/lib/domain-view";
 
 /**
  * The prerequisite graph grouped by domain, then by topic, and one domain
@@ -53,7 +65,11 @@ export interface DomainLayout {
   edges: GraphEdge[];
   /** Edges with one end in another domain, unreduced, `inside` naming the end in this one. */
   outside: (GraphEdge & { domain: string; inside: string })[];
+  /** The same concepts on axes (D11): by when each is learnt and by how many concepts need it. */
+  axes: AxesLayout;
 }
+
+export type { AxesLayout };
 
 /** The box dagre lays out per concept: the dot and two lines of label under it. */
 const NODE_WIDTH = 112;
@@ -212,8 +228,25 @@ export function topicOrder(groups: readonly { slug: string }[], topicOf: Readonl
   }
   const dependants = new Map<string, number>(slugs.map((t) => [t, 0]));
   for (const set of needs.values()) for (const t of set) dependants.set(t, (dependants.get(t) ?? 0) + 1);
+  const level = levels(slugs, needs);
+  const rank = new Map(slugs.map((t, i) => [t, i]));
+  return [...slugs].sort(
+    (a, b) =>
+      (level.get(a) ?? 0) - (level.get(b) ?? 0) ||
+      (dependants.get(b) ?? 0) - (dependants.get(a) ?? 0) ||
+      (rank.get(a) ?? 0) - (rank.get(b) ?? 0),
+  );
+}
 
-  // Tarjan's strongly connected components over "needs", in vocabulary order.
+/**
+ * Each of `ids` with its level: the longest chain of others it needs, where
+ * the ones that need each other (a strongly connected component) count as
+ * one and share a level. Tarjan's algorithm over `needs`, visiting in the
+ * order `ids` come in, numbers each component after every component it needs,
+ * so one pass in that order sets every level.
+ */
+function levels(ids: readonly string[], needs: ReadonlyMap<string, ReadonlySet<string>>): Map<string, number> {
+  const order = new Map(ids.map((id, i) => [id, i]));
   const component = new Map<string, number>();
   const index = new Map<string, number>();
   const low = new Map<string, number>();
@@ -227,7 +260,7 @@ export function topicOrder(groups: readonly { slug: string }[], topicOf: Readonl
     counter++;
     stack.push(v);
     onStack.add(v);
-    for (const w of [...(needs.get(v) ?? [])].sort((x, y) => slugs.indexOf(x) - slugs.indexOf(y))) {
+    for (const w of [...(needs.get(v) ?? [])].sort((x, y) => (order.get(x) ?? 0) - (order.get(y) ?? 0))) {
       if (!index.has(w)) {
         visit(w);
         low.set(v, Math.min(low.get(v) as number, low.get(w) as number));
@@ -243,28 +276,121 @@ export function topicOrder(groups: readonly { slug: string }[], topicOf: Readonl
       components++;
     }
   };
-  for (const t of slugs) if (!index.has(t)) visit(t);
+  for (const id of ids) if (!index.has(id)) visit(id);
 
-  // Tarjan numbers a component after every component it needs, so one pass in that order sets each level.
   const level = new Array<number>(components).fill(0);
   const members = new Map<number, string[]>();
-  for (const t of slugs) members.set(component.get(t) as number, [...(members.get(component.get(t) as number) ?? []), t]);
+  for (const id of ids) members.set(component.get(id) as number, [...(members.get(component.get(id) as number) ?? []), id]);
   for (let c = 0; c < components; c++) {
-    for (const t of members.get(c) ?? []) {
-      for (const n of needs.get(t) ?? []) {
+    for (const id of members.get(c) ?? []) {
+      for (const n of needs.get(id) ?? []) {
         const d = component.get(n) as number;
         if (d !== c) level[c] = Math.max(level[c], level[d] + 1);
       }
     }
   }
-  const rank = new Map(slugs.map((t, i) => [t, i]));
-  const levelOf = (t: string) => level[component.get(t) as number];
-  return [...slugs].sort(
-    (a, b) =>
-      levelOf(a) - levelOf(b) ||
-      (dependants.get(b) ?? 0) - (dependants.get(a) ?? 0) ||
-      (rank.get(a) ?? 0) - (rank.get(b) ?? 0),
-  );
+  return new Map(ids.map((id) => [id, level[component.get(id) as number]]));
+}
+
+/**
+ * The widest a domain on axes is laid out: framed and drawn at 0.35 it is
+ * 311px, inside the 318px a 390px phone's card gives the picture (measured),
+ * so ten layers, the owner's most, do not scroll sideways.
+ */
+const AXES_MAX_WIDTH = 880;
+/** A layer's column, at least wide enough for two dots side by side clear of the next column's (`AXES_DOT_CLEAR`). */
+const COLUMN_MIN = 80;
+const COLUMN_MAX = 140;
+/** From one dot to the next one down in the same column. */
+const STACK_DY = 44;
+/** Concepts with one layer and one count share a row of this many, then wrap to the next. */
+const PER_ROW = 2;
+/** How tall the log scale is, from the most needed to needed by none, before crowding pushes rows apart. */
+const LOG_SPAN_MAX = 480;
+const LOG_SPAN_MIN = 120;
+const LOG_STEP = 80;
+
+/**
+ * One domain on axes (D11): x is a concept's layer, a column per layer, and y
+ * how many concepts of the domain need it, on a log scale, most at the top.
+ * Concepts that would share a spot are spread deterministically: each count
+ * is a row, the concepts of one layer and one count side by side in it, two
+ * to a line by id, and a row starts no higher than its place on the scale,
+ * below every row above it, and a stack's height below the last dot of each
+ * of its columns. So the more needed concept is always the higher one, the
+ * earlier one always to the left, and no two dots come within
+ * `AXES_DOT_CLEAR` of each other.
+ */
+export function axesLayout(ids: readonly string[], edges: readonly GraphEdge[]): AxesLayout {
+  const sorted = [...ids].sort(byId);
+  const needs = new Map<string, Set<string>>(sorted.map((id) => [id, new Set<string>()]));
+  const leads = new Map<string, Set<string>>(sorted.map((id) => [id, new Set<string>()]));
+  for (const e of edges) {
+    if (!needs.has(e.from) || !needs.has(e.to) || e.from === e.to) continue;
+    needs.get(e.to)?.add(e.from);
+    leads.get(e.from)?.add(e.to);
+  }
+  const level = levels(sorted, needs);
+  const layer: Record<string, number> = {};
+  const needed: Record<string, number> = {};
+  for (const id of sorted) {
+    layer[id] = level.get(id) ?? 0;
+    // Everything reachable along "leads to", itself left out even inside a loop.
+    const seen = new Set<string>();
+    const todo = [id];
+    while (todo.length > 0) {
+      for (const next of leads.get(todo.pop() as string) ?? []) {
+        if (next === id || seen.has(next)) continue;
+        seen.add(next);
+        todo.push(next);
+      }
+    }
+    needed[id] = seen.size;
+  }
+
+  const layers = sorted.length === 0 ? 0 : Math.max(...sorted.map((id) => layer[id])) + 1;
+  const column = Math.max(COLUMN_MIN, Math.min(COLUMN_MAX, Math.floor((AXES_MAX_WIDTH - AXIS_BAND - 8) / Math.max(1, layers))));
+  const counts = [...new Set(sorted.map((id) => needed[id]))].sort((a, b) => b - a);
+  const most = counts[0] ?? 0;
+  const span = Math.max(LOG_SPAN_MIN, Math.min(LOG_SPAN_MAX, (counts.length - 1) * LOG_STEP));
+  const onScale = (n: number) => (most === 0 ? AXES_TOP : AXES_TOP + (1 - Math.log1p(n) / Math.log1p(most)) * span);
+  const centre = (l: number) => AXIS_BAND + (l + 0.5) * column;
+
+  const positions: Record<string, { x: number; y: number }> = {};
+  /** The lowest dot placed so far in each layer's column, and in the whole picture. */
+  const lowest = new Map<number, number>();
+  let floor = -Infinity;
+  for (const n of counts) {
+    const cells = new Map<number, string[]>();
+    for (const id of sorted) if (needed[id] === n) cells.set(layer[id], [...(cells.get(layer[id]) ?? []), id]);
+    let top = Math.max(onScale(n), floor + 1);
+    for (const l of cells.keys()) if (lowest.has(l)) top = Math.max(top, (lowest.get(l) as number) + STACK_DY);
+    for (const [l, cell] of cells) {
+      cell.forEach((id, i) => {
+        const line = Math.floor(i / PER_ROW);
+        const across = Math.min(PER_ROW, cell.length - line * PER_ROW);
+        const slot = i % PER_ROW;
+        const offset = across === 1 ? 0 : (slot - (across - 1) / 2) * (column / 2);
+        positions[id] = { x: centre(l) + offset, y: top + line * STACK_DY };
+        lowest.set(l, Math.max(lowest.get(l) ?? -Infinity, positions[id].y));
+        floor = Math.max(floor, positions[id].y);
+      });
+    }
+  }
+
+  const bottom = sorted.length === 0 ? AXES_TOP : floor;
+  const width = AXIS_BAND + layers * column + 8;
+  const plot = { x: AXIS_BAND, y: AXES_TOP, width: layers * column, height: bottom - AXES_TOP };
+  // Foundational: the earliest third of the columns, down to the lowest of them in the top half of the scale.
+  let zone: AxesLayout["zone"] = null;
+  if (most > 0) {
+    const early = Math.max(1, Math.ceil(layers / 3));
+    const half = Math.log1p(most) / 2;
+    const ys = sorted.filter((id) => layer[id] < early && Math.log1p(needed[id]) >= half).map((id) => positions[id].y);
+    const foot = Math.max(AXES_TOP, ...ys) + labelFoot(2) + GROUP_PAD;
+    zone = { x: plot.x, y: 4, width: early * column, height: Math.round(foot - 4) };
+  }
+  return { width, height: axesGeometry({ plot, width }).height, positions, layer, needed, layers, column, plot, zone };
 }
 
 /**
@@ -342,6 +468,7 @@ export function domainLayout(
       .map((g) => ({ topic: g.slug, title: g.title, concepts: g.concepts })),
     edges: drawn,
     outside,
+    axes: axesLayout(members.map((n) => n.id), own),
   };
 }
 
