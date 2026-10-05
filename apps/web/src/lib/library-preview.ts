@@ -204,8 +204,8 @@ export interface PreviewHeader {
    * Conversation tool, the row menu's Locate in conversation.
    */
   conversation?: { href: string; title: string } | null;
-  /** The file route, when there is a stored file to hand over. */
-  download: { href: string; filename?: string } | null;
+  /** The file route's `?download=1` (`assetDownloadHref`), when there is a stored file to hand over. */
+  download: { href: string } | null;
   /** `/library/<id>`: "Open page". */
   page: string;
   /** Whether the body is a picture or a player, drawn wider than a column of words. */

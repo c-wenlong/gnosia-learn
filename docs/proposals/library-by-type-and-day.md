@@ -141,7 +141,12 @@ carries a mastery dot read the way a course page reads a topic's: mastered
 when every concept of the topic is, not started when none is, learning
 otherwise. In the list, a row under a topic names its concept first and the
 course and module after it, since the concept is what tells the rows of one
-topic apart; Day and Course keep the place first. Favourites, which
+topic apart; Day keeps the place first. *Amended 2026-10-05:* under
+Course the heading and the module's section already name the place, so the
+row's line leaves it out and names the concept (else the conversation or the
+session), and a row with no parent but its topic under a topic heading says
+nothing on that line rather than the heading again, by the sentence-case
+rule's no-repeating-label clause in AGENTS.md. Favourites, which
 Manus has here, were added on the owner's request after this was written: a
 star on every asset page (#364) and a Favorites toggle in the toolbar,
 `?favorites=1`, beside the filter menus.

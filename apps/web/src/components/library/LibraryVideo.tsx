@@ -67,7 +67,7 @@ export function LibraryVideo({
   heading,
   watchedDay,
   favorite,
-  downloadName,
+  downloadHref,
   actions,
   notes,
   tabs,
@@ -88,8 +88,8 @@ export function LibraryVideo({
   watchedDay: string | null;
   /** Whether the owner has starred this video. */
   favorite: boolean;
-  /** The name Download saves the file under, or the browser's choice when absent. */
-  downloadName?: string;
+  /** What Download fetches: the file route's `?download=1` (`assetDownloadHref`). */
+  downloadHref: string;
   /** More actions after Favorite, Ask and Download. */
   actions?: ReactNode;
   /** Quiet lines under the facts: a sidecar that could not be read, say. */
@@ -99,6 +99,7 @@ export function LibraryVideo({
   const router = useRouter();
   const askId = useId();
   const [asking, setAsking] = useState(false);
+  const askButton = useRef<HTMLButtonElement | null>(null);
   const [startAt] = useState(() => resumeAt(saved));
   const [status, setStatus] = useState<WatchStatus>(() => ({
     coverage: saved === null ? 0 : coverage(saved.ranges, saved.duration),
@@ -253,13 +254,27 @@ export function LibraryVideo({
             {heading}
             <div className="flex flex-wrap items-center gap-2">
               <FavoriteButton assetId={assetId} initial={favorite} />
-              <AskButton open={asking} onToggle={() => setAsking((open) => !open)} controls={askId} />
-              <DownloadButton href={src} filename={downloadName} />
+              <AskButton
+                open={asking}
+                onToggle={() => setAsking((open) => !open)}
+                controls={askId}
+                buttonRef={askButton}
+              />
+              <DownloadButton href={downloadHref} />
               {actions}
             </div>
             <Collapse open={asking} id={askId}>
               <div className="pt-1">
-                <AskPanel assetId={assetId} subject="video" position={() => state.current.last} />
+                <AskPanel
+                  assetId={assetId}
+                  subject="video"
+                  position={() => state.current.last}
+                  open={asking}
+                  onDismiss={() => {
+                    setAsking(false);
+                    askButton.current?.focus();
+                  }}
+                />
               </div>
             </Collapse>
             {notes}

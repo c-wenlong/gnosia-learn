@@ -123,7 +123,7 @@ export default async function AssetPage({
   // The file's state, its words, a video's sidecars and poster: what the
   // body draws from, read the way the previewer reads them.
   const body = await loadAssetBody(asset, derivations.derived);
-  const { servable, fileHref, downloadName } = body;
+  const { servable, downloadHref } = body;
 
   const tabInput: AssetTabsInput = {
     asset,
@@ -209,7 +209,7 @@ export default async function AssetPage({
   );
   const trailing = (
     <>
-      {servable && <DownloadButton href={fileHref} filename={downloadName} />}
+      {servable && <DownloadButton href={downloadHref} />}
       {addToNote}
     </>
   );

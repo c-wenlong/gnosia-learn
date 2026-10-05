@@ -96,10 +96,11 @@ export function PreviewerHeader({
               </IconButton>
             )}
             {header?.download && (
-              // A plain anchor with `download`: there is no page to go to.
+              // A plain anchor with `download`: there is no page to go to. The
+              // route's `Content-Disposition` names the file, after its title.
               <a
                 href={header.download.href}
-                download={header.download.filename ?? ""}
+                download
                 aria-label="Download"
                 title="Download"
                 className={tool}

@@ -373,6 +373,16 @@ export function assetFileHref(id: string): string {
 }
 
 /**
+ * `?download=1` on the file route: the same bytes, saved under the asset's
+ * name rather than shown. Every Download takes it (the row menu, the
+ * previewer's header and body, the asset page), so a file saved from any of
+ * them has the one name the route gives it.
+ */
+export function assetDownloadHref(id: string): string {
+  return `${assetFileHref(id)}?download=1`;
+}
+
+/**
  * `/api/assets/<id>/poster`, a still frame from a video asset.
  *
  * One spelling, here, for the same reason `assetFileHref` is one spelling: the

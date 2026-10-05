@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 
 import { AskButton } from "@/components/library/AssetActions";
 import { AskPanel } from "@/components/library/AskPanel";
@@ -31,19 +31,34 @@ export function AskableTitle({
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
+  const ask = useRef<HTMLButtonElement | null>(null);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         {heading}
         <div className="flex shrink-0 flex-wrap items-start gap-2.5">
           {before}
-          <AskButton open={open} onToggle={() => setOpen((was) => !was)} controls={id} subject={subject} />
+          <AskButton
+            open={open}
+            onToggle={() => setOpen((was) => !was)}
+            controls={id}
+            subject={subject}
+            buttonRef={ask}
+          />
           {after}
         </div>
       </div>
       <Collapse open={open} id={id}>
         <div className="pt-1">
-          <AskPanel assetId={assetId} subject={subject} />
+          <AskPanel
+            assetId={assetId}
+            subject={subject}
+            open={open}
+            onDismiss={() => {
+              setOpen(false);
+              ask.current?.focus();
+            }}
+          />
         </div>
       </Collapse>
     </div>

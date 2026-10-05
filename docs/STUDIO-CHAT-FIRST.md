@@ -1557,6 +1557,10 @@ conversation reopened next month shows them too. Only the video and the
 diagram SVG are cards; the transcript, chapters, captions, poster and `.tldr`
 a job also writes are their companions in the Library. An asset the
 conversation wrote twice (an extend redrawn) is one card, at the later write.
+An asset belongs to the conversation that wrote it last (amended 2026-10-05):
+a diagram accepted in one conversation and extended in another is a card in
+the second only, as `assetParents` and the Library's group by conversation
+already have it, so the first's count drops it.
 A card that lands while the panel is open rises in as a new turn does
 (`Arrive`, reduced motion respected); one there on opening stands still. The
 job panels are unchanged.
