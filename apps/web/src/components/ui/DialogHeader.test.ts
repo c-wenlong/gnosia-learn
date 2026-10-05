@@ -150,7 +150,7 @@ describe("dialog headers", () => {
     // either way, has built its own header. The attributes are read up to the
     // next tag, past an arrow function's `>`. A name held in a variable is
     // beyond a file scan and left to review. The previewer, whose row of 28px
-    // tools was the last, now draws `DialogHeader` with `closeSize="sm"`.
+    // tools was the last, now draws `DialogHeader` with `closeSize="sm"` (`PreviewerHeader`).
     const closeButton = /<(?:IconButton|button)\b(?:(?!<[A-Za-z])[\s\S]){0,400}?\b(?:aria-)?label=\{?\s*["'`]Close["'`]/;
     const offenders = sources()
       .filter(({ text }) => /<Dialog\b/.test(text) && closeButton.test(text))
@@ -166,7 +166,7 @@ describe("dialog headers", () => {
   });
 
   it("draws the previewer's header with the kit's, its Close sized to the row of 28px tools", () => {
-    const text = sources().find(({ path }) => path === "components/library/Previewer.tsx")?.text ?? "";
+    const text = sources().find(({ path }) => path === "components/library/PreviewerHeader.tsx")?.text ?? "";
     expect(text).toMatch(/<DialogHeader\b[^>]*\bcloseSize="sm"/);
   });
 });
