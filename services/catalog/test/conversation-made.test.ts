@@ -10,7 +10,7 @@ import {
 } from "@self-learn/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { conversationMade, ensureLearner, madeName } from "../src/state";
+import { assetParents, conversationMade, ensureLearner, madeName } from "../src/state";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { ASSETS, seedAssets, seedContent, TOPIC_SLUG } from "./state-fixture";
 import { storedBlob } from "./stored-blob";
@@ -139,6 +139,63 @@ describe.skipIf(!reachable.ok)("conversation made", () => {
     const theirs = await conversationMade(scratch.db, "draft-theirs", THEIRS);
     expect(theirs.map((made) => made.id)).toEqual([THEIR_VIDEO]);
     expect(await conversationMade(scratch.db, "draft-mine", THEIRS)).toEqual([]);
+  });
+
+  it("gives an asset two conversations wrote to the one that wrote it last, as assetParents does", async () => {
+    const db = scratch.db;
+    const LATER = "diagram:learn/assets/extended.svg";
+    const TIED = "diagram:learn/assets/tied.svg";
+    const HIDDEN = "diagram:learn/assets/hidden-later.svg";
+    await db.insert(asset).values(
+      await Promise.all(
+        [LATER, TIED, HIDDEN].map(async (id) => ({
+          id,
+          kind: "diagram_svg",
+          path: id.slice("diagram:".length),
+          sourceRepo: "self-learn",
+          blobKey: await storedBlob(db, id, "svg"),
+        })),
+      ),
+    );
+    await db.insert(draft).values([
+      { id: "draft-a", title: "Accepted here", plannerSessionId: "pa", transcriptPath: "drafts/a/t.jsonl" },
+      { id: "draft-b", title: "Extended here", plannerSessionId: "pb", transcriptPath: "drafts/b/t.jsonl" },
+      { id: "draft-their-b", title: "Theirs, later", plannerSessionId: "pc", transcriptPath: "drafts/c/t.jsonl", ownerId: OTHER },
+    ]);
+    const jobRow = (id: string, draftId: string, ownerId = LOCAL_LEARNER_ID) => ({
+      id,
+      kind: "diagram",
+      topicSlug: TOPIC_SLUG,
+      targetPath: `learn/assets/${id}.tldr`,
+      idempotencyKey: id,
+      draftId,
+      ownerId,
+    });
+    await db.insert(job).values([jobRow("job-a", "draft-a"), jobRow("job-b", "draft-b"), jobRow("job-their-b", "draft-their-b", OTHER)]);
+    const at = (iso: string) => new Date(iso);
+    await db.insert(assetJob).values([
+      // Accepted in A, extended in B a day later: B's.
+      { assetId: LATER, jobId: "job-a", contentHash: HASH, bytes: 1, writtenAt: at("2026-10-01T00:00:00Z") },
+      { assetId: LATER, jobId: "job-b", contentHash: HASH, bytes: 1, writtenAt: at("2026-10-02T00:00:00Z") },
+      // Written by both at one instant: the smaller draft id's, A.
+      { assetId: TIED, jobId: "job-a", contentHash: HASH, bytes: 1, writtenAt: at("2026-10-01T00:00:00Z") },
+      { assetId: TIED, jobId: "job-b", contentHash: HASH, bytes: 1, writtenAt: at("2026-10-01T00:00:00Z") },
+      // A later write by another owner's conversation the owner cannot read: still A's to them.
+      { assetId: HIDDEN, jobId: "job-a", contentHash: HASH, bytes: 1, writtenAt: at("2026-10-01T00:00:00Z") },
+      { assetId: HIDDEN, jobId: "job-their-b", contentHash: HASH, bytes: 1, ownerId: OTHER, writtenAt: at("2026-10-03T00:00:00Z") },
+    ]);
+
+    const ids = async (draftId: string) => (await conversationMade(db, draftId, LOCAL)).map((made) => made.id);
+    expect((await ids("draft-a")).sort()).toEqual([HIDDEN, TIED].sort());
+    expect(await ids("draft-b")).toEqual([LATER]);
+    // B's card is its own write, not A's.
+    expect((await conversationMade(db, "draft-b", LOCAL))[0]).toMatchObject({ jobId: "job-b", madeAt: "2026-10-02T00:00:00.000Z" });
+
+    // The other direction agrees: each asset's latest conversation is the one listing it.
+    const parents = await assetParents(db, [LATER, TIED, HIDDEN], LOCAL);
+    expect(parents[LATER]?.conversations[0]?.id).toBe("draft-b");
+    expect(parents[TIED]?.conversations[0]?.id).toBe("draft-a");
+    expect(parents[HIDDEN]?.conversations.map((c) => c.id)).toEqual(["draft-a"]);
   });
 
   it("takes a diagram's slug from its SVG's path and a video's from its id", () => {

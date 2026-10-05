@@ -25,6 +25,15 @@ import type { CatalogDatabase } from "../db";
  * conversation that redrew its diagram twice made one diagram, the one the
  * Library holds now. Newest first, by that write.
  *
+ * **An asset belongs to the conversation that wrote it last.** A diagram
+ * accepted in conversation A and extended in B is B's alone: A's cards and
+ * count leave it out, since its picture is B's now. The latest write is
+ * picked the way `assetParents` lists conversations (the latest
+ * `asset_job.written_at`, a tie to the smaller draft id), so this list, the
+ * Library's group by conversation and its Locate in conversation agree. The
+ * other conversation's write counts only when the reader may read its
+ * `asset_job`, its job and its draft, as there.
+ *
  * **Scoped at every hop** (the "A read that forgets its owner" gotcha): the
  * draft, its jobs, the `asset_job` rows, the asset and the poster must each
  * be readable, so another owner's conversation answers with nothing, and an
@@ -134,6 +143,18 @@ function madeQuery(draftId: string, owners: Owners): SQL {
       join asset a on a.id = aj.asset_id and a.kind in (${kinds})${owned("a.owner_id", owners)}
       left join blob_object b on b.key = a.blob_key${owned("b.owner_id", owners)}
       where d.id = ${draftId}${owned("d.owner_id", owners)}
+        -- Another conversation wrote it later, or at the same instant with
+        -- the smaller id, as assetParents orders them: the asset is that one's.
+        and not exists (
+          select 1
+          from asset_job later
+          join job lj on lj.id = later.job_id${owned("lj.owner_id", owners)}
+          join draft ld on ld.id = lj.draft_id${owned("ld.owner_id", owners)}
+          where later.asset_id = a.id${owned("later.owner_id", owners)}
+            and ld.id <> d.id
+            and (later.written_at > aj.written_at
+                 or (later.written_at = aj.written_at and ld.id collate "C" < d.id collate "C"))
+        )
       order by a.id, aj.written_at desc, aj.job_id collate "C"
     ) made
     order by written_at desc, id collate "C"`;
