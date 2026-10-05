@@ -46,4 +46,22 @@ describe("Collapse", () => {
     expect(clip.className.split(" ")).toEqual(expect.arrayContaining(["relative", "overflow-clip"]));
     act(() => root.unmount());
   });
+
+  it("keeps one column that may shrink below its content, so a wide code block scrolls inside a narrow panel", () => {
+    // jsdom lays nothing out, so the width cannot be measured here. The
+    // implicit `auto` column this replaces is as wide as its item's
+    // min-content (a code block's longest line), which overflowed the
+    // workspace's 290px note panel; checked in a browser at 1280 and 390.
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    act(() => root.render(createElement(
+        Collapse,
+        { open: true, id: "r" } as ComponentProps<typeof Collapse>,
+        createElement("pre", null, "x".repeat(400)),
+      )));
+    const classes = (host.querySelector("#r") as HTMLElement).className.split(" ");
+    expect(classes).toContain("grid");
+    expect(classes).toContain("grid-cols-[minmax(0,1fr)]");
+    act(() => root.unmount());
+  });
 });
