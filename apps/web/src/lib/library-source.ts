@@ -11,8 +11,8 @@ import type { MasteryBucket } from "@/lib/mastery-bucket";
  * parents, so the order is fixed here, once, and the row draws what it is
  * handed:
  *
- * 1. the course and module ("CS3230 · Week 3"), and the concept after it
- *    when there is one too ("CS3230 · Week 3 · Master theorem");
+ * 1. the course and module ("CS3230 · Week 3: Proof of correctness"), and
+ *    the concept after it when there is one too;
  * 2. else the concept alone, with its mastery dot;
  * 3. else the studio conversation it was drawn or rendered in;
  * 4. else the tutor session it is the log of.
@@ -32,7 +32,7 @@ export interface SourceConcept {
 }
 
 export interface RowSource {
-  /** "CS3230 · Week 3", when a course holds the asset. */
+  /** "CS3230 · Week 3: Proof of correctness", when a course holds the asset. */
   place?: string;
   /** The concept, after the place when both are set. */
   concept?: SourceConcept;
@@ -41,20 +41,14 @@ export interface RowSource {
 }
 
 /**
- * A module's title as the line names it: the part before a colon, which is
- * how the course files number their weeks ("Week 3: Divide and conquer" is
- * "Week 3"), or the whole title when there is no colon to cut at.
+ * "CS3230 · Week 3: Proof of correctness", "CS3230" for an asset on the course
+ * itself, the course title when it has no code. The module's whole title, as
+ * the course page and the sidebar print it: the row truncates the line, and
+ * its tooltip carries what the ellipsis hides.
  */
-export function moduleShortTitle(title: string): string {
-  const at = title.indexOf(":");
-  const head = at > 0 ? title.slice(0, at).trim() : "";
-  return head === "" ? title.trim() : head;
-}
-
-/** "CS3230 · Week 3", "CS3230" for an asset on the course itself, the course title when it has no code. */
 export function placeLabel(place: AssetPlace): string {
   const course = place.code?.trim() || place.courseTitle;
-  return place.moduleTitle === null ? course : `${course} · ${moduleShortTitle(place.moduleTitle)}`;
+  return place.moduleTitle === null ? course : `${course} · ${place.moduleTitle.trim()}`;
 }
 
 const byCode = (a: AssetPlace, b: AssetPlace): number => {

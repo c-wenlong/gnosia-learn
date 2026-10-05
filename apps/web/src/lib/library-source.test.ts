@@ -1,7 +1,7 @@
 import type { AssetParents, AssetPlace } from "@self-learn/catalog/state";
 import { describe, expect, it } from "vitest";
 
-import { conceptOrder, moduleShortTitle, pickPlace, placeLabel, rowSource } from "./library-source";
+import { conceptOrder, pickPlace, placeLabel, rowSource } from "./library-source";
 
 const place = (over: Partial<AssetPlace>): AssetPlace => ({
   course: "cs3230",
@@ -38,19 +38,18 @@ const options = (course: string | null = null) => ({
   concept: (slug: string) => KB[slug] ?? null,
 });
 
-describe("moduleShortTitle and placeLabel", () => {
-  it("cuts a numbered module at its colon, and keeps a plain title whole", () => {
-    expect(moduleShortTitle("Week 3: Proof of correctness")).toBe("Week 3");
-    expect(moduleShortTitle("Weeks 3 to 4: Divide and conquer")).toBe("Weeks 3 to 4");
-    expect(moduleShortTitle("Foundations of HCI")).toBe("Foundations of HCI");
-    expect(moduleShortTitle(": odd")).toBe(": odd");
+describe("placeLabel", () => {
+  it("names the course by code, then the module's whole title; the title when there is no code", () => {
+    expect(placeLabel(place({}))).toBe("CS3230 · Week 3: Proof of correctness");
+    expect(placeLabel(place({ module: null, moduleTitle: null }))).toBe("CS3230");
+    expect(placeLabel(place({ code: null }))).toBe("Design and Analysis of Algorithms · Week 3: Proof of correctness");
+    expect(placeLabel(place({ code: "  " }))).toBe("Design and Analysis of Algorithms · Week 3: Proof of correctness");
   });
 
-  it("names the course by code, then the module; the title when there is no code", () => {
-    expect(placeLabel(place({}))).toBe("CS3230 · Week 3");
-    expect(placeLabel(place({ module: null, moduleTitle: null }))).toBe("CS3230");
-    expect(placeLabel(place({ code: null }))).toBe("Design and Analysis of Algorithms · Week 3");
-    expect(placeLabel(place({ code: "  " }))).toBe("Design and Analysis of Algorithms · Week 3");
+  it("never cuts a module title at its colon", () => {
+    expect(placeLabel(place({ code: "CS4225", moduleTitle: "Week 2: MapReduce" }))).toBe("CS4225 · Week 2: MapReduce");
+    expect(placeLabel(place({ moduleTitle: "Weeks 10 to 11: Stream processing" }))).toBe("CS3230 · Weeks 10 to 11: Stream processing");
+    expect(placeLabel(place({ moduleTitle: "  Foundations of HCI " }))).toBe("CS3230 · Foundations of HCI");
   });
 });
 
@@ -105,9 +104,9 @@ describe("rowSource precedence (golden)", () => {
         conversations: [{ id: "d1", title: "Ignored" }],
       }),
       null,
-      { place: "CS3230 · Week 3", concept: { title: "Recurrences", bucket: "learning", more: 1 } },
+      { place: "CS3230 · Week 3: Proof of correctness", concept: { title: "Recurrences", bucket: "learning", more: 1 } },
     ],
-    ["course alone", parents({ places: [place({})] }), null, { place: "CS3230 · Week 3" }],
+    ["course alone", parents({ places: [place({})] }), null, { place: "CS3230 · Week 3: Proof of correctness" }],
     [
       "concept alone, the first in graph order",
       parents({ concepts: ["master-theorem", "big-o"], sessions: [{ id: "s1", title: "Ignored" }] }),
@@ -156,7 +155,7 @@ describe("rowSource precedence (golden)", () => {
         places: [place({}), place({ course: "cs1231", code: "CS1231", moduleTitle: "Week 9: Graphs", via: "topic" })],
       }),
       "cs1231",
-      { place: "CS1231 · Week 9" },
+      { place: "CS1231 · Week 9: Graphs" },
     ],
   ];
 

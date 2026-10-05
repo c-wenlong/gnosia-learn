@@ -270,10 +270,14 @@ describe("/library", () => {
     const html = await render({ view: "list" });
 
     // The video sits in a course module and explains Paging.
-    expect(html).toContain("CS2106 · Week 7");
+    expect(html).toContain("CS2106 · Week 7: Virtual memory");
+    // The row's tooltip carries both lines whole, since both truncate.
+    expect(html).toContain('title="Paging, step by step\nCS2106 · Week 7: Virtual memory · Paging"');
     expect(html).toContain(">Paging</span>");
     // The note explains itself, so its row says the mastery, not the title again.
-    expect(html.split("The TLB").length - 1).toBe(1);
+    expect(html.replace(/ title="[^"]*"/g, "").split("The TLB").length - 1).toBe(1);
+    // Its tooltip says the mastery the line prints, not the title twice.
+    expect(html).toContain('title="The TLB\nLearning"');
     expect(html).toContain("Learning");
     // The session log names its session.
     expect(html).toContain("Teach session: the TLB");
