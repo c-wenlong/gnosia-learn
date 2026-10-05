@@ -30,7 +30,7 @@ import { conversationHref } from "@/lib/studio-view";
 import { SearchResults } from "./ChatSearch";
 import { FADE, FADE_IN } from "./motion";
 import { rowClick } from "./row-click";
-import { RECENT_GLYPHS, ROW, ROW_TWO_LINE, rowFill } from "./rows";
+import { recentGlyph, ROW, ROW_TWO_LINE, rowFill } from "./rows";
 import { useShell } from "./shell-context";
 import { useConversations } from "./use-conversations";
 import { useRecent } from "./use-recent";
@@ -134,7 +134,9 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
     ...(fromRunner === null || conversations.list === null ? [] : [{ items: fromRunner, more: conversations.list.more }]),
   ];
   const merged = mergeStreams(streams);
-  const { pinned, recent: rows } = splitPinned(merged.items, model?.pinned ?? []);
+  // Titles for the pins from every row read, renames included, so a pinned
+  // conversation the merge held back still shows its name now.
+  const { pinned, recent: rows } = splitPinned(merged.items, model?.pinned ?? [], streams.flatMap((s) => s.items));
   const unlisted = studio && (pending !== null || (active !== null && !merged.items.some((item) => item.draftId === active)));
   const loaded = model !== null || fromRunner !== null;
 
@@ -393,7 +395,7 @@ function RecentRow({
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  const kind = RECENT_GLYPHS[item.kind];
+  const kind = recentGlyph(item);
   const open = menu && !rail;
 
   if (renaming) {

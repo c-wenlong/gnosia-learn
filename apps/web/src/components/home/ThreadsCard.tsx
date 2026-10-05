@@ -6,6 +6,7 @@ import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { Thread, ThreadKind } from "@/lib/home-core";
+import { isCourseVisit } from "@/lib/recent-core";
 
 /** Each kind's glyph, and the word a screen reader hears before the title. */
 const KIND: Record<ThreadKind, { glyph: GlyphName; word: string }> = {
@@ -50,7 +51,7 @@ export function ThreadsCard({ threads, reachable }: { threads: Thread[]; reachab
                 <Glyph name={KIND[t.kind].glyph} className="text-text2" />
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate text-[14px] font-medium text-text">
-                    <span className="sr-only">{KIND[t.kind].word}: </span>
+                    <span className="sr-only">{isCourseVisit(t) ? "Course" : KIND[t.kind].word}: </span>
                     {t.title}
                   </span>
                   <span className="flex min-w-0 items-center gap-2 text-[12px] text-text2">
