@@ -39,8 +39,12 @@ export function ComposerBox({
   return (
     <div
       className={cx(
-        "flex min-w-0 flex-col transition-[opacity,border-color] duration-150 motion-reduce:transition-none",
+        "flex min-w-0 flex-col",
         COMPOSER_BOX,
+        // After the box's own `transition-colors duration-100`, so this one
+        // wins: the border's 150ms the box has always shown, and the fade
+        // when it is disabled.
+        "transition-[opacity,border-color] duration-150 motion-reduce:transition-none",
         "focus-within:border-accent",
         disabled && "cursor-not-allowed opacity-60",
         className,

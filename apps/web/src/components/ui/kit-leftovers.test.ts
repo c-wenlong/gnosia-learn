@@ -39,11 +39,12 @@ describe("cardClasses", () => {
   });
 
   it("takes the gap as an option, so there is only ever one gap class", () => {
-    // Tailwind sorts gap utilities by value, so a `gap-2` added beside the
-    // card's `gap-3` lost and never applied: one class, chosen here.
+    // One gap class whichever way it is asked for: the option, or a
+    // `className` gap that `cx` keeps over the card's own.
     expect(cardClasses({ gap: 2 }).split(" ").filter((c) => c.startsWith("gap-"))).toEqual(["gap-2"]);
     expect(cardClasses({ gap: 4, tight: true }).split(" ").filter((c) => c.startsWith("gap-"))).toEqual(["gap-4"]);
     expect(cardClasses({ flush: true, gap: 1.5 }).split(" ").filter((c) => c.startsWith("gap-"))).toEqual(["gap-1.5"]);
+    expect(cardClasses({ className: "gap-2" }).split(" ").filter((c) => c.startsWith("gap-"))).toEqual(["gap-2"]);
   });
 
   it("is what Card renders, flush included", () => {
