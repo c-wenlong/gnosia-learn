@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 
 import { cardClasses } from "@/components/ui/classes";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
-import { Glyph } from "@/components/ui/Glyph";
+import { DialogHeader } from "@/components/ui/DialogHeader";
 import { IconButton } from "@/components/ui/IconButton";
 import { CARD_TITLE, cx } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
@@ -21,13 +21,13 @@ export const CLOSE_MS = DIALOG_CLOSE_MS;
  * the asset page) a screen or more down. Here the page keeps its shape and
  * the note scrolls inside its card; the popup is for reading it at length.
  *
- * The popup is the kit `Dialog` at its reading size, as the studio's panels
- * are: the top layer, the page inert, focus kept inside. Escape, the close
- * button (in the same corner as the icon that opened it) and a click outside
- * all close it, and focus goes back to that icon. A click only counts as
- * outside when the press started there too, so a text selection dragged out
- * of the note does not close it. The page under it does not scroll while it
- * is open (`lockScroll`).
+ * The popup is the kit `Dialog` at its reading size under the kit
+ * `DialogHeader`, as the studio's panels are: the top layer, the page inert,
+ * focus kept inside. Escape, the header's Close (in the same corner as the
+ * icon that opened it) and a click outside all close it, and focus goes back
+ * to that icon. A click only counts as outside when the press started there
+ * too, so a text selection dragged out of the note does not close it. The
+ * page under it does not scroll while it is open (`lockScroll`).
  *
  * The content lives in one place at a time: in the card, or, while the popup
  * is open, in the popup. Two copies at once would give a note's headings the
@@ -99,7 +99,7 @@ export function ExpandablePanel({
 
   return (
     <section className={cardClasses({ flush: true })}>
-      <PanelHeader title={title} action={action}>
+      <CardHeader title={title} action={action}>
         <IconButton ref={openerRef} label={`Expand ${label}`} onClick={expand}>
           {/* Four corners pulled outward: open it larger. Only this panel draws it. */}
           <svg
@@ -117,7 +117,7 @@ export function ExpandablePanel({
             <path d="M12.5 3.5h4v4M7.5 16.5h-4v-4M16.5 3.5 11 9M3.5 16.5 9 11" />
           </svg>
         </IconButton>
-      </PanelHeader>
+      </CardHeader>
       <div
         ref={cardBodyRef}
         style={mounted && heldHeight !== null ? { height: heldHeight } : undefined}
@@ -138,12 +138,8 @@ export function ExpandablePanel({
           // the press: Safari does not focus a button it clicks.
           opener={() => openerRef.current}
         >
-          <PanelHeader title={title} action={action}>
-            <IconButton label="Close" onClick={collapse}>
-              <Glyph name="close" size={16} />
-            </IconButton>
-          </PanelHeader>
-          <div ref={dialogBodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-6 md:px-8">
+          <DialogHeader title={title} actions={action} onClose={collapse} />
+          <div ref={dialogBodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-6 md:px-8">
             {children}
           </div>
         </Dialog>
@@ -162,7 +158,11 @@ function scrollToShare(element: HTMLElement, share: number) {
   element.scrollTop = share * Math.max(0, element.scrollHeight - element.clientHeight);
 }
 
-function PanelHeader({ title, action, children }: { title: ReactNode; action?: ReactNode; children: ReactNode }) {
+/**
+ * The card's own title row, with the Expand icon at its right. The popup's
+ * header is the kit `DialogHeader`, so Close is the kit's.
+ */
+function CardHeader({ title, action, children }: { title: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex shrink-0 items-center gap-3 py-3 pr-3 pl-5">
       <h2 className={cx(CARD_TITLE, "min-w-0 flex-1 truncate")}>{title}</h2>

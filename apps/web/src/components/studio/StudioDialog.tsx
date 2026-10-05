@@ -7,8 +7,7 @@ import { ENTER } from "@/components/studio/motion";
 import { PaneContext, usePaneLayout } from "@/components/studio/pane-context";
 import { cx, PANEL_TITLE } from "@/components/ui/classes";
 import { Dialog, DIALOG_CLOSE_MS, type DialogSize } from "@/components/ui/Dialog";
-import { Glyph } from "@/components/ui/Glyph";
-import { IconButton } from "@/components/ui/IconButton";
+import { DialogHeader as KitDialogHeader } from "@/components/ui/DialogHeader";
 import { prefersReducedMotion } from "@/lib/motion";
 
 /**
@@ -251,31 +250,36 @@ export function StudioPane({
 }
 
 /**
- * The panel's 48px header: the title, a label-role meta (the draft's running
- * cost), and Close. Pinned: the body under it scrolls. Full screen it has no
- * Close and no rule under it, and starts with the pane's `leading`.
+ * The panel's header: the title, a label-role meta (the draft's running
+ * cost), the panel's own controls, and Close. In the dialog it is the kit
+ * `DialogHeader`, 48px with a rule under it, Close calling the dialog's
+ * `close`. Full screen it has no Close and no rule, since nothing is modal
+ * there to close, and starts with the pane's `leading`.
  */
 export function DialogHeader({ title, meta, children }: { title: ReactNode; meta?: ReactNode; children?: ReactNode }) {
   const { close } = useStudioDialog();
   const { inline, leading } = usePaneLayout();
+  const metaText = meta !== undefined && meta !== null && <span className="shrink-0 text-[12px] tabular-nums text-text3">{meta}</span>;
   if (inline) {
     return (
       <div className="flex h-12 shrink-0 items-center gap-2 px-3 md:px-5">
         {leading}
         <h2 className={cx(PANEL_TITLE, "min-w-0 flex-1 truncate")}>{title}</h2>
-        {meta !== undefined && meta !== null && <span className="shrink-0 text-[12px] tabular-nums text-text3">{meta}</span>}
+        {metaText}
         {children}
       </div>
     );
   }
   return (
-    <div className="flex h-12 shrink-0 items-center gap-3 border-b border-hair pl-5 pr-2 pt-[env(safe-area-inset-top)] md:pt-0">
-      <h2 className={cx(PANEL_TITLE, "min-w-0 flex-1 truncate")}>{title}</h2>
-      {meta !== undefined && meta !== null && <span className="shrink-0 text-[12px] tabular-nums text-text3">{meta}</span>}
-      {children}
-      <IconButton label="Close" onClick={close} data-dialog-close="">
-        <Glyph name="close" size={16} />
-      </IconButton>
-    </div>
+    <KitDialogHeader
+      title={title}
+      onClose={close}
+      actions={
+        <>
+          {metaText}
+          {children}
+        </>
+      }
+    />
   );
 }
