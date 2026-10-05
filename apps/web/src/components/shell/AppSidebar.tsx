@@ -278,12 +278,12 @@ export function AppSidebar() {
               and each row's 8px start padding (`ROW`) puts its 18px glyph at
               the rail's middle, in the same place open or folded, so only the
               labels appear and go. The section labels stick to the top of
-              this scroller (`data-sidebar-scroll`, which a row's menu measures
-              to open upwards near the bottom). */}
+              this scroller. `overscroll-contain`: a flick past its end in
+              the phone's drawer stops here rather than scrolling the page
+              behind the drawer. */}
           <div
             ref={scroller}
-            data-sidebar-scroll=""
-            className={cx("relative min-h-0 flex-1 overflow-x-hidden px-[13px] pb-3", rail ? "overflow-y-hidden" : "overflow-y-auto")}
+            className={cx("relative min-h-0 flex-1 overflow-x-hidden overscroll-contain px-[13px] pb-3", rail ? "overflow-y-hidden" : "overflow-y-auto")}
           >
             <ul className="flex flex-col gap-px">
               {studio && (
