@@ -170,9 +170,10 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   );
 }
 
+/** In the workspace's own mode, as its loading frame is, so the shell does not change height as it lands. */
 function Unreachable() {
   return (
-    <div data-layout="app">
+    <div data-layout="workspace" className={WORKSPACE_ROOT}>
       <Card title="Knowledge base unavailable" className="max-w-2xl">
         <p className="text-[14px] text-text2">
           The database could not be reached, so this concept cannot be shown. Nothing is lost: the note, the mastery and

@@ -64,6 +64,17 @@ describe("layout frames", () => {
     expect(bare).toEqual([]);
   });
 
+  it("keeps a page's fallbacks in its own mode, so the frame before them matches too", () => {
+    // A fallback (the database unreachable, say) replaces the same loading
+    // frame the page does; in another mode the shell would jump as it lands.
+    const mixed: string[] = [];
+    for (const page of pages(HERE)) {
+      const modes = new Set([...readFileSync(page, "utf8").matchAll(/data-layout="([a-z]+)"/g)].map((m) => m[1]));
+      if (modes.size > 1) mixed.push(`${rel(page)}: ${[...modes].join(", ")}`);
+    }
+    expect(mixed).toEqual([]);
+  });
+
   it("loads every page in its own mode", () => {
     const wrong: string[] = [];
     for (const page of pages(HERE)) {
