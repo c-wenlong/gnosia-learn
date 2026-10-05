@@ -595,6 +595,18 @@ describe("domain graph label culling", () => {
       enter(titleOf(host, t.slug));
       expect(plateOf(host)?.getAttribute("pointer-events")).toBe("none");
     });
+
+    // Review of #426: the layout switched from the keyboard, the pointer still resting on a cut title.
+    it("takes the plate away when the picture switches to Axes, though the pointer never left the title", () => {
+      const { host, svg } = mount(longMap);
+      drawAt(svg, MIN_DRAW_SCALE, longLayout);
+      const t = cutTopics(host)[0];
+      enter(titleOf(host, t.slug));
+      expect(plateOf(host)?.dataset.shown).toBe("true");
+      const axes = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Layout"] [role="radio"]')].find((b) => b.textContent?.trim() === "Axes");
+      act(() => (axes as HTMLButtonElement).click());
+      expect(plateOf(host)?.dataset.shown ?? "false").toBe("false");
+    });
   });
 
   // Review of #409: a title in a wide script is drawn a full em a character, and must still fit its group.
