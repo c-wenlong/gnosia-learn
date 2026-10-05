@@ -134,6 +134,9 @@ describe("dialog headers", () => {
     return found;
   };
 
+  // A button named Close, as a string, in an `IconButton`'s `label` or a `<button>`'s `aria-label`.
+  const closeButton = /<(?:IconButton|button)\b(?:(?!<[A-Za-z])[\s\S]){0,400}?\b(?:aria-)?label=\{?\s*["'`]Close["'`]/;
+
   it("marks a Close with data-dialog-close only in the kit's DialogHeader", () => {
     // Written as a JSX attribute, a createElement prop or setAttribute; a
     // reader (`hasAttribute`, a selector) is fine.
@@ -151,7 +154,6 @@ describe("dialog headers", () => {
     // next tag, past an arrow function's `>`. A name held in a variable is
     // beyond a file scan and left to review. The previewer, whose row of 28px
     // tools was the last, now draws `DialogHeader` with `closeSize="sm"` (`PreviewerHeader`).
-    const closeButton = /<(?:IconButton|button)\b(?:(?!<[A-Za-z])[\s\S]){0,400}?\b(?:aria-)?label=\{?\s*["'`]Close["'`]/;
     const offenders = sources()
       .filter(({ text }) => /<Dialog\b/.test(text) && closeButton.test(text))
       .map(({ path }) => path)
@@ -168,5 +170,8 @@ describe("dialog headers", () => {
   it("draws the previewer's header with the kit's, its Close sized to the row of 28px tools", () => {
     const text = sources().find(({ path }) => path === "components/library/PreviewerHeader.tsx")?.text ?? "";
     expect(text).toMatch(/<DialogHeader\b[^>]*\bcloseSize="sm"/);
+    // The header is a file of its own, outside the scan above (it draws no
+    // `<Dialog`), so a Close built by hand there is caught here.
+    expect(closeButton.test(text)).toBe(false);
   });
 });
