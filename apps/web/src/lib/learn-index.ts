@@ -126,11 +126,23 @@ export function parseScope(value: string | null | undefined): GraphScope {
 }
 
 /**
+ * How a domain's picture is arranged (D11 of docs/proposals/domain-map.md):
+ * in a group per topic, the default, or on axes, each concept by when it is
+ * learnt and by how many concepts need it. A topic is always in groups.
+ */
+export type MapLayout = "groups" | "axes";
+
+export function parseLayout(value: string | null | undefined): MapLayout {
+  return value === "axes" ? "axes" : "groups";
+}
+
+/**
  * The query string for the index's state, keeping any other parameter already
  * there. The map is the default view, so only the table writes `view`; the
  * map writes its domain and topic (D2 of docs/proposals/domain-map.md) and
  * the table only a scope other than its own default, so a reload or a shared
- * link shows exactly what was on the screen.
+ * link shows exactly what was on the screen. A domain on axes writes
+ * `layout=axes` (D11); a topic, the cards and the table have no layout to say.
  */
 export function indexSearch(
   state: {
@@ -140,6 +152,7 @@ export function indexSearch(
     filter: IndexFilter;
     domain: string | null;
     topic: string | null;
+    layout?: MapLayout;
   },
   current = "",
 ): string {
@@ -151,6 +164,7 @@ export function indexSearch(
   set("scope", map || state.scope === "neighbourhood" ? null : state.scope);
   set("domain", map ? state.domain : null);
   set("topic", map && state.domain !== null ? state.topic : null);
+  set("layout", map && state.domain !== null && state.topic === null && state.layout === "axes" ? "axes" : null);
   set("filter", state.filter === "all" ? null : state.filter);
   return params.toString();
 }

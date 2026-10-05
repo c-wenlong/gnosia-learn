@@ -28,6 +28,7 @@ import {
   matchesFilter,
   matchesQuery,
   parseFilter,
+  parseLayout,
   parseScope,
   parseView,
   statusFilterOptions,
@@ -35,6 +36,7 @@ import {
   type IndexFilter,
   type IndexRow,
   type IndexView,
+  type MapLayout,
 } from "@/lib/learn-index";
 
 export { MapPanel } from "@/components/learn/DomainBrowser";
@@ -66,6 +68,8 @@ type Initial = {
   filter: IndexFilter;
   domain: string | null;
   topic: string | null;
+  /** Groups unless the URL asked for the axes (D11). */
+  layout?: MapLayout;
 };
 
 /**
@@ -117,18 +121,20 @@ export function LearnIndex({
   const [view, setView] = useState(initial.view);
   const [scope, setScope] = useState(initial.scope);
   const [place, setPlace] = useState<Place>(() => placeOf(map, domainOf, initial));
+  // Kept while the learner moves about, and written to the URL only where it shows: a domain with no topic.
+  const [layout, setLayout] = useState<MapLayout>(initial.layout ?? "groups");
   const [selected, setSelected] = useState(() => shownIn(map, domainOf, placeOf(map, domainOf, initial), initial.selected));
   /** Asked when a pick moves to another place, which mounts a new panel: its heading takes the focus. */
   const [panelFocus, setPanelFocus] = useState(0);
 
-  const state = { selected, view, scope, filter, domain: place.domain, topic: place.topic };
+  const state = { selected, view, scope, filter, domain: place.domain, topic: place.topic, layout };
   useEffect(() => {
     const search = indexSearch(state, window.location.search);
     const next = `${window.location.pathname}${search ? `?${search}` : ""}`;
     if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(window.history.state, "", next);
     // `state` is rebuilt every render from the values listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, view, scope, filter, place]);
+  }, [selected, view, scope, filter, place, layout]);
 
   // Back and Forward move between levels: read the place back off the URL.
   useEffect(() => {
@@ -146,6 +152,8 @@ export function LearnIndex({
       const next = placeOf(map, domainOf, asked);
       setSelected(shownIn(map, domainOf, next, asked.selected));
       setPlace(next);
+      // Only a domain's own URL says how it is drawn; anywhere else the choice is kept for the next one.
+      if (next.domain !== null && next.topic === null) setLayout(parseLayout(params.get("layout")));
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -181,13 +189,13 @@ export function LearnIndex({
     [rows],
   );
   const domain = place.domain === null ? null : (map.tree.find((d) => d.slug === place.domain) ?? null);
-  const layout = place.domain === null ? null : map.layouts[place.domain];
+  const domainLayout = place.domain === null ? null : map.layouts[place.domain];
 
   /** Select a concept; one in another domain, or outside the open topic, moves there. */
   const pick = (id: string) => {
     const there = domainOf[id] ?? null;
     if (there === null) return;
-    const inTopic = place.topic === null || (layout?.groups.some((g) => g.topic === place.topic && g.concepts.includes(id)) ?? false);
+    const inTopic = place.topic === null || (domainLayout?.groups.some((g) => g.topic === place.topic && g.concepts.includes(id)) ?? false);
     if (there === place.domain && inTopic) setSelected(id);
     else {
       go({ domain: there, topic: null }, id);
@@ -270,7 +278,7 @@ export function LearnIndex({
             />
           </div>
         </div>
-      ) : domain === null || layout === null ? (
+      ) : domain === null || domainLayout === null ? (
         // Keyed by level, so each one fades in over the one it replaces.
         <div key="domains" className="animate-fade-in motion-reduce:animate-none">
           <DomainCards
@@ -285,7 +293,7 @@ export function LearnIndex({
         <div key={`${domain.slug}:${place.topic ?? ""}`} className="animate-fade-in motion-reduce:animate-none">
           <DomainView
             domain={domain}
-            layout={layout}
+            layout={domainLayout}
             topic={place.topic}
             rows={byId}
             nodes={nodes}
@@ -301,6 +309,8 @@ export function LearnIndex({
             onPick={pick}
             panelFocus={panelFocus}
             onPanelFocused={() => setPanelFocus(0)}
+            arrangement={layout}
+            onArrange={setLayout}
           />
         </div>
       )}
