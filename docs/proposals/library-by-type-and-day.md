@@ -236,7 +236,10 @@ into the day buckets the Chats list uses, 50 a page with Show older, and
 Home's threads read the same query from then on. Section labels are 13 px grey, sticky while their section
 scrolls, as Manus's are ([nav-section-header](../design/reference/manus/components.md#nav-section-header)).
 Hovering a row shows a more button; its menu has Pin, Rename (for a
-conversation), Open in course (for a module), Archive (for a conversation).
+conversation) and Open in course (for a module). (Amended 2026-10-05: it was
+written with Archive for a conversation too, which was left out on purpose,
+since the studio keeps no archive and its Start over closes a conversation
+for good.)
 A conversation's name is kept on its draft, in the `draft.name` column the
 studio runner writes (`PUT /api/drafts/{id}/name`), so every page that reads
 the draft calls it the same: the owner's name, else the planner's title,

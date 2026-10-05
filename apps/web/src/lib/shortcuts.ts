@@ -158,7 +158,7 @@ export interface ShortcutContext {
   mac: boolean;
   /** Focus is in a field or the composer (`isTypingTarget`). */
   typing: boolean;
-  /** A modal dialog is open: the page behind it is inert, so nothing in the shell is bound. */
+  /** A modal dialog or a kit popover is open: the page behind it is inert, or a menu is open over the shell, so nothing in the shell is bound. */
   modal: boolean;
   studio: boolean;
 }
