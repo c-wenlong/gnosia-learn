@@ -246,7 +246,9 @@ export function DomainGraph({
     const g = topicSlug === null ? undefined : groups.find((x) => x.topic === topicSlug);
     return g === undefined ? null : titlePlate(boxOf(g), g.title, heading, view);
   };
-  const titleCut = overTitle !== null && overTitle === hoverTopic && plateFor(overTitle) !== null ? overTitle : null;
+  // On the axes the topic titles are hidden, so none is cut: a switch made from the keyboard,
+  // with the pointer still resting where a title was, takes its plate away (review of #426).
+  const titleCut = !onAxes && overTitle !== null && overTitle === hoverTopic && plateFor(overTitle) !== null ? overTitle : null;
   if (titleCut !== null && titleCut !== titleHeld) setTitleHeld(titleCut);
   const heldPlate = plateFor(titleHeld);
 
