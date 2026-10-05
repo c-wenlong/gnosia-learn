@@ -877,6 +877,31 @@ describe("the shortcuts", () => {
     expect(key({ key: "O", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
   });
 
+  it("fires from a row's more button, its menu closed, and Escape there closes the phone's drawer", async () => {
+    const row: RecentItem = { key: "concept:recurrences", kind: "concept", title: "Recurrences", detail: null, href: "/learn/recurrences", at: new Date().toISOString() };
+    mocks.fetchRecent.mockResolvedValue({ ...EMPTY, items: [row] });
+    const container = await mount(false);
+    const more = () => nav(container).querySelector<HTMLButtonElement>('button[aria-label="More for Recurrences"]')!;
+    more().focus();
+    expect(key({ key: "k", ctrlKey: true }, more()).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(nav(container).querySelector('input[name="history-search"]'));
+    more().focus();
+    key({ key: "?", shiftKey: true }, more());
+    expect(document.querySelector("dialog[open]")?.textContent).toContain("Keyboard shortcuts");
+    act(() => {
+      document.querySelector("dialog[open]")!.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
+
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    expect(nav(container).getAttribute("role")).toBe("dialog");
+    more().focus();
+    key({ key: "Escape" }, more());
+    expect(nav(container).getAttribute("role")).toBeNull();
+  });
+
   it("binds nothing while a row's menu is open, so the fold cannot move the menu's anchor", async () => {
     const row: RecentItem = { key: "concept:recurrences", kind: "concept", title: "Recurrences", detail: null, href: "/learn/recurrences", at: new Date().toISOString() };
     mocks.fetchRecent.mockResolvedValue({ ...EMPTY, items: [row] });
@@ -943,6 +968,16 @@ describe("the shortcuts", () => {
     nav(container).querySelector("[data-studio-new]")!.addEventListener("click", pressed);
     expect(key({ key: "O", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
     expect(pressed).not.toHaveBeenCalled();
+
+    // On a phone the drawer still opens there, so New chat is pressed.
+    const desktop = window.matchMedia;
+    window.matchMedia = ((query: string) => ({ ...desktop(query), matches: query.includes("max-width") })) as typeof window.matchMedia;
+    try {
+      expect(key({ key: "O", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+      expect(pressed).toHaveBeenCalledTimes(1);
+    } finally {
+      window.matchMedia = desktop;
+    }
   });
 
   it("hands focus to the fold when Ctrl+. sends the slid-out sidebar back to the rail", async () => {
