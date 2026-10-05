@@ -182,7 +182,7 @@ export function pageOf<T>(
 /** `groups` in the order the first page saw them; one it did not see is left out. */
 function inOrder<T>(groups: readonly PageGroup<T>[], order: readonly string[]): PageGroup<T>[] {
   const byKey = new Map(groups.map((group) => [group.key, group]));
-  return order.flatMap((key) => {
+  return [...new Set(order)].flatMap((key) => {
     const group = byKey.get(key);
     return group === undefined ? [] : [group];
   });
@@ -195,12 +195,15 @@ const MAX_KEY = 1_000;
 /**
  * The groups' order back from the reader, checked, since it came from the
  * browser: undefined when none was sent, null when what was sent is not a
- * list of keys.
+ * list of distinct keys.
  */
 export function parseOrder(value: unknown): string[] | null | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.length > MAX_ORDER) return null;
   if (!value.every((key) => typeof key === "string" && key.length <= MAX_KEY)) return null;
+  // A key twice would draw its group twice, and make the page's work grow
+  // with the list rather than with the library.
+  if (new Set(value).size !== value.length) return null;
   return value as string[];
 }
 

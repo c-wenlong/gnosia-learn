@@ -203,6 +203,14 @@ describe("pageOf", () => {
     expect(seen).toEqual([...a.rows, ...b.rows, ...c.rows].map((r) => r.id));
   });
 
+  it("draws a group once however often the order names it", () => {
+    const a = group("a", rows("a", 120));
+    const first = ok(pageOf([a], sortKeyOf, "newest", null));
+    const next = ok(pageOf([a], sortKeyOf, "newest", parseCursor(first.next), { order: ["a", "a", "a"] }));
+    expect(ids(next)).toHaveLength(70);
+    expect(new Set(ids(next)).size).toBe(70);
+  });
+
   it("leaves a group the first page did not see for the next visit", () => {
     const a = group("2026-10-04", rows("a", 120));
     const first = ok(pageOf([a], sortKeyOf, "newest", null));
@@ -319,7 +327,7 @@ describe("parseOrder", () => {
     expect(parseOrder(undefined)).toBeUndefined();
     expect(parseOrder(["a", "b"])).toEqual(["a", "b"]);
     expect(parseOrder([])).toEqual([]);
-    for (const bad of [null, "a", [1], ["x".repeat(1001)], Array.from({ length: 5001 }, () => "a")]) {
+    for (const bad of [null, "a", [1], ["x".repeat(1001)], ["a", "b", "a"], Array.from({ length: 5001 }, (_, i) => `k${i}`)]) {
       expect(parseOrder(bad)).toBeNull();
     }
   });
