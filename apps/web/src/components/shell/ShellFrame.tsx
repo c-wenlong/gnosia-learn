@@ -101,10 +101,13 @@ export function ShellFrame({
           is what leaves a blank strip under the sticky sidebar.
         */}
         <div
+          // Read by the `ws:` variant (globals.css): with the sidebar on its
+          // rail the workspace's panels fit beside it at a narrower window.
+          data-sidebar={collapsed ? "rail" : "open"}
           className={cx(
             "group/shell relative flex min-h-dvh bg-page text-text",
             "has-[[data-layout=full]]:h-dvh has-[[data-layout=full]]:overflow-hidden",
-            "min-[900px]:has-[[data-layout=workspace]]:h-dvh min-[900px]:has-[[data-layout=workspace]]:overflow-hidden",
+            "ws:has-[[data-layout=workspace]]:h-dvh ws:has-[[data-layout=workspace]]:overflow-hidden",
           )}
         >
           <AppSidebar />
