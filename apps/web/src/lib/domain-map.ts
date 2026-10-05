@@ -197,7 +197,7 @@ function layoutTopic(ids: readonly string[], edges: readonly GraphEdge[], title:
  * foundations come first, a standalone topic waits behind them, and the
  * picture reads the way the subject is learnt.
  */
-function topicOrder(groups: readonly { slug: string }[], topicOf: ReadonlyMap<string, string>, edges: readonly GraphEdge[]): string[] {
+export function topicOrder(groups: readonly { slug: string }[], topicOf: ReadonlyMap<string, string>, edges: readonly GraphEdge[]): string[] {
   const slugs = groups.map((g) => g.slug);
   const needs = new Map<string, Set<string>>(slugs.map((t) => [t, new Set<string>()]));
   for (const e of edges) {

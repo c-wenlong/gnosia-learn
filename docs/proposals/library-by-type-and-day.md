@@ -8,7 +8,7 @@ built: the type tabs, the day groups, the source line from `assetParents`
 (`services/catalog/src/state/asset-parents.ts`, one statement per page) and
 the three `--shell-row` tokens. Days and times are counted in the zone Home
 uses (`appTimeZone()`), not UTC. Phase 2 (L4, L5) is built: the view
-options (`ViewOptions`, `?group=day|course|concept`, and Show all or
+options (`ViewOptions`, `?group=day|course|topic`, and Show all or
 Favorites only, where #372's Favorites chip moved), and the more menu on
 every row and card (`RowMenu` on the kit `Menu`, its items decided by
 `rowMenuItems` in `apps/web/src/lib/row-menu.ts`), which also offers Rename
@@ -121,7 +121,27 @@ button beside the grid/list switch opens a small menu with Group by: Day
 (default), Course, Concept; and Show: All, Not watched or read. Grouping by
 course gives a heading per course with its module order inside; by concept,
 a heading per concept in the order of the prerequisite graph. The choice is
-`?group=`, not a stored preference, so a link carries it. Favourites, which
+`?group=`, not a stored preference, so a link carries it.
+
+*Revised 2026-10-05, the owner's decision: the third grouping is by topic,
+not by concept.* On the owner's catalog "Concept" gave about 306 headings,
+one per note, because each note is its own concept (306 concepts carry
+assets, under 84 topics). The option is now Topic, `?group=topic`, and
+`?group=concept` reads as topic so a link saved before still groups. A row
+goes under the topic of its first concept in the prerequisite graph's order
+(the concept its source line names), else under the first topic the asset
+is itself filed under, else under "No topic", last; an asset under concepts
+of two topics shows once, so the headings' counts add up to the header's.
+Topics come domain by domain, the domains by title A to Z, and inside a
+domain in the Learn map's own order (`topicOrder`, D3 of domain-map.md, over
+the domain's own edges): prerequisite topics first, then the vocabulary's
+order. The map puts the most studied domain first; the Library sorts domains
+by title, so the headings do not move as the learner studies. A heading
+carries a mastery dot read the way a course page reads a topic's: mastered
+when every concept of the topic is, not started when none is, learning
+otherwise. In the list, a row under a topic names its concept first and the
+course and module after it, since the concept is what tells the rows of one
+topic apart; Day and Course keep the place first. Favourites, which
 Manus has here, were added on the owner's request after this was written: a
 star on every asset page (#364) and a Favorites toggle in the toolbar,
 `?favorites=1`, beside the filter menus.
@@ -236,7 +256,7 @@ is dropped there.
 | Phase | What | Where | Done when |
 | --- | --- | --- | --- |
 | 1 | L1, L2, L3, L8: the tab strip, the day groups, `createdAt` and `updatedAt` on the row, the parent query behind the source line, the density tokens | `apps/web/src/app/(app)/library/`, `apps/web/src/lib/library.ts`, `apps/web/src/components/asset-meta.ts`, a shared `dayGroups` helper, the shell's tokens | The Library at `?kind=` shows the tab strip and day groups in both views; every row has its time and, where it differs, its edited date; the source line resolves for an asset with a course item, a concept, a studio job and a session; the counts are in the header; `npm test` passes with a golden of the grouping and of the parent precedence |
-| 2 | L4, L5: view options, the row and card menu, with Copy link, the `?download=1` file response and Open in course built | the same, plus a `RowMenu` in `apps/web/src/components/library/` and `apps/web/src/app/api/assets/[id]/file/` | `?group=course` and `?group=concept` render; each of the six menu actions works on a row and a card, the three new ones with tests |
+| 2 | L4, L5: view options, the row and card menu, with Copy link, the `?download=1` file response and Open in course built | the same, plus a `RowMenu` in `apps/web/src/components/library/` and `apps/web/src/app/api/assets/[id]/file/` | `?group=course` and `?group=concept` render (the latter `?group=topic` since 2026-10-05); each of the six menu actions works on a row and a card, the three new ones with tests |
 | 3 | L6: the previewer | `apps/web/src/components/library/Previewer.tsx`, the asset page's body factored out of `library/[id]/page.tsx` | A row opens the panel, Escape restores the scroll position, deep links still open the page |
 | 4 | L7: the sidebar sections, the Recent query over drafts, sessions, playback positions, observation events and visits, the `visit` event with its migration and the preference fallback, the row menu | `apps/web/src/components/shell/`, `apps/web/src/lib/home.ts` and `home-core.ts`, a `recent.ts` beside them, `packages/schema/src/shared.ts` for `EVENT_TYPES` and a new `services/catalog/drizzle/00NN_visit_event.sql` | The sidebar shows Courses, Pinned and Recent with glyphs; a tutor session, a half-watched video, a concept observed yesterday and a module visited six modules ago all appear, and a finished video does not; the five modules in the preference still show after the migration; Home's threads come from the same query and its golden test is unchanged; the phone drawer is the same column; `AppSidebar.test.ts` covers the sections |
 
@@ -256,4 +276,4 @@ Phases 1 and 4 are independent; 2 and 3 build on 1.
 - Deleting or renaming an asset from the Library; the import owns asset rows.
 - A bottom tab bar on the phone. The drawer stays.
 - Manus's model picker, plan chip and credits in the top bar; the app has no top bar and the tutor's model chain is in Settings.
-- Group by task for the studio's own outputs beyond what L4's group by concept gives; a studio conversation is reachable from the row's source line.
+- Group by task for the studio's own outputs beyond what L4's group by topic gives; a studio conversation is reachable from the row's source line.
