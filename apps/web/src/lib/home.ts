@@ -89,7 +89,6 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
     topicIds: c.modules.flatMap((m) => m.topics.map((t) => t.id)),
   }));
   const standing = itemStanding(kb.concepts, courseRows.flatMap((c) => c.topicIds));
-  const started = coursesInProgress(courseRows, snapshot.completed, standing);
 
   // Recent's own sources (`recent.ts`), the list the sidebar shows too; Home
   // takes its first rows.
@@ -99,6 +98,9 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
     ownerScope(owner),
   );
   const threads = homeThreads(sources, { now, timeZone, limit: THREAD_ROWS });
+  // A course opened counts as started, as the sidebar's Courses section has it.
+  const opened = new Set(sources.modules.map((visit) => visit.courseSlug));
+  const started = coursesInProgress(courseRows, snapshot.completed, standing, opened);
 
   const paths: PathCourse[] = active.map((c) => ({
     slug: c.slug,

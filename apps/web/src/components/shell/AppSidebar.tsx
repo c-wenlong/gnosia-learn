@@ -204,7 +204,14 @@ export function AppSidebar() {
         if (rail) openSearch();
         else searchField.current?.focus();
       },
-      "new-chat": () => panel.current?.querySelector<HTMLElement>("[data-studio-new]")?.click(),
+      "new-chat": () => {
+        // No New chat to press, or only the hidden sidebar's on a focus page
+        // (a phone's drawer still opens there): the browser keeps its own press.
+        if (!isPhoneWidth() && focusPage()) return false;
+        const button = panel.current?.querySelector<HTMLElement>("[data-studio-new]");
+        if (button == null) return false;
+        button.click();
+      },
       "show-shortcuts": () => {
         // The drawer's Tab trap listens on the window and would pull focus
         // out of the sheet, so the drawer closes first.

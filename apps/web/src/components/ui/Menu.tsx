@@ -212,7 +212,12 @@ export function Menu({
         className="relative inline-flex"
         // The menu's events are its own: a row around it that opens on a press must not hear them.
         onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
+        // Only the keys the menu acts on, though: React's stop is the native
+        // event's too, and the shell's shortcuts and the phone drawer's
+        // Escape listen on the window.
+        onKeyDown={(event) => {
+          if (menuOwnsKey(event, open)) event.stopPropagation();
+        }}
       >
         <button
           ref={button}
@@ -248,6 +253,20 @@ export function Menu({
     </MenuContext.Provider>
   );
 }
+
+/**
+ * Whether a key press in a menu (its button or its list) is the menu's own,
+ * kept from the row around it: Enter and Space press the button or an item,
+ * the arrows, Home and End move, and, while the list is open, a letter finds
+ * an item. Any other key, or one held with Ctrl, Cmd or Alt, goes on.
+ */
+export function menuOwnsKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean }, open: boolean): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (MENU_KEYS.has(event.key)) return true;
+  return open && event.key.length === 1;
+}
+
+const MENU_KEYS = new Set(["Enter", " ", "ArrowUp", "ArrowDown", "Home", "End"]);
 
 /** A menu row: the kit's (`menuRowClasses`), a row that takes the focus itself, the glyph then the words. */
 const ITEM = menuRowClasses({ className: "shrink-0 leading-5 whitespace-nowrap" });
