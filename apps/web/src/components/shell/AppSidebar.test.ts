@@ -436,6 +436,10 @@ describe("the sections", () => {
     expect(rows.map((a) => a.getAttribute("href"))).toEqual(["/courses/cs3230/m2"]);
     expect(rows[0]!.textContent).toBe("CS3230 Algorithms2. Divide and conquer");
     expect(rows[0]!.getAttribute("aria-current")).toBeNull();
+    // Two lines tall, its height eased so it can settle on the rail.
+    expect(rows[0]!.className).toContain("h-[calc(var(--shell-row,36px)+8px)]");
+    expect(rows[0]!.className).toContain("transition-[height,color,background-color]");
+    expect(rows[0]!.className).toContain("motion-reduce:transition-none");
   });
 
   it("marks the course of the page on screen, on any page under it", async () => {
@@ -443,6 +447,24 @@ describe("the sections", () => {
     withRows();
     const container = await mount(false);
     expect(section(container, "sidebar-courses").querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/courses/cs3230/m2");
+  });
+
+  it("settles a two-line course row to one row's height on the rail, where only its glyph shows", async () => {
+    withRows();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root: Root = createRoot(container);
+    act(() => root.render(createElement(ShellFrame, { studio: false, initialCollapsed: true } as ComponentProps<typeof ShellFrame>, null)));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    const row = nav(container).querySelector<HTMLAnchorElement>('a[aria-label="CS3230 Algorithms"]')!;
+    expect(row.className).toContain("h-[var(--shell-row,36px)]");
+    expect(row.className).not.toContain("+8px");
   });
 
   it("gives a course with no module visited one line, opening the course page", async () => {

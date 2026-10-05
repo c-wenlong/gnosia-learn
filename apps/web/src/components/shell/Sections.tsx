@@ -30,7 +30,7 @@ import { conversationHref } from "@/lib/studio-view";
 import { SearchResults } from "./ChatSearch";
 import { FADE, FADE_IN } from "./motion";
 import { rowClick } from "./row-click";
-import { RECENT_GLYPHS, ROW, rowFill } from "./rows";
+import { RECENT_GLYPHS, ROW, ROW_TWO_LINE, rowFill } from "./rows";
 import { useShell } from "./shell-context";
 import { useConversations } from "./use-conversations";
 import { useRecent } from "./use-recent";
@@ -334,8 +334,13 @@ function CoursesSection({
                 aria-current={here ? "page" : undefined}
                 aria-label={rail ? name : undefined}
                 title={resume === null ? name : `${name}, ${resume}`}
-                // Two lines while the module visited last has a name under the course.
-                className={cx(ROW, resume !== null && "h-auto min-h-[var(--shell-row,36px)] py-1", rowFill(here))}
+                // Two lines while the module visited last has a name under the
+                // course, and one row's height on the rail, where only the glyph shows.
+                className={cx(
+                  resume === null ? ROW : ROW_TWO_LINE,
+                  resume !== null && (rail ? "h-[var(--shell-row,36px)]" : "h-[calc(var(--shell-row,36px)+8px)]"),
+                  rowFill(here),
+                )}
               >
                 <Glyph name="folder" size={18} className="text-text2" />
                 <span className={cx("flex min-w-0 flex-1 flex-col", FADE, rail ? "opacity-0" : FADE_IN)}>
