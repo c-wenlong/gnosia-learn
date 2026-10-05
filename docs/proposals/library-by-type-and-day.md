@@ -257,6 +257,55 @@ labels, the menu items and the Library rows, so the lists share one rhythm
 and a Compact setting later is one override. The folded rail stays 60 px
 with its peek; Manus's 52 px rail has no peek and is not better.
 
+**L9. The Library in pages, the next one loaded as the reader scrolls
+(2026-10-05).** A walk-through on a production build measured `/library` at
+3.0 to 4.5 MB of HTML, every one of the owner's 614 rows drawn on the server
+in every grouping and view, so the owner decided to page it. The page draws
+the first page: 50 rows, rounded up to finish the day, course, topic or
+conversation they end in so no heading is split on first paint, unless that
+would pass 100 rows, when the group is split and goes on under its one
+heading on the next page (a day of 197 imports is the real case). Every
+heading keeps the group's whole count, however much of it is drawn. The
+next page comes from a server function, `libraryPage` in
+`apps/web/src/app/(app)/library/page-action.tsx`, the previewer's pattern
+(L6): it reads the same `?kind=`, `?course=`, `?topic=`, `?q=`, `?sort=`,
+`?group=`, `?view=` and `?favorites=` from the view's URL and draws the rows
+with the page's own code (`loadLibraryView` and `renderLibraryPage` in
+`apps/web/src/components/library/library-view.tsx`). It is keyed by a cursor
+the last page hands over, the last row's group, course module and sort key,
+never an offset, so a row added above it does not shift the next page
+(`pageOf` in `apps/web/src/lib/library-pages.ts`); a cursor whose group has
+gone answers that the Library changed, with Reload.
+
+A sentinel under the list, watched a screen ahead, asks for the next page,
+one request at a time (`LibraryResults`); Show older (Show more where the rows
+do not run newest first) does the same from the keyboard and moves focus to
+the first row it brought, and a failed load says so in a quiet line with Try
+again. While a page loads, the last group shows placeholders in the layout's
+shape, a screen's worth (12 rows or 6 cards) or the rows left if fewer: the
+kit's `SkeletonRow` and `SkeletonCard`, in the `--skeleton` token, with a
+lighter band (`--skeleton-sheen`) that crosses each block left to right in
+1.2 s and then rests for 1.2 s, each block 90 ms behind the one before; under
+reduced motion the blocks are flat. The rows replace them and fade in. The
+previewer's right arrow on the last row drawn loads the next page and walks
+into it. Back, forward and a reload draw as many pages as the reader held
+and scroll back to where they were (session storage, keyed by the view's
+URL). Every kit `Skeleton` took the sheen in place of the pulse, so a loading
+frame looks the same everywhere.
+
+Measured on production builds on the owner's catalog, the base and this
+change served side by side and loaded in turn, seven times each:
+
+| Route | HTML before | HTML after | Gzipped before | Gzipped after | HTML received (median) | Network idle (median) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `/library` | 3,076,829 B | 344,021 B | 138 KB | 27 KB | 125 to 75 ms | 1,028 to 936 ms |
+| `/library?view=list` | 4,479,884 B | 444,385 B | 152 KB | 28 KB | 169 to 71 ms | 1,065 to 750 ms |
+| `/library?group=topic` | 3,194,250 B | 347,955 B | 146 KB | 26 KB | 134 to 70 ms | 1,061 to 933 ms |
+
+Scrolling to the end drew all 614 rows in every grouping and both views, each
+once, every heading once with its count equal to the rows under it, in 9 to
+11 pages.
+
 ## The Library
 
 ```

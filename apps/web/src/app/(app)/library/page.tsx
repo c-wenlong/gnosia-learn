@@ -1,71 +1,32 @@
 import type { Metadata } from "next";
 import Form from "next/form";
-import type { ReactNode } from "react";
 
-import { AssetCard, type CardConcept } from "@/components/AssetCard";
 import { PAGE_ENTER } from "@/components/PageLoading";
-import { AssetRow } from "@/components/library/AssetRow";
+import { LibraryResults } from "@/components/library/LibraryResults";
 import { LibraryToolbar, type LibraryMenu } from "@/components/library/LibraryToolbar";
+import { loadLibraryView, renderLibraryPage } from "@/components/library/library-view";
 import { Previewer } from "@/components/library/Previewer";
 import { loadPreview } from "@/components/library/preview-content";
-import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Notice } from "@/components/ui/Notice";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx, NOTE, PAGE_TITLE, STATUS_TEXT } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
-import { getCourses } from "@/data/courses";
-import { getTopics } from "@/data/topics";
+import { unservedRows } from "@/lib/asset-library";
 import {
-  loadAssetAccess,
-  loadFavorites,
-  loadLibrary,
-  loadSearchText,
-  thumbnailFor,
-  thumbnailStatusFor,
-  unservedRows,
-} from "@/lib/asset-library";
-import {
-  assetHref,
-  courseFacets,
-  explainedConcepts,
   filesNoun,
-  filterRows,
-  firstParam,
   isCompanionKind,
   isOtherKind,
-  kindFacets,
   libraryHref,
   libraryTabs,
   OTHERS_KIND,
-  parseGroup,
-  parseSort,
-  parseView,
-  searchHits,
-  searchTerms,
-  sortRows,
   tabOf,
-  type LibraryCourse,
   type LibraryFilters,
   type LibraryView,
 } from "@/lib/library";
 import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
-import { dayGroups, editedLabel, timeOfDay } from "@/lib/day-groups";
-import { loadKnowledgeBase } from "@/lib/learner-store";
-import {
-  conversationGroups,
-  courseGroups,
-  topicBucket,
-  topicGroups,
-  topicRanks,
-  type RowGroup,
-} from "@/lib/library-groups";
 import { parseOpen } from "@/lib/library-preview";
-import { conceptOrder, latestConversation, orderedConcepts, rowSource } from "@/lib/library-source";
-import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
 import { ownValue } from "@/lib/own-key";
-import { rowMenuItems } from "@/lib/row-menu";
-import { appTimeZone } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Library",
@@ -131,6 +92,12 @@ export const metadata: Metadata = {
  * asset page, and shows as a third menu only while it is set, whose "All
  * topics" clears it.
  *
+ * **In pages** (L9): the page draws the first fifty or so rows, the headings
+ * with their whole counts, and `LibraryResults` asks `libraryPage` for the
+ * rest a screen before the reader reaches them, showing placeholders with a
+ * sheen meanwhile. The rows are worked out once for both, in
+ * `loadLibraryView` (`@/components/library/library-view`).
+ *
  * **Dynamic, like every page here.** It reads the catalog, and every loader
  * marks its read as request work so `npm run build` succeeds with no
  * database.
@@ -141,59 +108,15 @@ export default async function LibraryPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const params = await searchParams;
-  const kind = firstParam(params.kind);
-  const topic = firstParam(params.topic);
-  const course = firstParam(params.course);
-  const q = firstParam(params.q)?.trim() || null;
-  const sort = parseSort(firstParam(params.sort));
-  const view = parseView(firstParam(params.view));
-  const favorites = firstParam(params.favorites) === "1";
-  const group = parseGroup(firstParam(params.group));
-  const filters: LibraryFilters = { kind, topic, course, q, sort, view, favorites, group };
   // The asset open in the previewer (L6), when the page is loaded with one:
   // its body is in the first paint rather than a skeleton.
   const open = parseOpen(params.open);
-
-  const [library, { kb }, courses, starred, preview, vocabulary] = await Promise.all([
-    loadLibrary(),
-    loadKnowledgeBase(),
-    getCourses(),
-    // The filter reads them, and so does every row's menu (Favorite or Unfavorite).
-    loadFavorites(),
+  const [listed, preview] = await Promise.all([
+    loadLibraryView(params),
     open === null ? Promise.resolve(null) : loadPreview(open),
-    // The topic headings' titles and order, read only for that grouping. A
-    // heading is a label, so a vocabulary that cannot be read falls back to
-    // the asset rows' own topic titles, then the slug, in slug order, rather
-    // than failing the page.
-    group === "topic" ? getTopics().catch(() => []) : Promise.resolve([]),
   ]);
-  // A store that could not be read filters to nothing rather than to
-  // everything, and the page says why below.
-  const favoriteIds = favorites ? (starred ?? new Set<string>()) : null;
-  const { rows, counts, reachable, truncated, titles, concepts } = library;
-  // Per row: a video in the blob store or a note the database owns draws, and
-  // anything else shows its placeholder.
-  const access = await loadAssetAccess(rows);
-
-  const facets = kindFacets(counts);
-  const libraryCourses: LibraryCourse[] = courses.map((c) => ({
-    slug: c.slug,
-    code: c.code,
-    title: c.title,
-    topics: c.modules.map((m) => m.topic),
-  }));
-  const courseChips = courseFacets(libraryCourses, rows);
-  // An unknown course slug matches nothing rather than being ignored: a URL
-  // that names a course and shows the whole library would be claiming a
-  // filter it did not apply.
-  const chosenCourse = course === null ? null : (libraryCourses.find((c) => c.slug === course) ?? null);
-  const courseTopics = course === null ? null : new Set(chosenCourse?.topics ?? []);
-
-  const terms = searchTerms(q);
-  const search = terms.length > 0 ? await loadSearchText(rows, terms) : null;
-  const hits = search === null ? null : searchHits(rows, terms, search.texts, search.sources);
-
-  const matching = sortRows(filterRows(rows, { kind, topic, courseTopics, hits, favorites: favoriteIds }), sort);
+  const { kind, topic, course, q, sort, favorites, group, filters, starred, access, facets, courseChips, chosenCourse, search, matching, view } = listed;
+  const { rows, counts, reachable, truncated, titles } = listed.library;
   // Said once for the view rather than on every card: how many rows here name
   // bytes nothing has stored yet, and the one command that stores them.
   const unserved = unservedRows(matching, access);
@@ -208,10 +131,6 @@ export default async function LibraryPage({
   // "manimkc", "manimkc and remotionkc", "manimkc, remotionkc and revideokc".
   const inWords = (names: readonly string[]) =>
     names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-  const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
-  const order = conceptOrder(kb.concepts);
-  const now = new Date();
-  const timeZone = appTimeZone();
   const tab = tabOf(kind);
   const tabs = libraryTabs(counts);
   // Narrowed beyond the tab: the header then says "12 of 30 files".
@@ -257,81 +176,10 @@ export default async function LibraryPage({
     (companionsShown > 0 ? ` · ${companionsShown} starred companion ${companionsShown === 1 ? "file" : "files"}` : "");
 
   const listLabel = q === null ? "Assets" : `Assets matching ${q}`;
-  // What a card or a row names beside the title: the first concept the asset
-  // explains, in the prerequisite graph's order (`orderedConcepts`), so the
-  // card, the row's line, its menu and the topic heading name the same one,
-  // with how many more; or its topic when it explains none. Grouped by topic,
-  // that topic is the heading the row sits under (`topicGroups` files a row
-  // with no concept by its first topic), so it is not said again.
-  const describe = (row: (typeof matching)[number]): { concept?: CardConcept; topic?: string } => {
-    const explained = explainedConcepts(orderedConcepts(ownValue(concepts, row.id) ?? [], order), kbById);
-    const first = explained[0];
-    const topicSlug = group === "topic" ? undefined : row.topics[0];
-    return {
-      concept: first === undefined ? undefined : { title: first.title, bucket: first.bucket, more: explained.length - 1 },
-      topic: topicSlug === undefined ? undefined : (ownValue(titles, topicSlug) ?? topicSlug),
-    };
-  };
-
-  // Where a list row came from, said on its second line (L3).
-  const sourceOf = (row: (typeof matching)[number]) =>
-    rowSource(ownValue(library.parents, row.id), {
-      course,
-      order,
-      // Grouped by course, the heading and the section already say the place.
-      placeInHeading: group === "course",
-      concept: (slug) => {
-        const known = kbById.get(slug);
-        return known === undefined ? null : { title: known.title, bucket: bucketOf(known) };
-      },
-    });
-  const parentsOf = (row: (typeof matching)[number]) => ownValue(library.parents, row.id);
-  // Every concept's bucket by its topic, for a topic heading's dot: all the
-  // topic's concepts, not only the ones with an asset here.
-  const topicConceptBuckets = new Map<string, MasteryBucket[]>();
-  const conceptTopic = new Map<string, string>();
-  if (group === "topic") {
-    for (const c of kb.concepts) {
-      if (!c.topic) continue;
-      conceptTopic.set(c.id, c.topic);
-      const list = topicConceptBuckets.get(c.topic);
-      if (list === undefined) topicConceptBuckets.set(c.topic, [bucketOf(c)]);
-      else list.push(bucketOf(c));
-    }
-  }
-  const topicTitles = new Map(vocabulary.map((t) => [t.slug, t.title]));
-  // Day, the default, or course, topic or conversation from the view options (L4).
-  const groups: RowGroup<(typeof matching)[number]>[] =
-    group === "course"
-      ? courseGroups(matching, (row) => parentsOf(row)?.places ?? [], { course })
-      : group === "conversation"
-        ? conversationGroups(matching, (row) => latestConversation(parentsOf(row)), { now, timeZone })
-        : group === "topic"
-          ? topicGroups(
-              matching,
-              (row) => ({ concepts: parentsOf(row)?.concepts ?? [], topics: row.topics }),
-              {
-                order,
-                topicOf: (slug) => conceptTopic.get(slug) ?? null,
-                rank: topicRanks(vocabulary, conceptTopic, kb.edges ?? []),
-                topic: (slug) => ({
-                  title: topicTitles.get(slug) ?? ownValue(titles, slug) ?? slug,
-                  bucket: topicBucket(topicConceptBuckets.get(slug) ?? []),
-                }),
-              },
-            )
-          : dayGroups(matching, (row) => row.createdAt, { now, timeZone });
-  // The more menu's items, per row (L5).
-  const menuOf = (row: (typeof matching)[number]) =>
-    rowMenuItems({
-      id: row.id,
-      kind: row.kind,
-      parents: parentsOf(row),
-      order,
-      course,
-      served: access.served.has(row.id),
-      starred: starred === null ? null : starred.has(row.id),
-    });
+  // The first page of rows (L9): about fifty, rounded up to finish the group
+  // they end in; the rest load as the reader scrolls.
+  const firstPage = renderLibraryPage(listed, null);
+  const here = libraryHref(filters);
   const courseOptions: LibraryMenu["options"] = [
     { value: "", label: "All courses", short: "All" },
     ...courseChips.map((f) => ({ value: f.slug, label: f.code, detail: f.title, count: f.count })),
@@ -495,61 +343,18 @@ export default async function LibraryPage({
             <Notice title="No assets match" actions={<TextLink href="/library">Clear every filter</TextLink>}>
               <p>{noMatchSentence}</p>
             </Notice>
-          ) : (
-            <section
-              aria-label={listLabel}
-              // A tab, a filter or a sort keeps the groups whose day is still
-              // shown and fades in the ones that arrive.
-              className={cx("flex flex-col gap-10", RESULTS_MOTION)}
-            >
-              {groups.map((held) => (
-                <GroupSection key={held.key} group={held} inset={view === "list"}>
-                  {(rows) =>
-                    view === "list" ? (
-                      <ul className="flex flex-col">
-                        {rows.map((row) => (
-                          <li key={row.id} className={cx("group/item", ARRIVE)}>
-                            <AssetRow
-                              asset={row}
-                              source={sourceOf(row)}
-                              grouping={group}
-                              topic={describe(row).topic}
-                              time={timeOfDay(row.createdAt, timeZone)}
-                              edited={editedLabel(row.createdAt, row.editedAt, { now, timeZone })}
-                              href={assetHref(row.id)}
-                              menu={menuOf(row)}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]">
-                        {rows.map((row) => {
-                          const { concept, topic: topicLabel } = describe(row);
-                          return (
-                            <li key={row.id} className={cx("flex", ARRIVE)}>
-                              <AssetCard
-                                asset={row}
-                                concept={concept}
-                                topic={topicLabel}
-                                href={assetHref(row.id)}
-                                menu={menuOf(row)}
-                                // A diagram is its own thumbnail; a video gets a frame
-                                // cut out of it on demand; everything else gets the
-                                // labelled placeholder.
-                                thumbnailSrc={thumbnailFor(row, access)}
-                                thumbnailStatusHref={thumbnailStatusFor(row, access)}
-                              />
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )
-                  }
-                </GroupSection>
-              ))}
-            </section>
-          )}
+          ) : firstPage.state === "ok" ? (
+            // Keyed by the view's URL: a new tab, filter, sort or grouping
+            // starts again at its own first page.
+            <LibraryResults
+              key={here}
+              href={here}
+              view={view}
+              label={listLabel}
+              first={firstPage}
+              more={group === "day" && sort === "newest" ? "Show older" : "Show more"}
+            />
+          ) : null}
           </Previewer>
 
           {truncated && (
@@ -560,72 +365,6 @@ export default async function LibraryPage({
         </>
       )}
     </div>
-  );
-}
-
-/**
- * The results dim while a filter, sort or view picked in the toolbar is
- * being rendered (`LibraryToolbar` marks itself `data-pending` for the
- * length of its transition), so the page says it heard the pick before the
- * new rows arrive, and a row that arrives fades in.
- */
-const RESULTS_MOTION =
-  "transition-opacity duration-150 ease-out motion-reduce:transition-none group-has-[[data-pending]]/library:opacity-60";
-const ARRIVE = "animate-fade-in motion-reduce:animate-none";
-
-
-/**
- * One group's rows under its heading, Manus's `date-heading`: the day ("4 Oct",
- * the year when it is not this one), the course ("CS3230" and its title in
- * grey), the topic (with its mastery dot) or the conversation (the day it was
- * last written to in grey), and the count in grey, "(5)".
- * The heading is the shell's row height (`--shell-row`); in the list it is
- * inset by the row's start padding (`--shell-row-pad`) so it lines up with
- * the glyphs under it, and in the grid it sits flush with the cards. A course
- * group runs its modules in course order, each under a smaller grey heading
- * with its own count, 24px apart. A group that arrives with a tab, a filter
- * or a new grouping fades in.
- */
-function GroupSection<T>({
-  group,
-  inset,
-  children,
-}: {
-  group: RowGroup<T>;
-  inset: boolean;
-  children: (rows: T[]) => ReactNode;
-}) {
-  const id = `group-${(group.key || "none").replace(/[^A-Za-z0-9_-]/g, "-")}`;
-  const pad = inset && "px-[var(--shell-row-pad)]";
-  return (
-    <section aria-labelledby={id} className={cx("flex flex-col", inset ? "gap-1" : "gap-3", ARRIVE)}>
-      <h2
-        id={id}
-        className={cx("flex h-[var(--shell-row)] min-w-0 items-center gap-1.5 text-[14px] leading-5 font-medium text-text", pad)}
-      >
-        {group.bucket !== undefined && <MasteryDot bucket={group.bucket} size={12} />}
-        <span className="min-w-0 truncate">
-          {group.label}
-          {group.detail !== undefined && <span className="font-normal text-text2"> {group.detail}</span>}
-        </span>
-        <span className="shrink-0 text-[12px] font-normal text-text2 tabular-nums">({group.rows.length})</span>
-      </h2>
-      {group.sections === undefined ? (
-        children(group.rows)
-      ) : (
-        <div className="flex flex-col gap-6">
-          {group.sections.map((section) => (
-            <section key={section.key || "course"} aria-label={`${group.label}, ${section.label}`} className={cx("flex flex-col", inset ? "gap-1" : "gap-3")}>
-              <h3 className={cx("flex min-w-0 items-center gap-1.5 text-[13px] leading-5 text-text2", pad)}>
-                <span className="min-w-0 truncate">{section.label}</span>
-                <span className="shrink-0 text-[12px] tabular-nums">({section.rows.length})</span>
-              </h3>
-              {children(section.rows)}
-            </section>
-          ))}
-        </div>
-      )}
-    </section>
   );
 }
 
