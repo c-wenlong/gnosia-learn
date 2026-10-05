@@ -10,7 +10,8 @@ import { AssetRow } from "./AssetRow";
 /**
  * Every row and card is a `next/link` to `/library/<id>`, and Next prefetches
  * each one as it enters the viewport and cancels it as it scrolls away, which
- * logged "destination stream closed early" on every long scroll (L9). A press
+ * the owner saw logged as "destination stream closed early" on long scrolls
+ * (L9). A press
  * opens the previewer, so the prefetch is off. `prefetch={false}` leaves no
  * trace in the markup, so the mocked link records the prop it was given.
  */
