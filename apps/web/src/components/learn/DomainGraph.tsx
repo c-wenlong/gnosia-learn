@@ -176,7 +176,9 @@ export function DomainGraph({
   }, []);
   // The frame's width does not depend on the title band, so the scale is measured from it before the band is known.
   // On the way to the axes the width glides with the rest of the frame.
-  const frameWidth = (frozen ?? viewBoxFor(layout, topic, moved)).width * (1 - glide) + axesViewBox(layout.axes).width * glide;
+  // A drag holds the frame still, in groups only: on the axes no drag is under way (it ends at the switch).
+  const held = onAxes ? null : frozen;
+  const frameWidth = (held ?? viewBoxFor(layout, topic, moved)).width * (1 - glide) + axesViewBox(layout.axes).width * glide;
   const scale = drawn === null ? 1 : drawn / frameWidth;
   const font = labelFont(scale);
   // A topic's title keeps 11px on screen too (D10), and its group's band grows upward to hold it.
@@ -188,7 +190,7 @@ export function DomainGraph({
   // A label drawn larger than the layout's size reaches further below its dot, so the frame grows to hold the bottom row's.
   const live = { ...fit, height: fit.height + Math.max(0, labelFoot(2, font) - labelFoot(2)) };
   const axes = axesGeometry(layout.axes, scale);
-  const view = frozen ?? mixBox(live, axesViewBox(layout.axes, scale), glide);
+  const view = held ?? mixBox(live, axesViewBox(layout.axes, scale), glide);
   // What stays lit (D5, D9): a concept and its neighbours, a topic's group, or a legend chip's.
   const keep =
     hover !== null && shown.has(hover)
@@ -267,10 +269,13 @@ export function DomainGraph({
           const d = drag.current;
           if (d === null) return;
           // No button down: the press was released outside the picture, before it became a drag.
-          if (event.buttons === 0) {
+          // Or the picture went to the axes while the pointer was down: the drag ends where it had got to.
+          if (event.buttons === 0 || onAxes) {
             drag.current = null;
             if (d.moving) {
               setFrozen(null);
+              // The click the release sends is the drag's, not a press to select.
+              if (onAxes) dragged.current = true;
               onMoveEnd();
             }
             return;
@@ -386,9 +391,11 @@ export function DomainGraph({
               }}
               onHover={onHover}
               onPointerDown={(event) => {
-                // On the axes a place means something, and while gliding it is on its way: neither drags.
-                if (event.button !== 0 || locked || onAxes || !settled) return;
+                if (event.button !== 0) return;
+                // A new press is not the end of an old drag, even where it cannot drag itself.
                 dragged.current = false;
+                // On the axes a place means something, and while gliding it is on its way: neither drags.
+                if (locked || onAxes || !settled) return;
                 const frame = live;
                 drag.current = { id, start: p, from: pointerAt(event, frame), moving: false, view: frame, pointer: event.pointerId };
               }}

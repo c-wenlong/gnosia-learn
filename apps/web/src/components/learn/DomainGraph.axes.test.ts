@@ -268,6 +268,67 @@ describe("the axes layout", () => {
     expect(host.querySelector("[data-moved]")).not.toBeNull();
   });
 
+  // Review of #426: a drag in Groups that no click followed must not swallow the first press on the axes.
+  it("selects on the first press in Axes after a drag in Groups", () => {
+    const host = mount();
+    const svg = drawFull(host);
+    const view = (svg.getAttribute("viewBox") ?? "").split(" ").map(Number);
+    const p = at(host, "dfs");
+    pointer(concept(host, "dfs"), "pointerdown", p.x - view[0], p.y - view[1]);
+    pointer(svg, "pointermove", p.x - view[0] + 40, p.y - view[1]);
+    pointer(svg, "pointerup", p.x - view[0] + 40, p.y - view[1], 0);
+    // No click after it: the pointer was let go off the concept.
+    act(() => option(host, "Axes").click());
+    const q = at(host, "bfs");
+    pointer(concept(host, "bfs"), "pointerdown", q.x, q.y);
+    pointer(svg, "pointerup", q.x, q.y, 0);
+    act(() => void concept(host, "bfs").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(url().get("concept")).toBe("bfs");
+  });
+
+  // Review of #426: switching to the axes mid-drag (the arrow keys on the switch) ends the drag there.
+  it("ends a drag in progress when the picture switches to the axes", () => {
+    const host = mount();
+    const svg = drawFull(host);
+    const view = (svg.getAttribute("viewBox") ?? "").split(" ").map(Number);
+    const p = at(host, "dfs");
+    pointer(concept(host, "dfs"), "pointerdown", p.x - view[0], p.y - view[1]);
+    pointer(svg, "pointermove", p.x - view[0] + 40, p.y - view[1]);
+    act(() => option(host, "Axes").click());
+    // The frame is the axes', not the one the drag froze.
+    const box = axesViewBox(layout.axes);
+    expect(svg.getAttribute("viewBox")).toBe(`${box.x} ${box.y} ${box.width} ${box.height}`);
+    pointer(svg, "pointermove", p.x - view[0] + 90, p.y - view[1] + 30);
+    pointer(svg, "pointerup", p.x - view[0] + 90, p.y - view[1] + 30, 0);
+    expect(at(host, "dfs")).toEqual(layout.axes.positions.dfs);
+    // Back in groups, it is where the drag had got to when the switch came, not where the pointer went after.
+    act(() => option(host, "Groups").click());
+    expect(at(host, "dfs")).toEqual({ x: p.x + 40, y: p.y });
+  });
+
+  // Review of #426: through the real history, not a URL put in place by hand.
+  it("comes back to Axes through Back and Forward in the browser's history", async () => {
+    const host = mount();
+    act(() => option(host, "Axes").click());
+    act(() => (host.querySelector('button[data-list-topic="graphs"]') as HTMLButtonElement).click());
+    expect(url().get("topic")).toBe("graphs");
+    const traverse = (move: () => void) =>
+      act(async () => {
+        const popped = new Promise((resolve) => window.addEventListener("popstate", resolve, { once: true }));
+        move();
+        await popped;
+      });
+    await traverse(() => window.history.back());
+    expect(url().get("topic")).toBeNull();
+    expect(url().get("layout")).toBe("axes");
+    expect(option(host, "Axes").getAttribute("aria-checked")).toBe("true");
+    expect(at(host, "dfs")).toEqual(layout.axes.positions.dfs);
+    await traverse(() => window.history.forward());
+    expect(url().get("topic")).toBe("graphs");
+    expect(switcher(host)).toBeNull();
+    expect(at(host, "bfs")).toEqual(layout.positions.bfs);
+  });
+
   it("lights a hovered concept's edges and shows its plate in Axes", () => {
     const host = mount("?domain=algorithms&layout=axes");
     enter(concept(host, "heap"));
