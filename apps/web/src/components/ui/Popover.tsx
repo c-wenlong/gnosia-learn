@@ -50,6 +50,11 @@ function onEscape(event: KeyboardEvent) {
   top.escape();
 }
 
+/** Whether any kit popover (a menu, a list, suggestions) is open now. */
+export function popoverOpen(): boolean {
+  return layers.length > 0;
+}
+
 function pushLayer(layer: { escape: () => void }): () => void {
   if (layers.length === 0) window.addEventListener("keydown", onEscape, true);
   layers.push(layer);

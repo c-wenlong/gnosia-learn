@@ -715,6 +715,40 @@ describe("the sections", () => {
     expect(courses.querySelector('a[aria-label="Browse courses"]')?.getAttribute("href")).toBe("/courses");
   });
 
+  it("titles a pinned conversation by its name now, when it is older than Recent's loaded page", async () => {
+    // A full page of newer rows, with more behind it: the merge holds back
+    // the runner's older conversation, and Pinned must still find its name.
+    const newer = Array.from({ length: 50 }, (_, i) =>
+      item({ key: `concept:c${i}`, kind: "concept", title: `Concept ${i}`, href: `/learn/c${i}`, at: new Date(Date.now() - i * 60_000).toISOString() }),
+    );
+    const pin = { key: "draft:d1", kind: "draft" as const, title: "TCP vs UDP", href: "/studio?draft=d1", at: ago(20) };
+    mocks.fetchRecent.mockResolvedValue({ ...EMPTY, items: newer, more: true, pinned: [pin] });
+    // Renamed in the studio since it was pinned: the runner's list carries the name.
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [{ ...DRAFT, name: "Transport layer", updated: ago(10) }], note: "" } });
+    const container = await mount(true);
+    const pinnedTitles = () => [...section(container, "sidebar-pinned").querySelectorAll("li a")].map((a) => a.textContent);
+    expect(pinnedTitles()).toEqual(["Conversation: Transport layer"]);
+
+    // Renamed again from Pinned: shown at once, and kept once the runner has it.
+    mocks.renameDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", name: "Sockets", title: "TCP vs UDP", changed: true, note: "" } });
+    mocks.listDrafts.mockResolvedValue({ ok: true, data: { drafts: [{ ...DRAFT, name: "Sockets", updated: ago(10) }], note: "" } });
+    act(() => moreFor(container, "Transport layer").click());
+    act(() => itemOf(container, "Transport layer", "Rename").click());
+    const field = nav(container).querySelector<HTMLInputElement>('input[aria-label="Name this conversation"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Sockets");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.renameDraft).toHaveBeenCalledWith("d1", "Sockets");
+    expect(pinnedTitles()).toEqual(["Conversation: Sockets"]);
+  });
+
   it("offers Show older while there is more, even when every row on screen is pinned", async () => {
     const pins = [VIDEO, MODULE, CONCEPT].map((r) => ({ key: r.key, kind: r.kind, title: r.title, href: r.href, at: ago(0) }));
     withRows({ more: true, pinned: pins });
@@ -832,6 +866,33 @@ describe("the shortcuts", () => {
     expect(key({ key: ".", ctrlKey: true }).defaultPrevented).toBe(false);
     expect(nav(container).dataset.state).toBe("open");
     dialog.remove();
+  });
+
+  it("leaves Ctrl+Shift+O to the browser when there is no New chat to press", async () => {
+    const container = await mount(true);
+    const button = nav(container).querySelector<HTMLElement>("[data-studio-new]")!;
+    button.removeAttribute("data-studio-new");
+    expect(key({ key: "O", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    button.setAttribute("data-studio-new", "");
+    expect(key({ key: "O", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+  });
+
+  it("binds nothing while a row's menu is open, so the fold cannot move the menu's anchor", async () => {
+    const row: RecentItem = { key: "concept:recurrences", kind: "concept", title: "Recurrences", detail: null, href: "/learn/recurrences", at: new Date().toISOString() };
+    mocks.fetchRecent.mockResolvedValue({ ...EMPTY, items: [row] });
+    const container = await mount(false);
+    const more = nav(container).querySelector<HTMLButtonElement>('button[aria-label="More for Recurrences"]')!;
+    act(() => more.click());
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(key({ key: ".", ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(nav(container).dataset.state).toBe("open");
+    expect(key({ key: "?", shiftKey: true }).defaultPrevented).toBe(false);
+    expect(document.querySelector("dialog[open]")).toBeNull();
+    // Escape closes the menu, and the shortcuts are bound again.
+    key({ key: "Escape" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(key({ key: ".", ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(nav(container).dataset.state).toBe("rail");
   });
 
   it("opens the shortcuts sheet on ? as a kit Dialog listing the table, and closes it on Escape", async () => {

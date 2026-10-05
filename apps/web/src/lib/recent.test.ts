@@ -207,6 +207,18 @@ describe("pins and names", () => {
     expect(split.pinned[0].title).toBe("Renamed upstream");
   });
 
+  it("titles a pin from every row read, when the merge held its row back from Recent", () => {
+    const row = (key: string, day: number, title = key): RecentItem => ({ key, kind: "concept", title, detail: null, href: "/", at: AT(day) });
+    const server = { items: Array.from({ length: 50 }, (_, i) => row(`concept:c${i}`, 20 - i / 10)), more: true };
+    const draft: RecentItem = { key: "draft:d1", kind: "draft", title: "Renamed", detail: null, href: "/studio?draft=d1", at: AT(2), draftId: "d1" };
+    const runner = { items: [draft], more: false };
+    const merged = mergeStreams([server, runner]);
+    expect(merged.items.some((r) => r.key === "draft:d1")).toBe(false);
+    const stored: PinnedRow = { key: "draft:d1", kind: "draft", title: "Old name", href: "/studio?draft=d1", at: AT(1) };
+    expect(splitPinned(merged.items, [stored]).pinned[0].title).toBe("Old name");
+    expect(splitPinned(merged.items, [stored], [...server.items, ...runner.items]).pinned[0].title).toBe("Renamed");
+  });
+
   it("calls a conversation by its name, else its title, and leaves out one with neither", () => {
     const items = recentItems({
       modules: [],

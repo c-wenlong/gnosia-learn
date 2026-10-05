@@ -134,7 +134,9 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
     ...(fromRunner === null || conversations.list === null ? [] : [{ items: fromRunner, more: conversations.list.more }]),
   ];
   const merged = mergeStreams(streams);
-  const { pinned, recent: rows } = splitPinned(merged.items, model?.pinned ?? []);
+  // Titles for the pins from every row read, renames included, so a pinned
+  // conversation the merge held back still shows its name now.
+  const { pinned, recent: rows } = splitPinned(merged.items, model?.pinned ?? [], streams.flatMap((s) => s.items));
   const unlisted = studio && (pending !== null || (active !== null && !merged.items.some((item) => item.draftId === active)));
   const loaded = model !== null || fromRunner !== null;
 

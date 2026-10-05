@@ -464,14 +464,19 @@ export function withoutPin(list: readonly PinnedRow[], key: string): PinnedRow[]
 
 /**
  * Recent split for the sidebar: the pinned rows, in pin order, each titled
- * as the live row is now when Recent still holds it; and Recent without them,
- * since a pinned row moves to Pinned rather than showing twice.
+ * as the live row is now when any list read holds it; and Recent without
+ * them, since a pinned row moves to Pinned rather than showing twice.
+ *
+ * `known` is every row read, before `mergeStreams` held any back: a pinned
+ * conversation older than the other list's last page is held back from
+ * Recent, but its name as the runner has it now is still the one to show.
  */
 export function splitPinned(
   items: readonly RecentItem[],
   pinned: readonly PinnedRow[],
+  known: readonly RecentItem[] = items,
 ): { pinned: PinnedRow[]; recent: RecentItem[] } {
-  const live = new Map(items.map((item) => [item.key, item]));
+  const live = new Map([...known, ...items].map((item) => [item.key, item]));
   const keys = new Set(pinned.map((p) => p.key));
   return {
     pinned: pinned.map((p) => {
