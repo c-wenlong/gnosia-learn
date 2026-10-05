@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
+import { isImeKey } from "@/components/ui/composer-keys";
 import { isMacPlatform, isTypingTarget, resolveShortcut, type ShortcutAction } from "@/lib/shortcuts";
 
 /**
@@ -23,7 +24,7 @@ export function useShellShortcuts(handlers: Record<ShortcutAction, () => void>, 
   useEffect(() => {
     const mac = isMacPlatform();
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.repeat) return;
+      if (event.defaultPrevented || isImeKey(event) || event.repeat) return;
       const action = resolveShortcut(event, {
         mac,
         typing: isTypingTarget(event.target),
