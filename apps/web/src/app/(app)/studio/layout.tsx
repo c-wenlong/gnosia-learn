@@ -1,4 +1,6 @@
 import { JobsProvider } from "@/components/studio/JobsProvider";
+import { StudioZone } from "@/components/studio/StudioZone";
+import { appTimeZone } from "@/lib/time-zone";
 import { requireStudio, studioApi } from "@/lib/studio";
 import type { Job } from "@/lib/studio-jobs";
 
@@ -31,7 +33,7 @@ export default async function StudioLayout({ children }: { children: React.React
 
   return (
     <JobsProvider initialJobs={listed.ok ? listed.data.jobs : []} streamEnabled>
-      {children}
+      <StudioZone timeZone={appTimeZone()}>{children}</StudioZone>
     </JobsProvider>
   );
 }
