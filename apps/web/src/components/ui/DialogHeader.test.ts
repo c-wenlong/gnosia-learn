@@ -95,16 +95,26 @@ describe("dialog headers", () => {
   });
 
   it("leaves no other Close drawn by hand inside a kit Dialog, but the two not moved yet", () => {
-    // A file that renders the kit `Dialog` and an `IconButton` named Close
-    // has built its own header. Two are left for a change of their own:
-    // Rename's and Ask's (RowMenu), whose card-titled header would move as
-    // it is, and the previewer's row of 28px tools (Previewer). Each must
-    // still be one, so the list only shrinks.
+    // A file that renders the kit `Dialog` and a button named Close, an
+    // `IconButton`'s `label` or a `<button>`'s `aria-label`, as a string
+    // either way, has built its own header. The attributes are read up to the
+    // next tag, past an arrow function's `>`. A name held in a variable is
+    // beyond a file scan and left to review. Two are left for a change of
+    // their own: Rename's and Ask's (RowMenu), whose card-titled header would
+    // move as it is, and the previewer's row of 28px tools (Previewer). Each
+    // must still be one, so the list only shrinks.
     const pending = ["components/library/Previewer.tsx", "components/library/RowMenu.tsx"];
+    const closeButton = /<(?:IconButton|button)\b(?:(?!<[A-Za-z])[\s\S]){0,400}?\b(?:aria-)?label=\{?\s*["'`]Close["'`]/;
     const offenders = sources()
-      .filter(({ text }) => /<Dialog\b/.test(text) && /<IconButton\b[^>]*label="Close"/.test(text))
+      .filter(({ text }) => /<Dialog\b/.test(text) && closeButton.test(text))
       .map(({ path }) => path)
       .sort();
     expect(offenders).toEqual(pending);
+    // The forms it is meant to catch, and the kit's own call, which it is not.
+    expect(closeButton.test('<IconButton onClick={() => close()} label="Close">')).toBe(true);
+    expect(closeButton.test("<IconButton label={'Close'} size=\"sm\">")).toBe(true);
+    expect(closeButton.test('<button type="button" aria-label="Close" onClick={close}>')).toBe(true);
+    expect(closeButton.test('<DialogHeader title="Settings" onClose={close} />')).toBe(false);
+    expect(closeButton.test('<IconButton label="Expand" /><span label="Close" />')).toBe(false);
   });
 });
