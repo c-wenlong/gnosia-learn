@@ -688,9 +688,13 @@ export async function runIndex(
                   .map((i) => `${i.id}: ${i.detail ?? "refused"}`)
                   .join("; "));
           posterless.push(
-            `${missing.length} ${indexer.source} video(s) have no poster` +
-              (missing.length === 0 ? "" : ` (${missing.join(", ")})`) +
-              (why === "" ? "" : `: ${why}`),
+            missing.length === 0
+              ? // Every video still has its poster: the failure is the step's
+                // own, and saying "0 videos have no poster" would send the
+                // reader looking for a poster to repair.
+                `the ${indexer.source} poster step failed, though every video has a poster: ${failed}`
+              : `${missing.length} ${indexer.source} video(s) have no poster (${missing.join(", ")})` +
+                  (why === "" ? "" : `: ${why}`),
           );
         }
       }
