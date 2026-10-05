@@ -54,9 +54,21 @@ function unwrap(node: ts.Expression): ts.Expression {
   return at;
 }
 
-/** Why an expression is a class list built by hand, or undefined when it is not one. */
+/**
+ * Why an expression is a class list built by hand, or undefined when it is
+ * not one. Each branch of a `? :` and the value side of `&&`, `||` and `??`
+ * is a class list of its own, so each is read too.
+ */
 function handBuilt(node: ts.Expression): string | undefined {
   const at = unwrap(node);
+  if (ts.isConditionalExpression(at)) return handBuilt(at.whenTrue) ?? handBuilt(at.whenFalse);
+  if (ts.isBinaryExpression(at)) {
+    const op = at.operatorToken.kind;
+    if (op === ts.SyntaxKind.AmpersandAmpersandToken) return handBuilt(at.right);
+    if (op === ts.SyntaxKind.BarBarToken || op === ts.SyntaxKind.QuestionQuestionToken) {
+      return handBuilt(at.left) ?? handBuilt(at.right);
+    }
+  }
   if (ts.isTemplateExpression(at)) return "a template string";
   if (ts.isBinaryExpression(at) && at.operatorToken.kind === ts.SyntaxKind.PlusToken) return "a `+`";
   if (ts.isCallExpression(at) && ts.isPropertyAccessExpression(at.expression) && at.expression.name.text === "join") {
@@ -146,6 +158,9 @@ describe("class lists", () => {
         "const g = <img className={cx(layer, h)} />;",
         "const shared = `p-2 ${tight}`;",
         "const i = <ul className={shared} />;",
+        'const j = <p className={selected ? `ring-2 ${tone}` : "ring-0"} />;',
+        "const k = <p className={open && `p-2 ${b}`} />;",
+        'const l = <p className={given ?? "p-2 " + b} />;',
       ].join("\n"),
     );
     expect(hits).toEqual([
@@ -156,6 +171,9 @@ describe("class lists", () => {
       "5: className is a template string",
       "6: layer, used as a class list, is a template string",
       "8: shared, used as a class list, is a template string",
+      "10: className is a template string",
+      "11: className is a template string",
+      "12: className is a `+`",
     ]);
   });
 
@@ -169,6 +187,8 @@ describe("class lists", () => {
         "const f = <a href={`/learn/${slug}`} aria-label={`Open ${title}`} />;",
         "const label = `${count} notes`;",
         'const g = <p className={cx("p-2")}>{label}</p>;',
+        'const h = <p className={open ? "p-2" : NOTE} />;',
+        'const i = <p className={given ?? "p-2"} />;',
       ].join("\n"),
     );
     expect(hits).toEqual([]);
