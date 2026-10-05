@@ -2,7 +2,8 @@ import type { AssetParents } from "@self-learn/catalog/state";
 
 import { moduleHref } from "@/lib/course-path";
 import { assetFileHref, assetHref, conceptHref } from "@/lib/library";
-import { orderedConcepts, pickPlace } from "@/lib/library-source";
+import { latestConversation, orderedConcepts, pickPlace } from "@/lib/library-source";
+import { conversationHref } from "@/lib/studio-view";
 
 /**
  * Which actions a Library row's and card's more menu offers, and in what
@@ -16,7 +17,9 @@ import { orderedConcepts, pickPlace } from "@/lib/library-source";
  * 1. where to go: Open, Open the concept (when it explains one, the first in
  *    the graph's order, the one its source line names), Open in course (when
  *    a course holds it: its module's page, or the course's for an asset on
- *    the course itself);
+ *    the course itself), Locate in conversation (when a studio conversation
+ *    made it: that conversation on `/studio`, the most recent of two,
+ *    Manus's Locate in task);
  * 2. what to do to it: Rename (any asset, #370's `asset_name`), Favorite or
  *    Unfavorite (#372's star; left out when the stars could not be read, since
  *    the menu could not say which), Ask (#374: a video, a note or a diagram the
@@ -32,6 +35,7 @@ export type RowMenuItem =
   | { action: "open"; label: "Open"; href: string }
   | { action: "concept"; label: "Open the concept"; href: string }
   | { action: "course"; label: "Open in course"; href: string }
+  | { action: "conversation"; label: "Locate in conversation"; href: string }
   | { action: "rename"; label: "Rename" }
   | { action: "favorite"; label: "Favorite" | "Unfavorite"; on: boolean }
   | { action: "ask"; label: "Ask"; subject: AskSubject }
@@ -70,6 +74,15 @@ export function assetDownloadHref(id: string): string {
   return `${assetFileHref(id)}?download=1`;
 }
 
+/**
+ * A conversation on `/studio`, open full screen: `/studio?draft=<id>`, the
+ * link the sidebar's conversation rows use (`conversationHref` from outside
+ * the studio).
+ */
+export function studioConversationHref(draftId: string): string {
+  return conversationHref("/studio", draftId);
+}
+
 export function rowMenuItems(input: RowMenuInput): RowMenuSections {
   const go: RowMenuItem[] = [{ action: "open", label: "Open", href: assetHref(input.id) }];
   const [concept] = orderedConcepts(input.parents?.concepts ?? [], input.order);
@@ -81,6 +94,11 @@ export function rowMenuItems(input: RowMenuInput): RowMenuSections {
       label: "Open in course",
       href: place.module === null ? `/courses/${place.course}` : moduleHref(place.course, place.module),
     });
+  }
+
+  const conversation = latestConversation(input.parents);
+  if (conversation !== null) {
+    go.push({ action: "conversation", label: "Locate in conversation", href: studioConversationHref(conversation.id) });
   }
 
   const act: RowMenuItem[] = [{ action: "rename", label: "Rename" }];

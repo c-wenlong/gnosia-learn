@@ -7,6 +7,7 @@ import {
   neighbour,
   openFromSearch,
   parseOpen,
+  previewConversation,
   previewDate,
   previewTarget,
   withOpen,
@@ -180,5 +181,34 @@ describe("previewDate", () => {
 
   it("has no date for an instant that does not parse", () => {
     expect(previewDate("nope", "nope", { now, timeZone }).date).toBeNull();
+  });
+});
+
+describe("previewConversation", () => {
+  const parents = (conversations: { id: string; title: string | null; name: string | null }[]) => ({
+    places: [],
+    concepts: [],
+    conversations: conversations.map((c) => ({ ...c, updatedAt: null })),
+    sessions: [],
+  });
+
+  it("links the conversation that wrote the asset last, by its display name, as the row menu does", () => {
+    expect(
+      previewConversation(
+        parents([
+          { id: "d-new", title: "Planner's title", name: "My name for it" },
+          { id: "d-old", title: "Older", name: null },
+        ]),
+      ),
+    ).toEqual({ href: "/studio?draft=d-new", title: "My name for it" });
+    expect(previewConversation(parents([{ id: "d1", title: null, name: null }]))).toEqual({
+      href: "/studio?draft=d1",
+      title: "Studio conversation",
+    });
+  });
+
+  it("has no tool when no conversation made it, or its parents could not be read", () => {
+    expect(previewConversation(parents([]))).toBeNull();
+    expect(previewConversation(undefined)).toBeNull();
   });
 });

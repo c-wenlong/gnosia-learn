@@ -52,9 +52,16 @@ import {
 import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
 import { dayGroups, editedLabel, timeOfDay } from "@/lib/day-groups";
 import { loadKnowledgeBase } from "@/lib/learner-store";
-import { courseGroups, topicBucket, topicGroups, topicRanks, type RowGroup } from "@/lib/library-groups";
+import {
+  conversationGroups,
+  courseGroups,
+  topicBucket,
+  topicGroups,
+  topicRanks,
+  type RowGroup,
+} from "@/lib/library-groups";
 import { parseOpen } from "@/lib/library-preview";
-import { conceptOrder, rowSource } from "@/lib/library-source";
+import { conceptOrder, latestConversation, rowSource } from "@/lib/library-source";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
 import { ownValue } from "@/lib/own-key";
 import { rowMenuItems } from "@/lib/row-menu";
@@ -96,8 +103,11 @@ export const metadata: Metadata = {
  * layout switch, as `?group=course` (a heading per course, its modules in
  * course order inside, "No course" last) or `?group=topic` (a heading per
  * topic in the Learn map's order, "No topic" last, each list row
- * naming its concept first; `?group=concept` is the same); each row in the
- * one group its source line names (`@/lib/library-groups`). Every row and
+ * naming its concept first; `?group=concept` is the same), or
+ * `?group=conversation` (a heading per studio conversation, newest first, with
+ * the day it was last written to, "No conversation" last, Manus's Group by
+ * task); each row in the one group its source line names
+ * (`@/lib/library-groups`). Every row and
  * card carries a more menu (L5, `RowMenu`), whose items are decided here per
  * asset by `rowMenuItems`, so the stars are read on every visit, not only
  * while Favorites only is on.
@@ -284,25 +294,27 @@ export default async function LibraryPage({
     }
   }
   const topicTitles = new Map(vocabulary.map((t) => [t.slug, t.title]));
-  // Day, the default, or course or topic from the view options (L4).
+  // Day, the default, or course, topic or conversation from the view options (L4).
   const groups: RowGroup<(typeof matching)[number]>[] =
     group === "course"
       ? courseGroups(matching, (row) => parentsOf(row)?.places ?? [], { course })
-      : group === "topic"
-        ? topicGroups(
-            matching,
-            (row) => ({ concepts: parentsOf(row)?.concepts ?? [], topics: row.topics }),
-            {
-              order,
-              topicOf: (slug) => conceptTopic.get(slug) ?? null,
-              rank: topicRanks(vocabulary, conceptTopic, kb.edges ?? []),
-              topic: (slug) => ({
-                title: topicTitles.get(slug) ?? ownValue(titles, slug) ?? slug,
-                bucket: topicBucket(topicConceptBuckets.get(slug) ?? []),
-              }),
-            },
-          )
-        : dayGroups(matching, (row) => row.createdAt, { now, timeZone });
+      : group === "conversation"
+        ? conversationGroups(matching, (row) => latestConversation(parentsOf(row)), { now, timeZone })
+        : group === "topic"
+          ? topicGroups(
+              matching,
+              (row) => ({ concepts: parentsOf(row)?.concepts ?? [], topics: row.topics }),
+              {
+                order,
+                topicOf: (slug) => conceptTopic.get(slug) ?? null,
+                rank: topicRanks(vocabulary, conceptTopic, kb.edges ?? []),
+                topic: (slug) => ({
+                  title: topicTitles.get(slug) ?? ownValue(titles, slug) ?? slug,
+                  bucket: topicBucket(topicConceptBuckets.get(slug) ?? []),
+                }),
+              },
+            )
+          : dayGroups(matching, (row) => row.createdAt, { now, timeZone });
   // The more menu's items, per row (L5).
   const menuOf = (row: (typeof matching)[number]) =>
     rowMenuItems({
@@ -559,7 +571,8 @@ const ARRIVE = "animate-fade-in motion-reduce:animate-none";
 /**
  * One group's rows under its heading, Manus's `date-heading`: the day ("4 Oct",
  * the year when it is not this one), the course ("CS3230" and its title in
- * grey) or the topic (with its mastery dot), and the count in grey, "(5)".
+ * grey), the topic (with its mastery dot) or the conversation (the day it was
+ * last written to in grey), and the count in grey, "(5)".
  * The heading is the shell's row height (`--shell-row`); in the list it is
  * inset by the row's start padding (`--shell-row-pad`) so it lines up with
  * the glyphs under it, and in the grid it sits flush with the cards. A course

@@ -23,6 +23,7 @@ const ICONS: Record<RowMenuItem["action"], GlyphName> = {
   open: "next",
   concept: "concepts",
   course: "open",
+  conversation: "compose",
   rename: "rename",
   favorite: "star",
   ask: "sparkle",
@@ -37,7 +38,7 @@ const ICONS: Record<RowMenuItem["action"], GlyphName> = {
  * `row-menu`). The page decides the items per asset (`rowMenuItems` in
  * `@/lib/row-menu`); this draws them and does what they say.
  *
- * - **Open, Open the concept, Open in course** are links.
+ * - **Open, Open the concept, Open in course, Locate in conversation** are links.
  * - **Rename** opens a small dialog with the name in a field, saved through
  *   #370's `POST /api/learner/asset-name`, the asset page's own rename; an
  *   empty field gives the asset back the name it came with.
@@ -128,6 +129,7 @@ export function RowMenu({
       case "open":
       case "concept":
       case "course":
+      case "conversation":
         return (
           <MenuItem key={entry.action} icon={icon} href={entry.href}>
             {entry.label}

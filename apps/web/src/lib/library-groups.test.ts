@@ -1,7 +1,7 @@
-import type { AssetPlace } from "@self-learn/catalog/state";
+import type { AssetConversation, AssetPlace } from "@self-learn/catalog/state";
 import { describe, expect, it } from "vitest";
 
-import { courseGroups, NO_GROUP, topicBucket, topicGroups, topicRanks, WHOLE_COURSE } from "./library-groups";
+import { conversationGroups, courseGroups, NO_GROUP, topicBucket, topicGroups, topicRanks, WHOLE_COURSE } from "./library-groups";
 import { conceptOrder } from "./library-source";
 
 const place = (over: Partial<AssetPlace>): AssetPlace => ({
@@ -201,5 +201,64 @@ describe("topicBucket", () => {
     expect(topicBucket(["mastered", "untouched"])).toBe("learning");
     expect(topicBucket(["learning"])).toBe("learning");
     expect(topicBucket([])).toBeNull();
+  });
+});
+
+describe("conversationGroups", () => {
+  const conversation = (over: Partial<AssetConversation>): AssetConversation => ({
+    id: "d1",
+    title: null,
+    name: null,
+    updatedAt: "2026-10-04T10:00:00.000Z",
+    ...over,
+  });
+  const NOW = new Date("2026-10-05T06:00:00Z");
+  const ZONE = "Asia/Singapore";
+
+  it("puts each row under its conversation, newest first, named by the shared rule and dated in the zone", () => {
+    const renamed = conversation({ id: "d-old", title: "Planner's words", name: "Proof picture", updatedAt: "2026-10-01T09:00:00.000Z" });
+    const titled = conversation({ id: "d-new", title: "Master theorem, drawn", updatedAt: "2026-10-04T17:30:00.000Z" });
+    const lastYear = conversation({ id: "d-2025", title: null, updatedAt: "2025-12-28T03:00:00.000Z" });
+    const rows = [
+      { id: "a", made: renamed },
+      { id: "b", made: titled },
+      { id: "note", made: null },
+      { id: "c", made: renamed },
+      { id: "d", made: lastYear },
+    ];
+    const groups = conversationGroups(rows, (row) => row.made, { now: NOW, timeZone: ZONE });
+    expect(groups.map((g) => [g.key, g.label, g.detail, g.rows.map((r) => r.id)])).toEqual([
+      // 17:30 UTC on the 4th is the 5th in Singapore.
+      ["conversation:d-new", "Master theorem, drawn", "5 Oct", ["b"]],
+      ["conversation:d-old", "Proof picture", "1 Oct", ["a", "c"]],
+      // No name and no title, and another year.
+      ["conversation:d-2025", "Studio conversation", "28 Dec 2025", ["d"]],
+      [NO_GROUP, "No conversation", undefined, ["note"]],
+    ]);
+  });
+
+  it("puts a conversation whose instant does not read after the dated ones, by id, with no day", () => {
+    const rows = [
+      { id: "x", made: conversation({ id: "z", updatedAt: null }) },
+      { id: "y", made: conversation({ id: "m", updatedAt: "not a date" }) },
+      { id: "w", made: conversation({ id: "dated" }) },
+    ];
+    const groups = conversationGroups(rows, (row) => row.made, { now: NOW, timeZone: ZONE });
+    expect(groups.map((g) => [g.key, g.detail])).toEqual([
+      ["conversation:dated", "4 Oct"],
+      ["conversation:m", undefined],
+      ["conversation:z", undefined],
+    ]);
+  });
+
+  it("orders two conversations written at the same instant by id, and leaves out an empty last group", () => {
+    const rows = [
+      { id: "1", made: conversation({ id: "b" }) },
+      { id: "2", made: conversation({ id: "a" }) },
+    ];
+    expect(conversationGroups(rows, (row) => row.made, { now: NOW, timeZone: ZONE }).map((g) => g.key)).toEqual([
+      "conversation:a",
+      "conversation:b",
+    ]);
   });
 });
