@@ -269,6 +269,8 @@ function MenuSection({ divider, children }: { divider: boolean; children: ReactN
  * than unmounted (the kit `Dialog` opens on mount and closes on unmount), so
  * the thread `AskPanel` holds in its state, and a reply still on its way, are
  * there when it is opened again, as the asset page's `Collapse` keeps them.
+ * Its `closing` follows `open` rather than `usePresence`'s `leaving`, so its
+ * fade ends at nothing and stays there until it has shut.
  */
 function RowDialog({
   open,
@@ -312,7 +314,12 @@ function RowDialog({
       ref={ref}
       label={label}
       size={size}
-      closing={leaving}
+      // A kept dialog is shut by the effect above, which runs after the
+      // commit that ends `leaving` and can come a frame after its paint. Off
+      // `leaving`, that frame shows it still open in its open style, a step
+      // back from the end of its fade; off `open`, it keeps its closed style
+      // until it has shut, and drops it only to open again.
+      closing={keep ? !open : leaving}
       opener={button}
       onClose={() => {
         if (open) onClose();

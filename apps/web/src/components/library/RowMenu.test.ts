@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { rowMenuItems } from "@/lib/row-menu";
 
 import { RowMenu } from "./RowMenu";
@@ -11,7 +12,8 @@ import { RowMenu } from "./RowMenu";
  * The Library row's menu doing what its items say: Copy link writes the asset
  * page's absolute URL and says "Copied", Favorite writes the star and
  * refreshes the page, Mark read appends the event, Download is the file
- * route's `?download=1`, and each says what happened beside the button.
+ * route's `?download=1`, and each says what happened beside the button. Ask's
+ * dialog, kept between showings, fades out to nothing and shuts there.
  */
 
 const refresh = vi.hoisted(() => vi.fn());
@@ -23,6 +25,14 @@ vi.mock("next/link", () => ({
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom's dialog does not open itself; this opens and shuts it as a browser's does.
+  const proto = HTMLDialogElement.prototype as unknown as { showModal: () => void; close: () => void };
+  proto.showModal ??= function (this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  };
+  proto.close ??= function (this: HTMLDialogElement) {
+    this.removeAttribute("open");
+  };
 });
 
 const mounted: Array<() => void> = [];
@@ -42,6 +52,7 @@ beforeEach(() => {
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const ID = "note:learn/concepts/os/tlb.md";
@@ -137,5 +148,67 @@ describe("RowMenu", () => {
     );
     expect(download?.getAttribute("href")).toBe("/api/assets/note%3Alearn%2Fconcepts%2Fos%2Ftlb.md/file?download=1");
     expect(download?.hasAttribute("download")).toBe(true);
+  });
+});
+
+describe("RowMenu's Ask dialog", () => {
+  it("keeps its closed style until it has shut, so the fade never steps back, and opens again on the same thread", async () => {
+    vi.useFakeTimers();
+    const { choose, container, button } = mount();
+    await choose("Ask");
+    const dialog = container.querySelector<HTMLDialogElement>('dialog[aria-label="Ask about The TLB"]');
+    if (dialog === null) throw new Error("no Ask dialog");
+    expect(dialog.open).toBe(true);
+    expect(dialog.hasAttribute("data-closing")).toBe(false);
+    const draft = dialog.querySelector("textarea");
+    if (draft === null) throw new Error("no Ask field");
+    // Typed, as a person would: the field is React's, so through its setter and an input event.
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(draft, "kept");
+      draft.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    // What the dialog looked like at the moment it left the top layer. A
+    // dialog shut after its closed style was dropped paints one frame of its
+    // open style first: the fade going 0, then back up, then gone.
+    const atShut: boolean[] = [];
+    const shut = dialog.close.bind(dialog);
+    dialog.close = () => {
+      atShut.push(dialog.hasAttribute("data-closing"));
+      shut();
+    };
+
+    act(() => {
+      dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+    expect(dialog.hasAttribute("data-closing")).toBe(true);
+    act(() => vi.advanceTimersByTime(DIALOG_CLOSE_MS));
+    expect(atShut).toEqual([true]);
+    expect(dialog.open).toBe(false);
+    expect(dialog.hasAttribute("data-closing")).toBe(true);
+    expect(document.activeElement).toBe(button);
+
+    // Opened again: the same element, its open style back, the draft still in it.
+    await choose("Ask");
+    expect(container.querySelector('dialog[aria-label="Ask about The TLB"]')).toBe(dialog);
+    expect(dialog.open).toBe(true);
+    expect(dialog.hasAttribute("data-closing")).toBe(false);
+    expect(dialog.querySelector("textarea")?.value).toBe("kept");
+  });
+
+  it("shuts at once when motion is reduced", async () => {
+    document.documentElement.dataset.motion = "reduce";
+    try {
+      const { choose, container, button } = mount();
+      await choose("Ask");
+      const dialog = container.querySelector<HTMLDialogElement>('dialog[aria-label="Ask about The TLB"]');
+      act(() => {
+        dialog?.dispatchEvent(new Event("cancel", { cancelable: true }));
+      });
+      expect(dialog?.open).toBe(false);
+      expect(document.activeElement).toBe(button);
+    } finally {
+      delete document.documentElement.dataset.motion;
+    }
   });
 });
