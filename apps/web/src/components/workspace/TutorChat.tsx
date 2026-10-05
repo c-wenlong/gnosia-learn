@@ -596,11 +596,11 @@ export function TutorChat({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
-      {/* From 900px up the panel is only as tall as the viewport leaves it, so
+      {/* Where the panels fit (`ws:`) the panel is only as tall as the viewport leaves it, so
           the thread gives up height before the chips and the composer do. */}
       <div
         ref={threadRef}
-        className="relative -mx-1 flex min-h-[280px] flex-1 flex-col gap-4 overflow-y-auto px-1 py-1 min-[900px]:min-h-32"
+        className="relative -mx-1 flex min-h-[280px] flex-1 flex-col gap-4 overflow-y-auto px-1 py-1 ws:min-h-32"
         aria-live="polite"
         aria-busy={busy}
       >

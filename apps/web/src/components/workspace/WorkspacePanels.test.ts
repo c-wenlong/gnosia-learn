@@ -3,6 +3,8 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ShellContext, type ShellControls } from "@/components/shell/shell-context";
+
 import { WorkspacePanels } from "./WorkspacePanels";
 
 beforeAll(() => {
@@ -28,10 +30,10 @@ function mount(element: ReactElement) {
   return host;
 }
 
-/** Hidden below 900px by a class on the element or any ancestor inside `host`. */
+/** Hidden where the panels stack behind tabs (`ws-tabs:`) by a class on the element or any ancestor inside `host`. */
 function hiddenOnPhone(el: Element, host: Element): boolean {
   for (let node: Element | null = el; node !== null && node !== host; node = node.parentElement) {
-    if (node.classList.contains("max-[899px]:hidden")) return true;
+    if (node.classList.contains("ws-tabs:hidden")) return true;
   }
   return false;
 }
@@ -54,7 +56,7 @@ describe("WorkspacePanels on a phone", () => {
     const tutor = host.querySelector('section[aria-label="Tutor"]') as HTMLElement;
     const title = tutor.querySelector("h2") as HTMLElement;
     expect(title.textContent).toBe("Tutor");
-    expect(title.classList.contains("max-[899px]:sr-only")).toBe(true);
+    expect(title.classList.contains("ws-tabs:sr-only")).toBe(true);
     const style = tutor.querySelector('[data-testid="style"]') as HTMLElement;
     expect(hiddenOnPhone(style, host)).toBe(false);
   });
@@ -69,10 +71,10 @@ describe("WorkspacePanels on a phone", () => {
 });
 
 describe("WorkspacePanels folding a side panel", () => {
-  /** A window 900px or wider, where the panels sit side by side. */
+  /** A window wide enough for the panels side by side beside the open sidebar (`ws:`). */
   function wideWindow() {
     vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(min-width: 900px)",
+      matches: query === "(min-width: 1160px)",
       media: query,
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
@@ -101,8 +103,8 @@ describe("WorkspacePanels folding a side panel", () => {
     const note = folder(host, "Note & sources");
     expect(note.dataset.folded).toBe("true");
     expect(note.hasAttribute("inert")).toBe(true);
-    expect(note.classList.contains("min-[900px]:opacity-0")).toBe(true);
-    expect(note.classList.contains("min-[900px]:invisible")).toBe(true);
+    expect(note.classList.contains("ws:opacity-0")).toBe(true);
+    expect(note.classList.contains("ws:invisible")).toBe(true);
     expect(rail.dataset.rail).toBe("shown");
     expect(rail.hasAttribute("inert")).toBe(false);
   });
@@ -120,11 +122,11 @@ describe("WorkspacePanels folding a side panel", () => {
     wideWindow();
     const host = panels();
     const grid = folder(host, "Note & sources").closest(".grid") as HTMLElement;
-    expect(grid.className).toContain("min-[900px]:transition-[grid-template-columns]");
+    expect(grid.className).toContain("ws:transition-[grid-template-columns]");
     expect(grid.className).toContain("motion-reduce:transition-none");
     act(() => button(host, "Collapse Note & sources").click());
-    expect(grid.className).toContain("min-[900px]:[--note-w:48px]");
-    expect(folder(host, "Note & sources").className).toContain("min-[900px]:w-[var(--note-open)]");
+    expect(grid.className).toContain("ws:[--note-w:48px]");
+    expect(folder(host, "Note & sources").className).toContain("ws:w-[var(--note-open)]");
   });
 
   it("never leaves a folded panel inert on a phone, where there is no rail to open it", () => {
@@ -140,7 +142,7 @@ describe("WorkspacePanels tabs on a phone", () => {
     const host = panels();
     const cells = [...host.querySelectorAll("[data-panel]")] as HTMLElement[];
     expect(cells.map((c) => c.dataset.panel)).toEqual(["note", "tutor", "studio"]);
-    for (const cell of cells) expect(cell.className).toContain("max-[899px]:starting:opacity-0");
+    for (const cell of cells) expect(cell.className).toContain("ws-tabs:starting:opacity-0");
     expect(cells.find((c) => c.dataset.active === "true")?.dataset.panel).toBe("tutor");
 
     const note = [...host.querySelectorAll('[aria-label="Workspace panels"] button')].find((b) => b.textContent === "Note & sources");
@@ -168,9 +170,9 @@ describe("WorkspacePanels tabs on a phone", () => {
     expect((host.querySelector('[data-active="true"]') as HTMLElement).dataset.panel).toBe("studio");
   });
 
-  it("drops the panels' tab roles from 900px up, where they sit side by side", () => {
+  it("drops the panels' tab roles where they sit side by side", () => {
     vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(min-width: 900px)",
+      matches: query === "(min-width: 1160px)",
       media: query,
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
@@ -178,6 +180,83 @@ describe("WorkspacePanels tabs on a phone", () => {
     const host = panels();
     expect(host.querySelector('[role="tabpanel"]')).toBeNull();
     expect(host.querySelectorAll("[data-panel][id]")).toHaveLength(3);
+  });
+
+  it("puts them side by side at a narrower window once the app sidebar is folded to its rail", () => {
+    // A 1000px window: too narrow beside the open sidebar, wide enough beside the rail.
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(min-width: 960px)",
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    const beside = (collapsed: boolean) =>
+      mount(
+        createElement(
+          ShellContext.Provider,
+          { value: { collapsed } as ShellControls },
+          createElement(WorkspacePanels, {
+            note: createElement("p", null, "note body"),
+            tutor: createElement("p", null, "tutor body"),
+            studio: createElement("p", null, "studio body"),
+            initialPanel: "tutor",
+          }),
+        ),
+      );
+    expect(beside(false).querySelectorAll('[role="tabpanel"]')).toHaveLength(3);
+    expect(beside(true).querySelector('[role="tabpanel"]')).toBeNull();
+  });
+
+  it("follows a fold of the sidebar on the same page: tab roles and a folded panel's inert both move", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(min-width: 960px)",
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    vi.stubGlobal("requestAnimationFrame", (task: FrameRequestCallback) => {
+      task(0);
+      return 0;
+    });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const draw = (collapsed: boolean) =>
+      act(() =>
+        root.render(
+          createElement(
+            ShellContext.Provider,
+            { value: { collapsed } as ShellControls },
+            createElement(WorkspacePanels, {
+              note: createElement("p", null, "note body"),
+              tutor: createElement("p", null, "tutor body"),
+              studio: createElement("p", null, "studio body"),
+              initialPanel: "tutor",
+            }),
+          ),
+        ),
+      );
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    const note = () => (host.querySelector('section[aria-label="Note & sources"]') as HTMLElement).parentElement as HTMLElement;
+
+    // Folded to the rail at 1000px: side by side, so the note can fold away, and is inert while it is.
+    draw(true);
+    expect(host.querySelector('[role="tabpanel"]')).toBeNull();
+    act(() => (host.querySelector('button[aria-label="Collapse Note & sources"]') as HTMLButtonElement).click());
+    expect(note().hasAttribute("inert")).toBe(true);
+
+    // The sidebar opens on the same page: tabs again, and no panel is left inert behind one.
+    draw(false);
+    expect(host.querySelectorAll('[role="tabpanel"]')).toHaveLength(3);
+    expect(note().hasAttribute("inert")).toBe(false);
+
+    // Folded once more: side by side, and the note's own fold is kept.
+    draw(true);
+    expect(host.querySelector('[role="tabpanel"]')).toBeNull();
+    expect(note().hasAttribute("inert")).toBe(true);
   });
 });
 

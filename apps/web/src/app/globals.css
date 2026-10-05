@@ -42,6 +42,38 @@
 }
 
 /*
+ * `ws:` is "the concept workspace's three panels fit side by side": the
+ * space beside the app sidebar, not the window, decides it. The panels need
+ * 250 + 270 + 32px of gaps, and the tutor between them at least 300, so
+ * 852px of content, plus main's 48px of padding: 1160px of window with the
+ * 260px sidebar open, 960px with it folded to its 60px rail. `ShellFrame`
+ * writes `data-sidebar` on the shell. `ws-tabs:` is the rest, where the
+ * panels stack behind tabs and the page scrolls. `WorkspacePanels`' `useWide` reads the same two
+ * widths, so script and styles agree.
+ */
+@custom-variant ws {
+  @media (min-width: 1160px) {
+    @slot;
+  }
+  @media (min-width: 960px) {
+    &:where([data-sidebar="rail"], [data-sidebar="rail"] *) {
+      @slot;
+    }
+  }
+}
+/* Its exact complement: the panels stack behind tabs. */
+@custom-variant ws-tabs {
+  @media (max-width: 959.98px) {
+    @slot;
+  }
+  @media (min-width: 960px) and (max-width: 1159.98px) {
+    &:where(:not([data-sidebar="rail"], [data-sidebar="rail"] *)) {
+      @slot;
+    }
+  }
+}
+
+/*
  * The hi-fi palette. The starting values and their provenance are `TOKENS`
  * in docs/design/kit/hifi.py and the token table in docs/design/DESIGN.md,
  * which record the hi-fi frames as drawn; where the app has since moved a

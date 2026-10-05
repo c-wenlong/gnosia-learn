@@ -113,10 +113,10 @@ describe("PageLoading, workspace", () => {
     expect(html).toMatch(/^<p role="status" class="sr-only">Opening the concept<\/p><div data-layout="workspace" aria-busy="true"/);
     const root = /<div data-layout="workspace" aria-busy="true" class="([^"]*)"/.exec(html)![1]!.split(" ");
     expect(root).toEqual(expect.arrayContaining([...WORKSPACE_ROOT.split(" "), "animate-fade-in-late"]));
-    // Three panels side by side from 900px up, one under the tab row below it.
-    expect(html).toContain("min-[900px]:grid-cols-[250px_minmax(0,1fr)_270px]");
+    // Three panels side by side where they fit (`ws:`), one under the tab row where not.
+    expect(html).toContain("ws:grid-cols-[250px_minmax(0,1fr)_270px]");
     expect(html.match(/border-b border-hair/g)).toHaveLength(3);
-    expect(html.match(/max-\[899px\]:hidden/g)).toHaveLength(2);
+    expect(html.match(/ws-tabs:hidden/g)).toHaveLength(2);
   });
 });
 
