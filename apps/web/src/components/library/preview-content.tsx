@@ -7,11 +7,11 @@ import { FavoriteButton } from "@/components/library/AssetActions";
 import { AssetBody } from "@/components/library/AssetBody";
 import { loadAssetBody } from "@/components/library/asset-body-data";
 import { MarkWatched } from "@/components/library/MarkWatched";
-import { loadAssetDetail, loadFavorite, loadPlayback } from "@/lib/asset-library";
+import { loadAssetDetail, loadAssetParents, loadFavorite, loadPlayback } from "@/lib/asset-library";
 import { dayKey } from "@/lib/days";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { assetHref, conceptHref, explainedConcepts } from "@/lib/library";
-import { parseOpen, previewDate, type PreviewHeader } from "@/lib/library-preview";
+import { parseOpen, previewConversation, previewDate, type PreviewHeader } from "@/lib/library-preview";
 import { appTimeZone } from "@/lib/time-zone";
 
 /** What the previewer is handed for one asset. */
@@ -46,11 +46,12 @@ export async function loadPreview(requested: string): Promise<PreviewAnswer> {
   const id = typeof requested === "string" ? parseOpen(requested) : null;
   if (id === null) return { state: "missing", id: String(requested) };
 
-  const [detail, { kb }, playback, favorite] = await Promise.all([
+  const [detail, { kb }, playback, favorite, parents] = await Promise.all([
     loadAssetDetail(id),
     loadKnowledgeBase(),
     loadPlayback(id),
     loadFavorite(id),
+    loadAssetParents(id),
   ]);
   const { asset, derivations, reachable, notes, concepts } = detail;
   if (asset === null) return { state: reachable ? "missing" : "unreachable", id };
@@ -70,6 +71,7 @@ export async function loadPreview(requested: string): Promise<PreviewAnswer> {
     date: when.date,
     dateTime: when.dateTime,
     concept: first === undefined ? null : { href: conceptHref(first.slug), title: first.title },
+    conversation: previewConversation(parents),
     download: body.servable ? { href: body.fileHref, filename: body.downloadName } : null,
     page: assetHref(asset.id),
     wide: asset.kind === "video" || asset.kind === "diagram_svg",

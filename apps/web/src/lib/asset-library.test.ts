@@ -48,7 +48,10 @@ const notes = ["graphs", "constructor", "__proto__"].map((slug) => ({
 
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
 
+const assetParents = vi.hoisted(() => vi.fn(async (): Promise<Record<string, unknown>> => ({})));
+
 vi.mock("@self-learn/catalog/state", () => ({
+  assetParents,
   listAssets: async (_db: unknown, filter: { ids?: string[]; kind?: string } = {}) =>
     filter.kind === "note"
       ? notes
@@ -77,9 +80,33 @@ vi.mock("@self-learn/catalog/state", () => ({
 
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
-const { readLibrary, readAssetDetail, readSearchText, searchableText } = await import(
+const { loadAssetParents, readLibrary, readAssetDetail, readSearchText, searchableText } = await import(
   "@/lib/asset-library"
 );
+
+describe("loadAssetParents, for the previewer's Conversation tool", () => {
+  const made = { places: [], concepts: [], conversations: [{ id: "d1", title: "T", name: null, updatedAt: null }], sessions: [] };
+
+  it("asks for the one asset, as the owner, and answers its parents", async () => {
+    assetParents.mockResolvedValueOnce({ "manimkc:out/x/y.mp4": made });
+    expect(await loadAssetParents("manimkc:out/x/y.mp4")).toEqual(made);
+    const call = assetParents.mock.calls.at(-1) as unknown as [unknown, string[], { owner: string }];
+    expect(call[1]).toEqual(["manimkc:out/x/y.mp4"]);
+    expect(call[2].owner).toBe("local");
+  });
+
+  it("answers undefined for an asset with no parent, and for one named like a prototype member", async () => {
+    assetParents.mockResolvedValueOnce({});
+    expect(await loadAssetParents("manimkc:out/x/y.mp4")).toBeUndefined();
+    assetParents.mockResolvedValueOnce({});
+    expect(await loadAssetParents("constructor")).toBeUndefined();
+  });
+
+  it("answers undefined when the read fails, costing the tool and not the panel", async () => {
+    assetParents.mockRejectedValueOnce(new Error("parents unavailable"));
+    expect(await loadAssetParents("manimkc:out/x/y.mp4")).toBeUndefined();
+  });
+});
 
 describe("a failing topic-title lookup", () => {
   it("still returns the rows, and reports the catalog as reachable", async () => {

@@ -58,7 +58,10 @@ export function AssetRow({
   /**
    * The page's grouping. Under `topic` the heading is the topic, so the
    * concept is what tells the rows apart, and the line names it first, the
-   * place after it; under the day and the course the place leads.
+   * place after it; under the day and the course the place leads. Under
+   * `conversation` the heading is the conversation, so the line names the
+   * concept first too, and never the conversation again: a row with neither
+   * a concept nor a course names its topic.
    */
   grouping?: LibraryGroup;
   /** The topic it is filed under, as a label: the line for an asset with no parent. */
@@ -81,11 +84,13 @@ export function AssetRow({
         ? "font-medium text-text2"
         : "font-mono text-[13px] font-medium text-text2";
 
+  const said = grouping === "conversation" && source?.origin?.kind === "conversation" ? null : source;
+  const conceptFirst = grouping === "topic" || grouping === "conversation";
   const line =
-    sourceLine(source, name.text, grouping === "topic") ?? (topic === undefined ? null : <span className="min-w-0 truncate">{topic}</span>);
+    sourceLine(said, name.text, conceptFirst) ?? (topic === undefined ? null : <span className="min-w-0 truncate">{topic}</span>);
   // Both lines truncate, and the title's stretched link covers the row, so
   // the link's tooltip carries the whole of each.
-  const tooltip = [name.text, sourceText(source, name.text) ?? topic].filter((t) => t !== undefined && t !== "").join("\n");
+  const tooltip = [name.text, sourceText(said, name.text) ?? topic].filter((t) => t !== undefined && t !== "").join("\n");
 
   return (
     <div
@@ -160,7 +165,7 @@ export function sourceText(source: RowSource | null, title: string): string | un
  * concept alone with its dot, or a conversation's or session's title. A note
  * explains its own concept, so a concept named exactly as the row's title is
  * not printed again; its dot carries the mastery on its own label, as the
- * card's does. With `conceptFirst` (grouped by topic) the concept leads and
+ * card's does. With `conceptFirst` (grouped by topic or conversation) the concept leads and
  * keeps the room, and the place follows it: "● Master theorem · CS3230 · Week 3".
  */
 function sourceLine(source: RowSource | null, title: string, conceptFirst = false): ReactNode | null {
