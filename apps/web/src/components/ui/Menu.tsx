@@ -5,6 +5,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -24,8 +25,11 @@ import { tabKeyIndex } from "./roving";
 const TYPEAHEAD_RESET_MS = 700;
 
 interface MenuControls {
-  /** Close the menu; `refocus` puts focus back on its button. */
-  close: (refocus?: boolean) => void;
+  /**
+   * Close the menu; `refocus` puts focus back on its button. `after` runs
+   * once the close has rendered, and then focus is left for it to place.
+   */
+  close: (refocus?: boolean, after?: () => void) => void;
 }
 
 const MenuContext = createContext<MenuControls | null>(null);
@@ -66,6 +70,10 @@ function useMenu(): MenuControls {
  * does not reach the elements around it (`stopPropagation`), so a menu on a
  * row that opens something on a press (the Library's previewer) is not also
  * a press on the row.
+ *
+ * **Out of reach.** `disabled` closes an open list and keeps it shut while
+ * the button cannot be reached: the sidebar's row menus while it is folded
+ * to its rail.
  */
 export function Menu({
   label,
@@ -74,6 +82,7 @@ export function Menu({
   triggerClassName,
   align = "end",
   minWidth = 192,
+  disabled = false,
   onOpenChange,
   children,
 }: {
@@ -87,6 +96,8 @@ export function Menu({
   align?: "start" | "end";
   /** The list's least width in px: 192 for a short menu, 240 for a row's. */
   minWidth?: number;
+  /** Out of reach (inert, hidden): an open list closes, and the button does not open it. */
+  disabled?: boolean;
   onOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }) {
@@ -96,6 +107,8 @@ export function Menu({
   // Which item opening focuses: the first, the last (Up on the button), or the checked one.
   const opening = useRef<"first" | "last">("first");
   const typed = useRef({ buffer: "", at: 0 });
+  // An item's `afterClose`, run once the list has closed.
+  const after = useRef<(() => void) | null>(null);
   const id = useId();
 
   const setOpen = useCallback(
@@ -107,12 +120,29 @@ export function Menu({
   );
 
   const close = useCallback(
-    (refocus = true) => {
+    (refocus = true, then?: () => void) => {
       setOpen(false);
-      if (refocus) button.current?.focus();
+      if (then !== undefined) after.current = then;
+      else if (refocus) button.current?.focus();
     },
     [setOpen],
   );
+
+  // An item's hand-off, once the close has rendered: whatever it opens (an
+  // inline field, a dialog) takes the focus from a list that is going.
+  useLayoutEffect(() => {
+    if (open || after.current === null) return;
+    const then = after.current;
+    after.current = null;
+    then();
+  }, [open]);
+
+  // Out of reach: an open list shuts while rendering, so it never shows a
+  // frame open on an inert button, and the owner hears that it did.
+  if (disabled && open) setOpenState(false);
+  useEffect(() => {
+    if (disabled) onOpenChange?.(false);
+  }, [disabled, onOpenChange]);
 
   const items = () => [...(list.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])];
 
@@ -134,6 +164,7 @@ export function Menu({
   };
 
   const onButtonKey = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (disabled) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       show(event.key === "ArrowUp" ? "last" : "first");
@@ -191,7 +222,7 @@ export function Menu({
           aria-controls={open ? listId : undefined}
           aria-label={label}
           title={label}
-          onClick={() => (open ? close(false) : show("first"))}
+          onClick={() => (open ? close(false) : !disabled && show("first"))}
           onKeyDown={onButtonKey}
           className={triggerClassName}
         >
@@ -228,6 +259,10 @@ const ITEM = menuRowClasses({ className: "shrink-0 leading-5 whitespace-nowrap" 
  * returns `"keep"`, for an item that says something in place first
  * ("Copied") and closes itself after.
  *
+ * `afterClose` runs once the menu has closed, and the focus is not put back
+ * on the button: the item hands it on, to an inline field that takes it (the
+ * sidebar's Rename) or a dialog.
+ *
  * `checked` makes it one of a set of choices (`menuitemradio`): a tick at the
  * right of the chosen one, and `aria-checked` for a screen reader.
  */
@@ -237,6 +272,7 @@ export function MenuItem({
   download,
   checked,
   onSelect,
+  afterClose,
   children,
 }: {
   icon?: GlyphName;
@@ -245,6 +281,8 @@ export function MenuItem({
   download?: boolean;
   checked?: boolean;
   onSelect?: () => void | "keep";
+  /** Runs once the menu has closed, the focus left for it to place. */
+  afterClose?: () => void;
   children: ReactNode;
 }) {
   const { close } = useMenu();
@@ -266,7 +304,7 @@ export function MenuItem({
     const kept = onSelect?.();
     if (kept === "keep") return;
     // A link navigates (or saves) on its own; the menu just goes.
-    close(!(href !== undefined && !download && !event.defaultPrevented));
+    close(!(href !== undefined && !download && !event.defaultPrevented), afterClose);
   };
   const role = radio ? "menuitemradio" : "menuitem";
   if (href !== undefined && download) {

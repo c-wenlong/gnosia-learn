@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
-import { cx, FIELD_TEXT, MENU_PANEL, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, STATUS_TEXT } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
-import { Glyph, type GlyphName } from "@/components/ui/Glyph";
-import { Popover } from "@/components/ui/Popover";
+import { Glyph } from "@/components/ui/Glyph";
+import { Menu, MenuItem } from "@/components/ui/Menu";
 import { isCurrentRow } from "@/lib/nav";
 import type { RecentChange } from "@/lib/recent-client";
 import {
@@ -61,8 +61,10 @@ import { useRecent } from "./use-recent";
  *
  * Each section label is 13px grey and sticks to the top of the sidebar's
  * scroller while its section scrolls under it. A row's more button appears on
- * hover or focus (always, on a screen with no hover), and its menu has Pin,
- * Rename for a conversation and Open in course for a module. There is no
+ * hover or focus (always, on a screen with no hover), and its menu, the kit
+ * `Menu` the Library's rows use, has Pin, Rename for a conversation and Open
+ * in course for a module. Rename hands the focus to a field in the row once
+ * the menu has gone (`afterClose`). There is no
  * Archive: the studio keeps no archive, and its Start over closes a
  * conversation for good, which a sidebar menu should not do in one press.
  *
@@ -390,8 +392,9 @@ function RecentRow({
 }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const more = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const kind = RECENT_GLYPHS[item.kind];
+  const open = menu && !rail;
 
   if (renaming) {
     return (
@@ -399,7 +402,8 @@ function RecentRow({
         title={item.title}
         onDone={(name) => {
           setRenaming(false);
-          requestAnimationFrame(() => more.current?.focus());
+          // Back to the more button once the row is drawn again.
+          requestAnimationFrame(() => box.current?.querySelector<HTMLButtonElement>("button[aria-haspopup]")?.focus());
           // Undefined is Escape. A blank field takes the name off; an unchanged one writes nothing.
           if (name === undefined || name === item.title) return;
           onRename?.(name);
@@ -409,7 +413,7 @@ function RecentRow({
   }
 
   return (
-    <div className="group/row relative">
+    <div ref={box} className="group/row relative">
       <Link
         href={href}
         scroll={item.kind === "draft" ? false : undefined}
@@ -421,7 +425,7 @@ function RecentRow({
         className={cx(
           ROW,
           rowFill(current),
-          menu ? "pe-9" : "group-focus-within/row:pe-9 group-hover/row:pe-9 [@media(hover:none)]:pe-9",
+          open ? "pe-9" : "group-focus-within/row:pe-9 group-hover/row:pe-9 [@media(hover:none)]:pe-9",
         )}
       >
         <Glyph name={kind.glyph} size={18} className="text-text2" />
@@ -432,139 +436,51 @@ function RecentRow({
         {briefed && <span aria-hidden className={cx("size-1.5 shrink-0 rounded-full bg-accent", FADE, rail ? "opacity-0" : FADE_IN)} />}
       </Link>
       <div inert={rail} className="absolute inset-y-0 right-1 flex items-center">
-        <button
-          ref={more}
-          type="button"
-          aria-label={`More for ${item.title}`}
-          aria-expanded={menu}
-          aria-haspopup="true"
-          onClick={() => setMenu((v) => !v)}
-          className={cx(
+        {/* The kit menu button, as the Library's rows have: its clicks and keys
+            stay inside it, so the row's link never hears them. */}
+        <Menu
+          label={`More for ${item.title}`}
+          disabled={rail}
+          onOpenChange={setMenu}
+          trigger={
+            <svg aria-hidden viewBox="0 0 20 20" className="size-[18px]" fill="currentColor">
+              <circle cx="5" cy="10" r="1.4" />
+              <circle cx="10" cy="10" r="1.4" />
+              <circle cx="15" cy="10" r="1.4" />
+            </svg>
+          }
+          triggerClassName={cx(
             "inline-flex size-7 items-center justify-center rounded-md text-text2 transition-[opacity,background-color] duration-150 hover:bg-surface2 hover:text-text motion-reduce:transition-none",
             "focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-            rail ? "opacity-0" : menu ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
+            rail ? "opacity-0" : open ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
           )}
         >
-          <svg aria-hidden viewBox="0 0 20 20" className="size-[18px]" fill="currentColor">
-            <circle cx="5" cy="10" r="1.4" />
-            <circle cx="10" cy="10" r="1.4" />
-            <circle cx="15" cy="10" r="1.4" />
-          </svg>
-        </button>
-        <RowMenu
-          open={menu && !rail}
-          anchor={more}
-          onClose={(refocus) => {
-            setMenu(false);
-            if (refocus) more.current?.focus();
-          }}
-        >
-          {(close) => (
-            <>
-              <MenuItem
-                glyph="pin"
-                onSelect={() => {
-                  close(true);
-                  void onChange(
-                    pinned
-                      ? { action: "unpin", key: item.key }
-                      : { action: "pin", row: { key: item.key, kind: item.kind, title: item.title, href: item.href } },
-                  );
-                }}
-              >
-                {pinned ? "Unpin" : "Pin"}
-              </MenuItem>
-              {onRename !== null && (
-                <MenuItem
-                  glyph="rename"
-                  onSelect={() => {
-                    close(false);
-                    setRenaming(true);
-                  }}
-                >
-                  Rename
-                </MenuItem>
-              )}
-              {courseHref !== null && (
-                <MenuItem glyph="open" href={courseHref} onSelect={() => close(false)}>
-                  Open in course
-                </MenuItem>
-              )}
-            </>
+          <MenuItem
+            icon="pin"
+            onSelect={() => {
+              void onChange(
+                pinned
+                  ? { action: "unpin", key: item.key }
+                  : { action: "pin", row: { key: item.key, kind: item.kind, title: item.title, href: item.href } },
+              );
+            }}
+          >
+            {pinned ? "Unpin" : "Pin"}
+          </MenuItem>
+          {onRename !== null && (
+            // The field takes the focus once the menu has gone.
+            <MenuItem icon="rename" afterClose={() => setRenaming(true)}>
+              Rename
+            </MenuItem>
           )}
-        </RowMenu>
+          {courseHref !== null && (
+            <MenuItem icon="open" href={courseHref}>
+              Open in course
+            </MenuItem>
+          )}
+        </Menu>
       </div>
     </div>
-  );
-}
-
-/**
- * A row's menu: a small card under its more button, or over it when the
- * screen has no room below. A disclosure of a few buttons, as the account
- * menu is, and like it a kit `Popover`: in the top layer at fixed
- * coordinates. The rows sit in folds that clip what they hold (`Collapse`,
- * around Pinned and each course), so a card placed in the row was cut off
- * under the last pinned row, and checking the sidebar's scroller for room
- * could not see the fold. It closes on Escape (focus back on the more
- * button, and the phone drawer around it stays open), on a press outside, on
- * the focus leaving it and on choosing an item, and focus moves to its first
- * item as it opens. It pops in and out with the `Popover`.
- */
-function RowMenu({
-  open,
-  anchor,
-  onClose,
-  children,
-}: {
-  open: boolean;
-  anchor: React.RefObject<HTMLButtonElement | null>;
-  onClose: (refocus: boolean) => void;
-  children: (close: (refocus: boolean) => void) => ReactNode;
-}) {
-  const box = useRef<HTMLDivElement>(null);
-  const id = useId();
-
-  // After the `Popover`'s own layout effect (a child's runs first) has shown and placed the box.
-  useLayoutEffect(() => {
-    if (open) box.current?.querySelector<HTMLElement>("a, button")?.focus({ preventScroll: true });
-  }, [open]);
-
-  return (
-    <Popover
-      ref={box}
-      anchorRef={anchor}
-      open={open}
-      // Escape hands the focus back to the more button itself.
-      onOpenChange={() => onClose(false)}
-      placement="bottom-end"
-      minWidth={192}
-      id={id}
-      className={MENU_PANEL}
-    >
-      <ul className="flex flex-col">{children(onClose)}</ul>
-    </Popover>
-  );
-}
-
-function MenuItem({ glyph, href, onSelect, children }: { glyph: GlyphName; href?: string; onSelect: () => void; children: ReactNode }) {
-  const itemClass = cx(
-    "flex h-[var(--shell-row,36px)] w-full items-center gap-2.5 rounded-lg px-2 text-left text-[14px] text-text transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none",
-    "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent",
-  );
-  return (
-    <li>
-      {href === undefined ? (
-        <button type="button" onClick={onSelect} className={itemClass}>
-          <Glyph name={glyph} size={16} className="text-text2" />
-          {children}
-        </button>
-      ) : (
-        <Link href={href} onClick={onSelect} className={itemClass}>
-          <Glyph name={glyph} size={16} className="text-text2" />
-          {children}
-        </Link>
-      )}
-    </li>
   );
 }
 
