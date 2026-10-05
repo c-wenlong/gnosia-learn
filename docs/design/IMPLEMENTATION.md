@@ -379,7 +379,7 @@ client boundary.
 | --- | --- | --- | --- |
 | `app` | up to 1392px, 24px gutters (16 on a phone), 24px top | full | every redesigned page |
 | `focus` | the whole width, no padding | no sidebar from 768px up; the phone keeps its header | Session and Review (hi-fi 05 to 08, 14, 15) |
-| `workspace` | as `app`; from 900px up the shell is fixed to the viewport and the page gets a `flex-1 min-h-0` region | full | the concept workspace, whose three panels scroll inside themselves |
+| `workspace` | as `app`; once the three panels fit beside the app sidebar (`ws:`, 1160px open, 960px on its rail) the shell is fixed to the viewport and the page gets a `flex-1 min-h-0` region | full | the concept workspace, whose three panels scroll inside themselves |
 | none | the old 48rem reading measure | full | pages not yet redesigned |
 | `wide` | 72rem | full | the old library pages |
 | `full` | the whole region, no padding, the shell fixed to the viewport | full | the studio's home, conversations and canvas |
@@ -766,7 +766,7 @@ reading, a pencil for practice. The concepts left the topic panel, since the ste
 | Tutor turns | Save to note and Why? | Why? only; Save to note was drawn disabled with "Not built yet." until 2026-09-29, when the owner had every not-built control removed | extending `POST /api/learner/note` is not in 1c |
 | Studio cards | "Generate flashcards", "Add source" | not drawn (disabled with a reason until 2026-09-29) | no feature behind them yet, and a control that only says so was removed |
 | Workspace tutor | not drawn | `?ask=<text>` prefills the tutor's input (never sends it) and opens the Tutor tab on a phone | a session's "Ask the tutor" lands here with its question |
-| Workspace panels | fixed three columns | 250 and 270px side panels from 900px, 290 and 310 from 1280px; tabs below 900px; each side panel collapses to a 48px rail | the brief's collapse and phone rules |
+| Workspace panels | fixed three columns | 250 and 270px side panels once the tutor keeps 300px beside them (`ws:`: 1160px with the app sidebar open, 960px on its rail), 290 and 310 from 1280px; tabs otherwise (`ws-tabs:`); each side panel collapses to a 48px rail | the brief's collapse and phone rules |
 | Today, Streak card | the card, with its week of discs | not drawn since 2026-09-29; the top bar's streak pill stays, and is a button (`HabitPill`) whose popover and accessible name carry the free misses and today's fact | the card repeated the pill (the owner's call). Until then it drew the week with a fifth `forgiven` disc state and no "Calendar" link |
 | Today, Streak strip | four disc states | a fifth, `forgiven`: a dashed `--streak` ring | the habit data has misses the leeway covered, and they should not read as either a done day or a plain miss |
 | Today, Next up | "Next on your path · CP4281 · Module 2" | the course and module when a curriculum item links the concept, otherwise the note's folder ("Next on your path · algorithms") | most notes link no curriculum item yet |

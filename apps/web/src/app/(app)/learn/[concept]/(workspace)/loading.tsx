@@ -1,7 +1,7 @@
 import { PageLoading } from "@/components/PageLoading";
 
 /**
- * The concept workspace's frame: `data-layout="workspace"`, so from 900px up
+ * The concept workspace's frame: `data-layout="workspace"`, so where the panels fit (`ws:`)
  * the shell is already fixed to the viewport while the page is read, rather
  * than loading as an `app` page and then changing height under the learner.
  *
