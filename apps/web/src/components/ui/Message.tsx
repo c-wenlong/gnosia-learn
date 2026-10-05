@@ -49,7 +49,7 @@ export function TutorMessage({
 export function UserMessage({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={cx("flex justify-end", className)}>
-      <p className="max-w-[80%] rounded-[20px] bg-tint px-4 py-3 text-[15px] leading-6 break-words whitespace-pre-wrap text-text">
+      <p className="relative max-w-[80%] rounded-[20px] bg-tint px-4 py-3 text-[15px] leading-6 break-words whitespace-pre-wrap text-text">
         <span className="sr-only">You: </span>
         {children}
       </p>

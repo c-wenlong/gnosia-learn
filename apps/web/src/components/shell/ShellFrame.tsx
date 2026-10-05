@@ -90,9 +90,18 @@ export function ShellFrame({
   return (
     <PublishContext.Provider value={setChats}>
       <ShellContext.Provider value={controls}>
+        {/*
+          `min-h-dvh`, not `min-h-full`: the body has only a min-height, so a
+          percentage of it resolved to nothing and a short page's shell
+          stopped at its content. `relative` makes the shell the containing
+          block for any absolute box nothing nearer claims (an `sr-only`
+          label in a chat thread), so the fixed-height modes' `overflow-hidden`
+          clips it instead of the document growing past the shell, which
+          is what leaves a blank strip under the sticky sidebar.
+        */}
         <div
           className={[
-            "group/shell flex min-h-full bg-page text-text",
+            "group/shell relative flex min-h-dvh bg-page text-text",
             "has-[[data-layout=full]]:h-dvh has-[[data-layout=full]]:overflow-hidden",
             "min-[900px]:has-[[data-layout=workspace]]:h-dvh min-[900px]:has-[[data-layout=workspace]]:overflow-hidden",
           ].join(" ")}

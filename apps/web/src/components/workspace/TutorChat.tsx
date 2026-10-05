@@ -598,7 +598,7 @@ export function TutorChat({
           the thread gives up height before the chips and the composer do. */}
       <div
         ref={threadRef}
-        className="-mx-1 flex min-h-[280px] flex-1 flex-col gap-4 overflow-y-auto px-1 py-1 min-[900px]:min-h-32"
+        className="relative -mx-1 flex min-h-[280px] flex-1 flex-col gap-4 overflow-y-auto px-1 py-1 min-[900px]:min-h-32"
         aria-live="polite"
         aria-busy={busy}
       >
