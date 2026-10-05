@@ -25,6 +25,8 @@ import {
   rawParamsOf,
   showsKind,
   withoutOutcome,
+  dayAndTime,
+  dayText,
   relativeTime,
   sortDiagrams,
   studioHref,
@@ -275,10 +277,46 @@ describe("the words", () => {
     ["2026-09-13T11:59:30.000Z", "just now"],
     ["2026-09-13T11:30:00.000Z", "30 minutes ago"],
     ["2026-09-13T11:00:00.000Z", "1 hour ago"],
-    ["2026-09-11T12:00:00.000Z", "2 days ago"],
-    ["2026-01-01T12:00:00.000Z", "2026-01-01"],
+    ["2026-09-12T13:00:00.000Z", "Yesterday"],
+    ["2026-09-11T12:00:00.000Z", "11 Sept"],
+    ["2025-12-28T12:00:00.000Z", "28 Dec 2025"],
   ])("says %s is %s", (iso, expected) => {
     expect(relativeTime(iso, now)).toBe(expected);
+  });
+
+  describe("calendar days in the app's zone", () => {
+    const sg = "Asia/Singapore";
+
+    it("says 37 hours earlier is Yesterday, as the sidebar does", () => {
+      // 14:00 on 5 Oct in Singapore, made 37 hours before: 01:00 on 4 Oct.
+      const at = Date.parse("2026-10-05T06:00:00.000Z");
+      expect(relativeTime(new Date(at - 37 * 3_600_000).toISOString(), at, sg)).toBe("Yesterday");
+    });
+
+    it("names the day for 49 hours earlier at 01:00", () => {
+      const at = Date.parse("2026-10-05T01:00:00+08:00");
+      expect(relativeTime(new Date(at - 49 * 3_600_000).toISOString(), at, sg)).toBe("3 Oct");
+    });
+
+    it("puts the same instant on both sides of midnight", () => {
+      const made = "2026-10-04T23:30:00+08:00";
+      expect(relativeTime(made, Date.parse("2026-10-04T23:59:00+08:00"), sg)).toBe("29 minutes ago");
+      expect(relativeTime(made, Date.parse("2026-10-05T00:10:00+08:00"), sg)).toBe("Yesterday");
+      expect(dayText(made, Date.parse("2026-10-05T00:10:00+08:00"), sg)).toBe("Yesterday");
+    });
+
+    it("files an early-morning Singapore instant under its own day, not the UTC one", () => {
+      const created = "2026-09-29T20:25:41.649Z"; // 04:25 on 30 Sept in Singapore
+      const now = Date.parse("2026-10-05T06:00:00.000Z");
+      expect(dayText(created, now, sg)).toBe("30 Sept");
+      expect(dayAndTime(created, now, sg)).toBe("30 Sept, 04:25");
+      expect(dayAndTime(created, now, sg)).not.toMatch(/T|Z/);
+    });
+
+    it("says what is missing", () => {
+      expect(dayText(null)).toBe("not recorded");
+      expect(dayAndTime(null)).toBe("");
+    });
   });
 
   it("says never rather than inventing a time for a file that is not there", () => {

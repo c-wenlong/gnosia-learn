@@ -10,6 +10,8 @@ import { buttonClasses, cx } from "@/components/ui/classes";
 import { jobStateLabel } from "@/lib/studio-job-state";
 import {
   canvasHref,
+  dayAndTime,
+  dayText,
   displayTitle,
   formatBytes,
   freshness,
@@ -211,12 +213,12 @@ function SelectedDiagram({
         </MetaRow>
         <MetaRow label="Shapes">{diagram.shapes}</MetaRow>
         <MetaRow label="Created">
-          {diagram.created === null ? "not recorded" : diagram.created.slice(0, 10)}
+          {dayText(diagram.created)}
         </MetaRow>
         <MetaRow label="Modified">
           {relativeTime(diagram.tldr.modified)}
           {diagram.tldr.modified !== null && (
-            <span className="block text-text2">{diagram.tldr.modified}</span>
+            <span className="block text-text2">{dayAndTime(diagram.tldr.modified)}</span>
           )}
         </MetaRow>
         <MetaRow label="Source note">
