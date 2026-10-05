@@ -33,8 +33,8 @@ import type { ModuleData, RelatedCourse } from "./types";
  *
  * The columns follow the width the page is given (container queries), not
  * the window's, since the app sidebar takes part of the window: from 1152px
- * of page the three columns sit side by side (sidebar 300, rail 360, the
- * module between), from 768px the rail drops under the module, and below
+ * of page the three columns sit side by side (sidebar 272, rail 304, the
+ * module between, which holds the reading and so gets the rest), from 768px the rail drops under the module, and below
  * that the sidebar turns into a picker above the module and the rail follows
  * it.
  */
@@ -104,7 +104,7 @@ export function CourseHome({
   // 1280. Two columns from 768px of page, the rail beside them from 1152px.
   return (
     <div className="@container">
-    <div className="grid grid-cols-1 items-start gap-4 @3xl:grid-cols-[272px_minmax(0,1fr)] @6xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+    <div className="grid grid-cols-1 items-start gap-4 @3xl:grid-cols-[272px_minmax(0,1fr)] @6xl:grid-cols-[272px_minmax(0,1fr)_304px]">
       <VisitTracker courseSlug={course.slug} moduleSlug={moduleSlug === undefined ? undefined : shown?.slug} />
 
       <CourseSidebar
