@@ -264,12 +264,21 @@ export function recentItems(sources: RecentSources): RecentItem[] {
 /* -------------------------------------------------------------------------- */
 
 /** A course in the sidebar's Courses section, with its modules in order. */
+/**
+ * A course in the sidebar: one row that opens where the owner left off. The
+ * module list is the course page's own sidebar, so the app's sidebar does not
+ * repeat it.
+ */
 export interface SidebarCourse {
   slug: string;
   code: string;
   title: string;
+  /** The course page, which every page of the course sits under. */
   href: string;
-  modules: { slug: string; title: string; order: number; href: string }[];
+  /** Where the row opens: the module visited last, else the course page, which shows the module the owner is on. */
+  open: string;
+  /** The module visited last, named under the course; null when none is recorded. */
+  resume: { title: string; order: number } | null;
 }
 
 /** What `GET /api/learner/recent` answers with: Recent's rows, the pins, and the courses. */
