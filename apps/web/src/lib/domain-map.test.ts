@@ -2,7 +2,26 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphEdge } from "@/lib/concept-graph";
 import { cachedDomainLayout, domainLayout, domainOfNode, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
-import { cullLabels, domainTitle, groupBox, MIN_DRAW_SCALE, NODE_HALF_WIDTH, titleWidth, type LabelItem } from "@/lib/domain-view";
+import { wrapLabel } from "@/lib/concept-graph";
+import {
+  cullLabels,
+  DOT_TOP,
+  domainTitle,
+  groupBox,
+  labelBox,
+  labelFont,
+  MIN_DRAW_SCALE,
+  NODE_HALF_WIDTH,
+  textEm,
+  TITLE_RESERVE,
+  titleBand,
+  titleBox,
+  titleFont,
+  titleWidth,
+  viewBoxFor,
+  type Box,
+  type LabelItem,
+} from "@/lib/domain-view";
 
 /**
  * Written before `domain-map.ts` (phase 1 of docs/proposals/domain-map.md),
@@ -260,5 +279,91 @@ describe("labels on a picture drawn at its smallest (D10)", () => {
     const laid = domainLayout(chain, links, topics, "algorithms");
     const items: LabelItem[] = chain.map((n) => ({ ...laid.positions[n.id], id: n.id, lines: 2, em: 8.25, rank: 6, dependants: 0 }));
     expect([...cullLabels(items, MIN_DRAW_SCALE)].sort()).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+/**
+ * Written before the topic titles kept 11px on screen (D10): on a real layout,
+ * drawn full size and at its smallest, a title sits inside its group, clear of
+ * the group's concepts and of every other group, and a label that would run
+ * into one is culled.
+ */
+describe("topic titles on a laid out domain (D10)", () => {
+  const long: DomainTopic[] = [
+    { slug: "sorting", title: "Sorting and the lower bound on comparison sorts", domain: "algorithms" },
+    { slug: "graphs", title: "Graphs", domain: "algorithms" },
+    { slug: "dp", title: "Dynamic programming over subsets and intervals", domain: "algorithms" },
+  ];
+  const vocab = [...long, ...topics.filter((t) => !long.some((l) => l.slug === t.slug))];
+  const laid = domainLayout(nodes, edges, vocab, "algorithms");
+  const hits = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  const at = (id: string) => laid.positions[id];
+  const items = (): LabelItem[] =>
+    Object.keys(laid.positions).map((id) => {
+      const lines = wrapLabel(`Concept ${id}`, 15);
+      return { id, ...at(id), lines: lines.length, em: Math.max(...lines.map((l) => textEm(l))), rank: 6, dependants: 0 };
+    });
+
+  for (const scale of [1, MIN_DRAW_SCALE]) {
+    it(`keeps each title inside its group, off its concepts and every other group, at scale ${scale}`, () => {
+      const font = titleFont(scale);
+      const band = titleBand(font);
+      const groups = laid.groups.map((g) => {
+        const box = groupBox(g.concepts.map(at), titleWidth(g.title), band);
+        return { g, box, title: titleBox(box, g.title, font) };
+      });
+      const frame = viewBoxFor(laid, null, {}, band);
+      for (const { g, box, title } of groups) {
+        expect(title.x, `${g.topic}'s title starts left of its group`).toBeGreaterThanOrEqual(box.x);
+        expect(title.x + title.width, `${g.topic}'s title runs past its group`).toBeLessThanOrEqual(box.x + box.width);
+        expect(title.y).toBeGreaterThanOrEqual(box.y);
+        for (const id of g.concepts) {
+          const p = at(id);
+          // The dot and the room kept above it for its rings.
+          const dot = { x: p.x - NODE_HALF_WIDTH, y: p.y - DOT_TOP, width: 2 * NODE_HALF_WIDTH, height: 2 * DOT_TOP };
+          expect(hits(title, dot), `${g.topic}'s title overlaps ${id}'s dot`).toBe(false);
+          const item = items().find((i) => i.id === id) as LabelItem;
+          expect(hits(title, labelBox(item, labelFont(scale))), `${g.topic}'s title overlaps ${id}'s label`).toBe(false);
+        }
+        for (const other of groups) {
+          if (other.g === g) continue;
+          expect(hits(title, other.box), `${g.topic}'s title runs into ${other.g.topic}`).toBe(false);
+          expect(hits(box, other.box), `${g.topic} and ${other.g.topic} overlap`).toBe(false);
+        }
+        // And the frame holds the whole group.
+        expect(box.y).toBeGreaterThanOrEqual(frame.y);
+        expect(box.y + box.height).toBeLessThanOrEqual(frame.y + frame.height);
+      }
+    });
+  }
+
+  it("cuts a title too long for its group at the smallest scale, and none at full size", () => {
+    const cut = (scale: number) =>
+      laid.groups.filter((g) => {
+        const font = titleFont(scale);
+        const box = groupBox(g.concepts.map(at), titleWidth(g.title), titleBand(font));
+        return textEm(g.title, true) * font > titleBox(box, g.title, font).width;
+      }).length;
+    expect(cut(1)).toBe(0);
+    expect(cut(MIN_DRAW_SCALE)).toBeGreaterThan(0);
+  });
+
+  it("packs the groups for the largest band, so a row's titles at the smallest scale do not reach the row above", () => {
+    for (const g of laid.groups) {
+      const box = groupBox(g.concepts.map(at), titleWidth(g.title), TITLE_RESERVE);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("culls a label that would run into a title, at the smallest scale", () => {
+    const font = titleFont(MIN_DRAW_SCALE);
+    const titles = laid.groups.map((g) => titleBox(groupBox(g.concepts.map(at), titleWidth(g.title), titleBand(font)), g.title, font));
+    const shown = cullLabels(items(), MIN_DRAW_SCALE, titles);
+    expect(shown.size).toBeGreaterThan(0);
+    for (const item of items()) {
+      if (!shown.has(item.id)) continue;
+      const box = labelBox(item, labelFont(MIN_DRAW_SCALE));
+      for (const t of titles) expect(hits(box, t), `${item.id}'s label runs into a title`).toBe(false);
+    }
   });
 });
