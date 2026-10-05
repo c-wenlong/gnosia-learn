@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { cx } from "@/components/ui/classes";
 import { readCookie } from "@/lib/client-cookie";
 import { SIDEBAR_COOKIE, writeSidebarCookie } from "@/lib/sidebar-cookie";
 
@@ -100,11 +101,11 @@ export function ShellFrame({
           is what leaves a blank strip under the sticky sidebar.
         */}
         <div
-          className={[
+          className={cx(
             "group/shell relative flex min-h-dvh bg-page text-text",
             "has-[[data-layout=full]]:h-dvh has-[[data-layout=full]]:overflow-hidden",
             "min-[900px]:has-[[data-layout=workspace]]:h-dvh min-[900px]:has-[[data-layout=workspace]]:overflow-hidden",
-          ].join(" ")}
+          )}
         >
           <AppSidebar />
           {/* Inert behind the phone's drawer, which holds focus meanwhile. */}

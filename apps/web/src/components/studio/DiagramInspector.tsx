@@ -6,7 +6,7 @@ import { MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Glyph } from "@/components/ui/Glyph";
-import { buttonClasses } from "@/components/ui/classes";
+import { buttonClasses, cx } from "@/components/ui/classes";
 import { jobStateLabel } from "@/lib/studio-job-state";
 import {
   canvasHref,
@@ -154,9 +154,10 @@ function SelectedDiagram({
   return (
     <>
       <div
-        className={`mb-3 flex items-center justify-center overflow-hidden rounded-xl border border-border bg-diagram-matte ${
-          embedded ? "h-72 max-h-[40dvh]" : "aspect-[4/3]"
-        }`}
+        className={cx(
+          "mb-3 flex items-center justify-center overflow-hidden rounded-xl border border-border bg-diagram-matte",
+          embedded ? "h-72 max-h-[40dvh]" : "aspect-[4/3]",
+        )}
       >
         {diagram.svg.exists ? (
           /* Same as the grid tile: the runner streams a file from outside the

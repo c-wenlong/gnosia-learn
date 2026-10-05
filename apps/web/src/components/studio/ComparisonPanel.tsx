@@ -149,11 +149,10 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
 
       {said !== null && (
         <div
-          className={`mt-2 rounded-md border p-2 text-xs ${
-            said.ok
-              ? "border-ok/40 bg-surface2 text-text2"
-              : "border-danger/45 bg-danger/8 text-danger"
-          }`}
+          className={cx(
+            "mt-2 rounded-md border p-2 text-xs",
+            said.ok ? "border-ok/40 bg-surface2 text-text2" : "border-danger/45 bg-danger/8 text-danger",
+          )}
         >
           <p className="break-words">{said.text}</p>
           {said.recompare === true && (
@@ -326,9 +325,7 @@ function Counts({ comparison }: { comparison: Comparison }) {
               <td className="py-1.5 text-right text-text2">{row.before}</td>
               <td className="py-1.5 text-right text-text">{row.after}</td>
               <td
-                className={`py-1.5 text-right ${
-                  row.direction === "flat" ? "text-text2" : "text-text"
-                }`}
+                className={cx("py-1.5 text-right", row.direction === "flat" ? "text-text2" : "text-text")}
               >
                 {row.delta ?? "—"}
               </td>
@@ -406,7 +403,7 @@ function Verify({ job }: { job: Job }) {
             <li key={check.rule} className="flex items-start gap-2 text-xs">
               <span
                 aria-hidden
-                className={`w-3 shrink-0 ${check.ok ? "text-ok-text" : "text-danger"}`}
+                className={cx("w-3 shrink-0", check.ok ? "text-ok-text" : "text-danger")}
               >
                 {check.ok ? "✓" : "✕"}
               </span>
