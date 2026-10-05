@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
 
+import { useShell } from "@/components/shell/shell-context";
 import { cx } from "@/components/ui/classes";
 import { Panel } from "@/components/ui/Panel";
 import { tabIds } from "@/components/ui/roving";
@@ -12,10 +13,10 @@ import { useMediaQuery } from "@/components/ui/use-media-query";
 /**
  * The workspace's three panels (hi-fi 04): Note & sources, Tutor, Studio.
  *
- * From 900px up they sit side by side at 290, the rest, and 310, each one the
+ * Where the panels fit (`ws:`) they sit side by side at 290, the rest, and 310, each one the
  * height of the window so it scrolls on its own, and either side panel can
- * collapse to a 48px rail to give the tutor the room. Below 900px three
- * columns do not fit, so the panels become tabs and one shows at a time: the
+ * collapse to a 48px rail to give the tutor the room. Where they do not fit
+ * (the space beside the app sidebar decides, not the window), the panels become tabs and one shows at a time: the
  * kit's `TabList` over them, each panel its `tabpanel`, since one panel on
  * show at a time, chosen from a row that names them, is the tabs pattern.
  *
@@ -41,11 +42,18 @@ const TABS: { id: PanelKey; label: string }[] = [
   { id: "studio", label: "Studio" },
 ];
 
-const WIDE = "(min-width: 900px)";
+/** The `ws:` variant's two widths (globals.css): the sidebar open, and folded to its rail. */
+const WIDE_OPEN = "(min-width: 1160px)";
+const WIDE_RAIL = "(min-width: 960px)";
 
-/** Whether the panels sit side by side (900px up). False on the server and the first client render. */
+/**
+ * Whether the panels sit side by side, as `ws:` decides it: by the room
+ * beside the app sidebar, so a folded sidebar brings them in sooner. False on
+ * the server and the first client render.
+ */
 function useWide(): boolean {
-  return useMediaQuery(WIDE, false);
+  const rail = useShell()?.collapsed ?? false;
+  return useMediaQuery(rail ? WIDE_RAIL : WIDE_OPEN, false);
 }
 
 function CollapseButton({
@@ -64,7 +72,7 @@ function CollapseButton({
       tone="muted"
       size="xs"
       weight="normal"
-      className="hidden min-[900px]:inline"
+      className="hidden ws:inline"
       aria-label={`Collapse ${label}`}
     >
       Collapse
@@ -97,7 +105,7 @@ function Rail({
       inert={open}
       data-rail={open ? "away" : "shown"}
       className={cx(
-        "absolute inset-y-0 left-0 z-10 hidden w-12 flex-col items-center gap-3 rounded-2xl bg-surface py-4 text-[13px] font-semibold text-text2 min-[900px]:flex",
+        "absolute inset-y-0 left-0 z-10 hidden w-12 flex-col items-center gap-3 rounded-2xl bg-surface py-4 text-[13px] font-semibold text-text2 ws:flex",
         "duration-200 ease-soft hover:text-text motion-reduce:transition-none",
         // Inset, so the column that clips the panel does not clip the ring.
         "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
@@ -113,9 +121,9 @@ function Rail({
 }
 
 /**
- * A side panel's place in the grid from 900px up: its column clips the panel,
+ * A side panel's place in the grid where the panels fit (`ws:`): its column clips the panel,
  * which keeps its open width (`openWidth`), so folding slides it out whole.
- * `edge` is the side it leaves by. Below 900px it is an ordinary block.
+ * `edge` is the side it leaves by. Where they do not fit it is an ordinary block.
  */
 function SidePanel({
   label,
@@ -142,25 +150,25 @@ function SidePanel({
   bodyClassName: string;
   children: ReactNode;
 }) {
-  // Folded is a desktop state: below 900px there is no rail, so the panel shows as a tab whatever it was.
+  // Folded is a desktop state: where they do not fit there is no rail, so the panel shows as a tab whatever it was.
   const folded = wide && !open;
   return (
-    <div className={cx("h-full min-[900px]:relative min-[900px]:overflow-hidden", edge === "left" && "min-[900px]:flex min-[900px]:justify-end")}>
+    <div className={cx("h-full ws:relative ws:overflow-hidden", edge === "left" && "ws:flex ws:justify-end")}>
       <Rail label={label} open={open} onExpand={onExpand} buttonRef={railRef} />
       <div
         inert={folded}
         data-folded={folded ? "true" : "false"}
         className={cx(
-          "h-full min-[900px]:shrink-0 min-[900px]:duration-200 min-[900px]:ease-soft min-[900px]:motion-reduce:transition-none",
+          "h-full ws:shrink-0 ws:duration-200 ws:ease-soft ws:motion-reduce:transition-none",
           openWidth,
           // As the rail: visibility waits for the fade out, and not in, so Collapse can take the focus at once.
-          open ? "min-[900px]:transition-opacity" : "min-[900px]:invisible min-[900px]:opacity-0 min-[900px]:transition-[opacity,visibility]",
+          open ? "ws:transition-opacity" : "ws:invisible ws:opacity-0 ws:transition-[opacity,visibility]",
         )}
       >
         <Panel
           title={label}
           aria-label={label}
-          headerClassName="max-[899px]:hidden"
+          headerClassName="ws-tabs:hidden"
           actions={<CollapseButton label={label} onClick={onCollapse} buttonRef={collapseRef} />}
           className="h-full"
           bodyClassName={bodyClassName}
@@ -204,16 +212,16 @@ export function WorkspacePanels({
     requestAnimationFrame(() => next.current?.focus({ preventScroll: true }));
   };
 
-  // `hidden` below 900px unless this is the active tab. A wrapper carries it,
+  // `hidden` where they do not fit unless this is the active tab. A wrapper carries it,
   // since a primitive's own `display` would win over a class passed to it. A
   // tab coming into view fades in from its starting style.
   const shown = (key: PanelKey) =>
     cx(
       "min-h-0 min-w-0",
-      "max-[899px]:transition-opacity max-[899px]:duration-150 max-[899px]:ease-out max-[899px]:starting:opacity-0 max-[899px]:motion-reduce:transition-none",
-      active !== key && "max-[899px]:hidden",
+      "ws-tabs:transition-opacity ws-tabs:duration-150 ws-tabs:ease-out ws-tabs:starting:opacity-0 ws-tabs:motion-reduce:transition-none",
+      active !== key && "ws-tabs:hidden",
     );
-  // Below 900px the panels are the tab row's panels; from 900px up they sit
+  // Where they do not fit the panels are the tab row's panels; where the panels fit (`ws:`) they sit
   // side by side with no tab row, so they are plain regions (each `Panel` is a
   // named section either way). Before hydration `wide` is false, so the
   // server's markup is the phone's, as the classes already are.
@@ -221,36 +229,36 @@ export function WorkspacePanels({
     const ids = tabIds(base, key);
     return wide ? { id: ids.panel } : { id: ids.panel, role: "tabpanel", "aria-labelledby": ids.tab };
   };
-  // Below 900px the tab row names the one panel on show, so its title would
+  // Where they do not fit the tab row names the one panel on show, so its title would
   // repeat the tab just pressed. The note and studio headers hold nothing else
   // there (Collapse is desktop-only) and go; the tutor's keeps its style line
   // and Settings link, with only the title hidden. The section keeps its name
   // for a screen reader either way.
-  const phoneTitle = "max-[899px]:sr-only";
+  const phoneTitle = "ws-tabs:sr-only";
 
   return (
-    <div className="flex min-h-0 flex-col gap-4 min-[900px]:flex-1">
+    <div className="flex min-h-0 flex-col gap-4 ws:flex-1">
       <TabList
         label="Workspace panels"
         items={TABS}
         value={active}
         onChange={setActive}
         idBase={base}
-        className="min-[900px]:hidden"
+        className="ws:hidden"
       />
 
       <div
         className={cx(
           "grid grid-cols-1 gap-4",
-          // From 900px up the page is fixed to the viewport (`data-layout="workspace"`),
+          // Where the panels fit (`ws:`) the page is fixed to the viewport (`data-layout="workspace"`),
           // so the grid takes whatever height is left and the panels scroll inside.
-          "min-[900px]:min-h-0 min-[900px]:flex-1 min-[900px]:grid-rows-[minmax(0,1fr)]",
+          "ws:min-h-0 ws:flex-1 ws:grid-rows-[minmax(0,1fr)]",
           // The open widths, once: the columns and the panels inside them both read them.
-          "min-[900px]:[--note-open:250px] min-[900px]:[--studio-open:270px] xl:[--note-open:290px] xl:[--studio-open:310px]",
-          noteOpen ? "min-[900px]:[--note-w:var(--note-open)]" : "min-[900px]:[--note-w:48px]",
-          studioOpen ? "min-[900px]:[--studio-w:var(--studio-open)]" : "min-[900px]:[--studio-w:48px]",
-          "min-[900px]:grid-cols-[var(--note-w)_minmax(0,1fr)_var(--studio-w)]",
-          "min-[900px]:transition-[grid-template-columns] min-[900px]:duration-200 min-[900px]:ease-soft min-[900px]:motion-reduce:transition-none",
+          "ws:[--note-open:250px] ws:[--studio-open:270px] xl:[--note-open:290px] xl:[--studio-open:310px]",
+          noteOpen ? "ws:[--note-w:var(--note-open)]" : "ws:[--note-w:48px]",
+          studioOpen ? "ws:[--studio-w:var(--studio-open)]" : "ws:[--studio-w:48px]",
+          "ws:grid-cols-[var(--note-w)_minmax(0,1fr)_var(--studio-w)]",
+          "ws:transition-[grid-template-columns] ws:duration-200 ws:ease-soft ws:motion-reduce:transition-none",
         )}
       >
         <div className={shown("note")} data-panel="note" data-active={active === "note"} {...tabPanel("note")}>
@@ -259,12 +267,12 @@ export function WorkspacePanels({
             open={noteOpen}
             wide={wide}
             edge="left"
-            openWidth="min-[900px]:w-[var(--note-open)]"
+            openWidth="ws:w-[var(--note-open)]"
             onCollapse={() => toggle(setNoteOpen, false, noteRail)}
             onExpand={() => toggle(setNoteOpen, true, noteCollapse)}
             railRef={noteRail}
             collapseRef={noteCollapse}
-            bodyClassName="gap-4 min-[900px]:overflow-y-auto"
+            bodyClassName="gap-4 ws:overflow-y-auto"
           >
             {note}
           </SidePanel>
@@ -276,10 +284,10 @@ export function WorkspacePanels({
             aria-label="Tutor"
             titleClassName={phoneTitle}
             actions={tutorAside}
-            className="h-full max-[899px]:min-h-[70dvh]"
+            className="h-full ws-tabs:min-h-[70dvh]"
             // A last resort for a window too short for even the shrunk thread,
             // the chips and the composer: the body scrolls rather than clips.
-            bodyClassName="gap-3.5 min-[900px]:overflow-y-auto"
+            bodyClassName="gap-3.5 ws:overflow-y-auto"
           >
             {tutor}
           </Panel>
@@ -291,12 +299,12 @@ export function WorkspacePanels({
             open={studioOpen}
             wide={wide}
             edge="right"
-            openWidth="min-[900px]:w-[var(--studio-open)]"
+            openWidth="ws:w-[var(--studio-open)]"
             onCollapse={() => toggle(setStudioOpen, false, studioRail)}
             onExpand={() => toggle(setStudioOpen, true, studioCollapse)}
             railRef={studioRail}
             collapseRef={studioCollapse}
-            bodyClassName="gap-2.5 min-[900px]:overflow-y-auto"
+            bodyClassName="gap-2.5 ws:overflow-y-auto"
           >
             {studio}
           </SidePanel>

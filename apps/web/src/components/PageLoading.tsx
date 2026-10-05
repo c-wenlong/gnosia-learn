@@ -22,9 +22,9 @@ import { cardClasses, cx } from "@/components/ui/classes";
  * is the studio's: the page fills the shell edge to edge (`data-layout="full"`)
  * and passes its own outline as children. `workspace` is the concept page's:
  * its root carries the page's own `data-layout="workspace"` and classes, so
- * the shell is fixed to the viewport from 900px up while it loads, as it will
+ * the shell is fixed to the viewport where the panels fit (`ws:`) while it loads, as it will
  * be once the page arrives, and the three panels are outlined at the page's
- * column widths (one, under a tab row, below 900px).
+ * column widths (one, under a tab row, where they do not fit).
  *
  * The status line sits beside the busy region, not in it, so a screen reader
  * announces it rather than waiting for the region to settle.
@@ -118,7 +118,7 @@ export function PageLoading({
  * own flex column have to agree between the frame and the page, or the shell
  * changes height under the learner as the page arrives.
  */
-export const WORKSPACE_ROOT = "flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:flex-1";
+export const WORKSPACE_ROOT = "flex flex-col gap-4 ws:min-h-0 ws:flex-1";
 
 /** The kit `Skeleton`'s classes, for a page outline whose block is not a `<div>`. */
 export const LOADING_BLOCK = SKELETON;
@@ -174,7 +174,7 @@ function PanelOutline({ className, children }: { className?: string; children: R
 /**
  * The concept workspace's outline: the header (a place, the title, Teach me),
  * then the note, the tutor and the studio side by side at the page's open
- * widths from 900px up. Below that the page shows a tab row over one panel,
+ * widths where the panels fit (`ws:`). Below that the page shows a tab row over one panel,
  * the note, so this does too.
  */
 function WorkspaceOutline() {
@@ -187,26 +187,26 @@ function WorkspaceOutline() {
         </div>
         <Skeleton className="h-11 w-28" />
       </div>
-      <Skeleton className="h-10 w-full min-[900px]:hidden" />
+      <Skeleton className="h-10 w-full ws:hidden" />
       <div
         className={cx(
           "grid grid-cols-1 gap-4",
-          "min-[900px]:min-h-0 min-[900px]:flex-1 min-[900px]:grid-rows-[minmax(0,1fr)]",
-          "min-[900px]:grid-cols-[250px_minmax(0,1fr)_270px] xl:grid-cols-[290px_minmax(0,1fr)_310px]",
+          "ws:min-h-0 ws:flex-1 ws:grid-rows-[minmax(0,1fr)]",
+          "ws:grid-cols-[250px_minmax(0,1fr)_270px] xl:grid-cols-[290px_minmax(0,1fr)_310px]",
         )}
       >
-        <PanelOutline className="max-[899px]:min-h-[50dvh]">
+        <PanelOutline className="ws-tabs:min-h-[50dvh]">
           <Skeleton className="h-3 w-full" />
           <Skeleton className="h-3 w-5/6" />
           <Skeleton className="h-3 w-2/3" />
           <Skeleton className="mt-2 h-24 w-full" />
         </PanelOutline>
-        <PanelOutline className="max-[899px]:hidden">
+        <PanelOutline className="ws-tabs:hidden">
           <Skeleton className="h-3 w-3/4" />
           <Skeleton className="h-3 w-1/2" />
           <Skeleton className="mt-auto h-12 w-full" />
         </PanelOutline>
-        <PanelOutline className="max-[899px]:hidden">
+        <PanelOutline className="ws-tabs:hidden">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
         </PanelOutline>
