@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { STATUS_TEXT } from "@/components/ui/classes";
+import { cx, STATUS_TEXT } from "@/components/ui/classes";
 import { sendJson } from "@/lib/send-json";
 
 type State = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
@@ -67,7 +67,7 @@ export function MarkWatched({
         {label}
       </Button>
       {state.kind === "failed" ? (
-        <p role="alert" className={`${STATUS_TEXT} text-danger`}>
+        <p role="alert" className={cx(STATUS_TEXT, "text-danger")}>
           {state.message}
         </p>
       ) : lastWatchedDay !== null ? (

@@ -1,5 +1,6 @@
 import { Mono } from "@/components/studio/StudioChrome";
 import { Button } from "@/components/ui/Button";
+import { cx } from "@/components/ui/classes";
 import { Notice } from "@/components/ui/Notice";
 
 /**
@@ -56,7 +57,7 @@ export function BlockedCard({
           <ul className="mt-3 space-y-1.5">
             {failing.map((line) => (
               <li key={line.name} className="flex gap-2 text-[12px]">
-                <span className={`w-10 shrink-0 font-medium ${line.status === "fail" ? "text-danger" : "text-warn-text"}`}>
+                <span className={cx("w-10 shrink-0 font-medium", line.status === "fail" ? "text-danger" : "text-warn-text")}>
                   {line.status === "fail" ? "fail" : "warn"}
                 </span>
                 <span className="w-24 shrink-0 text-text">{line.name}</span>

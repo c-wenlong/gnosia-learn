@@ -4,7 +4,7 @@ import { useId } from "react";
 
 import { Dialog } from "@/components/ui/Dialog";
 import { DialogHeader } from "@/components/ui/DialogHeader";
-import { NOTE } from "@/components/ui/classes";
+import { cx, NOTE } from "@/components/ui/classes";
 import { shortcutsFor } from "@/lib/shortcuts";
 
 import { ShortcutList, useIsMac } from "./ShortcutList";
@@ -24,7 +24,7 @@ export function ShortcutsSheet({ studio, closing, onClose }: { studio: boolean; 
       <DialogHeader title={<span id={title}>Keyboard shortcuts</span>} onClose={onClose} />
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-2 pb-5">
         <ShortcutList shortcuts={shortcutsFor(studio)} mac={mac} />
-        <p className={`${NOTE} pt-3`}>Only search works while you are typing in a field. The list is also in Settings, under General.</p>
+        <p className={cx(NOTE, "pt-3")}>Only search works while you are typing in a field. The list is also in Settings, under General.</p>
       </div>
     </Dialog>
   );

@@ -136,7 +136,7 @@ export default async function StudioPage({
   if (!health.ok) {
     moot.abort();
     return (
-      <div data-layout="full" className={`flex min-h-0 min-w-0 flex-1 flex-col ${FADE_IN}`}>
+      <div data-layout="full" className={cx("flex min-h-0 min-w-0 flex-1 flex-col", FADE_IN)}>
         <BlockedCard
           title={health.headline}
           lead={health.detail}
@@ -154,7 +154,7 @@ export default async function StudioPage({
   if (!health.data.tldrawkc) {
     moot.abort();
     return (
-      <div data-layout="full" className={`flex min-h-0 min-w-0 flex-1 flex-col ${FADE_IN}`}>
+      <div data-layout="full" className={cx("flex min-h-0 min-w-0 flex-1 flex-col", FADE_IN)}>
         <BlockedCard
           title="tldrawkc cannot run on this machine"
           lead="Every verb the studio drives launches this tool, so nothing here would work. doctor says:"
@@ -177,7 +177,7 @@ export default async function StudioPage({
   const topicDomains = topicDomainMap(topics);
   if (!listed.ok) {
     return (
-      <div data-layout="full" className={`flex min-h-0 min-w-0 flex-1 flex-col ${FADE_IN}`}>
+      <div data-layout="full" className={cx("flex min-h-0 min-w-0 flex-1 flex-col", FADE_IN)}>
         <BlockedCard title={listed.headline} lead={listed.detail} retryHref={path} />
       </div>
     );
@@ -247,7 +247,7 @@ export default async function StudioPage({
   return (
     // Fades in over the loading frame it replaces (opacity only, filling
     // backwards, so the home composer's @ menu keeps its stacking).
-    <div data-layout="full" className={`flex min-h-0 min-w-0 flex-1 flex-col ${FADE_IN}`}>
+    <div data-layout="full" className={cx("flex min-h-0 min-w-0 flex-1 flex-col", FADE_IN)}>
       <PanelHost
         panel={dialog}
         panelKey={panelSignature(params)}
