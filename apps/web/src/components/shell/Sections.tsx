@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
-import { cx, FIELD_TEXT, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, MENU_PANEL, STATUS_TEXT } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
-import { usePresence } from "@/components/ui/use-presence";
+import { Popover } from "@/components/ui/Popover";
 import { isCurrentRow } from "@/lib/nav";
 import type { RecentChange } from "@/lib/recent-client";
 import {
@@ -30,7 +30,7 @@ import { conversationHref } from "@/lib/studio-view";
 import { SearchResults } from "./ChatSearch";
 import { FADE, FADE_IN } from "./motion";
 import { rowClick } from "./row-click";
-import { RECENT_GLYPHS, ROW, rowFill } from "./rows";
+import { RECENT_GLYPHS, ROW, ROW_TWO_LINE, rowFill } from "./rows";
 import { useShell } from "./shell-context";
 import { useConversations } from "./use-conversations";
 import { useRecent } from "./use-recent";
@@ -38,8 +38,7 @@ import { useRecent } from "./use-recent";
 /**
  * The sidebar under the destinations, in sections (L7 of
  * docs/proposals/library-by-type-and-day.md, after Manus's sidebar): Courses,
- * the courses the owner has opened, each a folder that unfolds to its
- * modules; Pinned, shown once something is pinned; and Recent, what the owner
+ * the courses the owner has opened, each opening where they left off; Pinned, shown once something is pinned; and Recent, what the owner
  * was last in, newest first under day headings, fifty at a time.
  *
  * Recent is two reads merged. The catalog's (`useRecent`, through
@@ -56,6 +55,10 @@ import { useRecent } from "./use-recent";
  * once and stays until the runner's list carries it, or is taken back when
  * the runner refuses it.
  *
+ * A course is one row that opens the module visited last in it, named on a
+ * second line. Its module list is the course page's own sidebar, so this one
+ * does not repeat it, and a long course cannot push Recent off the screen.
+ *
  * Each section label is 13px grey and sticks to the top of the sidebar's
  * scroller while its section scrolls under it. A row's more button appears on
  * hover or focus (always, on a screen with no hover), and its menu has Pin,
@@ -63,7 +66,7 @@ import { useRecent } from "./use-recent";
  * Archive: the studio keeps no archive, and its Start over closes a
  * conversation for good, which a sidebar menu should not do in one press.
  *
- * On the folded rail the labels fade, the courses fold shut, and every row is
+ * On the folded rail the labels fade, and every row is
  * its glyph alone, named for a screen reader and by its tooltip.
  */
 export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () => void; search: HistorySearch }) {
@@ -290,23 +293,6 @@ function CoursesSection({
   pathname: string | null;
   onPick: () => void;
 }) {
-  // A course is open while the owner has it open, and the course of the page
-  // on screen opens by itself, so the current module is in view.
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
-  const here = courses.find((c) => isCurrentRow(c.href, pathname, true))?.slug ?? null;
-  const [seen, setSeen] = useState<string | null>(null);
-  if (here !== seen) {
-    setSeen(here);
-    if (here !== null && !open.has(here)) setOpen(new Set([...open, here]));
-  }
-  const toggle = (slug: string) =>
-    setOpen((now) => {
-      const next = new Set(now);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
-
   return (
     <section aria-labelledby="sidebar-courses" className="pb-2">
       <SectionLabel
@@ -336,66 +322,34 @@ function CoursesSection({
       )}
       <ul className="flex flex-col gap-px">
         {courses.map((course) => {
-          const unfolded = open.has(course.slug) && !rail;
-          const id = `sidebar-course-${course.slug}`;
+          // Any page of the course: the row is where the owner is.
+          const here = isCurrentRow(course.href, pathname, true);
           const name = `${course.code} ${course.title}`;
+          const resume = course.resume === null ? null : `${course.resume.order}. ${course.resume.title}`;
           return (
             <li key={course.slug}>
-              <button
-                type="button"
-                aria-expanded={unfolded}
-                aria-controls={id}
+              <Link
+                href={course.open}
+                onClick={onPick}
+                aria-current={here ? "page" : undefined}
                 aria-label={rail ? name : undefined}
-                title={rail ? name : undefined}
-                onClick={() => toggle(course.slug)}
-                className={cx(ROW, "group/course text-left", rowFill(false))}
+                title={resume === null ? name : `${name}, ${resume}`}
+                // Two lines while the module visited last has a name under the
+                // course, and one row's height on the rail, where only the glyph shows.
+                className={cx(
+                  resume === null ? ROW : ROW_TWO_LINE,
+                  resume !== null && (rail ? "h-[var(--shell-row,36px)]" : "h-[calc(var(--shell-row,36px)+8px)]"),
+                  rowFill(here),
+                )}
               >
-                {/* The folder gives way to a chevron on hover or focus, as
-                    Manus's project row does; both stay mounted and cross-fade. */}
-                <span className="relative size-[18px] shrink-0 text-text2">
-                  <Glyph
-                    name="folder"
-                    size={18}
-                    className={cx(
-                      "absolute inset-0 transition-opacity duration-150 motion-reduce:transition-none",
-                      !rail && "group-hover/course:opacity-0 group-focus-visible/course:opacity-0",
-                    )}
-                  />
-                  <Glyph
-                    name="chevron"
-                    size={18}
-                    className={cx(
-                      "absolute inset-0 opacity-0 transition-[opacity,rotate] duration-200 ease-soft motion-reduce:transition-none",
-                      !rail && "group-hover/course:opacity-100 group-focus-visible/course:opacity-100",
-                      // The kit's chevron points down: to the right while folded.
-                      unfolded ? "rotate-0" : "-rotate-90",
-                    )}
-                  />
+                <Glyph name="folder" size={18} className="text-text2" />
+                <span className={cx("flex min-w-0 flex-1 flex-col", FADE, rail ? "opacity-0" : FADE_IN)}>
+                  <span className="truncate">
+                    <span className="text-text2">{course.code}</span> {course.title}
+                  </span>
+                  {resume !== null && <span className="truncate text-[12px] font-normal leading-4 text-text3">{resume}</span>}
                 </span>
-                <span className={cx("min-w-0 flex-1 truncate", FADE, rail ? "opacity-0" : FADE_IN)}>
-                  <span className="text-text2">{course.code}</span> {course.title}
-                </span>
-              </button>
-              <Collapse open={unfolded} id={id} className="min-w-0">
-                <ul className="flex flex-col gap-px pb-1">
-                  {course.modules.map((m) => {
-                    const on = isCurrentRow(m.href, pathname, true);
-                    return (
-                      <li key={m.slug}>
-                        <Link
-                          href={m.href}
-                          onClick={onPick}
-                          aria-current={on ? "page" : undefined}
-                          className={cx(ROW, "ps-9 text-[13px]", on ? "bg-surface2 font-medium text-text" : "text-text2 hover:bg-surface2/60 hover:text-text")}
-                        >
-                          <span className="w-5 shrink-0 text-right text-[12px] tabular-nums text-text3">{m.order}</span>
-                          <span className="min-w-0 flex-1 truncate">{m.title}</span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Collapse>
+              </Link>
             </li>
           );
         })}
@@ -546,10 +500,15 @@ function RecentRow({
 
 /**
  * A row's menu: a small card under its more button, or over it when the
- * sidebar has no room below. Kept for one beat after it closes so it can fade
- * (`usePresence`). A disclosure of a few buttons, as the account menu is: it
- * closes on Escape (focus back on the more button), on a press outside, and
- * on choosing an item, and focus moves to its first item as it opens.
+ * screen has no room below. A disclosure of a few buttons, as the account
+ * menu is, and like it a kit `Popover`: in the top layer at fixed
+ * coordinates. The rows sit in folds that clip what they hold (`Collapse`,
+ * around Pinned and each course), so a card placed in the row was cut off
+ * under the last pinned row, and checking the sidebar's scroller for room
+ * could not see the fold. It closes on Escape (focus back on the more
+ * button, and the phone drawer around it stays open), on a press outside, on
+ * the focus leaving it and on choosing an item, and focus moves to its first
+ * item as it opens. It pops in and out with the `Popover`.
  */
 function RowMenu({
   open,
@@ -562,59 +521,28 @@ function RowMenu({
   onClose: (refocus: boolean) => void;
   children: (close: (refocus: boolean) => void) => ReactNode;
 }) {
-  const { mounted, leaving } = usePresence(open, 120);
   const box = useRef<HTMLDivElement>(null);
   const id = useId();
-  const [up, setUp] = useState(false);
-  // The latest close, for listeners that stay put while the menu is open.
-  const close = useRef(onClose);
-  useEffect(() => {
-    close.current = onClose;
-  });
 
-  useEffect(() => {
-    if (!open) return;
-    // Over the button when the scroller has no room for the card below it.
-    const scroller = anchor.current?.closest<HTMLElement>("[data-sidebar-scroll]");
-    const button = anchor.current?.getBoundingClientRect();
-    const bounds = scroller?.getBoundingClientRect();
-    const height = box.current?.offsetHeight ?? 120;
-     
-    if (button !== undefined && bounds !== undefined) setUp(button.bottom + height + 8 > bounds.bottom && button.top - height - 8 > bounds.top);
-    box.current?.querySelector<HTMLElement>("a, button")?.focus();
-    const onPointer = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!box.current?.contains(target) && !anchor.current?.contains(target)) close.current(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // The menu's Escape, not the drawer's.
-      event.stopPropagation();
-      close.current(true);
-    };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey, true);
-    };
-  }, [open, anchor]);
+  // After the `Popover`'s own layout effect (a child's runs first) has shown and placed the box.
+  useLayoutEffect(() => {
+    if (open) box.current?.querySelector<HTMLElement>("a, button")?.focus({ preventScroll: true });
+  }, [open]);
 
-  if (!mounted) return null;
   return (
-    <div
+    <Popover
       ref={box}
+      anchorRef={anchor}
+      open={open}
+      // Escape hands the focus back to the more button itself.
+      onOpenChange={() => onClose(false)}
+      placement="bottom-end"
+      minWidth={192}
       id={id}
-      inert={leaving}
-      className={cx(
-        "absolute right-0 z-20 w-48 rounded-xl border border-border bg-surface p-1 shadow-lg",
-        up ? "bottom-full mb-1 origin-bottom-right" : "top-full mt-1 origin-top-right",
-        leaving ? "pointer-events-none animate-pop-out" : "animate-pop-in",
-        "motion-reduce:animate-none",
-      )}
+      className={MENU_PANEL}
     >
       <ul className="flex flex-col">{children(onClose)}</ul>
-    </div>
+    </Popover>
   );
 }
 

@@ -208,6 +208,12 @@ describe("the sidebar", () => {
     expect(nav(container).className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
   });
 
+  it("keeps a flick past the end of its list from scrolling the page behind the drawer", async () => {
+    const container = await mount(true);
+    const scroller = nav(container).querySelector("ul")!.parentElement!;
+    expect(scroller.className.split(" ")).toEqual(expect.arrayContaining(["overflow-y-auto", "overscroll-contain"]));
+  });
+
   it("transitions the drawer's visibility only as it closes, so focus can land as it opens", async () => {
     const container = await mount(true);
     expect(nav(container).className).toContain("max-md:transition-[translate,visibility,box-shadow]");
@@ -377,10 +383,8 @@ describe("the sections", () => {
     code: "CS3230",
     title: "Algorithms",
     href: "/courses/cs3230",
-    modules: [
-      { slug: "m1", title: "Asymptotics", order: 1, href: "/courses/cs3230/m1" },
-      { slug: "m2", title: "Divide and conquer", order: 2, href: "/courses/cs3230/m2" },
-    ],
+    open: "/courses/cs3230/m2",
+    resume: { title: "Divide and conquer", order: 2 },
   };
   const withRows = (patch: Partial<RecentModel> = {}) => mocks.fetchRecent.mockResolvedValue({ ...EMPTY, items: [VIDEO, MODULE, CONCEPT], courses: [COURSE], ...patch });
   const section = (container: HTMLElement, id: string) => nav(container).querySelector(`#${id}`)!.closest("section")!;
@@ -423,7 +427,7 @@ describe("the sections", () => {
     expect(current?.getAttribute("href")).toBe("/library/video%3Aabc");
   });
 
-  it("lists Courses under a sticky 13px label with an add button to /courses, and unfolds a course on press", async () => {
+  it("lists Courses under a sticky 13px label with an add button to /courses, each one row that opens where the owner left off", async () => {
     withRows();
     const container = await mount(false);
     const label = nav(container).querySelector("#sidebar-courses")!;
@@ -431,27 +435,50 @@ describe("the sections", () => {
     expect(label.parentElement!.className).toContain("sticky");
     expect(nav(container).querySelector('a[aria-label="Browse courses"]')?.getAttribute("href")).toBe("/courses");
 
-    const folder = section(container, "sidebar-courses").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    expect(folder.textContent).toBe("CS3230 Algorithms");
-    const modules = container.querySelector<HTMLElement>(`#${folder.getAttribute("aria-controls")}`)!;
-    expect(folder.getAttribute("aria-expanded")).toBe("false");
-    expect(modules.hasAttribute("inert")).toBe(true);
-    act(() => folder.click());
-    expect(folder.getAttribute("aria-expanded")).toBe("true");
-    expect(modules.hasAttribute("inert")).toBe(false);
-    expect([...modules.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual(["/courses/cs3230/m1", "/courses/cs3230/m2"]);
-    // It glides open rather than appearing, and snaps under reduced motion.
-    expect(modules.className).toContain("transition-[grid-template-rows,opacity]");
-    expect(modules.className).toContain("motion-reduce:transition-none");
+    const courses = section(container, "sidebar-courses");
+    // No fold and no module list: the course page has its own.
+    expect(courses.querySelector("button[aria-expanded]")).toBeNull();
+    const rows = [...courses.querySelectorAll<HTMLAnchorElement>("li a")];
+    expect(rows.map((a) => a.getAttribute("href"))).toEqual(["/courses/cs3230/m2"]);
+    expect(rows[0]!.textContent).toBe("CS3230 Algorithms2. Divide and conquer");
+    expect(rows[0]!.getAttribute("aria-current")).toBeNull();
+    // Two lines tall, its height eased so it can settle on the rail.
+    expect(rows[0]!.className).toContain("h-[calc(var(--shell-row,36px)+8px)]");
+    expect(rows[0]!.className).toContain("transition-[height,color,background-color]");
+    expect(rows[0]!.className).toContain("motion-reduce:transition-none");
   });
 
-  it("opens the course of the page on screen by itself, its module marked", async () => {
-    mocks.pathname = "/courses/cs3230/m2/check";
+  it("marks the course of the page on screen, on any page under it", async () => {
+    mocks.pathname = "/courses/cs3230/m1/check";
     withRows();
     const container = await mount(false);
-    const folder = section(container, "sidebar-courses").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    expect(folder.getAttribute("aria-expanded")).toBe("true");
     expect(section(container, "sidebar-courses").querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/courses/cs3230/m2");
+  });
+
+  it("settles a two-line course row to one row's height on the rail, where only its glyph shows", async () => {
+    withRows();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root: Root = createRoot(container);
+    act(() => root.render(createElement(ShellFrame, { studio: false, initialCollapsed: true } as ComponentProps<typeof ShellFrame>, null)));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    const row = nav(container).querySelector<HTMLAnchorElement>('a[aria-label="CS3230 Algorithms"]')!;
+    expect(row.className).toContain("h-[var(--shell-row,36px)]");
+    expect(row.className).not.toContain("+8px");
+  });
+
+  it("gives a course with no module visited one line, opening the course page", async () => {
+    withRows({ courses: [{ ...COURSE, open: COURSE.href, resume: null }] });
+    const container = await mount(false);
+    const row = section(container, "sidebar-courses").querySelector<HTMLAnchorElement>("li a")!;
+    expect(row.getAttribute("href")).toBe("/courses/cs3230");
+    expect(row.textContent).toBe("CS3230 Algorithms");
   });
 
   it("shows Pinned only when something is pinned, and moves a pinned row out of Recent", async () => {
@@ -515,6 +542,19 @@ describe("the sections", () => {
     });
     expect(more.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(more);
+  });
+
+  it("opens a pinned row's menu in the top layer, so the Pinned fold around it cannot clip it", async () => {
+    withRows({ pinned: [{ key: VIDEO.key, kind: "video", title: "Master theorem", href: VIDEO.href, at: ago(1) }] });
+    const container = await mount(false);
+    act(() => moreFor(container, "Master theorem").click());
+    const menu = moreFor(container, "Master theorem").parentElement!.querySelector<HTMLElement>("[popover]")!;
+    expect(menu.getAttribute("popover")).toBe("manual");
+    expect(menu.className.split(" ")).toContain("fixed");
+    // The fold that would have cut it off, still around it in the DOM.
+    expect(menu.closest(".overflow-clip")).not.toBeNull();
+    expect(menuItems(container, "Master theorem")).toEqual(["Unpin"]);
+    expect(document.activeElement?.textContent).toBe("Unpin");
   });
 
   /** Rename on the "TCP vs UDP" row, typed and kept with Enter. */

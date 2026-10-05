@@ -385,7 +385,8 @@ export function AgentSession({
   const backHref = `/courses/${course.slug}/${module.slug}`;
 
   return (
-    <div className="flex flex-col gap-6">
+    // A 48rem reading measure, centred in the `app` layout's wider column.
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <nav>
         <TextLink href={backHref} size="md">
           ← Back to module

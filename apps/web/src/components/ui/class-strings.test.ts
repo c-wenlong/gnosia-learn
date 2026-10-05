@@ -28,15 +28,10 @@ const WEB_SRC = path.resolve(HERE, "../..");
 
 /**
  * Files the rule skips, each with why. Paths are relative to `apps/web/src`.
- * The three below are being changed in parallel PRs as this one lands, so
- * they are left alone here rather than conflicted; take each off the list
- * once its PR has merged (and fix whatever the rule then finds in it).
+ * Empty, and meant to stay that way: a class list that truly cannot go
+ * through `cx` is listed here with the reason.
  */
-const EXCEPTIONS: Record<string, string> = {
-  "components/studio/StudioDialog.tsx": "being changed in a parallel PR",
-  "components/library/ExpandablePanel.tsx": "being changed in a parallel PR",
-  "components/library/LibraryToolbar.tsx": "being changed in a parallel PR",
-};
+const EXCEPTIONS: Record<string, string> = {};
 
 function* sources(dir: string): Generator<string> {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -91,9 +86,25 @@ function handBuiltClassLists(file: string, text: string): string[] {
   const classNames = new Set<string>();
   const built = new Map<string, { line: number; how: string }>();
 
-  const collect = (node: ts.Node) => {
-    if (ts.isIdentifier(node)) classNames.add(node.text);
-    ts.forEachChild(node, collect);
+  // Only where a name is the value that lands in the list: a branch of `? :`,
+  // the right of `&&`, either side of `||` and `??`, an argument of `cx`. A
+  // name tested in a condition (`resume === null ? ROW : ROW_TWO_LINE`) is not
+  // a class list, so its own value is never read as one.
+  const collect = (node: ts.Expression): void => {
+    const at = unwrap(node);
+    if (ts.isIdentifier(at)) classNames.add(at.text);
+    else if (ts.isConditionalExpression(at)) [at.whenTrue, at.whenFalse].forEach(collect);
+    else if (ts.isBinaryExpression(at)) {
+      const op = at.operatorToken.kind;
+      if (op === ts.SyntaxKind.AmpersandAmpersandToken) collect(at.right);
+      else if (op === ts.SyntaxKind.BarBarToken || op === ts.SyntaxKind.QuestionQuestionToken || op === ts.SyntaxKind.PlusToken) {
+        collect(at.left);
+        collect(at.right);
+      }
+    } else if (ts.isTemplateExpression(at)) at.templateSpans.forEach((span) => collect(span.expression));
+    else if (ts.isArrayLiteralExpression(at)) at.elements.forEach(collect);
+    else if (ts.isSpreadElement(at)) collect(at.expression);
+    else if (ts.isCallExpression(at) && ts.isIdentifier(at.expression) && at.expression.text === "cx") at.arguments.forEach(collect);
   };
 
   const visit = (node: ts.Node) => {
@@ -189,6 +200,8 @@ describe("class lists", () => {
         'const g = <p className={cx("p-2")}>{label}</p>;',
         'const h = <p className={open ? "p-2" : NOTE} />;',
         'const i = <p className={given ?? "p-2"} />;',
+        "const resume = `${order}. ${title}`;",
+        'const j = <a className={cx(resume === null ? ROW : ROW_TWO_LINE, resume !== null && "h-9")} title={resume} />;',
       ].join("\n"),
     );
     expect(hits).toEqual([]);

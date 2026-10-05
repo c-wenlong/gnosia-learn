@@ -31,7 +31,13 @@ import { cx } from "@/components/ui/classes";
  * `focus` is the hi-fi's focus mode (frames 05 to 08): on a desktop the page
  * owns the whole screen, drawing its own step bar and exit link, so the
  * sidebar goes. On a phone (frames 14 and 15) the header stays, and the page
- * still starts flush under it.
+ * still starts flush under it. There `main`, the column inside it and the
+ * page's root are a chain of flex columns, so the page is exactly as tall as
+ * the space the header and the store banner leave (`ShellFrame` is at least
+ * the screen), and a session's action row sits at the bottom where a thumb
+ * is. A `min-height` worked out from the header's height missed its
+ * border, its safe-area padding and the banner, so it always ran a few
+ * pixels past the screen, and an open banner pushed the actions off it.
  *
  * `workspace` is `app` with the window scroll taken away on a desktop. The
  * concept page is three panels that scroll inside themselves, and any page
@@ -71,6 +77,8 @@ export function AppShell({
           "has-[[data-layout=workspace]]:px-4 has-[[data-layout=workspace]]:pt-6 md:has-[[data-layout=workspace]]:px-6 md:has-[[data-layout=workspace]]:pb-10",
           "min-[900px]:has-[[data-layout=workspace]]:flex min-[900px]:has-[[data-layout=workspace]]:min-h-0 min-[900px]:has-[[data-layout=workspace]]:pb-6",
           "has-[[data-layout=focus]]:px-0 has-[[data-layout=focus]]:pt-0 md:has-[[data-layout=focus]]:pb-0",
+          // A focus page on a phone fills what the header and the store banner leave (the column below).
+          "max-md:has-[[data-layout=focus]]:flex max-md:has-[[data-layout=focus]]:flex-col",
           "has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:p-0",
         )}
       >
@@ -80,6 +88,8 @@ export function AppShell({
             "has-[[data-layout=wide]]:max-w-6xl has-[[data-layout=app]]:max-w-[1392px] has-[[data-layout=focus]]:max-w-none",
             "has-[[data-layout=workspace]]:max-w-[1392px] min-[900px]:has-[[data-layout=workspace]]:flex min-[900px]:has-[[data-layout=workspace]]:min-h-0 min-[900px]:has-[[data-layout=workspace]]:flex-1 min-[900px]:has-[[data-layout=workspace]]:flex-col",
             "has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:max-w-none has-[[data-layout=full]]:flex-1",
+            "max-md:has-[[data-layout=focus]]:flex max-md:has-[[data-layout=focus]]:flex-1 max-md:has-[[data-layout=focus]]:flex-col",
+            "max-md:[&>[data-layout=focus]]:flex max-md:[&>[data-layout=focus]]:flex-1 max-md:[&>[data-layout=focus]]:flex-col",
           )}
         >
           {children}

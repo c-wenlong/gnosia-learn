@@ -456,13 +456,30 @@ async function step(name, page, fn) {
  * smoke test. React stamps a `__reactProps$…` key on every host node it has
  * hydrated, so its presence is the moment the handler is attached. A React
  * internal, but a stable one, and a smoke test that waits on a guess is worse.
+ *
+ * The node can be replaced while it waits, as the tutor's plain field is when
+ * the studio's @ field is swapped in, and React deletes that key from a node
+ * it removes, so a removed node would hold the wait to its timeout. The wait
+ * ends on removal too, and the locator is resolved again.
  */
-async function hydrated(page, locator) {
-  await locator.waitFor({ state: 'visible' });
-  const handle = await locator.elementHandle();
-  await page.waitForFunction((el) => Object.keys(el).some((k) => k.startsWith('__reactProps')), handle);
-  await handle.dispose();
-  return locator;
+async function hydrated(page, locator, timeout = 15_000) {
+  const until = Date.now() + timeout;
+  for (;;) {
+    const left = () => Math.max(1, until - Date.now());
+    await locator.waitFor({ state: 'visible', timeout: left() });
+    const handle = await locator.elementHandle({ timeout: left() });
+    try {
+      const done = await page.waitForFunction(
+        (el) => !el.isConnected || Object.keys(el).some((k) => k.startsWith('__reactProps')),
+        handle,
+        { timeout: left() },
+      );
+      await done.dispose();
+      if (await handle.evaluate((el) => el.isConnected)) return locator;
+    } finally {
+      await handle.dispose();
+    }
+  }
 }
 async function clickHydrated(page, locator) {
   await (await hydrated(page, locator)).click();
@@ -942,7 +959,10 @@ async function run() {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     if (!page.url().endsWith(`/learn/${state.concept}`)) await go(`/learn/${state.concept}`);
     const tutor = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Tutor', exact: true }) });
-    const input = tutor.getByPlaceholder('Ask about this concept');
+    // The plain textarea, or the studio's @ field (a contenteditable) once the
+    // studio's kit has swapped it in; both are the textbox with this name. The
+    // @ field's placeholder is an element of its own, not an attribute.
+    const input = tutor.getByRole('textbox', { name: /^Ask the tutor about / });
     await hydrated(page, input);
     await input.fill('What is this concept about?');
     const answered = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/agent/chat');
@@ -990,6 +1010,37 @@ async function run() {
         before,
       );
     }
+  });
+
+  await step('session: on a phone the column ends at the bottom of the screen', page, async () => {
+    // A focus page on a phone is a chain of flex columns under the header, so
+    // its action row sits at the bottom where a thumb is. The min-height it
+    // had before, worked out from the header's height, missed the header's
+    // border and ran a pixel or more past the screen on every phone.
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await go(`/learn/${state.concept}/session`);
+      const bar = page.getByRole('progressbar', { name: 'Session progress' });
+      await bar.waitFor();
+      await page.getByRole('button', { name: /^(Check|Continue)$/ }).first().waitFor({ timeout: 30_000 });
+      const m = await page.evaluate(() => ({ doc: document.documentElement.scrollHeight, viewport: window.innerHeight }));
+      assert(m.doc <= m.viewport, `the session is ${m.doc}px tall on a ${m.viewport}px phone screen`);
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
+  await step('shell: a missing course says so inside the shell, the sidebar kept', page, async () => {
+    // `(app)/not-found.tsx`: the root one sits above the shell's layout, so a
+    // `notFound()` from a page took the sidebar with it. The page streams
+    // behind its loading frame, so the status is already sent (200, with
+    // Next's noindex), and what is checked is what the learner sees.
+    await go('/courses/e2e-no-such-course');
+    await main.getByRole('heading', { name: 'Page not found' }).waitFor();
+    await page.getByRole('link', { name: 'Library', exact: true }).first().waitFor();
+    const layout = await main.locator('[data-layout]').first().getAttribute('data-layout');
+    assert(layout === 'app', `the notice is drawn in the ${layout} layout`);
   });
 
   await step("week check: the module path's last step answers through to the close screen", page, async () => {
