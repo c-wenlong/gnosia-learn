@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { isImeKey } from "@/components/ui/composer-keys";
+import { popoverOpen } from "@/components/ui/Popover";
 import { isMacPlatform, isTypingTarget, resolveShortcut, type ShortcutAction } from "@/lib/shortcuts";
 
 /**
@@ -11,8 +12,10 @@ import { isMacPlatform, isTypingTarget, resolveShortcut, type ShortcutAction } f
  *
  * A press is left alone when something already took it (`defaultPrevented`),
  * while an input method is composing, on a key held down (a held Cmd+. would
- * fold and unfold until it was let go), and while a modal dialog is open,
- * since the shell behind it is inert. With focus in a field or the composer
+ * fold and unfold until it was let go), while a modal dialog is open,
+ * since the shell behind it is inert, and while a kit popover is open (a row's
+ * menu), which Escape closes first, unless the focus is in a field, as in a
+ * combobox with its suggestions open. With focus in a field or the composer
  * only search fires (`resolveShortcut`). A press a handler acted on is
  * prevented, so the browser's own Cmd+K or Cmd+. does not run as well; a
  * handler that returns false had nothing to do there (the sidebar is hidden
@@ -27,10 +30,14 @@ export function useShellShortcuts(handlers: Record<ShortcutAction, () => boolean
     const mac = isMacPlatform();
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isImeKey(event) || event.repeat) return;
+      const typing = isTypingTarget(event.target);
       const action = resolveShortcut(event, {
         mac,
-        typing: isTypingTarget(event.target),
-        modal: document.querySelector("dialog[open]") !== null,
+        typing,
+        // An open kit menu counts too: folding the sidebar under a row's
+        // menu would move the menu's anchor out from under it. A field's
+        // suggestions do not: typing, only search fires, and it closes them.
+        modal: document.querySelector("dialog[open]") !== null || (popoverOpen() && !typing),
         studio,
       });
       if (action === null) return;

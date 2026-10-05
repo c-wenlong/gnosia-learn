@@ -84,6 +84,20 @@ describe("readHome", () => {
     expect(home.courses.total).toBe(1);
   });
 
+  it("lists a course opened with no topic done on the courses card, as the sidebar lists it", async () => {
+    const state = await import("@self-learn/catalog/state");
+    vi.mocked(state.recentActivity).mockResolvedValueOnce([
+      { type: "visit", course: "cs3230", module: "m1", at: new Date().toISOString() },
+    ] as never);
+    getCourses.mockResolvedValueOnce([
+      { slug: "cs3230", code: "CS3230", title: "Algorithms", order: 1, modules: [{ slug: "m1", title: "One", order: 1, topics: [{ id: "t1" }] }] },
+      { slug: "cs2111", code: "CS2111", title: "Other", order: 2, modules: [{ slug: "m1", title: "One", order: 1, topics: [{ id: "t2" }] }] },
+    ]);
+    const { readHome } = await import("./home");
+    const home = await readHome();
+    expect(home.courses.rows.map((r) => [r.slug, r.completed, r.total])).toEqual([["cs3230", 0, 1]]);
+  });
+
   it("loses only the draft threads when the studio's drafts cannot be read", async () => {
     vi.stubEnv("STUDIO_ENABLED", "1");
     getCourses.mockResolvedValueOnce([]);

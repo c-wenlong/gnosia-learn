@@ -327,6 +327,13 @@ describe("courses in progress", () => {
     expect(coursesInProgress(COURSES, {})).toEqual([]);
   });
 
+  it("lists a course opened with nothing done yet, as the sidebar's Courses section does, after the ones further along", () => {
+    expect(coursesInProgress(COURSES, { b1: true }, undefined, new Set(["a", "gone"]))).toEqual([
+      { slug: "b", code: "B2", title: "Second", completed: 1, total: 2, percent: 50 },
+      { slug: "a", code: "A1", title: "First", completed: 0, total: 4, percent: 0 },
+    ]);
+  });
+
   it("counts by mastery where a topic has concepts, and by the tick where it has none", () => {
     // a1 mastered and unticked, a2 ticked but not mastered, b1 ticked and bare.
     const standing = { mastered: ["a1"], withConcepts: ["a1", "a2"] };

@@ -1,6 +1,6 @@
 import { cx } from "@/components/ui/classes";
 import type { GlyphName } from "@/components/ui/Glyph";
-import type { RecentKind } from "@/lib/recent-core";
+import { isCourseVisit, type RecentKind } from "@/lib/recent-core";
 
 /**
  * One row of the sidebar: New chat, a destination, a course, a pinned or a
@@ -47,3 +47,9 @@ export const RECENT_GLYPHS: Record<RecentKind, { glyph: GlyphName; word: string 
   concept: { glyph: "concepts", word: "Concept" },
   session: { glyph: "chat", word: "Tutor session" },
 };
+
+/** A row's glyph and word: a course page visited with no module open is a "Course" (`isCourseVisit`). */
+export function recentGlyph(item: { kind: RecentKind; key: string }): { glyph: GlyphName; word: string } {
+  const kind = RECENT_GLYPHS[item.kind];
+  return isCourseVisit(item) ? { ...kind, word: "Course" } : kind;
+}

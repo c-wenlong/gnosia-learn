@@ -165,6 +165,26 @@ describe("Menu", () => {
     expect(outer).not.toHaveBeenCalled();
   });
 
+  it("lets every key it does not act on reach the window, where the shell's shortcuts and the drawer listen", () => {
+    const { button, outer } = setup();
+    const heard: string[] = [];
+    const onWindow = (event: KeyboardEvent) => heard.push(event.key);
+    window.addEventListener("keydown", onWindow);
+    button.focus();
+    for (const k of ["?", "Escape", "Tab"]) key(button, k);
+    act(() => {
+      button.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true, cancelable: true }));
+    });
+    // The keys it does act on stay inside it, so the row never hears them.
+    outer.mockClear();
+    key(button, "Enter");
+    key(button, " ");
+    key(button, "ArrowDown");
+    window.removeEventListener("keydown", onWindow);
+    expect(heard).toEqual(["?", "Escape", "Tab", "k"]);
+    expect(outer).not.toHaveBeenCalled();
+  });
+
   it("opens a list of choices on the checked one, ticked, under its heading", () => {
     const host = mount(
       el(
