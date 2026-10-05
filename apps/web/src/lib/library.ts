@@ -603,18 +603,35 @@ export function sortRows<T extends AssetCardRef & { createdAt: string }>(
   rows: readonly T[],
   sort: LibrarySort,
 ): T[] {
-  const collator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
-  const time = (row: T) => {
-    const t = Date.parse(row.createdAt);
-    return Number.isNaN(t) ? 0 : t;
-  };
-  return [...rows].sort((a, b) => {
-    const primary =
-      sort === "title"
-        ? collator.compare(assetDisplayTitle(a).text, assetDisplayTitle(b).text)
-        : time(b) - time(a);
-    return primary !== 0 ? primary : compareByKindThenId(a, b);
-  });
+  const keys = new Map(rows.map((row) => [row, sortKeyOf(row)]));
+  return [...rows].sort((a, b) => compareSortKeys(keys.get(a) as SortKey, keys.get(b) as SortKey, sort));
+}
+
+/**
+ * Where a row falls in `sortRows`'s order, as plain values: the instant it
+ * was made (0 when that does not parse), the name on its card, its kind and
+ * its id. A page of the Library hands the last one it drew to the next
+ * (`@/lib/library-pages`), so the next page starts after that row even when
+ * rows were added or removed in between, which an offset would not.
+ */
+export interface SortKey {
+  at: number;
+  title: string;
+  kind: string;
+  id: string;
+}
+
+export function sortKeyOf(row: AssetCardRef & { createdAt: string }): SortKey {
+  const at = Date.parse(row.createdAt);
+  return { at: Number.isNaN(at) ? 0 : at, title: assetDisplayTitle(row).text, kind: row.kind, id: row.id };
+}
+
+const titleCollator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+
+/** `sortRows`'s comparison: newest first or title A to Z, then kind, then id. */
+export function compareSortKeys(a: SortKey, b: SortKey, sort: LibrarySort): number {
+  const primary = sort === "title" ? titleCollator.compare(a.title, b.title) : b.at - a.at;
+  return primary !== 0 ? primary : compareByKindThenId(a, b);
 }
 
 /* -------------------------------------------------------------------------- */
