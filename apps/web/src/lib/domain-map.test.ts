@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { GraphEdge } from "@/lib/concept-graph";
 import { cachedDomainLayout, domainLayout, domainOfNode, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
 import { wrapLabel } from "@/lib/concept-graph";
+import { domainShape, type ShapeName } from "@/test/domain-shapes";
 import {
+  AXES_DOT_CLEAR,
+  axesViewBox,
   cullLabels,
   DOT_TOP,
   domainTitle,
@@ -365,5 +368,170 @@ describe("topic titles on a laid out domain (D10)", () => {
       const box = labelBox(item, labelFont(MIN_DRAW_SCALE));
       for (const t of titles) expect(hits(box, t), `${item.id}'s label runs into a title`).toBe(false);
     }
+  });
+});
+
+/**
+ * Written before the axes layout (D11 of docs/proposals/domain-map.md): each
+ * concept at x = its layer (the longest chain of prerequisites inside the
+ * domain, a cycle counting once) and y = how many concepts of the domain need
+ * it, on a log scale, most at the top, with no two dots on one spot.
+ */
+describe("the axes layout (D11)", () => {
+  const layout = domainLayout(nodes, edges, topics, "algorithms");
+  const { axes } = layout;
+  const ids = Object.keys(layout.positions).sort();
+
+  /** Every pair of dots at least the clearance apart, and every dot inside the picture. */
+  function expectApart(a: typeof axes, name: string) {
+    const list = Object.entries(a.positions);
+    for (let i = 0; i < list.length; i++) {
+      const [id, p] = list[i];
+      expect(p.x, `${name}: ${id} is left of the picture`).toBeGreaterThanOrEqual(0);
+      expect(p.x, `${name}: ${id} is right of the picture`).toBeLessThanOrEqual(a.width);
+      expect(p.y, `${name}: ${id} is above the picture`).toBeGreaterThanOrEqual(0);
+      expect(p.y, `${name}: ${id} is below the picture`).toBeLessThanOrEqual(a.height);
+      for (let j = i + 1; j < list.length; j++) {
+        const [other, q] = list[j];
+        expect(Math.hypot(p.x - q.x, p.y - q.y), `${name}: ${id} and ${other} overlap`).toBeGreaterThanOrEqual(AXES_DOT_CLEAR);
+      }
+    }
+  }
+
+  /** Earlier layers to the left, more dependants higher up, everywhere in the picture. */
+  function expectOrdered(a: typeof axes, name: string) {
+    const list = Object.keys(a.positions);
+    for (const x of list) {
+      for (const y of list) {
+        if (a.layer[x] < a.layer[y]) expect(a.positions[x].x, `${name}: ${x} is not left of ${y}`).toBeLessThan(a.positions[y].x);
+        if (a.needed[x] > a.needed[y]) expect(a.positions[x].y, `${name}: ${x} is not above ${y}`).toBeLessThan(a.positions[y].y);
+      }
+    }
+  }
+
+  it("places exactly the domain's concepts", () => {
+    expect(Object.keys(axes.positions).sort()).toEqual(ids);
+    expect(Object.keys(axes.layer).sort()).toEqual(ids);
+    expect(Object.keys(axes.needed).sort()).toEqual(ids);
+  });
+
+  it("gives each concept its longest chain of prerequisites inside the domain as its layer", () => {
+    expect(axes.layer).toEqual({
+      asym: 0,
+      bfs: 0,
+      stray: 0,
+      merge: 1,
+      dfs: 1,
+      quick: 2,
+      heap: 2,
+      memo: 2,
+      dijkstra: 3,
+      knapsack: 3,
+    });
+    expect(axes.layers).toBe(4);
+  });
+
+  it("counts every concept of the domain that needs one, through others too, and none outside it", () => {
+    expect(axes.needed).toEqual({
+      asym: 6,
+      merge: 5,
+      heap: 1,
+      memo: 1,
+      bfs: 2,
+      quick: 0,
+      dfs: 0,
+      dijkstra: 0,
+      knapsack: 0,
+      stray: 0,
+    });
+  });
+
+  it("puts earlier layers to the left and the more needed higher up", () => {
+    expectOrdered(axes, "fixture");
+    // A column per layer: concepts of one layer share it.
+    const center = (layer: number) => axes.plot.x + (layer + 0.5) * axes.column;
+    for (const id of ids) expect(Math.abs(axes.positions[id].x - center(axes.layer[id]))).toBeLessThanOrEqual(axes.column / 2);
+    // On a log scale: the gap between needed by 0 and by 1 is wider than between 5 and 6.
+    const y = (id: string) => axes.positions[id].y;
+    expect(y("stray") - y("heap")).toBeGreaterThan(y("merge") - y("asym"));
+  });
+
+  it("spreads concepts that would land on one spot, so no two dots overlap", () => {
+    expectApart(axes, "fixture");
+    // quick, heap and memo share layer 2; quick, dfs, dijkstra, knapsack and stray share needed 0.
+    expect(new Set(["quick", "heap", "memo"].map((id) => `${axes.positions[id].x},${axes.positions[id].y}`)).size).toBe(3);
+  });
+
+  for (const name of ["algorithms", "hci"] as ShapeName[]) {
+    it(`lays out the owner's ${name} domain in order, with no two dots overlapping`, () => {
+      const shape = domainShape(name);
+      const a = domainLayout(shape.nodes, shape.edges, shape.topics, shape.domain).axes;
+      expect(Object.keys(a.positions)).toHaveLength(shape.nodes.length);
+      expectApart(a, name);
+      expectOrdered(a, name);
+    });
+  }
+
+  it("fits the owner's largest domain on a phone at the smallest scale", () => {
+    const shape = domainShape("algorithms");
+    const a = domainLayout(shape.nodes, shape.edges, shape.topics, shape.domain).axes;
+    expect(a.layers).toBe(10);
+    // A 390px phone's card gives the picture 318px (measured in the built app), framed margin and all.
+    expect(axesViewBox(a).width * MIN_DRAW_SCALE).toBeLessThanOrEqual(318);
+    // The concept most needed is at the top, in the foundational zone at the top left.
+    const top = Object.keys(a.positions).sort((x, y) => a.needed[y] - a.needed[x])[0];
+    expect(a.needed[top]).toBe(30);
+    expect(a.zone).not.toBeNull();
+    const zone = a.zone as Box;
+    expect(zone.x).toBe(a.plot.x);
+    expect(zone.y).toBeLessThanOrEqual(a.plot.y);
+    const p = a.positions[top];
+    expect(p.x).toBeGreaterThan(zone.x);
+    expect(p.x).toBeLessThan(zone.x + zone.width);
+    expect(p.y).toBeLessThan(zone.y + zone.height);
+    expect(zone.width).toBeLessThan(a.plot.width / 2);
+  });
+
+  it("counts concepts that need each other as one layer, each needed by the other", () => {
+    const vocab: DomainTopic[] = [{ slug: "t", title: "T", domain: "d" }];
+    const ns = ["a", "b", "c", "z"].map((id) => node(id, "t"));
+    // a and b need each other; c needs both; z stands alone.
+    const l = domainLayout(ns, [req("a", "b"), req("b", "a"), req("b", "c")], vocab, "d").axes;
+    expect(l.layer).toEqual({ a: 0, b: 0, c: 1, z: 0 });
+    expect(l.needed).toEqual({ a: 2, b: 2, c: 0, z: 0 });
+    expectApart(l, "cycle");
+    expectOrdered(l, "cycle");
+  });
+
+  it("is the same whatever order the rows arrive in", () => {
+    const shape = domainShape("algorithms");
+    const a = domainLayout(shape.nodes, shape.edges, shape.topics, shape.domain).axes;
+    const shuffled = [...shape.nodes].sort((x, y) => (x.id.split("").reverse().join("") < y.id.split("").reverse().join("") ? -1 : 1));
+    expect(domainLayout(shuffled, [...shape.edges].reverse(), shape.topics, shape.domain).axes).toEqual(a);
+  });
+
+  it("lays out a domain with no edges along the baseline, and an empty one as nothing", () => {
+    const vocab: DomainTopic[] = [{ slug: "t", title: "T", domain: "d" }];
+    const flat = domainLayout(["a", "b", "c"].map((id) => node(id, "t")), [], vocab, "d").axes;
+    expect(flat.layers).toBe(1);
+    expect(flat.zone).toBeNull();
+    expectApart(flat, "flat");
+    expect(domainLayout(nodes, edges, topics, "nowhere").axes).toMatchObject({ positions: {}, layers: 0, zone: null });
+  });
+
+  it("is remembered with the groups layout", () => {
+    const first = cachedDomainLayout(nodes, edges, topics, "algorithms");
+    expect(cachedDomainLayout(nodes, edges, topics, "algorithms").axes).toBe(first.axes);
+    expect(first.axes).toEqual(axes);
+  });
+
+  it("draws most labels of the owner's largest domain at full size", () => {
+    const shape = domainShape("algorithms");
+    const a = domainLayout(shape.nodes, shape.edges, shape.topics, shape.domain).axes;
+    const items: LabelItem[] = shape.nodes.map((n) => {
+      const lines = wrapLabel(n.title, 15);
+      return { id: n.id, ...a.positions[n.id], lines: lines.length, em: Math.max(...lines.map((l) => textEm(l))), rank: 6, dependants: 0 };
+    });
+    expect(cullLabels(items, 1).size).toBeGreaterThanOrEqual(shape.nodes.length / 2);
   });
 });

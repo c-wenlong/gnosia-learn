@@ -4,7 +4,8 @@ Status: built, 2026-10-04, all four phases: 1 the tree and the layout
 ([#354](https://github.com/c-wenlong/self-learn/pull/354)), 2 the views and
 the island map removed ([#358](https://github.com/c-wenlong/self-learn/pull/358)),
 3 hover and drag ([#365](https://github.com/c-wenlong/self-learn/pull/365)),
-4 these docs ([#366](https://github.com/c-wenlong/self-learn/pull/366)). It replaces the island map
+4 these docs ([#366](https://github.com/c-wenlong/self-learn/pull/366)); the
+axes layout (D11) followed on 2026-10-05. It replaces the island map
 of [knowledge-map.md](knowledge-map.md), decisions G2 to G8; G1 (the graph
 is what `/learn` opens on, the table at `?view=table`) stands.
 
@@ -150,6 +151,54 @@ A cut title shows whole on a plate over it while the pointer rests there,
 in the concept plate's style, at the title's size, kept inside the picture's
 frame and fading in and out; a title wider than the frame wraps onto further
 lines, and a title that is not cut shows none.
+
+**D11. A domain can be drawn on axes (2026-10-05).** A "Groups / Axes"
+switch sits at the right of the breadcrumb row in the domain view, the
+kit's `SegmentedControl`. Axes puts each concept at x = its layer, the
+longest chain of prerequisites it has inside the domain, and y = how many
+concepts of the domain need it, directly or through others, on a log scale
+with the most at the top. The axes are captioned "Learn earlier" to "Learn
+later" along the bottom and "Needed by more concepts" up the side, and a
+soft "Foundational" zone covers the earliest third of the columns down to
+the lowest of them in the top half of the scale. There are no topic boxes;
+hovering a topic's header in the list lights its concepts, the one way to
+see a topic there. Concepts that need each other count as one layer, the
+same Tarjan pass the topics use (D3), and each is needed by the others.
+
+The positions are worked out on the server beside the groups
+(`DomainLayout.axes`, `axesLayout` in `domain-map.ts`), cached with them, so
+the browser runs no graph layout. A column per layer, at most 880 units
+across so the owner's ten layers fit a 390px phone at 0.35. Concepts that
+would share a spot are spread deterministically: each count of dependants
+is a row, the concepts of one layer and one count sit two to a line in
+their column, by id, and a row starts no higher than its place on the
+scale, below every row above it, and a stack's height below the last dot
+in each of its columns. So the more needed concept is always the higher,
+the earlier always to the left, and no two dots are within 40 units, which
+keeps their hover rings apart. Tests hold that on a fixture and on the
+shapes of the owner's algorithms and HCI domains (the HCI one has 14
+concepts in one layer that nothing needs).
+
+The choice is in the URL as `layout=axes` (none means groups), survives a
+reload and Back, and is kept in memory while the learner moves between
+domains and topics. It is left out of the URL on the cards, in the table
+and in a topic, which is always drawn in groups and shows no switch.
+Switching glides every concept between its two places over 400 ms, ease
+out, with the frame gliding too, while the topic boxes and the axes fade
+out and in; with motion reduced it is instant. Hover, the plate, the
+legend's chips, the list, search, the Status menu and label culling work as
+in groups, the captions kept clear of labels as titles are. Nothing drags on
+the axes, where a place means something: the groups' dragged places are not
+applied there, the "Positions moved" pill is hidden, and both come back
+with Groups.
+
+Measured on `self_learn` in the built app: algorithms is 873 by 714 units
+on axes (865 by 2230 in groups), so the whole domain fits a 1440 by 900
+screen without scrolling; its most needed concept (30 dependants) is in
+the top left of the zone. At 1440 wide 23 of its 56 labels are drawn and
+22 of computer architecture's 43; at 390 wide, 6 of each, none overlapping
+and none under 11px. The glide each way and a hover across 30 concepts held
+every frame at 16.7 ms.
 
 ## Phases
 
