@@ -58,13 +58,16 @@ export function AssetRow({
   /**
    * The page's grouping. Under `topic` the heading is the topic, so the
    * concept is what tells the rows apart, and the line names it first, the
-   * place after it; under the day and the course the place leads. Under
-   * `conversation` the heading is the conversation, so the line names the
-   * concept first too, and never the conversation again: a row with neither
-   * a concept nor a course names its topic.
+   * place after it, and never the topic: a row with no parent sits under the
+   * topic it is filed under, so its line is empty rather than the heading
+   * again. Under the day the place leads; under the course the heading is
+   * the place, so `source` comes without it (`rowSource`'s
+   * `placeInHeading`). Under `conversation` the heading is the conversation,
+   * so the line names the concept first too, and never the conversation
+   * again: a row with neither a concept nor a course names its topic.
    */
   grouping?: LibraryGroup;
-  /** The topic it is filed under, as a label: the line for an asset with no parent. */
+  /** The topic it is filed under, as a label: the line for an asset with no parent, except under a topic heading. */
   topic?: string;
   /** "18:12", in the owner's zone. */
   time: string | null;
@@ -86,11 +89,14 @@ export function AssetRow({
 
   const said = grouping === "conversation" && source?.origin?.kind === "conversation" ? null : source;
   const conceptFirst = grouping === "topic" || grouping === "conversation";
+  // Under a topic heading the row's own topic is the heading.
+  const fallback = grouping === "topic" ? undefined : topic;
   const line =
-    sourceLine(said, name.text, conceptFirst) ?? (topic === undefined ? null : <span className="min-w-0 truncate">{topic}</span>);
+    sourceLine(said, name.text, conceptFirst) ??
+    (fallback === undefined ? null : <span className="min-w-0 truncate">{fallback}</span>);
   // Both lines truncate, and the title's stretched link covers the row, so
   // the link's tooltip carries the whole of each.
-  const tooltip = [name.text, sourceText(said, name.text) ?? topic].filter((t) => t !== undefined && t !== "").join("\n");
+  const tooltip = [name.text, sourceText(said, name.text) ?? fallback].filter((t) => t !== undefined && t !== "").join("\n");
 
   return (
     <div

@@ -47,11 +47,22 @@ export function titleStem(title: string): string {
   );
 }
 
-/** What a saved download is called: the title with the file's extension, else the file's own name. */
+/**
+ * What a saved download is called: the title with the file's extension, else
+ * the file's own name. A companion's title names its format in brackets
+ * ("Big-O, from one running time (vtt)"), which the extension then says
+ * again, so a trailing "(vtt)" that is the extension is dropped: the file is
+ * "Big-O, from one running time.vtt", not "... (vtt).vtt".
+ */
 export function downloadName(filename: string, title: string | null | undefined): string {
-  const stem = title === null || title === undefined ? "" : titleStem(title);
-  if (stem === "") return filename;
   const ext = extensionOf(filename);
+  const named = title === null || title === undefined ? "" : titleStem(title);
+  const bracketed = ext === "" ? "" : `(${ext.slice(1).toLowerCase()})`;
+  const stem =
+    bracketed !== "" && named.toLowerCase().endsWith(bracketed) && named.length > bracketed.length
+      ? titleStem(named.slice(0, -bracketed.length))
+      : named;
+  if (stem === "") return filename;
   // A title that already ends in its extension ("notes.md") is not given a second one.
   return ext !== "" && stem.toLowerCase().endsWith(ext.toLowerCase()) ? stem : `${stem}${ext}`;
 }
