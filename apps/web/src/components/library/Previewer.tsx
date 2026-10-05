@@ -339,7 +339,8 @@ export function Previewer({
 /**
  * Manus's `previewer-header`: 48px, the kind's glyph, the title, the date in
  * grey, and at the right the tools, 28px each: the concept it explains (when
- * it explains one), Download (when there is a stored file), Open page and
+ * it explains one), Conversation (the studio conversation that made it, when
+ * one did: the row menu's Locate in conversation), Download (when there is a stored file), Open page and
  * Close. Until the body arrives, the title and the date are grey bars and
  * only Open page and Close are there, since they need nothing from the
  * server.
@@ -379,6 +380,16 @@ function PreviewerHeader({ header, id, onClose }: { header: PreviewHeader | null
         {header?.concept && (
           <IconButton label={`Open ${header.concept.title}`} size="sm" shape="square" href={header.concept.href}>
             <Glyph name="concepts" size={18} />
+          </IconButton>
+        )}
+        {header?.conversation && (
+          <IconButton
+            label={`Conversation: ${header.conversation.title}`}
+            size="sm"
+            shape="square"
+            href={header.conversation.href}
+          >
+            <Glyph name="compose" size={18} />
           </IconButton>
         )}
         {header?.download && (

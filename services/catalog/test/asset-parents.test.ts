@@ -87,9 +87,24 @@ describe.skipIf(!reachable.ok)("asset parents", () => {
 
     // The diagram was drawn by a studio job from a conversation, twice; the
     // later write names the conversation first. A job with no draft names none.
+    // Each conversation carries the owner's name for it, when they gave one,
+    // and when it was last written to.
     await db.insert(draft).values([
-      { id: "draft-old", title: "First try", plannerSessionId: "p1", transcriptPath: "drafts/old/t.jsonl" },
-      { id: "draft-new", title: "Alpha, again", plannerSessionId: "p2", transcriptPath: "drafts/new/t.jsonl" },
+      {
+        id: "draft-old",
+        title: "First try",
+        plannerSessionId: "p1",
+        transcriptPath: "drafts/old/t.jsonl",
+        updatedAt: new Date("2026-10-04T09:30:00Z"),
+      },
+      {
+        id: "draft-new",
+        title: "Alpha, again",
+        name: "Alpha picture",
+        plannerSessionId: "p2",
+        transcriptPath: "drafts/new/t.jsonl",
+        updatedAt: new Date("2026-10-03T08:00:00Z"),
+      },
       { id: "draft-theirs", title: "Their talk", plannerSessionId: "p3", transcriptPath: "drafts/t/t.jsonl", ownerId: OTHER },
     ]);
     const jobRow = (id: string, draftId: string | null, ownerId = LOCAL_LEARNER_ID) => ({
@@ -143,8 +158,10 @@ describe.skipIf(!reachable.ok)("asset parents", () => {
         ],
         concepts: ["alpha", "beta"],
         conversations: [
-          { id: "draft-new", title: "Alpha, again" },
-          { id: "draft-old", title: "First try" },
+          // By the asset's write, not the conversation's: draft-old was
+          // written to later, but its job wrote this diagram first.
+          { id: "draft-new", title: "Alpha, again", name: "Alpha picture", updatedAt: "2026-10-03T08:00:00.000Z" },
+          { id: "draft-old", title: "First try", name: null, updatedAt: "2026-10-04T09:30:00.000Z" },
         ],
         sessions: [],
       },
