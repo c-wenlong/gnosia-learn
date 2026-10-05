@@ -94,16 +94,16 @@ describe("dialog headers", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("leaves no other Close drawn by hand inside a kit Dialog, but the two not moved yet", () => {
+  it("leaves no other Close drawn by hand inside a kit Dialog, but the previewer's, not moved yet", () => {
     // A file that renders the kit `Dialog` and a button named Close, an
     // `IconButton`'s `label` or a `<button>`'s `aria-label`, as a string
     // either way, has built its own header. The attributes are read up to the
     // next tag, past an arrow function's `>`. A name held in a variable is
-    // beyond a file scan and left to review. Two are left for a change of
-    // their own: Rename's and Ask's (RowMenu), whose card-titled header would
-    // move as it is, and the previewer's row of 28px tools (Previewer). Each
-    // must still be one, so the list only shrinks.
-    const pending = ["components/library/Previewer.tsx", "components/library/RowMenu.tsx"];
+    // beyond a file scan and left to review. One is left for a change of its
+    // own: the previewer's row of 28px tools (Previewer), which needs more
+    // than the kit header holds. It must still be one, so the list only
+    // shrinks.
+    const pending = ["components/library/Previewer.tsx"];
     const closeButton = /<(?:IconButton|button)\b(?:(?!<[A-Za-z])[\s\S]){0,400}?\b(?:aria-)?label=\{?\s*["'`]Close["'`]/;
     const offenders = sources()
       .filter(({ text }) => /<Dialog\b/.test(text) && closeButton.test(text))
