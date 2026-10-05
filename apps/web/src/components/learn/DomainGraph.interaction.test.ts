@@ -6,7 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { LearnIndex } from "./LearnIndex";
 import type { GraphEdge } from "@/lib/concept-graph";
 import { domainLayout, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
-import { movedKey, viewBoxFor } from "@/lib/domain-view";
+import { MIN_DRAW_SCALE, movedKey, textEm, TITLE_INSET, viewBoxFor } from "@/lib/domain-view";
 import type { IndexRow } from "@/lib/learn-index";
 
 /**
@@ -77,13 +77,21 @@ afterEach(() => {
   window.history.replaceState(null, "", "/learn");
 });
 
-function mount() {
+// The same concepts under topics whose titles are too long for their groups at the smallest scale.
+const longTopics: DomainTopic[] = [
+  { slug: "sorting", title: "Sorting and the lower bound on comparison sorts", domain: "algorithms" },
+  { slug: "graphs", title: "Graph search, traversal orders and shortest paths", domain: "algorithms" },
+];
+const longLayout = domainLayout(nodes, edges, longTopics, "algorithms");
+const longMap = { tree: domainTree(nodes, edges, longTopics), layouts: { algorithms: longLayout } };
+
+function mount(m: typeof map = map) {
   window.history.replaceState(null, "", "/learn?domain=algorithms");
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   const initial = { selected: null, view: "graph" as const, scope: "neighbourhood" as const, filter: "all" as const, domain: "algorithms", topic: null };
-  act(() => root.render(createElement(LearnIndex, { rows, edges, map, initial })));
+  act(() => root.render(createElement(LearnIndex, { rows, edges, map: m, initial })));
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
@@ -305,8 +313,8 @@ describe("domain graph label culling", () => {
     delete (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver;
   });
 
-  function drawAt(svg: SVGSVGElement, scale: number) {
-    const view = viewBoxFor(layout, null);
+  function drawAt(svg: SVGSVGElement, scale: number, l: typeof layout = layout) {
+    const view = viewBoxFor(l, null);
     const width = view.width * scale;
     const height = view.height * scale;
     svg.getBoundingClientRect = () => ({ left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}) });
@@ -396,6 +404,69 @@ describe("domain graph label culling", () => {
         expect(d.x >= x && d.x <= x + w && d.y >= y && d.y <= y + h, `${id}'s label covers ${d.id}'s dot`).toBe(false);
       }
     }
+  });
+
+  const titleOf = (host: HTMLElement, topic: string) => host.querySelector(`svg [data-topic-title="${topic}"]`) as SVGTextElement;
+  /** What a title draws: its own text, not the full title its tooltip carries. */
+  const drawnTitle = (el: Element) =>
+    [...el.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent)
+      .join("");
+
+  it("draws a topic's title at the layout size full size, and at 11px on screen at the smallest scale", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 1);
+    expect(Number(titleOf(host, "sorting").getAttribute("font-size"))).toBe(12.5);
+    drawAt(svg, MIN_DRAW_SCALE);
+    for (const topic of ["sorting", "graphs"]) {
+      expect(Number(titleOf(host, topic).getAttribute("font-size")) * MIN_DRAW_SCALE).toBeCloseTo(11);
+    }
+  });
+
+  it("grows a group's title band with its title, leaving its concepts where they are", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 1);
+    const rect = () => host.querySelector('svg [data-group="graphs"] rect') as SVGRectElement;
+    const top = Number(rect().getAttribute("y"));
+    const cy = Number(dotOf(host, "bfs").getAttribute("cy"));
+    drawAt(svg, MIN_DRAW_SCALE);
+    expect(Number(rect().getAttribute("y"))).toBeLessThan(top);
+    expect(Number(dotOf(host, "bfs").getAttribute("cy"))).toBe(cy);
+    // The baseline sits below the band's top by more than the text's ascent, and above the first dot.
+    const title = titleOf(host, "graphs");
+    const font = Number(title.getAttribute("font-size"));
+    expect(Number(title.getAttribute("y")) - font * 0.9).toBeGreaterThan(Number(rect().getAttribute("y")));
+    expect(Number(title.getAttribute("y")) + font * 0.28).toBeLessThan(cy - 12);
+  });
+
+  it("ends a title too long for its group in an ellipsis on a small picture, the full title kept in its tooltip", () => {
+    const { host, svg } = mount(longMap);
+    drawAt(svg, 1, longLayout);
+    for (const t of longTopics) {
+      expect(drawnTitle(titleOf(host, t.slug))).toBe(t.title);
+      expect(titleOf(host, t.slug).querySelector("title")?.textContent).toBe(t.title);
+    }
+    drawAt(svg, MIN_DRAW_SCALE, longLayout);
+    let cut = 0;
+    for (const t of longTopics) {
+      const el = titleOf(host, t.slug);
+      const text = drawnTitle(el);
+      const rect = host.querySelector(`svg [data-group="${t.slug}"] rect`) as SVGRectElement;
+      const font = Number(el.getAttribute("font-size"));
+      // Drawn inside the group, whole or cut.
+      expect(Number(el.getAttribute("x"))).toBe(Number(rect.getAttribute("x")) + TITLE_INSET);
+      expect(Number(el.getAttribute("x")) + textEm(text, true) * font).toBeLessThanOrEqual(Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")));
+      if (text !== t.title) {
+        cut++;
+        expect(text.endsWith("\u2026")).toBe(true);
+        expect(t.title.startsWith(text.slice(0, -1))).toBe(true);
+      }
+      expect(el.querySelector("title")?.textContent).toBe(t.title);
+    }
+    expect(cut).toBeGreaterThan(0);
+    // The list beside the picture names the topic whole.
+    expect(host.querySelector('button[data-list-topic="graphs"]')?.textContent).toContain(longTopics[1].title);
   });
 
   it("keeps the hover plate inside the picture, as it does the labels", () => {

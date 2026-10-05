@@ -918,6 +918,55 @@ async function run() {
     }
   });
 
+  // D10: a topic's title keeps 11px on screen on a phone as a label does, its
+  // group's band grown to hold it, and one too long for its group is cut with
+  // an ellipsis rather than running into a neighbour.
+  await step('learn: topic titles stay readable on a phone, inside their groups', page, async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await go('/learn?domain=machine-learning');
+      const graph = main.getByRole('group', { name: /^Machine learning map/ });
+      await hydrated(page, graph.locator('[data-topic-title]').first());
+      // The title's size follows the scale measured after hydration: wait for it to settle.
+      await page.waitForFunction(() => {
+        const svg = document.querySelector('svg[data-domain-graph]');
+        const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+        return [...svg.querySelectorAll('[data-topic-title]')].every((t) => Number(t.getAttribute('font-size')) * scale >= 10.9);
+      });
+      const { scale, groups } = await graph.evaluate((svg) => {
+        const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+        const dots = [...svg.querySelectorAll('circle[data-dot]')].map((d) => d.getBoundingClientRect());
+        const groups = [...svg.querySelectorAll('[data-group]')].map((g) => {
+          const text = g.querySelector('[data-topic-title]');
+          const rect = g.querySelector('rect').getBoundingClientRect();
+          const box = text.getBoundingClientRect();
+          return {
+            topic: text.getAttribute('data-topic-title'),
+            px: Number(text.getAttribute('font-size')) * scale,
+            inside: box.left >= rect.left - 0.5 && box.right <= rect.right + 0.5 && box.top >= rect.top - 0.5 && box.bottom <= rect.bottom + 0.5,
+            onDot: dots.some((d) => d.left < box.right && box.left < d.right && d.top < box.bottom && box.top < d.bottom),
+            whole: text.querySelector('title')?.textContent ?? '',
+            drawn: [...text.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join(''),
+          };
+        });
+        return { scale, groups };
+      });
+      assert(scale < 0.9, `the picture is drawn at ${scale.toFixed(2)} on a phone, too large to test the titles`);
+      assert(groups.length > 0, 'no topic title is drawn');
+      for (const g of groups) {
+        assert(g.px >= 10.9, `${g.topic}'s title is ${g.px.toFixed(1)}px on screen`);
+        assert(g.inside, `${g.topic}'s title runs outside its group`);
+        assert(!g.onDot, `${g.topic}'s title overlaps a concept's dot`);
+        assert(
+          g.drawn === g.whole || (g.drawn.endsWith('…') && g.whole.startsWith(g.drawn.slice(0, -1))),
+          `${g.topic}'s title drew "${g.drawn}" for "${g.whole}"`,
+        );
+      }
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   await step('workspace: Open in the map lands on the concept in its domain', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go(`/learn/${state.concept}`);

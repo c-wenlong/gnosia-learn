@@ -14,8 +14,6 @@ export const DOT_TOP = 12;
 export const LABEL_BELOW = 46;
 /** Space between a group's edge and the concepts in it. */
 export const GROUP_PAD = 10;
-/** The band at the top of a group that holds the topic's title. */
-export const GROUP_TITLE = 22;
 
 const ACRONYMS = new Set(["ai", "hci", "llm", "llms", "ml", "ui", "ux", "gpu", "cpu", "os", "nlp", "rl"]);
 
@@ -35,17 +33,16 @@ export interface Box {
   height: number;
 }
 
-/** Roughly how wide a topic's title is drawn, at 12.5px bold, with its inset either side. */
-export const titleWidth = (title: string) => Math.ceil(title.length * 7.4 + 2 * 12);
-
 /**
  * The box a topic's group is drawn in, from where its concepts' dots are: wide
  * enough for each label, at least `minWidth` (its title's width) and centred
- * on its concepts when that is wider, with the title band above the top row.
- * The server packs groups by this box and the browser redraws it as concepts
- * are dragged, so a group always follows its concepts.
+ * on its concepts when that is wider, with a title band `band` tall above the
+ * top row (`titleBand`). The server packs groups by this box with the band at
+ * its largest (`TITLE_RESERVE`), and the browser redraws it with the band its
+ * title is drawn at and as concepts are dragged, so a group always follows its
+ * concepts and a larger title grows its band upward, into room kept for it.
  */
-export function groupBox(points: readonly { x: number; y: number }[], minWidth = 0): Box {
+export function groupBox(points: readonly { x: number; y: number }[], minWidth = 0, band = GROUP_TITLE): Box {
   if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
   let minX = Infinity;
   let minY = Infinity;
@@ -61,7 +58,7 @@ export function groupBox(points: readonly { x: number; y: number }[], minWidth =
   const right = maxX + NODE_HALF_WIDTH + GROUP_PAD;
   const width = Math.max(right - left, minWidth);
   const x = (left + right) / 2 - width / 2;
-  const y = minY - DOT_TOP - GROUP_PAD - GROUP_TITLE;
+  const y = minY - DOT_TOP - GROUP_PAD - band;
   return { x, y, width, height: maxY + LABEL_BELOW + GROUP_PAD - y };
 }
 
@@ -73,7 +70,12 @@ const padded = (b: Box): Box => ({ x: b.x - VIEW_PAD, y: b.y - VIEW_PAD, width: 
 /**
  * What the graph frames (D2, D3): the whole domain, or one topic's group when
  * a topic is open, either with a margin. `moved` holds the concepts dragged
- * from where the layout put them, so the frame keeps them in view.
+ * from where the layout put them, so the frame keeps them in view. `band` is
+ * the title band the groups are drawn with: the layout packs each row for the
+ * largest, so a smaller one leaves the top row's boxes lower by the
+ * difference, and the frame starts there rather than over an empty strip.
+ * Only the height depends on `band`, so the scale measured from the width
+ * does not.
  */
 export function viewBoxFor(
   layout: {
@@ -84,14 +86,16 @@ export function viewBoxFor(
   },
   topic: string | null,
   moved: Readonly<Record<string, { x: number; y: number }>> = {},
+  band = GROUP_TITLE,
 ): Box {
   const at = (id: string) => moved[id] ?? layout.positions[id];
   const group = topic === null ? undefined : layout.groups.find((g) => g.topic === topic);
-  if (group !== undefined) return padded(groupBox(group.concepts.map(at), titleWidth(group.title)));
-  const whole: Box = { x: 0, y: 0, width: layout.width, height: layout.height };
+  if (group !== undefined) return padded(groupBox(group.concepts.map(at), titleWidth(group.title), band));
+  const trim = layout.height > 0 ? Math.max(0, TITLE_RESERVE - band) : 0;
+  const whole: Box = { x: 0, y: trim, width: layout.width, height: layout.height - trim };
   const ids = Object.keys(moved).filter((id) => id in layout.positions);
   if (ids.length === 0) return padded(whole);
-  const reach = groupBox(ids.map(at));
+  const reach = groupBox(ids.map(at), 0, band);
   const x = Math.min(whole.x, reach.x);
   const y = Math.min(whole.y, reach.y);
   return padded({
@@ -176,6 +180,79 @@ export const MIN_DRAW_SCALE = 0.35;
 export function labelFont(scale: number): number {
   if (!Number.isFinite(scale) || scale <= 0) return LABEL_SIZE;
   return Math.max(LABEL_SIZE, LABEL_MIN_PX / scale);
+}
+
+/** How far a topic's title starts from its group's left edge, and from its top edge to the top of its text. */
+export const TITLE_INSET = 12;
+export const TITLE_TOP = 7;
+/** The least room kept between the end of a title and its group's right edge, when the title has grown with the scale. */
+export const TITLE_END = 6;
+
+/**
+ * The size a topic's title is drawn at, in layout units, for a picture drawn
+ * at `scale` (D10): as a label, the layout size or 11px on screen, whichever
+ * is larger. The picture is never drawn below `MIN_DRAW_SCALE` (its minimum
+ * width), so the title stops growing there, which bounds the band the layout
+ * has to keep for it.
+ */
+export function titleFont(scale: number): number {
+  if (!Number.isFinite(scale) || scale <= 0) return LABEL_SIZE;
+  return labelFont(Math.max(scale, MIN_DRAW_SCALE));
+}
+
+/**
+ * The band a title of size `font` takes at the top of its group: the inset,
+ * then Figtree's ascent and descent (0.92 and 0.28 of the size, read from the
+ * built app with `getBBox`). 22 at the layout size, as it always was.
+ */
+export const titleBand = (font: number) => TITLE_TOP + (font * 30) / 25;
+/** From a group's top edge to its title's baseline, at size `font`. */
+export const titleBaseline = (font: number) => TITLE_TOP + (font * 23) / 25;
+/** The band at the top of a group that holds the topic's title, at the layout size. */
+export const GROUP_TITLE = titleBand(LABEL_SIZE);
+/**
+ * The band the server packs every group with: the title at its largest, at
+ * `MIN_DRAW_SCALE`, rounded up. A picture drawn larger draws a smaller band,
+ * and the room it leaves goes above the group, between it and the row over it.
+ */
+export const TITLE_RESERVE = Math.ceil(titleBand(LABEL_MIN_PX / MIN_DRAW_SCALE));
+
+/**
+ * How wide a topic's group must be for its title at the layout size, with
+ * its inset either side: the 7.4 units a letter the layout has always allowed,
+ * or the measured glyph widths when a title of wide letters needs more. So a
+ * title drawn at the layout size is never cut, and today's groups keep their
+ * widths.
+ */
+export const titleWidth = (title: string) => Math.ceil(Math.max(title.length * 7.4, textEm(title, true) * LABEL_SIZE) + 2 * TITLE_INSET);
+
+/** The room a title has across its group: from its inset to `TITLE_END` short of the right edge. */
+export const titleRoom = (group: Box) => group.width - TITLE_INSET - TITLE_END;
+
+/**
+ * A title as drawn in `room` layout units at size `font` (D10): whole when it
+ * fits, else as many of its letters as fit before an ellipsis, with no space
+ * left in front of it. The full title stays in the title's tooltip and in the
+ * list beside the picture.
+ */
+export function fitTitle(title: string, font: number, room: number): string {
+  if (textEm(title, true) * font <= room) return title;
+  const chars = [...title];
+  for (let n = chars.length - 1; n > 0; n--) {
+    const cut = `${chars.slice(0, n).join("").trimEnd()}\u2026`;
+    if (textEm(cut, true) * font <= room) return cut;
+  }
+  return "\u2026";
+}
+
+/**
+ * The box a topic's title takes in `group` at size `font`: from its inset, as
+ * wide as the text drawn (`fitTitle`), and from the top inset to the foot of
+ * the band. What the culling keeps labels clear of (D10).
+ */
+export function titleBox(group: Box, title: string, font: number): Box {
+  const text = fitTitle(title, font, titleRoom(group));
+  return { x: group.x + TITLE_INSET, y: group.y + TITLE_TOP, width: textEm(text, true) * font, height: titleBand(font) - TITLE_TOP };
 }
 
 /** From one line of a label to the next, at size `font`. */
@@ -276,7 +353,7 @@ const overlaps = (a: Box, b: Box, gap: number) =>
  * The labels drawn, by greedy collision culling (D10, after ResearchRabbit's
  * graph): in priority order, each label's box is placed unless it overlaps a
  * label already placed, another concept's dot, or one of `clear` (a topic's
- * title). Each box is where the label is drawn, inside `frame` when one is
+ * title), keeping the same 2px on screen from a title as from a label. Each box is where the label is drawn, inside `frame` when one is
  * given (`labelBox`). The hovered concept's label is always placed. Ties go to the concept
  * more of the drawn edges lead from, then to the lower id, so the answer does
  * not depend on the order `items` come in. `scale` is screen pixels per layout
@@ -296,7 +373,7 @@ export function cullLabels(items: readonly LabelItem[], scale: number, clear: re
       item.rank === HOVER_RANK ||
       (!placed.some((p) => overlaps(p, box, gap)) &&
         !dots.some((d) => d.id !== item.id && overlaps(d.box, box, 0)) &&
-        !clear.some((c) => overlaps(c, box, 0)));
+        !clear.some((c) => overlaps(c, box, gap)));
     if (!free) continue;
     placed.push(box);
     shown.add(item.id);
