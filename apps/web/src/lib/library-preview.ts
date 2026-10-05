@@ -145,20 +145,24 @@ export function arrowStep(context: ArrowContext): -1 | 1 | null {
 
 /**
  * The date the panel's header prints in grey beside the title: "edited 2
- * Oct" when the asset changed more than a day after it was made (the row's
- * rule, `editedLabel`), else the day it was made, "4 Oct", with the year
- * when it is not this one. Null when neither instant parses.
+ * Oct" when a person changed the asset more than a day after it was made
+ * (the row's rule, `editedLabel`), else the day it was made, "4 Oct", with
+ * the year when it is not this one; `date` null when neither instant parses.
+ * `dateTime` is the instant the label is from, for `<time dateTime>`.
  */
 export function previewDate(
   createdAt: string,
-  updatedAt: string,
+  editedAt: string | null,
   options: { now: Date; timeZone?: string },
-): string | null {
-  const edited = editedLabel(createdAt, updatedAt, options);
-  if (edited !== null) return edited;
+): { date: string | null; dateTime: string } {
+  const edited = editedLabel(createdAt, editedAt, options);
+  if (edited !== null && editedAt !== null) return { date: edited, dateTime: editedAt };
   const made = Date.parse(createdAt);
-  if (Number.isNaN(made)) return null;
-  return dayLabel(dayKey(new Date(made), options.timeZone), dayKey(options.now, options.timeZone));
+  if (Number.isNaN(made)) return { date: null, dateTime: createdAt };
+  return {
+    date: dayLabel(dayKey(new Date(made), options.timeZone), dayKey(options.now, options.timeZone)),
+    dateTime: createdAt,
+  };
 }
 
 /** What the panel's header shows for the asset open in it, as the server answers it. */

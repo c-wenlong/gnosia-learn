@@ -119,7 +119,7 @@ export function AssetRow({
         {(time !== null || edited !== null) && (
           <span className="hidden shrink-0 flex-col items-end text-[12px] leading-4 text-text2 tabular-nums sm:flex">
             {time !== null && <time dateTime={asset.createdAt}>{time}</time>}
-            {edited !== null && <time dateTime={asset.updatedAt}>{edited}</time>}
+            {edited !== null && <time dateTime={asset.editedAt ?? undefined}>{edited}</time>}
           </span>
         )}
         {menu !== undefined && <RowMenu assetId={asset.id} title={name.text} sections={menu} className="z-10" />}
