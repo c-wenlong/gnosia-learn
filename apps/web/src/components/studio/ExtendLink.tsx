@@ -3,6 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 
 import { preloadMentionComposer } from "@/components/studio/preload-composer";
+import { cx } from "@/components/ui/classes";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 
 /**
@@ -63,12 +64,12 @@ function Label({ diagram, label }: { diagram?: string | undefined; label: string
   // wider word's width and nothing beside it moves when it changes.
   return (
     <span data-pending={pending ? "" : undefined} aria-live="polite" className="grid">
-      <span className={`col-start-1 row-start-1 ${pending ? "invisible" : ""}`}>
+      <span className={cx("col-start-1 row-start-1", pending ? "invisible" : "")}>
         {/* Heard as "Extend: <title>": the visible word first (label in name). */}
         {label}
         {diagram !== undefined && <span className="sr-only">: {diagram}</span>}
       </span>
-      <span aria-hidden={!pending} className={`col-start-1 row-start-1 ${pending ? "animate-pulse motion-reduce:animate-none" : "invisible"}`}>
+      <span aria-hidden={!pending} className={cx("col-start-1 row-start-1", pending ? "animate-pulse motion-reduce:animate-none" : "invisible")}>
         Opening…
       </span>
     </span>

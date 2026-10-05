@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { FadeImg } from "@/components/studio/motion-parts";
+import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { TextLink } from "@/components/ui/TextLink";
 import { tutorTurnsWords, videoPosterHref } from "@/lib/studio-cards";
@@ -25,9 +26,10 @@ export function PinnedDiagram({ name, title }: { name: string; title: string }) 
   const [missing, setMissing] = useState(false);
   return (
     <div
-      className={`flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-border ${
-        missing ? "bg-surface2" : "bg-diagram-matte"
-      }`}
+      className={cx(
+        "flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-border",
+        missing ? "bg-surface2" : "bg-diagram-matte",
+      )}
     >
       {missing ? (
         <span className="max-w-[44ch] px-4 text-center text-[13px] text-text3">
@@ -56,9 +58,10 @@ export function PinnedVideo({ slug, title }: { slug: string; title: string }) {
   const [missing, setMissing] = useState(false);
   return (
     <div
-      className={`flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-border ${
-        missing ? "bg-surface2" : "bg-black"
-      }`}
+      className={cx(
+        "flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-border",
+        missing ? "bg-surface2" : "bg-black",
+      )}
     >
       {missing ? (
         <span className="max-w-[44ch] px-4 text-center text-[13px] text-text3">

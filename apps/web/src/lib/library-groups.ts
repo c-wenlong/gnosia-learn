@@ -1,18 +1,21 @@
-import type { AssetPlace } from "@self-learn/catalog/state";
+import type { AssetConversation, AssetPlace } from "@self-learn/catalog/state";
 
 import type { GraphEdge } from "@/lib/concept-graph";
+import { dayLabel } from "@/lib/day-groups";
+import { dayKey } from "@/lib/days";
 import { topicOrder } from "@/lib/domain-map";
 import { domainTitle } from "@/lib/domain-view";
-import { orderedConcepts, pickPlace } from "@/lib/library-source";
+import { conversationLabel, orderedConcepts, pickPlace } from "@/lib/library-source";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
- * The Library's other two groupings (L4 of
+ * The Library's other three groupings (L4 of
  * docs/proposals/library-by-type-and-day.md): by course, a heading per course
- * with its modules in course order inside, and by topic, a heading per topic
- * in the Learn map's order (`topicRanks`). The day groups are
- * `dayGroups` in `@/lib/day-groups`; all three hand the page the same shape,
- * a key, a label and the rows, so it draws one heading style for each.
+ * with its modules in course order inside; by topic, a heading per topic in
+ * the Learn map's order (`topicRanks`); and by conversation, a heading per
+ * studio conversation, newest first (Manus's Group by task). The day groups
+ * are `dayGroups` in `@/lib/day-groups`; all four hand the page the same
+ * shape, a key, a label and the rows, so it draws one heading style for each.
  *
  * Each row lands in one group, the one its source line names (`rowSource` in
  * `@/lib/library-source`): the course `pickPlace` picks (the open `?course=`
@@ -38,11 +41,11 @@ export interface GroupSection<T> {
 }
 
 export interface RowGroup<T> {
-  /** Unique among the groups: `course:<slug>`, `topic:<slug>`, or `none`. */
+  /** Unique among the groups: `course:<slug>`, `topic:<slug>`, `conversation:<id>`, or `none`. */
   key: string;
   /** "CS3230", "Divide and conquer", "No course". */
   label: string;
-  /** Grey words after the label: the course's title beside its code. */
+  /** Grey words after the label: the course's title beside its code, a conversation's last day. */
   detail?: string;
   /** A topic heading's mastery (`topicBucket`), for its dot. */
   bucket?: MasteryBucket;
@@ -231,5 +234,64 @@ export function topicGroups<T>(
       };
     });
   if (loose.length > 0) groups.push({ key: NO_GROUP, label: "No topic", rows: loose });
+  return groups;
+}
+
+/**
+ * `rows` grouped by the studio conversation that made each (`conversationOf`,
+ * `latestConversation`: of two, the one whose job wrote the asset last, so an
+ * asset is shown once). A heading is the conversation's name by the shared
+ * rule (`conversationLabel`), with the day it was last written to in grey
+ * ("4 Oct", the year when it is not this one, in `timeZone`). The newest
+ * conversation comes first, one whose instant did not read after those, by
+ * id; what no conversation made (a note, a link, a course file) goes under
+ * "No conversation", last.
+ */
+export function conversationGroups<T>(
+  rows: readonly T[],
+  conversationOf: (row: T) => AssetConversation | null,
+  options: { now: Date; timeZone?: string },
+): RowGroup<T>[] {
+  const held = new Map<string, { conversation: AssetConversation; rows: T[] }>();
+  const loose: T[] = [];
+  for (const row of rows) {
+    const conversation = conversationOf(row);
+    if (conversation === null) {
+      loose.push(row);
+      continue;
+    }
+    const entry = held.get(conversation.id);
+    if (entry === undefined) held.set(conversation.id, { conversation, rows: [row] });
+    else entry.rows.push(row);
+  }
+
+  const time = (c: AssetConversation) => {
+    const at = c.updatedAt === null ? Number.NaN : Date.parse(c.updatedAt);
+    return Number.isNaN(at) ? null : at;
+  };
+  const today = dayKey(options.now, options.timeZone);
+  const groups: RowGroup<T>[] = [...held.values()]
+    .sort((a, b) => {
+      const at = time(a.conversation);
+      const bt = time(b.conversation);
+      if (at !== bt) {
+        if (at === null) return 1;
+        if (bt === null) return -1;
+        return bt - at;
+      }
+      const ai = a.conversation.id;
+      const bi = b.conversation.id;
+      return ai < bi ? -1 : ai > bi ? 1 : 0;
+    })
+    .map(({ conversation, rows: list }) => {
+      const at = time(conversation);
+      return {
+        key: `conversation:${conversation.id}`,
+        label: conversationLabel(conversation),
+        ...(at === null ? {} : { detail: dayLabel(dayKey(new Date(at), options.timeZone), today) }),
+        rows: list,
+      };
+    });
+  if (loose.length > 0) groups.push({ key: NO_GROUP, label: "No conversation", rows: loose });
   return groups;
 }

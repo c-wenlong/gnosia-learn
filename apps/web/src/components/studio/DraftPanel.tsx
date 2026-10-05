@@ -1504,7 +1504,7 @@ function Problem({
 function Failure({ text, className }: { text: string | null; className?: string }) {
   if (text === null) return null;
   return (
-    <p role="alert" className={`text-[13px] text-danger ${className ?? ""}`}>
+    <p role="alert" className={cx("text-[13px] text-danger", className)}>
       {text}
     </p>
   );
