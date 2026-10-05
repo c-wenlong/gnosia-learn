@@ -455,6 +455,16 @@ describe("the sections", () => {
     expect(rows[0]!.className).toContain("motion-reduce:transition-none");
   });
 
+  it("names the module visited last by its whole title, never cut at the colon, truncating with the tooltip holding it", async () => {
+    withRows({ courses: [{ ...COURSE, resume: { title: "Week 2: MapReduce", order: 2 } }] });
+    const container = await mount(false);
+    const row = section(container, "sidebar-courses").querySelector<HTMLAnchorElement>("li a")!;
+    const line = [...row.querySelectorAll("span")].find((s) => s.textContent === "2. Week 2: MapReduce")!;
+    expect(line).toBeDefined();
+    expect(line.className).toContain("truncate");
+    expect(row.getAttribute("title")).toBe("CS3230 Algorithms, 2. Week 2: MapReduce");
+  });
+
   it("marks the course of the page on screen, on any page under it", async () => {
     mocks.pathname = "/courses/cs3230/m1/check";
     withRows();
