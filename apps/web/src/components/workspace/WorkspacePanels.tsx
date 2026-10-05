@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { Panel } from "@/components/ui/Panel";
@@ -8,6 +8,7 @@ import { tabIds } from "@/components/ui/roving";
 import { TabList } from "@/components/ui/TabList";
 import { TextLink } from "@/components/ui/TextLink";
 import { useMediaQuery } from "@/components/ui/use-media-query";
+import { scrollBehavior } from "@/lib/motion";
 
 /**
  * The workspace's three panels (hi-fi 04): Note & sources, Tutor, Studio.
@@ -42,6 +43,9 @@ const TABS: { id: PanelKey; label: string }[] = [
 ];
 
 const WIDE = "(min-width: 900px)";
+
+/** The fragment that brings the note into view, wherever it is on this layout. */
+export const NOTE_HASH = "#note";
 
 /** Whether the panels sit side by side (900px up). False on the server and the first client render. */
 function useWide(): boolean {
@@ -197,6 +201,22 @@ export function WorkspacePanels({
   const studioRail = useRef<HTMLButtonElement>(null);
   const studioCollapse = useRef<HTMLButtonElement>(null);
 
+  // `#note` brings the note into view: the tutor's recorded-answer card links
+  // there (D89 of docs/STUDIO-CHAT-FIRST.md). On a phone that is the note's
+  // tab, from 900px up the note panel, opened if it was folded.
+  const notePanel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const show = () => {
+      if (window.location.hash !== NOTE_HASH) return;
+      setActive("note");
+      setNoteOpen(true);
+      requestAnimationFrame(() => notePanel.current?.scrollIntoView?.({ block: "start", behavior: scrollBehavior() }));
+    };
+    show();
+    window.addEventListener("hashchange", show);
+    return () => window.removeEventListener("hashchange", show);
+  }, []);
+
   /** Fold or open a side panel, and hand the focus to the control that undoes it. */
   const toggle = (set: (open: boolean) => void, open: boolean, next: RefObject<HTMLButtonElement | null>) => {
     set(open);
@@ -253,7 +273,7 @@ export function WorkspacePanels({
           "min-[900px]:transition-[grid-template-columns] min-[900px]:duration-200 min-[900px]:ease-soft min-[900px]:motion-reduce:transition-none",
         )}
       >
-        <div className={shown("note")} data-panel="note" data-active={active === "note"} {...tabPanel("note")}>
+        <div ref={notePanel} className={shown("note")} data-panel="note" data-active={active === "note"} {...tabPanel("note")}>
           <SidePanel
             label="Note & sources"
             open={noteOpen}

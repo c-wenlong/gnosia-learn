@@ -1,9 +1,10 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import { cx, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, linkClasses, STATUS_TEXT } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
 import { formatInterval } from "@/lib/review-core";
-import { recordedLine, type Verdict } from "@/lib/tutor-check";
+import { recordedCard, recordedLine, type RecordedResult, type Verdict } from "@/lib/tutor-check";
 
 /**
  * The row under a check the learner answered in the tutor chat (R2 of
@@ -22,11 +23,21 @@ export function VerdictRow({
   verdict,
   live,
   onRecord,
+  concept,
 }: {
   verdict: Verdict;
   live: boolean;
   onRecord: (correct: boolean) => void;
+  /**
+   * The concept the answer was recorded against, and where its note is: given,
+   * a committed verdict becomes a card naming both (D89 of
+   * docs/STUDIO-CHAT-FIRST.md); without it, the one line it always was.
+   */
+  concept?: { title: string; noteHref: string };
 }) {
+  if (verdict.state === "recorded" && verdict.recorded !== null && concept !== undefined) {
+    return <RecordedCard recorded={verdict.recorded} concept={concept} />;
+  }
   if (verdict.state === "recorded" && verdict.recorded !== null) {
     const ok = verdict.recorded.correct;
     return (
@@ -125,5 +136,62 @@ export function VerdictRow({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * What a committed verdict wrote, as a card in the thread: the verdict, the
+ * concept it counts for, how its mastery moved and when it is next reviewed,
+ * and a link to the concept's note. After Manus's deliverable card: the
+ * thread shows what the turn left behind, not only that it happened.
+ */
+function RecordedCard({
+  recorded,
+  concept,
+}: {
+  recorded: RecordedResult;
+  concept: { title: string; noteHref: string };
+}) {
+  const card = recordedCard(recorded, (d) => formatInterval(d));
+  const ok = recorded.correct;
+  return (
+    <section
+      role="status"
+      aria-label={`${card.verdict}: ${concept.title}`}
+      data-recorded={ok ? "correct" : "incorrect"}
+      className="flex w-full max-w-[34rem] animate-enter items-start gap-3 self-start rounded-xl border border-border bg-surface px-4 py-3 motion-reduce:animate-none"
+    >
+      <span
+        aria-hidden
+        className={cx(
+          "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full",
+          ok ? "bg-ok-tint text-ok-text" : "bg-warn-tint text-warn-text",
+        )}
+      >
+        <Glyph name={ok ? "tick" : "close"} size={16} />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className={cx("text-[13px] font-semibold", ok ? "text-ok-text" : "text-warn-text")}>{card.verdict}</p>
+        <p className="text-[14px] font-semibold leading-5 text-text">{concept.title}</p>
+        <p className="text-[13px] text-text2">
+          {card.mastery}
+          {card.review !== null && <span className="text-text3"> · {card.review}</span>}
+        </p>
+        {/* A plain anchor: the note is on this page, and `WorkspacePanels`
+            brings it into view on the `hashchange` a fragment link fires (a
+            second press, with the hash already set, fires one by hand). */}
+        <a
+          href={concept.noteHref}
+          onClick={() => {
+            if (concept.noteHref.startsWith("#") && window.location.hash === concept.noteHref) {
+              window.dispatchEvent(new HashChangeEvent("hashchange"));
+            }
+          }}
+          className={linkClasses({ size: "xs", className: "mt-1 self-start" })}
+        >
+          Open the note
+        </a>
+      </div>
+    </section>
   );
 }

@@ -238,6 +238,7 @@ export {
   type ListAssetsOptions,
 } from "./assets";
 export { assetParents, type AssetOrigin, type AssetParents, type AssetPlace } from "./asset-parents";
+export { conversationMade, madeName, MADE_KINDS, type MadeAsset, type MadeKind } from "./conversation-made";
 export { readAssetNaming, writeAssetName, type AssetNaming } from "./asset-names";
 export {
   domainOf,
