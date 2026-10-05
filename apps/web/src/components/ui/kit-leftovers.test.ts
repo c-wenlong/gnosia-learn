@@ -120,7 +120,7 @@ describe("Collapse", () => {
     // the guard below keeps padding off the box instead.
     const html = renderToStaticMarkup(createElement(Collapse, { open: false, className: "min-w-0" } as ComponentProps<typeof Collapse>, createElement("p", { className: "pt-4" }, "x")));
     expect(html).toContain("grid-rows-[0fr]");
-    expect(html).toMatch(/class="min-h-0 [^"]*min-w-0"><p class="pt-4">/);
+    expect(html).toMatch(/class="[^"]*\bmin-h-0 [^"]*min-w-0"><p class="pt-4">/);
   });
 });
 

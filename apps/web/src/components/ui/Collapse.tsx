@@ -23,6 +23,13 @@ import { Glyph } from "./Glyph";
  * scroll the content up inside its own frame. A browser without
  * `overflow-clip-margin` clips at the edge, as before.
  *
+ * **The inner box is `relative`, and must stay so.** A box clips only the
+ * positioned descendants whose containing block is the box itself or inside
+ * it. Without it, an `sr-only` line (which is `position: absolute`) inside a
+ * shut fold took its containing block from far up the page, escaped the
+ * clip at its static position, and made the document taller than the shell:
+ * the sticky sidebar then stopped short and a blank strip showed under it.
+ *
  * **No padding on `className`.** The inner box cannot be shorter than its own
  * padding, so a fold with `pt-4` there keeps 16px open while it is shut. The
  * space a fold carries (the gap above it, say) goes on its content instead,
@@ -50,7 +57,7 @@ export function Collapse({
         open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
       )}
     >
-      <div className={cx("min-h-0 overflow-clip [overflow-clip-margin:4px]", className)}>{children}</div>
+      <div className={cx("relative min-h-0 overflow-clip [overflow-clip-margin:4px]", className)}>{children}</div>
     </div>
   );
 }
