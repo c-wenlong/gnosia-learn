@@ -1031,6 +1031,13 @@ async function run() {
         await tabs.waitFor({ state: 'hidden' });
         const w = await settled();
         assert(w >= 300, `with the sidebar ${sidebar} at ${width}px the tutor is ${w}px wide`);
+        // A stacked tutor is wide too: the three must sit in one row, note, tutor, studio.
+        const row = await main.evaluate((el) => {
+          const box = (name) => el.querySelector(`section[aria-label="${name}"]`).getBoundingClientRect();
+          const [n, t, s] = [box('Note & sources'), box('Tutor'), box('Studio')];
+          return n.right <= t.left && t.right <= s.left && Math.abs(n.top - t.top) < 2 && Math.abs(t.top - s.top) < 2;
+        });
+        assert(row, `with the sidebar ${sidebar} at ${width}px the three panels are not side by side`);
       } else {
         await tabs.waitFor();
       }
