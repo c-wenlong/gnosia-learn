@@ -648,34 +648,47 @@ export async function runIndex(
       if (videos.length > 0 && report !== undefined && isVideoToolName(indexer.source)) {
         ffmpeg ??= ffmpegOption !== undefined ? Promise.resolve(ffmpegOption) : findFfmpeg();
         store ??= openBlobStore();
-        const cut = await uploadAssets(db, {
-          store,
-          source: indexer.source,
-          repoRoot: toolsRoot,
-          manimkcRoot,
-          remotionkcRoot,
-          revideokcRoot,
-          report,
-          ffmpeg: await ffmpeg,
-          owner,
-          author,
-          authorKind: "import",
-          reason: `catalog import of ${displayPath(repoRoot)}: a poster for each rendered ${indexer.source} video`,
-        });
-        const made = cut.items.filter((i) => i.kind === "poster" && i.action === "made").length;
-        const linked = cut.items.filter((i) => i.kind === "poster" && i.action === "linked").length;
-        if (made + linked > 0) write.notes.push(`${made} poster(s) cut and stored, ${linked} linked to their video again`);
-        const have = await videosWithStoredPoster(db, videos, ownerScope(owner));
-        const missing = videos.filter((id) => !have.has(id));
-        if (missing.length > 0) {
-          const why = cut.postersSkipped ?? cut.items
-            .filter((i) => i.action === "refused")
-            .map((i) => `${i.id}: ${i.detail ?? "refused"}`)
-            .join("; ");
+        let cut: Awaited<ReturnType<typeof uploadAssets>> | undefined;
+        try {
+          cut = await uploadAssets(db, {
+            store,
+            source: indexer.source,
+            repoRoot: toolsRoot,
+            manimkcRoot,
+            remotionkcRoot,
+            revideokcRoot,
+            report,
+            ffmpeg: await ffmpeg,
+            owner,
+            author,
+            authorKind: "import",
+            reason: `catalog import of ${displayPath(repoRoot)}: a poster for each rendered ${indexer.source} video`,
+          });
+        } catch (error) {
+          // The tool's rows are written; its posters are said with the rest,
+          // and the sources after it still run.
           posterless.push(
-            `${missing.length} ${indexer.source} video(s) have no poster (${missing.join(", ")})` +
-              (why === "" ? "" : `: ${why}`),
+            `the ${indexer.source} poster step failed: ${error instanceof Error ? error.message : String(error)}`,
           );
+        }
+        if (cut !== undefined) {
+          const made = cut.items.filter((i) => i.kind === "poster" && i.action === "made").length;
+          const linked = cut.items.filter((i) => i.kind === "poster" && i.action === "linked").length;
+          if (made + linked > 0) write.notes.push(`${made} poster(s) cut and stored, ${linked} linked to their video again`);
+          const have = await videosWithStoredPoster(db, videos, ownerScope(owner));
+          const missing = videos.filter((id) => !have.has(id));
+          if (missing.length > 0) {
+            const why =
+              cut.postersSkipped ??
+              cut.items
+                .filter((i) => i.action === "refused")
+                .map((i) => `${i.id}: ${i.detail ?? "refused"}`)
+                .join("; ");
+            posterless.push(
+              `${missing.length} ${indexer.source} video(s) have no poster (${missing.join(", ")})` +
+                (why === "" ? "" : `: ${why}`),
+            );
+          }
         }
       }
     }

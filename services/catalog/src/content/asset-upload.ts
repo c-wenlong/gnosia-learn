@@ -716,10 +716,35 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       return null;
     }
     if (options.ffmpeg === null) return detach("no ffmpeg to cut a poster from the new render");
+    // The file must still be the bytes the row names, before the cut and
+    // after it: a video answered `present` was not read again, and a render
+    // that changed on disk since its import would otherwise give the stored
+    // video a poster of other bytes.
+    const indexed = async (): Promise<string | null> => {
+      let facts;
+      try {
+        facts = await fileFacts(video.file);
+      } catch (error) {
+        return `${video.row.path} cannot be read under ${outRoot}: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`;
+      }
+      return facts.contentHash === video.row.contentHash
+        ? null
+        : `${video.row.path} has changed since it was indexed, so no poster was cut from it. Run \`${reindex}\`, then upload again.`;
+    };
+    const before = await indexed();
+    if (before !== null) {
+      refuse(id, "poster", before);
+      return detach(before);
+    }
     const frame = await extractPoster(options.ffmpeg, video.file);
     if (!frame.ok) {
       refuse(id, "poster", `no poster could be cut from ${video.row.path}: ${frame.reason}`);
       return detach(`no poster could be cut from the new render: ${frame.reason}`);
+    }
+    const after = await indexed();
+    if (after !== null) {
+      refuse(id, "poster", after);
+      return detach(after);
     }
     const sha256 = createHash("sha256").update(frame.body).digest("hex");
     const dir = await mkdtemp(path.join(os.tmpdir(), "self-learn-poster-"));

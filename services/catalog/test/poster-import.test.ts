@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { asset, assetDerivation, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { asset, assetDerivation, indexRun, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -119,6 +119,7 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
   let work: string;
   let tree: string;
   let manimkc: string;
+  let videoFile: string;
   const derivedFrom = async () =>
     (await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, POSTER))).map((d) => d.sourceAssetId);
   const posterRevisions = async () =>
@@ -139,7 +140,7 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
-    ({ work, tree, manimkc } = await fixture("catalog-poster-import-", async () => Buffer.from("a render")));
+    ({ work, tree, manimkc, videoFile } = await fixture("catalog-poster-import-", async () => Buffer.from("a render")));
   }, 60_000);
 
   afterAll(async () => {
@@ -214,5 +215,42 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
     const second = await upload();
     expect(second.items.find((i) => i.id === POSTER)?.action).toBe("present");
     expect(second.rowsWritten).toBe(0);
+
+    // A render that changed on disk since its import: the stored video is
+    // still `present`, and the poster is not cut from bytes it does not hold.
+    await scratch.db.delete(assetDerivation).where(eq(assetDerivation.assetId, POSTER));
+    await writeFile(videoFile, "a render nobody imported");
+    try {
+      const changed = await upload();
+      const item = changed.items.find((i) => i.id === POSTER);
+      expect(item?.action).toBe("refused");
+      expect(item?.detail).toMatch(/has changed since it was indexed, so no poster was cut from it/);
+      expect(await derivedFrom()).toEqual([]);
+    } finally {
+      await writeFile(videoFile, "a render");
+    }
+    expect((await upload()).items.find((i) => i.id === POSTER)?.action).toBe("linked");
+  });
+
+  it("names a poster step that throws, and still runs the sources after it", async () => {
+    const mirrorsRun = async () =>
+      (await scratch.db.select().from(indexRun).where(eq(indexRun.source, "mirrors")))[0]?.finishedAt?.getTime() ?? 0;
+    const before = await mirrorsRun();
+    // A re-render, so the poster must be cut, on a machine whose temp
+    // directory is gone: the cut's scratch file cannot be made.
+    await writeFile(videoFile, "a re-render");
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = path.join(work, "no-such-temp");
+    try {
+      await expect(importTree()).rejects.toThrow(/the manimkc poster step failed: .*ENOENT/);
+    } finally {
+      if (saved === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = saved;
+    }
+    // mirrors runs after manimkc, and ran.
+    expect(await mirrorsRun()).toBeGreaterThan(before);
+    // With a temp directory again, the next import cuts it.
+    await importTree();
+    expect(await videosWithStoredPoster(scratch.db, [VIDEO], LOCAL)).toEqual(new Set([VIDEO]));
   });
 });
