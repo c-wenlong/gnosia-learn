@@ -153,6 +153,7 @@ export function topicRanks(
   conceptTopic: ReadonlyMap<string, string>,
   edges: readonly GraphEdge[],
 ): Map<string, number> {
+  const domainOf = new Map(vocabulary.map((t) => [t.slug, t.domain]));
   const domains = new Map<string, { slug: string }[]>();
   for (const t of vocabulary) {
     const list = domains.get(t.domain);
@@ -165,7 +166,16 @@ export function topicRanks(
       const bt = domainTitle(b).toLowerCase();
       return at < bt ? -1 : at > bt ? 1 : a < b ? -1 : a > b ? 1 : 0;
     })
-    .flatMap(([, topics]) => topicOrder(topics, conceptTopic, edges));
+    .flatMap(([domain, topics]) => {
+      // The domain's own edges only, as the map orders a domain's topics
+      // (`domainLayout`): a prerequisite in another domain does not move a
+      // topic here.
+      const inside = (concept: string) => {
+        const slug = conceptTopic.get(concept);
+        return slug !== undefined && domainOf.get(slug) === domain;
+      };
+      return topicOrder(topics, conceptTopic, edges.filter((e) => inside(e.from) && inside(e.to)));
+    });
   return new Map(ordered.map((slug, i) => [slug, i]));
 }
 

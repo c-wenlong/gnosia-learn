@@ -114,8 +114,11 @@ goes under the topic of its first concept in the prerequisite graph's order
 (the concept its source line names), else under the first topic the asset
 is itself filed under, else under "No topic", last; an asset under concepts
 of two topics shows once, so the headings' counts add up to the header's.
-Topics come in the order the graph reaches them, by their earliest concept's
-rank (`conceptOrder`), which does not move as the learner studies. A heading
+Topics come domain by domain, the domains by title A to Z, and inside a
+domain in the Learn map's own order (`topicOrder`, D3 of domain-map.md, over
+the domain's own edges): prerequisite topics first, then the vocabulary's
+order. The map puts the most studied domain first; the Library sorts domains
+by title, so the headings do not move as the learner studies. A heading
 carries a mastery dot read the way a course page reads a topic's: mastered
 when every concept of the topic is, not started when none is, learning
 otherwise. In the list, a row under a topic names its concept first and the

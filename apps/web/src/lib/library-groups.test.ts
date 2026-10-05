@@ -175,6 +175,23 @@ describe("topicRanks", () => {
     ]);
     expect(topicRanks([], conceptTopic, edges).size).toBe(0);
   });
+
+  it("ignores a prerequisite in another domain, as the map does", () => {
+    // Paging needs a concept filed under an algorithms topic; inside OS it
+    // still goes by the vocabulary's order, ahead of scheduling.
+    const vocabulary = [
+      { slug: "analysis", domain: "algorithms" },
+      { slug: "paging", domain: "os" },
+      { slug: "scheduling", domain: "os" },
+    ];
+    const conceptTopic = new Map([
+      ["recurrences", "analysis"],
+      ["tlb", "paging"],
+      ["round-robin", "scheduling"],
+    ]);
+    const edges = [{ from: "recurrences", to: "tlb", kind: "requires" as const }];
+    expect([...topicRanks(vocabulary, conceptTopic, edges).keys()]).toEqual(["analysis", "paging", "scheduling"]);
+  });
 });
 
 describe("topicBucket", () => {
