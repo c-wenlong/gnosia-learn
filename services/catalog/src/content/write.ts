@@ -114,6 +114,17 @@ export interface WriteContentResult {
   id: string;
   /** False when the write left the entity exactly as its latest revision records it. */
   changed: boolean;
+  /**
+   * True when `changed` is false and the rows still moved: they had drifted
+   * from the latest revision without a write through this seam, and the
+   * write put them back as that revision records them, so no revision was
+   * appended. A foreign key's `ON DELETE CASCADE` is how that happens: a
+   * prune that deletes a video takes its poster's `asset_derivation` row with
+   * it, and the poster's latest revision still records the link (2026-10-05).
+   * Before this, such a write was rolled back as a no-op and the link could
+   * never be restored.
+   */
+  repaired?: true;
   /** The entity's latest revision after the write: the one appended, or the unchanged latest. */
   revisionId: number;
   seq: number;
@@ -242,7 +253,7 @@ async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promi
 
   // The writes run in a savepoint, so a write that changes nothing can be
   // rolled back whole once the snapshot says so.
-  const holder: { after?: SnapshotRead } = {};
+  const holder: { after?: SnapshotRead; repaired?: true } = {};
   let unchanged = false;
   try {
     await tx.transaction(async (sp) => {
@@ -250,7 +261,13 @@ async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promi
       const read = (await readSnapshots(sp, input.type, [input.id])).get(input.id);
       if (read === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
       holder.after = read;
-      if (!needsRevision(latest, read)) throw new Unchanged();
+      if (!needsRevision(latest, read)) {
+        // Rolled back only when the rows are as they were: a write that
+        // brought drifted rows back to the latest revision keeps its rows,
+        // and appends nothing, since the history already says this.
+        if (before !== undefined && before.hash === read.hash) throw new Unchanged();
+        holder.repaired = true;
+      }
     });
   } catch (error) {
     if (!(error instanceof Unchanged)) throw error;
@@ -259,11 +276,12 @@ async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promi
   const after = holder.after;
   if (after === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
 
-  if (unchanged && latest !== undefined) {
+  if ((unchanged || holder.repaired === true) && latest !== undefined) {
     return {
       type: input.type,
       id: input.id,
       changed: false,
+      ...(holder.repaired === true ? { repaired: true as const } : {}),
       revisionId: latest.id,
       seq: latest.seq,
       op: null,

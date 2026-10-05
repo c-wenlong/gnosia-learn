@@ -478,7 +478,7 @@ export async function buildToolRows(
   root: string,
   resolution: TopicResolution,
   options: VideoToolRowOptions = {},
-): Promise<{ rows: SourceRows; notes: string[]; metadata: { outRoot: string }; blobs: SourceBlob[] }> {
+): Promise<{ rows: SourceRows; notes: string[]; metadata: { outRoot: string }; blobs: SourceBlob[]; report: TopicsReport }> {
   const owner = options.owner ?? LOCAL_LEARNER_ID;
   const knownConcepts = options.knownConcepts ?? new Set<string>();
   const assets: NewAsset[] = [];
@@ -631,6 +631,7 @@ export async function buildToolRows(
     // not `index_run.source_root`.
     metadata: { outRoot },
     blobs,
+    report,
   };
 }
 

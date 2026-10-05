@@ -435,9 +435,11 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     // No stored poster for the video now: the route cuts one from the file.
     expect(await derivedFrom()).toEqual([]);
 
-    // A later run with ffmpeg sees no poster for the video and makes one.
+    // A later run with ffmpeg sees no poster for the video and cuts one. This
+    // ffmpeg prints the same JPEG whatever it is given, so the cut is the
+    // picture the row already names, and the run says it linked it again.
     const withFfmpeg = await uploadAssets(scratch.db, options());
-    expect(withFfmpeg.items.find((i) => i.id === posterId(VIDEO_ID))?.action).toBe("made");
+    expect(withFfmpeg.items.find((i) => i.id === posterId(VIDEO_ID))?.action).toBe("linked");
     expect(await derivedFrom()).toEqual([VIDEO_ID]);
     expect((await assetRow(posterId(VIDEO_ID)))?.blobKey).toBe(oldPoster);
   });

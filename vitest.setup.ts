@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -7,6 +8,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -148,6 +150,29 @@ process.env.REMOTIONKC_ROOT = path.join(temp, "self-learn-test-no-remotionkc");
 // revideokc, the third video tool, for the same reason and the same way.
 process.env.REVIDEOKC_ROOT = path.join(temp, "self-learn-test-no-revideokc");
 
+// ffmpeg, as a stand-in. `catalog import` cuts a poster for every rendered
+// video it stores (2026-10-05) and fails when it cannot, and the suites'
+// renders are a few bytes of text, which a real ffmpeg finds no frame in. The
+// stand-in prints a small JPEG-shaped body that depends on the video's bytes,
+// so a re-render cuts a different poster, as a real one would. A suite that
+// wants the real binary passes its path explicitly (test/poster-import.test.ts
+// does, with a real mp4), and one that wants none sets FFMPEG_PATH itself.
+const ffmpegHome = mkdtempSync(path.join(temp, "self-learn-ffmpeg-"));
+const ffmpegStandIn = path.join(ffmpegHome, "ffmpeg");
+writeFileSync(
+  ffmpegStandIn,
+  [
+    "#!/bin/sh",
+    'while [ $# -gt 0 ]; do if [ "$1" = "-i" ]; then file="$2"; fi; shift; done',
+    "printf '\\377\\330\\377\\340'",
+    'cksum < "$file" | cut -d " " -f 1',
+    "printf '\\377\\331'",
+    "",
+  ].join("\n"),
+);
+chmodSync(ffmpegStandIn, 0o755);
+process.env.FFMPEG_PATH = ffmpegStandIn;
+
 const removedBefore = REMOVED.map((folder) => [existsSync(folder), deepListing(folder)] as const);
 const seedBefore = deepListing(SEED);
 
@@ -163,5 +188,6 @@ afterAll(() => {
   } finally {
     if (root.startsWith(`${temp}${path.sep}`)) rmSync(root, { recursive: true, force: true });
     if (blobHome?.startsWith(`${temp}${path.sep}`)) rmSync(blobHome, { recursive: true, force: true });
+    rmSync(ffmpegHome, { recursive: true, force: true });
   }
 });
