@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type Ref } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx, STATUS_TEXT } from "@/components/ui/classes";
@@ -72,13 +72,14 @@ export function FavoriteButton({ assetId, initial }: { assetId: string; initial:
 }
 
 /**
- * Download: the asset's own file route with `download`, so the browser saves
- * it under its name rather than opening it. A plain anchor, not `next/link`,
- * because there is no page to navigate to.
+ * Download: the file route's `?download=1` (`assetDownloadHref`), the one
+ * every Download in the app takes, so the saved file has one name wherever
+ * it was pressed: the route's `Content-Disposition`, after the asset's title.
+ * A plain anchor, not `next/link`, because there is no page to navigate to.
  */
-export function DownloadButton({ href, filename }: { href: string; filename?: string }) {
+export function DownloadButton({ href }: { href: string }) {
   return (
-    <a href={href} download={filename ?? true} className={buttonClasses({ variant: "secondary", size: "sm" })}>
+    <a href={href} download className={buttonClasses({ variant: "secondary", size: "sm" })}>
       <Glyph name="download" size={18} className="text-text2" />
       Download
     </a>
@@ -91,10 +92,13 @@ export function AskButton({
   onToggle,
   controls,
   subject = "video",
+  buttonRef,
 }: {
   open: boolean;
   onToggle: () => void;
   controls: string;
+  /** The button, for the fold to hand focus back to when Escape closes it. */
+  buttonRef?: Ref<HTMLButtonElement>;
   /** What the tooltip names: "video", "note", "diagram". */
   subject?: string;
 }) {
@@ -105,6 +109,7 @@ export function AskButton({
       aria-expanded={open}
       aria-controls={controls}
       onClick={onToggle}
+      ref={buttonRef}
       title={`Ask the tutor a quick question about this ${subject}. Not saved.`}
     >
       <Glyph name="sparkle" size={18} className={open ? "text-accent-text" : "text-text2"} />

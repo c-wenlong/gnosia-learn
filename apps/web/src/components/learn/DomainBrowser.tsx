@@ -9,10 +9,11 @@ import { Card } from "@/components/ui/Card";
 import { CARD_TITLE, cx, LABEL } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
 import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
 import type { DomainLayout, DomainMapData, DomainSummary } from "@/lib/domain-map";
 import { domainTitle, movedKey, readMoved } from "@/lib/domain-view";
-import { legendMembers, legendPress, type IndexFilter, type IndexRow } from "@/lib/learn-index";
+import { legendMembers, legendPress, type IndexFilter, type IndexRow, type MapLayout } from "@/lib/learn-index";
 import { relatedTo, standingLine } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
@@ -26,6 +27,12 @@ import { LEECH_LABEL } from "@/lib/review-core";
  */
 
 export type Place = { domain: string | null; topic: string | null };
+
+/** The two ways to draw a domain (D11): a group per topic, or on axes. */
+const LAYOUT_ITEMS: SegmentItem<MapLayout>[] = [
+  { id: "groups", label: "Groups" },
+  { id: "axes", label: "Axes" },
+];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -154,6 +161,8 @@ export function DomainView({
   onPick,
   panelFocus = 0,
   onPanelFocused,
+  arrangement = "groups",
+  onArrange,
 }: {
   domain: DomainSummary;
   layout: DomainLayout;
@@ -175,6 +184,9 @@ export function DomainView({
   /** Bumped when a pick moved here from another place: the new panel's heading takes the focus. */
   panelFocus?: number;
   onPanelFocused?: () => void;
+  /** Groups or axes (D11); a topic is always groups, and offers no switch. */
+  arrangement?: MapLayout;
+  onArrange?: (next: MapLayout) => void;
 }) {
   const graphNodes = useMemo(() => new Map<string, DomainGraphNode>([...rows].map(([id, r]) => [id, r])), [rows]);
   const focus = selected === null ? null : (rows.get(selected) ?? null);
@@ -206,12 +218,15 @@ export function DomainView({
     [legend.group, members],
   );
   const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
-  // The pill goes as Reset starts, not when the glide home ends.
-  const anyMoved = Object.keys(moved).length > 0 && !gliding;
+  const onAxes = topic === null && arrangement === "axes";
+  // The pill goes as Reset starts, not when the glide home ends. On the axes nothing has moved:
+  // the groups' dragged places wait there for Groups to come back.
+  const anyMoved = Object.keys(moved).length > 0 && !gliding && !onAxes;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
         <Breadcrumb domain={domain} topic={topic} onGo={onGo} />
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {anyMoved && (
           <div
             role="status"
@@ -228,6 +243,10 @@ export function DomainView({
             </button>
           </div>
         )}
+        {topic === null && onArrange !== undefined && (
+          <SegmentedControl label="Layout" value={arrangement} onChange={onArrange} items={LAYOUT_ITEMS} />
+        )}
+        </div>
       </div>
       {/* Sized by the room the page has: the list docks beside the picture when it fits, under it otherwise. */}
       <div className="@container">
@@ -266,6 +285,7 @@ export function DomainView({
               onMove={move}
               onMoveEnd={save}
               locked={gliding}
+              arrangement={onAxes ? "axes" : "groups"}
             />
             {domain.links.length > 0 && (
               <p data-outside className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-text2">
@@ -283,8 +303,11 @@ export function DomainView({
               </p>
             )}
             <p className="text-[12px] leading-4 text-text3">
-              Prerequisites sit above. Solid: required. Dashed: background. The arc round a dot is its p(L); a dashed ring is
-              ready to learn; a red dot is a review overdue, a red ring keeps slipping.
+              {onAxes
+                ? "Left to right: when a concept is learnt. Higher up: more concepts need it. Hover a topic in the list to find its concepts."
+                : "Prerequisites sit above."}{" "}
+              Solid: required. Dashed: background. The arc round a dot is its p(L); a dashed ring is ready to learn; a red dot is a
+              review overdue, a red ring keeps slipping.
             </p>
           </Card>
           <div className="flex min-w-0 flex-col gap-3">

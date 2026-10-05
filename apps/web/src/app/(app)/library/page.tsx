@@ -61,7 +61,7 @@ import {
   type RowGroup,
 } from "@/lib/library-groups";
 import { parseOpen } from "@/lib/library-preview";
-import { conceptOrder, latestConversation, rowSource } from "@/lib/library-source";
+import { conceptOrder, latestConversation, orderedConcepts, rowSource } from "@/lib/library-source";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
 import { ownValue } from "@/lib/own-key";
 import { rowMenuItems } from "@/lib/row-menu";
@@ -258,11 +258,15 @@ export default async function LibraryPage({
 
   const listLabel = q === null ? "Assets" : `Assets matching ${q}`;
   // What a card or a row names beside the title: the first concept the asset
-  // explains, with how many more, or its topic when it explains none.
+  // explains, in the prerequisite graph's order (`orderedConcepts`), so the
+  // card, the row's line, its menu and the topic heading name the same one,
+  // with how many more; or its topic when it explains none. Grouped by topic,
+  // that topic is the heading the row sits under (`topicGroups` files a row
+  // with no concept by its first topic), so it is not said again.
   const describe = (row: (typeof matching)[number]): { concept?: CardConcept; topic?: string } => {
-    const explained = explainedConcepts(ownValue(concepts, row.id) ?? [], kbById);
+    const explained = explainedConcepts(orderedConcepts(ownValue(concepts, row.id) ?? [], order), kbById);
     const first = explained[0];
-    const topicSlug = row.topics[0];
+    const topicSlug = group === "topic" ? undefined : row.topics[0];
     return {
       concept: first === undefined ? undefined : { title: first.title, bucket: first.bucket, more: explained.length - 1 },
       topic: topicSlug === undefined ? undefined : (ownValue(titles, topicSlug) ?? topicSlug),
@@ -274,6 +278,8 @@ export default async function LibraryPage({
     rowSource(ownValue(library.parents, row.id), {
       course,
       order,
+      // Grouped by course, the heading and the section already say the place.
+      placeInHeading: group === "course",
       concept: (slug) => {
         const known = kbById.get(slug);
         return known === undefined ? null : { title: known.title, bucket: bucketOf(known) };

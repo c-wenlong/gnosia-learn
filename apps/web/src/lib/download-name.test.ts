@@ -44,6 +44,20 @@ describe("downloadName and titleStem", () => {
     expect(downloadName("README", "Read me")).toBe("Read me");
   });
 
+  it("drops a bracketed format that is the extension, rather than saying it twice", () => {
+    expect(downloadName("big_o.vtt", "Big-O and big-Omega, from one running time (vtt)")).toBe(
+      "Big-O and big-Omega, from one running time.vtt",
+    );
+    expect(downloadName("x.VTT", "Captions (VTT)")).toBe("Captions.VTT");
+    // Any other bracket stays: it is part of the name, not the format.
+    expect(downloadName("big_o.json", "Big-O (chapters)")).toBe("Big-O (chapters).json");
+    expect(downloadName("loop.mp4", "Loop engineering (narrated)")).toBe("Loop engineering (narrated).mp4");
+    // A title that is only the bracket keeps it, and no extension means nothing to drop.
+    expect(downloadName("a.vtt", "(vtt)")).toBe("(vtt).vtt");
+    expect(downloadName("README", "Read me (vtt)")).toBe("Read me (vtt)");
+    expect(contentDisposition("attachment", "a.vtt", "Paging (vtt)")).toBe('attachment; filename="Paging.vtt"');
+  });
+
   it("caps a long title", () => {
     expect(downloadName("a.mp4", "x".repeat(400))).toBe(`${"x".repeat(120)}.mp4`);
   });
