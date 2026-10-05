@@ -33,4 +33,17 @@ describe("Collapse", () => {
     expect(region.className).toContain("grid-rows-[1fr]");
     act(() => root.unmount());
   });
+
+  it("is the containing block for what it clips, so a shut fold's sr-only line cannot escape it", () => {
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    act(() => root.render(createElement(
+        Collapse,
+        { open: false, id: "r" } as ComponentProps<typeof Collapse>,
+        createElement("p", { className: "sr-only" }, "Saved"),
+      )));
+    const clip = (host.querySelector("#r") as HTMLElement).firstElementChild as HTMLElement;
+    expect(clip.className.split(" ")).toEqual(expect.arrayContaining(["relative", "overflow-clip"]));
+    act(() => root.unmount());
+  });
 });

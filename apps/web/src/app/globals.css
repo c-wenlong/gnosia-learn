@@ -844,6 +844,6 @@ html.theme-fade *::after {
 
 @media (prefers-reduced-motion: no-preference) {
   :root:not([data-motion="reduce"]) .settings-panel:not([hidden]) {
-    animation: settings-panel-in 180ms ease-out both;
+    animation: settings-panel-in 180ms ease-out backwards;
   }
 }
