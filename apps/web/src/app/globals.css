@@ -651,7 +651,6 @@ body {
   position: absolute;
   aspect-ratio: 1;
   border-radius: 9999px;
-  will-change: transform;
 }
 
 .studio-glow-teal {
@@ -672,7 +671,7 @@ body {
   left: 28%;
   top: -22%;
   width: min(46%, 40rem);
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-teal) 22%, transparent), transparent);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-mist) 22%, transparent), transparent);
 }
 
 .dark .studio-glow-teal {
@@ -726,6 +725,9 @@ body {
 /* Slow on purpose, and each field on its own period, so the three never line
    up into a visible loop. */
 @media (prefers-reduced-motion: no-preference) {
+  .studio-glow > span {
+    will-change: transform;
+  }
   .studio-glow-teal {
     animation: studio-glow-a 26s ease-in-out infinite;
   }
@@ -938,6 +940,11 @@ body {
 :root[data-motion="reduce"] .studio-breathe,
 :root[data-motion="reduce"] .studio-glow > span {
   animation: none;
+}
+
+/* A still field needs no layer of its own. */
+:root[data-motion="reduce"] .studio-glow > span {
+  will-change: auto;
 }
 
 :root[data-motion="reduce"] .animate-\[studio-slide_1\.6s_ease-in-out_infinite\] {

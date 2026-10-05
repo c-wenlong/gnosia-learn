@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     value: Value;
     sendDisabled?: boolean;
     disabledReason?: string;
+    quietReason?: boolean;
     layout?: string;
     toolbar?: ReactNode;
     handleRef?: { current: unknown };
@@ -120,6 +121,13 @@ describe("the home composer", () => {
     expect(mocks.composer!.sendDisabled).toBe(true);
     expect(mocks.createDraft).not.toHaveBeenCalled();
     expect(mocks.begin).not.toHaveBeenCalled();
+  });
+
+  it("gives a bare tag's reason to a screen reader without a line under the box", () => {
+    mount();
+    act(() => mocks.composer!.onChange({ text: "@diagram", mentions: [{ kind: "diagram", start: 0, end: 8 }] }));
+    expect(mocks.composer!.disabledReason).toBe("Say what it should show");
+    expect(mocks.composer!.quietReason).toBe(true);
   });
 
   it("keeps the words and says why when the draft could not be made", async () => {
