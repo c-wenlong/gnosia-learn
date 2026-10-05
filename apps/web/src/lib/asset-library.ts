@@ -66,17 +66,24 @@ import { parseTranscript } from "@/lib/transcript";
  */
 
 /**
- * The most rows one library read will fetch.
+ * The most rows one library read will fetch: a safety limit, not a page size.
  *
- * The catalog holds 206 today and this page renders all of them, which is the
- * right design at that size: filtering and grouping happen over a list the
- * server already has, there is no pagination state to keep in the URL, and the
- * counts on the chips are the counts of what clicking them yields. The cap
- * exists so that a catalog which grows an order of magnitude says so — the page
- * reports a truncated read rather than quietly showing a prefix of itself and
- * looking complete.
+ * The Library draws in pages (L9 of docs/proposals/library-by-type-and-day.md),
+ * but every page is cut from the whole matching list: the search, the course
+ * and favourite filters, the sort and the day, course, topic and conversation
+ * headings, each with its whole count, are worked out over every row the
+ * owner holds (`loadLibraryView`). So the read takes them all. This was 1,000
+ * when every row was drawn at once, and the owner's catalog passed it on
+ * 2026-10-05 with 1,023 rows: the header counted 626 files and the list held
+ * 603.
+ *
+ * 20,000 is about twenty times that catalog. It stays as a limit so a runaway
+ * catalog says so ("Read stopped at ...") rather than quietly showing a prefix
+ * of itself, and it keeps the reads that name every row by id
+ * (`assetParents`, the stored-blob checks) well under Postgres's 65,535 bind
+ * parameters per statement.
  */
-export const LIBRARY_ROW_CAP = 1000;
+export const LIBRARY_ROW_CAP = 20_000;
 
 /** How much of a text sidecar is read for display. */
 export const TEXT_PREVIEW_BYTES = 256 * 1024;
@@ -89,7 +96,7 @@ export interface LibrarySnapshot {
   counts: AssetKindCount[];
   /** False when the database could not be reached; `rows` and `counts` are then empty. */
   reachable: boolean;
-  /** True when the read came back at `LIBRARY_ROW_CAP` and there may be more. */
+  /** True when the catalog holds more than `LIBRARY_ROW_CAP` rows and `rows` is the first of them. */
   truncated: boolean;
   /**
    * Titles for every topic slug the rows carry, keyed by slug.
@@ -149,10 +156,14 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
   const scope = await currentScope();
   try {
     const db = await catalogDatabase();
-    const [rows, counts] = await Promise.all([
-      listAssets(db, { limit: LIBRARY_ROW_CAP }, scope),
+    // One row past the limit, so a catalog of exactly `LIBRARY_ROW_CAP` rows
+    // is whole and one of a row more is said to be cut.
+    const [read, counts] = await Promise.all([
+      listAssets(db, { limit: LIBRARY_ROW_CAP + 1 }, scope),
       assetCounts(db, scope),
     ]);
+    const truncated = read.length > LIBRARY_ROW_CAP;
+    const rows = truncated ? read.slice(0, LIBRARY_ROW_CAP) : read;
     // A third statement, and it has to be third: the slugs it asks about are
     // the ones the first read returned. It is a lookup rather than a fact the
     // page depends on, so it gets a failure boundary of its own: inside the
@@ -177,7 +188,7 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
       rows: [...rows].sort(compareByKindThenId),
       counts,
       reachable: true,
-      truncated: rows.length >= LIBRARY_ROW_CAP,
+      truncated,
       titles,
       concepts,
       parents,

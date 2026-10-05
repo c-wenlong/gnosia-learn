@@ -134,6 +134,37 @@ describe("libraryPage", () => {
     expect(await libraryPage("/library", one.next ?? "")).toEqual({ state: "unreachable" });
   });
 
+  it("walks more rows than the old read limit to the end, each once, every heading's count the rows under it", async () => {
+    // 1,200 notes over 30 days, past the 1,000 the read used to stop at.
+    const many = Array.from({ length: 1_200 }, (_, i) =>
+      note(`2026-09-${String(1 + (i % 30)).padStart(2, "0")}`, i, `Note ${String(i).padStart(4, "0")}`),
+    );
+    loadLibrary.mockResolvedValue(library(many));
+    const { libraryPage } = await import("./page-action");
+    for (const href of ["/library?view=list", "/library", "/library?group=conversation", "/library?group=course&view=list"]) {
+      const one = await first(href);
+      const pages: LibraryPage<ReactNode>[] = [one];
+      for (let next = one.next; next !== null; ) {
+        const page = await libraryPage(href, next, one.order);
+        if (page.state !== "ok") throw new Error(`${href}: ${page.state}`);
+        pages.push(page);
+        next = page.next;
+      }
+      const drawn = pages.flatMap((page) => [...html(page).matchAll(/>(Note \d{4})</g)].map(([, t]) => t));
+      expect(drawn, href).toHaveLength(1_200);
+      expect(new Set(drawn).size, href).toBe(1_200);
+      // A heading's count is its whole group, on every page that holds part of it.
+      const headings = new Map<string, number>();
+      const under = new Map<string, number>();
+      for (const piece of pages.flatMap((page) => page.pieces)) {
+        headings.set(piece.group.key, piece.group.count);
+        under.set(piece.group.key, (under.get(piece.group.key) ?? 0) + piece.rows.length);
+      }
+      expect(Object.fromEntries(under), href).toEqual(Object.fromEntries(headings));
+      expect([...headings.values()].reduce((sum, n) => sum + n, 0), href).toBe(1_200);
+    }
+  });
+
   it("keeps a repeated parameter as the page would", async () => {
     const { libraryPage } = await import("./page-action");
     const one = await first("/library?view=list");
