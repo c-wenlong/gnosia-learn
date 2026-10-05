@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { Providers } from "@/components/settings/Providers";
 import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
+import { ShortcutsCard } from "@/components/settings/ShortcutsCard";
 import { cx, PAGE_TITLE } from "@/components/ui/classes";
 import { getAllTopicIds, getCourses } from "@/data/courses";
 import { currentOwner } from "@/lib/owner";
 import { loadProviderKeys } from "@/lib/provider-keys/settings";
 import { loadSettings } from "@/lib/settings";
 import { providersView } from "@/lib/providers/view";
+import { isMacUserAgent } from "@/lib/shortcuts";
 import { loadTutorModels } from "@/lib/tutor-models/settings";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -32,10 +35,15 @@ export const metadata: Metadata = { title: "Settings" };
  *
  * The cards are grouped into tabs (General, Profile, Tutor, Data) so the page
  * is one short group at a time; `?tab=` opens one, read by `SettingsTabs`.
+ *
+ * General ends with the Shortcuts card (`ShortcutsCard`, after Manus's
+ * Settings, Shortcuts pane), drawn with ⌘ or Ctrl as the request's user
+ * agent says, so the first paint matches the browser's.
  */
 export default async function SettingsPage() {
   const owner = await currentOwner();
-  const [settings, courses, keys] = await Promise.all([loadSettings(), getCourses(), loadProviderKeys(owner)]);
+  const [settings, courses, keys, request] = await Promise.all([loadSettings(), getCourses(), loadProviderKeys(owner), headers()]);
+  const mac = isMacUserAgent(request.get("user-agent"));
   const models = await loadTutorModels(owner, keys);
   // Ids rather than labels: "NVIDIA NIM → Google Gemini → OpenRouter" does
   // not fit the 300px box. Each says whose key it is. With a model chain, the
@@ -53,7 +61,17 @@ export default async function SettingsPage() {
       <h1 className={PAGE_TITLE}>Settings</h1>
       <SettingsTabs
         sections={[
-          { id: "general", label: "General", glyph: "sliders", content: <GeneralSettings settings={settings} /> },
+          {
+            id: "general",
+            label: "General",
+            glyph: "sliders",
+            content: (
+              <>
+                <GeneralSettings settings={settings} />
+                <ShortcutsCard macGuess={mac} />
+              </>
+            ),
+          },
           { id: "profile", label: "Profile", glyph: "person", content: <ProfileSettings /> },
           {
             id: "tutor",
