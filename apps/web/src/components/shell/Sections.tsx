@@ -38,8 +38,7 @@ import { useRecent } from "./use-recent";
 /**
  * The sidebar under the destinations, in sections (L7 of
  * docs/proposals/library-by-type-and-day.md, after Manus's sidebar): Courses,
- * the courses the owner has opened, each a folder that unfolds to its
- * modules; Pinned, shown once something is pinned; and Recent, what the owner
+ * the courses the owner has opened, each opening where they left off; Pinned, shown once something is pinned; and Recent, what the owner
  * was last in, newest first under day headings, fifty at a time.
  *
  * Recent is two reads merged. The catalog's (`useRecent`, through
@@ -56,6 +55,10 @@ import { useRecent } from "./use-recent";
  * once and stays until the runner's list carries it, or is taken back when
  * the runner refuses it.
  *
+ * A course is one row that opens the module visited last in it, named on a
+ * second line. Its module list is the course page's own sidebar, so this one
+ * does not repeat it, and a long course cannot push Recent off the screen.
+ *
  * Each section label is 13px grey and sticks to the top of the sidebar's
  * scroller while its section scrolls under it. A row's more button appears on
  * hover or focus (always, on a screen with no hover), and its menu has Pin,
@@ -63,7 +66,7 @@ import { useRecent } from "./use-recent";
  * Archive: the studio keeps no archive, and its Start over closes a
  * conversation for good, which a sidebar menu should not do in one press.
  *
- * On the folded rail the labels fade, the courses fold shut, and every row is
+ * On the folded rail the labels fade, and every row is
  * its glyph alone, named for a screen reader and by its tooltip.
  */
 export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () => void; search: HistorySearch }) {
@@ -290,23 +293,6 @@ function CoursesSection({
   pathname: string | null;
   onPick: () => void;
 }) {
-  // A course is open while the owner has it open, and the course of the page
-  // on screen opens by itself, so the current module is in view.
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
-  const here = courses.find((c) => isCurrentRow(c.href, pathname, true))?.slug ?? null;
-  const [seen, setSeen] = useState<string | null>(null);
-  if (here !== seen) {
-    setSeen(here);
-    if (here !== null && !open.has(here)) setOpen(new Set([...open, here]));
-  }
-  const toggle = (slug: string) =>
-    setOpen((now) => {
-      const next = new Set(now);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
-
   return (
     <section aria-labelledby="sidebar-courses" className="pb-2">
       <SectionLabel
@@ -336,66 +322,29 @@ function CoursesSection({
       )}
       <ul className="flex flex-col gap-px">
         {courses.map((course) => {
-          const unfolded = open.has(course.slug) && !rail;
-          const id = `sidebar-course-${course.slug}`;
+          // Any page of the course: the row is where the owner is.
+          const here = isCurrentRow(course.href, pathname, true);
           const name = `${course.code} ${course.title}`;
+          const resume = course.resume === null ? null : `${course.resume.order}. ${course.resume.title}`;
           return (
             <li key={course.slug}>
-              <button
-                type="button"
-                aria-expanded={unfolded}
-                aria-controls={id}
+              <Link
+                href={course.open}
+                onClick={onPick}
+                aria-current={here ? "page" : undefined}
                 aria-label={rail ? name : undefined}
-                title={rail ? name : undefined}
-                onClick={() => toggle(course.slug)}
-                className={cx(ROW, "group/course text-left", rowFill(false))}
+                title={resume === null ? name : `${name}, ${resume}`}
+                // Two lines while the module visited last has a name under the course.
+                className={cx(ROW, resume !== null && "h-auto min-h-[var(--shell-row,36px)] py-1", rowFill(here))}
               >
-                {/* The folder gives way to a chevron on hover or focus, as
-                    Manus's project row does; both stay mounted and cross-fade. */}
-                <span className="relative size-[18px] shrink-0 text-text2">
-                  <Glyph
-                    name="folder"
-                    size={18}
-                    className={cx(
-                      "absolute inset-0 transition-opacity duration-150 motion-reduce:transition-none",
-                      !rail && "group-hover/course:opacity-0 group-focus-visible/course:opacity-0",
-                    )}
-                  />
-                  <Glyph
-                    name="chevron"
-                    size={18}
-                    className={cx(
-                      "absolute inset-0 opacity-0 transition-[opacity,rotate] duration-200 ease-soft motion-reduce:transition-none",
-                      !rail && "group-hover/course:opacity-100 group-focus-visible/course:opacity-100",
-                      // The kit's chevron points down: to the right while folded.
-                      unfolded ? "rotate-0" : "-rotate-90",
-                    )}
-                  />
+                <Glyph name="folder" size={18} className="text-text2" />
+                <span className={cx("flex min-w-0 flex-1 flex-col", FADE, rail ? "opacity-0" : FADE_IN)}>
+                  <span className="truncate">
+                    <span className="text-text2">{course.code}</span> {course.title}
+                  </span>
+                  {resume !== null && <span className="truncate text-[12px] font-normal leading-4 text-text3">{resume}</span>}
                 </span>
-                <span className={cx("min-w-0 flex-1 truncate", FADE, rail ? "opacity-0" : FADE_IN)}>
-                  <span className="text-text2">{course.code}</span> {course.title}
-                </span>
-              </button>
-              <Collapse open={unfolded} id={id} className="min-w-0">
-                <ul className="flex flex-col gap-px pb-1">
-                  {course.modules.map((m) => {
-                    const on = isCurrentRow(m.href, pathname, true);
-                    return (
-                      <li key={m.slug}>
-                        <Link
-                          href={m.href}
-                          onClick={onPick}
-                          aria-current={on ? "page" : undefined}
-                          className={cx(ROW, "ps-9 text-[13px]", on ? "bg-surface2 font-medium text-text" : "text-text2 hover:bg-surface2/60 hover:text-text")}
-                        >
-                          <span className="w-5 shrink-0 text-right text-[12px] tabular-nums text-text3">{m.order}</span>
-                          <span className="min-w-0 flex-1 truncate">{m.title}</span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Collapse>
+              </Link>
             </li>
           );
         })}

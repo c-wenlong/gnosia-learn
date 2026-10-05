@@ -683,10 +683,13 @@ the learner is on.
 | [`CourseSidebar`](../../apps/web/src/components/course-home/CourseSidebar.tsx), [`ModuleMain`](../../apps/web/src/components/course-home/ModuleMain.tsx), [`ModulePath`](../../apps/web/src/components/course-home/ModulePath.tsx), [`TopicRow`](../../apps/web/src/components/course-home/TopicRow.tsx), [`ModuleResources`](../../apps/web/src/components/course-home/ModuleResources.tsx), [`CourseRail`](../../apps/web/src/components/course-home/CourseRail.tsx) | the three columns and their rows; `rows.ts` holds the row classes, `icons.tsx` the glyphs and status marks |
 
 **Layout.** Three `Panel`s (surface, radius 16, no border, no shadow) on the
-page colour, 16 apart: from 1280px a 300px sidebar, the module, and a 360px
-rail; from 1024px the rail drops under the module; below that the sidebar
-becomes a picker (a button naming the module on screen, opening the list)
-above the module, and the rail follows. The sidebar is sticky from 1024px.
+page colour, 16 apart, sized by the width the page is given (container
+queries), not the window's: from 1152px of page a 272px sidebar, the module,
+and a 304px rail; from 768px the rail drops under the module; below that the
+sidebar becomes a picker (a button naming the module on screen, opening the
+list) above the module, and the rail follows. The sidebar is sticky from
+768px. The side columns are kept narrow and the module panel has no inset
+beyond the panel's own 16px, so the reading gets the width.
 
 **Which module `/courses/[slug]` shows.** The one holding the active topic
 (`pathStatus`), else the first. It is chosen once, on the client, from the

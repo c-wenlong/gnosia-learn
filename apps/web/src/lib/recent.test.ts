@@ -333,7 +333,17 @@ describe("readRecent", () => {
     );
     expect(recent.items.find((r) => r.key === "session:web-x")?.href).toBe("/learn/recurrences");
     expect(recent.pinned.map((p) => p.key)).toEqual(["concept:recurrences"]);
-    expect(recent.courses.map((c) => [c.slug, c.modules.map((m) => m.slug)])).toEqual([["cs3230", ["m1", "m3"]]]);
+    // One row per course, opening the module visited last in it.
+    expect(recent.courses).toEqual([
+      {
+        slug: "cs3230",
+        code: "CS3230",
+        title: "Algorithms",
+        href: "/courses/cs3230",
+        open: "/courses/cs3230/m3",
+        resume: { title: "Divide and conquer", order: 3 },
+      },
+    ]);
     // Every read is the owner's, and bounded by the page: the newest 51
     // concepts and sessions, and the concepts those name, once each.
     for (const fn of [state.readPreferences, state.readLearnerSnapshot]) {
@@ -377,7 +387,21 @@ describe("readRecent", () => {
     state.readPreferences.mockResolvedValue({});
     state.readLearnerSnapshot.mockResolvedValue({ completed: { "cs3230-m1-t1": true, "cs4225-m1-t1": true }, inactiveCourses: ["cs4225"] });
     const { readRecent } = await import("./recent");
-    expect((await readRecent()).courses.map((c) => c.slug)).toEqual(["cs3230"]);
+    const { courses } = await readRecent();
+    expect(courses.map((c) => c.slug)).toEqual(["cs3230"]);
+    // With no module visited, the row opens the course page and names no module.
+    expect(courses[0]).toMatchObject({ open: "/courses/cs3230", resume: null });
+  });
+
+  it("opens a course at the newest visit whose module still exists", async () => {
+    state.recentActivity.mockResolvedValue([
+      { type: "visit", at: AT(5), course: "cs3230", module: "gone" },
+      { type: "visit", at: AT(4), course: "cs3230" },
+      { type: "visit", at: AT(3), course: "cs3230", module: "m1" },
+    ]);
+    state.readPreferences.mockResolvedValue({});
+    const { readRecent } = await import("./recent");
+    expect((await readRecent()).courses[0]).toMatchObject({ open: "/courses/cs3230/m1", resume: { title: "Asymptotics", order: 1 } });
   });
 
   it("loses only the rows a failed read held, and is the empty answer when the database cannot be reached", async () => {
