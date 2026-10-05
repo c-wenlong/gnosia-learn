@@ -343,7 +343,8 @@ describe("domain graph label culling", () => {
       // The dot stays, and the name a screen reader hears is whole.
       expect(g.querySelector("circle[data-dot]")).not.toBeNull();
       expect(g.getAttribute("aria-label")).toMatch(new RegExp(`^${id[0].toUpperCase()}${id.slice(1)}, Learning`));
-      expect(g.querySelector("title")?.textContent).toBe(g.getAttribute("aria-label"));
+      // No SVG <title>: the browser's own tooltip would sit over the hover plate (the owner's call, 2026-10-05).
+      expect(g.querySelector("title")).toBeNull();
     }
   });
 
@@ -407,7 +408,7 @@ describe("domain graph label culling", () => {
   });
 
   const titleOf = (host: HTMLElement, topic: string) => host.querySelector(`svg [data-topic-title="${topic}"]`) as SVGTextElement;
-  /** What a title draws: its own text, not the full title its tooltip carries. */
+  /** What a title draws: its own text nodes. */
   const drawnTitle = (el: Element) =>
     [...el.childNodes]
       .filter((n) => n.nodeType === Node.TEXT_NODE)
@@ -440,12 +441,12 @@ describe("domain graph label culling", () => {
     expect(Number(title.getAttribute("y")) + font * 0.28).toBeLessThan(cy - 12);
   });
 
-  it("ends a title too long for its group in an ellipsis on a small picture, the full title kept in its tooltip", () => {
+  it("ends a title too long for its group in an ellipsis on a small picture, the full title on its plate and in the list", () => {
     const { host, svg } = mount(longMap);
     drawAt(svg, 1, longLayout);
     for (const t of longTopics) {
       expect(drawnTitle(titleOf(host, t.slug))).toBe(t.title);
-      expect(titleOf(host, t.slug).querySelector("title")?.textContent).toBe(t.title);
+      expect(titleOf(host, t.slug).querySelector("title")).toBeNull();
     }
     drawAt(svg, MIN_DRAW_SCALE, longLayout);
     let cut = 0;
@@ -462,7 +463,7 @@ describe("domain graph label culling", () => {
         expect(text.endsWith("\u2026")).toBe(true);
         expect(t.title.startsWith(text.slice(0, -1))).toBe(true);
       }
-      expect(el.querySelector("title")?.textContent).toBe(t.title);
+      expect(el.querySelector("title")).toBeNull();
     }
     expect(cut).toBeGreaterThan(0);
     // The list beside the picture names the topic whole.
@@ -629,7 +630,17 @@ describe("domain graph label culling", () => {
       expect(Number(el.getAttribute("x")) + drawn, `${t.slug}'s title runs past its group`).toBeLessThanOrEqual(
         Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")),
       );
-      expect(el.querySelector("title")?.textContent).toBe(t.title);
+      expect(el.querySelector("title")).toBeNull();
+    }
+  });
+
+  // The owner's call (2026-10-05): the browser's small grey tooltip duplicated the hover plate.
+  it("draws no SVG title anywhere in the picture, every concept still named whole for a screen reader", () => {
+    const { svg } = mount(longMap);
+    drawAt(svg, MIN_DRAW_SCALE, longLayout);
+    expect(svg.querySelectorAll("title")).toHaveLength(0);
+    for (const g of svg.querySelectorAll("[data-concept]")) {
+      expect(g.getAttribute("aria-label")).toMatch(/^.+, (Mastered|Learning|Not started)/);
     }
   });
 

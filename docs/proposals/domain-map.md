@@ -141,7 +141,7 @@ grew from 2108 to 2223 units tall, 101px more page at 1440 by 900, and
 computer architecture from 1789 to 1882. A group stays as wide as its title
 at 12.5 units (the old 7.4 units a letter, or the glyph widths when those
 are wider), and a title that grows past its room ends in an ellipsis, the
-whole title in its tooltip and in the list. Sizing groups for the title at
+whole title on a plate when hovered and in the list. Sizing groups for the title at
 0.35 instead would make a title-limited group about 2.5 times as wide on
 every screen. At 1440 no title is cut; at 1280, 4 of 13 in algorithms and 6
 of 11 in computer architecture are; at 390 most are, at 11px where they were
@@ -236,3 +236,9 @@ the other 49 concepts within 6 ms of the pointer arriving; a 30-step drag
 held every frame at 16.7 ms; the moved position was in `sessionStorage`,
 survived a reload, and Reset cleared both. Reset glides the concepts home
 over 300 ms, or at once with reduced motion.
+
+The picture draws no SVG `<title>` (the owner's call, 2026-10-05): the
+browser showed it as its own small grey tooltip a moment after the hover
+plate, saying the same thing again. A concept's name for a screen reader is
+its `aria-label`, which carries the title, the mastery and the marks; a
+topic's is the list's button, since the picture's titles are `aria-hidden`.
