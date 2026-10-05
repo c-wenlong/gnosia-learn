@@ -1004,6 +1004,61 @@ async function run() {
     }
   });
 
+  await step('workspace: the three panels turn on where the tutor keeps 300px, by the sidebar', page, async () => {
+    // `ws:` (globals.css): side by side once the tutor keeps 300px beside the
+    // app sidebar, which is 1160px with it open and 960px on its rail. Each
+    // edge is checked a pixel either side.
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    const tabs = main.getByRole('tablist');
+    const tutor = main.locator('section[aria-label="Tutor"]');
+    // The tutor's width once the sidebar's and the columns' slides are done.
+    const settled = () =>
+      tutor.evaluate(async (el) => {
+        let last = -1;
+        for (let i = 0; i < 40; i += 1) {
+          const now = Math.round(el.getBoundingClientRect().width);
+          if (now === last) return now;
+          last = now;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        return last;
+      });
+    const at = async (width, sidebar) => {
+      await page.setViewportSize({ width, height: 800 });
+      // Off the rail, so it does not peek out over the page.
+      await page.mouse.move(width - 40, 400);
+      if (width === edge[sidebar]) {
+        await tabs.waitFor({ state: 'hidden' });
+        const w = await settled();
+        assert(w >= 300, `with the sidebar ${sidebar} at ${width}px the tutor is ${w}px wide`);
+        // A stacked tutor is wide too: the three must sit in one row, note, tutor, studio.
+        const row = await main.evaluate((el) => {
+          const box = (name) => el.querySelector(`section[aria-label="${name}"]`).getBoundingClientRect();
+          const [n, t, s] = [box('Note & sources'), box('Tutor'), box('Studio')];
+          return n.right <= t.left && t.right <= s.left && Math.abs(n.top - t.top) < 2 && Math.abs(t.top - s.top) < 2;
+        });
+        assert(row, `with the sidebar ${sidebar} at ${width}px the three panels are not side by side`);
+      } else {
+        await tabs.waitFor();
+      }
+    };
+    const edge = { open: 1160, rail: 960 };
+    try {
+      await page.setViewportSize({ width: 1159, height: 800 });
+      await go(`/learn/${state.concept}`);
+      await at(1159, 'open');
+      await at(1160, 'open');
+      await page.setViewportSize({ width: 1000, height: 800 });
+      await clickHydrated(page, page.getByRole('button', { name: 'Collapse the sidebar' }));
+      await at(959, 'rail');
+      await at(960, 'rail');
+    } finally {
+      const expand = page.getByRole('button', { name: 'Expand the sidebar' });
+      if (await expand.count()) await expand.click();
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   await step('tutor: no provider key shows the notice and Try again', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     if (!page.url().endsWith(`/learn/${state.concept}`)) await go(`/learn/${state.concept}`);
