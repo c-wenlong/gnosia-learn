@@ -15,6 +15,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx, NOTE, PAGE_TITLE, STATUS_TEXT } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { getCourses } from "@/data/courses";
+import { getTopics } from "@/data/topics";
 import {
   loadAssetAccess,
   loadFavorites,
@@ -51,10 +52,10 @@ import {
 import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
 import { dayGroups, editedLabel, timeOfDay } from "@/lib/day-groups";
 import { loadKnowledgeBase } from "@/lib/learner-store";
-import { conceptGroups, courseGroups, type RowGroup } from "@/lib/library-groups";
+import { courseGroups, topicBucket, topicGroups, topicRanks, type RowGroup } from "@/lib/library-groups";
 import { parseOpen } from "@/lib/library-preview";
 import { conceptOrder, rowSource } from "@/lib/library-source";
-import { bucketOf } from "@/lib/mastery-bucket";
+import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
 import { ownValue } from "@/lib/own-key";
 import { rowMenuItems } from "@/lib/row-menu";
 import { appTimeZone } from "@/lib/time-zone";
@@ -91,11 +92,12 @@ export const metadata: Metadata = {
  * submitting it is a client-side navigation) that carries the other filters
  * along as hidden fields.
  *
- * **Or by course or by concept** (L4), from the view options beside the
+ * **Or by course or by topic** (L4), from the view options beside the
  * layout switch, as `?group=course` (a heading per course, its modules in
- * course order inside, "No course" last) or `?group=concept` (a heading per
- * concept in the prerequisite graph's order, "No concept" last); each row in
- * the one group its source line names (`@/lib/library-groups`). Every row and
+ * course order inside, "No course" last) or `?group=topic` (a heading per
+ * topic in the Learn map's order, "No topic" last, each list row
+ * naming its concept first; `?group=concept` is the same); each row in the
+ * one group its source line names (`@/lib/library-groups`). Every row and
  * card carries a more menu (L5, `RowMenu`), whose items are decided here per
  * asset by `rowMenuItems`, so the stars are read on every visit, not only
  * while Favorites only is on.
@@ -142,13 +144,18 @@ export default async function LibraryPage({
   // its body is in the first paint rather than a skeleton.
   const open = parseOpen(params.open);
 
-  const [library, { kb }, courses, starred, preview] = await Promise.all([
+  const [library, { kb }, courses, starred, preview, vocabulary] = await Promise.all([
     loadLibrary(),
     loadKnowledgeBase(),
     getCourses(),
     // The filter reads them, and so does every row's menu (Favorite or Unfavorite).
     loadFavorites(),
     open === null ? Promise.resolve(null) : loadPreview(open),
+    // The topic headings' titles and order, read only for that grouping. A
+    // heading is a label, so a vocabulary that cannot be read falls back to
+    // the asset rows' own topic titles, then the slug, in slug order, rather
+    // than failing the page.
+    group === "topic" ? getTopics().catch(() => []) : Promise.resolve([]),
   ]);
   // A store that could not be read filters to nothing rather than to
   // everything, and the page says why below.
@@ -263,15 +270,38 @@ export default async function LibraryPage({
       },
     });
   const parentsOf = (row: (typeof matching)[number]) => ownValue(library.parents, row.id);
-  // Day, the default, or course or concept from the view options (L4).
+  // Every concept's bucket by its topic, for a topic heading's dot: all the
+  // topic's concepts, not only the ones with an asset here.
+  const topicConceptBuckets = new Map<string, MasteryBucket[]>();
+  const conceptTopic = new Map<string, string>();
+  if (group === "topic") {
+    for (const c of kb.concepts) {
+      if (!c.topic) continue;
+      conceptTopic.set(c.id, c.topic);
+      const list = topicConceptBuckets.get(c.topic);
+      if (list === undefined) topicConceptBuckets.set(c.topic, [bucketOf(c)]);
+      else list.push(bucketOf(c));
+    }
+  }
+  const topicTitles = new Map(vocabulary.map((t) => [t.slug, t.title]));
+  // Day, the default, or course or topic from the view options (L4).
   const groups: RowGroup<(typeof matching)[number]>[] =
     group === "course"
       ? courseGroups(matching, (row) => parentsOf(row)?.places ?? [], { course })
-      : group === "concept"
-        ? conceptGroups(matching, (row) => parentsOf(row)?.concepts ?? [], order, (slug) => {
-            const known = kbById.get(slug);
-            return known === undefined ? null : { title: known.title, bucket: bucketOf(known) };
-          })
+      : group === "topic"
+        ? topicGroups(
+            matching,
+            (row) => ({ concepts: parentsOf(row)?.concepts ?? [], topics: row.topics }),
+            {
+              order,
+              topicOf: (slug) => conceptTopic.get(slug) ?? null,
+              rank: topicRanks(vocabulary, conceptTopic, kb.edges ?? []),
+              topic: (slug) => ({
+                title: topicTitles.get(slug) ?? ownValue(titles, slug) ?? slug,
+                bucket: topicBucket(topicConceptBuckets.get(slug) ?? []),
+              }),
+            },
+          )
         : dayGroups(matching, (row) => row.createdAt, { now, timeZone });
   // The more menu's items, per row (L5).
   const menuOf = (row: (typeof matching)[number]) =>
@@ -464,6 +494,7 @@ export default async function LibraryPage({
                             <AssetRow
                               asset={row}
                               source={sourceOf(row)}
+                              grouping={group}
                               topic={describe(row).topic}
                               time={timeOfDay(row.createdAt, timeZone)}
                               edited={editedLabel(row.createdAt, row.editedAt, { now, timeZone })}
@@ -528,7 +559,7 @@ const ARRIVE = "animate-fade-in motion-reduce:animate-none";
 /**
  * One group's rows under its heading, Manus's `date-heading`: the day ("4 Oct",
  * the year when it is not this one), the course ("CS3230" and its title in
- * grey) or the concept (with its mastery dot), and the count in grey, "(5)".
+ * grey) or the topic (with its mastery dot), and the count in grey, "(5)".
  * The heading is the shell's row height (`--shell-row`); in the list it is
  * inset by the row's start padding (`--shell-row-pad`) so it lines up with
  * the glyphs under it, and in the grid it sits flush with the cards. A course
