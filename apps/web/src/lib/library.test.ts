@@ -235,11 +235,12 @@ describe("withPick", () => {
 });
 
 describe("the grouping (?group=)", () => {
-  it("parses course and topic, reads concept as topic, and anything else as the day", () => {
-    expect(["course", "topic", "concept", "day", "Topic", "", null, undefined].map(parseGroup)).toEqual([
+  it("parses course, topic and conversation, reads concept as topic, and anything else as the day", () => {
+    expect(["course", "topic", "concept", "conversation", "day", "Topic", "", null, undefined].map(parseGroup)).toEqual([
       "course",
       "topic",
       "topic",
+      "conversation",
       "day",
       "day",
       "day",
@@ -256,6 +257,12 @@ describe("the grouping (?group=)", () => {
     expect(libraryHref(withPick(grouped, "group", "course"))).toBe("/library?course=cs3230&favorites=1&view=list&group=course");
     expect(libraryHref(withPick(grouped, "group", ""))).toBe("/library?course=cs3230&favorites=1&view=list");
     expect(libraryHref(withPick(grouped, "kind", "video"))).toBe("/library?kind=video&course=cs3230&favorites=1&view=list&group=topic");
+  });
+
+  it("writes ?group=conversation, and a hand-typed one that is not a grouping as nothing", () => {
+    expect(libraryHref(withPick({ view: "list" }, "group", "conversation"))).toBe("/library?view=list&group=conversation");
+    expect(libraryHref(withPick({}, "group", "task"))).toBe("/library");
+    expect(libraryHref({ group: null })).toBe("/library");
   });
 
   it("rewrites an old ?group=concept link as ?group=topic", () => {

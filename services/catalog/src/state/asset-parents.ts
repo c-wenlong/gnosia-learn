@@ -62,13 +62,26 @@ export interface AssetOrigin {
   title: string | null;
 }
 
+/**
+ * A studio conversation that wrote the asset. Beside the planner's title it
+ * carries the name the owner gave it (`draft.name`, which every page shows
+ * first, `conversationTitle` in the web app) and when the conversation was
+ * last written to (`draft.updated_at`), which the Library's group by
+ * conversation dates its headings by and orders them on.
+ */
+export interface AssetConversation extends AssetOrigin {
+  name: string | null;
+  /** ISO 8601; null only when the row's instant did not read. */
+  updatedAt: string | null;
+}
+
 export interface AssetParents {
   /** By code, then module position; `item` rows before `topic` rows. */
   places: AssetPlace[];
   /** Concept slugs, sorted. The caller orders them by the graph. */
   concepts: string[];
-  /** Studio conversations, the most recent write first. */
-  conversations: AssetOrigin[];
+  /** Studio conversations, the one whose job wrote the asset most recently first. */
+  conversations: AssetConversation[];
   /** Tutor sessions this asset is the log of, the latest first. */
   sessions: AssetOrigin[];
 }
@@ -84,6 +97,14 @@ interface ParentRow extends Record<string, unknown> {
   position: number | null;
   ref: string | null;
   ref_title: string | null;
+  ref_name: string | null;
+  ref_updated: Date | string | null;
+}
+
+function instant(value: Date | string | null): string | null {
+  if (value === null) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 /**
@@ -130,7 +151,12 @@ export async function assetParents(
         break;
       case "draft":
         if (row.ref !== null && !parents.conversations.some((c) => c.id === row.ref)) {
-          parents.conversations.push({ id: row.ref, title: row.ref_title });
+          parents.conversations.push({
+            id: row.ref,
+            title: row.ref_title,
+            name: row.ref_name,
+            updatedAt: instant(row.ref_updated),
+          });
         }
         break;
       case "session":
@@ -163,7 +189,8 @@ function parentsQuery(ids: readonly string[], owners: Owners): SQL {
       select w.id as asset_id, 'item' as branch,
              c.slug as course, c.metadata ->> 'code' as code, c.title as course_title,
              m.slug as module, m.title as module_title, m.position as position,
-             null::text as ref, null::text as ref_title, null::timestamptz as at, 0 as rank
+             null::text as ref, null::text as ref_title, null::text as ref_name, null::timestamptz as ref_updated,
+             null::timestamptz as at, 0 as rank
       from wanted w
       join collection_item ci on ci.asset_id = w.id
       join collection m on m.id = ci.collection_id and m.kind = 'module' and m.archived_at is null${owned("m.owner_id", owners)}
@@ -172,7 +199,7 @@ function parentsQuery(ids: readonly string[], owners: Owners): SQL {
       select w.id, 'item',
              c.slug, c.metadata ->> 'code', c.title,
              null, null, 0,
-             null, null, null, 0
+             null, null, null, null, null, 0
       from wanted w
       join collection_item ci on ci.asset_id = w.id
       join collection c on c.id = ci.collection_id and c.kind = 'course' and c.archived_at is null${owned("c.owner_id", owners)}
@@ -180,7 +207,7 @@ function parentsQuery(ids: readonly string[], owners: Owners): SQL {
       select w.id, 'topic',
              c.slug, c.metadata ->> 'code', c.title,
              m.slug, m.title, m.position,
-             null, null, null, 1
+             null, null, null, null, null, 1
       from wanted w
       join asset_topic at on at.asset_id = w.id
       join topic t on t.slug = at.topic_slug${owned("t.owner_id", owners)}
@@ -190,14 +217,14 @@ function parentsQuery(ids: readonly string[], owners: Owners): SQL {
       union all
       select w.id, 'concept',
              null, null, null, null, null, null,
-             k.slug, null, null, 2
+             k.slug, null, null, null, null, 2
       from wanted w
       join asset_concept ac on ac.asset_id = w.id
       join concept k on k.slug = ac.concept_slug${owned("k.owner_id", owners)}
       union all
       select w.id, 'draft',
              null, null, null, null, null, null,
-             d.id, d.title, aj.written_at, 3
+             d.id, d.title, d.name, d.updated_at, aj.written_at, 3
       from wanted w
       join asset_job aj on aj.asset_id = w.id${owned("aj.owner_id", owners)}
       join job j on j.id = aj.job_id${owned("j.owner_id", owners)}
@@ -205,7 +232,7 @@ function parentsQuery(ids: readonly string[], owners: Owners): SQL {
       union all
       select w.id, 'session',
              null, null, null, null, null, null,
-             s.id, s.title, s.started_at, 4
+             s.id, s.title, null, null, s.started_at, 4
       from wanted w
       join session s on s.log_asset_id = w.id${owned("s.learner_id", owners)}
     ) parents

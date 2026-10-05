@@ -390,6 +390,55 @@ describe("/library", () => {
     expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="group"[^>]*value="topic"/);
   });
 
+  it("groups by conversation with ?group=conversation, newest first, dated, no conversation last", async () => {
+    const snapshot = await loadLibrary();
+    loadLibrary.mockResolvedValue({
+      ...snapshot,
+      parents: {
+        ...PARENTS,
+        "video:paging": {
+          ...PARENTS["video:paging"],
+          // Two conversations wrote it: it shows once, under the later write.
+          conversations: [
+            { id: "d-paging", title: "Paging, drawn", name: "Paging walk", updatedAt: "2026-10-04T09:00:00Z" },
+            { id: "d-first", title: "First go", name: null, updatedAt: "2026-10-05T01:00:00Z" },
+          ],
+        },
+        "link:ostep": {
+          places: [],
+          concepts: [],
+          conversations: [{ id: "d-reading", title: "Reading list", name: null, updatedAt: "2026-09-30T00:00:00Z" }],
+          sessions: [],
+        },
+      },
+    });
+    const html = await render({ group: "conversation", view: "list" });
+    // The owner's name over the planner's title, the day last written to in
+    // grey; the note and the session log came from no conversation.
+    expect(dayHeadings(html)).toEqual(["Paging walk 4 Oct (1)", "Reading list 30 Sept (1)", "No conversation (2)"]);
+    expect(html).not.toContain("First go");
+    // A search and the layout switch keep the grouping.
+    expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="group"[^>]*value="conversation"/);
+    expect(html).toContain('href="/library?group=conversation"');
+    // The row names its concept first, then the place; never the conversation again.
+    const paging = html.slice(html.indexOf("Paging, step by step</a>"));
+    expect(paging.indexOf(">Paging<")).toBeLessThan(paging.indexOf("CS2106 · Week 7"));
+    // The link has neither, so its line is its topic, and its heading is the
+    // only place its conversation is named.
+    expect(html.split("Reading list").length - 1).toBe(1);
+    const menu = (id: string) =>
+      (rowMenu.mock.calls.map(([props]) => props) as { assetId: string; sections: { action: string; label: string; href?: string }[][] }[])
+        .find((props) => props.assetId === id)
+        ?.sections[0];
+    expect(menu("video:paging")?.at(-1)).toEqual({
+      action: "conversation",
+      label: "Locate in conversation",
+      href: "/studio?draft=d-paging",
+    });
+    expect(menu("link:ostep")?.map((item) => item.label)).toEqual(["Open", "Locate in conversation"]);
+    expect(menu("note:tlb")?.map((item) => item.label)).toEqual(["Open", "Open the concept"]);
+  });
+
   it("keeps the place first in a row grouped by day", async () => {
     const html = await render({ view: "list" });
     // From the end of the title link, past its tooltip, which names the place first.
