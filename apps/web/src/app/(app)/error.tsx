@@ -27,7 +27,8 @@ export default function AppError({
   retry: () => void;
 }) {
   return (
-    <div className="flex animate-enter flex-col gap-4 py-6 motion-reduce:animate-none">
+    // `app`, as the loading frame it replaces is, so the shell keeps its gutters.
+    <div data-layout="app" className="flex animate-enter flex-col gap-4 py-6 motion-reduce:animate-none">
       <Notice
         role="alert"
         title="This page could not read its content."

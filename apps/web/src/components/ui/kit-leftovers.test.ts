@@ -6,7 +6,7 @@ import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { PageLoading } from "@/components/PageLoading";
+import { PageLoading, WORKSPACE_ROOT } from "@/components/PageLoading";
 import { StudioCanvasLoading, StudioGridLoading } from "@/components/studio/StudioLoading";
 
 import { Card } from "./Card";
@@ -104,6 +104,19 @@ describe("PageLoading, full", () => {
       // The legacy alias the blocks were filled with, gone from the blocks.
       expect(html).not.toMatch(/bg-\[var\(--surface-hover\)\][^"]*animate-pulse/);
     }
+  });
+});
+
+describe("PageLoading, workspace", () => {
+  it("carries the concept page's own root, so the shell is the same height while it loads", () => {
+    const html = renderToStaticMarkup(PageLoading({ layout: "workspace", label: "Opening the concept" }));
+    expect(html).toMatch(/^<p role="status" class="sr-only">Opening the concept<\/p><div data-layout="workspace" aria-busy="true"/);
+    const root = /<div data-layout="workspace" aria-busy="true" class="([^"]*)"/.exec(html)![1]!.split(" ");
+    expect(root).toEqual(expect.arrayContaining([...WORKSPACE_ROOT.split(" "), "animate-fade-in-late"]));
+    // Three panels side by side from 900px up, one under the tab row below it.
+    expect(html).toContain("min-[900px]:grid-cols-[250px_minmax(0,1fr)_270px]");
+    expect(html.match(/border-b border-hair/g)).toHaveLength(3);
+    expect(html.match(/max-\[899px\]:hidden/g)).toHaveLength(2);
   });
 });
 

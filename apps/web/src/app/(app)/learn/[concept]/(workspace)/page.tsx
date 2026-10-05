@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import type { EmbedResolution } from "@/components/NoteProse";
+import { PAGE_ENTER, WORKSPACE_ROOT } from "@/components/PageLoading";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Eyebrow } from "@/components/ui/Eyebrow";
@@ -113,7 +114,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   const eyebrow = placeLabel(w.place) ?? (w.domain ? `${w.domain} · not in a course yet` : "Not in a course yet");
 
   return (
-    <div data-layout="workspace" className="flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:flex-1">
+    <div data-layout="workspace" className={cx(WORKSPACE_ROOT, PAGE_ENTER)}>
       <header className="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-3">
         <div className="min-w-0 flex-1 basis-[18rem]">
           <Eyebrow>{eyebrow}</Eyebrow>
