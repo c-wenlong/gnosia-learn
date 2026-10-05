@@ -10,7 +10,9 @@ import {
   pageOf,
   parseCursor,
   parseHeldPages,
+  parseOrder,
   POP_WINDOW_MS,
+  sameLibraryView,
   type LibraryPage,
   type PageGroup,
 } from "./library-pages";
@@ -178,7 +180,38 @@ describe("pageOf", () => {
     const list = rows("a", 3);
     const last = parseCursor(encodeCursor({ group: "a", section: null, key: sortKeyOf(list[2]) }));
     expect(ok(pageOf([group("a", list)], sortKeyOf, "newest", last))).toEqual({ state: "ok", pieces: [], next: null, remaining: 0 });
-    expect(ok(pageOf([], sortKeyOf, "newest", null))).toEqual({ state: "ok", pieces: [], next: null, remaining: 0 });
+    expect(ok(pageOf([], sortKeyOf, "newest", null))).toEqual({ state: "ok", pieces: [], order: [], next: null, remaining: 0 });
+  });
+
+  it("hands over the first page's group order, and keeps it when a group moves ahead of the cursor", () => {
+    const a = group("conversation:a", rows("a", 120));
+    const b = group("conversation:b", rows("b", 60));
+    const c = group("conversation:c", rows("c", 5));
+    const first = ok(pageOf([a, b, c], sortKeyOf, "newest", null));
+    expect(first.order).toEqual(["conversation:a", "conversation:b", "conversation:c"]);
+    expect(ids(first)).toHaveLength(50);
+    // Conversation c is written to: it now sorts first. Without the order it
+    // would be behind the cursor and never drawn.
+    const moved = [c, a, b];
+    expect(ids(ok(pageOf(moved, sortKeyOf, "newest", parseCursor(first.next)))).some((id) => id.includes(":c-"))).toBe(false);
+    const pages = [first];
+    while (pages[pages.length - 1].next !== null) {
+      pages.push(ok(pageOf(moved, sortKeyOf, "newest", parseCursor(pages[pages.length - 1].next), { order: first.order })));
+    }
+    expect(pages.slice(1).every((p) => p.order === undefined)).toBe(true);
+    const seen = pages.flatMap(ids);
+    expect(seen).toEqual([...a.rows, ...b.rows, ...c.rows].map((r) => r.id));
+  });
+
+  it("leaves a group the first page did not see for the next visit", () => {
+    const a = group("2026-10-04", rows("a", 120));
+    const first = ok(pageOf([a], sortKeyOf, "newest", null));
+    expect(first.next).not.toBeNull();
+    const fresh = group("2026-10-05", rows("new", 3, "2026-10-05"));
+    const next = ok(pageOf([fresh, a], sortKeyOf, "newest", parseCursor(first.next), { order: first.order }));
+    expect(next.pieces.map((p) => p.group.key)).toEqual(["2026-10-04"]);
+    expect(ids(next)).toHaveLength(70);
+    expect(next.next).toBeNull();
   });
 
   it("carries a heading's detail and mastery dot", () => {
@@ -255,14 +288,39 @@ describe("back and forward", () => {
     }
   });
 
-  it("restores after a recent popstate, or on a document loaded by back or reload", () => {
+  it("restores after a recent popstate to this view, or on a document loaded by back or reload", () => {
     const now = 10_000;
-    expect(cameBack({ now, lastPop: now - 100, navigation: "navigate", firstMount: false })).toBe(true);
-    expect(cameBack({ now, lastPop: now - POP_WINDOW_MS, navigation: "navigate", firstMount: false })).toBe(false);
-    expect(cameBack({ now, lastPop: now + 5, navigation: null, firstMount: false })).toBe(false);
-    expect(cameBack({ now, lastPop: null, navigation: "back_forward", firstMount: true })).toBe(true);
-    expect(cameBack({ now, lastPop: null, navigation: "reload", firstMount: true })).toBe(true);
-    expect(cameBack({ now, lastPop: null, navigation: "reload", firstMount: false })).toBe(false);
-    expect(cameBack({ now, lastPop: null, navigation: "navigate", firstMount: true })).toBe(false);
+    const href = "/library?view=list";
+    const pop = (ago: number, url = "http://localhost/library?view=list") => ({ at: now - ago, url });
+    const base = { now, href, navigation: "navigate", firstMount: false };
+    expect(cameBack({ ...base, lastPop: pop(100) })).toBe(true);
+    expect(cameBack({ ...base, lastPop: pop(100, "http://localhost/library?view=list&open=note%3Ax") })).toBe(true);
+    // Back to some other page, then a link here: a fresh visit.
+    expect(cameBack({ ...base, lastPop: pop(100, "http://localhost/home") })).toBe(false);
+    expect(cameBack({ ...base, lastPop: pop(POP_WINDOW_MS) })).toBe(false);
+    expect(cameBack({ ...base, lastPop: pop(-5), navigation: null })).toBe(false);
+    expect(cameBack({ ...base, lastPop: null, navigation: "back_forward", firstMount: true })).toBe(true);
+    expect(cameBack({ ...base, lastPop: null, navigation: "reload", firstMount: true })).toBe(true);
+    expect(cameBack({ ...base, lastPop: null, navigation: "reload", firstMount: false })).toBe(false);
+    expect(cameBack({ ...base, lastPop: null, navigation: "navigate", firstMount: true })).toBe(false);
+  });
+
+  it("knows a view by its parameters, in any order, an open row aside", () => {
+    expect(sameLibraryView("http://x/library?view=list&group=topic", "/library?group=topic&view=list")).toBe(true);
+    expect(sameLibraryView("/library?open=a&view=list", "/library?view=list")).toBe(true);
+    expect(sameLibraryView("/library", "/library?view=list")).toBe(false);
+    expect(sameLibraryView("/home?view=list", "/library?view=list")).toBe(false);
+    expect(sameLibraryView("http://[bad", "/library")).toBe(false);
+  });
+});
+
+describe("parseOrder", () => {
+  it("takes a list of keys, nothing, or refuses", () => {
+    expect(parseOrder(undefined)).toBeUndefined();
+    expect(parseOrder(["a", "b"])).toEqual(["a", "b"]);
+    expect(parseOrder([])).toEqual([]);
+    for (const bad of [null, "a", [1], ["x".repeat(1001)], Array.from({ length: 5001 }, () => "a")]) {
+      expect(parseOrder(bad)).toBeNull();
+    }
   });
 });

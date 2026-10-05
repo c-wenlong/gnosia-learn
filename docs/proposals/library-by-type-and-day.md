@@ -275,7 +275,10 @@ with the page's own code (`loadLibraryView` and `renderLibraryPage` in
 the last page hands over, the last row's group, course module and sort key,
 never an offset, so a row added above it does not shift the next page
 (`pageOf` in `apps/web/src/lib/library-pages.ts`); a cursor whose group has
-gone answers that the Library changed, with Reload.
+gone answers that the Library changed, with Reload. The first page also hands
+over its groups' order, which the reader sends back and later pages keep, so
+a conversation written to meanwhile cannot jump ahead of the cursor and have
+its rows skipped; a group that did not exist then waits for the next visit.
 
 A sentinel under the list, watched a screen ahead, asks for the next page,
 one request at a time (`LibraryResults`); Show older (Show more where the rows

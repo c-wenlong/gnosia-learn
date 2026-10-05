@@ -1,7 +1,7 @@
 "use server";
 
 import { loadLibraryView, renderLibraryPage, type LibraryParams, type RenderedPage } from "@/components/library/library-view";
-import { parseCursor, type StalePage } from "@/lib/library-pages";
+import { parseCursor, parseOrder, type StalePage } from "@/lib/library-pages";
 
 /** What the Library asks for when the reader scrolls past the rows it holds. */
 export type LibraryPageAnswer = RenderedPage | StalePage | { state: "unreachable" };
@@ -18,17 +18,20 @@ export type LibraryPageAnswer = RenderedPage | StalePage | { state: "unreachable
  * query is read. `cursor` is the one the last page handed over: the place of
  * the last row drawn, never an offset (`@/lib/library-pages`). A cursor that
  * does not parse, or whose group has gone, answers `stale`, and the reader is
- * told the Library changed.
+ * told the Library changed. `order` is the first page's groups in the order
+ * it drew them, which later pages keep, so a group that moved meanwhile is
+ * not skipped (`pageOf`).
  *
  * Server functions run one at a time per client, which suits a list that
  * asks for one page at a time.
  */
-export async function libraryPage(href: string, cursor: string): Promise<LibraryPageAnswer> {
+export async function libraryPage(href: string, cursor: string, order?: string[]): Promise<LibraryPageAnswer> {
   const after = parseCursor(cursor);
-  if (after === null || typeof href !== "string") return { state: "stale" };
+  const groups = parseOrder(order);
+  if (after === null || groups === null || typeof href !== "string") return { state: "stale" };
   const view = await loadLibraryView(paramsOf(href));
   if (!view.library.reachable) return { state: "unreachable" };
-  return renderLibraryPage(view, after);
+  return renderLibraryPage(view, after, groups);
 }
 
 /** The Library's parameters from its URL, every value kept, as a page's `searchParams` would hold them. */

@@ -117,6 +117,11 @@ describe("libraryPage", () => {
     const { libraryPage } = await import("./page-action");
     expect(await libraryPage("/library", "not a cursor")).toEqual({ state: "stale" });
     expect(await libraryPage(42 as unknown as string, "{}")).toEqual({ state: "stale" });
+    const fine = await first("/library");
+    expect(await libraryPage("/library", fine.next ?? "", "nope" as unknown as string[])).toEqual({ state: "stale" });
+    // The first page's order, sent back, is the order kept.
+    expect(fine.order).toEqual(["2026-10-04", "2026-10-03"]);
+    expect((await libraryPage("/library", fine.next ?? "", fine.order)).state).toBe("ok");
     const one = await first("/library");
     loadLibrary.mockResolvedValue(library(ROWS.filter((r) => r.id.startsWith("note:2026-10-03"))));
     expect(await libraryPage("/library", one.next ?? "")).toEqual({ state: "stale" });

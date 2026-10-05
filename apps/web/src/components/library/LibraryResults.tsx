@@ -36,23 +36,25 @@ export const SKELETON_ROWS = { list: 12, grid: 6 } as const;
 /** Loads a screen ahead of the reader: the sentinel counts as seen a viewport before it is. */
 const AHEAD = "0px 0px 100% 0px";
 
-// When the browser last went back or forward, read when a list mounts
-// (`cameBack`). Module state, since the list that mounts after a popstate is
-// a new instance. Marked before the app router hears of it: the router
+// When the browser last went back or forward, and to where, read when a
+// list mounts (`cameBack`). Module state, since the list that mounts after a
+// popstate is a new instance. Marked before the app router hears of it: the router
 // renders a back navigation inside its own popstate listener, effects
 // included, so a listener after it would mark the time once the list had
 // already decided (measured). The Navigation API says so first where the
 // browser has it, and a capturing listener runs before the router's own.
-let lastPop: number | null = null;
+let lastPop: { at: number; url: string } | null = null;
 let mountedBefore = false;
 if (typeof window !== "undefined") {
-  const mark = () => {
-    lastPop = Date.now();
+  const mark = (url: string) => {
+    lastPop = { at: Date.now(), url };
   };
-  window.addEventListener("popstate", mark, { capture: true });
+  // By popstate the location is already the entry gone back to.
+  window.addEventListener("popstate", () => mark(window.location.href), { capture: true });
   const navigation = (window as unknown as { navigation?: EventTarget }).navigation;
   navigation?.addEventListener("navigate", (event) => {
-    if ((event as Event & { navigationType?: string }).navigationType === "traverse") mark();
+    const traverse = event as Event & { navigationType?: string; destination?: { url?: string } };
+    if (traverse.navigationType === "traverse" && typeof traverse.destination?.url === "string") mark(traverse.destination.url);
   });
 }
 
@@ -129,7 +131,14 @@ export function LibraryResults({
   const next = last.next;
   const listRef = useRef<HTMLElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // A page asked for and not yet on screen: set from the request until its
+  // rows commit, so nothing asks for the same cursor twice in between.
   const inFlight = useRef(false);
+  // The status as of the last commit, for the sentinel, which must not retry
+  // a failed or stale load on its own.
+  const statusRef = useRef<Status>("idle");
+  // The first page's groups in its order, which every later page keeps (`pageOf`).
+  const order = first.order;
   // Set while back or forward draws the pages the reader held, so the
   // sentinel does not race it.
   const restoring = useRef(false);
@@ -148,12 +157,12 @@ export function LibraryResults({
       setStatus("loading");
       let answer: LibraryPageAnswer | null = null;
       try {
-        answer = await libraryPage(href, cursor);
+        answer = await libraryPage(href, cursor, order);
       } catch {
         answer = null;
       }
-      inFlight.current = false;
       if (answer === null || answer.state !== "ok") {
+        inFlight.current = false;
         setStatus(answer?.state === "stale" ? "stale" : "failed");
         for (const resolve of waiting.current.splice(0)) resolve(false);
         return false;
@@ -169,13 +178,14 @@ export function LibraryResults({
       });
       return shown;
     },
-    [href],
+    [href, order],
   );
 
   /** The next page when the sentinel is within a screen of the viewport and nothing else is loading. */
   const loadIfNear = useCallback(() => {
     const sentinel = sentinelRef.current;
     if (sentinel === null || restoring.current || inFlight.current) return;
+    if (statusRef.current === "failed" || statusRef.current === "stale") return;
     if (sentinel.getBoundingClientRect().top > window.innerHeight * 2) return;
     void load(drawn.current[drawn.current.length - 1].next);
   }, [load]);
@@ -183,7 +193,7 @@ export function LibraryResults({
   // Back, forward or a reload: as many pages as were held, then the scroll.
   // First among the effects, so it holds the list before the sentinel asks.
   useEffect(() => {
-    const back = cameBack({ now: Date.now(), lastPop, navigation: navigationType(), firstMount: !mountedBefore });
+    const back = cameBack({ now: Date.now(), lastPop, href, navigation: navigationType(), firstMount: !mountedBefore });
     mountedBefore = true;
     const held = back ? readHeld(storeKey) : null;
     if (held === null || held.pages <= 1) return;
@@ -212,6 +222,7 @@ export function LibraryResults({
   // Show older asked for it, and keep the count for back and forward.
   useEffect(() => {
     drawn.current = pages;
+    inFlight.current = false;
     for (const resolve of waiting.current.splice(0)) resolve(true);
     if (focusFrom.current !== null) {
       const links = listRef.current?.querySelectorAll<HTMLElement>("a[href]");
@@ -223,6 +234,7 @@ export function LibraryResults({
 
   // A page landed and the reader is still within a screen of the end: the next.
   useEffect(() => {
+    statusRef.current = status;
     if (status === "idle") loadIfNear();
   }, [status, pages, loadIfNear]);
 
@@ -244,7 +256,11 @@ export function LibraryResults({
   const moreRowsRef = use(LibraryMoreContext);
   useEffect(() => {
     if (moreRowsRef === null) return;
-    moreRowsRef.current = () => load(drawn.current[drawn.current.length - 1].next);
+    // A page already on its way: wait for it rather than answer that nothing came.
+    moreRowsRef.current = () =>
+      inFlight.current
+        ? new Promise<boolean>((resolve) => waiting.current.push(resolve))
+        : load(drawn.current[drawn.current.length - 1].next);
     return () => {
       moreRowsRef.current = null;
     };

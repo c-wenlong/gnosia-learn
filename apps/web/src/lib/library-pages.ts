@@ -21,6 +21,15 @@ import { compareSortKeys, type LibrarySort, type SortKey } from "@/lib/library";
  * last asset of a day deleted, a topic renamed) cannot be placed, and the
  * answer says the Library changed rather than guessing.
  *
+ * **The groups keep the order the first page saw.** A conversation written
+ * to, or a topic whose prerequisites changed, can move ahead of the group
+ * the cursor sits in, and the rows it holds would then be behind the cursor
+ * and never drawn. So the first page hands over its groups' order (`order`),
+ * the reader sends it back with every cursor, and later pages follow it: a
+ * group that moved stays where the reader expects it, and a group that did
+ * not exist then (a new day) is left for the next visit, like any row added
+ * above the cursor.
+ *
  * Pure and React-free: the page and the server function both call it, and so
  * does a test.
  */
@@ -73,6 +82,8 @@ export interface PagePiece<T> {
 export interface LibraryPage<T> {
   state: "ok";
   pieces: PagePiece<T>[];
+  /** Every group's key in the order drawn, on the first page only: what later pages follow. */
+  order?: string[];
   /** The cursor for the page after this one, or null when this was the last. */
   next: string | null;
   /** Rows after this page, for the skeletons the next one shows while it loads. */
@@ -92,19 +103,21 @@ interface Slot<T> {
 }
 
 /**
- * The page of `groups` after `after` (the first page when null), its rows'
+ * The page of `given` after `after` (the first page when null), its rows'
  * order and grouping exactly as drawn in full. `keyOf` is `sortKeyOf`, and
- * `sort` the order the rows inside each group were sorted by.
+ * `sort` the order the rows inside each group were sorted by; `order`, when
+ * the reader sent the first page's back, puts the groups in that order.
  */
 export function pageOf<T>(
-  groups: readonly PageGroup<T>[],
+  given: readonly PageGroup<T>[],
   keyOf: (row: T) => SortKey,
   sort: LibrarySort,
   after: PageCursor | null,
-  options: { size?: number; max?: number } = {},
+  options: { size?: number; max?: number; order?: readonly string[] | null } = {},
 ): LibraryPage<T> | StalePage {
   const size = Math.max(1, options.size ?? PAGE_SIZE);
   const max = Math.max(size, options.max ?? PAGE_MAX);
+  const groups = options.order == null ? given : inOrder(given, options.order);
   const slots: Slot<T>[] = [];
   // The first and last slot of each group, to finish one and to say where a heading starts.
   const spans: { first: number; last: number }[] = [];
@@ -157,7 +170,38 @@ export function pageOf<T>(
     end < slots.length && lastSlot !== undefined
       ? encodeCursor({ group: groups[lastSlot.group].key, section: sectionKey(groups, lastSlot), key: lastSlot.key })
       : null;
-  return { state: "ok", pieces, next, remaining: slots.length - end };
+  return {
+    state: "ok",
+    pieces,
+    ...(after === null ? { order: groups.map((group) => group.key) } : {}),
+    next,
+    remaining: slots.length - end,
+  };
+}
+
+/** `groups` in the order the first page saw them; one it did not see is left out. */
+function inOrder<T>(groups: readonly PageGroup<T>[], order: readonly string[]): PageGroup<T>[] {
+  const byKey = new Map(groups.map((group) => [group.key, group]));
+  return order.flatMap((key) => {
+    const group = byKey.get(key);
+    return group === undefined ? [] : [group];
+  });
+}
+
+/** The most group keys an order from the reader may hold, and the longest key. */
+const MAX_ORDER = 5_000;
+const MAX_KEY = 1_000;
+
+/**
+ * The groups' order back from the reader, checked, since it came from the
+ * browser: undefined when none was sent, null when what was sent is not a
+ * list of keys.
+ */
+export function parseOrder(value: unknown): string[] | null | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_ORDER) return null;
+  if (!value.every((key) => typeof key === "string" && key.length <= MAX_KEY)) return null;
+  return value as string[];
 }
 
 function heading<T>(group: PageGroup<T>): PieceHeading {
@@ -300,13 +344,43 @@ export function parseHeldPages(raw: string | null): HeldPages | null {
 export const POP_WINDOW_MS = 2_000;
 
 /**
+ * Whether a URL is the Library view `href` names (`libraryHref`), whatever
+ * order its parameters are in and whether a row is open in the previewer.
+ */
+export function sameLibraryView(url: string, href: string): boolean {
+  const view = (value: string) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(value, "http://library.invalid");
+    } catch {
+      return null;
+    }
+    parsed.searchParams.delete("open");
+    parsed.searchParams.sort();
+    return `${parsed.pathname}?${parsed.searchParams.toString()}`;
+  };
+  const a = view(url);
+  return a !== null && a === view(href);
+}
+
+/**
  * Whether a list that just mounted was reached by back or forward (or a
  * reload), and so should draw as many pages as it held and scroll to where
- * it was: a popstate moments ago (the app router's back), or a document
- * loaded that way when this is its first list. A link or a fresh visit
- * starts at the first page.
+ * it was: a popstate moments ago to this very view (the app router's back),
+ * or a document loaded that way when this is its first list. A link or a
+ * fresh visit starts at the first page, a link followed moments after a
+ * back to some other page included.
  */
-export function cameBack(input: { now: number; lastPop: number | null; navigation: string | null; firstMount: boolean }): boolean {
-  if (input.lastPop !== null && input.now - input.lastPop >= 0 && input.now - input.lastPop < POP_WINDOW_MS) return true;
+export function cameBack(input: {
+  now: number;
+  lastPop: { at: number; url: string } | null;
+  href: string;
+  navigation: string | null;
+  firstMount: boolean;
+}): boolean {
+  const pop = input.lastPop;
+  if (pop !== null && input.now - pop.at >= 0 && input.now - pop.at < POP_WINDOW_MS) {
+    return sameLibraryView(pop.url, input.href);
+  }
   return input.firstMount && (input.navigation === "back_forward" || input.navigation === "reload");
 }

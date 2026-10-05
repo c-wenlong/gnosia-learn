@@ -256,10 +256,15 @@ export type RenderedPage = LibraryPage<ReactNode>;
 
 /**
  * The page after `after` (the first when null), each row drawn by the view's
- * `renderRow`. Stale when the cursor's group is gone (`pageOf`).
+ * `renderRow`, its groups in the first page's `order` when the reader sent
+ * it. Stale when the cursor's group is gone (`pageOf`).
  */
-export function renderLibraryPage(view: LibraryView, after: PageCursor | null): RenderedPage | StalePage {
-  const page = pageOf(view.groups, sortKeyOf, view.sort, after);
+export function renderLibraryPage(
+  view: LibraryView,
+  after: PageCursor | null,
+  order?: readonly string[],
+): RenderedPage | StalePage {
+  const page = pageOf(view.groups, sortKeyOf, view.sort, after, { order });
   if (page.state === "stale") return page;
   return {
     ...page,

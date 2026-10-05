@@ -54,6 +54,7 @@ function page(pieces: Array<[string, number, number]>, next: string | null, rema
   let at = from;
   return {
     state: "ok",
+    ...(from === 0 ? { order: [...new Set(pieces.map(([key]) => key))] } : {}),
     pieces: pieces.map(([key, count, n]) => {
       const rows = rowNodes(prefix, n, at);
       at += n;
@@ -125,7 +126,8 @@ describe("LibraryResults", () => {
     await scrollNear();
     await scrollNear();
     expect(libraryPage).toHaveBeenCalledTimes(1);
-    expect(libraryPage).toHaveBeenCalledWith("/library?view=list", "c1");
+    // With the first page's group order, which later pages keep.
+    expect(libraryPage).toHaveBeenCalledWith("/library?view=list", "c1", ["4 Oct"]);
     expect(container.querySelector("section")?.getAttribute("aria-busy")).toBe("true");
     // Three rows are left, so three row placeholders, inside the group they continue.
     expect(container.querySelectorAll('[data-skeleton="row"]')).toHaveLength(3);
@@ -222,6 +224,7 @@ describe("LibraryResults", () => {
     libraryPage
       .mockResolvedValueOnce(page([["4 Oct", 9, 3]], "c2", 4, "r", 2))
       .mockResolvedValueOnce(page([["4 Oct", 9, 2]], "c3", 2, "r", 5));
+    window.history.replaceState(null, "", "/library?view=list");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await mount({ first: page([["4 Oct", 9, 2]], "c1", 7) });
     await act(async () => undefined);
@@ -229,6 +232,41 @@ describe("LibraryResults", () => {
     expect(links()).toHaveLength(7);
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 2400, behavior: "instant" });
     expect(JSON.parse(window.sessionStorage.getItem("library-pages:/library?view=list") ?? "{}").pages).toBe(3);
+  });
+
+  it("starts at the first page when the back went to another page", async () => {
+    window.sessionStorage.setItem("library-pages:/library?view=list", JSON.stringify({ pages: 3, y: 2400 }));
+    window.history.replaceState(null, "", "/home");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await mount({ first: page([["4 Oct", 9, 2]], "c1", 7) });
+    expect(libraryPage).not.toHaveBeenCalled();
+    expect(links()).toHaveLength(2);
+  });
+
+  it("does not retry a failed load from the sentinel, only from Try again", async () => {
+    libraryPage.mockRejectedValueOnce(new Error("offline"));
+    await mount();
+    await scrollNear();
+    expect(libraryPage).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("The next rows did not load.");
+    await scrollNear();
+    expect(libraryPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the previewer wait for a page already on its way", async () => {
+    let answer: (page: Page) => void = () => undefined;
+    libraryPage.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const more: { current: null | (() => Promise<boolean>) } = { current: null };
+    await mount({}, more);
+    await scrollNear();
+    let asked: Promise<boolean> | undefined;
+    await act(async () => {
+      asked = more.current?.();
+    });
+    expect(libraryPage).toHaveBeenCalledTimes(1);
+    await act(async () => answer(page([["4 Oct", 3, 1]], null, 0, "r", 2)));
+    expect(await asked).toBe(true);
+    expect(links()).toContain("r 2");
   });
 
   it("keeps the count of pages drawn for back and forward", async () => {
