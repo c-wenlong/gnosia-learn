@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import { cx } from "@/components/ui/classes";
 import { useHydrated } from "@/lib/use-hydrated";
 
 /**
@@ -9,7 +10,7 @@ import { useHydrated } from "@/lib/use-hydrated";
  * 200ms, at once for a reader who asked for less motion.
  */
 export function revealClass(shown: boolean): string {
-  return `transition-opacity duration-200 ease-out motion-reduce:transition-none ${shown ? "opacity-100" : "opacity-0"}`;
+  return cx("transition-opacity duration-200 ease-out motion-reduce:transition-none", shown ? "opacity-100" : "opacity-0");
 }
 
 /**

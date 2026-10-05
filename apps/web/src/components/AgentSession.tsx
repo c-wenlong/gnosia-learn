@@ -7,7 +7,7 @@ import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
-import { LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
+import { cx, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { Composer } from "@/components/ui/Composer";
 import { LiveStatus } from "@/components/ui/LiveStatus";
@@ -468,7 +468,7 @@ export function AgentSession({
       </section>
 
       <Card flush className="min-h-[420px]">
-        <p className={`${NOTE} border-b border-hair px-4 py-2`}>
+        <p className={cx(NOTE, "border-b border-hair px-4 py-2")}>
           Browser session · {activeModel}
         </p>
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
@@ -494,7 +494,7 @@ export function AgentSession({
               // speaker label; only the provider, when there is one, is shown.
               m.role === "assistant" ? (
                 <TutorMessage key={m.id} className="animate-enter motion-reduce:animate-none">
-                  {m.meta && <p className={`${NOTE} mb-1`}>{m.meta}</p>}
+                  {m.meta && <p className={cx(NOTE, "mb-1")}>{m.meta}</p>}
                   <div className="whitespace-pre-wrap">
                     <MathText text={m.content} />
                   </div>

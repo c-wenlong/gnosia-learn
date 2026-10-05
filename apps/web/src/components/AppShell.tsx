@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { ShellFrame } from "@/components/shell/ShellFrame";
 import { StoreBanner } from "@/components/shell/StoreBanner";
+import { cx } from "@/components/ui/classes";
 
 /**
  * The frame every page renders inside: the sidebar, and beside it the store
@@ -63,7 +64,7 @@ export function AppShell({
     <ShellFrame studio={studio} initialCollapsed={collapsed}>
       <StoreBanner />
       <main
-        className={[
+        className={cx(
           // The old pages' gutters, and room under a phone page for the home indicator.
           "flex-1 px-4 pt-8 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8 md:pb-8 lg:px-12",
           "has-[[data-layout=app]]:px-4 has-[[data-layout=app]]:pt-6 md:has-[[data-layout=app]]:px-6 md:has-[[data-layout=app]]:pb-10",
@@ -71,15 +72,15 @@ export function AppShell({
           "min-[900px]:has-[[data-layout=workspace]]:flex min-[900px]:has-[[data-layout=workspace]]:min-h-0 min-[900px]:has-[[data-layout=workspace]]:pb-6",
           "has-[[data-layout=focus]]:px-0 has-[[data-layout=focus]]:pt-0 md:has-[[data-layout=focus]]:pb-0",
           "has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:p-0",
-        ].join(" ")}
+        )}
       >
         <div
-          className={[
+          className={cx(
             "mx-auto w-full max-w-3xl",
             "has-[[data-layout=wide]]:max-w-6xl has-[[data-layout=app]]:max-w-[1392px] has-[[data-layout=focus]]:max-w-none",
             "has-[[data-layout=workspace]]:max-w-[1392px] min-[900px]:has-[[data-layout=workspace]]:flex min-[900px]:has-[[data-layout=workspace]]:min-h-0 min-[900px]:has-[[data-layout=workspace]]:flex-1 min-[900px]:has-[[data-layout=workspace]]:flex-col",
             "has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:max-w-none has-[[data-layout=full]]:flex-1",
-          ].join(" ")}
+          )}
         >
           {children}
         </div>

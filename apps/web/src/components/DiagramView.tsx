@@ -132,7 +132,7 @@ export function DiagramView({
         // A constant mat in both themes: see the note above on why the diagram
         // is never recoloured to match the page.
         <div
-          className={`relative bg-diagram-matte p-3 ${status === "ready" ? "" : "min-h-48"}`}
+          className={cx("relative bg-diagram-matte p-3", status === "ready" ? "" : "min-h-48")}
         >
           {/* Behind the picture, never over it: the diagram must be visible on
               its own, so that a page where this script never runs still shows

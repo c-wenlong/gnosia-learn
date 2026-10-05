@@ -101,7 +101,7 @@ export default async function AssetPage({
     // statement about the catalog this page is in no position to make.
     if (reachable) notFound();
     return (
-      <div data-layout="app" className={`flex flex-col gap-4 ${PAGE_ENTER}`}>
+      <div data-layout="app" className={cx("flex flex-col gap-4", PAGE_ENTER)}>
         {backLink}
         <Notice title="The catalog is unreachable" command="npm run catalog -- status">
           This asset could not be looked up, which is not the same as it not existing. The row is
@@ -172,7 +172,7 @@ export default async function AssetPage({
 
   if (asset.kind === "video" && servable) {
     return (
-      <div data-layout="app" className={`flex flex-col gap-4 ${PAGE_ENTER}`}>
+      <div data-layout="app" className={cx("flex flex-col gap-4", PAGE_ENTER)}>
         {backLink}
         <AssetBody
           data={body}
@@ -230,7 +230,7 @@ export default async function AssetPage({
     );
 
   return (
-    <div data-layout="app" className={`flex flex-col gap-4 ${PAGE_ENTER}`}>
+    <div data-layout="app" className={cx("flex flex-col gap-4", PAGE_ENTER)}>
       {backLink}
       {!pictureFirst && titleRow}
       <div className="min-w-0">
