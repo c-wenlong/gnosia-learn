@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useOptimistic, useRef, useTransition, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useOptimistic, useRef, useTransition, type ReactNode } from "react";
 
 import { ViewOptions } from "@/components/library/ViewOptions";
 import { FilterMenu } from "@/components/ui/FilterMenu";
-import { cx } from "@/components/ui/classes";
+import { SegmentedControl, type SegmentLink } from "@/components/ui/SegmentedControl";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import {
   libraryHref,
@@ -37,14 +37,46 @@ export interface LibraryMenu {
 const TYPE = "Type";
 
 /**
+ * What a plain click on a type link does: the toolbar's `pick`, told the link's
+ * `href`. The kit's segment link takes no `onClick`, so the toolbar hands its
+ * own over through this, and `TypeLink` below stays one component for the
+ * life of the page (a link component made in a render would remount the row).
+ */
+const TypePick = createContext<(href: string) => void>(() => {});
+
+/**
+ * A type segment: the kit's page link (`next/link`, scroll kept), except that a
+ * plain click on a tab other than the current one is taken in-page, as a menu
+ * pick is, so the face slides at once and the results dim until the server has
+ * drawn the new view. A modified click is the browser's (a new tab) and a click
+ * on the current tab does nothing, as before.
+ */
+const TypeLink: SegmentLink = ({ href, ...rest }) => {
+  const pick = useContext(TypePick);
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      {...rest}
+      onClick={(event) => {
+        if (!isPlainClick(event)) return;
+        event.preventDefault();
+        if (rest["aria-current"] !== "page") pick(href);
+      }}
+    />
+  );
+};
+
+/**
  * The Library's header: the title and its count on the left, then the
  * filters and how to show them, and under them the strip of type tabs (L1 of
  * docs/proposals/library-by-type-and-day.md).
  *
  * **The tabs.** All, Videos, Diagrams, Notes, Sessions, Links, and Others
  * when the catalog holds a companion file: plain words with no counts, as
- * Manus's `type-tab` is (32 tall, radius 8, the chosen one filled), each
- * label drawn twice so the bolder chosen weight does not shift the strip.
+ * Manus's `type-tab` is, as the kit's `SegmentedControl` in its links mode
+ * (32 tall, the chosen one's face sliding between them, the segments of one
+ * width so choosing one shifts nothing).
  * They are links to `?kind=`, so a modified click opens one in a new tab; a
  * plain click is taken in-page like a menu pick. On a phone the strip is one
  * chip ("All", "Videos") opening the same list, as Manus's is at 390.
@@ -163,6 +195,12 @@ export function LibraryToolbar({
   };
 
   const chosen = values[TYPE] ?? tab;
+  // Each tab's link keeps every other filter, as the strip always did.
+  const typeHref = (value: string) => libraryHref({ ...filters, kind: value === "" ? null : value });
+  const pickType = (href: string) => {
+    const hit = tabs.find((t) => typeHref(t.value) === href);
+    if (hit !== undefined) pick(TYPE, "kind", hit.value);
+  };
   const typeOptions: FilterOption[] = tabs.map((t) => ({ value: t.value, label: t.label }));
 
   return (
@@ -211,35 +249,22 @@ export function LibraryToolbar({
         </section>
       </div>
 
-      <nav aria-label="Type" className="hidden flex-wrap items-center gap-1 md:flex">
-        {tabs.map((t) => {
-          const current = t.value === chosen;
-          return (
-            <Link
-              key={t.value}
-              href={libraryHref({ ...filters, kind: t.value === "" ? null : t.value })}
-              aria-current={current ? "page" : undefined}
-              scroll={false}
-              onClick={(event) => {
-                if (!isPlainClick(event)) return;
-                event.preventDefault();
-                if (!current) pick(TYPE, "kind", t.value);
-              }}
-              className={cx(
-                "grid h-8 items-center rounded-lg px-2.5 text-[14px] leading-5 transition-colors duration-150 ease-out motion-reduce:transition-none",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                current ? "bg-surface2 font-semibold text-text" : "text-text2 hover:bg-surface2/60 hover:text-text",
-              )}
-            >
-              {/* The bolder copy reserves the width, so choosing a tab does not shift the strip. */}
-              <span aria-hidden className="invisible col-start-1 row-start-1 font-semibold">
-                {t.label}
-              </span>
-              <span className="col-start-1 row-start-1 text-center">{t.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+      {/* From 768px only: below it the chip above carries the same list. */}
+      <div className="hidden max-w-full md:block">
+        <TypePick.Provider value={pickType}>
+          <SegmentedControl
+            mode="links"
+            label={TYPE}
+            link={TypeLink}
+            value={chosen}
+            items={tabs.map((t) => ({
+              id: t.value,
+              label: t.label,
+              href: typeHref(t.value),
+            }))}
+          />
+        </TypePick.Provider>
+      </div>
     </div>
   );
 }

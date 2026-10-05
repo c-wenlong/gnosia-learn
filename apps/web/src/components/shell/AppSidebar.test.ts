@@ -377,10 +377,8 @@ describe("the sections", () => {
     code: "CS3230",
     title: "Algorithms",
     href: "/courses/cs3230",
-    modules: [
-      { slug: "m1", title: "Asymptotics", order: 1, href: "/courses/cs3230/m1" },
-      { slug: "m2", title: "Divide and conquer", order: 2, href: "/courses/cs3230/m2" },
-    ],
+    open: "/courses/cs3230/m2",
+    resume: { title: "Divide and conquer", order: 2 },
   };
   const withRows = (patch: Partial<RecentModel> = {}) => mocks.fetchRecent.mockResolvedValue({ ...EMPTY, items: [VIDEO, MODULE, CONCEPT], courses: [COURSE], ...patch });
   const section = (container: HTMLElement, id: string) => nav(container).querySelector(`#${id}`)!.closest("section")!;
@@ -423,7 +421,7 @@ describe("the sections", () => {
     expect(current?.getAttribute("href")).toBe("/library/video%3Aabc");
   });
 
-  it("lists Courses under a sticky 13px label with an add button to /courses, and unfolds a course on press", async () => {
+  it("lists Courses under a sticky 13px label with an add button to /courses, each one row that opens where the owner left off", async () => {
     withRows();
     const container = await mount(false);
     const label = nav(container).querySelector("#sidebar-courses")!;
@@ -431,40 +429,60 @@ describe("the sections", () => {
     expect(label.parentElement!.className).toContain("sticky");
     expect(nav(container).querySelector('a[aria-label="Browse courses"]')?.getAttribute("href")).toBe("/courses");
 
-    const folder = section(container, "sidebar-courses").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    expect(folder.textContent).toBe("CS3230 Algorithms");
-    const modules = container.querySelector<HTMLElement>(`#${folder.getAttribute("aria-controls")}`)!;
-    expect(folder.getAttribute("aria-expanded")).toBe("false");
-    expect(modules.hasAttribute("inert")).toBe(true);
-    act(() => folder.click());
-    expect(folder.getAttribute("aria-expanded")).toBe("true");
-    expect(modules.hasAttribute("inert")).toBe(false);
-    expect([...modules.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual(["/courses/cs3230/m1", "/courses/cs3230/m2"]);
-    // It glides open rather than appearing, and snaps under reduced motion.
-    expect(modules.className).toContain("transition-[grid-template-rows,opacity]");
-    expect(modules.className).toContain("motion-reduce:transition-none");
+    const courses = section(container, "sidebar-courses");
+    // No fold and no module list: the course page has its own.
+    expect(courses.querySelector("button[aria-expanded]")).toBeNull();
+    const rows = [...courses.querySelectorAll<HTMLAnchorElement>("li a")];
+    expect(rows.map((a) => a.getAttribute("href"))).toEqual(["/courses/cs3230/m2"]);
+    expect(rows[0]!.textContent).toBe("CS3230 Algorithms2. Divide and conquer");
+    expect(rows[0]!.getAttribute("aria-current")).toBeNull();
+    // Two lines tall, its height eased so it can settle on the rail.
+    expect(rows[0]!.className).toContain("h-[calc(var(--shell-row,36px)+8px)]");
+    expect(rows[0]!.className).toContain("transition-[height,color,background-color]");
+    expect(rows[0]!.className).toContain("motion-reduce:transition-none");
   });
 
-  it("shows a module's whole title in one truncating line, the tooltip holding all of it", async () => {
-    withRows({ courses: [{ ...COURSE, modules: [{ slug: "m2", title: "Week 2: MapReduce", order: 2, href: "/courses/cs3230/m2" }] }] });
+  it("names the module visited last by its whole title, never cut at the colon, truncating with the tooltip holding it", async () => {
+    withRows({ courses: [{ ...COURSE, resume: { title: "Week 2: MapReduce", order: 2 } }] });
     const container = await mount(false);
-    const folder = section(container, "sidebar-courses").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    act(() => folder.click());
-    const link = container.querySelector<HTMLAnchorElement>(`#${folder.getAttribute("aria-controls")} a`)!;
-    const title = [...link.querySelectorAll("span")].find((s) => s.textContent === "Week 2: MapReduce")!;
-    expect(title).toBeDefined();
-    expect(title.getAttribute("title")).toBe("Week 2: MapReduce");
-    expect(title.className).toContain("truncate");
-    expect(title.className).toContain("min-w-0");
+    const row = section(container, "sidebar-courses").querySelector<HTMLAnchorElement>("li a")!;
+    const line = [...row.querySelectorAll("span")].find((s) => s.textContent === "2. Week 2: MapReduce")!;
+    expect(line).toBeDefined();
+    expect(line.className).toContain("truncate");
+    expect(row.getAttribute("title")).toBe("CS3230 Algorithms, 2. Week 2: MapReduce");
   });
 
-  it("opens the course of the page on screen by itself, its module marked", async () => {
-    mocks.pathname = "/courses/cs3230/m2/check";
+  it("marks the course of the page on screen, on any page under it", async () => {
+    mocks.pathname = "/courses/cs3230/m1/check";
     withRows();
     const container = await mount(false);
-    const folder = section(container, "sidebar-courses").querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    expect(folder.getAttribute("aria-expanded")).toBe("true");
     expect(section(container, "sidebar-courses").querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/courses/cs3230/m2");
+  });
+
+  it("settles a two-line course row to one row's height on the rail, where only its glyph shows", async () => {
+    withRows();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root: Root = createRoot(container);
+    act(() => root.render(createElement(ShellFrame, { studio: false, initialCollapsed: true } as ComponentProps<typeof ShellFrame>, null)));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    const row = nav(container).querySelector<HTMLAnchorElement>('a[aria-label="CS3230 Algorithms"]')!;
+    expect(row.className).toContain("h-[var(--shell-row,36px)]");
+    expect(row.className).not.toContain("+8px");
+  });
+
+  it("gives a course with no module visited one line, opening the course page", async () => {
+    withRows({ courses: [{ ...COURSE, open: COURSE.href, resume: null }] });
+    const container = await mount(false);
+    const row = section(container, "sidebar-courses").querySelector<HTMLAnchorElement>("li a")!;
+    expect(row.getAttribute("href")).toBe("/courses/cs3230");
+    expect(row.textContent).toBe("CS3230 Algorithms");
   });
 
   it("shows Pinned only when something is pinned, and moves a pinned row out of Recent", async () => {
