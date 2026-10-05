@@ -7,11 +7,11 @@ import { ASSET_NAME_MAX, cleanAssetName } from "@self-learn/schema/shared";
 import { AskPanel } from "@/components/library/AskPanel";
 import { Button } from "@/components/ui/Button";
 import { Dialog, DIALOG_CLOSE_MS, type DialogSize } from "@/components/ui/Dialog";
+import { DialogHeader } from "@/components/ui/DialogHeader";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
-import { IconButton } from "@/components/ui/IconButton";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
 import { Menu, MenuDivider, MenuItem } from "@/components/ui/Menu";
-import { CARD_TITLE, cx, iconButtonClasses, inputClasses } from "@/components/ui/classes";
+import { cx, iconButtonClasses, inputClasses } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
 import type { AskSubject, RowMenuItem, RowMenuSections } from "@/lib/row-menu";
 import { sendJson } from "@/lib/send-json";
@@ -260,7 +260,7 @@ function MenuSection({ divider, children }: { divider: boolean; children: ReactN
 /**
  * Rename's and Ask's dialog over the Library: the kit `Dialog` (modal, Escape
  * and a press on the backdrop close it, focus kept inside and handed back to
- * the more button), with a header holding its name and Close. It fades out
+ * the more button), under the kit `DialogHeader`: its name and Close. It fades out
  * for `DIALOG_CLOSE_MS` before it goes, at once under reduced motion.
  *
  * `keep` is Ask's: once opened it stays in the page, closed by hand rather
@@ -316,13 +316,8 @@ function RowDialog({
         if (open) onClose();
       }}
     >
-      <div className="flex shrink-0 items-center gap-3 py-3 pr-3 pl-5">
-        <h2 className={cx(CARD_TITLE, "min-w-0 flex-1 truncate")}>{label}</h2>
-        <IconButton label="Close" onClick={() => open && onClose()}>
-          <Glyph name="close" size={16} />
-        </IconButton>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-5">{children}</div>
+      <DialogHeader title={label} onClose={() => open && onClose()} />
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-5">{children}</div>
     </Dialog>
   );
 }

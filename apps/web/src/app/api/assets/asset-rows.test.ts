@@ -374,6 +374,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       topics: [],
       createdAt: "",
       updatedAt: "",
+      editedAt: null,
     });
     const out = await library.readSearchText(
       [

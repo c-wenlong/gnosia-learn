@@ -72,6 +72,24 @@ is id, kind, path, url, bytes and title, and the list adds `createdAt` to
 it), so phase 1 adds `createdAt` and `updatedAt` to the row type and to the
 list query.
 
+*Amended 2026-10-05 (the owner's call): the label shows only when a person
+made the last change.* `updated_at` turned out to say nothing about people:
+every upsert sets it, so `catalog import` and the video tools' index runs
+moved it on 739 of the owner's 963 assets, and 458 rows said "edited". The
+row now carries `editedAt`, read by `listAssets` from `content_revision`:
+the time of the asset's latest revision that changed something, when its
+`author_kind` is `person`, or of the reader's own rename (`asset_name`) when
+that is later; null otherwise. A note commit or vault push, a diagram accept,
+a course edit and a rename count; an import or indexer refresh does not, and
+cancels an earlier person's edit, since it is then the last change. Two
+person-recorded writes are not edits and are skipped: one that only stored
+bytes or rehooked a poster (`catalog asset upload`, flip day), and every
+poster revision, since only an upload or a studio accept writes a poster.
+Session logs have no person revisions (their appends are `session_log_entry`
+rows, not asset revisions), so they never carry the label. The one-day
+threshold stays. On the owner's catalog that takes the labelled rows from
+458 to 174: 143 notes, 29 links, one diagram and its source.
+
 **L3. A row names where it came from.** Second line, in grey: the course and
 module for a reading, the concept for a note or diagram, the conversation for
 a studio output, the session for a log. Each parent is a join the catalog
