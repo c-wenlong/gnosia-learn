@@ -13,10 +13,12 @@ import { isMacPlatform, isTypingTarget, resolveShortcut, type ShortcutAction } f
  * while an input method is composing, on a key held down (a held Cmd+. would
  * fold and unfold until it was let go), and while a modal dialog is open,
  * since the shell behind it is inert. With focus in a field or the composer
- * only search fires (`resolveShortcut`). A press that is a shortcut is
- * prevented, so the browser's own Cmd+K or Cmd+. does not run as well.
+ * only search fires (`resolveShortcut`). A press a handler acted on is
+ * prevented, so the browser's own Cmd+K or Cmd+. does not run as well; a
+ * handler that returns false had nothing to do there (the sidebar is hidden
+ * on a focus page), and the key goes on to the browser.
  */
-export function useShellShortcuts(handlers: Record<ShortcutAction, () => void>, studio: boolean): void {
+export function useShellShortcuts(handlers: Record<ShortcutAction, () => boolean | void>, studio: boolean): void {
   const latest = useRef(handlers);
   useEffect(() => {
     latest.current = handlers;
@@ -32,8 +34,7 @@ export function useShellShortcuts(handlers: Record<ShortcutAction, () => void>, 
         studio,
       });
       if (action === null) return;
-      event.preventDefault();
-      latest.current[action]();
+      if (latest.current[action]() !== false) event.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

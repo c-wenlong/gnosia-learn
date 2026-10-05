@@ -858,6 +858,40 @@ describe("the shortcuts", () => {
     expect(document.querySelector("dialog")).toBeNull();
   });
 
+  it("leaves Ctrl+K and Ctrl+. to the browser on a focus page, where the sidebar is hidden", async () => {
+    const Focus = () => createElement("div", { "data-layout": "focus" });
+    const container = await mount(false, Focus as unknown as () => null);
+    expect(key({ key: "k", ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(key({ key: ".", ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(nav(container).dataset.state).toBe("open");
+  });
+
+  it("hands focus to the fold when Ctrl+. sends the slid-out sidebar back to the rail", async () => {
+    const container = await mount(false);
+    key({ key: ".", ctrlKey: true });
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, cancelable: true }));
+    });
+    expect(nav(container).dataset.state).toBe("peek");
+    const home = [...nav(container).querySelectorAll<HTMLAnchorElement>("a")].find((a) => a.textContent === "Home")!;
+    home.focus();
+    key({ key: ".", ctrlKey: true }, home);
+    expect(nav(container).dataset.state).toBe("rail");
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    });
+    expect(document.activeElement?.hasAttribute("data-fold")).toBe(true);
+  });
+
+  it("closes the phone's drawer before opening the sheet, so its Tab trap lets the sheet be", async () => {
+    const container = await mount(true);
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
+    expect(nav(container).getAttribute("role")).toBe("dialog");
+    key({ key: "?", shiftKey: true });
+    expect(nav(container).getAttribute("role")).toBeNull();
+    expect(document.querySelector("dialog[open]")).not.toBeNull();
+  });
+
   it("does not open the sheet while typing, and opens it from Ctrl+/", async () => {
     await mount(false);
     const field = document.createElement("input");

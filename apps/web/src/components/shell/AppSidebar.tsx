@@ -60,8 +60,8 @@ import { isPhoneWidth, useShellShortcuts } from "./use-shortcuts";
  * after Manus's): Cmd+. folds or unfolds it (on a phone, opens or closes the
  * drawer), Cmd+K focuses the search (sliding the rail out, or opening the
  * drawer, first), Cmd+Shift+O presses New chat, and "?" or Cmd+/ opens the
- * shortcuts sheet. On a focus page, where it is hidden, the first two do
- * nothing.
+ * shortcuts sheet, closing the drawer first. On a focus page, where it is
+ * hidden, the first two leave the key to the browser.
  */
 export function AppSidebar() {
   const shell = useShell();
@@ -184,10 +184,14 @@ export function AppSidebar() {
           else openDrawer?.();
           return;
         }
-        if (focusPage()) return;
-        // Slid out over the page, it goes back to the rail it came from.
-        if (peeking) stopPeek();
-        else setCollapsed?.(!collapsed);
+        if (focusPage()) return false;
+        if (peeking) {
+          // Slid out over the page, it goes back to the rail it came from,
+          // and focus in it goes to the fold, on the rail too, as Escape does.
+          const inside = room.current?.contains(document.activeElement) === true;
+          stopPeek();
+          if (inside) requestAnimationFrame(() => room.current?.querySelector<HTMLElement>("[data-fold]")?.focus());
+        } else setCollapsed?.(!collapsed);
       },
       search: () => {
         if (isPhoneWidth()) {
@@ -196,12 +200,17 @@ export function AppSidebar() {
           requestAnimationFrame(() => searchField.current?.focus());
           return;
         }
-        if (focusPage()) return;
+        if (focusPage()) return false;
         if (rail) openSearch();
         else searchField.current?.focus();
       },
       "new-chat": () => panel.current?.querySelector<HTMLElement>("[data-studio-new]")?.click(),
-      "show-shortcuts": () => setSheet(true),
+      "show-shortcuts": () => {
+        // The drawer's Tab trap listens on the window and would pull focus
+        // out of the sheet, so the drawer closes first.
+        if (drawer) closeDrawer?.();
+        setSheet(true);
+      },
     },
     studio,
   );
