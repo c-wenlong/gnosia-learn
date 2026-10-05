@@ -15,6 +15,7 @@ import {
   parseScope,
   indexSearch,
   conceptMapHref,
+  parseLayout,
   parseView,
   statusFilterOptions,
   type IndexRow,
@@ -124,6 +125,33 @@ describe("filters and search", () => {
     expect(indexSearch({ ...base, view: "graph", domain: "algorithms", topic: null }, "utm=x&view=graph&scope=island")).toBe(
       "utm=x&concept=dot&domain=algorithms",
     );
+  });
+
+  // D11 of docs/proposals/domain-map.md: a domain is drawn in groups or on axes.
+  it("reads the map's layout, groups unless the axes are asked for", () => {
+    expect(parseLayout("axes")).toBe("axes");
+    expect(parseLayout("groups")).toBe("groups");
+    expect(parseLayout(null)).toBe("groups");
+    expect(parseLayout(undefined)).toBe("groups");
+    expect(parseLayout("bogus")).toBe("groups");
+  });
+
+  it("writes layout=axes on a domain only, and drops it in a topic, on the cards and in the table", () => {
+    const base = { selected: null, filter: "all" as const, scope: "neighbourhood" as const, layout: "axes" as const };
+    expect(indexSearch({ ...base, view: "graph", domain: "algorithms", topic: null })).toBe("domain=algorithms&layout=axes");
+    // Groups is the default, so it says nothing.
+    expect(indexSearch({ ...base, layout: "groups", view: "graph", domain: "algorithms", topic: null }, "domain=algorithms&layout=axes")).toBe(
+      "domain=algorithms",
+    );
+    // A topic is always groups.
+    expect(indexSearch({ ...base, view: "graph", domain: "algorithms", topic: "sorting" }, "domain=algorithms&layout=axes")).toBe(
+      "domain=algorithms&topic=sorting",
+    );
+    // The cards and the table have no picture to arrange.
+    expect(indexSearch({ ...base, view: "graph", domain: null, topic: null }, "layout=axes")).toBe("");
+    expect(indexSearch({ ...base, view: "table", domain: "algorithms", topic: null }, "domain=algorithms&layout=axes")).toBe("view=table");
+    // A state that does not name a layout leaves the groups' URL as it was.
+    expect(indexSearch({ selected: null, filter: "all", scope: "neighbourhood", view: "graph", domain: "algorithms", topic: null }, "layout=axes")).toBe("domain=algorithms");
   });
 
   it("links a concept to its place on the map, which the page opens in its domain", () => {

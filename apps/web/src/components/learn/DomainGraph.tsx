@@ -1,14 +1,20 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { wrapLabel, type GraphEdge } from "@/lib/concept-graph";
 import type { DomainLayout } from "@/lib/domain-map";
 import {
+  AXES_CAPTIONS,
+  axesCaptions,
+  axesGeometry,
+  axesViewBox,
   cullLabels,
   edgeEnds,
   fitTitle,
+  GLIDE_MS,
+  glideEase,
   groupBox,
   labelBaseline,
   labelBox,
@@ -16,8 +22,11 @@ import {
   labelFoot,
   labelRank,
   MIN_DRAW_SCALE,
+  mixBox,
+  mixPoint,
   neighbours,
   NODE_HALF_WIDTH,
+  sideCaptionX,
   textEm,
   TITLE_INSET,
   titleBand,
@@ -31,8 +40,10 @@ import {
   type Box,
   type LabelItem,
 } from "@/lib/domain-view";
+import type { MapLayout } from "@/lib/learn-index";
 import { arcLength } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import { prefersReducedMotion } from "@/lib/motion";
 
 /**
  * One domain, or one of its topics, as a bounded picture (D3 of
@@ -40,6 +51,11 @@ import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
  * it, and the domain's own edges as straight lines between the dots. The
  * layout arrives from the server; this draws it at the width of its card,
  * and the page scrolls when it is tall. There is no pan and no zoom.
+ *
+ * Or on axes (D11): each concept by when it is learnt (its layer) and by how
+ * many concepts need it, the server's second layout. Switching glides every
+ * concept from one place to the other while the topic boxes and the axes
+ * fade out and in. Nothing drags on the axes, where a place means something.
  */
 
 export interface DomainGraphNode {
@@ -91,6 +107,7 @@ export function DomainGraph({
   onMove,
   onMoveEnd,
   locked = false,
+  arrangement = "groups",
 }: {
   layout: DomainLayout;
   /** The domain's title, for the accessible name. */
@@ -116,6 +133,8 @@ export function DomainGraph({
   onMoveEnd: () => void;
   /** Reset is gliding the concepts home: no drag starts until it is done. */
   locked?: boolean;
+  /** Groups or axes (D11). A topic is only ever drawn in groups. */
+  arrangement?: MapLayout;
 }) {
   const groups = topic === null ? layout.groups : layout.groups.filter((g) => g.topic === topic);
   const shown = new Set(groups.flatMap((g) => g.concepts));
@@ -127,8 +146,17 @@ export function DomainGraph({
   /** Set when a drag ends, so the click the browser sends after it does not select. */
   const dragged = useRef(false);
   const count = shown.size;
-  const label = `${title} map, ${count} concept${count === 1 ? "" : "s"} in ${groups.length} topic${groups.length === 1 ? "" : "s"}`;
-  const at = (id: string) => moved[id] ?? layout.positions[id];
+  const onAxes = arrangement === "axes" && topic === null;
+  const concepts = `${count} concept${count === 1 ? "" : "s"}`;
+  const label = onAxes
+    ? `${title} map, ${concepts} by when they are learnt and how many concepts need them, the most needed at the top left`
+    : `${title} map, ${concepts} in ${groups.length} topic${groups.length === 1 ? "" : "s"}`;
+  // How far the picture is from its groups (0) to its axes (1), gliding between (D11).
+  const glide = useGlide(onAxes ? 1 : 0);
+  const settled = glide === (onAxes ? 1 : 0);
+  /** Where a concept is in groups: dragged there, or where the layout put it. The groups' boxes follow these. */
+  const home = (id: string) => moved[id] ?? layout.positions[id];
+  const at = (id: string) => (glide === 0 ? home(id) : mixPoint(home(id), layout.axes.positions[id] ?? home(id), glide));
   const topicOf = new Map(groups.flatMap((g) => g.concepts.map((id) => [id, g.topic] as const)));
   const lines = (id: string) => wrapLabel(nodes.get(id)?.title ?? id, LABEL_CHARS).length;
   // How wide the picture is drawn, for the labels' size on screen (D10); unknown until measured.
@@ -147,17 +175,20 @@ export function DomainGraph({
     return () => observer.disconnect();
   }, []);
   // The frame's width does not depend on the title band, so the scale is measured from it before the band is known.
-  const scale = drawn === null ? 1 : drawn / (frozen ?? viewBoxFor(layout, topic, moved)).width;
+  // On the way to the axes the width glides with the rest of the frame.
+  const frameWidth = (frozen ?? viewBoxFor(layout, topic, moved)).width * (1 - glide) + axesViewBox(layout.axes).width * glide;
+  const scale = drawn === null ? 1 : drawn / frameWidth;
   const font = labelFont(scale);
   // A topic's title keeps 11px on screen too (D10), and its group's band grows upward to hold it.
   const heading = titleFont(scale);
   const band = titleBand(heading);
-  const boxOf = (g: { concepts: readonly string[]; title: string }) => groupBox(g.concepts.map(at), titleWidth(g.title), band);
+  const boxOf = (g: { concepts: readonly string[]; title: string }) => groupBox(g.concepts.map(home), titleWidth(g.title), band);
   // The frame holds still while a concept is being dragged, and takes in where it was left afterwards.
   const fit = viewBoxFor(layout, topic, moved, band);
   // A label drawn larger than the layout's size reaches further below its dot, so the frame grows to hold the bottom row's.
   const live = { ...fit, height: fit.height + Math.max(0, labelFoot(2, font) - labelFoot(2)) };
-  const view = frozen ?? live;
+  const axes = axesGeometry(layout.axes, scale);
+  const view = frozen ?? mixBox(live, axesViewBox(layout.axes, scale), glide);
   // What stays lit (D5, D9): a concept and its neighbours, a topic's group, or a legend chip's.
   const keep =
     hover !== null && shown.has(hover)
@@ -195,7 +226,8 @@ export function DomainGraph({
       });
     }
     // A topic's title stays clear of labels: the box it is drawn in, at its size, in the band above its concepts.
-    const titles = groups.map((g) => titleBox(boxOf(g), g.title, heading));
+    // On the axes there are no titles, and the captions are kept clear instead.
+    const titles = onAxes ? axesCaptions(layout.axes, axes.caption) : groups.map((g) => titleBox(boxOf(g), g.title, heading));
     return cullLabels(items, scale, titles, view);
   })();
   /** Lines of label drawn under a concept: none when its label is culled, so its edges run to the dot. */
@@ -212,6 +244,7 @@ export function DomainGraph({
       ends={edgeEnds(at(e.from), at(e.to), drawnLines(e.from), drawnLines(e.to), font)}
       faint={dimmed.has(e.from) || dimmed.has(e.to)}
       across={topicOf.get(e.from) !== topicOf.get(e.to)}
+      soft={onAxes}
       hot={hot(e)}
       quiet={keep !== null && !hot(e) && !(hover === null && keep.has(e.from) && keep.has(e.to))}
     />
@@ -274,6 +307,15 @@ export function DomainGraph({
           setFrozen(null);
         }}
       >
+        {/* The topic boxes: faded out, and out of reach, on the axes (D11). */}
+        <g
+          data-groups
+          aria-hidden={onAxes ? true : undefined}
+          className={cx(
+            "transition-opacity duration-[400ms] ease-soft motion-reduce:transition-none",
+            onAxes ? "pointer-events-none opacity-0" : "opacity-100",
+          )}
+        >
         {groups.map((g) => {
           const box = boxOf(g);
           const lit = hoverTopic === g.topic;
@@ -312,6 +354,8 @@ export function DomainGraph({
             </g>
           );
         })}
+        </g>
+        {topic === null && <Axes layout={layout} geometry={axes} on={onAxes} />}
         {edges.filter((e) => !hot(e)).map(edge)}
         {/* The lit edges go on top, so a faded one never crosses them. */}
         {edges.filter(hot).map(edge)}
@@ -331,6 +375,7 @@ export function DomainGraph({
               font={font}
               frame={view}
               labelled={labelled.has(id)}
+              draggable={!onAxes}
               light={id === hover ? "hover" : keep === null ? null : keep.has(id) ? "related" : "faded"}
               onSelect={(c) => {
                 if (dragged.current) {
@@ -341,7 +386,8 @@ export function DomainGraph({
               }}
               onHover={onHover}
               onPointerDown={(event) => {
-                if (event.button !== 0 || locked) return;
+                // On the axes a place means something, and while gliding it is on its way: neither drags.
+                if (event.button !== 0 || locked || onAxes || !settled) return;
                 dragged.current = false;
                 const frame = live;
                 drag.current = { id, start: p, from: pointerAt(event, frame), moving: false, view: frame, pointer: event.pointerId };
@@ -352,6 +398,97 @@ export function DomainGraph({
         {plate !== undefined && <Plate node={plate} at={at(plate.id)} lines={lines(plate.id)} font={font} frame={view} />}
       </svg>
     </div>
+  );
+}
+
+/**
+ * How far the picture is from its groups (0) to its axes (1). A change of
+ * `target` glides there over `GLIDE_MS`, eased, from wherever a glide in
+ * progress had got to; with motion reduced it is there at once.
+ */
+function useGlide(target: 0 | 1): number {
+  const [glide, setGlide] = useState<{ target: 0 | 1; t: number }>({ target, t: target });
+  let shown = glide.t;
+  if (glide.target !== target) {
+    // A new target, noticed while rendering: reached at once with motion reduced, else glided to from here.
+    const instant = prefersReducedMotion() || typeof requestAnimationFrame === "undefined";
+    shown = instant ? target : glide.t;
+    setGlide({ target, t: shown });
+  }
+  /** Where the glide has got to, for the next one to start from. */
+  const now = useRef(glide.t);
+  const frame = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    now.current = glide.t;
+  }, [glide.t]);
+  useLayoutEffect(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    const from = now.current;
+    if (from === target) return;
+    const began = performance.now();
+    const step = (time: number) => {
+      const k = (time - began) / GLIDE_MS;
+      const t = k >= 1 ? target : from + (target - from) * glideEase(k);
+      now.current = t;
+      setGlide({ target, t });
+      frame.current = k >= 1 ? null : requestAnimationFrame(step);
+    };
+    frame.current = requestAnimationFrame(step);
+  }, [target]);
+  useEffect(
+    () => () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
+  return shown;
+}
+
+/**
+ * The axes (D11): the soft foundational zone at the top left, the two axis
+ * lines with their arrows, and the captions, at 11px on screen as a topic's
+ * title is. Drawn under the edges and the concepts, and faded out with
+ * nothing to press while the picture is in groups.
+ */
+function Axes({ layout, geometry: g, on }: { layout: DomainLayout; geometry: ReturnType<typeof axesGeometry>; on: boolean }) {
+  const { plot, zone } = layout.axes;
+  const f = g.caption;
+  const arrow = 5;
+  const side = sideCaptionX(f);
+  return (
+    <g
+      data-axes
+      aria-hidden="true"
+      pointerEvents="none"
+      className={cx("transition-opacity duration-[400ms] ease-soft motion-reduce:transition-none", on ? "opacity-100" : "opacity-0")}
+    >
+      {zone !== null && (
+        <g data-zone>
+          <rect x={zone.x} y={zone.y} width={zone.width} height={zone.height} rx={16} className="fill-tint" />
+          <text x={zone.x + TITLE_INSET} y={zone.y + titleBaseline(f)} fontSize={f} fontWeight={700} className="fill-accent">
+            {AXES_CAPTIONS.zone}
+          </text>
+        </g>
+      )}
+      <g className="stroke-text3" strokeWidth={1} fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <line x1={g.left} y1={g.axisY} x2={g.left} y2={g.top} />
+        <polyline points={`${g.left - arrow},${g.top + arrow} ${g.left},${g.top} ${g.left + arrow},${g.top + arrow}`} />
+        <line x1={g.left} y1={g.axisY} x2={g.right} y2={g.axisY} />
+        <polyline points={`${g.right - arrow},${g.axisY - arrow} ${g.right},${g.axisY} ${g.right - arrow},${g.axisY + arrow}`} />
+      </g>
+      <g fontSize={f} fontWeight={600} className="fill-text2">
+        <text x={plot.x} y={g.captionY}>
+          {AXES_CAPTIONS.earlier}
+        </text>
+        <text x={g.right} y={g.captionY} textAnchor="end">
+          {AXES_CAPTIONS.later}
+        </text>
+        <text x={side} y={g.top} textAnchor="end" transform={`rotate(-90 ${side} ${g.top})`}>
+          {AXES_CAPTIONS.side}
+        </text>
+      </g>
+    </g>
   );
 }
 
@@ -380,6 +517,7 @@ function Edge({
   ends: [from, to],
   faint,
   across,
+  soft = false,
   hot,
   quiet,
 }: {
@@ -387,6 +525,8 @@ function Edge({
   ends: [Point, Point];
   faint: boolean;
   across: boolean;
+  /** On the axes, with no groups to read first, every edge is drawn as lightly as one between topics. */
+  soft?: boolean;
   /** Touches the hovered concept: the accent colour, thicker. */
   hot: boolean;
   /** Something else is hovered: nearly gone. */
@@ -406,7 +546,7 @@ function Edge({
       className={cx(
         "transition-opacity duration-150 motion-reduce:transition-none",
         hot ? "stroke-accent" : "stroke-text3",
-        hot ? "opacity-100" : quiet ? "opacity-10" : faint ? "opacity-15" : across ? "opacity-30" : "opacity-70",
+        hot ? "opacity-100" : quiet ? "opacity-10" : faint ? "opacity-15" : across || soft ? "opacity-30" : "opacity-70",
       )}
     />
   );
@@ -422,6 +562,7 @@ function Concept({
   font,
   frame,
   labelled,
+  draggable = true,
   light,
   onSelect,
   onHover,
@@ -439,6 +580,8 @@ function Concept({
   frame: Box;
   /** False when the label is culled (D10): the dot stays, and the name is still the accessible one. */
   labelled: boolean;
+  /** False on the axes (D11), where a press selects and nothing drags. */
+  draggable?: boolean;
   /** Under hover (D5): the hovered concept, a neighbour kept lit, a concept faded, or nothing hovered. */
   light: "hover" | "related" | "faded" | null;
   onSelect: (id: string) => void;
@@ -476,7 +619,8 @@ function Concept({
       aria-label={caption}
       aria-pressed={selected}
       className={cx(
-        "cursor-grab touch-none outline-none transition-opacity duration-150 active:cursor-grabbing motion-reduce:transition-none",
+        "outline-none transition-opacity duration-150 motion-reduce:transition-none",
+        draggable ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer",
         light === "faded" ? "opacity-10" : dim && light === null ? "opacity-20" : undefined,
       )}
       onClick={() => onSelect(n.id)}

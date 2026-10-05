@@ -239,6 +239,120 @@ export const GROUP_TITLE = titleBand(LABEL_SIZE);
 export const TITLE_RESERVE = Math.ceil(titleBand(LABEL_MIN_PX / MIN_DRAW_SCALE));
 
 /**
+ * A domain on axes (D11 of docs/proposals/domain-map.md): each concept at x =
+ * its layer, the longest chain of prerequisites inside the domain (concepts
+ * that need each other count as one), and y = how many concepts of the
+ * domain need it, directly or through others, on a log scale with the most
+ * at the top. Laid out by `domain-map.ts` on the server; drawn here.
+ */
+export interface AxesLayout {
+  /** The picture at the layout size, its captions included. */
+  width: number;
+  height: number;
+  /** Each concept's dot. */
+  positions: Record<string, { x: number; y: number }>;
+  /** Each concept's layer, from 0. */
+  layer: Record<string, number>;
+  /** How many concepts of the domain need each one. */
+  needed: Record<string, number>;
+  /** How many layers there are, and how wide each one's column is. */
+  layers: number;
+  column: number;
+  /** From the first column's left edge to the last's right, and from the top dot to the bottom one. */
+  plot: Box;
+  /** The soft "Foundational" zone at the top left, or null when nothing in the domain needs anything. */
+  zone: Box | null;
+}
+
+/** The band left of the plot for the side caption, and above it for the zone's: the title band at its largest. */
+export const AXIS_BAND = TITLE_RESERVE;
+/** The top dot's centre: under the zone's caption at its largest, with room for the hover ring. */
+export const AXES_TOP = AXIS_BAND + 24;
+/** Two dots on the axes are never closer than this, centre to centre: the hover rings do not touch. */
+export const AXES_DOT_CLEAR = 40;
+/** Where the axis lines run, just outside the plot. */
+const AXIS_INSET = 6;
+
+/**
+ * Where the axes' lines and captions go for a picture drawn at `scale`: the
+ * horizontal axis under the bottom row's labels, its captions under it, and
+ * the picture's height to their foot. At scale 1 this is the height the
+ * server reports; a label grown on a small picture pushes the axis down with
+ * it rather than running into it. The captions keep 11px on screen as a
+ * topic's title does (D10).
+ */
+export function axesGeometry(axes: Pick<AxesLayout, "plot" | "width">, scale = 1) {
+  const font = labelFont(scale);
+  const caption = titleFont(scale);
+  const axisY = axes.plot.y + axes.plot.height + labelFoot(2, font) + 4;
+  const left = axes.plot.x - AXIS_INSET;
+  return {
+    caption,
+    axisY,
+    /** The vertical axis, from above the top dot down to the horizontal one. */
+    left,
+    top: axes.plot.y - DOT_TOP - 8,
+    right: axes.width - 2,
+    /** The baseline of the captions along the bottom. */
+    captionY: axisY + AXIS_INSET + caption * 0.92,
+    height: Math.ceil(axisY + AXIS_INSET + caption * 1.2 + 2),
+  };
+}
+
+/** The axes' captions, in sentence case (D11). */
+export const AXES_CAPTIONS = {
+  earlier: "Learn earlier",
+  later: "Learn later",
+  side: "Needed by more concepts",
+  zone: "Foundational",
+} as const;
+
+/** Where the side caption's baseline runs, rotated to read upward, left of the vertical axis. */
+export const sideCaptionX = (caption: number) => AXIS_BAND - AXIS_INSET - 6 - caption * 0.28;
+
+/**
+ * The boxes the axes' captions take inside the plot's reach at size
+ * `caption`: the zone's, in the band above the top row, and the side one,
+ * left of the vertical axis. A label is culled rather than drawn over either,
+ * as over a topic's title (D10). The captions along the bottom sit under
+ * every label and need no room kept.
+ */
+export function axesCaptions(axes: Pick<AxesLayout, "plot" | "zone">, caption: number): Box[] {
+  const side: Box = {
+    x: sideCaptionX(caption) - caption * 0.92,
+    y: axes.plot.y - DOT_TOP - 8,
+    width: caption * 1.2,
+    height: textEm(AXES_CAPTIONS.side) * caption * 1.05,
+  };
+  if (axes.zone === null) return [side];
+  return [side, { x: axes.zone.x + TITLE_INSET, y: axes.zone.y + TITLE_TOP, width: textEm(AXES_CAPTIONS.zone, true) * caption, height: caption * 1.2 }];
+}
+
+/** What the picture frames on axes, with the margin the groups' frame has, drawn at `scale`. Its width does not depend on the scale. */
+export function axesViewBox(axes: Pick<AxesLayout, "plot" | "width">, scale = 1): Box {
+  return padded({ x: 0, y: 0, width: axes.width, height: axesGeometry(axes, scale).height });
+}
+
+/** A frame between two, `t` of the way from `a` to `b`: the glide between the layouts. */
+export function mixBox(a: Box, b: Box, t: number): Box {
+  if (t <= 0) return a;
+  if (t >= 1) return b;
+  const mix = (p: number, q: number) => p + (q - p) * t;
+  return { x: mix(a.x, b.x), y: mix(a.y, b.y), width: mix(a.width, b.width), height: mix(a.height, b.height) };
+}
+
+/** A point `t` of the way from `a` to `b`, exactly at either end. */
+export function mixPoint(a: { x: number; y: number }, b: { x: number; y: number }, t: number): { x: number; y: number } {
+  if (t <= 0) return a;
+  if (t >= 1) return b;
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+/** How long the glide between the groups and the axes takes, and its ease: fast out, settling in. */
+export const GLIDE_MS = 400;
+export const glideEase = (k: number) => 1 - (1 - Math.min(1, Math.max(0, k))) ** 3;
+
+/**
  * How wide a topic's group must be for its title at the layout size, with
  * its inset either side: the 7.4 units a letter the layout has always allowed,
  * or the measured glyph widths when a title of wide letters needs more. So a

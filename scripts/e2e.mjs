@@ -757,6 +757,62 @@ async function run() {
     assert((await graph.locator('[data-concept="softmax"]').getAttribute('aria-pressed')) === 'true', 'a plain press did not select');
   });
 
+  // D11: a domain switches to axes, each concept by when it is learnt and how
+  // many concepts need it; the choice is in the URL and survives a reload,
+  // hover still lights a concept's edges, nothing drags, and Groups comes back.
+  await step('learn: a domain switches to axes and back, hover still lights edges and nothing drags', page, async () => {
+    await go('/learn?domain=machine-learning');
+    const graph = main.getByRole('group', { name: /^Machine learning map/ });
+    const layout = main.getByRole('radiogroup', { name: 'Layout' });
+    const dot = graph.locator('[data-concept="self-attention"] circle[data-dot]');
+    await hydrated(page, layout.getByRole('radio', { name: 'Axes' }));
+    const inGroups = { x: Number(await dot.getAttribute('cx')), y: Number(await dot.getAttribute('cy')) };
+    await layout.getByRole('radio', { name: 'Axes' }).click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('layout') === 'axes');
+    // The glide ends with the axes drawn and the topic boxes faded out.
+    await page.waitForFunction(
+      (p) => {
+        const c = document.querySelector('[data-concept="self-attention"] circle[data-dot]');
+        return c !== null && (Number(c.getAttribute('cx')) !== p.x || Number(c.getAttribute('cy')) !== p.y);
+      },
+      inGroups,
+    );
+    await graph.locator('[data-axes].opacity-100').waitFor({ state: 'attached' });
+    await graph.locator('[data-groups].opacity-0').waitFor({ state: 'attached' });
+    assert(((await graph.locator('[data-axes]').textContent()) ?? '').includes('Needed by more concepts'), 'the axes have no side caption');
+
+    await page.reload({ waitUntil: 'load' });
+    await hydrated(page, graph.locator('[data-concept="self-attention"]'));
+    assert((await layout.getByRole('radio', { name: 'Axes' }).getAttribute('aria-checked')) === 'true', 'a reload lost the axes');
+    const onAxes = { x: Number(await dot.getAttribute('cx')), y: Number(await dot.getAttribute('cy')) };
+    assert(onAxes.x !== inGroups.x || onAxes.y !== inGroups.y, 'after a reload the concept is back in its group');
+
+    const box = await dot.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await graph.locator('[data-concept="self-attention"][data-hover="true"]').waitFor();
+    assert((await graph.locator('[data-edge][data-hot="true"]').count()) > 0, 'no edge lit on the axes');
+    assert((await graph.locator('[data-faded="true"]').count()) > 0, 'nothing faded on the axes');
+
+    // A drag moves nothing, and leaves no pill.
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width / 2 + i * 8, box.y + box.height / 2 + i * 4);
+    await page.mouse.up();
+    assert(Number(await dot.getAttribute('cx')) === onAxes.x && Number(await dot.getAttribute('cy')) === onAxes.y, 'a drag moved a concept on the axes');
+    assert((await main.locator('[data-moved]').count()) === 0, 'a drag on the axes showed the moved pill');
+    await page.mouse.move(2, 2);
+
+    await layout.getByRole('radio', { name: 'Groups' }).click();
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has('layout'));
+    await page.waitForFunction(
+      (p) => {
+        const c = document.querySelector('[data-concept="self-attention"] circle[data-dot]');
+        return c !== null && Number(c.getAttribute('cx')) === p.x && Number(c.getAttribute('cy')) === p.y;
+      },
+      inGroups,
+    );
+    await graph.locator('[data-groups].opacity-100').waitFor({ state: 'attached' });
+  });
+
   // D9: a legend chip previews its group on hover, writing nothing; a press
   // commits it as the Status filter and a second press clears it, and the
   // chips wrap on a phone.
