@@ -25,7 +25,7 @@ import { cx } from "@/components/ui/classes";
  * | `wide`    | 72rem, old gutters                      | the old library pages    |
  * | `app`     | up to 1392px inside 24px gutters (16 on a phone) | every redesigned page |
  * | `focus`   | the whole width, no padding, and no sidebar from 768px up | Session and Review (focus mode) |
- * | `workspace` | `app` below 900px; from 900px up the shell is fixed to the viewport and the page fills the rest | the concept workspace |
+ * | `workspace` | `app` until the three panels fit beside the sidebar (`ws:`: 1160px, 960px with it on its rail); then the shell is fixed to the viewport and the page fills the rest | the concept workspace |
  * | `full`    | the whole region, no padding, the shell fixed to the viewport | the studio |
  *
  * `focus` is the hi-fi's focus mode (frames 05 to 08): on a desktop the page
@@ -45,7 +45,7 @@ import { cx } from "@/components/ui/classes";
  * window, put the composer and the panel headers out of reach: the window
  * scrolled, the panels did not. Fixing the shell to `h-dvh` and handing the
  * page a `flex-1 min-h-0` region means the panels can only ever be as tall as
- * the viewport, whatever they contain. Below 900px the panels stack behind
+ * the viewport, whatever they contain. Where the three do not fit (`ws:`), they stack behind
  * tabs and the page scrolls as `app` does.
  *
  * `full` is not a wider `wide`. The studio's conversation and canvas have to
@@ -75,7 +75,7 @@ export function AppShell({
           "flex-1 px-4 pt-8 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8 md:pb-8 lg:px-12",
           "has-[[data-layout=app]]:px-4 has-[[data-layout=app]]:pt-6 md:has-[[data-layout=app]]:px-6 md:has-[[data-layout=app]]:pb-10",
           "has-[[data-layout=workspace]]:px-4 has-[[data-layout=workspace]]:pt-6 md:has-[[data-layout=workspace]]:px-6 md:has-[[data-layout=workspace]]:pb-10",
-          "min-[900px]:has-[[data-layout=workspace]]:flex min-[900px]:has-[[data-layout=workspace]]:min-h-0 min-[900px]:has-[[data-layout=workspace]]:pb-6",
+          "ws:has-[[data-layout=workspace]]:flex ws:has-[[data-layout=workspace]]:min-h-0 ws:has-[[data-layout=workspace]]:pb-6",
           "has-[[data-layout=focus]]:px-0 has-[[data-layout=focus]]:pt-0 md:has-[[data-layout=focus]]:pb-0",
           // A focus page on a phone fills what the header and the store banner leave (the column below).
           "max-md:has-[[data-layout=focus]]:flex max-md:has-[[data-layout=focus]]:flex-col",
@@ -86,7 +86,7 @@ export function AppShell({
           className={cx(
             "mx-auto w-full max-w-3xl",
             "has-[[data-layout=wide]]:max-w-6xl has-[[data-layout=app]]:max-w-[1392px] has-[[data-layout=focus]]:max-w-none",
-            "has-[[data-layout=workspace]]:max-w-[1392px] min-[900px]:has-[[data-layout=workspace]]:flex min-[900px]:has-[[data-layout=workspace]]:min-h-0 min-[900px]:has-[[data-layout=workspace]]:flex-1 min-[900px]:has-[[data-layout=workspace]]:flex-col",
+            "has-[[data-layout=workspace]]:max-w-[1392px] ws:has-[[data-layout=workspace]]:flex ws:has-[[data-layout=workspace]]:min-h-0 ws:has-[[data-layout=workspace]]:flex-1 ws:has-[[data-layout=workspace]]:flex-col",
             "has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:max-w-none has-[[data-layout=full]]:flex-1",
             "max-md:has-[[data-layout=focus]]:flex max-md:has-[[data-layout=focus]]:flex-1 max-md:has-[[data-layout=focus]]:flex-col",
             "max-md:[&>[data-layout=focus]]:flex max-md:[&>[data-layout=focus]]:flex-1 max-md:[&>[data-layout=focus]]:flex-col",
