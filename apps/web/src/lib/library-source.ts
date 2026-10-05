@@ -135,10 +135,17 @@ export function rowSource(
     order: ReadonlyMap<string, number>;
     /** The concept's title and mastery; null when the knowledge base does not hold it. */
     concept: (slug: string) => { title: string; bucket: MasteryBucket } | null;
+    /**
+     * True when the page groups by course: the row's heading and section
+     * already name the place, the same one `pickPlace` picks here
+     * (`courseGroups` calls it with the same course), so the line leaves it
+     * out and says what else it knows, the concept first.
+     */
+    placeInHeading?: boolean;
   },
 ): RowSource | null {
   if (parents === undefined) return null;
-  const place = pickPlace(parents.places, options.course);
+  const place = options.placeInHeading === true ? null : pickPlace(parents.places, options.course);
 
   const slugs = orderedConcepts(parents.concepts, options.order);
   const first = slugs[0];

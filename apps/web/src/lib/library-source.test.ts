@@ -175,6 +175,36 @@ describe("rowSource precedence (golden)", () => {
   }
 });
 
+describe("rowSource under a course heading", () => {
+  const under = (input: AssetParents, course: string | null = null) =>
+    rowSource(input, { ...options(course), placeInHeading: true });
+
+  it("leaves the place to the heading and names the concept", () => {
+    expect(under(parents({ places: [place({})], concepts: ["master-theorem", "recurrences"] }))).toEqual({
+      concept: { title: "Recurrences", bucket: "learning", more: 1 },
+    });
+  });
+
+  it("falls to the conversation, then the session, when the place was all it had besides", () => {
+    expect(
+      under(
+        parents({
+          places: [place({})],
+          conversations: [{ id: "d1", title: "How dengue moves", name: null, updatedAt: null }],
+          sessions: [{ id: "s1", title: "S" }],
+        }),
+      ),
+    ).toEqual({ origin: { kind: "conversation", title: "How dengue moves" } });
+    expect(under(parents({ places: [place({})], sessions: [{ id: "s1", title: "S" }] }))).toEqual({
+      origin: { kind: "session", title: "S" },
+    });
+  });
+
+  it("says nothing for an asset the course is the only parent of", () => {
+    expect(under(parents({ places: [place({})] }), "cs3230")).toBeNull();
+  });
+});
+
 describe("latestConversation", () => {
   it("is the conversation whose job wrote the asset last, the first the catalog lists, or null", () => {
     const newer = { id: "d2", title: "Again", name: null, updatedAt: "2026-10-03T00:00:00.000Z" };

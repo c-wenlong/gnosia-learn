@@ -6,7 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { rowMenuItems } from "@/lib/row-menu";
 
-import { RowMenu } from "./RowMenu";
+import { RowMenu, rowMenuOwnsKey } from "./RowMenu";
 
 /**
  * The Library row's menu doing what its items say: Copy link writes the asset
@@ -148,6 +148,60 @@ describe("RowMenu", () => {
     );
     expect(download?.getAttribute("href")).toBe("/api/assets/note%3Alearn%2Fconcepts%2Fos%2Ftlb.md/file?download=1");
     expect(download?.hasAttribute("download")).toBe(true);
+  });
+});
+
+describe("RowMenu's keys", () => {
+  const press = (on: Element, init: KeyboardEventInit) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    act(() => {
+      on.dispatchEvent(event);
+    });
+  };
+
+  it("lets a shortcut and Escape through to the window, and keeps the menu's own keys from the row", () => {
+    const { container, button } = mount();
+    const menu = container.firstElementChild as HTMLElement;
+    const row: string[] = [];
+    const win: string[] = [];
+    const onRow = (event: KeyboardEvent) => row.push(event.key);
+    const onWindow = (event: KeyboardEvent) => win.push(event.key);
+    // The row around the menu, which opens its asset on a key. Above React's
+    // root (the container), since a stop there cannot keep a listener on the
+    // same element from hearing it.
+    document.body.addEventListener("keydown", onRow);
+    window.addEventListener("keydown", onWindow);
+    try {
+      // Cmd+K and Escape are the shell's: the row menu stops neither. Pressed
+      // on the row menu's own wrapper; from the More button, the kit Menu
+      // around it applies its own rule first (ui/Menu.tsx).
+      press(menu, { key: "k", metaKey: true });
+      press(menu, { key: "Escape" });
+      expect(win).toEqual(["k", "Escape"]);
+      expect(row).toEqual(["k", "Escape"]);
+
+      // Enter, Space and the arrows from the More button are the menu's: the row never hears them.
+      for (const key of ["Enter", " ", "ArrowDown", "ArrowUp", "Home", "End"]) press(button, { key });
+      for (const key of ["Enter", "ArrowDown"]) press(menu, { key });
+      expect(row).toEqual(["k", "Escape"]);
+      expect(win).toEqual(["k", "Escape"]);
+    } finally {
+      document.body.removeEventListener("keydown", onRow);
+      window.removeEventListener("keydown", onWindow);
+    }
+  });
+
+  it("owns a letter only inside the open list, and nothing held with a modifier", () => {
+    const plain = { ctrlKey: false, metaKey: false, altKey: false };
+    expect(rowMenuOwnsKey({ ...plain, key: "Enter" }, false)).toBe(true);
+    expect(rowMenuOwnsKey({ ...plain, key: " " }, false)).toBe(true);
+    expect(rowMenuOwnsKey({ ...plain, key: "ArrowDown" }, false)).toBe(true);
+    expect(rowMenuOwnsKey({ ...plain, key: "c" }, true)).toBe(true);
+    expect(rowMenuOwnsKey({ ...plain, key: "c" }, false)).toBe(false);
+    expect(rowMenuOwnsKey({ ...plain, key: "?" }, false)).toBe(false);
+    expect(rowMenuOwnsKey({ ...plain, key: "Escape" }, true)).toBe(false);
+    expect(rowMenuOwnsKey({ ...plain, metaKey: true, key: "k" }, true)).toBe(false);
+    expect(rowMenuOwnsKey({ ...plain, ctrlKey: true, key: "Enter" }, false)).toBe(false);
   });
 });
 

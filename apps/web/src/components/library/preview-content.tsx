@@ -72,7 +72,7 @@ export async function loadPreview(requested: string): Promise<PreviewAnswer> {
     dateTime: when.dateTime,
     concept: first === undefined ? null : { href: conceptHref(first.slug), title: first.title },
     conversation: previewConversation(parents),
-    download: body.servable ? { href: body.fileHref, filename: body.downloadName } : null,
+    download: body.servable ? { href: body.downloadHref } : null,
     page: assetHref(asset.id),
     wide: asset.kind === "video" || asset.kind === "diagram_svg",
   };

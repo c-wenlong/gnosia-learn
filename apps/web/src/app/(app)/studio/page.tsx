@@ -271,17 +271,22 @@ export default async function StudioPage({
           {shot === null && (
             <section
               aria-labelledby="studio-home"
-              className="relative flex min-h-[calc(100dvh-12rem)] flex-col justify-center px-4 py-12 md:min-h-[calc(100dvh-9rem)]"
+              // Pinned from the top, not centred: a centred stack moved the
+              // composer whenever anything under it or inside it changed
+              // height (a tag's hint, the box growing a line). The offsets put
+              // it where the centred layout used to rest, so only a resize or
+              // a zoom moves it.
+              className="relative flex min-h-[calc(100dvh-12rem)] flex-col px-4 pb-12 pt-[max(3rem,calc(50dvh-15rem))] md:min-h-[calc(100dvh-9rem)] md:pt-[max(3rem,calc(50dvh-13.25rem))]"
             >
-              {/* A soft wash of the accent behind the heading, in tokens, so every theme has its own. */}
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_45%_at_50%_45%,color-mix(in_oklab,var(--accent)_16%,transparent),transparent)]"
-              />
-              {/* z-20: the translate makes this its own stacking context, and the
-                  composer's @ menu opens downwards out of it; without the
-                  index the assets panel after it paints over the menu. */}
-              <div className="relative z-20 mx-auto flex w-full max-w-3xl -translate-y-4 flex-col items-center gap-7">
+              {/* The brand's glow drifting behind the heading (`.studio-glow` in globals.css). */}
+              <div aria-hidden className="studio-glow">
+                <span className="studio-glow-teal" />
+                <span className="studio-glow-gold" />
+                <span className="studio-glow-mist" />
+              </div>
+              {/* z-20: the composer's @ menu opens downwards out of this block;
+                  without the index the assets panel after it paints over the menu. */}
+              <div className="relative z-20 mx-auto flex w-full max-w-3xl flex-col items-center gap-7">
                 <div className="flex flex-col items-center gap-2.5">
                   <h1 id="studio-home" className="text-center font-display text-[30px] font-semibold leading-tight text-text md:text-[40px]">
                     What shall we make?
