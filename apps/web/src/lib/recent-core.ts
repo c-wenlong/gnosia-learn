@@ -536,6 +536,15 @@ export function rowMatches(item: Pick<RecentItem, "title" | "folded">, words: st
   return titleMatches(item.title, words) || (item.folded ?? []).some((f) => titleMatches(f.title, words));
 }
 
+/**
+ * The title a search hit shows: the row's own when it holds `words`, else the
+ * folded session's that does, so the words found are the words shown.
+ */
+export function matchedTitle(item: Pick<RecentItem, "title" | "folded">, words: string): string {
+  if (titleMatches(item.title, words)) return item.title;
+  return (item.folded ?? []).find((f) => titleMatches(f.title, words))?.title ?? item.title;
+}
+
 /** Whether `title` holds `words`, in any case. Empty words match everything. */
 export function titleMatches(title: string, words: string): boolean {
   const needle = fold(words);

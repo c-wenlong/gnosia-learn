@@ -10,7 +10,7 @@ import { cx, STATUS_TEXT } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField as KitSearchField } from "@/components/ui/SearchField";
 import { isCurrentRow } from "@/lib/nav";
-import type { RecentItem } from "@/lib/recent-core";
+import { matchedTitle, type RecentItem } from "@/lib/recent-core";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
@@ -187,12 +187,14 @@ function RecentHit({ item, words, onPick }: { item: RecentItem; words: string; o
   const pathname = usePathname();
   const current = isCurrentRow(item.href, pathname, item.kind === "module");
   const kind = recentGlyph(item);
+  // A row found by a tutor session folded into it shows that session's title.
+  const title = matchedTitle(item, words);
   return (
-    <Link href={item.href} onClick={onPick} aria-current={current ? "page" : undefined} title={item.title} className={cx(ROW, rowFill(current))}>
+    <Link href={item.href} onClick={onPick} aria-current={current ? "page" : undefined} title={title} className={cx(ROW, rowFill(current))}>
       <Glyph name={kind.glyph} size={18} className="text-text2" />
       <span className="min-w-0 flex-1 truncate">
         <span className="sr-only">{kind.word}: </span>
-        <Marked text={item.title} words={words} />
+        <Marked text={title} words={words} />
       </span>
     </Link>
   );

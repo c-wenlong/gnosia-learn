@@ -4,6 +4,7 @@ import {
   asPinned,
   isCourseVisit,
   isAppPath,
+  matchedTitle,
   mergeStreams,
   moduleVisits,
   recentGroups,
@@ -111,6 +112,9 @@ describe("the five sources", () => {
     expect(rows.map((r) => r.folded?.map((f) => f.key))).toEqual([["session:c"], ["session:a", "session:b"]]);
     expect(rowMatches(rows[1], "witness")).toBe(true);
     expect(rowMatches(rows[1], "theta")).toBe(false);
+    // The hit shows the title that holds the words.
+    expect(matchedTitle(rows[1], "witness")).toBe("Big-O: the witness definition");
+    expect(matchedTitle(rows[1], "big")).toBe("Big-O");
     // A session pinned before it was folded keeps its title, and its page's row leaves Recent.
     const pin: PinnedRow = { key: "session:a", kind: "session", title: "Old", href: "/learn/big-o", at: AT(1) };
     const split = splitPinned(rows, [pin]);
