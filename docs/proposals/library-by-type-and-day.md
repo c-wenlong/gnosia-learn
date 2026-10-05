@@ -338,6 +338,8 @@ the sum of the headings and no "Read stopped" line. Away from the database,
 working out and drawing the first page took a median of 14 ms for 1,023 rows,
 34 ms for 10,230 and 56 ms for 20,000.
 
+**Row links do not prefetch (2026-10-05).** Every row and card is a `next/link` to `/library/<id>`, and Next prefetched each one as it entered the viewport and cancelled it as it left, which the owner saw the server log as "destination stream closed early" (a headless scroll on a production build did not reproduce the log, but did fire 563 prefetches against 8 after); a press opens the previewer, so the prefetched page was rarely used. The links in `AssetRow` and `AssetCard` take `prefetch={false}` (`apps/web/src/components/library/prefetch.test.ts`); the toolbar, the tabs and the sidebar keep theirs.
+
 ## The Library
 
 ```

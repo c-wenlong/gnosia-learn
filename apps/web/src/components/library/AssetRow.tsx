@@ -119,6 +119,10 @@ export function AssetRow({
           {/* `next/link`: an in-app navigation, not a reload of the whole document. */}
           <Link
             href={href}
+            // Off (L9): a press opens the previewer, and a long list passes
+            // hundreds of rows through the viewport, each prefetched and
+            // then cancelled as it scrolled away.
+            prefetch={false}
             title={tooltip}
             className={cx(
               "block truncate text-[14px] leading-5 outline-none",
