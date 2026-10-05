@@ -1258,6 +1258,33 @@ async function run() {
     await row.waitFor({ state: 'detached' });
   });
 
+  await step('settings: the sidebar reaches the bottom with every fold shut', page, async () => {
+    // #405: an `sr-only` line (position: absolute) inside a shut fold escaped
+    // the fold's clip and made the document taller than the shell, so the
+    // sticky sidebar stopped short with a blank strip under it. The Tutor tab
+    // holds shut folds with such lines (Add provider, each row's panels).
+    if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
+    await main.getByRole('button', { name: 'Add provider', expanded: false }).waitFor();
+    for (const height of [860, 600]) {
+      await page.setViewportSize({ width: 1280, height });
+      const m = await page.evaluate(async () => {
+        window.scrollTo(0, document.documentElement.scrollHeight);
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const shell = document.querySelector('.group\\/shell');
+        const sidebar = shell && [...shell.querySelectorAll('*')].find((e) => getComputedStyle(e).position === 'sticky');
+        return {
+          doc: document.documentElement.scrollHeight,
+          shell: shell ? Math.round(shell.getBoundingClientRect().height) : -1,
+          sidebarBottom: sidebar ? Math.round(sidebar.getBoundingClientRect().bottom) : -1,
+          viewport: window.innerHeight,
+        };
+      });
+      assert(m.doc <= m.shell + 1, `at 1280x${height} the document is ${m.doc}px, taller than the ${m.shell}px shell`);
+      assert(Math.abs(m.sidebarBottom - m.viewport) <= 1, `at 1280x${height}, scrolled to the end, the sidebar ends at ${m.sidebarBottom}px of ${m.viewport}`);
+    }
+    await page.setViewportSize({ width: 1280, height: 860 });
+  });
+
   await step('theme: Dark adds `dark` to <html>', page, async () => {
     if (!page.url().endsWith('/settings')) await go('/settings');
     // The theme is two radio groups since #101, Palette and Appearance; dark is an appearance.

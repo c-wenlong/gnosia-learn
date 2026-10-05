@@ -242,7 +242,7 @@ export function StudioPane({
         {/* Rises in from the home view it replaces (`PanelHost`). Filling
             backwards, so no transform stays behind to trap the composer's
             @ menu in a stacking context once it has arrived. */}
-        <section ref={ref} aria-label={label} className={cx("flex min-h-0 min-w-0 flex-1 flex-col bg-page text-text", ENTER)}>
+        <section ref={ref} aria-label={label} className={cx("relative flex min-h-0 min-w-0 flex-1 flex-col bg-page text-text", ENTER)}>
           {children}
         </section>
       </PaneContext.Provider>
