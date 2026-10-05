@@ -391,8 +391,15 @@ describe("the sections", () => {
   const recentRows = (container: HTMLElement) =>
     [...section(container, "sidebar-recent").querySelectorAll<HTMLAnchorElement>("li a")].map((a) => a.querySelector("span")?.textContent);
   const moreFor = (container: HTMLElement, title: string) => nav(container).querySelector<HTMLButtonElement>(`button[aria-label="More for ${title}"]`)!;
-  const menuItems = (container: HTMLElement, title: string) =>
-    [...moreFor(container, title).parentElement!.querySelectorAll("ul li")].map((li) => li.textContent);
+  /** A row's menu items: the kit `Menu`'s list, beside its button. */
+  const itemsOf = (container: HTMLElement, title: string) =>
+    [...moreFor(container, title).parentElement!.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
+  const menuItems = (container: HTMLElement, title: string) => itemsOf(container, title).map((item) => item.textContent);
+  const itemOf = (container: HTMLElement, title: string, name: string) => itemsOf(container, title).find((item) => item.textContent === name)!;
+  const key = (target: Element, k: string) =>
+    act(() => {
+      target.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+    });
 
   it("reads Recent without the conversations when the runner has them, and whole without a studio", async () => {
     await mount(true);
@@ -500,7 +507,7 @@ describe("the sections", () => {
     const container = await mount(true);
     act(() => moreFor(container, "Divide and conquer").click());
     expect(menuItems(container, "Divide and conquer")).toEqual(["Pin", "Open in course"]);
-    expect(moreFor(container, "Divide and conquer").parentElement!.querySelector("ul a")?.getAttribute("href")).toBe("/courses/cs3230");
+    expect(itemOf(container, "Divide and conquer", "Open in course").getAttribute("href")).toBe("/courses/cs3230");
     act(() => moreFor(container, "TCP vs UDP").click());
     expect(menuItems(container, "TCP vs UDP")).toEqual(["Pin", "Rename"]);
     act(() => moreFor(container, "Master theorem").click());
@@ -514,7 +521,7 @@ describe("the sections", () => {
     // What the route stores, which the read after the pin brings back.
     withRows({ pinned: [{ key: VIDEO.key, kind: "video", title: "Master theorem", href: VIDEO.href, at: ago(0) }] });
     act(() => moreFor(container, "Master theorem").click());
-    const pin = [...moreFor(container, "Master theorem").parentElement!.querySelectorAll("ul button")].find((b) => b.textContent === "Pin")!;
+    const pin = itemOf(container, "Master theorem", "Pin");
     await act(async () => {
       (pin as HTMLButtonElement).click();
     });
@@ -533,8 +540,14 @@ describe("the sections", () => {
     // The more button fades in on hover rather than appearing.
     expect(more.className).toContain("group-hover/row:opacity-100");
     expect(more.className).toContain("motion-reduce:transition-none");
+    // The kit menu button, as the Library's rows have.
+    expect(more.getAttribute("aria-haspopup")).toBe("menu");
     act(() => more.click());
-    const menu = more.parentElement!.querySelector<HTMLElement>("div.animate-pop-in")!;
+    const menu = more.parentElement!.querySelector<HTMLElement>('[role="menu"]')!;
+    expect(more.getAttribute("aria-controls")).toBe(menu.id);
+    // The kit Popover's pop, which reduced motion turns off.
+    expect(menu.getAttribute("popover")).toBe("manual");
+    expect(menu.className).toContain("animate-pop-in");
     expect(menu.className).toContain("motion-reduce:animate-none");
     expect(document.activeElement?.textContent).toBe("Pin");
     act(() => {
@@ -542,6 +555,50 @@ describe("the sections", () => {
     });
     expect(more.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(more);
+  });
+
+  it("moves through a row's menu with the arrows and typeahead, and keeps its keys and clicks from the row", async () => {
+    withRows();
+    const container = await mount(true);
+    const more = moreFor(container, "Divide and conquer");
+    const row = more.closest("div.group\\/row")!.querySelector("a")!;
+    const onRow = vi.fn();
+    row.addEventListener("click", onRow);
+    // Down on the button opens it on the first item.
+    key(more, "ArrowDown");
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement?.textContent).toBe("Pin");
+    key(document.activeElement!, "ArrowDown");
+    expect(document.activeElement?.textContent).toBe("Open in course");
+    // It wraps, and a letter finds an item.
+    key(document.activeElement!, "ArrowDown");
+    expect(document.activeElement?.textContent).toBe("Pin");
+    key(document.activeElement!, "o");
+    expect(document.activeElement?.textContent).toBe("Open in course");
+    key(document.activeElement!, "Escape");
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(more);
+    // A press inside the menu is not a press on the row's link.
+    act(() => more.click());
+    act(() => itemOf(container, "Divide and conquer", "Pin").click());
+    expect(onRow).not.toHaveBeenCalled();
+  });
+
+  it("hands the focus to the rename field once the menu has gone, and back to the more button after", async () => {
+    const container = await mount(true);
+    act(() => moreFor(container, "TCP vs UDP").click());
+    act(() => itemOf(container, "TCP vs UDP", "Rename").click());
+    const field = nav(container).querySelector<HTMLInputElement>('input[aria-label="Name this conversation"]')!;
+    expect(document.activeElement).toBe(field);
+    expect(nav(container).querySelector('[role="menu"]')).toBeNull();
+    // Escape keeps the old name and leaves the drawer around it alone.
+    key(field, "Escape");
+    expect(nav(container).querySelector('input[aria-label="Name this conversation"]')).toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    });
+    expect(document.activeElement).toBe(moreFor(container, "TCP vs UDP"));
+    expect(mocks.renameDraft).not.toHaveBeenCalled();
   });
 
   it("opens a pinned row's menu in the top layer, so the Pinned fold around it cannot clip it", async () => {
@@ -560,8 +617,7 @@ describe("the sections", () => {
   /** Rename on the "TCP vs UDP" row, typed and kept with Enter. */
   async function renameTo(container: HTMLElement, name: string) {
     act(() => moreFor(container, "TCP vs UDP").click());
-    const rename = [...moreFor(container, "TCP vs UDP").parentElement!.querySelectorAll("ul button")].find((b) => b.textContent === "Rename")!;
-    act(() => (rename as HTMLButtonElement).click());
+    act(() => itemOf(container, "TCP vs UDP", "Rename").click());
     const field = nav(container).querySelector<HTMLInputElement>('input[aria-label="Name this conversation"]')!;
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, name);
@@ -597,8 +653,7 @@ describe("the sections", () => {
     const container = await mount(true);
     expect(recentRows(container)).toContain("Conversation: Transport layer");
     act(() => moreFor(container, "Transport layer").click());
-    const rename = [...moreFor(container, "Transport layer").parentElement!.querySelectorAll("ul button")].find((b) => b.textContent === "Rename")!;
-    act(() => (rename as HTMLButtonElement).click());
+    act(() => itemOf(container, "Transport layer", "Rename").click());
     const field = nav(container).querySelector<HTMLInputElement>('input[aria-label="Name this conversation"]')!;
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "   ");
