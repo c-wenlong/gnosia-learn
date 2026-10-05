@@ -22,7 +22,7 @@ const FULL: PreviewHeader = {
   dateTime: "2026-09-30T00:00:00.000Z",
   concept: { href: "/learn/tcp", title: "TCP" },
   conversation: { href: "/studio?draft=d1", title: "TCP vs UDP" },
-  download: { href: "/api/assets/diagram%3Atcp/file?download=1", filename: "tcp.svg" },
+  download: { href: "/api/assets/diagram%3Atcp/file?download=1" },
   page: "/library/diagram%3Atcp",
   wide: true,
 };
