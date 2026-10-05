@@ -128,6 +128,25 @@ computer architecture (6px). A label's width is the sum of Figtree's
 measured glyph widths, so a line of wide letters is not undercounted. Hover and drag frames held at 16.7 ms, and one
 culling pass over 60 labels takes about 20 µs.
 
+A topic's title keeps its size the same way (2026-10-05): 12.5 units or
+11px on screen, whichever is larger, bold. Its band at the top of the group
+grows upward with it, from 22 units at the layout size to 45 at 0.35, where
+it stops, since the picture is never drawn smaller. The server packs every
+group with the 45-unit band, so a title at its largest never reaches the
+row above. A picture drawn larger draws the smaller band and the room left
+goes between the rows, so the groups themselves look as they did. That
+costs 23 units a row: on `self_learn`'s algorithms (six rows) the picture
+grew from 2108 to 2223 units tall, 101px more page at 1440 by 900, and
+computer architecture from 1789 to 1882. A group stays as wide as its title
+at 12.5 units (the old 7.4 units a letter, or the glyph widths when those
+are wider), and a title that grows past its room ends in an ellipsis, the
+whole title in its tooltip and in the list. Sizing groups for the title at
+0.35 instead would make a title-limited group about 2.5 times as wide on
+every screen. At 1440 no title is cut; at 1280, 4 of 13 in algorithms and 6
+of 11 in computer architecture are; at 390 most are, at 11px where they were
+4.4px. A label keeps 2px on screen from a title as from another label, so at
+390 algorithms draws 31 of its 56 labels and computer architecture 24 of 43.
+
 ## Phases
 
 | Phase | What ships | Done when |

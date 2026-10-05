@@ -5,6 +5,8 @@ import {
   DOT_GAP,
   domainOfConcepts,
   edgeEnds,
+  fitTitle,
+  GROUP_TITLE,
   groupBox,
   LABEL_MIN_PX,
   LABEL_SIZE,
@@ -14,9 +16,18 @@ import {
   labelFoot,
   labelRank,
   matchCounts,
+  MIN_DRAW_SCALE,
   movedKey,
   neighbours,
   readMoved,
+  TITLE_INSET,
+  TITLE_RESERVE,
+  TITLE_TOP,
+  titleBand,
+  titleBaseline,
+  titleBox,
+  titleFont,
+  titleRoom,
   titleWidth,
   toLayoutPoint,
   VIEW_PAD,
@@ -38,8 +49,20 @@ const layout = {
 };
 
 describe("viewBoxFor (D2, D3)", () => {
-  it("frames the whole domain, with a margin", () => {
-    expect(viewBoxFor(layout, null)).toEqual({ x: -VIEW_PAD, y: -VIEW_PAD, width: 400 + 2 * VIEW_PAD, height: 300 + 2 * VIEW_PAD });
+  it("frames the whole domain, with a margin, when the titles take the room the layout packed for", () => {
+    expect(viewBoxFor(layout, null, {}, TITLE_RESERVE)).toEqual({ x: -VIEW_PAD, y: -VIEW_PAD, width: 400 + 2 * VIEW_PAD, height: 300 + 2 * VIEW_PAD });
+  });
+
+  it("starts the frame at the top row's boxes when the titles take less, so no empty strip sits above them", () => {
+    // The layout packs each row for the largest band; a smaller one leaves the top row's boxes that much lower.
+    const trim = TITLE_RESERVE - GROUP_TITLE;
+    expect(viewBoxFor(layout, null)).toEqual({ x: -VIEW_PAD, y: trim - VIEW_PAD, width: 400 + 2 * VIEW_PAD, height: 300 - trim + 2 * VIEW_PAD });
+  });
+
+  it("is as wide whatever the title band, so the scale measured from it does not depend on the band", () => {
+    for (const topic of [null, "left"]) {
+      expect(viewBoxFor(layout, topic, {}, TITLE_RESERVE).width).toBe(viewBoxFor(layout, topic).width);
+    }
   });
 
   it("frames one topic's group when a topic is open", () => {
@@ -231,6 +254,17 @@ describe("cullLabels (D10)", () => {
     expect(cullLabels([item("a", 0, 0)], 1, [{ x: -10, y: 20, width: 20, height: 10 }]).size).toBe(0);
   });
 
+  // Found looking at the built app at 390px: a label ending a fraction of a pixel above a title read as touching it.
+  it("keeps a label as far from a title as from another label: 2px on screen", () => {
+    // The label's box starts 16 units under its dot; the title ends 1 unit above that.
+    const title = { x: -10, y: 5, width: 20, height: 10 };
+    expect(cullLabels([item("a", 0, 0)], 1, [title]).size).toBe(0);
+    expect(cullLabels([item("a", 0, 0)], 1, [{ ...title, y: 3 }]).size).toBe(1);
+    // Drawn at twice the size, the 2px is 1 unit.
+    expect(cullLabels([item("a", 0, 0)], 2, [{ ...title, y: 4.5 }]).size).toBe(1);
+    expect(cullLabels([item("a", 0, 0)], 2, [{ ...title, y: 5.5 }]).size).toBe(0);
+  });
+
   it("culls more as the picture shrinks, since a label keeps its size on screen", () => {
     const row = Array.from({ length: 6 }, (_, i) => item(`c${i}`, i * 128, 0, { em: 8.25 }));
     expect(cullLabels(row, 1).size).toBe(6);
@@ -297,6 +331,27 @@ describe("textEm (D10)", () => {
     expect(textEm("é")).toBeGreaterThanOrEqual(textEm("e"));
   });
 
+  // Review of #409: a letter of a wide script took the fallback width, short of the full em it is drawn at.
+  it("measures a Chinese, Japanese or Korean letter, a full-width form or an emoji as a full em", () => {
+    // Measured in the built app with canvas measureText, at 500 and 700: 1.0 em a character for each.
+    for (const c of ["\u6f22", "\u306e", "\ub3d9", "\uff21", "\u{1f4da}"]) {
+      expect(textEm(c), c).toBeGreaterThanOrEqual(1);
+      expect(textEm(c, true), c).toBeGreaterThanOrEqual(1);
+    }
+    // Accented Latin, Cyrillic and Greek letters keep the fallback, which already covers them (0.54 to 0.58 em).
+    expect(textEm("\u00e9")).toBeLessThan(1);
+    expect(textEm("\u0434")).toBeLessThan(1);
+  });
+
+  it("cuts a title in a wide script to fit, with the fallback no longer undercounting it", () => {
+    const title = "\u52d5\u7684\u8a08\u753b\u6cd5\u3068\u5206\u5272\u7d71\u6cbb\u6cd5";
+    const font = 31.4;
+    const room = 200;
+    const cut = fitTitle(title, font, room);
+    // Drawn at 1 em a character, the cut title still fits its room.
+    expect(([...cut].length - 1) * font + textEm("\u2026", true) * font).toBeLessThanOrEqual(room);
+  });
+
   it("culls two labels of wide letters that a flat allowance per letter would keep", () => {
     const wide = textEm("WWWWWWWW");
     const items: LabelItem[] = [
@@ -304,5 +359,100 @@ describe("textEm (D10)", () => {
       { id: "b", x: 90, y: 0, lines: 1, em: wide, rank: 6, dependants: 0 },
     ];
     expect([...cullLabels(items, 1)]).toEqual(["a"]);
+  });
+});
+
+/**
+ * Written before the topic titles kept their size (D10 of
+ * docs/proposals/domain-map.md): a topic's title keeps 11px on screen as a
+ * label does, its band grows to hold it, and a title too long for its group at
+ * that size ends in an ellipsis rather than running past the group's edge.
+ */
+describe("topic titles (D10)", () => {
+  it("draws a title at the layout size near full size, and at 11px on screen below that", () => {
+    expect(titleFont(1)).toBe(LABEL_SIZE);
+    expect(titleFont(0.5) * 0.5).toBeCloseTo(LABEL_MIN_PX);
+    expect(titleFont(MIN_DRAW_SCALE) * MIN_DRAW_SCALE).toBeCloseTo(LABEL_MIN_PX);
+    expect(titleFont(Number.NaN)).toBe(LABEL_SIZE);
+    expect(titleFont(0)).toBe(LABEL_SIZE);
+  });
+
+  it("stops growing at the smallest the picture is drawn, so it never outgrows the band the layout packed for", () => {
+    expect(titleFont(0.1)).toBe(titleFont(MIN_DRAW_SCALE));
+    for (const scale of [0.1, MIN_DRAW_SCALE, 0.5, 0.87, 1, 1.15]) {
+      expect(titleBand(titleFont(scale))).toBeLessThanOrEqual(TITLE_RESERVE);
+    }
+    expect(TITLE_RESERVE - titleBand(titleFont(MIN_DRAW_SCALE))).toBeLessThan(1);
+  });
+
+  it("keeps today's band at the layout size", () => {
+    expect(titleBand(LABEL_SIZE)).toBe(GROUP_TITLE);
+    expect(GROUP_TITLE).toBe(22);
+  });
+
+  it("puts the baseline so the text's ascent starts at the band's top inset and its descent ends at the band's foot", () => {
+    for (const font of [LABEL_SIZE, 20, titleFont(MIN_DRAW_SCALE)]) {
+      const box = titleBox({ x: 0, y: 100, width: 400, height: 200 }, "Graphs", font);
+      expect(box.y).toBe(100 + TITLE_TOP);
+      expect(box.y + box.height).toBeCloseTo(100 + titleBand(font));
+      expect(titleBaseline(font)).toBeGreaterThan(TITLE_TOP);
+      expect(titleBaseline(font)).toBeLessThan(titleBand(font));
+    }
+  });
+
+  it("leaves a title that fits whole", () => {
+    expect(fitTitle("Sorting", LABEL_SIZE, 200)).toBe("Sorting");
+  });
+
+  it("ends a title too long for its room in an ellipsis, keeping as much of it as fits", () => {
+    const title = "Recurrence relations for recursive algorithms";
+    const font = titleFont(MIN_DRAW_SCALE);
+    const room = 120;
+    const cut = fitTitle(title, font, room);
+    expect(cut.endsWith("\u2026")).toBe(true);
+    expect(textEm(cut, true) * font).toBeLessThanOrEqual(room);
+    const kept = cut.slice(0, -1);
+    expect(title.startsWith(kept)).toBe(true);
+    // One more letter would not have fitted.
+    const more = title.slice(0, kept.length + 1).trimEnd() + "\u2026";
+    expect(textEm(more, true) * font).toBeGreaterThan(room);
+    // No space is left before the ellipsis.
+    expect(kept).toBe(kept.trimEnd());
+  });
+
+  it("draws at least the ellipsis in a room too small for anything", () => {
+    expect(fitTitle("Graphs", 30, 1)).toBe("\u2026");
+  });
+
+  it("makes a group wide enough for its title at the layout size, wide letters included, so a title is cut only when it grows", () => {
+    for (const title of ["Sorting", "Asymptotic notation and growth rates", "WWWWWWWWWWWWWWWW", "Memory consistency models"]) {
+      const box = groupBox([{ x: 0, y: 0 }], titleWidth(title));
+      expect(fitTitle(title, LABEL_SIZE, titleRoom(box))).toBe(title);
+    }
+  });
+
+  it("keeps the title inside its group's box, clear of the row of concepts under it", () => {
+    for (const scale of [1, 0.6, MIN_DRAW_SCALE]) {
+      const font = titleFont(scale);
+      const band = titleBand(font);
+      const dot = { x: 0, y: 0 };
+      const group = groupBox([dot], titleWidth("Instruction-level parallelism, overview and revision"), band);
+      const box = titleBox(group, "Instruction-level parallelism, overview and revision", font);
+      expect(box.x).toBeGreaterThanOrEqual(group.x + TITLE_INSET);
+      expect(box.x + box.width).toBeLessThanOrEqual(titleRoom(group) + group.x + TITLE_INSET + 1e-9);
+      expect(box.x + box.width).toBeLessThan(group.x + group.width);
+      expect(box.y).toBeGreaterThanOrEqual(group.y);
+      // The dot's ring sits below the band.
+      expect(box.y + box.height).toBeLessThanOrEqual(dot.y - 12);
+    }
+  });
+
+  it("grows a group's band upward with the title, leaving the concepts where they are", () => {
+    const points = [{ x: 0, y: 100 }];
+    const small = groupBox(points, 0);
+    const large = groupBox(points, 0, TITLE_RESERVE);
+    expect(large.y).toBe(small.y - (TITLE_RESERVE - GROUP_TITLE));
+    expect(large.y + large.height).toBe(small.y + small.height);
+    expect(large.width).toBe(small.width);
   });
 });
