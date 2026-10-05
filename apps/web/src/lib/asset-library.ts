@@ -816,6 +816,22 @@ export async function loadFavorite(id: string): Promise<Favorite | null> {
 }
 
 /**
+ * Where one asset came from (`assetParents`, scoped to the owner), for the
+ * Library previewer's Conversation tool. Undefined when it has no parent or
+ * the read failed: that costs the tool, never the panel.
+ */
+export async function loadAssetParents(id: string): Promise<AssetParents | undefined> {
+  await connection();
+  try {
+    const parents = await assetParents(await catalogDatabase(), [id], await currentScope());
+    return Object.hasOwn(parents, id) ? parents[id] : undefined;
+  } catch (error) {
+    warn("asset parents", error);
+    return undefined;
+  }
+}
+
+/**
  * Every asset the owner starred, by id, for the Library's Favorites filter:
  * the `favorite:` preferences and nothing else. Null when the store could not be read, which the page
  * says rather than showing an empty list as though nothing were starred.
