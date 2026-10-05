@@ -1387,10 +1387,25 @@ async function run() {
     );
     await clickHydrated(page, preview.getByRole('button', { name: 'Play (k)' }));
     await preview.getByRole('button', { name: 'Pause (k)' }).waitFor();
-    // Until the clock has moved, not a fixed sleep: the button turns to Pause
-    // as play is asked for, and a large file can take a moment to start.
+    // Until the clock has moved half a second, not a fixed sleep: the button
+    // turns to Pause as play is asked for, and a large file can take a moment
+    // to start. Measured from where it starts playing, since a `--copy` may
+    // resume the video part-way through.
     const video = await preview.locator('video').elementHandle();
-    await page.waitForFunction((v) => v.currentTime > 0.5, video, { timeout: 15_000 });
+    await page.waitForFunction(
+      (v) => {
+        // A seek (the resume landing late) moves the clock without playing.
+        if (v.dataset.e2eWatch === undefined) {
+          v.dataset.e2eWatch = '1';
+          v.addEventListener('seeked', () => delete v.dataset.e2eFrom);
+        }
+        if (v.paused || v.seeking) return false;
+        v.dataset.e2eFrom ??= String(v.currentTime);
+        return v.currentTime - Number(v.dataset.e2eFrom) > 0.5;
+      },
+      video,
+      { timeout: 15_000 },
+    );
     await video.dispose();
     await preview.getByRole('button', { name: 'Pause (k)' }).click();
     const response = await saved;
