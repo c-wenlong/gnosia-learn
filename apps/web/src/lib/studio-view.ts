@@ -13,6 +13,9 @@
  * side of the line rather than inside a page.
  */
 
+import { dayLabel, timeOfDay } from "@/lib/day-groups";
+import { dayKey } from "@/lib/days";
+
 /** Mirrors `services/studio/src/diagrams.ts`. Structural, not imported: the */
 /* two packages do not depend on each other and a shared type would need a third. */
 export type SvgState = "current" | "stale" | "missing";
@@ -703,26 +706,63 @@ export function groupDiagrams(
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
 
 /**
- * `4 minutes ago`. Coarse on purpose: the grid is scanned, not read.
+ * `4 minutes ago`, `Yesterday`, `3 Oct`. Coarse on purpose: the grid is scanned,
+ * not read.
+ *
+ * Days are calendar days in `timeZone` (the runtime's own when omitted, which
+ * is the browser's in a client component), the rule the sidebar's Recent and
+ * the Library's day groups use, so the three never disagree: something made
+ * 37 hours ago is "Yesterday", not "2 days ago". Within today it counts
+ * minutes and hours; older than yesterday it names the day, with the year
+ * when it is not this year.
  *
  * Rendered on the server, which means it is the server's clock and it does not
  * tick. That is the right trade for a page that is a snapshot of a directory:
  * a relative time that silently drifts is worse than one that is accurate when
  * the page was drawn and has a real timestamp in the inspector beside it.
  */
-export function relativeTime(iso: string | null, now: number = Date.now()): string {
+export function relativeTime(iso: string | null, now: number = Date.now(), timeZone?: string): string {
   if (iso === null) return "never";
   const at = Date.parse(iso);
   if (!Number.isFinite(at)) return "unknown";
   const delta = now - at;
   if (delta < MINUTE) return "just now";
-  if (delta < HOUR) return plural(Math.round(delta / MINUTE), "minute");
-  if (delta < DAY) return plural(Math.round(delta / HOUR), "hour");
-  if (delta < 30 * DAY) return plural(Math.round(delta / DAY), "day");
-  return new Date(at).toISOString().slice(0, 10);
+  const today = dayKey(new Date(now), timeZone);
+  const day = dayKey(new Date(at), timeZone);
+  if (day === today) {
+    return delta < HOUR ? plural(Math.round(delta / MINUTE), "minute") : plural(Math.round(delta / HOUR), "hour");
+  }
+  return dayWords(day, today);
+}
+
+/** "Yesterday" for the day before `today`, else the day label ("3 Oct"); both are day keys. */
+function dayWords(day: string, today: string): string {
+  const next = new Date(`${day}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10) === today ? "Yesterday" : dayLabel(day, today);
+}
+
+/**
+ * An instant as a day, in `timeZone`: "Today", "Yesterday" or "30 Sept". For
+ * the panel's Created line, where a UTC date used to disagree with the Library.
+ */
+export function dayText(iso: string | null, now: number = Date.now(), timeZone?: string): string {
+  if (iso === null) return "not recorded";
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return "unknown";
+  const today = dayKey(new Date(now), timeZone);
+  const day = dayKey(new Date(at), timeZone);
+  return day === today ? "Today" : dayWords(day, today);
+}
+
+/** The day and clock time of an instant, "30 Sept, 10:25", in `timeZone`; "" when it does not parse. */
+export function dayAndTime(iso: string | null, now: number = Date.now(), timeZone?: string): string {
+  if (iso === null || !Number.isFinite(Date.parse(iso))) return "";
+  const time = timeOfDay(iso, timeZone);
+  const day = dayLabel(dayKey(new Date(iso), timeZone), dayKey(new Date(now), timeZone));
+  return time === null ? day : `${day}, ${time}`;
 }
 
 function plural(count: number, noun: string): string {
