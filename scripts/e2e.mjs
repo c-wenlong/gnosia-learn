@@ -1004,6 +1004,40 @@ async function run() {
     }
   });
 
+  await step('workspace: a folded sidebar makes room for the three panels at 1000px', page, async () => {
+    // `ws:` (globals.css): the panels sit side by side once the tutor keeps
+    // 300px beside them, which the space beside the app sidebar decides.
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    await page.setViewportSize({ width: 1000, height: 800 });
+    try {
+      await go(`/learn/${state.concept}`);
+      // Beside the open sidebar the tutor would be too narrow: the panels are tabs.
+      const tabs = main.getByRole('tablist');
+      await tabs.waitFor();
+      await clickHydrated(page, page.getByRole('button', { name: 'Collapse the sidebar' }));
+      await tabs.waitFor({ state: 'hidden' });
+      // Off the rail, so it does not peek out, then past the sidebar's and the columns' slide.
+      await page.mouse.move(700, 400);
+      const tutor = main.locator('section[aria-label="Tutor"]');
+      await tutor.waitFor();
+      const width = await tutor.evaluate(async (el) => {
+        let last = -1;
+        for (let i = 0; i < 40; i += 1) {
+          const now = Math.round(el.getBoundingClientRect().width);
+          if (now === last) return now;
+          last = now;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        return last;
+      });
+      assert(width >= 300, `the tutor is ${width}px wide beside the rail`);
+    } finally {
+      const expand = page.getByRole('button', { name: 'Expand the sidebar' });
+      if (await expand.count()) await expand.click();
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   await step('tutor: no provider key shows the notice and Try again', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     if (!page.url().endsWith(`/learn/${state.concept}`)) await go(`/learn/${state.concept}`);

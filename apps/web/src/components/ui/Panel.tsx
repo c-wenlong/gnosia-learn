@@ -24,12 +24,12 @@ export function Panel({
   as?: "section" | "div" | "aside";
   className?: string;
   /**
-   * Classes for the header, e.g. `max-[899px]:hidden` where a tab row above
+   * Classes for the header, e.g. `ws-tabs:hidden` where a tab row above
    * already names the panel and the header would say it a second time.
    */
   headerClassName?: string;
   /**
-   * Classes for the title alone, e.g. `max-[899px]:sr-only` where a tab row
+   * Classes for the title alone, e.g. `ws-tabs:sr-only` where a tab row
    * names the panel but the header's actions still have to show.
    */
   titleClassName?: string;
