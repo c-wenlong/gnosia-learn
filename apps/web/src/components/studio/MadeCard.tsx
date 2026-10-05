@@ -89,11 +89,7 @@ export function MadeCard({ item, path }: { item: MadeItem; path: string }) {
           kind === "video" ? "bg-black" : "bg-diagram-matte",
         )}
       >
-        {thumb !== null ? (
-          <FadeImg src={thumb} alt="" loading="lazy" decoding="async" className={cx("h-full w-full", kind === "video" ? "object-cover" : "object-contain p-1.5")} />
-        ) : (
-          <Glyph name={kind} size={24} className={kind === "video" ? "text-white/70" : "text-text3"} />
-        )}
+        <MadeThumb src={thumb} kind={kind} glyph={24} className={kind === "video" ? "object-cover" : "object-contain p-1.5"} />
         <KindBadge kind={kind} />
       </Link>
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 py-0.5">
@@ -181,11 +177,7 @@ function MadeRow({ item }: { item: MadeItem }) {
             kind === "video" ? "bg-black" : "bg-diagram-matte",
           )}
         >
-          {thumb !== null ? (
-            <FadeImg src={thumb} alt="" loading="lazy" decoding="async" className={cx("h-full w-full", kind === "video" ? "object-cover" : "object-contain p-0.5")} />
-          ) : (
-            <Glyph name={kind} size={16} className={kind === "video" ? "text-white/70" : "text-text3"} />
-          )}
+          <MadeThumb src={thumb} kind={kind} glyph={16} className={kind === "video" ? "object-cover" : "object-contain p-0.5"} />
         </span>
         <span className="min-w-0 flex-1 truncate font-medium">
           <KindWord kind={kind} />
@@ -198,4 +190,17 @@ function MadeRow({ item }: { item: MadeItem }) {
       </Link>
     </li>
   );
+}
+
+/**
+ * The picture, or the kind's glyph when there is none stored or the route
+ * would not serve it (a blob gone missing, file serving off): a broken image
+ * says less than the glyph does.
+ */
+function MadeThumb({ src, kind, glyph, className }: { src: string | null; kind: "diagram" | "video"; glyph: number; className: string }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (src === null || failed === src) {
+    return <Glyph name={kind} size={glyph} className={kind === "video" ? "text-white/70" : "text-text3"} />;
+  }
+  return <FadeImg src={src} alt="" loading="lazy" decoding="async" onError={() => setFailed(src)} className={cx("h-full w-full", className)} />;
 }

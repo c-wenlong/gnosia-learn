@@ -663,6 +663,45 @@ describe("what the conversation made (D89)", () => {
     expect(links).toEqual(["/library?open=video%3Adengue", "/library?open=diagram%3Alearn%2Fassets%2Ftcp-vs-udp.svg"]);
   });
 
+  it("keeps its cards when a later read finds the catalog unreachable", async () => {
+    const answers = [
+      { ok: true, reachable: true, made: [made()] },
+      { ok: true, reachable: false, made: [] },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(answers.shift() ?? { ok: true, reachable: false, made: [] }), { status: 200 })),
+    );
+    mounted.push(() => vi.unstubAllGlobals());
+    const view = accepted();
+    const host = await mount(view);
+    expect(host.querySelector("[data-made]")).not.toBeNull();
+    // The thread moves (a new entry), which reads again: the catalog is down now.
+    mocks.getDraft.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ...view, transcript: [...view.transcript, entry(5, "planner", "Anything else?", { at: "2026-09-30T03:00:05Z" })] },
+    });
+    await act(async () => mocks.events?.onEvent({ type: "turn", data: {} }));
+    // The panel gathers a burst of events into one read, 60ms later.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 120)));
+    await settle();
+    expect(host.textContent).toContain("Anything else?");
+    // The unreachable answer was read, and changed nothing on screen.
+    expect(answers).toEqual([]);
+    expect(host.querySelector("[data-made]")).not.toBeNull();
+    expect(host.textContent).toContain("Everything made in this conversation (1)");
+  });
+
+  it("draws the kind's glyph when the picture will not load", async () => {
+    stubMade([made()]);
+    const host = await mount(accepted());
+    const img = host.querySelector<HTMLImageElement>("[data-made] img")!;
+    await act(async () => img.dispatchEvent(new Event("error")));
+    expect(host.querySelector("[data-made] img")).toBeNull();
+    expect(host.querySelector("[data-made] svg")).not.toBeNull();
+  });
+
   it("shows neither a card nor the list when nothing was made", async () => {
     stubMade([]);
     const host = await mount(accepted());

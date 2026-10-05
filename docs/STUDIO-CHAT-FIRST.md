@@ -1576,9 +1576,13 @@ and a conversation reopened later said that something was accepted without
 offering it. Reading the catalog rather than the runner is what makes the
 card true later: an asset is what landed in the database, and `asset_job` is
 already the record of which job wrote it (the reverse of `assetParents`'
-conversation branch). Placing the card by time, under the first studio line
-at or after the write, needs nothing new from the runner: it writes the asset
-and then that line, milliseconds apart.
+conversation branch). Placing the card by time and slug, under the first
+studio line at or after the write that names the asset's slug ("saved as
+tcp-vs-udp"), needs nothing new from the runner: it writes the asset and then
+that line, milliseconds apart, and the slug keeps a card off another job's
+line that landed in between. A read that finds the catalog unreachable keeps
+the cards already shown, and a picture the route will not serve falls back to
+the kind's glyph.
 
 **Rejected:** a card driven by the job's terminal state (it would vanish with
 the job list, and say nothing about an accept that failed to land); a card

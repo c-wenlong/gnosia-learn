@@ -49,6 +49,17 @@ describe("placeMade", () => {
     expect(placeMade([], [early]).tail).toEqual([early]);
   });
 
+  it("follows its own job's line when another job's landed between the write and it", () => {
+    const entries = [
+      { ...entry(7, "studio", "2026-09-30T02:25:41.690Z"), text: 'The video "Softmax" was accepted and saved as softmax-basics, under ml.' },
+      { ...entry(8, "studio", "2026-09-30T02:25:41.703Z"), text: 'The diagram "TCP vs UDP" was accepted and saved as tcp-vs-udp, under tcp.' },
+    ];
+    expect([...placeMade(entries, [item()]).after.keys()]).toEqual([8]);
+    // A slug that is only part of another word is not named.
+    const other = [{ ...entry(7, "studio", "2026-09-30T02:25:42Z"), text: "saved as tcp-vs-udp-v2" }, { ...entry(8, "studio", "2026-09-30T02:25:43Z"), text: "done" }];
+    expect([...placeMade(other, [item()]).after.keys()]).toEqual([7]);
+  });
+
   it("lists two cards under one line oldest first, as the thread reads", () => {
     const newer = item({ id: "video:dengue", kind: "video", madeAt: "2026-09-30T02:25:41.690Z" });
     const { after } = placeMade([entry(8, "studio", "2026-09-30T02:25:42Z")], [newer, item()]);
@@ -60,8 +71,13 @@ describe("parseMade", () => {
   it("keeps whole items and drops the rest", () => {
     expect(parseMade({ made: [item(), { id: "x", kind: "poster" }, { ...item(), madeAt: "never" }, null] })).toEqual([item()]);
     expect(parseMade({ made: [{ ...item(), title: "  ", name: "" }] })).toEqual([item({ title: null, name: null })]);
-    expect(parseMade(null)).toEqual([]);
-    expect(parseMade({ made: "no" })).toEqual([]);
+    expect(parseMade({ ok: true, reachable: true, made: [] })).toEqual([]);
+  });
+
+  it("is no answer for a catalog that was not reached, or a body that is not one, so the panel keeps its cards", () => {
+    expect(parseMade({ ok: true, reachable: false, made: [] })).toBeNull();
+    expect(parseMade(null)).toBeNull();
+    expect(parseMade({ made: "no" })).toBeNull();
   });
 });
 

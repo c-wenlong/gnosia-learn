@@ -33,11 +33,17 @@ export function isDraftId(value: string): boolean {
   return /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
 
-/** The route's answer, kept to the items that are whole; anything else is an empty list. */
-export function parseMade(body: unknown): MadeItem[] {
-  if (body === null || typeof body !== "object") return [];
+/**
+ * The route's answer, kept to the items that are whole, or null when it is
+ * no answer to show: not one at all, or the route's word that the catalog was
+ * not reached (`reachable: false`), whose empty list says nothing about what
+ * was made. The panel keeps what it shows on a null.
+ */
+export function parseMade(body: unknown): MadeItem[] | null {
+  if (body === null || typeof body !== "object") return null;
+  if ((body as { reachable?: unknown }).reachable === false) return null;
   const made = (body as { made?: unknown }).made;
-  if (!Array.isArray(made)) return [];
+  if (!Array.isArray(made)) return null;
   return made.flatMap((value): MadeItem[] => {
     if (value === null || typeof value !== "object") return [];
     const v = value as Record<string, unknown>;
@@ -84,6 +90,14 @@ export interface PlacedEntry {
   seq: number;
   role: string;
   at: string;
+  text?: string;
+}
+
+/** Whether a studio line names the slug as a word: "saved as tcp-vs-udp, under ...". */
+function names(text: string | undefined, name: string | null): boolean {
+  if (text === undefined || name === null) return false;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9-])${escaped}([^a-z0-9-]|$)`).test(text);
 }
 
 /**
@@ -91,11 +105,13 @@ export interface PlacedEntry {
  * keyed by that entry's seq, and the rest (`tail`) at the end.
  *
  * The runner writes the asset, then the studio line that says it landed
- * ("The diagram ... was accepted and saved as ..."), milliseconds apart, so
- * a card goes under the first studio line at or after the write: where the
- * job's story ended. With no such line (a runner that wrote none, or a line
- * not yet read) it goes under the last entry before the write, and with no
- * entry at all, at the end. Each list is oldest first, as the thread reads.
+ * ("The diagram ... was accepted and saved as tcp-vs-udp, ..."), milliseconds
+ * apart, so a card goes under the first studio line at or after the write
+ * that names the asset's slug: where its own job's story ended, even when
+ * another job's line landed between the two. A line naming no slug is the
+ * fallback (an asset with no slug, or a runner that worded it otherwise),
+ * then the last entry before the write, and with no entry at all, the end.
+ * Each list is oldest first, as the thread reads.
  */
 export function placeMade(
   entries: readonly PlacedEntry[],
@@ -110,7 +126,8 @@ export function placeMade(
   const oldestFirst = [...made].sort((a, b) => Date.parse(a.madeAt) - Date.parse(b.madeAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   for (const item of oldestFirst) {
     const at = Date.parse(item.madeAt);
-    const landed = timed.find(({ entry, at: when }) => entry.role === "studio" && when >= at);
+    const later = timed.filter(({ entry, at: when }) => entry.role === "studio" && when >= at);
+    const landed = later.find(({ entry }) => names(entry.text, item.name)) ?? later[0];
     const before = timed.filter(({ at: when }) => when <= at).at(-1);
     const host = landed ?? before;
     if (host === undefined) {
