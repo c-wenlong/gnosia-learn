@@ -153,6 +153,8 @@ const NO_MANIMKC = SEED ? mkdtempSync(join(OUT, 'no-manimkc-')) : null;
  */
 const held = { browser: null, server: null, copying: null };
 let teardown = null;
+/** The learner's display name, read from a `--copy`; the seed sets none. */
+let ACCOUNT_NAME = null;
 let interrupted = false;
 /** Why the teardown did not finish cleanly, if it did not. A leftover copy fails the run. */
 let teardownProblem = null;
@@ -304,6 +306,14 @@ async function createCopy() {
     throw new Error(`${error.message} (is Postgres running, and does ${TEMPLATE_DB} exist?)`);
   });
   await markReviewDue();
+  ACCOUNT_NAME = await displayName();
+}
+
+/** The signed-in learner's display name in the copy, which names the sidebar's account row; null for none. */
+async function displayName() {
+  const read = await pg('psql', ['-d', COPY_DB, '-v', 'ON_ERROR_STOP=1', '-Atc', "select coalesce(display_name, '') from learner where id = 'local'"]);
+  if (read.status !== 0) throw new Error(`could not read the learner's name in the copy: ${read.stderr.trim()}`);
+  return read.stdout.replace(/\n$/, '') || null;
 }
 
 async function markReviewDue() {
@@ -417,6 +427,17 @@ function tail(file, lines = 30) {
 // Steps.
 
 const results = [];
+
+/**
+ * The tutor's notice when it has no key to call (T4, `missingKeyMessage` in
+ * apps/web/src/lib/agent/providers.ts). From the seed there is no model chain,
+ * so it says "No model provider key is set" (or the client's own "no model
+ * provider key yet"). A `--copy` carries the owner's chain in `tutor_model`
+ * and their keys in `provider_key`, sealed under their `AUTH_SECRET`; this
+ * run's server has its own secret, so no saved key opens (docs/BYOK.md), the
+ * env keys are blanked, and the notice names the chain's providers instead.
+ */
+const NO_KEY = /no model provider key (is set|yet)\. Add one in Settings|None of your models has a key\. In Settings, add a key for /i;
 
 /** A step this run cannot take, and why: listed as SKIP, never as a pass. */
 function skip(name, why) {
@@ -534,7 +555,7 @@ async function run() {
 
   const go = (path) => page.goto(base + path, { waitUntil: 'load' });
   const main = page.getByRole('main');
-  const state = { concept: null, answered: false };
+  const state = { concept: null, answered: null };
 
   await step('landing: Open your book goes to /sign-in', page, async () => {
     await go('/');
@@ -1127,10 +1148,9 @@ async function run() {
     await tutor.getByRole('button', { name: 'Send', exact: true }).click();
     const response = await answered;
     assert(response.status() === 503, `/api/agent/chat answered ${response.status()}, expected 503 with no provider key`);
-    // The server names the gap itself ("No model provider key is set", from
-    // `missingKeyMessage` in apps/web/src/lib/agent/providers.ts since #250);
-    // the client's own fallback says "no model provider key yet". Either is right.
-    await tutor.getByRole('alert').getByText(/no model provider key (is set|yet)\. Add one in Settings/i).waitFor();
+    // The server names the gap itself (`missingKeyMessage` since #250); the
+    // client's own fallback says "no model provider key yet". `NO_KEY` takes both.
+    await tutor.getByRole('alert').getByText(NO_KEY).waitFor();
     await tutor.getByRole('button', { name: 'Try again' }).waitFor();
   });
 
@@ -1157,7 +1177,7 @@ async function run() {
         await clickHydrated(page, choices.first());
         await check.click();
         await cont.waitFor();
-        state.answered = true;
+        state.answered = state.concept;
       }
       await clickHydrated(page, cont);
       await page.waitForFunction(
@@ -1202,11 +1222,13 @@ async function run() {
   });
 
   await step("week check: the module path's last step answers through to the close screen", page, async () => {
-    // The seed's cp4284 module 3: tool-calling and react-loop, whose notes carry checks.
+    // cp4284 module 3, whose notes carry checks: in the seed tool-calling and
+    // react-loop, so the counts are exact; a `--copy` holds the owner's
+    // module, which lists what it lists (agent memory as well, since then).
     const modulePage = '/courses/cp4284/m3-agentic-frameworks';
     await go(modulePage);
     const row = main.getByRole('link', { name: /^Week check/ });
-    await row.getByText(/^2 concepts · up to 6 questions$/).waitFor();
+    await row.getByText(SEED ? /^2 concepts · up to 6 questions$/ : /^\d+ concepts? · up to \d+ questions?$/).waitFor();
     await clickHydrated(page, row);
     await page.waitForURL(`${base}${modulePage}/check`);
 
@@ -1227,6 +1249,7 @@ async function run() {
         const posted = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/learner/observe');
         await check.click();
         sent.push((await posted).postDataJSON());
+        state.answered = sent.at(-1).conceptSlug;
         await cont.waitFor();
       }
       await clickHydrated(page, cont);
@@ -1283,10 +1306,13 @@ async function run() {
     const card = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Pick up where you left off' }) });
     await card.waitFor();
     await card.locator(`a[href^="/courses/${slug}"]`).first().waitFor();
-    // The concept's own row. Since #379 the session the step above walked is
-    // a row too, and one with no log opens the same concept page, so the
-    // concept is told apart by the kind a screen reader hears first.
-    if (state.answered) await card.locator(`a[href="/learn/${state.concept}"]`).filter({ hasText: /^Concept: / }).waitFor();
+    // The row of the concept answered last (the week check's, else the
+    // session's): the card is bounded, and a `--copy` has threads of its own,
+    // so an earlier answer can be pushed off it. Since #379 the session the
+    // step above walked is a row too, and one with no log opens the same
+    // concept page, so the concept is told apart by the kind a screen reader
+    // hears first.
+    if (state.answered !== null) await card.locator(`a[href="/learn/${state.answered}"]`).filter({ hasText: /^Concept: / }).waitFor();
     // What the threads open up: at least one group, each a heading over links.
     const next = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Next from here' }) });
     await next.getByRole('heading', { level: 3, name: /^After / }).first().waitFor();
@@ -1372,7 +1398,7 @@ async function run() {
     await page.waitForURL(/\/ask\?q=qzx/);
     await main.getByText('This chat is not saved', { exact: false }).waitFor();
     // No provider key in this run: the tutor's first turn names the gap.
-    await main.getByRole('alert').getByText(/no model provider key (is set|yet)\. Add one in Settings/i).waitFor();
+    await main.getByRole('alert').getByText(NO_KEY).waitFor();
     await main.getByRole('button', { name: 'Try again' }).waitFor();
 
     // A link from anywhere else waits for Start: a turn is paid for.
@@ -1386,7 +1412,7 @@ async function run() {
     await hydrated(page, begin);
     assert(!asked, 'the linked page sent a turn before Start');
     await begin.click();
-    await main.getByRole('alert').getByText(/no model provider key/i).waitFor();
+    await main.getByRole('alert').getByText(NO_KEY).waitFor();
     page.off('request', watch);
     assert(asked, 'Start sent no turn');
   });
@@ -1397,8 +1423,13 @@ async function run() {
     // The Videos tab is a link to `?kind=video`, and the URL is the filter.
     await clickHydrated(page, main.getByRole('group', { name: 'Type', exact: true }).getByRole('link', { name: 'Videos', exact: true }));
     await page.waitForURL(/\/library\?(.*&)?kind=video/);
-    await main.getByRole('region', { name: 'Assets' }).getByRole('link').first().click();
-    await page.waitForURL(/\/library\/[^/?]+$/);
+    // A press on a tile opens the asset in the previewer over the list
+    // (L6 of docs/proposals/library-by-type-and-day.md), not its page: the
+    // URL gains `?open=<id>` and the dialog draws the page's body, player
+    // included.
+    await clickHydrated(page, main.getByRole('region', { name: 'Assets' }).getByRole('link').first());
+    await page.waitForURL(/\/library\?(.*&)?open=[^&]+/);
+    const preview = page.getByRole('dialog');
     // No button to press: the player saves its own place. Play a moment,
     // pause, and the pause is a save the route has to accept.
     // The save that carries what played, not any request to the route.
@@ -1408,10 +1439,29 @@ async function run() {
         response.request().method() === 'POST' &&
         (response.request().postDataJSON()?.ranges?.length ?? 0) > 0,
     );
-    await clickHydrated(page, main.getByRole('button', { name: 'Play (k)' }));
-    await main.getByRole('button', { name: 'Pause (k)' }).waitFor();
-    await page.waitForTimeout(1500);
-    await main.getByRole('button', { name: 'Pause (k)' }).click();
+    await clickHydrated(page, preview.getByRole('button', { name: 'Play (k)' }));
+    await preview.getByRole('button', { name: 'Pause (k)' }).waitFor();
+    // Until the clock has moved half a second, not a fixed sleep: the button
+    // turns to Pause as play is asked for, and a large file can take a moment
+    // to start. Measured from where it starts playing, since a `--copy` may
+    // resume the video part-way through.
+    const video = await preview.locator('video').elementHandle();
+    await page.waitForFunction(
+      (v) => {
+        // A seek (the resume landing late) moves the clock without playing.
+        if (v.dataset.e2eWatch === undefined) {
+          v.dataset.e2eWatch = '1';
+          v.addEventListener('seeked', () => delete v.dataset.e2eFrom);
+        }
+        if (v.paused || v.seeking) return false;
+        v.dataset.e2eFrom ??= String(v.currentTime);
+        return v.currentTime - Number(v.dataset.e2eFrom) > 0.5;
+      },
+      video,
+      { timeout: 15_000 },
+    );
+    await video.dispose();
+    await preview.getByRole('button', { name: 'Pause (k)' }).click();
     const response = await saved;
     assert(response.ok(), `the playback save answered ${response.status()}`);
   });
@@ -1507,10 +1557,12 @@ async function run() {
 
   await step('sign out: /home answers 307 afterwards', page, async () => {
     await go('/home');
-    // The account row at the sidebar's foot (#308): named by its text,
-    // "Account", with the sidebar open, and "Account and settings" folded to
+    // The account row at the sidebar's foot (#308) is named by the learner's
+    // display name, "Account" until there is one (the seed has none, a
+    // `--copy` the owner's), and "<name>, account and settings" folded to
     // the rail, where it is the avatar alone.
-    await clickHydrated(page, page.getByRole('button', { name: /^Account( and settings)?$/ }));
+    const name = (ACCOUNT_NAME ?? 'Account').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await clickHydrated(page, page.getByRole('button', { name: new RegExp(`^${name}(, account and settings)?$`) }));
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL(`${base}/`);
     const after = await page.request.get(`${base}/home`, { maxRedirects: 0 });
