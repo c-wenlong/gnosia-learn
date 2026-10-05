@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import type { EmbedResolution } from "@/components/NoteProse";
+import { PAGE_ENTER, WORKSPACE_ROOT } from "@/components/PageLoading";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Eyebrow } from "@/components/ui/Eyebrow";
@@ -113,7 +114,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   const eyebrow = placeLabel(w.place) ?? (w.domain ? `${w.domain} · not in a course yet` : "Not in a course yet");
 
   return (
-    <div data-layout="workspace" className="flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:flex-1">
+    <div data-layout="workspace" className={cx(WORKSPACE_ROOT, PAGE_ENTER)}>
       <header className="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-3">
         <div className="min-w-0 flex-1 basis-[18rem]">
           <Eyebrow>{eyebrow}</Eyebrow>
@@ -169,9 +170,14 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   );
 }
 
+/**
+ * In the workspace's own mode, as its loading frame is, so the shell does not
+ * change height as it lands. The shell is fixed to the viewport there, so the
+ * notice scrolls inside itself in a short window rather than being cut off.
+ */
 function Unreachable() {
   return (
-    <div data-layout="app">
+    <div data-layout="workspace" className={cx(WORKSPACE_ROOT, "min-[900px]:overflow-y-auto")}>
       <Card title="Knowledge base unavailable" className="max-w-2xl">
         <p className="text-[14px] text-text2">
           The database could not be reached, so this concept cannot be shown. Nothing is lost: the note, the mastery and

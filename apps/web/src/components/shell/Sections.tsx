@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
-import { cx, FIELD_TEXT, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, MENU_PANEL, STATUS_TEXT } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
-import { usePresence } from "@/components/ui/use-presence";
+import { Popover } from "@/components/ui/Popover";
 import { isCurrentRow } from "@/lib/nav";
 import type { RecentChange } from "@/lib/recent-client";
 import {
@@ -500,10 +500,15 @@ function RecentRow({
 
 /**
  * A row's menu: a small card under its more button, or over it when the
- * sidebar has no room below. Kept for one beat after it closes so it can fade
- * (`usePresence`). A disclosure of a few buttons, as the account menu is: it
- * closes on Escape (focus back on the more button), on a press outside, and
- * on choosing an item, and focus moves to its first item as it opens.
+ * screen has no room below. A disclosure of a few buttons, as the account
+ * menu is, and like it a kit `Popover`: in the top layer at fixed
+ * coordinates. The rows sit in folds that clip what they hold (`Collapse`,
+ * around Pinned and each course), so a card placed in the row was cut off
+ * under the last pinned row, and checking the sidebar's scroller for room
+ * could not see the fold. It closes on Escape (focus back on the more
+ * button, and the phone drawer around it stays open), on a press outside, on
+ * the focus leaving it and on choosing an item, and focus moves to its first
+ * item as it opens. It pops in and out with the `Popover`.
  */
 function RowMenu({
   open,
@@ -516,59 +521,28 @@ function RowMenu({
   onClose: (refocus: boolean) => void;
   children: (close: (refocus: boolean) => void) => ReactNode;
 }) {
-  const { mounted, leaving } = usePresence(open, 120);
   const box = useRef<HTMLDivElement>(null);
   const id = useId();
-  const [up, setUp] = useState(false);
-  // The latest close, for listeners that stay put while the menu is open.
-  const close = useRef(onClose);
-  useEffect(() => {
-    close.current = onClose;
-  });
 
-  useEffect(() => {
-    if (!open) return;
-    // Over the button when the scroller has no room for the card below it.
-    const scroller = anchor.current?.closest<HTMLElement>("[data-sidebar-scroll]");
-    const button = anchor.current?.getBoundingClientRect();
-    const bounds = scroller?.getBoundingClientRect();
-    const height = box.current?.offsetHeight ?? 120;
-     
-    if (button !== undefined && bounds !== undefined) setUp(button.bottom + height + 8 > bounds.bottom && button.top - height - 8 > bounds.top);
-    box.current?.querySelector<HTMLElement>("a, button")?.focus();
-    const onPointer = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!box.current?.contains(target) && !anchor.current?.contains(target)) close.current(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // The menu's Escape, not the drawer's.
-      event.stopPropagation();
-      close.current(true);
-    };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey, true);
-    };
-  }, [open, anchor]);
+  // After the `Popover`'s own layout effect (a child's runs first) has shown and placed the box.
+  useLayoutEffect(() => {
+    if (open) box.current?.querySelector<HTMLElement>("a, button")?.focus({ preventScroll: true });
+  }, [open]);
 
-  if (!mounted) return null;
   return (
-    <div
+    <Popover
       ref={box}
+      anchorRef={anchor}
+      open={open}
+      // Escape hands the focus back to the more button itself.
+      onOpenChange={() => onClose(false)}
+      placement="bottom-end"
+      minWidth={192}
       id={id}
-      inert={leaving}
-      className={cx(
-        "absolute right-0 z-20 w-48 rounded-xl border border-border bg-surface p-1 shadow-lg",
-        up ? "bottom-full mb-1 origin-bottom-right" : "top-full mt-1 origin-top-right",
-        leaving ? "pointer-events-none animate-pop-out" : "animate-pop-in",
-        "motion-reduce:animate-none",
-      )}
+      className={MENU_PANEL}
     >
       <ul className="flex flex-col">{children(onClose)}</ul>
-    </div>
+    </Popover>
   );
 }
 

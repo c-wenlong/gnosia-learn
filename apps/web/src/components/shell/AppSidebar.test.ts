@@ -208,6 +208,12 @@ describe("the sidebar", () => {
     expect(nav(container).className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
   });
 
+  it("keeps a flick past the end of its list from scrolling the page behind the drawer", async () => {
+    const container = await mount(true);
+    const scroller = nav(container).querySelector("ul")!.parentElement!;
+    expect(scroller.className.split(" ")).toEqual(expect.arrayContaining(["overflow-y-auto", "overscroll-contain"]));
+  });
+
   it("transitions the drawer's visibility only as it closes, so focus can land as it opens", async () => {
     const container = await mount(true);
     expect(nav(container).className).toContain("max-md:transition-[translate,visibility,box-shadow]");
@@ -536,6 +542,19 @@ describe("the sections", () => {
     });
     expect(more.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(more);
+  });
+
+  it("opens a pinned row's menu in the top layer, so the Pinned fold around it cannot clip it", async () => {
+    withRows({ pinned: [{ key: VIDEO.key, kind: "video", title: "Master theorem", href: VIDEO.href, at: ago(1) }] });
+    const container = await mount(false);
+    act(() => moreFor(container, "Master theorem").click());
+    const menu = moreFor(container, "Master theorem").parentElement!.querySelector<HTMLElement>("[popover]")!;
+    expect(menu.getAttribute("popover")).toBe("manual");
+    expect(menu.className.split(" ")).toContain("fixed");
+    // The fold that would have cut it off, still around it in the DOM.
+    expect(menu.closest(".overflow-clip")).not.toBeNull();
+    expect(menuItems(container, "Master theorem")).toEqual(["Unpin"]);
+    expect(document.activeElement?.textContent).toBe("Unpin");
   });
 
   /** Rename on the "TCP vs UDP" row, typed and kept with Enter. */
