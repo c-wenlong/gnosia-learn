@@ -73,9 +73,12 @@ export const THEME_COLOURS = [
 /** The `--font-*` families in `globals.css`, and Tailwind's own three. */
 export const THEME_FONTS = ["sans", "serif", "mono", "display", "book"] as const;
 
-/** The `--animate-*` and `--ease-*` names `globals.css` adds to Tailwind's. */
-const THEME_ANIMATIONS = ["spin", "ping", "pulse", "bounce", "enter", "pop-in", "fade-in", "pop-out", "fade-in-late"];
-const THEME_EASES = ["in", "out", "in-out", "soft"];
+/**
+ * Tailwind's `--animate-*` and `--ease-*` names and the ones `globals.css`
+ * adds, which `class-merge.test.ts` also holds to the stylesheet.
+ */
+export const THEME_ANIMATIONS = ["spin", "ping", "pulse", "bounce", "enter", "pop-in", "fade-in", "pop-out", "fade-in-late"];
+export const THEME_EASES = ["in", "out", "in-out", "soft"];
 
 const KEYWORD_COLOURS = new Set(["inherit", "current", "transparent", "black", "white"]);
 const PALETTE =

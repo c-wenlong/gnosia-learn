@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { Card } from "./Card";
-import { THEME_COLOURS, THEME_FONTS } from "./class-merge";
+import { THEME_ANIMATIONS, THEME_COLOURS, THEME_EASES, THEME_FONTS } from "./class-merge";
 import {
   badgeClasses,
   buttonClasses,
@@ -76,11 +76,13 @@ describe("cx", () => {
     keepsAll("inset-ring inset-ring-border bg-track");
   });
 
-  it("lists the same colours and families globals.css declares", () => {
+  it("lists the same colours, families, animations and eases globals.css declares", () => {
     const block = css.slice(css.indexOf("@theme inline {"));
     const declared = [...block.slice(0, block.indexOf("\n}")).matchAll(/--color-([a-z0-9-]+):/g)].map((m) => m[1]);
     expect([...THEME_COLOURS].sort()).toEqual([...new Set(declared)].sort());
     for (const font of themeBlock("font")) expect(THEME_FONTS).toContain(font);
+    for (const animation of themeBlock("animate")) expect(THEME_ANIMATIONS).toContain(animation);
+    for (const ease of themeBlock("ease")) expect(THEME_EASES).toContain(ease);
   });
 
   it("keeps a class it does not know, so a word that only looks like a colour is never dropped", () => {
