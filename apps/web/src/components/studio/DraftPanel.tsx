@@ -9,6 +9,7 @@ import { NoteProse } from "@/components/NoteProse";
 import { ConfirmCard, type SaveOutcome } from "@/components/studio/ConfirmCard";
 import { ConfirmCardVideo } from "@/components/studio/ConfirmCardVideo";
 import { JobPanel } from "@/components/studio/JobPanel";
+import { MadeCard, MadeList, useConversationMade } from "@/components/studio/MadeCard";
 import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
 import { PinnedConcept, PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
 import { PANE_GUTTER, usePaneLayout } from "@/components/studio/pane-context";
@@ -130,6 +131,7 @@ import {
 } from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { conversationTitle } from "@/lib/conversation-title";
+import { placeMade, type MadeItem } from "@/lib/conversation-made";
 import { announceDraftChange } from "@/lib/studio-draft-list";
 import { panelHref, titleOf } from "@/lib/studio-view";
 
@@ -460,6 +462,17 @@ export function DraftPanel({
   }, [ready, mode]);
 
   const entries = useMemo(() => (view === null ? [] : visibleEntries(view.transcript)), [view]);
+  // What the conversation made, from the catalog (D89): read on opening and
+  // whenever the thread or a job's state moves, since the runner writes the
+  // asset just before the studio line saying it landed.
+  const madeVersion =
+    view === null
+      ? ""
+      : `${topSeq(view.transcript)}|${view.state}|${Object.values(view.slots ?? {})
+          .map((slot) => `${slot?.jobId ?? ""}:${slot?.jobState ?? ""}`)
+          .join(",")}`;
+  const { made, seen: madeSeen } = useConversationMade(draftId, madeVersion);
+  const placed = useMemo(() => placeMade(entries, made), [entries, made]);
   // What sits at the thread's foot besides the entries: the reply being
   // written, and a problem or refusal in its place when a turn fails
   // without adding an entry.
@@ -467,7 +480,7 @@ export function DraftPanel({
   // The thread scrolls, never the page. Something new in it (a message, a
   // reply, a banner) glides into view; a new thread box (opening, back from a
   // job) jumps straight to its foot (`useFollowFoot`).
-  const threadChange = useMemo(() => [entries.length, pending, mode, foot], [entries.length, pending, mode, foot]);
+  const threadChange = useMemo(() => [entries.length, pending, mode, foot, made.length], [entries.length, pending, mode, foot, made.length]);
   useFollowFoot(thread, threadChange, { glide: true });
   const streamText = stream?.text ?? null;
   useEffect(() => {
@@ -931,7 +944,7 @@ export function DraftPanel({
           </div>
         )}
 
-        {entries.map((entry) => (
+        {entries.flatMap((entry) => [
           // A person's turn does not animate: it replaces the bubble that
           // already rose in at Send (below), in the same place.
           <Arrive key={entry.seq} animate={baseline !== null && entry.seq > baseline && entry.role !== "person"}>
@@ -962,8 +975,12 @@ export function DraftPanel({
               videoTools={video?.tools ?? []}
               charsPerSecond={video?.charsPerSecond}
             />
-          </Arrive>
-        ))}
+          </Arrive>,
+          // Where the job's story ended: what it made, as a card (D89).
+          ...(placed.after.get(entry.seq) ?? []).map((item) => (
+            <MadeArrival key={`made:${item.id}`} item={item} seen={madeSeen} path={path} />
+          )),
+        ])}
 
         {pending !== null && !view.transcript.some((entry) => entry.seq === pending.seq) && (
           <UserMessage className={ENTER}>
@@ -1016,6 +1033,11 @@ export function DraftPanel({
             </Callout>
           </Arrive>
         )}
+
+        {placed.tail.map((item) => (
+          <MadeArrival key={`made:${item.id}`} item={item} seen={madeSeen} path={path} />
+        ))}
+        <MadeList made={made} />
       </div>
 
       <div
@@ -1079,6 +1101,18 @@ export function DraftPanel({
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * A card for something the conversation made. One the panel opened with
+ * stands still; one that lands while it is open rises in, as a new turn does.
+ */
+function MadeArrival({ item, seen, path }: { item: MadeItem; seen: ReadonlySet<string> | null; path: string }) {
+  return (
+    <Arrive animate={seen !== null && !seen.has(item.id)} className="px-1.5">
+      <MadeCard item={item} path={path} />
+    </Arrive>
+  );
+}
 
 /** The newest seq in a transcript, or 0 for an empty one. */
 function topSeq(transcript: readonly Pick<TranscriptEntry, "seq">[]): number {
