@@ -1254,8 +1254,10 @@ async function run() {
 
   await step('library: a type, a sort and the list layout all land in the URL', page, async () => {
     await go('/library');
-    // The types are a row of tabs since Library phase 1, links to `?kind=`.
-    await clickHydrated(page, main.getByRole('navigation', { name: 'Type' }).getByRole('link', { name: 'Notes', exact: true }));
+    // The types are a row of tabs since Library phase 1, links to `?kind=`,
+    // and since #417 the kit's SegmentedControl in links mode, a group named
+    // "Type" like the Layout switch beside it.
+    await clickHydrated(page, main.getByRole('group', { name: 'Type', exact: true }).getByRole('link', { name: 'Notes', exact: true }));
     await page.waitForURL(/\/library\?(.*&)?kind=note/);
     // The sort is a bare menu in the toolbar: picking Title keeps the type.
     await clickHydrated(page, main.getByRole('button', { name: 'Sort: Newest' }));
@@ -1339,7 +1341,7 @@ async function run() {
   else await step('library: first video plays and saves its place', page, async () => {
     await go('/library');
     // The Videos tab is a link to `?kind=video`, and the URL is the filter.
-    await clickHydrated(page, main.getByRole('navigation', { name: 'Type' }).getByRole('link', { name: 'Videos', exact: true }));
+    await clickHydrated(page, main.getByRole('group', { name: 'Type', exact: true }).getByRole('link', { name: 'Videos', exact: true }));
     await page.waitForURL(/\/library\?(.*&)?kind=video/);
     await main.getByRole('region', { name: 'Assets' }).getByRole('link').first().click();
     await page.waitForURL(/\/library\/[^/?]+$/);
