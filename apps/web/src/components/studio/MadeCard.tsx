@@ -1,6 +1,6 @@
 "use client";
 
-import { StudioTime } from "@/components/studio/StudioZone";
+import { StudioTime, useStudioZone } from "@/components/studio/StudioZone";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
@@ -23,7 +23,7 @@ import {
   type MadeItem,
 } from "@/lib/conversation-made";
 import { scrollBehavior } from "@/lib/motion";
-import { extendFromHref } from "@/lib/studio-view";
+import { dayAndTime, extendFromHref } from "@/lib/studio-view";
 
 /**
  * What a conversation made, in its thread (D89 of docs/STUDIO-CHAT-FIRST.md):
@@ -71,6 +71,7 @@ export function useConversationMade(draftId: string, version: string): { made: M
 
 /** One asset the conversation made: its picture, its title and when, Open, and Extend or Change. */
 export function MadeCard({ item, path }: { item: MadeItem; path: string }) {
+  const zone = useStudioZone();
   const title = madeTitle(item);
   const thumb = madeThumbHref(item);
   const kind = item.kind === "video" ? "video" : "diagram";
@@ -100,7 +101,7 @@ export function MadeCard({ item, path }: { item: MadeItem; path: string }) {
             {title}
           </h3>
           <p className="mt-0.5 text-[12px] leading-4 text-text3">
-            <time dateTime={item.madeAt} title={new Date(item.madeAt).toLocaleString()}>
+            <time dateTime={item.madeAt} title={dayAndTime(item.madeAt, undefined, zone)}>
               <StudioTime at={item.madeAt} />
             </time>
           </p>
