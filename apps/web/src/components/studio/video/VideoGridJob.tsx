@@ -236,7 +236,7 @@ function TileVideoJob({ slug, title, poster, path }: { slug: string; title: stri
   if (job === null) return null;
   return (
     // Fades in over the poster as the job starts, as a diagram's does (`TileJob`).
-    <div className={`absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border ${FADE_IN}`}>
+    <div className={cx("absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border", FADE_IN)}>
       <VideoStage key={job.jobId} job={job} title={title} backdrop={poster} path={path} isNew={false} />
     </div>
   );
@@ -269,7 +269,7 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
         key={job.jobId}
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
-        className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2 ${FADE_IN}`}
+        className={cx("flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2", FADE_IN)}
       >
         <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-surface2">
           <Dot stage={videoTileStage(job)} />
@@ -378,7 +378,7 @@ function Backdrop({
             decoding="async"
             onLoad={posterLoaded}
             onError={() => setPosterMissing(true)}
-            className={`relative h-full w-full object-contain pb-12 ${posterShown ? "studio-fade-in" : "opacity-0"}`}
+            className={cx("relative h-full w-full object-contain pb-12", posterShown ? "studio-fade-in" : "opacity-0")}
           />
         )}
       </div>
@@ -386,10 +386,10 @@ function Backdrop({
   }
 
   const blur = stage === "failed" ? "blur-[6px]" : "blur-[3px]";
-  const layer = `absolute inset-0 h-full w-full object-contain ${blur} transition-[filter] duration-300 ease-out motion-reduce:transition-none`;
+  const layer = cx("absolute inset-0 h-full w-full object-contain", blur, "transition-[filter] duration-300 ease-out motion-reduce:transition-none");
   const hasPicture = live.current !== null || backdrop !== null;
   return (
-    <div aria-hidden className={`absolute inset-0 overflow-hidden ${hasPicture ? "bg-black" : ""}`}>
+    <div aria-hidden className={cx("absolute inset-0 overflow-hidden", hasPicture ? "bg-black" : "")}>
       {live.current === null && backdrop !== null && (
         // eslint-disable-next-line @next/next/no-img-element -- see above.
         <img src={backdrop} alt="" decoding="async" className={layer} />
@@ -400,9 +400,14 @@ function Backdrop({
       )}
       {live.current !== null && (
         // eslint-disable-next-line @next/next/no-img-element -- see above.
-        <img key={live.current} src={live.current} alt="" className={`${layer} studio-fade-in`} />
+        <img key={live.current} src={live.current} alt="" className={cx(layer, "studio-fade-in")} />
       )}
-      <div className={`absolute inset-0 transition-[background-color] duration-300 ease-out motion-reduce:transition-none ${stage === "failed" ? "studio-veil-strong" : "studio-veil"}`} />
+      <div
+        className={cx(
+          "absolute inset-0 transition-[background-color] duration-300 ease-out motion-reduce:transition-none",
+          stage === "failed" ? "studio-veil-strong" : "studio-veil",
+        )}
+      />
       {stage === "working" && <div className="studio-shimmer absolute inset-0 overflow-hidden" />}
     </div>
   );
@@ -499,7 +504,7 @@ function RowWords({ job }: { job: VideoJob }) {
   const stage = videoTileStage(job);
   const elapsed = useElapsed(job);
   return (
-    <span className={`flex min-w-0 max-w-full items-center gap-1.5 ${stage === "failed" ? "text-danger" : "text-text2"}`}>
+    <span className={cx("flex min-w-0 max-w-full items-center gap-1.5", stage === "failed" ? "text-danger" : "text-text2")}>
       <Dot stage={stage} />
       <span className="min-w-0 truncate">{stage === "failed" ? videoFailureLine(job) : videoHeadline(job)}</span>
       {stage === "working" && job.state !== "queued" && (
@@ -513,7 +518,7 @@ function RowWords({ job }: { job: VideoJob }) {
 
 function Dot({ stage }: { stage: VideoTileStage }) {
   const tone = stage === "failed" ? "bg-danger" : stage === "review" ? "bg-ok" : "bg-accent studio-breathe";
-  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone}`} />;
+  return <span aria-hidden className={cx("h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none", tone)} />;
 }
 
 /* -------------------------------------------------------------------------- */

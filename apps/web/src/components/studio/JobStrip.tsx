@@ -6,6 +6,7 @@ import { useStudioPath } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Button } from "@/components/ui/Button";
+import { cx } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import {
   failureReport,
@@ -191,7 +192,7 @@ function Dot({ job }: { job: Job }) {
           ? "bg-text2"
           : "bg-accent";
   const pulse = job.state === "running" ? "animate-pulse motion-reduce:animate-none" : "";
-  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone} ${pulse}`} />;
+  return <span aria-hidden className={cx("h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none", tone, pulse)} />;
 }
 
 /**
@@ -222,7 +223,7 @@ export function Elapsed({ job }: { job: Job }) {
  */
 export function Duration({ ms, live }: { ms: number | null; live: boolean }) {
   return (
-    <span className={`inline-block tabular-nums ${live ? "min-w-[5ch]" : ""}`}>
+    <span className={cx("inline-block tabular-nums", live ? "min-w-[5ch]" : "")}>
       {/* A no-break space, so the empty box keeps a line's height and baseline. */}
       {ms === null ? "\u00a0" : formatDuration(ms)}
     </span>

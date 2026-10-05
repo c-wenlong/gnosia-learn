@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 
+import { cx } from "@/components/ui/classes";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 
@@ -44,7 +45,7 @@ export function CourseCover({ src, code }: { src: string | null; code: string })
       alt=""
       fill
       unoptimized
-      className={`object-cover ${fade}`}
+      className={cx("object-cover", fade)}
       onLoad={onLoad}
       onError={() => setFailed(src)}
     />

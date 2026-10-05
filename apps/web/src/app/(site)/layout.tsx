@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { GnosiaWordmark } from "@/components/brand";
+import { cx } from "@/components/ui/classes";
 
 import { GITHUB_URL, siteLink } from "./site";
 import { ThemeToggle } from "./ThemeToggle";
@@ -33,7 +34,7 @@ const literata = Literata({
 export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
     <div
-      className={`${literata.variable} group/site gnosia-ground flex min-h-dvh flex-col overflow-x-clip font-sans`}
+      className={cx(literata.variable, "group/site gnosia-ground flex min-h-dvh flex-col overflow-x-clip font-sans")}
     >
       <a
         href="#main"

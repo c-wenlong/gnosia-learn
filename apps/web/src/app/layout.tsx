@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Figtree, Geist_Mono } from "next/font/google";
+import { cx } from "@/components/ui/classes";
 import { asMotionMode, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
 import { resolveSiteUrl } from "@/lib/site-url";
 import { asThemeMode, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
@@ -86,7 +87,7 @@ export default async function RootLayout({
       suppressHydrationWarning
       data-theme={theme}
       data-motion={motion}
-      className={`${figtree.variable} ${geistMono.variable} h-full antialiased${classes.map((c) => ` ${c}`).join("")}`}
+      className={cx(figtree.variable, geistMono.variable, "h-full antialiased", ...classes)}
     >
       <body className="min-h-full">
         <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
