@@ -49,6 +49,7 @@ export function Composer({
   disabled = false,
   sendDisabled = false,
   disabledReason,
+  quietReason = false,
   autoFocus,
   inputRef,
   onModEnter,
@@ -78,6 +79,11 @@ export function Composer({
    * width from the field on a phone.
    */
   disabledReason?: string;
+  /**
+   * Keep the reason for a screen reader only: still the field's and Send's
+   * description, but `sr-only`, so it takes no room under the box.
+   */
+  quietReason?: boolean;
   autoFocus?: boolean;
   /** The textarea, for a caller that focuses it (a suggestion chip). */
   inputRef?: RefObject<HTMLTextAreaElement | null>;
@@ -128,7 +134,7 @@ export function Composer({
 
   const describedBy = reason === null ? undefined : reasonId;
   const reasonLine = reason !== null && (
-    <p id={reasonId} className={cx(COMPOSER_REASON, "animate-fade-in motion-reduce:animate-none")}>
+    <p id={reasonId} className={quietReason ? "sr-only" : cx(COMPOSER_REASON, "animate-fade-in motion-reduce:animate-none")}>
       {reason}
     </p>
   );

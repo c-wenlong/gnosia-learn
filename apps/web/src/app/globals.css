@@ -634,6 +634,111 @@ body {
   animation: studio-breathe 2s ease-in-out infinite;
 }
 
+/* The studio home's glow: three soft fields of the brand's teal, gold and
+   mist drifting behind "What shall we make?", Lovable's moving wash in
+   Gnosia's colours. Each field is a radial gradient that fades to nothing at
+   its own edge, so no blur filter is needed and only `transform` animates,
+   which the compositor does alone. The brand tokens flip with `.dark`, so
+   both appearances get their own strength from one set of rules. */
+.studio-glow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.studio-glow > span {
+  position: absolute;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+}
+
+.studio-glow-teal {
+  left: -12%;
+  bottom: -24%;
+  width: min(70%, 62rem);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-teal) 38%, transparent), transparent);
+}
+
+.studio-glow-gold {
+  right: -14%;
+  bottom: -28%;
+  width: min(64%, 56rem);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-gold-soft) 62%, transparent), transparent);
+}
+
+.studio-glow-mist {
+  left: 28%;
+  top: -22%;
+  width: min(46%, 40rem);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-mist) 22%, transparent), transparent);
+}
+
+.dark .studio-glow-teal {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-teal) 55%, transparent), transparent);
+}
+
+.dark .studio-glow-gold {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-gold) 34%, transparent), transparent);
+}
+
+.dark .studio-glow-mist {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-mist) 26%, transparent), transparent);
+}
+
+@keyframes studio-glow-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(14%, -10%) scale(1.12);
+  }
+  66% {
+    transform: translate(4%, 6%) scale(0.94);
+  }
+}
+
+@keyframes studio-glow-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  40% {
+    transform: translate(-12%, -8%) scale(1.08);
+  }
+  70% {
+    transform: translate(-4%, 8%) scale(0.92);
+  }
+}
+
+@keyframes studio-glow-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-10%, 14%) scale(1.15);
+  }
+}
+
+/* Slow on purpose, and each field on its own period, so the three never line
+   up into a visible loop. */
+@media (prefers-reduced-motion: no-preference) {
+  .studio-glow > span {
+    will-change: transform;
+  }
+  .studio-glow-teal {
+    animation: studio-glow-a 26s ease-in-out infinite;
+  }
+  .studio-glow-gold {
+    animation: studio-glow-b 32s ease-in-out infinite;
+  }
+  .studio-glow-mist {
+    animation: studio-glow-c 22s ease-in-out infinite;
+  }
+}
+
 /* Less movement asked for: the light stops crossing, a new picture replaces
    the old one at once, and the dot holds still. The words and the elapsed
    time still say the job is running. */
@@ -832,8 +937,14 @@ body {
 :root[data-motion="reduce"] .gnosia-rise,
 :root[data-motion="reduce"] .studio-shimmer::after,
 :root[data-motion="reduce"] .studio-fade-in,
-:root[data-motion="reduce"] .studio-breathe {
+:root[data-motion="reduce"] .studio-breathe,
+:root[data-motion="reduce"] .studio-glow > span {
   animation: none;
+}
+
+/* A still field needs no layer of its own. */
+:root[data-motion="reduce"] .studio-glow > span {
+  will-change: auto;
 }
 
 :root[data-motion="reduce"] .animate-\[studio-slide_1\.6s_ease-in-out_infinite\] {
