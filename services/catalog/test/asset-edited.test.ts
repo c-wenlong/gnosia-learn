@@ -146,7 +146,14 @@ describe.skipIf(!reachable.ok)("listAssets editedAt", () => {
     await writeAssetName(scratch.db, NOTE, "Translation lookaside buffer", LOCAL_LEARNER_ID);
     const [named] = await scratch.db.select({ at: assetName.updatedAt }).from(assetName);
     expect(await editedAt(NOTE)).toBe(named!.at.toISOString());
-    await write(note("The TLB, as the files say"), "import");
+    const imported = await write(note("The TLB, as the files say"), "import");
+    expect(await editedAt(NOTE)).toBeNull();
+
+    // A rename in the same instant as the import loses the tie: the import
+    // still cancels it.
+    await writeAssetName(scratch.db, NOTE, "TLB", LOCAL_LEARNER_ID);
+    expect(await editedAt(NOTE)).not.toBeNull();
+    await scratch.db.update(assetName).set({ updatedAt: new Date(imported) });
     expect(await editedAt(NOTE)).toBeNull();
   });
 

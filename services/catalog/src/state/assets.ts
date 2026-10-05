@@ -170,7 +170,11 @@ export async function revisionsExist(db: CatalogDatabase): Promise<boolean> {
  *   revisions never count.
  * - A rename is the reader's own `asset_name` row, not a revision, so its
  *   `updated_at` is a person's change too, and the later of it and the last
- *   revision decides.
+ *   revision decides. Both are stamped by the database's clock, and a tie
+ *   goes to the revision (`person` false sorts first), so an import in the
+ *   same instant as a rename still cancels it. Clearing a name deletes the
+ *   row, so a cleared name leaves no trace here: the asset reads as its
+ *   last revision says.
  *
  * Revisions are keyed by the asset's id, which is global (D23), and only an
  * asset the reader may read reaches this, so it widens nothing.
@@ -192,7 +196,7 @@ function editedAtColumn(learnerId: string, names: boolean): SQL<Date | string | 
        limit 1)
       ${renamed}
     ) x
-    order by x.at desc
+    order by x.at desc, x.person
     limit 1
   )`;
 }
