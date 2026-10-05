@@ -6,7 +6,7 @@ import type { VideoChapter } from "@/components/media";
 import { readAssetText, readFileProblems, withCatalog } from "@/lib/asset-library";
 import { storedPosters } from "@/lib/asset-files";
 import { problemSource, type RouteProblemCode } from "@/lib/asset-problems";
-import { assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
+import { assetDownloadHref, assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
 import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/transcript";
 
@@ -32,8 +32,12 @@ export interface AssetBodyData {
   statusHref: string;
   /** What a failure names as the way back: a studio video is made again, not uploaded. */
   failureSource: string;
-  /** What Download saves the file as: its own name, as the file route's `Content-Disposition` gives it. */
-  downloadName: string | undefined;
+  /**
+   * What Download fetches: the file route's `?download=1`, which names the
+   * saved file after the asset's title, the same route the row menu's
+   * Download takes, so the file has one name wherever it was pressed.
+   */
+  downloadHref: string;
   /** Why the file cannot be served, or null when it can (or is a link, which has no file). */
   fileProblem: RouteProblemCode | null;
   servable: boolean;
@@ -114,7 +118,7 @@ export async function loadAssetBody(asset: AssetRef, derived: readonly AssetRef[
     fileHref,
     statusHref: assetStatusHref(asset.id),
     failureSource: problemSource(asset.id, asset.sourceRepo) ?? asset.sourceRepo,
-    downloadName: asset.path?.split("/").filter(Boolean).pop(),
+    downloadHref: assetDownloadHref(asset.id),
     fileProblem,
     servable,
     sidecars,
