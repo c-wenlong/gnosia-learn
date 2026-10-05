@@ -1,3 +1,4 @@
+import { StudioTime } from "@/components/studio/StudioZone";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { PanelLink, SelectableFrame } from "@/components/studio/PanelLink";
@@ -11,7 +12,6 @@ import {
   canvasHref,
   displayTitle,
   formatBytes,
-  relativeTime,
   thumbnailHref,
   type Diagram,
 } from "@/lib/studio-view";
@@ -72,7 +72,7 @@ export function DiagramTile({
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             {untopiced ? <Badge tone="warn">No topic</Badge> : <Badge>{diagram.topic}</Badge>}
             <span className="text-xs text-text2">
-              {relativeTime(diagram.tldr.modified)}
+              <StudioTime at={diagram.tldr.modified} />
             </span>
           </div>
           {showConcepts && diagram.concepts.length > 0 && (
@@ -239,7 +239,7 @@ export function DiagramRow({
         {formatBytes(diagram.svg.bytes) ?? `${diagram.shapes} shapes`}
       </span>
       <span className="w-24 shrink-0 text-right text-text2">
-        {relativeTime(diagram.tldr.modified)}
+        <StudioTime at={diagram.tldr.modified} />
       </span>
     </SelectableFrame>
   );
