@@ -1,3 +1,4 @@
+import type { TopicsReport } from "./video-tool";
 import type {
   IndexSource,
   NewAsset,
@@ -222,6 +223,12 @@ export interface SourceResult extends SourceNotes {
    * the entries already stored, rather than replacing anything.
    */
   logs?: ImportedLog[];
+  /**
+   * A video tool's `topics --json` report, as the read saw it. The runner
+   * hands it to the poster step after the rows are written, so the posters
+   * are cut from the same files the rows were hashed from.
+   */
+  report?: TopicsReport;
 }
 
 /**

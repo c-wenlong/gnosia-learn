@@ -1697,6 +1697,20 @@ departs from the plan:
   re-render lands under its own key in the same import. `catalog asset upload`
   then only makes posters. Before 0013 nothing changes: rows first, then the
   upload, which is flip day's order.
+- **The import makes the posters too (2026-10-05).** Leaving them to a
+  separate `catalog asset upload` meant every new render, from any of the
+  three video tools, showed a placeholder until someone ran it, and the owner
+  ran that backfill by hand more than once. Under the contract, after each
+  video tool's rows land, the runner (`services/catalog/src/index/run.ts`)
+  calls `uploadAssets` with the report the import just read: videos and
+  sidecars answer `present` without being read again, and only a poster that
+  is missing, unhooked or cut from older bytes is cut, stored and written,
+  in one transaction with its row, as the upload has always done. A poster
+  row whose derivation a prune's cascade removed is linked again
+  (`linked`, not `made`). A video still without a stored poster at the end,
+  for want of ffmpeg or because the cut failed, fails the import naming it,
+  after every other row is written, and `catalog doctor` lists it. The
+  upload command stays, for a database the import has not run against since.
 - **The suites that test the upload itself** (`asset-upload`, `blob-owner`)
   run on a scratch database stopped at 0012, since that flow only exists
   before the contract; fixtures elsewhere that wrote a stored-kind row with a

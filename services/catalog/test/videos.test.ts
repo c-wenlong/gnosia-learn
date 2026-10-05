@@ -466,6 +466,22 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     expect((await scratch.db.select().from(video).where(eq(video.slug, slug))).length).toBe(0);
   });
 
+  it("refuses a cut the gate left no poster for, so an accepted video always has one", async () => {
+    // Every path that writes a video leaves a poster behind (2026-10-05):
+    // the studio's gate cuts it, and the accept stores it with the video or
+    // stores nothing.
+    const slug = "posterless-cut";
+    const { job: queued } = await jobReady(slug);
+    const dir = await candidate(slug);
+    await rm(path.join(dir, "poster.jpg"));
+    const copies = JSON.parse(await readFile(path.join(dir, "copies.json"), "utf8")) as { files: Record<string, unknown> };
+    delete copies.files["poster.jpg"];
+    await writeFile(path.join(dir, "copies.json"), JSON.stringify(copies));
+    await expect(put({ slug, dir, jobId: queued.id })).rejects.toThrow(/records no copy named poster\.jpg/);
+    expect(await jobState(queued.id)).toBe("awaiting_review");
+    expect((await scratch.db.select().from(video).where(eq(video.slug, slug))).length).toBe(0);
+  });
+
   it("rolls the rows and the accept back together when the write is refused", async () => {
     const slug = "stale-base";
     const { job: queued } = await jobReady(slug);
@@ -828,19 +844,25 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       state: "present",
       confirmedAt: new Date(),
     });
-    // An owner move done for the poster and not its video: the id still pairs them.
-    await scratch.db.insert(asset).values({
-      id: "poster:manimkc:out/demo/one/one.mp4",
-      kind: "poster",
-      sourceRepo: "self-learn",
-      blobKey: key,
-      contentHash: sha("their poster"),
-      bytes: 12,
-      ownerId: "other",
-    });
-    const render = (await listVideos(scratch.db, LOCAL)).find((v) => v.assetId === "manimkc:out/demo/one/one.mp4");
-    expect(render?.poster).toBeNull();
-    await scratch.db.delete(asset).where(eq(asset.id, "poster:manimkc:out/demo/one/one.mp4"));
+    // An owner move done for the poster and not its video: the id still
+    // pairs them. The import cut the render's poster (2026-10-05), so the
+    // move is made on that row and undone after.
+    const id = "poster:manimkc:out/demo/one/one.mp4";
+    const [own] = await scratch.db.select().from(asset).where(eq(asset.id, id));
+    expect(own?.ownerId).toBe("local");
+    await scratch.db
+      .update(asset)
+      .set({ ownerId: "other", blobKey: key, contentHash: sha("their poster"), bytes: 12 })
+      .where(eq(asset.id, id));
+    try {
+      const render = (await listVideos(scratch.db, LOCAL)).find((v) => v.assetId === "manimkc:out/demo/one/one.mp4");
+      expect(render?.poster).toBeNull();
+    } finally {
+      await scratch.db
+        .update(asset)
+        .set({ ownerId: own!.ownerId, blobKey: own!.blobKey, contentHash: own!.contentHash, bytes: own!.bytes })
+        .where(eq(asset.id, id));
+    }
   });
 
   it("counts a studio video's cut as referenced in the blob audit", async () => {
