@@ -1,0 +1,110 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { createElement, type ComponentProps } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+
+import { PANEL_TITLE } from "./classes";
+import { DialogHeader } from "./DialogHeader";
+
+/**
+ * The kit dialog's header: a 48px bar with a rule under it, the title in the
+ * panel role, the caller's actions, and the one Close the studio's focus
+ * logic recognises (`data-dialog-close`). Then the guard that fails a dialog
+ * header built by hand.
+ */
+
+const header = (props: Partial<ComponentProps<typeof DialogHeader>> = {}) =>
+  renderToStaticMarkup(createElement(DialogHeader, { title: "Settings", onClose: () => undefined, ...props }));
+
+const classesOf = (html: string) => (html.match(/class="([^"]*)"/)?.[1] ?? "").split(" ");
+
+describe("DialogHeader", () => {
+  it("names the dialog in an h2 in the panel title role, truncated to one line", () => {
+    const html = header();
+    const h2 = html.match(/<h2 class="([^"]*)">Settings<\/h2>/);
+    expect(h2).not.toBeNull();
+    const classes = h2![1].split(" ");
+    expect(classes).toEqual(expect.arrayContaining([...PANEL_TITLE.split(" "), "min-w-0", "flex-1", "truncate"]));
+  });
+
+  it("ends with the kit Close, marked for the focus logic", () => {
+    const html = header();
+    expect(html).toMatch(/<button type="button" aria-label="Close" title="Close" class="[^"]*" data-dialog-close="">/);
+    // Close is the last thing in the row.
+    expect(html.lastIndexOf("<button")).toBe(html.indexOf("<button"));
+    expect(html.endsWith("</button></div>")).toBe(true);
+  });
+
+  it("draws the leading mark before the title and the actions between the title and Close", () => {
+    const html = header({
+      leading: createElement("span", { "data-leading": "" }),
+      actions: [createElement("a", { key: "raw", href: "/raw" }, "Raw file"), createElement("span", { key: "cost" }, "$0.12")],
+    });
+    const at = (needle: string) => html.indexOf(needle);
+    expect(at("data-leading")).toBeGreaterThan(-1);
+    expect(at("data-leading")).toBeLessThan(at("<h2"));
+    expect(at("<h2")).toBeLessThan(at("Raw file"));
+    expect(at("Raw file")).toBeLessThan(at("$0.12"));
+    expect(at("$0.12")).toBeLessThan(at("data-dialog-close"));
+  });
+
+  it("holds nothing but the title and Close when given nothing else", () => {
+    const html = header();
+    expect(html).toMatch(/^<div class="[^"]*"><h2 [^>]*>Settings<\/h2><button /);
+  });
+
+  it("is a 48px bar with a hairline under it, pinned over the body", () => {
+    const classes = classesOf(header());
+    expect(classes).toEqual(expect.arrayContaining(["flex", "shrink-0", "items-center", "border-b", "border-hair", "md:h-12"]));
+  });
+
+  it("clears the notch on a phone and keeps its 48px under it, and from 768px has no inset", () => {
+    const classes = classesOf(header());
+    expect(classes).toEqual(
+      expect.arrayContaining(["pt-[env(safe-area-inset-top)]", "h-[calc(3rem+env(safe-area-inset-top))]", "md:pt-0", "md:h-12"]),
+    );
+  });
+});
+
+describe("dialog headers", () => {
+  const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
+  const sources = (): Array<{ path: string; text: string }> => {
+    const found: Array<{ path: string; text: string }> = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) found.push({ path: relative(src, path), text: readFileSync(path, "utf8") });
+      }
+    };
+    walk(src);
+    return found;
+  };
+
+  it("marks a Close with data-dialog-close only in the kit's DialogHeader", () => {
+    // Written as a JSX attribute, a createElement prop or setAttribute; a
+    // reader (`hasAttribute`, a selector) is fine.
+    const writes = /data-dialog-close\s*=|["']data-dialog-close["']\s*:|setAttribute\(\s*["']data-dialog-close["']/;
+    const offenders = sources()
+      .filter(({ path, text }) => path !== "components/ui/DialogHeader.tsx" && writes.test(text))
+      .map(({ path }) => path);
+    expect(offenders).toEqual([]);
+  });
+
+  it("leaves no other Close drawn by hand inside a kit Dialog, but the two not moved yet", () => {
+    // A file that renders the kit `Dialog` and an `IconButton` named Close
+    // has built its own header. Two are left for a change of their own:
+    // Rename's and Ask's (RowMenu), whose card-titled header would move as
+    // it is, and the previewer's row of 28px tools (Previewer). Each must
+    // still be one, so the list only shrinks.
+    const pending = ["components/library/Previewer.tsx", "components/library/RowMenu.tsx"];
+    const offenders = sources()
+      .filter(({ text }) => /<Dialog\b/.test(text) && /<IconButton\b[^>]*label="Close"/.test(text))
+      .map(({ path }) => path)
+      .sort();
+    expect(offenders).toEqual(pending);
+  });
+});

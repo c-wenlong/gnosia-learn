@@ -90,9 +90,9 @@ export const CARD_TITLE = "font-sans text-[16px] leading-snug font-bold text-tex
 
 /**
  * The name in a 48px header bar with a hairline under it: the kit `Panel`'s
- * (NotebookLM's column header) and the studio dialog's. 14/600, quieter than
- * a card title, since the bar is chrome around the content rather than a
- * heading inside it.
+ * (NotebookLM's column header) and the kit `DialogHeader`'s. 14/600,
+ * quieter than a card title, since the bar is chrome around the content
+ * rather than a heading inside it.
  */
 export const PANEL_TITLE = "font-sans text-[14px] leading-5 font-semibold text-text";
 
