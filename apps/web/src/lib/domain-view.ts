@@ -144,15 +144,36 @@ const GLYPH_WIDTHS = [
   0.57, 0.24, 0.28, 0.5, 0.23, 0.86, 0.57, 0.58, 0.6, 0.59, 0.35, 0.47, 0.39, 0.57, 0.53, 0.8, 0.5, 0.54, 0.49, 0.39, 0.26, 0.39, 0.6, 0.64, 0.2,
 ];
 const GLYPH_EM = new Map([...GLYPH_CHARS].map((c, i) => [c, GLYPH_WIDTHS[i]]));
-/** A character the table has no width for (an accented or non-Latin letter): as wide as the wider capitals. */
+/** A character the table has no width for (an accented, Cyrillic or Greek letter): as wide as the wider capitals. */
 const GLYPH_UNKNOWN = 0.78;
+/**
+ * A character of a wide script, drawn a full em by the fallback font: Chinese,
+ * Japanese and Korean, the full-width forms and emoji, each measured at 1.0
+ * em in the built app at weights 500 and 700.
+ */
+const GLYPH_WIDE = 1;
+const WIDE: readonly [number, number][] = [
+  [0x1100, 0x115f], // Hangul jamo
+  [0x2e80, 0xa4cf], // CJK radicals, kana, ideographs, Yi
+  [0xac00, 0xd7a3], // Hangul syllables
+  [0xf900, 0xfaff], // CJK compatibility ideographs
+  [0xfe30, 0xfe4f], // CJK compatibility forms
+  [0xff00, 0xff60], // full-width forms
+  [0xffe0, 0xffe6],
+  [0x1f000, 0x1faff], // emoji and pictographs
+  [0x20000, 0x3fffd], // CJK extensions
+];
+const isWide = (c: string) => {
+  const code = c.codePointAt(0) ?? 0;
+  return WIDE.some(([lo, hi]) => code >= lo && code <= hi);
+};
 /** Bold against weight 500: 1.035 on average over the table, 1.094 at the 90th percentile. */
 const BOLD_EM = 1.1;
 
 /** How wide `line` is drawn, in ems of the label's size: the sum of its characters' widths. */
 export function textEm(line: string, bold = false): number {
   let em = 0;
-  for (const c of line) em += GLYPH_EM.get(c) ?? GLYPH_UNKNOWN;
+  for (const c of line) em += GLYPH_EM.get(c) ?? (isWide(c) ? GLYPH_WIDE : GLYPH_UNKNOWN);
   return bold ? em * BOLD_EM : em;
 }
 /** Half the box a dot keeps clear of other labels: its radius and half its stroke. */

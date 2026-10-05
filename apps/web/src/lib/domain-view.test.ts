@@ -331,6 +331,27 @@ describe("textEm (D10)", () => {
     expect(textEm("é")).toBeGreaterThanOrEqual(textEm("e"));
   });
 
+  // Review of #409: a letter of a wide script took the fallback width, short of the full em it is drawn at.
+  it("measures a Chinese, Japanese or Korean letter, a full-width form or an emoji as a full em", () => {
+    // Measured in the built app with canvas measureText, at 500 and 700: 1.0 em a character for each.
+    for (const c of ["\u6f22", "\u306e", "\ub3d9", "\uff21", "\u{1f4da}"]) {
+      expect(textEm(c), c).toBeGreaterThanOrEqual(1);
+      expect(textEm(c, true), c).toBeGreaterThanOrEqual(1);
+    }
+    // Accented Latin, Cyrillic and Greek letters keep the fallback, which already covers them (0.54 to 0.58 em).
+    expect(textEm("\u00e9")).toBeLessThan(1);
+    expect(textEm("\u0434")).toBeLessThan(1);
+  });
+
+  it("cuts a title in a wide script to fit, with the fallback no longer undercounting it", () => {
+    const title = "\u52d5\u7684\u8a08\u753b\u6cd5\u3068\u5206\u5272\u7d71\u6cbb\u6cd5";
+    const font = 31.4;
+    const room = 200;
+    const cut = fitTitle(title, font, room);
+    // Drawn at 1 em a character, the cut title still fits its room.
+    expect(([...cut].length - 1) * font + textEm("\u2026", true) * font).toBeLessThanOrEqual(room);
+  });
+
   it("culls two labels of wide letters that a flat allowance per letter would keep", () => {
     const wide = textEm("WWWWWWWW");
     const items: LabelItem[] = [

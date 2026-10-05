@@ -469,6 +469,29 @@ describe("domain graph label culling", () => {
     expect(host.querySelector('button[data-list-topic="graphs"]')?.textContent).toContain(longTopics[1].title);
   });
 
+  // Review of #409: a title in a wide script is drawn a full em a character, and must still fit its group.
+  it("cuts a title in a wide script so it fits its group drawn a full em a character", () => {
+    const wide: DomainTopic[] = [
+      { slug: "sorting", title: "\u6574\u5217\u3068\u6bd4\u8f03\u30bd\u30fc\u30c8\u306e\u4e0b\u754c", domain: "algorithms" },
+      { slug: "graphs", title: "\uadf8\ub798\ud504 \ud0d0\uc0c9\uacfc \ucd5c\ub2e8 \uacbd\ub85c", domain: "algorithms" },
+    ];
+    const wideLayout = domainLayout(nodes, edges, wide, "algorithms");
+    const { host, svg } = mount({ tree: domainTree(nodes, edges, wide), layouts: { algorithms: wideLayout } });
+    drawAt(svg, MIN_DRAW_SCALE, wideLayout);
+    for (const t of wide) {
+      const el = titleOf(host, t.slug);
+      const text = drawnTitle(el);
+      const rect = host.querySelector(`svg [data-group="${t.slug}"] rect`) as SVGRectElement;
+      const font = Number(el.getAttribute("font-size"));
+      // Every letter but a space a full em, as the fallback font draws them.
+      const drawn = [...text].reduce((w, c) => w + (c === " " ? 0.25 : c === "\u2026" ? 0.64 : 1), 0) * font;
+      expect(Number(el.getAttribute("x")) + drawn, `${t.slug}'s title runs past its group`).toBeLessThanOrEqual(
+        Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")),
+      );
+      expect(el.querySelector("title")?.textContent).toBe(t.title);
+    }
+  });
+
   it("keeps the hover plate inside the picture, as it does the labels", () => {
     const { host, svg } = mount();
     drawAt(svg, 0.15);
