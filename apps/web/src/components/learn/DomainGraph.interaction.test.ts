@@ -483,8 +483,9 @@ describe("domain graph label culling", () => {
       const text = drawnTitle(el);
       const rect = host.querySelector(`svg [data-group="${t.slug}"] rect`) as SVGRectElement;
       const font = Number(el.getAttribute("font-size"));
-      // Every letter but a space a full em, as the fallback font draws them.
-      const drawn = [...text].reduce((w, c) => w + (c === " " ? 0.25 : c === "\u2026" ? 0.64 : 1), 0) * font;
+      // As the browser draws it in bold: a wide letter is a full em at 700 as at 500 (measured), and the
+      // Figtree space and ellipsis take the table's bold allowance.
+      const drawn = [...text].reduce((w, c) => w + (c === " " ? 0.25 * 1.1 : c === "\u2026" ? 0.64 * 1.1 : 1), 0) * font;
       expect(Number(el.getAttribute("x")) + drawn, `${t.slug}'s title runs past its group`).toBeLessThanOrEqual(
         Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")),
       );
