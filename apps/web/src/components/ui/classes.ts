@@ -11,9 +11,22 @@
  * `globals.css`, never literals.
  */
 
-/** Join the truthy class names. */
+import { mergeClasses } from "./class-merge";
+
+/**
+ * Join the truthy class names, and where two set the same thing under the
+ * same variants, keep only the later one: a caller's `className` after a kit
+ * piece's base classes wins. Joining alone was not enough, because Tailwind v4
+ * orders the utilities of one property by value in the stylesheet, not by
+ * their place in the string, so of a Placeholder's `rounded-xl` and a cover's
+ * `rounded-none` the stylesheet's order decided, and the cover kept its
+ * corners. The merge is tailwind-merge told this app's theme
+ * (`class-merge.ts`), and it drops a class only when a later one sets the
+ * same property; a class it does not know is kept as it is. Results are
+ * cached, so a class list seen before costs a lookup.
+ */
 export function cx(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(" ");
+  return mergeClasses(...parts);
 }
 
 /**
@@ -597,9 +610,9 @@ const CARD_GAP: Record<CardGap, string> = { 0: "", 1.5: "gap-1.5", 2: "gap-2", 3
  * the rounded corners, for a card whose rows, header strip or picture run to
  * its edges (a table, a diagram on its mat) and pad themselves.
  *
- * The gap and padding are options rather than classes a caller adds, because
- * `cx` joins classes without merging them and Tailwind orders same-property
- * utilities by value: a `gap-2` beside the card's `gap-3` never applied.
+ * The gap is an option so the kit's spacings are named in one place. A
+ * caller's `gap-2` or `p-3` in `className` wins as well, since `cx` keeps
+ * the later of two classes that set the same thing.
  */
 export function cardClasses({
   tight = false,
