@@ -123,6 +123,7 @@ function PlainFallback(props: MentionComposerProps<DraftKind>) {
         disabled={props.disabled}
         sendDisabled={props.sendDisabled}
         disabledReason={props.disabledReason}
+        quietReason={props.quietReason}
         onModEnter={props.onModEnter}
         inputRef={field}
         layout={props.layout}
