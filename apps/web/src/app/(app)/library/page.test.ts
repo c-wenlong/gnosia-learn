@@ -446,6 +446,80 @@ describe("/library", () => {
     expect(paging.indexOf("CS2106 · Week 7")).toBeLessThan(paging.indexOf(">Paging<"));
   });
 
+  it("names on a card the concept its row, its menu and its topic heading name, in graph order, not slug order", async () => {
+    const snapshot = await loadLibrary();
+    // By slug, address translation comes first; in the graph it needs paging,
+    // so paging does. The catalog hands the slugs sorted by slug.
+    loadLibrary.mockResolvedValue({
+      ...snapshot,
+      concepts: { ...snapshot.concepts, "video:paging": ["address-translation", "paging"] },
+      parents: {
+        ...PARENTS,
+        "video:paging": { ...PARENTS["video:paging"], concepts: ["address-translation", "paging"] },
+      },
+    });
+    const { kb } = (await loadKnowledgeBase()) as { kb: { concepts: object[] } };
+    loadKnowledgeBase.mockResolvedValue({
+      reachable: true,
+      kb: {
+        concepts: [
+          ...kb.concepts,
+          {
+            id: "address-translation",
+            requires: ["paging"],
+            assumes: [],
+            topic: "operating-systems",
+            ...CONCEPT,
+            title: "Address translation",
+          },
+        ],
+      },
+    });
+
+    const grid = await render();
+    const card = grid.slice(grid.indexOf("Paging, step by step"));
+    expect(card.indexOf(">Paging<")).toBeGreaterThan(-1);
+    expect(card.slice(0, card.indexOf("</li>"))).not.toContain("Address translation");
+    expect(card.slice(0, card.indexOf("</li>"))).toContain("+1");
+
+    const list = await render({ view: "list" });
+    expect(list).toContain('title="Paging, step by step\nCS2106 · Week 7: Virtual memory · Paging +1"');
+    const menu = (rowMenu.mock.calls.map(([props]) => props) as { assetId: string; sections: { label: string; href?: string }[][] }[])
+      .find((props) => props.assetId === "video:paging")
+      ?.sections.flat()
+      .find((item) => item.label === "Open the concept");
+    expect(menu?.href).toBe("/learn/paging");
+
+    // Grouped by topic it sits under paging's topic, not address translation's.
+    const byTopic = await render({ group: "topic" });
+    expect(dayHeadings(byTopic)).toEqual(["Virtual memory (2)", "Operating systems (1)", "No topic (1)"]);
+  });
+
+  it("does not repeat a topic heading on the line of a row filed under it, in the list or the grid", async () => {
+    // The link explains no concept and sits in no course: grouped by topic it
+    // is under Operating systems, so that name is the heading's alone.
+    for (const view of ["list", "grid"]) {
+      const html = await render({ group: "topic", view });
+      const section = html.slice(html.indexOf('id="group-topic-operating-systems"'));
+      const ostep = section.slice(0, section.indexOf("</section>"));
+      expect(ostep).toContain("OSTEP");
+      expect(ostep.split("Operating systems").length - 1).toBe(1);
+    }
+    // Grouped by day the same row still names its topic.
+    const byDay = await render({ view: "list" });
+    expect(byDay).toContain('title="OSTEP\nOperating systems"');
+  });
+
+  it("leaves the place to the heading in a row grouped by course, and names its concept", async () => {
+    const html = await render({ group: "course", view: "list" });
+    const paging = html.slice(html.indexOf("Paging, step by step</a>"));
+    const line = paging.slice(0, paging.indexOf("</li>"));
+    expect(line).toContain(">Paging<");
+    expect(line).not.toContain("CS2106");
+    expect(line).not.toContain("Week 7");
+    expect(html).toContain('title="Paging, step by step\nPaging"');
+  });
+
   it("falls back to the day for a grouping it does not know", async () => {
     const html = await render({ group: "domain" });
     expect(dayHeadings(html)).toEqual(["3 Oct (1)", "29 Sept (2)", "1 Sept (1)"]);

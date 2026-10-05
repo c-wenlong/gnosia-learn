@@ -188,9 +188,15 @@ export function RowMenu({
     <span
       ref={root}
       className={cx("relative inline-flex shrink-0 items-center", className)}
-      // The dialog is inside the row too: a press or a key in it is not the row's.
+      // The dialog is inside the row too: a press in it is not the row's.
       onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => event.stopPropagation()}
+      // Only the keys the menu acts on, though (`rowMenuOwnsKey`): React's
+      // stop is the native event's too, and the shell's shortcuts and the
+      // phone drawer's Escape listen on the window.
+      onKeyDown={(event) => {
+        const inList = event.target instanceof Element && event.target.closest('[role="menu"]') !== null;
+        if (rowMenuOwnsKey(event, inList)) event.stopPropagation();
+      }}
     >
       <span
         role="status"
@@ -243,12 +249,32 @@ export function RowMenu({
       </RowDialog>
       {asked !== null && (
         <RowDialog open={dialog === "ask"} label={`Ask about ${title}`} size="default" keep button={moreButton} onClose={closeDialog}>
-          <AskPanel assetId={assetId} subject={asked} />
+          <AskPanel assetId={assetId} subject={asked} open={dialog === "ask"} />
         </RowDialog>
       )}
     </span>
   );
 }
+
+/**
+ * Whether a key press in the row's menu (its button, its list or a dialog it
+ * opened) is the menu's own, kept from the row and the card around it, which
+ * open their asset: Enter and Space press the button, an item or a dialog's
+ * control, the arrows, Home and End move, and, inside the open list, a letter
+ * finds an item. Any other key, or one held with Ctrl, Cmd or Alt, goes on
+ * to the window, where the shell's shortcuts listen (a field in a dialog is
+ * typing, which they leave alone). The kit `Menu`'s rule, for the row.
+ */
+export function rowMenuOwnsKey(
+  event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean },
+  inList: boolean,
+): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (ROW_MENU_KEYS.has(event.key)) return true;
+  return inList && event.key.length === 1;
+}
+
+const ROW_MENU_KEYS = new Set(["Enter", " ", "ArrowUp", "ArrowDown", "Home", "End"]);
 
 function MenuSection({ divider, children }: { divider: boolean; children: ReactNode }) {
   return (

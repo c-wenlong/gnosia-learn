@@ -1,7 +1,7 @@
 import type { AssetParents } from "@self-learn/catalog/state";
 
 import { moduleHref } from "@/lib/course-path";
-import { assetFileHref, assetHref, conceptHref } from "@/lib/library";
+import { assetDownloadHref, assetHref, conceptHref } from "@/lib/library";
 import { latestConversation, orderedConcepts, pickPlace } from "@/lib/library-source";
 import { conversationHref } from "@/lib/studio-view";
 
@@ -69,10 +69,7 @@ export function askSubjectOf(kind: string): AskSubject | null {
   return kind === "video" ? "video" : kind === "note" ? "note" : kind === "diagram_svg" ? "diagram" : null;
 }
 
-/** `?download=1` on the file route: the same bytes, saved under the asset's name rather than shown. */
-export function assetDownloadHref(id: string): string {
-  return `${assetFileHref(id)}?download=1`;
-}
+export { assetDownloadHref };
 
 /**
  * A conversation on `/studio`, open full screen: `/studio?draft=<id>`, the
