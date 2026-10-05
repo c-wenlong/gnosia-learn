@@ -19,6 +19,9 @@ import {
   MIN_DRAW_SCALE,
   movedKey,
   neighbours,
+  plateLeft,
+  titlePlate,
+  wrapTitle,
   readMoved,
   TITLE_INSET,
   TITLE_RESERVE,
@@ -422,6 +425,55 @@ describe("topic titles (D10)", () => {
 
   it("draws at least the ellipsis in a room too small for anything", () => {
     expect(fitTitle("Graphs", 30, 1)).toBe("\u2026");
+  });
+
+  it("pushes a hover plate inside the frame, and centres one wider than it", () => {
+    const frame = { x: -10, y: 0, width: 200, height: 100 };
+    expect(plateLeft(50, 60, frame)).toBe(50);
+    expect(plateLeft(-40, 60, frame)).toBe(-10);
+    expect(plateLeft(170, 60, frame)).toBe(130);
+    expect(plateLeft(0, 300, frame)).toBe(-60);
+  });
+
+  it("breaks a title into lines that fit and join back to the title", () => {
+    const title = "Instruction-level parallelism, overview and revision";
+    const font = 12.5;
+    for (const max of [60, 120, 200, 2000]) {
+      const lines = wrapTitle(title, font, max);
+      expect(lines.join("")).toBe(title);
+      for (const l of lines) expect(textEm(l.trimEnd(), true) * font).toBeLessThanOrEqual(max);
+    }
+    expect(wrapTitle(title, font, 2000)).toEqual([title]);
+    // A word wider than a line alone is broken by letters.
+    const long = wrapTitle("Antidisestablishmentarianism", font, 60);
+    expect(long.length).toBeGreaterThan(1);
+    expect(long.join("")).toBe("Antidisestablishmentarianism");
+  });
+
+  it("plates a cut title whole over its line, and a whole one not at all", () => {
+    const title = "Instruction-level parallelism, overview and revision";
+    const font = titleFont(MIN_DRAW_SCALE);
+    const group = groupBox([{ x: 0, y: 0 }], titleWidth(title), titleBand(font));
+    const frame = { x: -500, y: -60, width: 4000, height: 300 };
+    expect(titlePlate(group, title, LABEL_SIZE, frame)).toBeNull();
+    const narrow = groupBox([{ x: 0, y: 0 }], 40, titleBand(font));
+    const plate = titlePlate(narrow, title, font, frame);
+    expect(plate).not.toBeNull();
+    if (plate === null) return;
+    // One line, starting where the title does, over its whole height and as wide as the whole title.
+    expect(plate.lines).toEqual([title]);
+    expect(plate.textX).toBe(narrow.x + TITLE_INSET);
+    expect(plate.baseline).toBe(narrow.y + titleBaseline(font));
+    expect(plate.box.y).toBeLessThan(plate.baseline - font * 0.92);
+    expect(plate.box.y + plate.box.height).toBeGreaterThan(plate.baseline + font * 0.28);
+    expect(plate.box.width).toBeGreaterThanOrEqual(textEm(title, true) * font);
+    // In a frame narrower than the title it wraps, each line inside the frame.
+    const tight = { x: -500, y: -60, width: 300, height: 300 };
+    const wrapped = titlePlate(narrow, title, font, tight);
+    expect(wrapped?.lines.length).toBeGreaterThan(1);
+    expect(wrapped?.lines.join("")).toBe(title);
+    expect(wrapped?.box.x).toBeGreaterThanOrEqual(tight.x);
+    expect((wrapped?.box.x ?? 0) + (wrapped?.box.width ?? 0)).toBeLessThanOrEqual(tight.x + tight.width);
   });
 
   it("makes a group wide enough for its title at the layout size, wide letters included, so a title is cut only when it grows", () => {

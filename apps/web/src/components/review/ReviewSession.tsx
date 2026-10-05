@@ -541,7 +541,7 @@ function AnswerPanel({
       ref={panelRef}
       tabIndex={-1}
       aria-label="Answer"
-      className="flex animate-enter flex-col gap-1 rounded-2xl bg-tint p-4 outline-none motion-reduce:animate-none md:gap-2.5 md:rounded-[20px] md:p-6"
+      className="flex animate-enter flex-col gap-1 rounded-2xl bg-tint p-4 outline-none motion-reduce:animate-none md:gap-2 md:rounded-[20px] md:p-6"
     >
       <Eyebrow>Answer</Eyebrow>
       <p className="text-[15px] leading-[1.45] text-text md:text-[17px] md:leading-[26px]">

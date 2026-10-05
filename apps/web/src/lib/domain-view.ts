@@ -390,6 +390,68 @@ export function titleBox(group: Box, title: string, font: number): Box {
   return { x: group.x + TITLE_INSET, y: group.y + TITLE_TOP, width: textEm(text, true) * font, height: titleBand(font) - TITLE_TOP };
 }
 
+/**
+ * Where a hover plate starts so that it stays inside `frame` (D10): at `left`
+ * when that fits, else pushed in; one wider than the frame is centred on it.
+ */
+export function plateLeft(left: number, width: number, frame: Box): number {
+  if (width >= frame.width) return frame.x + (frame.width - width) / 2;
+  return Math.max(frame.x, Math.min(left, frame.x + frame.width - width));
+}
+
+/** The room either side of the text on a hover plate. */
+export const PLATE_PAD = 10;
+
+/**
+ * A title broken into lines no wider than `max` layout units at size `font`:
+ * at spaces where it can, inside a word that is wider alone. A line broken at
+ * a space keeps it at its end, so the lines joined are the title exactly.
+ */
+export function wrapTitle(title: string, font: number, max: number): string[] {
+  const fits = (text: string) => textEm(text.trimEnd(), true) * font <= max;
+  const lines: string[] = [];
+  let line = "";
+  for (const word of title.match(/\S+\s*|\s+/g) ?? [title]) {
+    if (fits(line + word)) {
+      line += word;
+      continue;
+    }
+    if (line !== "") lines.push(line);
+    line = "";
+    let rest = word;
+    // A word wider than a line on its own is broken by letters.
+    while (!fits(rest)) {
+      const chars = [...rest];
+      let n = chars.length - 1;
+      while (n > 1 && !fits(chars.slice(0, n).join(""))) n--;
+      lines.push(chars.slice(0, n).join(""));
+      rest = chars.slice(n).join("");
+    }
+    line = rest;
+  }
+  if (line !== "") lines.push(line);
+  return lines.length > 0 ? lines : [title];
+}
+
+/**
+ * The plate that shows a cut topic title whole (D10): `null` when the title
+ * fits `group` and is drawn whole, else a box over the title's line at size
+ * `font`, kept inside `frame`, with where its text starts, the title's own
+ * baseline and the lines of text. A title wider than the frame wraps onto
+ * further lines, downward over the group's concepts, so none runs past it.
+ */
+export function titlePlate(group: Box, title: string, font: number, frame: Box) {
+  if (fitTitle(title, font, titleRoom(group)) === title) return null;
+  const lines = wrapTitle(title, font, Math.max(font, frame.width - 2 * PLATE_PAD));
+  const width = Math.ceil(Math.max(...lines.map((l) => textEm(l.trimEnd(), true))) * font + 2 * PLATE_PAD);
+  const baseline = group.y + titleBaseline(font);
+  const x = plateLeft(group.x + TITLE_INSET - PLATE_PAD, width, frame);
+  const top = baseline - (font * 23) / 25 - 4;
+  const step = labelLine(font);
+  const height = (font * 30) / 25 + 8 + (lines.length - 1) * step;
+  return { box: { x, y: top, width, height } as Box, textX: x + PLATE_PAD, baseline, lines, step };
+}
+
 /** From one line of a label to the next, at size `font`. */
 export const labelLine = (font: number) => (font * 28) / 25;
 /** From a dot's centre to the baseline of a label's line `k`, at size `font`. */

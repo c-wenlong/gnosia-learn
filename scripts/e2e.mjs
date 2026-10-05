@@ -1040,6 +1040,60 @@ async function run() {
     }
   });
 
+  // D10: a title cut short shows whole on a plate over it while the pointer rests there, and the plate goes
+  // when the pointer leaves; the title's group still lights.
+  await step('learn: a cut topic title shows whole on a plate on hover', page, async () => {
+    try {
+      // A seed domain is one topic with a group wide enough that its title fits on most phones; the narrowest
+      // (320px) draws the picture small enough that the title outgrows it.
+      await page.setViewportSize({ width: 320, height: 640 });
+      await go('/learn?domain=machine-learning');
+      const graph = main.locator('svg[data-domain-graph]');
+      await hydrated(page, graph.locator('[data-topic-title]').first());
+      // The title's size follows the scale measured after hydration: wait for it to settle.
+      await page.waitForFunction(() => {
+        const svg = document.querySelector('svg[data-domain-graph]');
+        const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+        return [...svg.querySelectorAll('[data-topic-title]')].every((t) => Number(t.getAttribute('font-size')) * scale >= 10.9);
+      });
+      const titles = await graph.evaluate((svg) =>
+        [...svg.querySelectorAll('[data-topic-title]')].map((t) => ({
+          topic: t.getAttribute('data-topic-title'),
+          whole: t.querySelector('title')?.textContent ?? '',
+          drawn: [...t.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join(''),
+        })),
+      );
+      const cut = titles.find((t) => t.drawn !== t.whole);
+      const whole = titles.find((t) => t.drawn === t.whole);
+      assert(cut !== undefined, `no title is cut at 320px: ${JSON.stringify(titles.map((t) => t.drawn))}`);
+      const plate = graph.locator('[data-title-plate]');
+      assert((await plate.count()) === 0, 'a plate shows with nothing hovered');
+      if (whole !== undefined) {
+        await graph.locator(`[data-topic-title="${whole.topic}"]`).hover();
+        assert((await plate.count()) === 0, `a plate shows over "${whole.whole}", which is not cut`);
+      }
+      await graph.locator(`[data-topic-title="${cut.topic}"]`).hover();
+      await plate.waitFor();
+      assert((await plate.getAttribute('data-shown')) === 'true', 'the plate is not shown');
+      assert((await plate.locator('text').textContent()) === cut.whole, `the plate reads "${await plate.locator('text').textContent()}", not "${cut.whole}"`);
+      const inside = await graph.evaluate((svg) => {
+        const rect = svg.querySelector('[data-title-plate] rect').getBoundingClientRect();
+        const frame = svg.getBoundingClientRect();
+        return rect.left >= frame.left - 0.5 && rect.right <= frame.right + 0.5;
+      });
+      assert(inside, `the plate runs outside the picture`);
+      const group = graph.locator(`[data-group="${cut.topic}"] rect`);
+      assert(/stroke-accent/.test((await group.getAttribute('class')) ?? ''), `${cut.topic}'s group is not lit`);
+      await page.mouse.move(2, 2);
+      await page.waitForFunction(() => {
+        const p = document.querySelector('[data-title-plate]');
+        return p === null || p.dataset.shown === 'false';
+      });
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   await step('workspace: Open in the map lands on the concept in its domain', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go(`/learn/${state.concept}`);
