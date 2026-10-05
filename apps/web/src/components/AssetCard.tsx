@@ -178,6 +178,9 @@ export function AssetCard({
             // reloaded the whole document and flashed white between pages.
             <Link
               href={href}
+              // Off (L9): a press opens the previewer, and a grid of many
+              // cards would prefetch each page it scrolls past.
+              prefetch={false}
               className={cx(
                 "outline-none after:absolute after:-inset-[2px] after:rounded-[20px] after:content-['']",
                 "focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent",
