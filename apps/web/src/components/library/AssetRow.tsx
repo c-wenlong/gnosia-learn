@@ -7,6 +7,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { cx } from "@/components/ui/classes";
 import type { RowSource } from "@/lib/library-source";
+import { masteryCaption } from "@/lib/mastery-bucket";
 import type { RowMenuSections } from "@/lib/row-menu";
 
 /**
@@ -74,6 +75,9 @@ export function AssetRow({
 
   const line =
     sourceLine(source, name.text) ?? (topic === undefined ? null : <span className="min-w-0 truncate">{topic}</span>);
+  // Both lines truncate, and the title's stretched link covers the row, so
+  // the link's tooltip carries the whole of each.
+  const tooltip = [name.text, sourceText(source, name.text) ?? topic].filter((t) => t !== undefined && t !== "").join("\n");
 
   return (
     <div
@@ -96,6 +100,7 @@ export function AssetRow({
           {/* `next/link`: an in-app navigation, not a reload of the whole document. */}
           <Link
             href={href}
+            title={tooltip}
             className={cx(
               "block truncate text-[14px] leading-5 outline-none",
               nameClass,
@@ -124,6 +129,25 @@ export function AssetRow({
 }
 
 /**
+ * The source line as plain text, for the row's tooltip; undefined when there
+ * is none. A concept named as the row's title is its mastery, as the line
+ * prints it, and the "+N" follows either way.
+ */
+export function sourceText(source: RowSource | null, title: string): string | undefined {
+  if (source === null) return undefined;
+  if (source.origin !== undefined) return source.origin.title;
+  const concept = source.concept;
+  let conceptText: string | undefined;
+  if (concept !== undefined) {
+    const isTitle = concept.title.trim().toLowerCase() === title.trim().toLowerCase();
+    conceptText = isTitle ? masteryCaption(concept.bucket) : concept.title;
+    if (concept.more > 0) conceptText += ` +${concept.more}`;
+  }
+  const parts = [source.place, conceptText].filter((t): t is string => t !== undefined);
+  return parts.length === 0 ? undefined : parts.join(" · ");
+}
+
+/**
  * The source line's content: "CS3230 · Week 3 · ● Master theorem", the
  * concept alone with its dot, or a conversation's or session's title. A note
  * explains its own concept, so a concept named exactly as the row's title is
@@ -147,7 +171,8 @@ function sourceLine(source: RowSource | null, title: string): ReactNode | null {
     concept !== undefined && concept.title.trim().toLowerCase() === title.trim().toLowerCase();
   return (
     <>
-      {/* The place stays whole and the concept gives way, up to 60% of the line. */}
+      {/* The place keeps up to 60% of the line and the concept gives way first;
+          past that the module title ends in an ellipsis, and the tooltip has it whole. */}
       {source.place !== undefined && <span className="max-w-[60%] shrink-0 truncate">{source.place}</span>}
       {source.place !== undefined && concept !== undefined && (
         <span aria-hidden className="shrink-0">
