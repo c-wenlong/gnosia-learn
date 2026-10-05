@@ -2,6 +2,7 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { libraryTabs } from "@/lib/library";
@@ -147,7 +148,7 @@ describe("LibraryToolbar's type row", () => {
   });
 
   it("stays the kit's control: no hand-built strip of links comes back", () => {
-    const source = readFileSync(new URL("./LibraryToolbar.tsx", import.meta.url), "utf8");
+    const source = readFileSync(join(process.cwd(), "apps/web/src/components/library/LibraryToolbar.tsx"), "utf8");
     expect(source).toContain('mode="links"');
     expect(source).not.toMatch(/<nav\b/);
     // The old strip drew its own current style and its own bold-copy width trick.
