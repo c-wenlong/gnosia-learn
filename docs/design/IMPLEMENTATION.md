@@ -371,6 +371,28 @@ account menu and full size on Settings. Changing one axis keeps the other. A
 component never branches on the class: it reads tokens, and the palettes are
 in `globals.css` (`:root`, `.dark`, `.gnosia`, `.gnosia.dark`).
 
+**Keyboard shortcuts live in one table (2026-10-05, after Manus).** Manus
+binds Cmd+. to fold its sidebar, Cmd+K to search and Cmd+Shift+O for a new
+task, and lists them in its Settings, Shortcuts pane
+([its capture](reference/manus/screenshots/settings-light-shortcuts.png)).
+The shell does the same from `SHORTCUTS` in
+[`apps/web/src/lib/shortcuts.ts`](../../apps/web/src/lib/shortcuts.ts): each
+row has an id, a label, its keys as a platform-neutral descriptor (`mod` is
+Command on a Mac and Control elsewhere, drawn as ⌘ or Ctrl), and the action
+it runs. `AppSidebar` binds the rows with an action through
+`useShellShortcuts` (`components/shell/use-shortcuts.ts`): Cmd+. folds or
+unfolds the sidebar (on a phone, opens or closes the drawer), Cmd+K focuses
+the search (sliding the rail out, or opening the drawer, first), Cmd+Shift+O
+presses the sidebar's New chat (only with a studio), and "?" or Cmd+/ opens
+the shortcuts sheet, a kit `Dialog`. None fires with focus in a field, a
+select or an editable region such as the Lexical composer, except Cmd+K, as
+in Manus, and none while a modal dialog is open. Keys other parts already
+handle (Escape in menus, dialogs and the drawer, the arrows in menus and the
+Library's previewer) are rows with no action: listed, never rebound. The
+sheet and Settings' Shortcuts card (General tab) both draw the table through
+`ShortcutList`, so what is listed is what is bound. The card is read only;
+Manus lets a key be rebound, and nobody here has asked for that.
+
 **A page picks its layout with `data-layout` on its root element.** The
 shell reads it with `has-*`, so no prop or context crosses the server and
 client boundary.

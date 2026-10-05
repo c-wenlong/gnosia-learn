@@ -9,7 +9,9 @@ import { GnosiaWordmark } from "@/components/brand";
 import { useHistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
+import { DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { IconButton } from "@/components/ui/IconButton";
+import { usePresence } from "@/components/ui/use-presence";
 import { rememberFocus } from "@/lib/focus";
 import { activeDestination, DESTINATIONS, STUDIO_DESTINATION } from "@/lib/nav";
 import { isPlainClick } from "@/lib/plain-click";
@@ -22,6 +24,8 @@ import { NavIcon } from "./NavIcon";
 import { ROW, rowFill } from "./rows";
 import { Sections } from "./Sections";
 import { useShell } from "./shell-context";
+import { ShortcutsSheet } from "./ShortcutsSheet";
+import { isPhoneWidth, useShellShortcuts } from "./use-shortcuts";
 
 /**
  * The app's one sidebar, laid out the way a chat app's is: the wordmark and
@@ -51,6 +55,13 @@ import { useShell } from "./shell-context";
  * by a pick, the backdrop, Escape or a navigation. While it is open focus
  * starts on its first item and Tab stays inside it (the page behind is inert,
  * `ShellFrame`), and closing it hands focus back to whatever opened it.
+ *
+ * It binds the shell's keyboard shortcuts (`SHORTCUTS` in `lib/shortcuts.ts`,
+ * after Manus's): Cmd+. folds or unfolds it (on a phone, opens or closes the
+ * drawer), Cmd+K focuses the search (sliding the rail out, or opening the
+ * drawer, first), Cmd+Shift+O presses New chat, and "?" or Cmd+/ opens the
+ * shortcuts sheet, closing the drawer first. On a focus page, where it is
+ * hidden, the first two leave the key to the browser.
  */
 export function AppSidebar() {
   const shell = useShell();
@@ -160,6 +171,49 @@ export function AppSidebar() {
     stopPeek();
     closeDrawer?.();
   };
+  /** The shortcuts sheet, kept mounted for its way out. */
+  const [sheet, setSheet] = useState(false);
+  const sheetPresence = usePresence(sheet, DIALOG_CLOSE_MS);
+  const openDrawer = shell?.openDrawer;
+  const setCollapsed = shell?.setCollapsed;
+  useShellShortcuts(
+    {
+      "toggle-sidebar": () => {
+        if (isPhoneWidth()) {
+          if (drawer) closeDrawer?.();
+          else openDrawer?.();
+          return;
+        }
+        if (focusPage()) return false;
+        if (peeking) {
+          // Slid out over the page, it goes back to the rail it came from,
+          // and focus in it goes to the fold, on the rail too, as Escape does.
+          const inside = room.current?.contains(document.activeElement) === true;
+          stopPeek();
+          if (inside) requestAnimationFrame(() => room.current?.querySelector<HTMLElement>("[data-fold]")?.focus());
+        } else setCollapsed?.(!collapsed);
+      },
+      search: () => {
+        if (isPhoneWidth()) {
+          // The drawer puts focus on its first item as it opens; the field takes it after.
+          if (!drawer) openDrawer?.();
+          requestAnimationFrame(() => searchField.current?.focus());
+          return;
+        }
+        if (focusPage()) return false;
+        if (rail) openSearch();
+        else searchField.current?.focus();
+      },
+      "new-chat": () => panel.current?.querySelector<HTMLElement>("[data-studio-new]")?.click(),
+      "show-shortcuts": () => {
+        // The drawer's Tab trap listens on the window and would pull focus
+        // out of the sheet, so the drawer closes first.
+        if (drawer) closeDrawer?.();
+        setSheet(true);
+      },
+    },
+    studio,
+  );
   const newChatOn = pathname === STUDIO_DESTINATION.href && shell?.chats?.active == null && shell?.chats?.pending == null;
 
   return (
@@ -341,8 +395,14 @@ export function AppSidebar() {
           </div>
         </nav>
       </div>
+      {sheetPresence.mounted && <ShortcutsSheet studio={studio} closing={sheetPresence.leaving} onClose={() => setSheet(false)} />}
     </>
   );
+}
+
+/** A `data-layout="focus"` page is on screen, where the sidebar is hidden from 768px up. */
+function focusPage(): boolean {
+  return document.querySelector('[data-layout="focus"]') !== null;
 }
 
 function item(on: boolean): string {

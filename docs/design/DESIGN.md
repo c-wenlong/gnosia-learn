@@ -193,6 +193,13 @@ rows with mastery), Mark watched, Add to note. Settings holds the habit
 controls the learner owns, the tutor style, and the BKT priors under an
 Advanced label.
 
+Keyboard shortcuts (2026-10-05, credited to Manus's Settings, Shortcuts
+pane): Cmd+. folds the sidebar, Cmd+K searches, Cmd+Shift+O starts a new
+chat, and "?" or Cmd+/ shows them all in a sheet. Settings lists the same
+table in a Shortcuts card on its General tab, keycaps drawn as ⌘ on a Mac
+and Ctrl elsewhere. The table is `apps/web/src/lib/shortcuts.ts`;
+IMPLEMENTATION.md, "The shell", has the rules.
+
 ## Components
 
 The lo-fi kit draws every screen from these pieces; the hi-fi pass and the
