@@ -1039,7 +1039,8 @@ async function run() {
             px: Number(text.getAttribute('font-size')) * scale,
             inside: box.left >= rect.left - 0.5 && box.right <= rect.right + 0.5 && box.top >= rect.top - 0.5 && box.bottom <= rect.bottom + 0.5,
             onDot: dots.some((d) => d.left < box.right && box.left < d.right && d.top < box.bottom && box.top < d.bottom),
-            whole: text.querySelector('title')?.textContent ?? '',
+            // The whole title is the list's topic button: the picture draws no SVG <title> (no browser tooltip).
+            whole: document.querySelector(`button[data-list-topic="${text.getAttribute('data-topic-title')}"]`)?.textContent?.trim() ?? '',
             drawn: [...text.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join(''),
           };
         });
@@ -1080,9 +1081,13 @@ async function run() {
       const titles = await graph.evaluate((svg) =>
         [...svg.querySelectorAll('[data-topic-title]')].map((t) => ({
           topic: t.getAttribute('data-topic-title'),
-          whole: t.querySelector('title')?.textContent ?? '',
+          whole: document.querySelector(`button[data-list-topic="${t.getAttribute('data-topic-title')}"]`)?.textContent?.trim() ?? '',
           drawn: [...t.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join(''),
         })),
+      );
+      assert(
+        (await graph.locator('title').count()) === 0,
+        'the picture draws an SVG <title>, so the browser adds its own grey tooltip over the plate',
       );
       const cut = titles.find((t) => t.drawn !== t.whole);
       const whole = titles.find((t) => t.drawn === t.whole);

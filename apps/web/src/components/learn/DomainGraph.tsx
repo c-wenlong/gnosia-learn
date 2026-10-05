@@ -374,8 +374,8 @@ export function DomainGraph({
                   onHoverTopic(null);
                 }}
               >
-                {/* The whole title, for a pointer resting on one cut short; the list beside the picture names it too. */}
-                <title>{g.title}</title>
+                {/* No SVG <title>: the browser's grey tooltip would sit over the plate that shows a cut
+                    title whole. The list beside the picture names the topic too. */}
                 {fitTitle(g.title, heading, titleRoom(box))}
               </text>
             </g>
@@ -721,7 +721,8 @@ function Concept({
       onMouseLeave={() => onHover(null)}
       onPointerDown={onPointerDown}
     >
-      <title>{caption}</title>
+      {/* The name is the aria-label alone: an SVG <title> would add the browser's own grey
+          tooltip on top of the hover plate. */}
       {/* The whole dot and label take a press, not only the painted strokes: the dot's row, and the
           label's own box when it is drawn, so a wide label never covers the dot beside it. */}
       <rect data-press="dot" x={x - NODE_HALF_WIDTH} y={y - 18} width={NODE_HALF_WIDTH * 2} height={36} fill="transparent" />
