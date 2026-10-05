@@ -144,7 +144,11 @@ describe.skipIf(!reachable.ok)("revideokc through catalog import", () => {
     expect(new Map(topics.map((t) => [t.assetId, t.topicSlug])).get(`revideokc:${SECOND}`)).toBe("agent-memory-and-state");
     expect(topics.filter((t) => t.topicSlug === "agent-tool-use-and-reasoning-loops")).toHaveLength(4);
     const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, `revideokc:${VIDEO}`));
-    expect(derived).toHaveLength(3);
+    // The three sidecars, and the poster the import cut (2026-10-05).
+    expect(derived.map((d) => d.assetId)).toContain(posterId(`revideokc:${VIDEO}`));
+    expect(derived).toHaveLength(4);
+    const secondPoster = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, `revideokc:${SECOND}`));
+    expect(secondPoster.map((d) => d.assetId)).toEqual([posterId(`revideokc:${SECOND}`)]);
   });
 
   it("records the run's data root, which is where out/… resolves, and the checkout it read", async () => {
@@ -153,7 +157,7 @@ describe.skipIf(!reachable.ok)("revideokc through catalog import", () => {
     expect(run?.sourceRoot).toBe(checkout);
   });
 
-  it("leaves asset upload --source revideokc only the posters to cut", async () => {
+  it("leaves asset upload --source revideokc nothing to do, posters included", async () => {
     const upload = () =>
       uploadAssets(scratch.db, { store: openBlobStore(), source: "revideokc", repoRoot: REPO_ROOT, ffmpeg });
     const first = await upload();
@@ -165,11 +169,12 @@ describe.skipIf(!reachable.ok)("revideokc through catalog import", () => {
       ["revideokc:out/agents/loops/loops.transcript.json", "present"],
       ["revideokc:out/agents/loops/loops.chapters.json", "present"],
       ["revideokc:out/agents/loops/loops.vtt", "present"],
-      [posterId(`revideokc:${VIDEO}`), "made"],
+      [posterId(`revideokc:${VIDEO}`), "present"],
       [`revideokc:${SECOND}`, "present"],
-      [posterId(`revideokc:${SECOND}`), "made"],
+      [posterId(`revideokc:${SECOND}`), "present"],
     ]);
-    // Idempotent: the second run finds everything where the first left it.
+    // The import cut both posters, so neither run writes a row.
+    expect(first.rowsWritten).toBe(0);
     expect((await upload()).rowsWritten).toBe(0);
   });
 

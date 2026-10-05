@@ -1226,6 +1226,26 @@ not have to be worked out again.
   `services/catalog/src/poster/recipe.ts`. The web app used to cut a poster
   per request as a fallback; since phase 2 it serves only the one the upload
   stored, and a video with none shows its placeholder.
+  Since 2026-10-05 every path that writes a video leaves a poster behind, so
+  the placeholder is a bug, not a step someone forgot. `catalog import` of
+  manimkc, remotionkc or revideokc runs the upload's own poster step
+  (`uploadAssets`, with the report the import just read) after each tool's
+  rows land, cutting a poster that is missing, unhooked or cut from older
+  bytes, and linking one a prune left behind; `catalog video put` stores the
+  gate's `poster.jpg` with the video or stores nothing. ffmpeg missing, or a
+  cut that fails, fails the import naming each video and why, after the rest
+  of the import is written; run it again once ffmpeg is there. `catalog
+  doctor` lists videos with no stored poster and posters derived from no
+  video. The cause of the last backfill: a prune deletes a video and the
+  foreign key cascades its poster's `asset_derivation` row away, while the
+  poster row (outside the tool's namespace) stays with a latest revision
+  that still records the link, so the write that restores the link used to
+  be rolled back as a no-op. `writeLocked` in
+  `services/catalog/src/content/write.ts` now keeps a write that brings
+  drifted rows back to the latest revision (`repaired`, no revision
+  appended). The suites run a stand-in ffmpeg (`FFMPEG_PATH`, set in
+  `vitest.setup.ts`); `test/poster-import.test.ts` runs the real one on a
+  real mp4 when it is on `PATH`.
 - **Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
   `scripts/learn` on purpose.** `apps/web/src/app` and
   `apps/web/src/components` are view code and untested by design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear

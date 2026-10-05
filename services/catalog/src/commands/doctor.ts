@@ -113,6 +113,20 @@ export interface DoctorResult {
     unstored: { id: string; kind: string }[];
     unkeyed: string[];
   };
+  /**
+   * Posters (2026-10-05). `videosWithout`: videos with no `poster` asset
+   * derived from them whose blob is present, which the Library draws as a
+   * grey placeholder. Every path that writes a video also cuts its poster
+   * (`catalog import`, `catalog video put`), so one listed here is a gap
+   * worth chasing: run `catalog import` again (or `catalog asset upload
+   * --source <tool>`), which cuts what is missing and links a poster a prune
+   * left behind. `unlinked`: poster rows derived from no video, the other
+   * half of that prune. Reported, never counted.
+   */
+  posters: {
+    videosWithout: { id: string; sourceRepo: string | null }[];
+    unlinked: string[];
+  };
   /** Write-seam guards (D4), armed per table by `catalog flip`. */
   writeGuards: Record<string, boolean | null>;
   /**
@@ -161,6 +175,7 @@ export async function doctor(
     conceptsWithoutTopic: [],
     conceptTopicRequired: false,
     blobContract: { inForce: false, unstored: [], unkeyed: [] },
+    posters: { videosWithout: [], unlinked: [] },
     writeGuards: {},
     links: { mixed: [], unreadable: [], restamped: [] },
     caps: ownerCapsOrError(),
@@ -250,6 +265,7 @@ export async function doctor(
   ).rows;
 
   const blobContract = { inForce: await blobContractInForce(db), ...(await blobContractDistance(db)) };
+  const posters = await posterGaps(db);
 
   const writeGuards: Record<string, boolean | null> = {};
   for (const table of WRITE_GUARDED_TABLES) {
@@ -300,6 +316,7 @@ export async function doctor(
     conceptsWithoutTopic: orphans.rows.map((row) => row.slug),
     conceptTopicRequired: topicColumn?.nullable === "NO",
     blobContract,
+    posters,
     writeGuards,
     caps: ownerCapsOrError(),
     links: { ...links, restamped },
@@ -309,6 +326,37 @@ export async function doctor(
     // A link to an unreadable row is reported and does not fail: the seam
     // carries one over on purpose, and removing it is a person's decision.
     ok: !contradicted && !missingGuard && links.mixed.length === 0,
+  };
+}
+
+/**
+ * The videos without a stored poster, and the posters without a video: the
+ * same join the web app's `videosWithStoredPoster` makes (a `poster` derived
+ * from the video, its blob `present`), across every owner, as the rest of
+ * this report is. A poster another owner holds is still a poster here: the
+ * question is whether one was ever cut, not who may read it.
+ */
+async function posterGaps(db: CatalogDatabase): Promise<DoctorResult["posters"]> {
+  const without = await db.execute<{ id: string; source_repo: string | null }>(sql`
+    select v.id, v.source_repo from asset v
+    where v.kind = 'video'
+      and not exists (
+        select 1 from asset_derivation d
+        join asset p on p.id = d.asset_id and p.kind = 'poster'
+        join blob_object b on b.key = p.blob_key and b.state = 'present'
+        where d.source_asset_id = v.id
+      )
+    order by v.id collate "C"
+  `);
+  const unlinked = await db.execute<{ id: string }>(sql`
+    select p.id from asset p
+    where p.kind = 'poster'
+      and not exists (select 1 from asset_derivation d where d.asset_id = p.id)
+    order by p.id collate "C"
+  `);
+  return {
+    videosWithout: without.rows.map((row) => ({ id: row.id, sourceRepo: row.source_repo })),
+    unlinked: unlinked.rows.map((row) => row.id),
   };
 }
 
@@ -463,6 +511,15 @@ export function formatDoctor(result: DoctorResult): string {
   for (const row of contract.unstored.slice(0, SAMPLE)) lines.push(`  ${row.id} (${row.kind})`);
   if (contract.unstored.length > SAMPLE) lines.push(`  and ${contract.unstored.length - SAMPLE} more (--json lists all)`);
   for (const key of contract.unkeyed.slice(0, SAMPLE)) lines.push(`  key ${key}`);
+  const posters = result.posters;
+  lines.push(
+    `videos with no poster: ${posters.videosWithout.length === 0 ? "none" : `${posters.videosWithout.length} (run catalog import again, or catalog asset upload --source <tool>; either cuts them)`}`,
+  );
+  for (const row of posters.videosWithout.slice(0, SAMPLE)) lines.push(`  ${row.id} (${row.sourceRepo ?? "no source"})`);
+  lines.push(
+    `posters derived from no video: ${posters.unlinked.length === 0 ? "none" : `${posters.unlinked.length} (the next import or upload of their video links them again)`}`,
+  );
+  for (const id of posters.unlinked.slice(0, SAMPLE)) lines.push(`  ${id}`);
   lines.push(`blob caps: ${formatCaps(result.caps)}`);
   const armed = Object.entries(result.writeGuards).filter(([, on]) => on === true).map(([t]) => t);
   const missing = Object.entries(result.writeGuards).filter(([, on]) => on === null).map(([t]) => t);
