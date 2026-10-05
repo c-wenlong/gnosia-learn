@@ -260,6 +260,8 @@ describe("/library", () => {
     expect(html).toContain(">Paging</span>");
     // The note explains itself, so its row says the mastery, not the title again.
     expect(html.replace(/ title="[^"]*"/g, "").split("The TLB").length - 1).toBe(1);
+    // Its tooltip says the mastery the line prints, not the title twice.
+    expect(html).toContain('title="The TLB\nLearning"');
     expect(html).toContain("Learning");
     // The session log names its session.
     expect(html).toContain("Teach session: the TLB");

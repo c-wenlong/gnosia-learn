@@ -7,6 +7,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { cx } from "@/components/ui/classes";
 import type { RowSource } from "@/lib/library-source";
+import { masteryCaption } from "@/lib/mastery-bucket";
 import type { RowMenuSections } from "@/lib/row-menu";
 
 /**
@@ -129,15 +130,19 @@ export function AssetRow({
 
 /**
  * The source line as plain text, for the row's tooltip; undefined when there
- * is none. A concept named as the row's title is left out, as the line
- * leaves it out.
+ * is none. A concept named as the row's title is its mastery, as the line
+ * prints it, and the "+N" follows either way.
  */
 export function sourceText(source: RowSource | null, title: string): string | undefined {
   if (source === null) return undefined;
   if (source.origin !== undefined) return source.origin.title;
   const concept = source.concept;
-  const named = concept !== undefined && concept.title.trim().toLowerCase() !== title.trim().toLowerCase();
-  const conceptText = !named ? undefined : concept.more > 0 ? `${concept.title} +${concept.more}` : concept.title;
+  let conceptText: string | undefined;
+  if (concept !== undefined) {
+    const isTitle = concept.title.trim().toLowerCase() === title.trim().toLowerCase();
+    conceptText = isTitle ? masteryCaption(concept.bucket) : concept.title;
+    if (concept.more > 0) conceptText += ` +${concept.more}`;
+  }
   const parts = [source.place, conceptText].filter((t): t is string => t !== undefined);
   return parts.length === 0 ? undefined : parts.join(" · ");
 }
