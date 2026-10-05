@@ -13,7 +13,7 @@ import { courseSlugsOf, placeOf } from "@/lib/concept-workspace";
 import { appTimeZone } from "@/lib/time-zone";
 import { loadKnowledgeBase } from "@/lib/kb/load";
 import type { KbConcept } from "@/lib/kb/types";
-import { dueLabel, lastSeenLabel, parseFilter, parseScope, parseView, type IndexRow } from "@/lib/learn-index";
+import { dueLabel, lastSeenLabel, parseFilter, parseLayout, parseScope, parseView, type IndexRow } from "@/lib/learn-index";
 import { bucketOf } from "@/lib/mastery-bucket";
 import type { Course } from "@/lib/types";
 
@@ -99,9 +99,10 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
   // the domain cards, or on the domain of the concept the URL names.
   const selected = known ? asked : view === "table" ? defaultSelection(kb.concepts, kb.frontier, now) : null;
   // Every domain is laid out here, on the server, so dagre never reaches the
-  // browser (D3), and remembered per graph, so a request whose graph has not
-  // changed does not pay for it again. The pictures together are a few
-  // kilobytes, and moving between domains then needs no round trip.
+  // browser (D3), in groups and on axes (D11), and remembered per graph, so
+  // a request whose graph has not changed does not pay for it again. The
+  // pictures together are a few kilobytes, and moving between domains or
+  // layouts then needs no round trip.
   const topicOf = new Map(kb.concepts.map((c) => [c.id, c.topic]));
   const domainNodes: DomainNode[] = rows.map((r) => ({
     id: r.id,
@@ -133,6 +134,7 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
           filter: parseFilter(first(params.filter)),
           domain: first(params.domain),
           topic: first(params.topic),
+          layout: parseLayout(first(params.layout)),
         }}
       />
     </div>
