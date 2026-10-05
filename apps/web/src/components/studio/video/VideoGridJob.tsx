@@ -1,5 +1,6 @@
 "use client";
 
+import { StudioTime } from "@/components/studio/StudioZone";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
@@ -38,7 +39,7 @@ import {
   type StudioVideo,
   type VideoTileStage,
 } from "@/lib/studio-video";
-import { conversationHref, gridHref, panelHref, relativeTime } from "@/lib/studio-view";
+import { conversationHref, gridHref, panelHref } from "@/lib/studio-view";
 
 /**
  * Studio videos in the grid, and a video job where its video is (docs/
@@ -90,7 +91,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
           <span className="line-clamp-2 text-sm font-medium">{title}</span>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             {video.topic !== null && <Badge>{video.topic}</Badge>}
-            {video.updated !== "" && <span className="text-xs text-text2">{relativeTime(video.updated)}</span>}
+            {video.updated !== "" && <span className="text-xs text-text2"><StudioTime at={video.updated} /></span>}
           </div>
         </div>
       </PanelLink>

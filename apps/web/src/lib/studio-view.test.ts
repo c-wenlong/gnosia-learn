@@ -281,7 +281,7 @@ describe("the words", () => {
     ["2026-09-11T12:00:00.000Z", "11 Sept"],
     ["2025-12-28T12:00:00.000Z", "28 Dec 2025"],
   ])("says %s is %s", (iso, expected) => {
-    expect(relativeTime(iso, now)).toBe(expected);
+    expect(relativeTime(iso, now, "UTC")).toBe(expected);
   });
 
   describe("calendar days in the app's zone", () => {

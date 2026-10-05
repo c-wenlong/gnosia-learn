@@ -706,7 +706,6 @@ export function groupDiagrams(
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
 
 /**
  * `4 minutes ago`, `Yesterday`, `3 Oct`. Coarse on purpose: the grid is scanned,

@@ -1,3 +1,4 @@
+import { StudioTime } from "@/components/studio/StudioZone";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
@@ -10,13 +11,10 @@ import { buttonClasses, cx } from "@/components/ui/classes";
 import { jobStateLabel } from "@/lib/studio-job-state";
 import {
   canvasHref,
-  dayAndTime,
-  dayText,
   displayTitle,
   formatBytes,
   freshness,
   panelHref,
-  relativeTime,
   thumbnailHref,
   type Diagram,
   type DiagramListing,
@@ -213,12 +211,12 @@ function SelectedDiagram({
         </MetaRow>
         <MetaRow label="Shapes">{diagram.shapes}</MetaRow>
         <MetaRow label="Created">
-          {dayText(diagram.created)}
+          <StudioTime at={diagram.created} as="day" />
         </MetaRow>
         <MetaRow label="Modified">
-          {relativeTime(diagram.tldr.modified)}
+          <StudioTime at={diagram.tldr.modified} />
           {diagram.tldr.modified !== null && (
-            <span className="block text-text2">{dayAndTime(diagram.tldr.modified)}</span>
+            <span className="block text-text2"><StudioTime at={diagram.tldr.modified} as="dayTime" /></span>
           )}
         </MetaRow>
         <MetaRow label="Source note">
@@ -233,7 +231,7 @@ function SelectedDiagram({
             <>
               <Mono>{diagram.svg.path}</Mono>
               <span className="block text-text2">
-                {formatBytes(diagram.svg.bytes)} · {relativeTime(diagram.svg.modified)}
+                {formatBytes(diagram.svg.bytes)} · <StudioTime at={diagram.svg.modified} />
                 {diagram.svgState === "stale" ? " · exported from an earlier version" : ""}
               </span>
             </>

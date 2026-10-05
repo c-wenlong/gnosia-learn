@@ -1,5 +1,6 @@
 "use client";
 
+import { StudioTime } from "@/components/studio/StudioZone";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
@@ -22,7 +23,7 @@ import {
   type MadeItem,
 } from "@/lib/conversation-made";
 import { scrollBehavior } from "@/lib/motion";
-import { extendFromHref, relativeTime } from "@/lib/studio-view";
+import { extendFromHref } from "@/lib/studio-view";
 
 /**
  * What a conversation made, in its thread (D89 of docs/STUDIO-CHAT-FIRST.md):
@@ -100,7 +101,7 @@ export function MadeCard({ item, path }: { item: MadeItem; path: string }) {
           </h3>
           <p className="mt-0.5 text-[12px] leading-4 text-text3">
             <time dateTime={item.madeAt} title={new Date(item.madeAt).toLocaleString()}>
-              {relativeTime(item.madeAt)}
+              <StudioTime at={item.madeAt} />
             </time>
           </p>
         </div>
@@ -185,7 +186,7 @@ function MadeRow({ item }: { item: MadeItem }) {
         </span>
         <KindBadge kind={kind} inline />
         <time dateTime={item.madeAt} className="shrink-0 text-[12px] text-text3">
-          {relativeTime(item.madeAt)}
+          <StudioTime at={item.madeAt} />
         </time>
       </Link>
     </li>
