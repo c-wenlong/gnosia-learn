@@ -70,7 +70,8 @@ export function ModuleMain({
   return (
     <Panel as="section" className={className}>
       {/* A new module's words fade in over the panel, which stays put. */}
-      <div className="flex animate-fade-in flex-col px-1 py-1 motion-reduce:animate-none sm:px-4 sm:py-2">
+      {/* The panel's own 16px is the inset: the reading gets the width. */}
+      <div className="flex animate-fade-in flex-col px-1 py-1 motion-reduce:animate-none">
         <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
           <div className="min-w-0 flex-1">
             <p className="text-[14px] leading-5 text-text2">
