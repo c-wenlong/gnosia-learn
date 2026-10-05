@@ -8,6 +8,7 @@ import type { DomainLayout } from "@/lib/domain-map";
 import {
   cullLabels,
   edgeEnds,
+  fitTitle,
   groupBox,
   labelBaseline,
   labelBox,
@@ -18,6 +19,12 @@ import {
   neighbours,
   NODE_HALF_WIDTH,
   textEm,
+  TITLE_INSET,
+  titleBand,
+  titleBaseline,
+  titleBox,
+  titleFont,
+  titleRoom,
   titleWidth,
   toLayoutPoint,
   viewBoxFor,
@@ -119,8 +126,6 @@ export function DomainGraph({
   const [frozen, setFrozen] = useState<Box | null>(null);
   /** Set when a drag ends, so the click the browser sends after it does not select. */
   const dragged = useRef(false);
-  // The frame holds still while a concept is being dragged, and takes in where it was left afterwards.
-  const fit = viewBoxFor(layout, topic, moved);
   const count = shown.size;
   const label = `${title} map, ${count} concept${count === 1 ? "" : "s"} in ${groups.length} topic${groups.length === 1 ? "" : "s"}`;
   const at = (id: string) => moved[id] ?? layout.positions[id];
@@ -141,8 +146,15 @@ export function DomainGraph({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const scale = drawn === null ? 1 : drawn / (frozen ?? fit).width;
+  // The frame's width does not depend on the title band, so the scale is measured from it before the band is known.
+  const scale = drawn === null ? 1 : drawn / (frozen ?? viewBoxFor(layout, topic, moved)).width;
   const font = labelFont(scale);
+  // A topic's title keeps 11px on screen too (D10), and its group's band grows upward to hold it.
+  const heading = titleFont(scale);
+  const band = titleBand(heading);
+  const boxOf = (g: { concepts: readonly string[]; title: string }) => groupBox(g.concepts.map(at), titleWidth(g.title), band);
+  // The frame holds still while a concept is being dragged, and takes in where it was left afterwards.
+  const fit = viewBoxFor(layout, topic, moved, band);
   // A label drawn larger than the layout's size reaches further below its dot, so the frame grows to hold the bottom row's.
   const live = { ...fit, height: fit.height + Math.max(0, labelFoot(2, font) - labelFoot(2)) };
   const view = frozen ?? live;
@@ -182,11 +194,8 @@ export function DomainGraph({
         dependants: dependants.get(id) ?? 0,
       });
     }
-    // A topic's title stays clear of labels: it is drawn at the layout size, in the band above its concepts.
-    const titles = groups.map((g) => {
-      const box = groupBox(g.concepts.map(at), titleWidth(g.title));
-      return { x: box.x + 12, y: box.y + 8, width: titleWidth(g.title) - 24, height: 16 };
-    });
+    // A topic's title stays clear of labels: the box it is drawn in, at its size, in the band above its concepts.
+    const titles = groups.map((g) => titleBox(boxOf(g), g.title, heading));
     return cullLabels(items, scale, titles, view);
   })();
   /** Lines of label drawn under a concept: none when its label is culled, so its edges run to the dot. */
@@ -266,7 +275,7 @@ export function DomainGraph({
         }}
       >
         {groups.map((g) => {
-          const box = groupBox(g.concepts.map(at), titleWidth(g.title));
+          const box = boxOf(g);
           const lit = hoverTopic === g.topic;
           return (
             <g key={g.topic} data-group={g.topic}>
@@ -283,16 +292,22 @@ export function DomainGraph({
                 data-topic-title={g.topic}
                 // A pointer's shortcut: the list's topic buttons are the keyboard's (D7).
                 aria-hidden="true"
-                x={box.x + 12}
-                y={box.y + 20}
-                fontSize={12.5}
+                x={box.x + TITLE_INSET}
+                y={box.y + titleBaseline(heading)}
+                fontSize={heading}
                 fontWeight={700}
-                className={cx("outline-none", lit ? "fill-text" : "fill-text2", topic === null && "cursor-pointer")}
+                className={cx(
+                  "outline-none transition-[fill] duration-150 motion-reduce:transition-none",
+                  lit ? "fill-text" : "fill-text2",
+                  topic === null && "cursor-pointer",
+                )}
                 onClick={() => onTopic(g.topic)}
                 onMouseEnter={() => onHoverTopic(g.topic)}
                 onMouseLeave={() => onHoverTopic(null)}
               >
-                {g.title}
+                {/* The whole title, for a pointer resting on one cut short; the list beside the picture names it too. */}
+                <title>{g.title}</title>
+                {fitTitle(g.title, heading, titleRoom(box))}
               </text>
             </g>
           );

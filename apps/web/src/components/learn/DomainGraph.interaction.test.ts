@@ -6,7 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { LearnIndex } from "./LearnIndex";
 import type { GraphEdge } from "@/lib/concept-graph";
 import { domainLayout, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
-import { movedKey, viewBoxFor } from "@/lib/domain-view";
+import { MIN_DRAW_SCALE, movedKey, textEm, TITLE_INSET, viewBoxFor } from "@/lib/domain-view";
 import type { IndexRow } from "@/lib/learn-index";
 
 /**
@@ -77,13 +77,21 @@ afterEach(() => {
   window.history.replaceState(null, "", "/learn");
 });
 
-function mount() {
+// The same concepts under topics whose titles are too long for their groups at the smallest scale.
+const longTopics: DomainTopic[] = [
+  { slug: "sorting", title: "Sorting and the lower bound on comparison sorts", domain: "algorithms" },
+  { slug: "graphs", title: "Graph search, traversal orders and shortest paths", domain: "algorithms" },
+];
+const longLayout = domainLayout(nodes, edges, longTopics, "algorithms");
+const longMap = { tree: domainTree(nodes, edges, longTopics), layouts: { algorithms: longLayout } };
+
+function mount(m: typeof map = map) {
   window.history.replaceState(null, "", "/learn?domain=algorithms");
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   const initial = { selected: null, view: "graph" as const, scope: "neighbourhood" as const, filter: "all" as const, domain: "algorithms", topic: null };
-  act(() => root.render(createElement(LearnIndex, { rows, edges, map, initial })));
+  act(() => root.render(createElement(LearnIndex, { rows, edges, map: m, initial })));
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
@@ -305,8 +313,8 @@ describe("domain graph label culling", () => {
     delete (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver;
   });
 
-  function drawAt(svg: SVGSVGElement, scale: number) {
-    const view = viewBoxFor(layout, null);
+  function drawAt(svg: SVGSVGElement, scale: number, l: typeof layout = layout) {
+    const view = viewBoxFor(l, null);
     const width = view.width * scale;
     const height = view.height * scale;
     svg.getBoundingClientRect = () => ({ left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}) });
@@ -395,6 +403,93 @@ describe("domain graph label culling", () => {
         if (d.id === id) continue;
         expect(d.x >= x && d.x <= x + w && d.y >= y && d.y <= y + h, `${id}'s label covers ${d.id}'s dot`).toBe(false);
       }
+    }
+  });
+
+  const titleOf = (host: HTMLElement, topic: string) => host.querySelector(`svg [data-topic-title="${topic}"]`) as SVGTextElement;
+  /** What a title draws: its own text, not the full title its tooltip carries. */
+  const drawnTitle = (el: Element) =>
+    [...el.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent)
+      .join("");
+
+  it("draws a topic's title at the layout size full size, and at 11px on screen at the smallest scale", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 1);
+    expect(Number(titleOf(host, "sorting").getAttribute("font-size"))).toBe(12.5);
+    drawAt(svg, MIN_DRAW_SCALE);
+    for (const topic of ["sorting", "graphs"]) {
+      expect(Number(titleOf(host, topic).getAttribute("font-size")) * MIN_DRAW_SCALE).toBeCloseTo(11);
+    }
+  });
+
+  it("grows a group's title band with its title, leaving its concepts where they are", () => {
+    const { host, svg } = mount();
+    drawAt(svg, 1);
+    const rect = () => host.querySelector('svg [data-group="graphs"] rect') as SVGRectElement;
+    const top = Number(rect().getAttribute("y"));
+    const cy = Number(dotOf(host, "bfs").getAttribute("cy"));
+    drawAt(svg, MIN_DRAW_SCALE);
+    expect(Number(rect().getAttribute("y"))).toBeLessThan(top);
+    expect(Number(dotOf(host, "bfs").getAttribute("cy"))).toBe(cy);
+    // The baseline sits below the band's top by more than the text's ascent, and above the first dot.
+    const title = titleOf(host, "graphs");
+    const font = Number(title.getAttribute("font-size"));
+    expect(Number(title.getAttribute("y")) - font * 0.9).toBeGreaterThan(Number(rect().getAttribute("y")));
+    expect(Number(title.getAttribute("y")) + font * 0.28).toBeLessThan(cy - 12);
+  });
+
+  it("ends a title too long for its group in an ellipsis on a small picture, the full title kept in its tooltip", () => {
+    const { host, svg } = mount(longMap);
+    drawAt(svg, 1, longLayout);
+    for (const t of longTopics) {
+      expect(drawnTitle(titleOf(host, t.slug))).toBe(t.title);
+      expect(titleOf(host, t.slug).querySelector("title")?.textContent).toBe(t.title);
+    }
+    drawAt(svg, MIN_DRAW_SCALE, longLayout);
+    let cut = 0;
+    for (const t of longTopics) {
+      const el = titleOf(host, t.slug);
+      const text = drawnTitle(el);
+      const rect = host.querySelector(`svg [data-group="${t.slug}"] rect`) as SVGRectElement;
+      const font = Number(el.getAttribute("font-size"));
+      // Drawn inside the group, whole or cut.
+      expect(Number(el.getAttribute("x"))).toBe(Number(rect.getAttribute("x")) + TITLE_INSET);
+      expect(Number(el.getAttribute("x")) + textEm(text, true) * font).toBeLessThanOrEqual(Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")));
+      if (text !== t.title) {
+        cut++;
+        expect(text.endsWith("\u2026")).toBe(true);
+        expect(t.title.startsWith(text.slice(0, -1))).toBe(true);
+      }
+      expect(el.querySelector("title")?.textContent).toBe(t.title);
+    }
+    expect(cut).toBeGreaterThan(0);
+    // The list beside the picture names the topic whole.
+    expect(host.querySelector('button[data-list-topic="graphs"]')?.textContent).toContain(longTopics[1].title);
+  });
+
+  // Review of #409: a title in a wide script is drawn a full em a character, and must still fit its group.
+  it("cuts a title in a wide script so it fits its group drawn a full em a character", () => {
+    const wide: DomainTopic[] = [
+      { slug: "sorting", title: "\u6574\u5217\u3068\u6bd4\u8f03\u30bd\u30fc\u30c8\u306e\u4e0b\u754c", domain: "algorithms" },
+      { slug: "graphs", title: "\uadf8\ub798\ud504 \ud0d0\uc0c9\uacfc \ucd5c\ub2e8 \uacbd\ub85c", domain: "algorithms" },
+    ];
+    const wideLayout = domainLayout(nodes, edges, wide, "algorithms");
+    const { host, svg } = mount({ tree: domainTree(nodes, edges, wide), layouts: { algorithms: wideLayout } });
+    drawAt(svg, MIN_DRAW_SCALE, wideLayout);
+    for (const t of wide) {
+      const el = titleOf(host, t.slug);
+      const text = drawnTitle(el);
+      const rect = host.querySelector(`svg [data-group="${t.slug}"] rect`) as SVGRectElement;
+      const font = Number(el.getAttribute("font-size"));
+      // As the browser draws it in bold: a wide letter is a full em at 700 as at 500 (measured), and the
+      // Figtree space and ellipsis take the table's bold allowance.
+      const drawn = [...text].reduce((w, c) => w + (c === " " ? 0.25 * 1.1 : c === "\u2026" ? 0.64 * 1.1 : 1), 0) * font;
+      expect(Number(el.getAttribute("x")) + drawn, `${t.slug}'s title runs past its group`).toBeLessThanOrEqual(
+        Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")),
+      );
+      expect(el.querySelector("title")?.textContent).toBe(t.title);
     }
   });
 

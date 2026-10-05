@@ -1,7 +1,7 @@
 import { Graph, layout as dagreLayout } from "@dagrejs/dagre";
 
 import { reduceEdges, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
-import { DOT_TOP, domainTitle, groupBox, titleWidth } from "@/lib/domain-view";
+import { DOT_TOP, domainTitle, groupBox, TITLE_RESERVE, titleWidth } from "@/lib/domain-view";
 
 /**
  * The prerequisite graph grouped by domain, then by topic, and one domain
@@ -168,7 +168,12 @@ export function domainTree(
   );
 }
 
-/** One topic's concepts in layers, positioned so its group box, as wide as its title at least, starts at the origin. */
+/**
+ * One topic's concepts in layers, positioned so its group box, as wide as its
+ * title at least, starts at the origin. The box takes the title band at its
+ * largest (`TITLE_RESERVE`, the title at 11px on the smallest picture), so a
+ * title grown to that size never reaches the row of groups above (D10).
+ */
 function layoutTopic(ids: readonly string[], edges: readonly GraphEdge[], title: string) {
   const g = new Graph({ multigraph: true });
   g.setGraph({ rankdir: "TB", nodesep: 16, ranksep: 40, marginx: 0, marginy: 0 });
@@ -180,7 +185,7 @@ function layoutTopic(ids: readonly string[], edges: readonly GraphEdge[], title:
     const box = g.node(id);
     return { id, x: Math.round(box.x), y: Math.round(box.y - NODE_HEIGHT / 2 + DOT_TOP) };
   });
-  const box = groupBox(raw, titleWidth(title));
+  const box = groupBox(raw, titleWidth(title), TITLE_RESERVE);
   return {
     width: Math.ceil(box.width),
     height: Math.ceil(box.height),
@@ -197,7 +202,7 @@ function layoutTopic(ids: readonly string[], edges: readonly GraphEdge[], title:
  * foundations come first, a standalone topic waits behind them, and the
  * picture reads the way the subject is learnt.
  */
-function topicOrder(groups: readonly { slug: string }[], topicOf: ReadonlyMap<string, string>, edges: readonly GraphEdge[]): string[] {
+export function topicOrder(groups: readonly { slug: string }[], topicOf: ReadonlyMap<string, string>, edges: readonly GraphEdge[]): string[] {
   const slugs = groups.map((g) => g.slug);
   const needs = new Map<string, Set<string>>(slugs.map((t) => [t, new Set<string>()]));
   for (const e of edges) {

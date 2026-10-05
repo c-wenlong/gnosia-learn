@@ -1,23 +1,27 @@
 import type { AssetPlace } from "@self-learn/catalog/state";
 
+import type { GraphEdge } from "@/lib/concept-graph";
+import { topicOrder } from "@/lib/domain-map";
+import { domainTitle } from "@/lib/domain-view";
 import { orderedConcepts, pickPlace } from "@/lib/library-source";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
  * The Library's other two groupings (L4 of
  * docs/proposals/library-by-type-and-day.md): by course, a heading per course
- * with its modules in course order inside, and by concept, a heading per
- * concept in the prerequisite graph's order. The day groups are
+ * with its modules in course order inside, and by topic, a heading per topic
+ * in the Learn map's order (`topicRanks`). The day groups are
  * `dayGroups` in `@/lib/day-groups`; all three hand the page the same shape,
  * a key, a label and the rows, so it draws one heading style for each.
  *
  * Each row lands in one group, the one its source line names (`rowSource` in
  * `@/lib/library-source`): the course `pickPlace` picks (the open `?course=`
  * filter's, else the first by code, a module listing ahead of a topic match),
- * and the first concept in the graph's order. An asset in two courses or
- * under two concepts is not shown twice, which would make the counts add up
- * to more than the header's. What has no course or no concept goes under a
- * last group, "No course" or "No concept", rather than vanishing.
+ * and the topic of the first concept in the graph's order. An asset in two
+ * courses or under two concepts of different topics is not shown twice, which
+ * would make the counts add up to more than the header's. What has no course
+ * or no topic goes under a last group, "No course" or "No topic", rather than
+ * vanishing.
  *
  * A row's place inside its group (or its module) is kept from the input, so
  * the sort menu still orders the rows, as it does inside a day.
@@ -34,17 +38,17 @@ export interface GroupSection<T> {
 }
 
 export interface RowGroup<T> {
-  /** Unique among the groups: `course:<slug>`, `concept:<slug>`, or `none`. */
+  /** Unique among the groups: `course:<slug>`, `topic:<slug>`, or `none`. */
   key: string;
-  /** "CS3230", "Master theorem", "No course". */
+  /** "CS3230", "Divide and conquer", "No course". */
   label: string;
   /** Grey words after the label: the course's title beside its code. */
   detail?: string;
-  /** A concept heading's mastery, for its dot. */
+  /** A topic heading's mastery (`topicBucket`), for its dot. */
   bucket?: MasteryBucket;
   /** Every row in the group, in its sections' order when it has sections. */
   rows: T[];
-  /** A course's modules, in course order; absent for a concept or the last group. */
+  /** A course's modules, in course order; absent for a topic or the last group. */
   sections?: GroupSection<T>[];
 }
 
@@ -118,37 +122,114 @@ export function courseGroups<T>(
 }
 
 /**
- * `rows` grouped by the first concept each explains, the concepts in the
- * prerequisite graph's order (`conceptOrder`), one the graph does not hold
- * after those by slug, and "No concept" last.
+ * A topic's mastery from its concepts' buckets, by the rule a course page's
+ * topic row uses (`resolveTopicMastery` in `@/lib/course-path`): mastered
+ * only when every concept is, untouched only when none has been started,
+ * learning otherwise. Null for a topic with no concepts, which gets no dot.
  */
-export function conceptGroups<T>(
+export function topicBucket(buckets: readonly MasteryBucket[]): MasteryBucket | null {
+  if (buckets.length === 0) return null;
+  if (buckets.every((b) => b === "mastered")) return "mastered";
+  if (buckets.every((b) => b === "untouched")) return "untouched";
+  return "learning";
+}
+
+/** What a row is grouped by under topic: the concepts it explains and the topics it is filed under. */
+export interface TopicParents {
+  concepts: readonly string[];
+  topics: readonly string[];
+}
+
+/**
+ * Every topic's place in the topic grouping, the order the Learn map draws
+ * them in: domain by domain, the domains by title A to Z, and inside a domain
+ * the map's own order (`topicOrder`, D3 of docs/proposals/domain-map.md),
+ * prerequisite topics first, then the vocabulary's order. The map puts the
+ * most studied domain first; here the domains go by title, so the headings
+ * do not move about as the learner studies.
+ */
+export function topicRanks(
+  vocabulary: readonly { slug: string; domain: string }[],
+  conceptTopic: ReadonlyMap<string, string>,
+  edges: readonly GraphEdge[],
+): Map<string, number> {
+  const domainOf = new Map(vocabulary.map((t) => [t.slug, t.domain]));
+  const domains = new Map<string, { slug: string }[]>();
+  for (const t of vocabulary) {
+    const list = domains.get(t.domain);
+    if (list === undefined) domains.set(t.domain, [{ slug: t.slug }]);
+    else list.push({ slug: t.slug });
+  }
+  const ordered = [...domains.entries()]
+    .sort(([a], [b]) => {
+      const at = domainTitle(a).toLowerCase();
+      const bt = domainTitle(b).toLowerCase();
+      return at < bt ? -1 : at > bt ? 1 : a < b ? -1 : a > b ? 1 : 0;
+    })
+    .flatMap(([domain, topics]) => {
+      // The domain's own edges only, as the map orders a domain's topics
+      // (`domainLayout`): a prerequisite in another domain does not move a
+      // topic here.
+      const inside = (concept: string) => {
+        const slug = conceptTopic.get(concept);
+        return slug !== undefined && domainOf.get(slug) === domain;
+      };
+      return topicOrder(topics, conceptTopic, edges.filter((e) => inside(e.from) && inside(e.to)));
+    });
+  return new Map(ordered.map((slug, i) => [slug, i]));
+}
+
+/**
+ * `rows` grouped by topic: the topic of the first concept each explains, in
+ * the prerequisite graph's order (`orderedConcepts`), so the source line, the
+ * row menu and the heading agree on the concept. A row whose first concept
+ * has no topic, or that explains no concept, goes under the first topic it is
+ * itself filed under, and only a row with neither goes under "No topic", last.
+ * Topics come in `rank`'s order (`topicRanks`), one it does not hold after
+ * those, by slug.
+ */
+export function topicGroups<T>(
   rows: readonly T[],
-  conceptsOf: (row: T) => readonly string[],
-  order: ReadonlyMap<string, number>,
-  concept: (slug: string) => { title: string; bucket: MasteryBucket } | null,
+  parentsOf: (row: T) => TopicParents,
+  options: {
+    /** `conceptOrder`, which picks a row's first concept. */
+    order: ReadonlyMap<string, number>;
+    /** The topic a concept is filed under, or null. */
+    topicOf: (concept: string) => string | null;
+    /** `topicRanks`. */
+    rank: ReadonlyMap<string, number>;
+    /** The heading's title and dot; null when the topic is not known. */
+    topic: (slug: string) => { title: string; bucket: MasteryBucket | null } | null;
+  },
 ): RowGroup<T>[] {
   const held = new Map<string, T[]>();
   const loose: T[] = [];
   for (const row of rows) {
-    const [first] = orderedConcepts(conceptsOf(row), order);
-    if (first === undefined) {
+    const parents = parentsOf(row);
+    const [first] = orderedConcepts(parents.concepts, options.order);
+    const slug = (first === undefined ? null : options.topicOf(first)) ?? parents.topics[0] ?? null;
+    if (slug === null) {
       loose.push(row);
       continue;
     }
-    const list = held.get(first);
-    if (list === undefined) held.set(first, [row]);
+    const list = held.get(slug);
+    if (list === undefined) held.set(slug, [row]);
     else list.push(row);
   }
-  const groups: RowGroup<T>[] = orderedConcepts([...held.keys()], order).map((slug) => {
-    const known = concept(slug);
-    return {
-      key: `concept:${slug}`,
-      label: known?.title ?? slug,
-      bucket: known?.bucket ?? "untouched",
-      rows: held.get(slug) ?? [],
-    };
-  });
-  if (loose.length > 0) groups.push({ key: NO_GROUP, label: "No concept", rows: loose });
+
+  const rankOf = (slug: string) => options.rank.get(slug) ?? Number.MAX_SAFE_INTEGER;
+  const groups: RowGroup<T>[] = [...held.entries()]
+    .sort(([a], [b]) => rankOf(a) - rankOf(b) || (a < b ? -1 : a > b ? 1 : 0))
+    .map(([slug, list]) => {
+      const known = options.topic(slug);
+      const bucket = known?.bucket ?? null;
+      return {
+        key: `topic:${slug}`,
+        label: known?.title ?? slug,
+        ...(bucket === null ? {} : { bucket }),
+        rows: list,
+      };
+    });
+  if (loose.length > 0) groups.push({ key: NO_GROUP, label: "No topic", rows: loose });
   return groups;
 }
