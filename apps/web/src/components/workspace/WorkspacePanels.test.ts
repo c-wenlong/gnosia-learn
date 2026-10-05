@@ -259,3 +259,25 @@ describe("WorkspacePanels tabs on a phone", () => {
     expect(note().hasAttribute("inert")).toBe(true);
   });
 });
+
+describe("WorkspacePanels and #note (D89)", () => {
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("shows the note's tab when the recorded-answer card's link sets the fragment", () => {
+    window.history.replaceState(null, "", "/learn/tcp");
+    const host = panels();
+    const note = host.querySelector('[data-panel="note"]') as HTMLElement;
+    expect(note.dataset.active).toBe("false");
+    act(() => {
+      window.history.replaceState(null, "", "/learn/tcp#note");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(note.dataset.active).toBe("true");
+  });
+
+  it("opens on the note when the page is reached with the fragment", () => {
+    window.history.replaceState(null, "", "/learn/tcp#note");
+    const host = panels();
+    expect((host.querySelector('[data-panel="note"]') as HTMLElement).dataset.active).toBe("true");
+  });
+});
