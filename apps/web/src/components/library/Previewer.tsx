@@ -7,6 +7,7 @@ import type { PreviewAnswer } from "@/components/library/preview-content";
 import { LOADING_BLOCK } from "@/components/PageLoading";
 import { Button } from "@/components/ui/Button";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
+import { DialogHeader } from "@/components/ui/DialogHeader";
 import { cx, iconButtonClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
@@ -337,95 +338,117 @@ export function Previewer({
 }
 
 /**
- * Manus's `previewer-header`: 48px, the kind's glyph, the title, the date in
- * grey, and at the right the tools, 28px each: the concept it explains (when
- * it explains one), Conversation (the studio conversation that made it, when
- * one did: the row menu's Locate in conversation), Download (when there is a stored file), Open page and
- * Close. Until the body arrives, the title and the date are grey bars and
- * only Open page and Close are there, since they need nothing from the
- * server.
+ * Manus's `previewer-header`, drawn by the kit's `DialogHeader`: 48px, the
+ * kind's glyph, the title, and at the right the date in grey, then the tools,
+ * 28px each: the concept it explains (when it explains one), Conversation
+ * (the studio conversation that made it, when one did: the row menu's Locate
+ * in conversation), Download (when there is a stored file), Open page, and
+ * Close, which is `closeSize="sm"` so it is in line with them. Until the body
+ * arrives, the glyph, the title and the date are grey bars and only Open page
+ * and Close are there, since they need nothing from the server.
+ *
+ * A plain file name keeps its mono 14 and `text2` inside the title; any other
+ * title is the kit's `PANEL_TITLE`.
  */
 function PreviewerHeader({ header, id, onClose }: { header: PreviewHeader | null; id: string; onClose: () => void }) {
   const tool = iconButtonClasses({ size: "sm", shape: "square", tone: "neutral" });
   return (
-    <div className="flex h-12 shrink-0 items-center gap-3 border-b border-hair py-1.5 pr-3 pl-4 md:pl-5">
-      {header === null ? (
-        <div className="flex min-w-0 flex-1 items-center gap-3" aria-hidden>
-          <span className={cx(LOADING_BLOCK, "size-[18px] shrink-0")} />
-          <span className={cx(LOADING_BLOCK, "h-4 w-56 max-w-[50%]")} />
-          <span className={cx(LOADING_BLOCK, "hidden h-3 w-16 sm:block")} />
-        </div>
-      ) : (
-        <div className="flex min-w-0 flex-1 animate-fade-in items-center gap-2.5 motion-reduce:animate-none">
-          <span className="shrink-0 text-text2" aria-hidden>
+    <DialogHeader
+      onClose={onClose}
+      closeSize="sm"
+      leading={
+        header === null ? (
+          <span aria-hidden className={cx(LOADING_BLOCK, "size-[18px] shrink-0")} />
+        ) : (
+          <span className="shrink-0 animate-fade-in text-text2 motion-reduce:animate-none" aria-hidden>
             <Glyph name={header.family} size={18} />
           </span>
-          <h2
+        )
+      }
+      title={
+        header === null ? (
+          <>
+            {/* The heading is never empty, for a screen reader; the bar is only to look at. */}
+            <span className="sr-only">Loading preview</span>
+            <span aria-hidden className={cx(LOADING_BLOCK, "block h-4 w-56 max-w-[50%]")} />
+          </>
+        ) : (
+          <span
             className={cx(
-              "min-w-0 truncate text-[16px] leading-[22px] font-medium",
-              header.plainName ? "font-mono text-[14px] text-text2" : "text-text",
+              "animate-fade-in motion-reduce:animate-none",
+              header.plainName && "font-mono font-medium text-text2",
             )}
           >
             <span className="sr-only">{header.kindLabel}: </span>
             {header.title}
-          </h2>
-          {header.date !== null && (
-            <time dateTime={header.dateTime} className="hidden shrink-0 text-[12px] leading-4 text-text3 sm:inline">
-              {header.date}
-            </time>
+          </span>
+        )
+      }
+      actions={
+        <>
+          {header === null ? (
+            <span aria-hidden className={cx(LOADING_BLOCK, "hidden h-3 w-16 sm:block")} />
+          ) : (
+            header.date !== null && (
+              <time
+                dateTime={header.dateTime}
+                className="hidden shrink-0 animate-fade-in text-[12px] leading-4 text-text3 motion-reduce:animate-none sm:inline"
+              >
+                {header.date}
+              </time>
+            )
           )}
-        </div>
-      )}
-      <div className="flex shrink-0 items-center gap-1">
-        {header?.concept && (
-          <IconButton label={`Open ${header.concept.title}`} size="sm" shape="square" href={header.concept.href}>
-            <Glyph name="concepts" size={18} />
-          </IconButton>
-        )}
-        {header?.conversation && (
-          <IconButton
-            label={`Conversation: ${header.conversation.title}`}
-            size="sm"
-            shape="square"
-            href={header.conversation.href}
-          >
-            <Glyph name="compose" size={18} />
-          </IconButton>
-        )}
-        {header?.download && (
-          // A plain anchor with `download`: there is no page to go to.
-          <a
-            href={header.download.href}
-            download={header.download.filename ?? ""}
-            aria-label="Download"
-            title="Download"
-            className={tool}
-          >
-            <Glyph name="download" size={18} />
-          </a>
-        )}
-        <IconButton label="Open page" size="sm" shape="square" href={header?.page ?? assetHref(id)}>
-          {/* Four corners pulled outward: the full page. */}
-          <svg
-            aria-hidden
-            viewBox="0 0 20 20"
-            width={18}
-            height={18}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12.5 3.5h4v4M7.5 16.5h-4v-4M16.5 3.5 11 9M3.5 16.5 9 11" />
-          </svg>
-        </IconButton>
-        <span aria-hidden className="mx-1 h-4 w-px bg-hair" />
-        <IconButton label="Close" size="sm" shape="square" onClick={onClose}>
-          <Glyph name="close" size={18} />
-        </IconButton>
-      </div>
-    </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {header?.concept && (
+              <IconButton label={`Open ${header.concept.title}`} size="sm" shape="square" href={header.concept.href}>
+                <Glyph name="concepts" size={18} />
+              </IconButton>
+            )}
+            {header?.conversation && (
+              <IconButton
+                label={`Conversation: ${header.conversation.title}`}
+                size="sm"
+                shape="square"
+                href={header.conversation.href}
+              >
+                <Glyph name="compose" size={18} />
+              </IconButton>
+            )}
+            {header?.download && (
+              // A plain anchor with `download`: there is no page to go to.
+              <a
+                href={header.download.href}
+                download={header.download.filename ?? ""}
+                aria-label="Download"
+                title="Download"
+                className={tool}
+              >
+                <Glyph name="download" size={18} />
+              </a>
+            )}
+            <IconButton label="Open page" size="sm" shape="square" href={header?.page ?? assetHref(id)}>
+              {/* Four corners pulled outward: the full page. */}
+              <svg
+                aria-hidden
+                viewBox="0 0 20 20"
+                width={18}
+                height={18}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12.5 3.5h4v4M7.5 16.5h-4v-4M16.5 3.5 11 9M3.5 16.5 9 11" />
+              </svg>
+            </IconButton>
+            {/* 8px clear on each side of the rule, as the hand-built row had: 4 of margin
+                and the group's 4px gap before it, and 4 less than the row's 12px gap to Close. */}
+            <span aria-hidden className="ml-1 -mr-1 h-4 w-px bg-hair" />
+          </div>
+        </>
+      }
+    />
   );
 }
 
