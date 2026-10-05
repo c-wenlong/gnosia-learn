@@ -888,6 +888,15 @@ describe("the shortcuts", () => {
     expect(nav(container).dataset.state).toBe("open");
     expect(key({ key: "?", shiftKey: true }).defaultPrevented).toBe(false);
     expect(document.querySelector("dialog[open]")).toBeNull();
+    // From a field, as a combobox with its suggestions open, search still fires.
+    const field = document.createElement("input");
+    document.body.append(field);
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(key({ key: "k", ctrlKey: true }, field).defaultPrevented).toBe(true);
+    field.remove();
+    // The search field took the focus, which closed the menu; open it again.
+    if (more.getAttribute("aria-expanded") !== "true") act(() => more.click());
+    expect(more.getAttribute("aria-expanded")).toBe("true");
     // Escape closes the menu, and the shortcuts are bound again.
     key({ key: "Escape" });
     expect(more.getAttribute("aria-expanded")).toBe("false");
@@ -925,6 +934,15 @@ describe("the shortcuts", () => {
     expect(key({ key: "k", ctrlKey: true }).defaultPrevented).toBe(false);
     expect(key({ key: ".", ctrlKey: true }).defaultPrevented).toBe(false);
     expect(nav(container).dataset.state).toBe("open");
+  });
+
+  it("leaves Ctrl+Shift+O to the browser on a focus page, and presses no hidden New chat", async () => {
+    const Focus = () => createElement("div", { "data-layout": "focus" });
+    const container = await mount(true, Focus as unknown as () => null);
+    const pressed = vi.fn((event: Event) => event.preventDefault());
+    nav(container).querySelector("[data-studio-new]")!.addEventListener("click", pressed);
+    expect(key({ key: "O", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    expect(pressed).not.toHaveBeenCalled();
   });
 
   it("hands focus to the fold when Ctrl+. sends the slid-out sidebar back to the rail", async () => {

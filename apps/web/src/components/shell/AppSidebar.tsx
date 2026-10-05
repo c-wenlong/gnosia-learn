@@ -205,7 +205,9 @@ export function AppSidebar() {
         else searchField.current?.focus();
       },
       "new-chat": () => {
-        // No New chat to press (the sidebar is hidden): the browser keeps its own press.
+        // No New chat to press, or only the hidden sidebar's on a focus page:
+        // the browser keeps its own press.
+        if (focusPage()) return false;
         const button = panel.current?.querySelector<HTMLElement>("[data-studio-new]");
         if (button == null) return false;
         button.click();
