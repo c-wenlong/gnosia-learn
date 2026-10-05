@@ -87,9 +87,11 @@ function handBuiltClassLists(file: string, text: string): string[] {
   const built = new Map<string, { line: number; how: string }>();
 
   // Only where a name is the value that lands in the list: a branch of `? :`,
-  // the right of `&&`, either side of `||` and `??`, an argument of `cx`. A
-  // name tested in a condition (`resume === null ? ROW : ROW_TWO_LINE`) is not
-  // a class list, so its own value is never read as one.
+  // the right of `&&`, either side of `||` and `??`, and an argument of a call
+  // whose result is the list (`cx`, a kit helper such as `buttonClasses({
+  // className })`, or any helper of the caller's own), object arguments'
+  // values included. A name tested in a condition (`resume === null ? ROW :
+  // ROW_TWO_LINE`) is not a class list, so its own value is never read as one.
   const collect = (node: ts.Expression): void => {
     const at = unwrap(node);
     if (ts.isIdentifier(at)) classNames.add(at.text);
@@ -104,7 +106,13 @@ function handBuiltClassLists(file: string, text: string): string[] {
     } else if (ts.isTemplateExpression(at)) at.templateSpans.forEach((span) => collect(span.expression));
     else if (ts.isArrayLiteralExpression(at)) at.elements.forEach(collect);
     else if (ts.isSpreadElement(at)) collect(at.expression);
-    else if (ts.isCallExpression(at) && ts.isIdentifier(at.expression) && at.expression.text === "cx") at.arguments.forEach(collect);
+    else if (ts.isCallExpression(at)) at.arguments.forEach(collect);
+    else if (ts.isObjectLiteralExpression(at)) {
+      for (const property of at.properties) {
+        if (ts.isPropertyAssignment(property)) collect(property.initializer);
+        else if (ts.isShorthandPropertyAssignment(property)) classNames.add(property.name.text);
+      }
+    }
   };
 
   const visit = (node: ts.Node) => {
@@ -172,6 +180,10 @@ describe("class lists", () => {
         'const j = <p className={selected ? `ring-2 ${tone}` : "ring-0"} />;',
         "const k = <p className={open && `p-2 ${b}`} />;",
         'const l = <p className={given ?? "p-2 " + b} />;',
+        "const tinted = `ring-2 ${tone}`;",
+        "const m = <p className={decorate(tinted)} />;",
+        "const padded = `p-2 ${size}`;",
+        'const n = <a className={buttonClasses({ variant: "ghost", className: padded })} />;',
       ].join("\n"),
     );
     expect(hits).toEqual([
@@ -185,6 +197,8 @@ describe("class lists", () => {
       "10: className is a template string",
       "11: className is a template string",
       "12: className is a `+`",
+      "13: tinted, used as a class list, is a template string",
+      "15: padded, used as a class list, is a template string",
     ]);
   });
 
