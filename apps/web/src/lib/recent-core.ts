@@ -167,6 +167,15 @@ export function moduleVisits(
 }
 
 /**
+ * Whether a module row is a course page visited with no module open: its key
+ * is `module:<course>/` with nothing after the slash, a pinned copy's too.
+ * It reads "Course", not "Course module".
+ */
+export function isCourseVisit(item: { kind: RecentKind; key: string }): boolean {
+  return item.kind === "module" && item.key.endsWith("/");
+}
+
+/**
  * Every row, newest first: module pages, videos stopped partway, studio
  * drafts, concepts answered on and tutor sessions, merged into one list.
  *
@@ -245,15 +254,28 @@ export function recentItems(sources: RecentSources): RecentItem[] {
     });
   }
 
-  for (const s of sources.sessions ?? []) {
-    out.push({
+  // A session with no log opens its concept's page, as that concept's row
+  // does, so several of them on one concept read as the same row repeated.
+  // Each page is one row: the concept's, when the concept has one, dated by
+  // the later of the two; else the newest session's. A session with a log
+  // opens the log, a page of its own.
+  const byHref = new Map(out.filter((item) => item.kind === "concept").map((item) => [item.href, item]));
+  for (const s of [...(sources.sessions ?? [])].sort((a, b) => time(b.updatedAt) - time(a.updatedAt))) {
+    const same = byHref.get(s.href);
+    if (same !== undefined) {
+      if (same.kind === "concept" && time(s.updatedAt) > time(same.at)) same.at = s.updatedAt;
+      continue;
+    }
+    const row: RecentItem = {
       key: `session:${s.id}`,
       kind: "session",
       title: s.title,
       detail: "Tutor session",
       href: s.href,
       at: s.updatedAt,
-    });
+    };
+    byHref.set(s.href, row);
+    out.push(row);
   }
 
   return out.sort((a, b) => time(b.at) - time(a.at));

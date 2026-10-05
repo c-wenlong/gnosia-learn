@@ -16,7 +16,7 @@ import { conversationHref, relativeTime } from "@/lib/studio-view";
 
 import { FADE, FADE_IN } from "./motion";
 import { rowClick } from "./row-click";
-import { RECENT_GLYPHS, ROW, rowFill } from "./rows";
+import { recentGlyph, ROW, rowFill } from "./rows";
 import { useRecentSearch } from "./use-recent";
 
 /**
@@ -186,7 +186,7 @@ export function SearchResults({
 function RecentHit({ item, words, onPick }: { item: RecentItem; words: string; onPick: () => void }) {
   const pathname = usePathname();
   const current = isCurrentRow(item.href, pathname, item.kind === "module");
-  const kind = RECENT_GLYPHS[item.kind];
+  const kind = recentGlyph(item);
   return (
     <Link href={item.href} onClick={onPick} aria-current={current ? "page" : undefined} title={item.title} className={cx(ROW, rowFill(current))}>
       <Glyph name={kind.glyph} size={18} className="text-text2" />

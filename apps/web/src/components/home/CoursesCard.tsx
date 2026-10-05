@@ -6,8 +6,8 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { CourseInProgress } from "@/lib/home-core";
 
 /**
- * Courses in progress (hi-fi 01, bottom right): the courses with at least one
- * topic ticked, furthest along first, then All courses. The card lists the
+ * Courses in progress (hi-fi 01, bottom right): the courses opened or with at
+ * least one topic done, furthest along first, then All courses. The card lists the
  * first few and says how many more there are, rather than dropping them
  * without a word.
  */
@@ -15,7 +15,7 @@ export function CoursesCard({ courses: { rows: courses, total } }: { courses: { 
   return (
     <Card title="Courses in progress" className="items-stretch">
       {courses.length === 0 ? (
-        <p className="text-[14px] text-text2">No course started yet. Tick a topic on a course page and it shows here.</p>
+        <p className="text-[14px] text-text2">No course started yet. Open one from All courses and it shows here.</p>
       ) : (
         <ul className="flex flex-col gap-4">
           {courses.map((c) => (

@@ -512,6 +512,16 @@ describe("the sections", () => {
     expect(recentRows(container)).not.toContain("Video: Master theorem");
   });
 
+  it("calls a course page visited with no module open a course, not a course module, in Recent and in Pinned", async () => {
+    const visit = item({ key: "module:cs3230/", kind: "module", title: "Design and Analysis of Algorithms", href: "/courses/cs3230", at: ago(1), courseSlug: "cs3230" });
+    withRows({ items: [visit, MODULE] });
+    const container = await mount(false);
+    expect(recentRows(container)).toEqual(expect.arrayContaining(["Course: Design and Analysis of Algorithms", "Course module: Divide and conquer"]));
+    withRows({ items: [MODULE], pinned: [{ key: visit.key, kind: "module", title: visit.title, href: visit.href, at: ago(0) }] });
+    const again = await mount(false);
+    expect([...section(again, "sidebar-pinned").querySelectorAll("li a")].map((a) => a.textContent)).toEqual(["Course: Design and Analysis of Algorithms"]);
+  });
+
   it("offers Pin on every row, Rename on a conversation and Open in course on a module", async () => {
     withRows();
     const container = await mount(true);
