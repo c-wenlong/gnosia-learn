@@ -9,6 +9,8 @@ import {
   cullLabels,
   edgeEnds,
   fitTitle,
+  plateLeft,
+  titlePlate,
   groupBox,
   labelBaseline,
   labelBox,
@@ -133,6 +135,8 @@ export function DomainGraph({
   const lines = (id: string) => wrapLabel(nodes.get(id)?.title ?? id, LABEL_CHARS).length;
   // How wide the picture is drawn, for the labels' size on screen (D10); unknown until measured.
   const [drawn, setDrawn] = useState<number | null>(null);
+  /** The topic whose cut title has a plate, kept mounted for the beat it takes to fade after the pointer leaves. */
+  const [titleHeld, setTitleHeld] = useState<string | null>(null);
   useLayoutEffect(() => {
     const el = svg.current;
     if (el === null) return;
@@ -201,6 +205,14 @@ export function DomainGraph({
   /** Lines of label drawn under a concept: none when its label is culled, so its edges run to the dot. */
   const drawnLines = (id: string) => (labelled.has(id) ? lines(id) : 0);
   const plate = hover !== null && shown.has(hover) ? nodes.get(hover) : undefined;
+  // A topic title cut short shows whole on a plate while the pointer rests on it (D10).
+  const plateFor = (topicSlug: string | null) => {
+    const g = topicSlug === null ? undefined : groups.find((x) => x.topic === topicSlug);
+    return g === undefined ? null : titlePlate(boxOf(g), g.title, heading, view);
+  };
+  const titleCut = hoverTopic !== null && plateFor(hoverTopic) !== null ? hoverTopic : null;
+  if (titleCut !== null && titleCut !== titleHeld) setTitleHeld(titleCut);
+  const held = plateFor(titleHeld);
 
   const pointerAt = (event: { clientX: number; clientY: number }, frame: Box) =>
     svg.current === null ? { x: 0, y: 0 } : toLayoutPoint(event.clientX, event.clientY, svg.current.getBoundingClientRect(), frame);
@@ -349,6 +361,15 @@ export function DomainGraph({
             />
           );
         })}
+        {held !== null && titleHeld !== null && (
+          <TitlePlate
+            key={titleHeld}
+            plate={held}
+            font={heading}
+            shown={titleCut === titleHeld}
+            onGone={() => setTitleHeld((t) => (t === titleHeld ? null : t))}
+          />
+        )}
         {plate !== undefined && <Plate node={plate} at={at(plate.id)} lines={lines(plate.id)} font={font} frame={view} />}
       </svg>
     </div>
@@ -359,8 +380,7 @@ export function DomainGraph({
 function Plate({ node, at, lines, font, frame }: { node: DomainGraphNode; at: Point; lines: number; font: number; frame: Box }) {
   const width = Math.ceil(textEm(node.title, true) * font + 20);
   // Centred on the dot, and pushed inside the frame as a label is (D10); one wider than the frame is centred on it.
-  const left =
-    width >= frame.width ? frame.x + (frame.width - width) / 2 : Math.max(frame.x, Math.min(at.x - width / 2, frame.x + frame.width - width));
+  const left = plateLeft(at.x - width / 2, width, frame);
   const top = at.y + 15;
   // Tall enough to cover the label it replaces, one line or two.
   const height = labelFoot(lines, font) - 15;
@@ -369,6 +389,49 @@ function Plate({ node, at, lines, font, frame }: { node: DomainGraphNode; at: Po
       <rect x={left} y={top} width={width} height={height} rx={6} className="fill-surface stroke-hair" strokeWidth={1} />
       <text x={left + width / 2} y={top + height / 2 + font * 0.36} textAnchor="middle" fontSize={font} fontWeight={700} className="fill-text">
         {node.title}
+      </text>
+    </g>
+  );
+}
+
+/**
+ * The whole of a cut topic title on a plate over its line (D10), in the concept plate's style. It fades in
+ * when it mounts and out when `shown` goes false, then asks to be unmounted; the pointer passes through it,
+ * so the title under it keeps the hover that lights its group.
+ */
+function TitlePlate({
+  plate,
+  font,
+  shown,
+  onGone,
+}: {
+  plate: NonNullable<ReturnType<typeof titlePlate>>;
+  font: number;
+  shown: boolean;
+  onGone: () => void;
+}) {
+  const { box, textX, baseline, lines, step } = plate;
+  return (
+    <g
+      data-title-plate
+      data-shown={shown}
+      aria-hidden="true"
+      pointerEvents="none"
+      className={cx(
+        "animate-fade-in transition-opacity duration-150 motion-reduce:animate-none motion-reduce:transition-none",
+        shown ? "opacity-100" : "opacity-0",
+      )}
+      onTransitionEnd={() => {
+        if (!shown) onGone();
+      }}
+    >
+      <rect x={box.x} y={box.y} width={box.width} height={box.height} rx={6} className="fill-surface stroke-hair" strokeWidth={1} />
+      <text x={textX} y={baseline} fontSize={font} fontWeight={700} className="fill-text">
+        {lines.map((line, i) => (
+          <tspan key={i} x={textX} dy={i === 0 ? 0 : step}>
+            {line}
+          </tspan>
+        ))}
       </text>
     </g>
   );

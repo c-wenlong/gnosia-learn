@@ -146,6 +146,10 @@ every screen. At 1440 no title is cut; at 1280, 4 of 13 in algorithms and 6
 of 11 in computer architecture are; at 390 most are, at 11px where they were
 4.4px. A label keeps 2px on screen from a title as from another label, so at
 390 algorithms draws 31 of its 56 labels and computer architecture 24 of 43.
+A cut title shows whole on a plate over it while the pointer rests there,
+in the concept plate's style, at the title's size, kept inside the picture's
+frame and fading in and out; a title wider than the frame wraps onto further
+lines, and a title that is not cut shows none.
 
 ## Phases
 

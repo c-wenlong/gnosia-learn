@@ -469,6 +469,97 @@ describe("domain graph label culling", () => {
     expect(host.querySelector('button[data-list-topic="graphs"]')?.textContent).toContain(longTopics[1].title);
   });
 
+  // Option B of the owner's call: a title cut short shows whole on a plate while the pointer rests on it.
+  describe("the whole title of a cut topic title, on a plate", () => {
+    const plateOf = (host: HTMLElement) => host.querySelector("svg [data-title-plate]") as SVGGElement | null;
+    const cutTopics = (host: HTMLElement) => longTopics.filter((t) => drawnTitle(titleOf(host, t.slug)) !== t.title);
+
+    it("shows the full title on a plate over a cut title, and hides it when the pointer leaves", () => {
+      const { host, svg } = mount(longMap);
+      drawAt(svg, MIN_DRAW_SCALE, longLayout);
+      const cut = cutTopics(host);
+      expect(cut.length).toBeGreaterThan(0);
+      expect(plateOf(host)).toBeNull();
+      for (const t of cut) {
+        enter(titleOf(host, t.slug));
+        const plate = plateOf(host);
+        expect(plate, `${t.slug} shows no plate`).not.toBeNull();
+        expect(plate?.dataset.shown).toBe("true");
+        expect(plate?.querySelector("text")?.textContent).toBe(t.title);
+        // Same size and weight as the title it covers, and it covers it.
+        const text = plate?.querySelector("text") as SVGTextElement;
+        expect(text.getAttribute("font-size")).toBe(titleOf(host, t.slug).getAttribute("font-size"));
+        expect(text.getAttribute("font-weight")).toBe("700");
+        leave(titleOf(host, t.slug));
+        expect(plateOf(host)?.dataset.shown ?? "false").toBe("false");
+      }
+    });
+
+    it("draws the plate over the title and keeps it inside the picture", () => {
+      const { host, svg } = mount(longMap);
+      drawAt(svg, MIN_DRAW_SCALE, longLayout);
+      for (const t of cutTopics(host)) {
+        const title = titleOf(host, t.slug);
+        enter(title);
+        const rect = plateOf(host)?.querySelector("rect") as SVGRectElement;
+        const x = Number(rect.getAttribute("x"));
+        const w = Number(rect.getAttribute("width"));
+        const y = Number(rect.getAttribute("y"));
+        const h = Number(rect.getAttribute("height"));
+        const font = Number(title.getAttribute("font-size"));
+        const baseline = Number(title.getAttribute("y"));
+        // Over the whole of the title's line, and as wide as the whole title.
+        expect(y).toBeLessThan(baseline - font * 0.9);
+        expect(y + h).toBeGreaterThan(baseline + font * 0.28);
+        // Wide enough for its longest line, and tall enough for all of them.
+        const lines = [...(plateOf(host)?.querySelectorAll("tspan") ?? [])].map((l) => l.textContent ?? "");
+        expect(lines.join("")).toBe(t.title);
+        expect(w).toBeGreaterThanOrEqual(Math.max(...lines.map((l) => textEm(l.trimEnd(), true))) * font);
+        expect(y + h).toBeGreaterThanOrEqual(baseline + font * 0.28 + (lines.length - 1) * font);
+        const frame = svg.getAttribute("viewBox")?.split(" ").map(Number) as number[];
+        expect(x).toBeGreaterThanOrEqual(frame[0]);
+        expect(x + w).toBeLessThanOrEqual(frame[0] + frame[2] + 1e-9);
+        leave(title);
+      }
+    });
+
+    it("shows no plate for a title that is not cut", () => {
+      const { host, svg } = mount(longMap);
+      drawAt(svg, 1, longLayout);
+      expect(cutTopics(host)).toEqual([]);
+      for (const t of longTopics) {
+        enter(titleOf(host, t.slug));
+        expect(plateOf(host)).toBeNull();
+        leave(titleOf(host, t.slug));
+      }
+      const short = mount();
+      drawAt(short.svg, MIN_DRAW_SCALE);
+      enter(titleOf(short.host, "sorting"));
+      expect(plateOf(short.host)).toBeNull();
+    });
+
+    it("still lights the group while the plate shows", () => {
+      const { host, svg } = mount(longMap);
+      drawAt(svg, MIN_DRAW_SCALE, longLayout);
+      const t = cutTopics(host)[0];
+      const other = t.slug === "sorting" ? ["bfs", "dfs"] : ["merge", "quick", "heap"];
+      const own = t.slug === "sorting" ? ["merge", "quick", "heap"] : ["bfs", "dfs"];
+      enter(titleOf(host, t.slug));
+      expect(plateOf(host)?.dataset.shown).toBe("true");
+      expect(own.map((id) => state(host, id))).not.toContain("faded");
+      expect(other.map((id) => state(host, id))).toEqual(other.map(() => "faded"));
+      expect((host.querySelector(`svg [data-group="${t.slug}"] rect`) as Element).getAttribute("class")).toContain("stroke-accent");
+    });
+
+    it("lets the pointer through, so the title under it keeps the hover", () => {
+      const { host, svg } = mount(longMap);
+      drawAt(svg, MIN_DRAW_SCALE, longLayout);
+      const t = cutTopics(host)[0];
+      enter(titleOf(host, t.slug));
+      expect(plateOf(host)?.getAttribute("pointer-events")).toBe("none");
+    });
+  });
+
   // Review of #409: a title in a wide script is drawn a full em a character, and must still fit its group.
   it("cuts a title in a wide script so it fits its group drawn a full em a character", () => {
     const wide: DomainTopic[] = [
