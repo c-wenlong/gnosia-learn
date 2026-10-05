@@ -30,6 +30,15 @@ import { Glyph } from "./Glyph";
  * clip at its static position, and made the document taller than the shell:
  * the sticky sidebar then stopped short and a blank strip showed under it.
  *
+ * **One column that may shrink to nothing.** A grid with no
+ * `grid-template-columns` has an implicit `auto` column, and an `auto` track
+ * is never narrower than its item's min-content width. A fold holding a code
+ * block with a long line (its `pre` scrolls, but its min-content is the whole
+ * line) or a wide table was therefore as wide as that line, and spilled out of
+ * a 290px panel instead of wrapping to it. `minmax(0,1fr)` lets the track
+ * take the fold's own width whatever is inside; an inner scroller then does
+ * its job. `Collapse.test.ts` holds it.
+ *
  * **No padding on `className`.** The inner box cannot be shorter than its own
  * padding, so a fold with `pt-4` there keeps 16px open while it is shut. The
  * space a fold carries (the gap above it, say) goes on its content instead,
@@ -53,7 +62,7 @@ export function Collapse({
       id={id}
       inert={!open}
       className={cx(
-        "grid transition-[grid-template-rows,opacity] duration-300 ease-soft motion-reduce:transition-none",
+        "grid grid-cols-[minmax(0,1fr)] transition-[grid-template-rows,opacity] duration-300 ease-soft motion-reduce:transition-none",
         open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
       )}
     >
