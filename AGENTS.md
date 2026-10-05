@@ -1145,6 +1145,12 @@ not have to be worked out again.
   the next page had read all of its data (0.5 to 2.7 s per tab under load,
   measured). A page whose shape differs a lot adds its own `loading.tsx`
   beside it, as the studio and Review (a focus page, `PageLoading layout="focus"`) do.
+  A frame draws its page's `data-layout`, or the shell changes width or
+  height as the page replaces it, and a `loading.tsx` wraps every segment
+  below it as well as its own page: the concept workspace's frame sits in a
+  `(workspace)` group so the session under it keeps its focus frame.
+  `apps/web/src/app/(app)/layout-frames.test.ts` fails a page whose frame is
+  in another mode.
   The cost is that no signed-in page works with JavaScript off: the streamed
   content waits in a hidden `<div>` for an inline script to swap it in, so the
   page stays on its loading frame. The `(app)` layout's `<noscript>` notice
