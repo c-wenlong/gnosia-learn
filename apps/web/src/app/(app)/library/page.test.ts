@@ -376,7 +376,8 @@ describe("/library", () => {
     expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="group"[^>]*value="topic"/);
     expect(html).toContain('href="/library?group=topic"');
     // The row names its concept first and the place after it.
-    const paging = html.slice(html.indexOf("Paging, step by step"));
+    // From the end of the title link, past its tooltip, which names the place first.
+    const paging = html.slice(html.indexOf("Paging, step by step</a>"));
     expect(paging.indexOf(">Paging<")).toBeGreaterThan(-1);
     expect(paging.indexOf(">Paging<")).toBeLessThan(paging.indexOf("CS2106 · Week 7"));
   });
@@ -391,7 +392,8 @@ describe("/library", () => {
 
   it("keeps the place first in a row grouped by day", async () => {
     const html = await render({ view: "list" });
-    const paging = html.slice(html.indexOf("Paging, step by step"));
+    // From the end of the title link, past its tooltip, which names the place first.
+    const paging = html.slice(html.indexOf("Paging, step by step</a>"));
     expect(paging.indexOf("CS2106 · Week 7")).toBeLessThan(paging.indexOf(">Paging<"));
   });
 
