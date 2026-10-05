@@ -30,7 +30,7 @@ import {
   recentItems,
   recentPage,
   RECENT_PAGE,
-  titleMatches,
+  rowMatches,
   type ModulePlace,
   type ModuleVisit,
   type RecentModel,
@@ -300,7 +300,7 @@ export async function readRecent(options: RecentOptions = {}): Promise<RecentMod
     const concepts = await recentConcepts(db, owner, conceptsNamed(events, sessions));
     const sources = await recentSources(db, { events, preferences, drafts, sessions, concepts, courses }, scope);
     const all = recentItems(sources);
-    const page = q === "" ? recentPage(all, pages) : recentPage(all.filter((item) => titleMatches(item.title, q)), 1);
+    const page = q === "" ? recentPage(all, pages) : recentPage(all.filter((item) => rowMatches(item, q)), 1);
     return {
       reachable: true,
       items: page.items,

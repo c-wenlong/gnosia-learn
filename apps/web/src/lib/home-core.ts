@@ -467,14 +467,17 @@ export function toNextUp(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Every course with at least one topic done, furthest along first. Done is
- * the path's rule: mastered when the topic has concepts, ticked when it has
- * none, which is what `standing` and `completed` say between them.
+ * Every course with at least one topic done, or opened (`opened`, the
+ * courses of the module visits, as the sidebar's Courses section lists them),
+ * furthest along first. Done is the path's rule: mastered when the topic has
+ * concepts, ticked when it has none, which is what `standing` and
+ * `completed` say between them.
  */
 export function coursesInProgress(
   courses: readonly { slug: string; code: string; title: string; order: number; topicIds: readonly string[] }[],
   completed: Readonly<Record<string, true>>,
   standing: ItemStanding = EMPTY_STANDING,
+  opened: ReadonlySet<string> = new Set(),
 ): CourseInProgress[] {
   const isDone = itemDoneWith(standing, completed);
   return courses
@@ -491,7 +494,7 @@ export function coursesInProgress(
       };
       return { row, order: c.order };
     })
-    .filter(({ row }) => row.completed > 0)
+    .filter(({ row }) => row.completed > 0 || opened.has(row.slug))
     .sort((a, b) => b.row.percent - a.row.percent || a.order - b.order)
     .map(({ row }) => row);
 }

@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   asPinned,
+  isCourseVisit,
   isAppPath,
+  matchedTitle,
   mergeStreams,
   moduleVisits,
   recentGroups,
   recentItems,
   recentPage,
   RECENT_PAGE,
+  rowMatches,
   splitPinned,
   titleMatches,
   withPin,
@@ -91,6 +94,35 @@ describe("the five sources", () => {
       ["session:web-1", "session", "Big-O", "Tutor session", "/learn/big-o"],
     ]);
     expect(rows[1]).toMatchObject({ bucket: "learning", pL: 0.4, conceptId: "recurrences" });
+  });
+
+  it("makes one row of a page that several tutor sessions with no log and a concept all open", () => {
+    const session = (id: string, day: number, href = "/learn/big-o") => ({ id, title: "Big-O: the witness definition", href, updatedAt: AT(day) });
+    const rows = recentItems({
+      ...none,
+      concepts: [{ id: "big-o", title: "Big-O", bucket: "learning", pL: 0.3, at: AT(2) }],
+      sessions: [session("a", 3), session("b", 1), session("c", 4, "/learn/theta"), session("d", 5, "/learn/theta")],
+    });
+    // The concept's row, dated by its latest session; the newest session alone on a page with no concept row.
+    expect(rows.map((r) => [r.key, r.href, r.at])).toEqual([
+      ["session:d", "/learn/theta", AT(5)],
+      ["concept:big-o", "/learn/big-o", AT(3)],
+    ]);
+    // The folded sessions stay findable by their own titles and keys.
+    expect(rows.map((r) => r.folded?.map((f) => f.key))).toEqual([["session:c"], ["session:a", "session:b"]]);
+    expect(rowMatches(rows[1], "witness")).toBe(true);
+    expect(rowMatches(rows[1], "theta")).toBe(false);
+    // The hit shows the title that holds the words.
+    expect(matchedTitle(rows[1], "witness")).toBe("Big-O: the witness definition");
+    expect(matchedTitle(rows[1], "big")).toBe("Big-O");
+    // A session pinned before it was folded keeps its title, and its page's row leaves Recent.
+    const pin: PinnedRow = { key: "session:a", kind: "session", title: "Old", href: "/learn/big-o", at: AT(1) };
+    const split = splitPinned(rows, [pin]);
+    expect(split.pinned).toEqual([{ ...pin, title: "Big-O: the witness definition", href: "/learn/big-o" }]);
+    expect(split.recent.map((r) => r.key)).toEqual(["session:d"]);
+    // A session with a log opens the log, a page of its own, and stays.
+    const logged = recentItems({ ...none, sessions: [session("e", 2, "/library/session%3Ae"), session("f", 1, "/library/session%3Af")] });
+    expect(logged.map((r) => r.key)).toEqual(["session:e", "session:f"]);
   });
 
   it("merges every kind newest first, keeping the sources' order for rows touched in one instant", () => {
@@ -205,6 +237,26 @@ describe("pins and names", () => {
     const split = splitPinned([live], [pin]);
     expect(split.recent).toEqual([]);
     expect(split.pinned[0].title).toBe("Renamed upstream");
+  });
+
+  it("titles a pin from every row read, when the merge held its row back from Recent", () => {
+    const row = (key: string, day: number, title = key): RecentItem => ({ key, kind: "concept", title, detail: null, href: "/", at: AT(day) });
+    const server = { items: Array.from({ length: 50 }, (_, i) => row(`concept:c${i}`, 20 - i / 10)), more: true };
+    const draft: RecentItem = { key: "draft:d1", kind: "draft", title: "Renamed", detail: null, href: "/studio?draft=d1", at: AT(2), draftId: "d1" };
+    const runner = { items: [draft], more: false };
+    const merged = mergeStreams([server, runner]);
+    expect(merged.items.some((r) => r.key === "draft:d1")).toBe(false);
+    const stored: PinnedRow = { key: "draft:d1", kind: "draft", title: "Old name", href: "/studio?draft=d1", at: AT(1) };
+    expect(splitPinned(merged.items, [stored]).pinned[0].title).toBe("Old name");
+    expect(splitPinned(merged.items, [stored], [...server.items, ...runner.items]).pinned[0].title).toBe("Renamed");
+  });
+
+  it("tells a course page visited with no module open from a module", () => {
+    const items = recentItems({ ...none, modules: [{ courseSlug: "cs3230", at: AT(2) }, { courseSlug: "cs3230", moduleSlug: "m3", at: AT(1) }], place });
+    expect(items.map((r) => [r.key, isCourseVisit(r)])).toEqual([
+      ["module:cs3230/", true],
+      ["module:cs3230/m3", false],
+    ]);
   });
 
   it("calls a conversation by its name, else its title, and leaves out one with neither", () => {
@@ -324,14 +376,14 @@ describe("readRecent", () => {
       ["concept:recurrences", "Recurrences"],
       // From the preference, merged with the visit events.
       ["module:cs3230/m1", "Asymptotics"],
-      // The log's title, and the log in the Library, for a CLI session; the concept for a web one.
+      // The log's title, and the log in the Library, for a CLI session. The
+      // web one has no log and opens its concept's page, which the concept's
+      // own row already does, so it is that row.
       ["session:2026-08-19-react-agents", "ReAct agents"],
-      ["session:web-x", "Recurrences"],
     ]);
     expect(recent.items.find((r) => r.key === "session:2026-08-19-react-agents")?.href).toBe(
       "/library/session%3Alearn%2Fsessions%2F2026-08-19-react-agents.md",
     );
-    expect(recent.items.find((r) => r.key === "session:web-x")?.href).toBe("/learn/recurrences");
     expect(recent.pinned.map((p) => p.key)).toEqual(["concept:recurrences"]);
     // One row per course, opening the module visited last in it.
     expect(recent.courses).toEqual([
