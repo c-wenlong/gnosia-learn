@@ -11,9 +11,7 @@ import { loadAssetDetail, loadAssetParents, loadFavorite, loadPlayback } from "@
 import { dayKey } from "@/lib/days";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { assetHref, conceptHref, explainedConcepts } from "@/lib/library";
-import { parseOpen, previewDate, type PreviewHeader } from "@/lib/library-preview";
-import { conversationLabel, latestConversation } from "@/lib/library-source";
-import { studioConversationHref } from "@/lib/row-menu";
+import { parseOpen, previewConversation, previewDate, type PreviewHeader } from "@/lib/library-preview";
 import { appTimeZone } from "@/lib/time-zone";
 
 /** What the previewer is handed for one asset. */
@@ -63,7 +61,6 @@ export async function loadPreview(requested: string): Promise<PreviewAnswer> {
   const body = await loadAssetBody(asset, derivations.derived);
   const first = explainedConcepts(concepts, new Map(kb.concepts.map((c) => [c.id, c])))[0];
   const family = familyOf(asset.kind);
-  const conversation = latestConversation(parents);
 
   const when = previewDate(asset.createdAt, asset.editedAt, { now: new Date(), timeZone: zone });
   const header: PreviewHeader = {
@@ -74,10 +71,7 @@ export async function loadPreview(requested: string): Promise<PreviewAnswer> {
     date: when.date,
     dateTime: when.dateTime,
     concept: first === undefined ? null : { href: conceptHref(first.slug), title: first.title },
-    conversation:
-      conversation === null
-        ? null
-        : { href: studioConversationHref(conversation.id), title: conversationLabel(conversation) },
+    conversation: previewConversation(parents),
     download: body.servable ? { href: body.fileHref, filename: body.downloadName } : null,
     page: assetHref(asset.id),
     wide: asset.kind === "video" || asset.kind === "diagram_svg",
