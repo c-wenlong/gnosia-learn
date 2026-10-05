@@ -6,8 +6,9 @@
  * `InlineConfirm`, which own the focus of a confirm. `MentionComposer` is one
  * too, and deliberately not exported here: it carries Lexical, which only
  * `/studio` should load. `SegmentedControl` is a client component a server
- * page may render in its `links` mode, where no function crosses. The
- * contract (names and props) is written down in docs/design/IMPLEMENTATION.md.
+ * page may render in its `links` mode, where no function crosses.
+ * `DialogHeader` has no state but takes `onClose`, so it goes inside a
+ * `Dialog`, in the client component that draws it. The contract (names and props) is written down in docs/design/IMPLEMENTATION.md.
  */
 export { Badge } from "./Badge";
 export { Banner } from "./Banner";
@@ -19,6 +20,7 @@ export { Chip } from "./Chip";
 export { ChoiceRow, type ChoiceState } from "./ChoiceRow";
 export { Combobox } from "./Combobox";
 export { Dialog, DIALOG_CLOSE_MS, type DialogProps, type DialogSize } from "./Dialog";
+export { DialogHeader } from "./DialogHeader";
 export { Composer } from "./Composer";
 export { ConfirmFold } from "./ConfirmFold";
 export { Divider } from "./Divider";

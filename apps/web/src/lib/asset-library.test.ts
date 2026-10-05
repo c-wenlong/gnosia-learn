@@ -161,7 +161,7 @@ describe("the words search reads", () => {
 
   it("reads nothing, and says so, when no transcript here has a stored copy", async () => {
     const out = await readSearchText(
-      [{ ...rows[0]!, id: "manimkc:out/x/y.transcript.json", kind: "transcript", path: "out/x/y.transcript.json", createdAt: "", updatedAt: "" }],
+      [{ ...rows[0]!, id: "manimkc:out/x/y.transcript.json", kind: "transcript", path: "out/x/y.transcript.json", createdAt: "", updatedAt: "", editedAt: null }],
       ["dot"],
     );
     expect(out.searchedText).toBe(false);

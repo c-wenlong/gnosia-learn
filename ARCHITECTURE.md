@@ -143,7 +143,7 @@ entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
 
-Twelve pages, a 404, and the API handlers below. Pages are server components;
+Twelve pages, two 404s, and the API handlers below. Pages are server components;
 the interactive parts opt into the client one component at a time. The app
 is mid-redesign: [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md)
 says which pages are on the new design and which phase replaces the rest.
@@ -156,14 +156,14 @@ says which pages are on the new design and which phase replaces the rest.
 | `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first; `?only=a,b,c` asks just those due cards (Home's recall card linked here until it moved into the chat, #381) |
 | `/settings` | `settings/page.tsx` | The theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
 | `/learn` | `learn/page.tsx` | The Learn index: every concept in a table with search and mastery filters, and the neighbourhood (or course) graph of the selected row |
-| `/learn/[concept]` | `learn/[concept]/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph. `?ask=` prefills the tutor's input |
+| `/learn/[concept]` | `learn/[concept]/(workspace)/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph. `?ask=` prefills the tutor's input |
 | `/learn/[concept]/session` | `learn/[concept]/session/page.tsx` | Session focus mode: probe, teach (the note's prose and its diagram or video), check, close. Every graded answer is evidence through `POST /api/learner/observe`; the close screen shows what moved and what got scheduled. `?mode=check` asks the note's checks only |
 | `/library` | `library/page.tsx` | Every indexed asset as a card grid: text search (`?q=`), kind and course chips, a newest or title sort, the concept each card explains |
 | `/library/[id]` | `library/[id]/page.tsx` | One asset (a video that resumes where it stopped, with chapters on its scrub bar and subtitles; a diagram; a file's words; or a link) with Mark read for anything not a video, and under it one tabbed card shared by every kind (`components/library/AssetTabs.tsx`: Explains, Related, Files, Details; a video puts its Transcript first) |
 | `/courses/[slug]` | `courses/[slug]/page.tsx` | The course path: one unit card per module with a node per topic, coloured by the mastery of the concepts whose notes name it (or by the tick when none does), one active node with Continue, and a rail with the course header, the module list and the current module's assets. Each node opens its note, recap, tick and tutor chat; each unit its resources |
 | `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | A 307 to `/courses/[slug]#<module-slug>`: the module page folded into the path as a unit |
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
-| not found | `not-found.tsx` | The 404 |
+| not found | `not-found.tsx`, `(app)/not-found.tsx` | The 404: the root one for an address no route matches, the `(app)` one, inside the shell, for a `notFound()` from a page under it |
 | `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn, for a course topic, with `conceptSlug` for one concept note, or with `subject` for the open tutor (`/ask`), which reads no note and records nothing |
 | `POST /api/agent/session` | `api/agent/session/route.ts` | One multiple-choice question for a session step, written by the tutor model as JSON and refused if it is not; writes nothing |
 | `GET /api/concepts/[slug]` | `api/concepts/[slug]/route.ts` | Everything the concept workspace shows about one concept, as JSON |

@@ -226,7 +226,6 @@ export function checkProviderLabel(value: unknown): { ok: true; label: string } 
   if (label.length > CUSTOM_PROVIDER_LIMITS.maxLabelChars) {
     return { ok: false, reason: `The name is longer than ${CUSTOM_PROVIDER_LIMITS.maxLabelChars} characters.` };
   }
-  // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(label)) return { ok: false, reason: "The name has a character it cannot hold." };
   return { ok: true, label };
 }

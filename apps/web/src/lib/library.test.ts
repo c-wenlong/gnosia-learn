@@ -342,6 +342,7 @@ function row(
     url: string | null;
     topics: string[];
     createdAt: string;
+    editedAt: string | null;
   }> = {},
 ) {
   return {
@@ -353,6 +354,7 @@ function row(
     bytes: null,
     topics: [],
     createdAt: "2026-09-13T00:00:00.000Z",
+    editedAt: null,
     ...over,
   };
 }
@@ -488,6 +490,13 @@ describe("sortRows", () => {
 
   it("sorts by the name on the card, ignoring case and reading numbers as numbers", () => {
     expect(ids(sortRows(rows, "title"))).toEqual(["a", "b", "e", "d", "c"]);
+  });
+
+  it("keeps a row where it was made when a person edits it later", () => {
+    // "edited 4 Oct" is a label on the row, not a move: the day groups and
+    // the newest sort are `createdAt` alone (L2).
+    const edited = [...rows, row("f", { title: "Phi", createdAt: "2026-09-01T00:00:00.000Z", editedAt: "2026-10-04T00:00:00.000Z" })];
+    expect(ids(sortRows(edited, "newest"))).toEqual(["a", "b", "e", "c", "d", "f"]);
   });
 
   it("does not reorder its input", () => {

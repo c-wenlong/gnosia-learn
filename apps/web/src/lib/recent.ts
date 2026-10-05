@@ -217,7 +217,8 @@ export const SIDEBAR_COURSES = 12;
  * module visits, each once. An owner who has opened none yet gets the courses
  * they have ticked something in, in the shortlist's order, so the section is
  * not empty for someone who studied before visits were recorded. A course
- * set aside on the Courses page is left out, as Home leaves it out.
+ * set aside on the Courses page is left out, as Home leaves it out. Each
+ * opens at the module visited last in it.
  */
 export function sidebarCourses(
   courses: readonly Course[],
@@ -236,14 +237,18 @@ export function sidebarCourses(
   }
   return picked.slice(0, SIDEBAR_COURSES).map((c) => {
     const base = `/courses/${encodeURIComponent(c.slug)}`;
+    // Visits are newest first, so the first one in this course with a module that still exists.
+    const last = visits
+      .filter((v) => v.courseSlug === c.slug && v.moduleSlug !== undefined)
+      .map((v) => c.modules.find((m) => m.slug === v.moduleSlug))
+      .find((m) => m !== undefined);
     return {
       slug: c.slug,
       code: c.code,
       title: c.title,
       href: base,
-      modules: [...c.modules]
-        .sort((a, b) => a.order - b.order)
-        .map((m) => ({ slug: m.slug, title: m.title, order: m.order, href: `${base}/${encodeURIComponent(m.slug)}` })),
+      open: last === undefined ? base : `${base}/${encodeURIComponent(last.slug)}`,
+      resume: last === undefined ? null : { title: last.title, order: last.order },
     };
   });
 }

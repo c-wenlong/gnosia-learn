@@ -497,7 +497,7 @@ export default async function LibraryPage({
                               grouping={group}
                               topic={describe(row).topic}
                               time={timeOfDay(row.createdAt, timeZone)}
-                              edited={editedLabel(row.createdAt, row.updatedAt, { now, timeZone })}
+                              edited={editedLabel(row.createdAt, row.editedAt, { now, timeZone })}
                               href={assetHref(row.id)}
                               menu={menuOf(row)}
                             />

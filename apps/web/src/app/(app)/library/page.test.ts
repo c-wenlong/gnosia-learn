@@ -62,6 +62,7 @@ const ROWS = [
     topics: ["operating-systems"],
     createdAt: "2026-10-03T08:00:00Z",
     updatedAt: "2026-10-03T08:00:00Z",
+    editedAt: null,
   },
   {
     id: "note:tlb",
@@ -73,8 +74,9 @@ const ROWS = [
     sourceRepo: "self-learn",
     topics: ["operating-systems"],
     createdAt: "2026-09-29T12:00:00Z",
-    // Revised five days later: the row says so.
+    // Revised by a person five days later: the row says so.
     updatedAt: "2026-10-04T09:00:00Z",
+    editedAt: "2026-10-04T09:00:00Z",
   },
   {
     id: "session:2026-09-29-tlb",
@@ -87,6 +89,7 @@ const ROWS = [
     topics: [],
     createdAt: "2026-09-29T15:30:00Z",
     updatedAt: "2026-09-29T15:30:00Z",
+    editedAt: null,
   },
   {
     id: "link:ostep",
@@ -98,7 +101,9 @@ const ROWS = [
     sourceRepo: "self-learn",
     topics: ["operating-systems"],
     createdAt: "2026-09-01T00:00:00Z",
-    updatedAt: "2026-09-01T00:00:00Z",
+    // Rewritten by an import a month later: no person changed it, so no label.
+    updatedAt: "2026-10-02T00:00:00Z",
+    editedAt: null,
   },
   {
     id: "video:paging.vtt",
@@ -111,6 +116,7 @@ const ROWS = [
     topics: ["operating-systems"],
     createdAt: "2026-10-03T08:00:00Z",
     updatedAt: "2026-10-03T08:00:00Z",
+    editedAt: null,
   },
 ];
 
@@ -273,9 +279,10 @@ describe("/library", () => {
     expect(html).toContain("Teach session: the TLB");
     // The link has no parent and shows its topic.
     expect(html).toContain("Operating systems");
-    // Times in the owner's zone, and the edited day for the revised note.
+    // Times in the owner's zone, and the edited day for the note a person
+    // revised; the link an import rewrote says nothing.
     expect(html).toContain('<time dateTime="2026-10-03T08:00:00Z">08:00</time>');
-    expect(html).toContain("edited 4 Oct");
+    expect(html).toContain('<time dateTime="2026-10-04T09:00:00Z">edited 4 Oct</time>');
     expect(html.match(/edited /g)).toHaveLength(1);
   });
 
