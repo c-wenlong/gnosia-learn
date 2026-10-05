@@ -98,7 +98,10 @@ export function HomeComposer({ path, video }: { path: string; video: VideoAvaila
         autoFocus={focusIsUnclaimed}
         fallbackNote="The @ menu could not load; the Diagram and Video buttons still add tags."
         sendDisabled={busy || block !== null}
+        // A bare tag's reason is heard, not shown: a line appearing under
+        // the box on every tag was noise, and the disabled Send says enough.
         disabledReason={busy ? "Opening the conversation." : (block ?? undefined)}
+        quietReason={!busy}
         toolbar={options.map((option) => (
           <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
         ))}

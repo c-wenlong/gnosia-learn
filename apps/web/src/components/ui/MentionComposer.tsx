@@ -149,6 +149,11 @@ export interface MentionComposerProps<K extends string = string> {
   disabled?: boolean;
   sendDisabled?: boolean;
   disabledReason?: string;
+  /**
+   * Keep the reason for a screen reader only: still the field's and Send's
+   * description, but `sr-only`, so it takes no room under the box.
+   */
+  quietReason?: boolean;
   onModEnter?: () => void;
   maxRows?: number;
   sendLabel?: string;
@@ -320,6 +325,7 @@ function Field<K extends string>({
   disabled = false,
   sendDisabled = false,
   disabledReason,
+  quietReason = false,
   onModEnter,
   maxRows = COMPOSER_MAX_ROWS,
   sendLabel = "Send",
@@ -898,7 +904,7 @@ function Field<K extends string>({
         </div>
       )}
       {reason !== null && (
-        <p id={reasonId} className={COMPOSER_REASON}>
+        <p id={reasonId} className={quietReason ? "sr-only" : COMPOSER_REASON}>
           {reason}
         </p>
       )}
