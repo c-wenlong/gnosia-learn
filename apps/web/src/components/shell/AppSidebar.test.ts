@@ -749,3 +749,124 @@ describe("the sections", () => {
     expect(section(container, "sidebar-recent").textContent).toContain("Recent could not be read.");
   });
 });
+
+describe("the shortcuts", () => {
+  // jsdom is neither a Mac nor a phone: Ctrl is the modifier, and the
+  // sidebar is the desktop column.
+  const key = (init: KeyboardEventInit, target: EventTarget = window) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+    return event;
+  };
+
+  beforeAll(() => {
+    const proto = HTMLDialogElement.prototype as unknown as { showModal: () => void; close: () => void };
+    proto.showModal ??= function (this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    };
+    proto.close ??= function (this: HTMLDialogElement) {
+      this.removeAttribute("open");
+    };
+  });
+
+  afterEach(() => {
+    document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
+  });
+
+  it("folds and unfolds the sidebar on Ctrl+., and keeps the browser's own press from running", async () => {
+    const container = await mount(false);
+    const room = () => nav(container).parentElement!;
+    expect(room().className).toContain("w-[260px]");
+    const event = key({ key: ".", ctrlKey: true });
+    expect(event.defaultPrevented).toBe(true);
+    expect(room().className).toContain("w-[60px]");
+    expect(document.cookie).toContain("gnosia-sidebar=collapsed");
+    key({ key: ".", ctrlKey: true });
+    expect(room().className).toContain("w-[260px]");
+  });
+
+  it("focuses the search on Ctrl+K, even from a field, and slides the rail out to do it", async () => {
+    const container = await mount(false);
+    const field = () => nav(container).querySelector<HTMLInputElement>('input[name="history-search"]')!;
+    const elsewhere = document.createElement("textarea");
+    document.body.append(elsewhere);
+    elsewhere.focus();
+    key({ key: "k", ctrlKey: true }, elsewhere);
+    expect(document.activeElement).toBe(field());
+
+    elsewhere.focus();
+    key({ key: ".", ctrlKey: true }, elsewhere);
+    // Typing: the fold is not taken from the field.
+    expect(nav(container).dataset.state).toBe("open");
+    elsewhere.blur();
+    key({ key: ".", ctrlKey: true });
+    expect(nav(container).dataset.state).toBe("rail");
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, cancelable: true }));
+    });
+    expect(nav(container).dataset.state).toBe("peek");
+    expect(document.activeElement).toBe(field());
+    elsewhere.remove();
+  });
+
+  it("presses New chat on Ctrl+Shift+O, which on the studio empties its composer", async () => {
+    mocks.pathname = "/studio";
+    const newChat = vi.fn();
+    function Studio() {
+      usePublishStudioChats({ active: "d1", pending: null, newChat, navigate: () => true, path: "/studio", initial: [DRAFT], titles: {} });
+      return null;
+    }
+    await mount(true, Studio as () => null);
+    key({ key: "O", ctrlKey: true, shiftKey: true });
+    expect(newChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds no New chat without a studio, and nothing while a modal dialog is open", async () => {
+    const container = await mount(false);
+    expect(key({ key: "O", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    document.body.append(dialog);
+    expect(key({ key: ".", ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(nav(container).dataset.state).toBe("open");
+    dialog.remove();
+  });
+
+  it("opens the shortcuts sheet on ? as a kit Dialog listing the table, and closes it on Escape", async () => {
+    await mount(true);
+    key({ key: "?", shiftKey: true });
+    const sheet = document.querySelector<HTMLDialogElement>("dialog[open]")!;
+    expect(sheet).not.toBeNull();
+    expect(sheet.textContent).toContain("Keyboard shortcuts");
+    expect([...sheet.querySelectorAll("[data-shortcut]")].map((row) => row.getAttribute("data-shortcut"))).toEqual(
+      expect.arrayContaining(["new-chat", "search", "toggle-sidebar", "show-shortcuts", "preview-step"]),
+    );
+    // Ctrl and the key as caps, not ⌘: jsdom is not a Mac.
+    const caps = [...sheet.querySelectorAll('[data-shortcut="search"] kbd')].map((kbd) => kbd.textContent);
+    expect(caps).toEqual(["Ctrl", "K"]);
+    // The kit's rise and fade, and none of it under reduced motion.
+    expect(sheet.className).toContain("starting:open:opacity-0");
+    expect(sheet.className).toContain("motion-reduce:transition-none");
+    act(() => {
+      sheet.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
+    expect(document.querySelector("dialog")).toBeNull();
+  });
+
+  it("does not open the sheet while typing, and opens it from Ctrl+/", async () => {
+    await mount(false);
+    const field = document.createElement("input");
+    document.body.append(field);
+    field.focus();
+    key({ key: "?", shiftKey: true }, field);
+    expect(document.querySelector("dialog")).toBeNull();
+    field.remove();
+    key({ key: "/", ctrlKey: true });
+    expect(document.querySelector("dialog[open]")).not.toBeNull();
+  });
+});
