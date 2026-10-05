@@ -7,6 +7,7 @@ import {
   collection,
   collectionItem,
   concept,
+  contentRevision,
   type OwnerScope,
   topic,
 } from "@self-learn/schema";
@@ -122,6 +123,78 @@ export async function assetNamesExist(db: CatalogDatabase): Promise<boolean> {
     console.warn("asset names: this database predates asset_name (0024), so assets show their source's titles; run `npm run catalog -- migrate`");
   }
   return present;
+}
+
+/** Only a yes is kept, as for `asset_name`. */
+const hasRevisions = new WeakMap<object, true>();
+
+/**
+ * Does this database have `content_revision` (migration 0010)? A database
+ * from before it has no record of who wrote a row, so every asset reads with
+ * `editedAt` null rather than every asset read failing.
+ */
+export async function revisionsExist(db: CatalogDatabase): Promise<boolean> {
+  const key = cacheKey(db);
+  if (hasRevisions.has(key)) return true;
+  const { rows } = await db.execute<{ present: boolean }>(
+    sql`select to_regclass(current_schema() || '.content_revision') is not null as present`,
+  );
+  const present = rows[0]?.present === true;
+  if (present) hasRevisions.set(key, true);
+  return present;
+}
+
+/**
+ * When a person last changed the asset, if a person's write is the last
+ * change it has had: the Library's "edited 2 Oct" (L2 of
+ * docs/proposals/library-by-type-and-day.md, the owner's call of 2026-10-05).
+ * Null when the last change was an import or an indexer, and for an asset
+ * with no history.
+ *
+ * `asset.updated_at` cannot answer it: every upsert sets it, so a `catalog
+ * import` or a video tool's index run that rewrites a row moves it, and on
+ * the owner's catalog 739 of 963 assets had it later than `created_at`.
+ * `content_revision` says who wrote each version (`author_kind`), so the last
+ * change is the asset's latest revision that changed something, and the
+ * answer is its time when its author was a person.
+ *
+ * Three refinements, each from the owner's own history:
+ *
+ * - A person-run write that only moved bytes into the blob store or rehooked
+ *   a poster (`catalog asset upload`, flip day) is not a change: a revision
+ *   whose snapshot, less `entity.blob_key` and `links.asset_derivation`,
+ *   equals the one before it is skipped. An import revision is always a
+ *   change, since an import appends only when its snapshot moved.
+ * - A poster is cut by `catalog asset upload` or a studio accept and never
+ *   edited, but the upload records itself as a person, so a poster's
+ *   revisions never count.
+ * - A rename is the reader's own `asset_name` row, not a revision, so its
+ *   `updated_at` is a person's change too, and the later of it and the last
+ *   revision decides.
+ *
+ * Revisions are keyed by the asset's id, which is global (D23), and only an
+ * asset the reader may read reaches this, so it widens nothing.
+ */
+function editedAtColumn(learnerId: string, names: boolean): SQL<Date | string | null> {
+  const stripped = (alias: string) => sql.raw(`(${alias}.snapshot #- '{entity,blob_key}' #- '{links,asset_derivation}')`);
+  const renamed = names
+    ? sql`union all (select n.updated_at, true from ${assetName} n where n.learner_id = ${learnerId} and n.asset_id = "asset"."id")`
+    : sql``;
+  return sql<Date | string | null>`(
+    select case when x.person then x.at end
+    from (
+      (select c.created_at as at, (c.author_kind = 'person' and c.op <> 'delete' and "asset"."kind" <> 'poster') as person
+       from ${contentRevision} c
+       left join ${contentRevision} p on p.id = c.previous_id
+       where c.entity_type = 'asset' and c.entity_id = "asset"."id"
+         and (c.author_kind = 'import' or p.id is null or ${stripped("c")} is distinct from ${stripped("p")})
+       order by c.seq desc
+       limit 1)
+      ${renamed}
+    ) x
+    order by x.at desc
+    limit 1
+  )`;
 }
 
 /**
@@ -491,10 +564,16 @@ export interface AssetWithTopics extends AssetRef {
   createdAt: string;
   /**
    * When the row last changed, as an ISO instant: `asset.updated_at`, which
-   * every upsert sets (`updateSet` in `../content/upsert.ts`). The Library
-   * row says "edited" when it is more than a day after `createdAt`.
+   * every upsert sets (`updateSet` in `../content/upsert.ts`). The
+   * Library no longer reads it for "edited": see `editedAt`.
    */
   updatedAt: string;
+  /**
+   * When a person last changed the row, as an ISO instant, or null when the
+   * last change was an import or an indexer (`editedAtColumn`). The Library
+   * row says "edited" when it is more than a day after `createdAt`.
+   */
+  editedAt: string | null;
 }
 
 /**
@@ -571,8 +650,8 @@ export async function listAssets(
   // spells that. Short-circuiting also saves the round trip, the same way
   // `assetsByIds` does.
   if (options.ids !== undefined && options.ids.length === 0) return [];
-  const names = await assetNamesExist(db);
-  return scopedRead(db, scope.readable, (owners) => listScoped(db, options, owners, scope.owner, names));
+  const [names, revisions] = await Promise.all([assetNamesExist(db), revisionsExist(db)]);
+  return scopedRead(db, scope.readable, (owners) => listScoped(db, options, owners, scope.owner, names, revisions));
 }
 
 /** `listAssets` for one set of owners, or every owner on a database from before 0010. */
@@ -582,6 +661,7 @@ async function listScoped(
   owners: Owners,
   learnerId: string,
   names: boolean,
+  revisions: boolean,
 ): Promise<AssetWithTopics[]> {
   const { kind, topicSlug, sourceRepo, ids, limit, offset } = options;
   const conditions = [
@@ -602,6 +682,7 @@ async function listScoped(
       ...assetColumns(learnerId, names),
       createdAt: asset.createdAt,
       updatedAt: asset.updatedAt,
+      editedAt: revisions ? editedAtColumn(learnerId, names) : sql<null>`null`,
       // Only chips for topics the reader may read (phase 4).
       topics: sql<string[]>`(
         select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug} collate "C"), '{}')
@@ -633,6 +714,9 @@ async function listScoped(
     topics: row.topics ?? [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    // A timestamp out of raw SQL is parsed by the driver, not by drizzle's
+    // column mapping, so it is normalised whichever form it arrives in.
+    editedAt: row.editedAt === null || row.editedAt === undefined ? null : new Date(row.editedAt).toISOString(),
   }));
 }
 
