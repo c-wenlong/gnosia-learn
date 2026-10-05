@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { useShell } from "@/components/shell/shell-context";
 import { cx } from "@/components/ui/classes";
@@ -9,6 +9,7 @@ import { tabIds } from "@/components/ui/roving";
 import { TabList } from "@/components/ui/TabList";
 import { TextLink } from "@/components/ui/TextLink";
 import { useMediaQuery } from "@/components/ui/use-media-query";
+import { scrollBehavior } from "@/lib/motion";
 
 /**
  * The workspace's three panels (hi-fi 04): Note & sources, Tutor, Studio.
@@ -45,6 +46,9 @@ const TABS: { id: PanelKey; label: string }[] = [
 /** The `ws:` variant's two widths (globals.css): the sidebar open, and folded to its rail. */
 const WIDE_OPEN = "(min-width: 1160px)";
 const WIDE_RAIL = "(min-width: 960px)";
+
+/** The fragment that brings the note into view, wherever it is on this layout. */
+export const NOTE_HASH = "#note";
 
 /**
  * Whether the panels sit side by side, as `ws:` decides it: by the room
@@ -205,6 +209,22 @@ export function WorkspacePanels({
   const studioRail = useRef<HTMLButtonElement>(null);
   const studioCollapse = useRef<HTMLButtonElement>(null);
 
+  // `#note` brings the note into view: the tutor's recorded-answer card links
+  // there (D89 of docs/STUDIO-CHAT-FIRST.md). As tabs that is the note's tab,
+  // side by side the note panel, opened if it was folded.
+  const notePanel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const show = () => {
+      if (window.location.hash !== NOTE_HASH) return;
+      setActive("note");
+      setNoteOpen(true);
+      requestAnimationFrame(() => notePanel.current?.scrollIntoView?.({ block: "start", behavior: scrollBehavior() }));
+    };
+    show();
+    window.addEventListener("hashchange", show);
+    return () => window.removeEventListener("hashchange", show);
+  }, []);
+
   /** Fold or open a side panel, and hand the focus to the control that undoes it. */
   const toggle = (set: (open: boolean) => void, open: boolean, next: RefObject<HTMLButtonElement | null>) => {
     set(open);
@@ -261,7 +281,7 @@ export function WorkspacePanels({
           "ws:transition-[grid-template-columns] ws:duration-200 ws:ease-soft ws:motion-reduce:transition-none",
         )}
       >
-        <div className={shown("note")} data-panel="note" data-active={active === "note"} {...tabPanel("note")}>
+        <div ref={notePanel} className={shown("note")} data-panel="note" data-active={active === "note"} {...tabPanel("note")}>
           <SidePanel
             label="Note & sources"
             open={noteOpen}

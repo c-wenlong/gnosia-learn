@@ -516,3 +516,55 @@ describe("motion", () => {
     expect(mocks.scrolls).toEqual([]);
   });
 });
+
+describe("a recorded answer (D89)", () => {
+  const verdict = (over: Record<string, unknown> = {}) => ({
+    question: "What does the second packet carry?",
+    requestId: "req-1",
+    source: "teach",
+    judged: "ready",
+    suggested: true,
+    feedback: null,
+    state: "recorded",
+    tapped: true,
+    error: null,
+    recorded: { correct: true, pLBefore: 0.25, pLAfter: 0.41, intervalDays: 1 },
+    ...over,
+  });
+  const seed = (slug: string, answer: Record<string, unknown>) =>
+    sessionStorage.setItem(
+      threadKey(slug),
+      JSON.stringify([
+        { role: "assistant", content: "CHECK: What does the second packet carry?" },
+        { role: "user", content: "SYN and ACK", verdict: answer },
+        { role: "assistant", content: "Right." },
+      ]),
+    );
+
+  it("is a card naming the concept, the verdict and the move, with a link to the note", async () => {
+    seed("tcp-recorded", verdict());
+    const host = await mount({ slug: "tcp-recorded" });
+    const card = host.querySelector<HTMLElement>("[data-recorded]");
+    expect(card?.dataset.recorded).toBe("correct");
+    expect(card?.getAttribute("aria-label")).toBe("Recorded as correct: The TCP handshake");
+    expect(card?.textContent).toContain("The TCP handshake");
+    expect(card?.textContent).toContain("Mastery moved: p(L) 0.25 → 0.41");
+    expect(card?.textContent).toContain("review in 1 day");
+    const link = [...card!.querySelectorAll("a")].find((a) => a.textContent === "Open the note");
+    expect(link?.getAttribute("href")).toBe("#note");
+  });
+
+  it("says incorrect in the warn colour, and leaves an answer not yet recorded as its row", async () => {
+    seed("tcp-wrong", verdict({ recorded: { correct: false, pLBefore: 0.4, pLAfter: 0.3, intervalDays: null }, tapped: false }));
+    const host = await mount({ slug: "tcp-wrong" });
+    const card = host.querySelector<HTMLElement>("[data-recorded]");
+    expect(card?.dataset.recorded).toBe("incorrect");
+    expect(card?.textContent).toContain("Recorded as incorrect");
+    expect(card?.textContent).not.toContain("review in");
+
+    seed("tcp-open", verdict({ state: "open", recorded: null, tapped: null }));
+    const open = await mount({ slug: "tcp-open" });
+    expect(open.querySelector("[data-recorded]")).toBeNull();
+    expect(open.querySelector('[aria-label="Record this answer"]')).not.toBeNull();
+  });
+});

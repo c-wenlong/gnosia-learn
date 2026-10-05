@@ -122,6 +122,14 @@ until the thread moves on, then folds to "Not recorded". A write that fails
 keeps the row and its request id, so the next tap retries the same answer
 rather than recording a second (`requestId`, as the session page does).
 
+Since 2026-10-05 (D89 of [STUDIO-CHAT-FIRST.md](../STUDIO-CHAT-FIRST.md)),
+in the concept tutor the committed row is a card rather than that one line:
+the verdict, the concept, "Mastery moved: p(L) 0.25 → 0.41", the next
+review, and "Open the note", which brings the concept's note into view
+(`#note`). After Manus's deliverable card and its "View all files in this
+task": the thread shows what the turn left behind. The recording flow is
+unchanged; the course topic tutor keeps the line.
+
 This is the review page's own rule for a check card, applied to prose: "a
 right pick suggests Good and a wrong one Again, shown on the rating row and
 committed by Continue, and any of the four buttons overrides it". The model

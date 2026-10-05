@@ -278,6 +278,22 @@ export function recordedLine(result: RecordedResult, interval: (days: number) =>
   return parts.join(" · ");
 }
 
+/**
+ * The recorded-answer card's words (D89 of docs/STUDIO-CHAT-FIRST.md): the
+ * verdict, the mastery's move in the session page's terms, and the next
+ * review, the same facts `recordedLine` puts on one line.
+ */
+export function recordedCard(
+  result: RecordedResult,
+  interval: (days: number) => string,
+): { verdict: string; mastery: string; review: string | null } {
+  return {
+    verdict: `Recorded as ${result.correct ? "correct" : "incorrect"}`,
+    mastery: `Mastery moved: p(L) ${result.pLBefore.toFixed(2)} → ${result.pLAfter.toFixed(2)}`,
+    review: result.intervalDays === null ? null : `review in ${interval(result.intervalDays)}`,
+  };
+}
+
 /** Lowercase words of three letters or more, for matching a question to a note's check. */
 function words(text: string): Set<string> {
   return new Set(text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
