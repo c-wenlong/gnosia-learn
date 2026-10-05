@@ -283,7 +283,7 @@ export function AppSidebar() {
           <div
             ref={scroller}
             data-sidebar-scroll=""
-            className={cx("min-h-0 flex-1 overflow-x-hidden px-[13px] pb-3", rail ? "overflow-y-hidden" : "overflow-y-auto")}
+            className={cx("relative min-h-0 flex-1 overflow-x-hidden px-[13px] pb-3", rail ? "overflow-y-hidden" : "overflow-y-auto")}
           >
             <ul className="flex flex-col gap-px">
               {studio && (

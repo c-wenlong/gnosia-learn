@@ -124,7 +124,7 @@ export function CourseSidebar({
               : "@3xl:invisible @3xl:grid-rows-[0fr] @3xl:opacity-0 @3xl:transition-[grid-template-rows,opacity,visibility]",
           )}
         >
-          <div className="min-h-0 overflow-clip [overflow-clip-margin:4px]">
+          <div className="relative min-h-0 overflow-clip [overflow-clip-margin:4px]">
             <ol className="flex flex-col gap-0.5 pt-1">
               {course.modules.map((m, i) => {
                 const s = status.modules[i]!;
