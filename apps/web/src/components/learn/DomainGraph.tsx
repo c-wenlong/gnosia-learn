@@ -183,8 +183,8 @@ export function DomainGraph({
   // The frame's width does not depend on the title band, so the scale is measured from it before the band is known.
   // On the way to the axes the width glides with the rest of the frame.
   // A drag holds the frame still, in groups only: on the axes no drag is under way (it ends at the switch).
-  const held = onAxes ? null : frozen;
-  const frameWidth = (held ?? viewBoxFor(layout, topic, moved)).width * (1 - glide) + axesViewBox(layout.axes).width * glide;
+  const heldFrame = onAxes ? null : frozen;
+  const frameWidth = (heldFrame ?? viewBoxFor(layout, topic, moved)).width * (1 - glide) + axesViewBox(layout.axes).width * glide;
   const scale = drawn === null ? 1 : drawn / frameWidth;
   const font = labelFont(scale);
   // A topic's title keeps 11px on screen too (D10), and its group's band grows upward to hold it.
@@ -196,7 +196,7 @@ export function DomainGraph({
   // A label drawn larger than the layout's size reaches further below its dot, so the frame grows to hold the bottom row's.
   const live = { ...fit, height: fit.height + Math.max(0, labelFoot(2, font) - labelFoot(2)) };
   const axes = axesGeometry(layout.axes, scale);
-  const view = held ?? mixBox(live, axesViewBox(layout.axes, scale), glide);
+  const view = heldFrame ?? mixBox(live, axesViewBox(layout.axes, scale), glide);
   // What stays lit (D5, D9): a concept and its neighbours, a topic's group, or a legend chip's.
   const keep =
     hover !== null && shown.has(hover)
@@ -248,7 +248,7 @@ export function DomainGraph({
   };
   const titleCut = overTitle !== null && overTitle === hoverTopic && plateFor(overTitle) !== null ? overTitle : null;
   if (titleCut !== null && titleCut !== titleHeld) setTitleHeld(titleCut);
-  const held = plateFor(titleHeld);
+  const heldPlate = plateFor(titleHeld);
 
   const pointerAt = (event: { clientX: number; clientY: number }, frame: Box) =>
     svg.current === null ? { x: 0, y: 0 } : toLayoutPoint(event.clientX, event.clientY, svg.current.getBoundingClientRect(), frame);
@@ -422,10 +422,10 @@ export function DomainGraph({
             />
           );
         })}
-        {held !== null && titleHeld !== null && (
+        {heldPlate !== null && titleHeld !== null && (
           <TitlePlate
             key={titleHeld}
-            plate={held}
+            plate={heldPlate}
             font={heading}
             shown={titleCut === titleHeld}
             onGone={() => setTitleHeld((t) => (t === titleHeld ? null : t))}
