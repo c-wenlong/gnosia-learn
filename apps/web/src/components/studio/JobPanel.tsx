@@ -14,7 +14,7 @@ import { readJobLookup, type JobLookup } from "@/lib/studio-video";
 import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { buttonClasses } from "@/components/ui/classes";
+import { buttonClasses, cx } from "@/components/ui/classes";
 import {
   failureFooter,
   failureReport,
@@ -376,7 +376,7 @@ function DiagramJobPanel({
       </div>
 
       {said !== null && (
-        <p className={`mt-2 text-xs ${said.ok ? "text-ok-text" : "text-danger"}`}>{said.text}</p>
+        <p className={cx("mt-2 text-xs", said.ok ? "text-ok-text" : "text-danger")}>{said.text}</p>
       )}
 
       {/* The runner's `note` and the candidate's path were printed here as
@@ -408,15 +408,16 @@ function PhaseList({ rows, live }: { rows: PhaseRow[]; live: boolean }) {
         {rows.map((row) => (
           <li
             key={row.key}
-            className={`flex h-8 items-center gap-2 text-xs ${
+            className={cx(
+              "flex h-8 items-center gap-2 text-xs",
               row.status === "pending"
                 ? "opacity-40"
                 : row.status === "done"
                   ? "text-text2"
                   : row.status === "failed"
                     ? "text-danger"
-                    : "font-medium"
-            }`}
+                    : "font-medium",
+            )}
           >
             <span aria-hidden className="w-4 shrink-0 text-center">
               {row.status === "done" ? "✓" : row.status === "failed" ? "✕" : row.status === "current" ? "•" : "·"}

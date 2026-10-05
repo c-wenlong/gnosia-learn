@@ -84,7 +84,7 @@ export function TileJob({
   return (
     // Fades in over the tile as the job starts; opacity only, since a scale
     // would show the thumbnail round its edges for a moment.
-    <div className={`absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border ${FADE_IN}`}>
+    <div className={cx("absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border", FADE_IN)}>
       {/* Keyed by job, so a second job on the same diagram starts from its own pictures. */}
       <JobStage key={job.jobId} job={job} title={title} thumbnail={thumbnail} path={path} isNew={false} />
     </div>
@@ -172,7 +172,7 @@ function NewDiagramRow({ job, path }: { job: Job; path: string }) {
     <PanelLink
       href={panelHref(path, { job: job.jobId })}
       scroll={false}
-      className={`flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2 ${FADE_IN}`}
+      className={cx("flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2", FADE_IN)}
     >
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-surface2">
         <Dot stage={tileStage(job)} />
@@ -288,7 +288,7 @@ function Backdrop({
             onLoad={afterLoaded}
             onError={() => setAfterMissing(true)}
             // Clear of the status bar, so the bar never sits on the drawing.
-            className={`relative h-full w-full object-contain px-2 pt-2 pb-14 ${afterShown ? "studio-fade-in" : "opacity-0"}`}
+            className={cx("relative h-full w-full object-contain px-2 pt-2 pb-14", afterShown ? "studio-fade-in" : "opacity-0")}
           />
         )}
       </div>
@@ -301,7 +301,11 @@ function Backdrop({
   // square drawing, and a cover-cropped backdrop cut exactly that change off.
   // Framed the same, the thumbnail blurs in place when a job starts.
   // The blur deepens, and the veil thickens, as a job fails: a change, not a cut.
-  const layer = `absolute inset-0 h-full w-full object-contain p-2 ${blur} transition-[filter] duration-300 ease-out motion-reduce:transition-none`;
+  const layer = cx(
+    "absolute inset-0 h-full w-full object-contain p-2",
+    blur,
+    "transition-[filter] duration-300 ease-out motion-reduce:transition-none",
+  );
   const thumbnailShown = thumbnail !== null && showsThumbnail(live);
   return (
     <div aria-hidden className="absolute inset-0 overflow-hidden">
@@ -321,10 +325,15 @@ function Backdrop({
           src={live.current}
           alt=""
           onAnimationEnd={settle}
-          className={`${layer} ${live.settled ? "" : "studio-fade-in"}`}
+          className={cx(layer, live.settled ? "" : "studio-fade-in")}
         />
       )}
-      <div className={`absolute inset-0 transition-[background-color] duration-300 ease-out motion-reduce:transition-none ${stage === "failed" ? "studio-veil-strong" : "studio-veil"}`} />
+      <div
+        className={cx(
+          "absolute inset-0 transition-[background-color] duration-300 ease-out motion-reduce:transition-none",
+          stage === "failed" ? "studio-veil-strong" : "studio-veil",
+        )}
+      />
       {stage === "working" && <div className="studio-shimmer absolute inset-0 overflow-hidden" />}
     </div>
   );
@@ -434,7 +443,7 @@ function RowWords({ job }: { job: Job }) {
   // The words truncate first; the dot and the time never do.
   return (
     <span
-      className={`flex min-w-0 max-w-full items-center gap-1.5 ${stage === "failed" ? "text-danger" : "text-text2"}`}
+      className={cx("flex min-w-0 max-w-full items-center gap-1.5", stage === "failed" ? "text-danger" : "text-text2")}
     >
       <Dot stage={stage} />
       <span className="min-w-0 truncate">{rowWords(job)}</span>
@@ -450,7 +459,7 @@ function RowWords({ job }: { job: Job }) {
 function Dot({ stage }: { stage: TileStage }) {
   const tone =
     stage === "failed" ? "bg-danger" : stage === "review" ? "bg-ok" : "bg-accent studio-breathe";
-  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${tone}`} />;
+  return <span aria-hidden className={cx("h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none", tone)} />;
 }
 
 function capitalise(text: string): string {
