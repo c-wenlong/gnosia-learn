@@ -89,4 +89,10 @@ describe("editedLabel", () => {
     expect(editedLabel("bad", "2026-10-03T00:00:00Z", options)).toBeNull();
     expect(editedLabel(made, "bad", options)).toBeNull();
   });
+
+  it("says nothing when no person changed the row, however long ago it was made", () => {
+    // The catalog's `editedAt` is null when the last change was an import or
+    // an indexer refresh, which is most rows: `updated_at` is not read at all.
+    expect(editedLabel("2026-01-01T00:00:00Z", null, options)).toBeNull();
+  });
 });

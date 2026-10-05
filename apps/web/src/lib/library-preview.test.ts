@@ -152,20 +152,33 @@ describe("previewDate", () => {
   const now = new Date("2026-10-05T04:00:00Z");
   const timeZone = "Asia/Singapore";
 
-  it("says the day it was made", () => {
-    expect(previewDate("2026-10-04T10:00:00Z", "2026-10-04T10:05:00Z", { now, timeZone })).toBe("4 Oct");
+  it("says the day it was made, with the instant it was made", () => {
+    expect(previewDate("2026-10-04T10:00:00Z", "2026-10-04T10:05:00Z", { now, timeZone })).toEqual({
+      date: "4 Oct",
+      dateTime: "2026-10-04T10:00:00Z",
+    });
   });
 
-  it("says edited when it changed more than a day later", () => {
-    expect(previewDate("2026-09-01T10:00:00Z", "2026-10-02T10:00:00Z", { now, timeZone })).toBe("edited 2 Oct");
+  it("says edited when a person changed it more than a day later", () => {
+    expect(previewDate("2026-09-01T10:00:00Z", "2026-10-02T10:00:00Z", { now, timeZone })).toEqual({
+      date: "edited 2 Oct",
+      dateTime: "2026-10-02T10:00:00Z",
+    });
+  });
+
+  it("says the day it was made when no person changed it, whatever an import did", () => {
+    expect(previewDate("2026-09-01T10:00:00Z", null, { now, timeZone })).toEqual({
+      date: "1 Sept",
+      dateTime: "2026-09-01T10:00:00Z",
+    });
   });
 
   it("counts the day in the zone, and names another year", () => {
-    expect(previewDate("2026-10-03T17:00:00Z", "2026-10-03T17:00:00Z", { now, timeZone })).toBe("4 Oct");
-    expect(previewDate("2025-12-28T04:00:00Z", "2025-12-28T04:00:00Z", { now, timeZone })).toBe("28 Dec 2025");
+    expect(previewDate("2026-10-03T17:00:00Z", null, { now, timeZone }).date).toBe("4 Oct");
+    expect(previewDate("2025-12-28T04:00:00Z", null, { now, timeZone }).date).toBe("28 Dec 2025");
   });
 
-  it("is null for an instant that does not parse", () => {
-    expect(previewDate("nope", "nope", { now, timeZone })).toBeNull();
+  it("has no date for an instant that does not parse", () => {
+    expect(previewDate("nope", "nope", { now, timeZone }).date).toBeNull();
   });
 });
