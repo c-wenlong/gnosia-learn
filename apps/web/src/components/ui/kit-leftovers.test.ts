@@ -56,10 +56,10 @@ describe("cardClasses", () => {
 });
 
 describe("Skeleton", () => {
-  it("is one grey block at one radius, pulsing unless motion is reduced", () => {
+  it("is one block at one radius, its sheen sweeping unless motion is reduced", () => {
     const classes = classesOf(renderToStaticMarkup(createElement(Skeleton, { className: "h-4 w-20" })));
-    expect(classes).toEqual(expect.arrayContaining(["rounded-md", "bg-surface2", "animate-pulse", "motion-reduce:animate-none", "h-4", "w-20"]));
-    expect(SKELETON.split(" ")).toEqual(expect.arrayContaining(["rounded-md", "bg-surface2"]));
+    expect(classes).toEqual(expect.arrayContaining(["skeleton", "rounded-md", "animate-sheen", "motion-reduce:animate-none", "h-4", "w-20"]));
+    expect(SKELETON.split(" ")).toEqual(expect.arrayContaining(["skeleton", "rounded-md"]));
   });
 
   it("drops the radius when it fills a frame that clips it", () => {

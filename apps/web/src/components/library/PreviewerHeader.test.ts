@@ -90,7 +90,7 @@ describe("PreviewerHeader without one", () => {
   it("shows grey bars where the glyph, title and date go, and only Open page and Close", () => {
     const html = render({ header: null, loading: true });
     expect(html).not.toContain("<time");
-    expect(html.match(/animate-pulse/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(html.match(/animate-sheen/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(html).toContain('aria-label="Open page" title="Open page"');
     expect(html).toContain('href="/library/diagram%3Atcp"');
     expect(html).not.toContain('aria-label="Download"');
