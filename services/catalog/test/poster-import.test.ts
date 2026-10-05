@@ -242,7 +242,9 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
     const saved = process.env.TMPDIR;
     process.env.TMPDIR = path.join(work, "no-such-temp");
     try {
-      await expect(importTree()).rejects.toThrow(/the manimkc poster step failed: .*ENOENT/);
+      await expect(importTree()).rejects.toThrow(
+        /1 manimkc video\(s\) have no poster \(manimkc:out\/demo\/one\/one\.mp4\): the poster step failed: .*ENOENT/,
+      );
     } finally {
       if (saved === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = saved;

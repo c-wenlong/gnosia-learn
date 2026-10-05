@@ -649,6 +649,7 @@ export async function runIndex(
         ffmpeg ??= ffmpegOption !== undefined ? Promise.resolve(ffmpegOption) : findFfmpeg();
         store ??= openBlobStore();
         let cut: Awaited<ReturnType<typeof uploadAssets>> | undefined;
+        let failed: string | null = null;
         try {
           cut = await uploadAssets(db, {
             store,
@@ -666,29 +667,31 @@ export async function runIndex(
           });
         } catch (error) {
           // The tool's rows are written; its posters are said with the rest,
-          // and the sources after it still run.
-          posterless.push(
-            `the ${indexer.source} poster step failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
+          // naming the videos still without one, and the sources after it
+          // still run.
+          failed = error instanceof Error ? error.message : String(error);
         }
         if (cut !== undefined) {
           const made = cut.items.filter((i) => i.kind === "poster" && i.action === "made").length;
           const linked = cut.items.filter((i) => i.kind === "poster" && i.action === "linked").length;
           if (made + linked > 0) write.notes.push(`${made} poster(s) cut and stored, ${linked} linked to their video again`);
-          const have = await videosWithStoredPoster(db, videos, ownerScope(owner));
-          const missing = videos.filter((id) => !have.has(id));
-          if (missing.length > 0) {
-            const why =
-              cut.postersSkipped ??
-              cut.items
-                .filter((i) => i.action === "refused")
-                .map((i) => `${i.id}: ${i.detail ?? "refused"}`)
-                .join("; ");
-            posterless.push(
-              `${missing.length} ${indexer.source} video(s) have no poster (${missing.join(", ")})` +
-                (why === "" ? "" : `: ${why}`),
-            );
-          }
+        }
+        const have = await videosWithStoredPoster(db, videos, ownerScope(owner));
+        const missing = videos.filter((id) => !have.has(id));
+        if (missing.length > 0 || failed !== null) {
+          const why =
+            failed !== null
+              ? `the poster step failed: ${failed}`
+              : (cut?.postersSkipped ??
+                (cut?.items ?? [])
+                  .filter((i) => i.action === "refused")
+                  .map((i) => `${i.id}: ${i.detail ?? "refused"}`)
+                  .join("; "));
+          posterless.push(
+            `${missing.length} ${indexer.source} video(s) have no poster` +
+              (missing.length === 0 ? "" : ` (${missing.join(", ")})`) +
+              (why === "" ? "" : `: ${why}`),
+          );
         }
       }
     }
