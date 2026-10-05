@@ -312,6 +312,32 @@ Scrolling to the end drew all 614 rows in every grouping and both views, each
 once, every heading once with its count equal to the rows under it, in 9 to
 11 pages.
 
+**The read limit (2026-10-05).** Paging left the read behind it at 1,000 rows
+(`LIBRARY_ROW_CAP` in `apps/web/src/lib/asset-library.ts`), a limit from when
+every row was drawn at once. The owner's catalog passed it the same day with
+1,023 asset rows, so the header said 626 files while scrolling drew 601 and the
+page said "Read stopped at 1000 rows". The search, the course and favourite
+filters, the sort and every heading's whole count are worked out over all the
+matching rows in `loadLibraryView`, so the limit is now a safety limit rather
+than a page size: 20,000, with the same "Read stopped" line one row past it
+(the read asks for one more than the limit, so a catalog of exactly 20,000 is
+whole). That keeps the reads that name every row by id (`assetParents`, the
+stored-blob checks) far below Postgres's 65,535 bind parameters, and the
+groups' order a page sends back (`MAX_ORDER` in `library-pages.ts`) rises to
+the same figure, since every group holds a row. Moving the counts and the
+cursor into SQL was not done: the search reads transcripts and note bodies,
+and the course, topic and conversation headings come from `assetParents` and
+the prerequisite graph, so it would be a second implementation of the page.
+
+Measured on production builds on the owner's catalog, the base and this
+change loaded in turn, one warm-up and seven counted loads each: the HTML
+arrived in a median of 80 ms on both for `/library`, 75 and 77 ms for the
+list, 75 and 74 ms grouped by topic. Scrolling to the end drew all 626 rows
+in every grouping and both views, each once, with the header's 626 equal to
+the sum of the headings and no "Read stopped" line. Away from the database,
+working out and drawing the first page took a median of 14 ms for 1,023 rows,
+34 ms for 10,230 and 56 ms for 20,000.
+
 ## The Library
 
 ```

@@ -10,6 +10,7 @@ import {
   pageOf,
   parseCursor,
   parseHeldPages,
+  MAX_ORDER,
   parseOrder,
   POP_WINDOW_MS,
   sameLibraryView,
@@ -327,7 +328,9 @@ describe("parseOrder", () => {
     expect(parseOrder(undefined)).toBeUndefined();
     expect(parseOrder(["a", "b"])).toEqual(["a", "b"]);
     expect(parseOrder([])).toEqual([]);
-    for (const bad of [null, "a", [1], ["x".repeat(1001)], ["a", "b", "a"], Array.from({ length: 5001 }, (_, i) => `k${i}`)]) {
+    // One group per row at the Library's read limit is still an order.
+    expect(parseOrder(Array.from({ length: MAX_ORDER }, (_, i) => `k${i}`))).toHaveLength(MAX_ORDER);
+    for (const bad of [null, "a", [1], ["x".repeat(1001)], ["a", "b", "a"], Array.from({ length: MAX_ORDER + 1 }, (_, i) => `k${i}`)]) {
       expect(parseOrder(bad)).toBeNull();
     }
   });

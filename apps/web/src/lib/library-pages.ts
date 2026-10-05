@@ -188,8 +188,16 @@ function inOrder<T>(groups: readonly PageGroup<T>[], order: readonly string[]): 
   });
 }
 
-/** The most group keys an order from the reader may hold, and the longest key. */
-const MAX_ORDER = 5_000;
+/**
+ * The most group keys an order from the reader may hold, and the longest key.
+ *
+ * A group holds at least one row, so the Library can draw no more groups than
+ * the rows it reads, and this is the same figure as its read limit
+ * (`LIBRARY_ROW_CAP` in `@/lib/asset-library`, which this pure module cannot
+ * import). Grouped by conversation, ten thousand rows can be five thousand
+ * groups, and an order any shorter than the rows would be refused as stale.
+ */
+export const MAX_ORDER = 20_000;
 const MAX_KEY = 1_000;
 
 /**
