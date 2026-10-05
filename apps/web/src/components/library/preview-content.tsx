@@ -61,13 +61,14 @@ export async function loadPreview(requested: string): Promise<PreviewAnswer> {
   const first = explainedConcepts(concepts, new Map(kb.concepts.map((c) => [c.id, c])))[0];
   const family = familyOf(asset.kind);
 
+  const when = previewDate(asset.createdAt, asset.editedAt, { now: new Date(), timeZone: zone });
   const header: PreviewHeader = {
     family,
     kindLabel: assetKindLabel(asset.kind),
     title: name.text,
     plainName: name.source !== "title",
-    date: previewDate(asset.createdAt, asset.updatedAt, { now: new Date(), timeZone: zone }),
-    dateTime: asset.updatedAt,
+    date: when.date,
+    dateTime: when.dateTime,
     concept: first === undefined ? null : { href: conceptHref(first.slug), title: first.title },
     download: body.servable ? { href: body.fileHref, filename: body.downloadName } : null,
     page: assetHref(asset.id),

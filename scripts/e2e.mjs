@@ -1061,6 +1061,37 @@ async function run() {
     }
   });
 
+  await step('session: on a phone the column ends at the bottom of the screen', page, async () => {
+    // A focus page on a phone is a chain of flex columns under the header, so
+    // its action row sits at the bottom where a thumb is. The min-height it
+    // had before, worked out from the header's height, missed the header's
+    // border and ran a pixel or more past the screen on every phone.
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await go(`/learn/${state.concept}/session`);
+      const bar = page.getByRole('progressbar', { name: 'Session progress' });
+      await bar.waitFor();
+      await page.getByRole('button', { name: /^(Check|Continue)$/ }).first().waitFor({ timeout: 30_000 });
+      const m = await page.evaluate(() => ({ doc: document.documentElement.scrollHeight, viewport: window.innerHeight }));
+      assert(m.doc <= m.viewport, `the session is ${m.doc}px tall on a ${m.viewport}px phone screen`);
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
+  await step('shell: a missing course says so inside the shell, the sidebar kept', page, async () => {
+    // `(app)/not-found.tsx`: the root one sits above the shell's layout, so a
+    // `notFound()` from a page took the sidebar with it. The page streams
+    // behind its loading frame, so the status is already sent (200, with
+    // Next's noindex), and what is checked is what the learner sees.
+    await go('/courses/e2e-no-such-course');
+    await main.getByRole('heading', { name: 'Page not found' }).waitFor();
+    await page.getByRole('link', { name: 'Library', exact: true }).first().waitFor();
+    const layout = await main.locator('[data-layout]').first().getAttribute('data-layout');
+    assert(layout === 'app', `the notice is drawn in the ${layout} layout`);
+  });
+
   await step("week check: the module path's last step answers through to the close screen", page, async () => {
     // The seed's cp4284 module 3: tool-calling and react-loop, whose notes carry checks.
     const modulePage = '/courses/cp4284/m3-agentic-frameworks';

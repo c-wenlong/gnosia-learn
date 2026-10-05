@@ -101,18 +101,25 @@ export function timeOfDay(instant: string, timeZone?: string): string | null {
 export const EDITED_AFTER_MS = 86_400_000;
 
 /**
- * "edited 2 Oct" when `updatedAt` is more than a day after `createdAt`, else
+ * "edited 2 Oct" when `editedAt` is more than a day after `createdAt`, else
  * null: a note revised a month after it was written says so, and a row the
- * same import wrote and then touched again a minute later does not. The day
- * is counted in `timeZone`, with the year when it is not this year.
+ * same writer touched again a minute later does not. The day is counted in
+ * `timeZone`, with the year when it is not this year.
+ *
+ * `editedAt` is when a person last changed the asset, and null when the last
+ * change was an import or an indexer refresh (`editedAt` on the catalog's
+ * `AssetWithTopics`, the owner's call of 2026-10-05). Never
+ * `asset.updated_at`: every import moves that, so it said "edited" on nearly
+ * every row.
  */
 export function editedLabel(
   createdAt: string,
-  updatedAt: string,
+  editedAt: string | null,
   options: { now: Date; timeZone?: string },
 ): string | null {
+  if (editedAt === null) return null;
   const made = parsed(createdAt);
-  const changed = parsed(updatedAt);
+  const changed = parsed(editedAt);
   if (made === null || changed === null) return null;
   if (changed.getTime() - made.getTime() <= EDITED_AFTER_MS) return null;
   return `edited ${dayLabel(dayKey(changed, options.timeZone), dayKey(options.now, options.timeZone))}`;

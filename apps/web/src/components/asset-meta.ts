@@ -35,12 +35,16 @@ export interface AssetCardRef {
 /**
  * An asset as the Library lists it: the card's facts and the two instants a
  * row prints, when it entered the catalog (its day group and the time at the
- * right, "18:12") and when it last changed ("edited 2 Oct"). Both are ISO
- * instants, `asset.created_at` and `asset.updated_at`.
+ * right, "18:12") and when a person last changed it ("edited 2 Oct").
+ * `createdAt` is `asset.created_at`; `editedAt` is the catalog's answer to
+ * "was the last change a person's write, and when", null when it was an
+ * import or an indexer. `updatedAt` is `asset.updated_at`, which every import
+ * moves, so nothing prints it.
  */
 export interface AssetRowRef extends AssetCardRef {
   createdAt: string;
   updatedAt: string;
+  editedAt: string | null;
 }
 
 export type Family = "video" | "diagram" | "text" | "link";
