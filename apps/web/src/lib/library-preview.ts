@@ -1,6 +1,10 @@
 import { dayKey } from "@/lib/days";
 import { dayLabel, editedLabel } from "@/lib/day-groups";
+import type { AssetParents } from "@self-learn/catalog/state";
+
+import { conversationLabel, latestConversation } from "@/lib/library-source";
 import { isPlainClick } from "@/lib/plain-click";
+import { studioConversationHref } from "@/lib/row-menu";
 
 /**
  * The rules behind the Library's previewer (L6 of
@@ -166,6 +170,20 @@ export function previewDate(
 }
 
 /** What the panel's header shows for the asset open in it, as the server answers it. */
+/**
+ * The previewer header's Conversation tool: the conversation the row menu's
+ * Locate in conversation opens (`latestConversation`, the one whose job wrote
+ * the asset last), as its link and its name. Null when no conversation made
+ * the asset, or its parents could not be read (`loadAssetParents` answers
+ * undefined then), which costs the tool and nothing else.
+ */
+export function previewConversation(parents: AssetParents | undefined): { href: string; title: string } | null {
+  const conversation = latestConversation(parents);
+  return conversation === null
+    ? null
+    : { href: studioConversationHref(conversation.id), title: conversationLabel(conversation) };
+}
+
 export interface PreviewHeader {
   /** The asset's family, for the glyph: video, diagram, text or link. */
   family: "video" | "diagram" | "text" | "link";
@@ -180,6 +198,12 @@ export interface PreviewHeader {
   dateTime: string;
   /** The first concept it explains: its workspace, and its name for the tool's label. */
   concept: { href: string; title: string } | null;
+  /**
+   * The studio conversation that made it, the most recent of two
+   * (`latestConversation`): `/studio?draft=<id>` and its name, for the
+   * Conversation tool, the row menu's Locate in conversation.
+   */
+  conversation?: { href: string; title: string } | null;
   /** The file route, when there is a stored file to hand over. */
   download: { href: string; filename?: string } | null;
   /** `/library/<id>`: "Open page". */

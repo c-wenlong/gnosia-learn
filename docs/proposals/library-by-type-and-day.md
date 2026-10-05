@@ -8,7 +8,7 @@ built: the type tabs, the day groups, the source line from `assetParents`
 (`services/catalog/src/state/asset-parents.ts`, one statement per page) and
 the three `--shell-row` tokens. Days and times are counted in the zone Home
 uses (`appTimeZone()`), not UTC. Phase 2 (L4, L5) is built: the view
-options (`ViewOptions`, `?group=day|course|topic`, and Show all or
+options (`ViewOptions`, `?group=day|course|topic|conversation`, and Show all or
 Favorites only, where #372's Favorites chip moved), and the more menu on
 every row and card (`RowMenu` on the kit `Menu`, its items decided by
 `rowMenuItems` in `apps/web/src/lib/row-menu.ts`), which also offers Rename
@@ -146,6 +146,23 @@ Manus has here, were added on the owner's request after this was written: a
 star on every asset page (#364) and a Favorites toggle in the toolbar,
 `?favorites=1`, beside the filter menus.
 
+*Added 2026-10-05: group by conversation, after Manus's Group by task.* A
+fourth option, Conversation, `?group=conversation`, gives a heading per
+studio conversation that made an asset, through the parent L3 already reads
+(`asset_job` to `job` to `draft`, in `assetParents`, which now also returns
+each conversation's `name` and `updated_at`). The heading is the
+conversation's name by the rule every page uses (`conversationTitle`, #395:
+the owner's name, else the planner's title; the catalog's row has no first
+message, so one with neither reads "Studio conversation"), with the day it
+was last written to in grey and its count; the newest conversation comes
+first, and "No conversation" is last, for the notes, links and course files
+no conversation made. An asset two conversations wrote shows once, under
+the one whose job wrote it last (`latestConversation` in
+`apps/web/src/lib/library-source.ts`), the same one its source line and its
+Locate in conversation name. A row under a conversation names its concept
+first and the course and module after it, as under a topic, and never the
+conversation again; with neither, it names its topic.
+
 **L5. A menu per row and per card.** The more button at the right of a row,
 and in a card's title row, opens: Open, Open the concept (when it has one),
 Open in course (when it has one), Copy link, Download (for a stored file),
@@ -158,6 +175,14 @@ is the file route with `?download=1`, which answers with
 `Content-Disposition: attachment` where today it serves the file inline;
 Open in course is the L3 parent's module page. Nothing destructive: a
 Library asset is deleted by the import that stops seeing it, not by hand.
+
+*Added 2026-10-05: Locate in conversation, after Manus's Locate in task.*
+After Open in course, an asset a studio conversation made gets Locate in
+conversation, which opens that conversation on `/studio?draft=<id>`, the
+link the sidebar's conversation rows use (`studioConversationHref` in
+`apps/web/src/lib/row-menu.ts`, over the studio's `conversationHref`); of
+two, the one whose job wrote the asset last. The previewer's header carries
+the same link among its tools, beside the concept's, as Conversation.
 
 **L6. A previewer over the Library.** Pressing a row or a card opens the
 asset in a panel over the page (Manus's 1200 by 820 at 1440, a 48 px header
@@ -276,4 +301,4 @@ Phases 1 and 4 are independent; 2 and 3 build on 1.
 - Deleting or renaming an asset from the Library; the import owns asset rows.
 - A bottom tab bar on the phone. The drawer stays.
 - Manus's model picker, plan chip and credits in the top bar; the app has no top bar and the tutor's model chain is in Settings.
-- Group by task for the studio's own outputs beyond what L4's group by topic gives; a studio conversation is reachable from the row's source line.
+- Group by task beyond the studio's conversations: a tutor session is reachable from its log's source line, and is not a grouping (L4's group by conversation, 2026-10-05, covers the studio).

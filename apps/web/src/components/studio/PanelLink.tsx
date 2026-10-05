@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { ComponentProps, ReactNode } from "react";
 
 import { usePanelHost } from "@/components/studio/panel-host";
+import { cx } from "@/components/ui/classes";
 import { isPlainClick } from "@/lib/plain-click";
 import { browserMove } from "@/lib/studio-view";
 
@@ -73,5 +74,5 @@ export function SelectableFrame({
   children: ReactNode;
 }) {
   const selected = useSearchParams().get("sel") === name;
-  return <div className={`${className} ${selected ? selectedClassName : idleClassName}`}>{children}</div>;
+  return <div className={cx(className, selected ? selectedClassName : idleClassName)}>{children}</div>;
 }

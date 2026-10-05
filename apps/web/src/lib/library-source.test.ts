@@ -1,7 +1,7 @@
 import type { AssetParents, AssetPlace } from "@self-learn/catalog/state";
 import { describe, expect, it } from "vitest";
 
-import { conceptOrder, pickPlace, placeLabel, rowSource } from "./library-source";
+import { conceptOrder, latestConversation, pickPlace, placeLabel, rowSource } from "./library-source";
 
 const place = (over: Partial<AssetPlace>): AssetPlace => ({
   course: "cs3230",
@@ -101,7 +101,7 @@ describe("rowSource precedence (golden)", () => {
       parents({
         places: [place({})],
         concepts: ["master-theorem", "recurrences"],
-        conversations: [{ id: "d1", title: "Ignored" }],
+        conversations: [{ id: "d1", title: "Ignored", name: null, updatedAt: null }],
       }),
       null,
       { place: "CS3230 · Week 3: Proof of correctness", concept: { title: "Recurrences", bucket: "learning", more: 1 } },
@@ -127,13 +127,22 @@ describe("rowSource precedence (golden)", () => {
     ],
     [
       "a studio conversation, over a session",
-      parents({ conversations: [{ id: "d1", title: "How dengue moves" }], sessions: [{ id: "s1", title: "S" }] }),
+      parents({
+        conversations: [{ id: "d1", title: "How dengue moves", name: null, updatedAt: null }],
+        sessions: [{ id: "s1", title: "S" }],
+      }),
       null,
       { origin: { kind: "conversation", title: "How dengue moves" } },
     ],
     [
+      "a conversation the owner renamed, by its name over the planner's title",
+      parents({ conversations: [{ id: "d1", title: "How dengue moves", name: "  Dengue map  ", updatedAt: null }] }),
+      null,
+      { origin: { kind: "conversation", title: "Dengue map" } },
+    ],
+    [
       "an untitled conversation",
-      parents({ conversations: [{ id: "d1", title: null }] }),
+      parents({ conversations: [{ id: "d1", title: null, name: " ", updatedAt: null }] }),
       null,
       { origin: { kind: "conversation", title: "Studio conversation" } },
     ],
@@ -164,4 +173,14 @@ describe("rowSource precedence (golden)", () => {
       expect(rowSource(input, options(course))).toEqual(expected);
     });
   }
+});
+
+describe("latestConversation", () => {
+  it("is the conversation whose job wrote the asset last, the first the catalog lists, or null", () => {
+    const newer = { id: "d2", title: "Again", name: null, updatedAt: "2026-10-03T00:00:00.000Z" };
+    const older = { id: "d1", title: "First", name: null, updatedAt: "2026-10-04T00:00:00.000Z" };
+    expect(latestConversation(parents({ conversations: [newer, older] }))).toBe(newer);
+    expect(latestConversation(parents({}))).toBeNull();
+    expect(latestConversation(undefined)).toBeNull();
+  });
 });

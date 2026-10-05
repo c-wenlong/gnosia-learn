@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { buttonClasses } from "@/components/ui/classes";
+import { buttonClasses, cx } from "@/components/ui/classes";
 import { assetProblem, type AssetProblemCode } from "@/lib/asset-problems";
 
 /**
@@ -45,7 +45,7 @@ export function WidgetFailure({
   inset = false,
   onRetry,
   sourceRepo,
-  className = "",
+  className,
 }: {
   /** What failed, as a full phrase: "This video did not load." */
   headline: ReactNode;
@@ -70,7 +70,7 @@ export function WidgetFailure({
       <div
         role="status"
         data-problem={code ?? "checking"}
-        className={`flex animate-fade-in flex-col items-center justify-center gap-1 px-3 py-2 text-center motion-reduce:animate-none ${className}`}
+        className={cx("flex animate-fade-in flex-col items-center justify-center gap-1 px-3 py-2 text-center motion-reduce:animate-none", className)}
       >
         <BrokenGlyph className="h-5 w-5 text-text3" />
         <p className="text-[12px] font-medium text-text">{headline}</p>
@@ -93,9 +93,11 @@ export function WidgetFailure({
     <div
       role="status"
       data-problem={code ?? "checking"}
-      className={`flex animate-fade-in flex-col items-center justify-center gap-2 bg-surface2 px-5 py-8 text-center motion-reduce:animate-none ${
-        inset ? "" : "rounded-xl border-2 border-border"
-      } ${className}`}
+      className={cx(
+        "flex animate-fade-in flex-col items-center justify-center gap-2 bg-surface2 px-5 py-8 text-center motion-reduce:animate-none",
+        !inset && "rounded-xl border-2 border-border",
+        className,
+      )}
     >
       <BrokenGlyph className="h-6 w-6 text-text3" />
       <p className="text-sm font-medium text-balance text-text">{headline}</p>

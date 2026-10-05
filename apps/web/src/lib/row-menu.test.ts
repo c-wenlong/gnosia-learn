@@ -2,7 +2,7 @@ import type { AssetParents, AssetPlace } from "@self-learn/catalog/state";
 import { describe, expect, it } from "vitest";
 
 import { conceptOrder } from "./library-source";
-import { askSubjectOf, assetDownloadHref, rowMenuItems, type RowMenuInput } from "./row-menu";
+import { askSubjectOf, assetDownloadHref, rowMenuItems, studioConversationHref, type RowMenuInput } from "./row-menu";
 
 const place = (over: Partial<AssetPlace> = {}): AssetPlace => ({
   course: "cs3230",
@@ -72,6 +72,36 @@ describe("rowMenuItems", () => {
     expect(labels({ kind: "diagram_svg" })[1]).toEqual(["Rename", "Favorite", "Ask", "Mark read"]);
     expect(labels({ kind: "session" })[1]).toEqual(["Rename", "Favorite", "Mark read"]);
     expect(labels({ kind: "link", served: false })).toEqual([["Open"], ["Rename", "Favorite", "Mark read"], ["Copy link"]]);
+  });
+
+  it("locates a conversation's diagram in it, after Open in course, the most recent of two", () => {
+    const sections = rowMenuItems(
+      input({
+        kind: "diagram_svg",
+        parents: parents({
+          places: [place()],
+          conversations: [
+            { id: "draft new", title: "Again", name: "Proof picture", updatedAt: "2026-10-03T00:00:00.000Z" },
+            { id: "draft-old", title: "First", name: null, updatedAt: "2026-10-04T00:00:00.000Z" },
+          ],
+        }),
+      }),
+    );
+    expect(sections[0]?.map((i) => i.label)).toEqual(["Open", "Open in course", "Locate in conversation"]);
+    expect(sections[0]?.[2]).toEqual({
+      action: "conversation",
+      label: "Locate in conversation",
+      href: "/studio?draft=draft+new",
+    });
+    // Alone, with no course or concept, it still comes after Open.
+    expect(labels({ parents: parents({ conversations: [{ id: "d1", title: null, name: null, updatedAt: null }] }) })[0]).toEqual([
+      "Open",
+      "Locate in conversation",
+    ]);
+  });
+
+  it("links a conversation as the sidebar does, /studio?draft=<id>", () => {
+    expect(studioConversationHref("abc-123")).toBe("/studio?draft=abc-123");
   });
 
   it("offers Unfavorite on a starred asset, and neither when the stars could not be read", () => {
