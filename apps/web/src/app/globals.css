@@ -86,6 +86,11 @@
   --page: #f8f8f8;
   --surface: #ffffff;
   --surface2: #f3f3f3;
+  /* A loading placeholder (`Skeleton`) and the lighter band that sweeps
+     across it. A step darker than --surface2, so a block reads on a card's
+     white as well as on the page's grey. */
+  --skeleton: #ececec;
+  --skeleton-sheen: #f8f8f8;
   --tint: #eef1ff;
   --border: #e5e5e5;
   --hair: #ebebeb;
@@ -188,6 +193,8 @@
   --page: #141414;
   --surface: #1e1e1e;
   --surface2: #292929;
+  --skeleton: #2a2a2a;
+  --skeleton-sheen: #383838;
   --tint: #232a4a;
   --border: #4c4c4c;
   --hair: #333333;
@@ -264,6 +271,8 @@
   --page: #faf6ec; /* --brand-cream */
   --surface: #fffdf8;
   --surface2: #f3eee1;
+  --skeleton: #eee8da;
+  --skeleton-sheen: #faf7ef;
   --tint: #e2efec;
   --border: #e6dfd0;
   --hair: #ede7da;
@@ -327,6 +336,8 @@
   --page: #0a1621; /* --brand-navy in dark */
   --surface: #102131;
   --surface2: #1b2c3c;
+  --skeleton: #1c2e3f;
+  --skeleton-sheen: #2a3d50;
   --tint: #112c32;
   --border: #3d4c5b;
   --hair: #263645;
@@ -407,6 +418,11 @@
   /* A loading frame that waits before it shows, so a quick page never
      flashes it: invisible for 120ms, then a fade (components/PageLoading). */
   --animate-fade-in-late: fade-in 150ms ease-out 120ms backwards;
+  /* A loading placeholder's sheen (`Skeleton`): a lighter band crosses the
+     block left to right in 1.2s, then the block rests for 1.2s, so the
+     blocks of a page breathe at intervals rather than strobe. Each block's
+     delay staggers it from its siblings (`--skeleton-delay`). */
+  --animate-sheen: sheen 2.4s ease-in-out var(--skeleton-delay, 0ms) infinite;
 
   @keyframes pop-out {
     to {
@@ -430,6 +446,20 @@
   @keyframes fade-in {
     from {
       opacity: 0;
+    }
+  }
+  /* The band is the middle of a gradient three blocks wide; moving the
+     gradient's position from its right end to its left carries the band
+     from off the block's left edge to off its right. At rest (and under
+     reduced motion) the position is the left end, where the gradient is
+     only the block's own colour. */
+  @keyframes sheen {
+    0% {
+      background-position: 100% 0;
+    }
+    50%,
+    100% {
+      background-position: 0% 0;
     }
   }
 }
@@ -577,6 +607,24 @@ body {
   background: color-mix(in srgb, var(--surface) 90%, transparent);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
+}
+
+/* The kit `Skeleton`'s block: its colour, and the sheen's band as a
+   gradient three blocks wide, parked at its left end, where it is only the
+   block's colour. `animate-sheen` moves it. */
+@layer components {
+  .skeleton {
+    background-color: var(--skeleton);
+    background-image: linear-gradient(
+      100deg,
+      transparent 40%,
+      var(--skeleton-sheen) 50%,
+      transparent 60%
+    );
+    background-size: 300% 100%;
+    background-repeat: no-repeat;
+    background-position: 0% 0;
+  }
 }
 
 @keyframes studio-shimmer {

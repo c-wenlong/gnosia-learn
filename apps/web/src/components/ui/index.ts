@@ -48,7 +48,7 @@ export {
   type SegmentSize,
 } from "./SegmentedControl";
 export { Select } from "./Select";
-export { Skeleton, SKELETON } from "./Skeleton";
+export { Skeleton, SkeletonCard, SkeletonRow, SKELETON, sheenDelay } from "./Skeleton";
 export { StatTile, type StatTone } from "./StatTile";
 export { TabList, type TabListItem, type TabListOrientation } from "./TabList";
 export { Textarea } from "./Textarea";

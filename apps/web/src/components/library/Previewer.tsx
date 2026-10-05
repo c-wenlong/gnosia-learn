@@ -3,6 +3,7 @@
 import { Suspense, startTransition, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 import { previewAsset } from "@/app/(app)/library/preview-action";
+import { LibraryMoreContext, type MoreRows } from "@/components/library/library-more";
 import type { PreviewAnswer } from "@/components/library/preview-content";
 import { PreviewerHeader } from "@/components/library/PreviewerHeader";
 import { LOADING_BLOCK } from "@/components/PageLoading";
@@ -55,7 +56,9 @@ type Answer = PreviewAnswer | { state: "failed"; id: string };
  * back when the panel pushed the entry, and otherwise (the panel opened from
  * a link) replace the URL without `?open=`, so they never leave the Library.
  * The arrow keys move to the previous or next row of the list as drawn,
- * replacing the entry rather than adding one.
+ * replacing the entry rather than adding one; the right arrow on the last
+ * row drawn loads the Library's next page (`LibraryMoreContext`) and goes on
+ * into it.
  *
  * **The body is the asset page's**, `AssetBody`, rendered on the server by
  * `previewAsset` when the panel opens; until it arrives the panel shows a
@@ -187,16 +190,26 @@ export function Previewer({
     show(null);
   }, [openId, show]);
 
+  // The Library's paged list leaves its loader here (`LibraryMoreContext`).
+  const moreRows = useRef<MoreRows | null>(null);
+
   const step = useCallback(
-    (by: -1 | 1) => {
+    async (by: -1 | 1) => {
       const list = listRef.current;
       if (list === null || openId === null) return;
-      const ids: string[] = [];
-      for (const a of list.querySelectorAll("a[href]")) {
-        const id = assetIdOfHref(a.getAttribute("href"));
-        if (id !== null && !ids.includes(id)) ids.push(id);
+      const drawnIds = () => {
+        const ids: string[] = [];
+        for (const a of list.querySelectorAll("a[href]")) {
+          const id = assetIdOfHref(a.getAttribute("href"));
+          if (id !== null && !ids.includes(id)) ids.push(id);
+        }
+        return ids;
+      };
+      let next = neighbour(drawnIds(), openId, by);
+      // Past the last row drawn: the next page, then the first row on it (L9).
+      if (next === null && by === 1 && moreRows.current !== null && (await moreRows.current())) {
+        next = neighbour(drawnIds(), openId, by);
       }
-      const next = neighbour(ids, openId, by);
       if (next === null) return;
       const state: unknown = window.history.state;
       const pushed = typeof state === "object" && state !== null && (state as Record<string, unknown>)[PUSHED] === true;
@@ -274,7 +287,7 @@ export function Previewer({
     });
     if (by === null) return;
     event.preventDefault();
-    step(by);
+    void step(by);
   }
 
   // While the panel fades out, the visit's answer stays; a new visit shows
@@ -286,7 +299,7 @@ export function Previewer({
     <>
       {/* `contents`: the wrapper only listens; the list lays out as before. */}
       <div ref={listRef} className="contents" onClickCapture={onListClick}>
-        {children}
+        <LibraryMoreContext value={moreRows}>{children}</LibraryMoreContext>
       </div>
 
       {mounted && shownId !== null && (
