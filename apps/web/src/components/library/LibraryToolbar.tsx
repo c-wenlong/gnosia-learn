@@ -51,7 +51,7 @@ const TYPE = "Type";
  *
  * **The rest of the row.** The filter menus (Course, Topic while one is set,
  * and Kind inside Others), then the search, the sort, the view options (L4:
- * group by day, course or concept, and show all or favorites only, which is
+ * group by day, course or topic, and show all or favorites only, which is
  * where #372's Favorites chip went, `ViewOptions`) and the grid or list
  * switch, all at a chip's 34px, at the right of the title's line. From
  * 768px the title, the filters and the controls share that line, the search

@@ -24,6 +24,11 @@ vi.mock("@/lib/asset-library", async (importOriginal) => ({
 }));
 vi.mock("@/lib/learner-store", () => ({ loadKnowledgeBase }));
 vi.mock("@/data/courses", () => ({ getCourses: async () => [] }));
+const getTopics = vi.hoisted(() => vi.fn());
+vi.mock("@/data/topics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/data/topics")>()),
+  getTopics,
+}));
 // The menus push through the app router, which static markup has none of, so
 // the toolbar is stood in for by its server-built parts: the heading, the
 // search form and the layout switch. Its other props (the tabs, the menus)
@@ -181,14 +186,19 @@ describe("/library", () => {
       concepts: { "video:paging": ["paging"], "note:tlb": ["tlb"] },
       parents: PARENTS,
     });
+    getTopics.mockReset();
+    getTopics.mockResolvedValue([
+      { slug: "virtual-memory", title: "Virtual memory", domain: "systems" },
+      { slug: "operating-systems", title: "Operating systems", domain: "systems" },
+    ]);
     loadFavorites.mockReset();
     loadFavorites.mockResolvedValue(new Set(["note:tlb"]));
     loadKnowledgeBase.mockResolvedValue({
       reachable: true,
       kb: {
         concepts: [
-          { id: "paging", requires: [], assumes: [], ...CONCEPT },
-          { id: "tlb", requires: ["paging"], assumes: [], ...CONCEPT, title: "The TLB" },
+          { id: "paging", requires: [], assumes: [], topic: "virtual-memory", ...CONCEPT },
+          { id: "tlb", requires: ["paging"], assumes: [], topic: "virtual-memory", ...CONCEPT, title: "The TLB" },
         ],
       },
     });
@@ -342,16 +352,40 @@ describe("/library", () => {
     expect(html).toContain('href="/library?group=course"');
   });
 
-  it("groups by concept with ?group=concept, in the prerequisite graph's order, with no concept last", async () => {
-    const html = await render({ group: "concept" });
-    expect(dayHeadings(html)).toEqual(["Paging (1)", "The TLB (1)", "No concept (2)"]);
-    // The concept heading carries its mastery dot.
-    const heading = html.match(/<h2 id="group-concept-paging".*?<\/h2>/)?.[0] ?? "";
+  it("groups by topic with ?group=topic, a heading per topic, a filed-only asset under its own topic, no topic last", async () => {
+    const html = await render({ group: "topic", view: "list" });
+    // The video and the note explain concepts of one topic; the link explains
+    // none and is filed under Operating systems; the session log has neither.
+    expect(dayHeadings(html)).toEqual(["Virtual memory (2)", "Operating systems (1)", "No topic (1)"]);
+    // The topic heading carries its mastery dot, the topic with concepts only.
+    const heading = html.match(/<h2 id="group-topic-virtual-memory".*?<\/h2>/)?.[0] ?? "";
     expect(heading).toContain('role="img"');
+    expect(html.match(/<h2 id="group-topic-operating-systems".*?<\/h2>/)?.[0] ?? "").not.toContain('role="img"');
+    // A search and the layout switch keep the grouping.
+    expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="group"[^>]*value="topic"/);
+    expect(html).toContain('href="/library?group=topic"');
+    // The row names its concept first and the place after it.
+    const paging = html.slice(html.indexOf("Paging, step by step"));
+    expect(paging.indexOf(">Paging<")).toBeGreaterThan(-1);
+    expect(paging.indexOf(">Paging<")).toBeLessThan(paging.indexOf("CS2106 · Week 7"));
+  });
+
+  it("reads an old ?group=concept link as topic, and the slug when the vocabulary cannot be read", async () => {
+    getTopics.mockRejectedValue(new Error("database down"));
+    const html = await render({ group: "concept" });
+    // With no vocabulary the topics go by slug, and a title comes from the rows or is the slug.
+    expect(dayHeadings(html)).toEqual(["Operating systems (1)", "virtual-memory (2)", "No topic (1)"]);
+    expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="group"[^>]*value="topic"/);
+  });
+
+  it("keeps the place first in a row grouped by day", async () => {
+    const html = await render({ view: "list" });
+    const paging = html.slice(html.indexOf("Paging, step by step"));
+    expect(paging.indexOf("CS2106 · Week 7")).toBeLessThan(paging.indexOf(">Paging<"));
   });
 
   it("falls back to the day for a grouping it does not know", async () => {
-    const html = await render({ group: "topic" });
+    const html = await render({ group: "domain" });
     expect(dayHeadings(html)).toEqual(["3 Oct (1)", "29 Sept (2)", "1 Sept (1)"]);
     expect(html).not.toMatch(/name="group"/);
   });

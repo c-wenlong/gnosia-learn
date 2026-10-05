@@ -6,6 +6,7 @@ import { RowMenu } from "@/components/library/RowMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { cx } from "@/components/ui/classes";
+import type { LibraryGroup } from "@/lib/library";
 import type { RowSource } from "@/lib/library-source";
 import type { RowMenuSections } from "@/lib/row-menu";
 
@@ -43,6 +44,7 @@ import type { RowMenuSections } from "@/lib/row-menu";
 export function AssetRow({
   asset,
   source,
+  grouping,
   topic,
   time,
   edited,
@@ -52,6 +54,12 @@ export function AssetRow({
   asset: AssetRowRef;
   /** Where it came from; null names `topic` instead, or nothing. */
   source: RowSource | null;
+  /**
+   * The page's grouping. Under `topic` the heading is the topic, so the
+   * concept is what tells the rows apart, and the line names it first, the
+   * place after it; under the day and the course the place leads.
+   */
+  grouping?: LibraryGroup;
   /** The topic it is filed under, as a label: the line for an asset with no parent. */
   topic?: string;
   /** "18:12", in the owner's zone. */
@@ -73,7 +81,7 @@ export function AssetRow({
         : "font-mono text-[13px] font-medium text-text2";
 
   const line =
-    sourceLine(source, name.text) ?? (topic === undefined ? null : <span className="min-w-0 truncate">{topic}</span>);
+    sourceLine(source, name.text, grouping === "topic") ?? (topic === undefined ? null : <span className="min-w-0 truncate">{topic}</span>);
 
   return (
     <div
@@ -128,9 +136,10 @@ export function AssetRow({
  * concept alone with its dot, or a conversation's or session's title. A note
  * explains its own concept, so a concept named exactly as the row's title is
  * not printed again; its dot carries the mastery on its own label, as the
- * card's does.
+ * card's does. With `conceptFirst` (grouped by topic) the concept leads and
+ * keeps the room, and the place follows it: "● Master theorem · CS3230 · Week 3".
  */
-function sourceLine(source: RowSource | null, title: string): ReactNode | null {
+function sourceLine(source: RowSource | null, title: string, conceptFirst = false): ReactNode | null {
   if (source === null) return null;
   if (source.origin !== undefined) {
     return (
@@ -145,6 +154,23 @@ function sourceLine(source: RowSource | null, title: string): ReactNode | null {
   const concept = source.concept;
   const conceptIsTitle =
     concept !== undefined && concept.title.trim().toLowerCase() === title.trim().toLowerCase();
+  if (conceptFirst && concept !== undefined) {
+    return (
+      <>
+        <MasteryDot bucket={concept.bucket} size={12} showLabel={conceptIsTitle} />
+        {!conceptIsTitle && <span className="min-w-0 truncate">{concept.title}</span>}
+        {concept.more > 0 && <span className="shrink-0 text-text3">+{concept.more}</span>}
+        {source.place !== undefined && (
+          <>
+            <span aria-hidden className="shrink-0">
+              ·
+            </span>
+            <span className="max-w-[40%] shrink-0 truncate">{source.place}</span>
+          </>
+        )}
+      </>
+    );
+  }
   return (
     <>
       {/* The place stays whole and the concept gives way, up to 60% of the line. */}

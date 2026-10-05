@@ -98,7 +98,7 @@ export function conceptOrder(concepts: readonly { id: string; requires: readonly
 /**
  * Concept slugs in the prerequisite graph's order (`conceptOrder`), a slug
  * the graph does not hold last, by slug. The order the source line, the row
- * menu's Open the concept and the group by concept all take, so the three
+ * menu's Open the concept and the group by topic all take, so the three
  * name the same concept first.
  */
 export function orderedConcepts(slugs: readonly string[], order: ReadonlyMap<string, number>): string[] {
