@@ -251,7 +251,7 @@ export function LibraryVideo({
         onPlayback={onPlayback}
         header={
           <div className="flex flex-col gap-2">
-            <div className="min-w-0">{heading}</div>
+            {heading != null && <div className="min-w-0">{heading}</div>}
             <div className="flex flex-wrap items-center gap-2">
               <FavoriteButton assetId={assetId} initial={favorite} />
               <AskButton
