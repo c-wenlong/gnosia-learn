@@ -625,15 +625,16 @@ handler as every other route. Every response carries a `note`.
 
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
-| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch |
+| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution |
 | `GET` | `/api/drafts` | `?state=&limit=&nonEmpty=&q=`; `state` may be a comma list (`open,briefed`); `nonEmpty=1` leaves out drafts with no person message (`turns` 0), before the limit is applied; *since D87:* `q` (at most 200 characters, else 400) keeps the drafts whose name, title, first message or concept title contains it, in any case, also before the limit and the `before` cursor | `{ drafts: [{ draftId, kind, state, title, name, firstMessage, source, turns, costUsd, updated, jobId }] }`. `name` is the owner's name for the conversation (see `PUT .../name`), or null. `firstMessage` is the person's first message, whitespace collapsed and cut to 120 characters, or null before one |
-| `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, title, name, transcript: [{ seq, role, text, at, brief?, edit? }], brief, briefSeq, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown. `briefSeq` is the seq of the transcript entry carrying `brief` (a planner reply, or the `studio` note of an edit, which has `edit: true`), null with no brief |
+| `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, title, name, model, transcript: [{ seq, role, text, at, brief?, edit? }], brief, briefSeq, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown. `briefSeq` is the seq of the transcript entry carrying `brief` (a planner reply, or the `studio` note of an edit, which has `edit: true`), null with no brief |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, no length cap of its own; a body over 1 MB is refused with 413 | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
 | `GET` | `/api/drafts/{id}/events` | `Last-Event-ID` | SSE: `delta` (text so far), `reply`, `brief`, `brief-invalid`, `studio`, `state`, `error` |
 | `POST` | `/api/drafts/{id}/draw` | `{ idempotencyKey }` | `201 { draftId, jobId, state: "drawing" }`; every refusal `POST /api/jobs` can give, with the same status and body |
 | `POST` | `/api/drafts/{id}/abandon` | none | `{ draftId, state: "abandoned" }`. Stops an in-flight turn first |
 | `PUT` | `/api/drafts/{id}/brief?base=<seq>` | a whole `Brief`, as `GET` returns it; `idempotencyKey` and `mermaid` are dropped (Draw mints the one and attaches the other, C8). `base` is the `briefSeq` of the brief being edited, or `none` on a draft with no brief | `200 { draftId, state: "briefed", brief, briefSeq, pendingTopic, note }` after `validateBrief` against the vocabulary as it is now, widened with the pending topic while the brief still names it (any other topic clears it). Allowed on an `open` or `briefed` draft; an `open` one becomes `briefed`, and the edited brief stays in force (see States). Appends a `studio` note (`edit: true`) listing what changed, carrying the brief as a reply carries one; SSE: `studio`, `brief` (`edit: true`, `replySeq` the note), then `state`. The planner's next turn opens with one note for every edit since it last heard, measured from the brief it last knew, and the whole brief in force. A brief identical to the one in force is `200` and writes nothing, whatever `base` says, so a retry is safe. `400 { field: "base" }` for a missing or malformed base, `400 { field }` as `POST /api/jobs`; `409 { reason: "brief-changed", base }` when `base` is not the brief in force (a planner reply or another tab replaced it; `base` is the current one); `409 { reason: "in-flight" \| "draw-in-progress" \| "drawing" \| "done" \| "abandoned" }`; `503` vocabulary unreadable |
 | `PUT` | `/api/drafts/{id}/name` | `{ name }`: a string, or `null` to take the name off | `200 { draftId, name, title, changed, note }`. The owner's name for the conversation (the sidebar's Rename), kept as `name` in `draft.json` and mirrored to `draft.name`; every page shows it before the planner's `title`, and `GET /api/drafts?q=` matches it. Whitespace runs become one space, the ends are trimmed, and it is cut to 200 characters; a name with nothing left is `null`. It goes through the draft's write chain like every other change, so `drain` waits for it, and it leaves `updated` alone, so a rename neither moves the conversation up the lists nor delays its pruning. The planner is not told. The same name again is `200` with `changed: false`. `400 { field: "name" }` for a missing name or one that is not a string or null; `404` for a draft that is not there; `503` while the studio shuts down |
+| `PUT` | `/api/drafts/{id}/model` | `{ model }`: a name `claude --model` takes, or `null`/`"default"`/`""` to clear | `200 { draftId, model, changed, note }`, since D90. The composer picker's pick for the whole conversation: the next planner spawn runs `claude --model` on it, and Draw stamps it onto the posted brief unless the brief names one itself. Kept as `model` on `draft.json`; goes through the write chain (so `drain` waits) and leaves `updated` alone, like a rename. The same model again is `200` with `changed: false`. `400 { field: "model" }` for a missing field, a non-string, or a name the CLI would not take; `404` for a draft that is not there; `503` while the studio shuts down |
 
 **Job routes.** `POST /api/jobs` accepts an optional `draftId` beside the
 brief; the runner checks the draft exists and is `briefed`, stores it on
@@ -1596,6 +1597,40 @@ thread shows more, as the note's disclosure does); and the studio's
 `/studio/api/diagrams/<name>/svg` for the picture, which is keyed by name and
 served by the runner, where the catalog's read already says whether the blob
 is present.
+
+### D90. A conversation carries the model its turns and jobs run on
+
+**Verdict (2026-10-08):** the composer holds a model picker, as Manus's chat
+header does, scoped to the conversation rather than to the settings panel's
+every job of a kind. On the home composer it is a `FilterMenu` in the toolbar
+beside the kind toggles; in an open conversation, where the composer keeps
+its row layout on purpose, it sits in the meta row under it. The pick is
+`model` on `POST /api/drafts`, changed later by `PUT /api/drafts/{id}/model`,
+kept on `draft.json` as `model` (the same runner-owned place `name` lives),
+and reported on the view and the `state` event. `"default"`, an empty pick
+and `null` all clear it; anything else must be a name `claude --model` takes
+(`isAgentModel`, the same rule the settings save applies). A pick applies to
+the next planner spawn (`--model` on the argv) and to the brief a press
+posts: Draw stamps it onto the job's brief when the brief names none of its
+own, so a person's explicit `model` on a posted brief still wins (D53), and
+the stored brief the card shows stays clean of it. A pick made while a turn
+is in flight does not restart that turn; it is the next spawn's. The offered
+list is `offeredModels()` in `agent-settings.ts`, the one list the settings
+table, `/api/settings/agent` and `/api/health`'s `agent.models` all report,
+so a stale web build falls back to its own copy and never a different one.
+Only the Claude Code harness has a model to pass; other runners keep this
+inert until one exists.
+
+**Why:** the model is a choice a person makes per piece of work ("draft this
+hard one on Opus"), not a site policy; the panel's row stays the default a
+conversation overrides. Per conversation rather than per message because a
+turn's model is also what costs and what the session resumes on, and a model
+that changed mid-reply would read as the planner changing its mind. The pick
+not being stamped onto the stored brief is what keeps an edit's `model`
+invariant true (`modelOf` keeps whatever a brief already held; a pick adds
+none) and lets a changed pick reach a brief already proposed without editing
+it. A rename's rule applies to it too: it goes through the write chain so
+`drain` waits, and it leaves `updated` alone so a pick moves nothing.
 
 ## Later: other kinds of asset
 

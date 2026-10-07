@@ -346,6 +346,13 @@ describe("the video brief", () => {
     expect(() => validateVideoBrief({ ...base(), voice: "zz_nobody" }, testVocabulary())).toThrow(/kokoro voice/);
     expect(() => validateVideoBrief({ ...base(), scenes: [(base().scenes as unknown[])[0]] }, testVocabulary())).toThrow(/2 to 8 scenes/);
   });
+
+  it("keeps a model the conversation's picker stamped (D90), and refuses one the CLI would not take", () => {
+    expect(validateVideoBrief({ ...base(), model: "fable" }, testVocabulary()).model).toBe("fable");
+    expect(validateVideoBrief({ ...base() }, testVocabulary())).not.toHaveProperty("model");
+    expect(() => validateVideoBrief({ ...base(), model: "opus; rm -rf /" }, testVocabulary())).toThrow(/model/);
+    expect(() => validateVideoBrief({ ...base(), model: 7 }, testVocabulary())).toThrow(/model/);
+  });
 });
 
 describe("the sandbox profiles", () => {

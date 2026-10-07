@@ -43,8 +43,8 @@ export interface ModelChoice {
 
 /**
  * The models the menu offers when the runner does not say: the list
- * `GET /api/settings/agent` sends (#207, `OFFERED_MODELS` in
- * `services/studio/src/api.ts`), every one the rate table prices, by the name
+ * `GET /api/settings/agent` sends (#207, `offeredModels` in
+ * `services/studio/src/agent-settings.ts`), every one the rate table prices, by the name
  * `claude --model` takes, with the model each runs. The runner's own list
  * wins when it answers, since it drops a model its rate table cannot price;
  * this copy is also what a save may store.

@@ -631,6 +631,102 @@ describe("PUT /api/drafts/{id}/name", () => {
   });
 });
 
+describe("the conversation's model (D90)", () => {
+  const setModel = (draftId: string, body: unknown) =>
+    fetch(`${base}/api/drafts/${draftId}/model`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  /** The value after a flag in a recorded spawn, or null when the flag is not there. */
+  const flag = (argv: string[], name: string): string | null => (argv.includes(name) ? (argv[argv.indexOf(name) + 1] ?? null) : null);
+
+  it("is picked at create, kept on the record, the disk and the view, and passed to the planner", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const created = await post("/api/drafts", { model: "opus" });
+    expect(created.status).toBe(201);
+    const { draftId } = (await created.json()) as { draftId: string };
+    expect(drafts.get(draftId)?.model).toBe("opus");
+    const disk = JSON.parse(await readFile(draftJsonPath(draftId), "utf8")) as Record<string, unknown>;
+    expect(disk.model).toBe("opus");
+    const view = (await (await fetch(`${base}/api/drafts/${draftId}`)).json()) as Record<string, unknown>;
+    expect(view).toMatchObject({ model: "opus" });
+
+    await post(`/api/drafts/${draftId}/messages`, tagged("draw it"));
+    await drafts.settled(draftId);
+    const argv = (await fake.argvs()).at(-1)!;
+    expect(flag(argv, "--model")).toBe("opus");
+  });
+
+  it("is set and cleared by PUT, never moving the row up the list", async () => {
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    const before = drafts.get(draftId)!.updatedAt;
+
+    const picked = await setModel(draftId, { model: "fable" });
+    expect(picked.status).toBe(200);
+    expect(await picked.json()).toMatchObject({ draftId, model: "fable", changed: true, note: "the conversation runs on fable" });
+    expect(drafts.get(draftId)?.model).toBe("fable");
+    expect(drafts.get(draftId)!.updatedAt).toBe(before);
+    // The same pick again writes nothing.
+    expect(await (await setModel(draftId, { model: "fable" })).json()).toMatchObject({ model: "fable", changed: false });
+
+    // "default", an empty pick and null all hand the runner's own default back.
+    expect(await (await setModel(draftId, { model: "default" })).json()).toMatchObject({ model: null, changed: true, note: "the model is cleared" });
+    await setModel(draftId, { model: "opus" });
+    expect(await (await setModel(draftId, { model: "   " })).json()).toMatchObject({ model: null, changed: true });
+    await setModel(draftId, { model: "opus" });
+    expect(await (await setModel(draftId, { model: null })).json()).toMatchObject({ model: null, changed: true });
+    expect(drafts.get(draftId)?.model ?? null).toBeNull();
+    const disk = JSON.parse(await readFile(draftJsonPath(draftId), "utf8")) as Record<string, unknown>;
+    expect(disk.model ?? null).toBeNull();
+  });
+
+  it("refuses what is not a model, a body without one, and a conversation that is not there", async () => {
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    for (const body of [{ model: 7 }, { model: ["a"] }, { model: "opus; rm -rf /" }, {}]) {
+      const refused = await setModel(draftId, body);
+      expect(refused.status, JSON.stringify(body)).toBe(400);
+      expect(await refused.json()).toMatchObject({ detail: { field: "model" } });
+    }
+    expect((await setModel("no-such-draft", { model: "opus" })).status).toBe(404);
+    const created = await post("/api/drafts", { model: "opus; rm -rf /" });
+    expect(created.status).toBe(400);
+    expect(await created.json()).toMatchObject({ detail: { field: "model" } });
+  });
+
+  it("applies a new pick to the next turn; a turn already spawned keeps its own", async () => {
+    await fake.script([{ text: "one" }, { text: "two" }]);
+    const { draftId } = (await (await post("/api/drafts", { model: "sonnet" })).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, { text: "first" });
+    await drafts.settled(draftId);
+    await setModel(draftId, { model: "opus" });
+    await post(`/api/drafts/${draftId}/messages`, { text: "second" });
+    await drafts.settled(draftId);
+    const argvs = await fake.argvs();
+    expect(flag(argvs[0]!, "--model")).toBe("sonnet");
+    expect(flag(argvs[1]!, "--model")).toBe("opus");
+  });
+
+  it("stamps the pick onto the brief a press posts, without touching the stored one", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { draftId } = (await (await post("/api/drafts", { model: "fable" })).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, tagged("draw it"));
+    await drafts.settled(draftId);
+    // The pick is the conversation's, not the brief's: the card's brief stays clean.
+    expect(drafts.get(draftId)!.slots!.diagram!.brief).not.toHaveProperty("model");
+    const drawn = await post(`/api/drafts/${draftId}/draw`, { idempotencyKey: "press" });
+    expect(drawn.status).toBe(201);
+    const { jobId } = (await drawn.json()) as { jobId: string };
+    expect(store.get(jobId)?.brief.model).toBe("fable");
+    await until(() => agentMock.startAgent.mock.calls.length > 0, "the job never reached its agent");
+  });
+
+  it("takes a model a posted brief names, past the old sonnet-or-opus list", async () => {
+    const job = await post("/api/jobs", { ...good, model: "claude-fable-5-1", idempotencyKey: "j-fable" });
+    expect(job.status).toBe(201);
+    const { jobId } = (await job.json()) as { jobId: string };
+    expect(store.get(jobId)?.brief.model).toBe("claude-fable-5-1");
+    await until(() => agentMock.startAgent.mock.calls.length > 0, "the job never reached its agent");
+    expect(store.get(jobId)?.agentModel).toMatchObject({ passed: "claude-fable-5-1", source: "brief" });
+  });
+});
+
 describe("resume and revise carry the draft", () => {
   it("a resumed interrupted job is the draft's newest, and the draft follows it", async () => {
     await fake.script([{ text: proposing(good) }]);

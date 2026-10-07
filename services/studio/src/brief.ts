@@ -1,7 +1,9 @@
 import type { TopicEntry } from "@self-learn/content";
 
+import { isAgentModel } from "@self-learn/schema/shared";
+
 import { topicList } from "./catalog";
-import { MERMAID_LIMIT, MODELS, studioOwner, TEXT_LIMIT, VOCABULARY_STATUS_MS, type Model } from "./config";
+import { MERMAID_LIMIT, studioOwner, TEXT_LIMIT, VOCABULARY_STATUS_MS } from "./config";
 import { readThrough, type CachedRead } from "./content-cache";
 
 /**
@@ -66,7 +68,7 @@ export interface Brief {
   /** The flowchart text itself. Written to scratch; never interpolated. */
   mermaid?: string;
   source?: string;
-  model?: Model;
+  model?: string;
   notes?: string;
   /** Supplied by the caller so a retried submit returns the existing job. */
   idempotencyKey?: string;
@@ -82,7 +84,7 @@ export interface ValidBrief extends Brief {
    * one. Filling `sonnet` in here, as this did before the panel, would make
    * every brief name a model and the panel apply to none.
    */
-  model?: Model;
+  model?: string;
   concepts: string[];
   idempotencyKey: string;
 }
@@ -134,6 +136,19 @@ function oneOf<T extends string>(value: unknown, field: string, allowed: readonl
     throw new BriefError(field, `"${raw}" is not a "${field}". Known: ${allowed.join(", ")}.`);
   }
   return raw as T;
+}
+
+/**
+ * A model name on a brief: whatever `claude --model` takes, the same rule the
+ * settings panel's save applies (D53). Newer releases rename models without a
+ * schema bump, so the check is the name's shape, not a fixed list.
+ */
+export function agentModelName(value: unknown): string {
+  const raw = text(value, "model", 90);
+  if (!isAgentModel(raw)) {
+    throw new BriefError("model", `"${raw}" is not a model name the claude CLI takes`);
+  }
+  return raw;
 }
 
 /** The topic vocabulary, as a brief is checked against it. */
@@ -405,7 +420,7 @@ export function validateBrief(input: unknown, vocabulary: Vocabulary): ValidBrie
   const layout = raw.layout === undefined ? undefined : oneOf(raw.layout, "layout", LAYOUTS);
   const source = optionalText(raw.source, "source", 400);
   const notes = optionalText(raw.notes, "notes");
-  const model = raw.model === undefined ? undefined : oneOf(raw.model, "model", MODELS);
+  const model = raw.model === undefined ? undefined : agentModelName(raw.model);
   const idempotencyKey = optionalText(raw.idempotencyKey, "idempotencyKey", 200);
 
   return {

@@ -20,6 +20,7 @@ import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
 import { diagramAvailability, videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
+import { runnerSettings } from "@/lib/studio-agent-settings";
 import { makeVideoTitle } from "@/lib/studio-extend";
 import { readVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
@@ -80,6 +81,12 @@ interface Health {
   video?: unknown;
   /** Whether a diagram job can be queued at all (#206). */
   diagramAgent?: unknown;
+  /**
+   * The resolved agent settings, the owner's Claude Code defaults and the
+   * models on offer (D90's `agent.models`), as `runnerSettings` reads them.
+   * Optional: a runner from before it does not send it.
+   */
+  agent?: unknown;
 }
 
 export default async function StudioPage({
@@ -202,6 +209,9 @@ export default async function StudioPage({
   // A job's picture, full width, in place of the home view (the strip stays).
   const shot = view.shot !== null && view.job !== null ? { jobId: view.job, which: view.shot } : null;
   const diagramState = diagramAvailability(health.data.diagramAgent);
+  // The models and Claude Code defaults the home composer's picker lists
+  // (D90): health's `agent` block, or the shared list when it does not say.
+  const agent = runnerSettings(health.data.agent);
 
   const topicOptions = topicOptionsOf(topics);
   const cap = capFrom(health.data.dailyCap);
@@ -295,7 +305,7 @@ export default async function StudioPage({
                     Talk an idea through, then make it a diagram or a video.
                   </p>
                 </div>
-                <HomeComposer path={path} video={videoState} />
+                <HomeComposer path={path} video={videoState} models={agent.models} defaults={agent.defaults} />
               </div>
             </section>
           )}

@@ -1,4 +1,4 @@
-import { resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
+import { offeredModels, resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
 import { vocabularyStatus } from "./brief";
 import { doctor, doctorAnsweredAt, DOCTOR_TTL_MS } from "./canvas";
 import { status as catalogStatus, type CatalogResult } from "./catalog";
@@ -117,5 +117,8 @@ export async function agentSettings(): Promise<Record<string, unknown>> {
     // What "Claude Code default" resolves to now, for either kind: the
     // owner's user settings file. The menu shows it whatever a row says.
     defaults: { model: video.claude.model, effort: video.claude.effort },
+    // The pick list a conversation's model menu offers: the same rows the
+    // settings panel lists (D90 of docs/STUDIO-CHAT-FIRST.md).
+    models: offeredModels(),
   };
 }
