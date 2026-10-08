@@ -1766,6 +1766,28 @@ moves. The keys' home is Settings because a key is a credential, and
 credentials live where the other providers' already did; the dialog keeps a
 Connect affordance because a picker row is where the want starts.
 
+### D95. The provider key is one key in two stores
+
+**Verdict (2026-10-09):** the Settings Providers card and the BYOK harness
+share credentials — `/api/learner/provider-key` writes the sealed row and
+mirrors it to the runner's `byok.json` in the same request, Delete removes
+from both, and a tutor-model provider delete drops the BYOK entry when the
+key went with it. The tutor's `gemini` is BYOK's `google` (the tables name
+Google's OpenAI-compatible endpoint differently); `TUTOR_TO_BYOK` is the
+whole overlap. Each connected provider's row in the card holds its Studio
+tier picks under the expand arrow, a provider the runner has but the tutor
+does not gets a slim row of its own, and `POST
+/api/learner/provider-key/sync` pushes a saved key to a runner that missed
+it — a provider connected before the merge, or while the runner was down.
+The runner remains standalone: the web side writes the file, never reads
+anything back except status.
+
+**Why:** two "your keys" cards that each knew half of the same accounts was
+the setup a merged card fixes. The runner keeps its own copy because a
+spawn must not depend on the web app being up; a write-time mirror keeps
+them in step for everything the cards do, and the sync route is the
+self-heal for whatever they miss.
+
 ## Later: other kinds of asset
 
 Diagrams first. The owner wants to chat to launch manimkc videos too, through
