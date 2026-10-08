@@ -17,6 +17,8 @@ import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
 import { TextLink } from "@/components/ui/TextLink";
 import { cx } from "@/components/ui/classes";
+import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
+import { DialogHeader } from "@/components/ui/DialogHeader";
 import { usePresence } from "@/components/ui/use-presence";
 import { ByokTiers } from "@/components/settings/ByokTiers";
 import type { ChainEntry } from "@/lib/agent/providers";
@@ -121,10 +123,9 @@ export function Providers({ view }: { view: ProvidersView }) {
       id={`${base}-add`}
       variant="secondary"
       size="sm"
-      aria-expanded={adding}
-      aria-controls={`${base}-add-form`}
+      aria-haspopup="dialog"
       disabled={!view.keysReachable || addSaving}
-      onClick={() => setAdding((was) => !was)}
+      onClick={() => setAdding(true)}
     >
       <Glyph name="add" size={16} />
       Add provider
@@ -148,22 +149,23 @@ export function Providers({ view }: { view: ProvidersView }) {
           Your models could not be read: the database is unreachable. The tutor is using the built-in defaults.
         </Callout>
       )}
-      <Collapse open={adding} id={`${base}-add-form`}>
-        <AddProvider
-          open={adding}
-          addable={view.addable}
-          onSaving={setAddSaving}
-          onClose={() => {
-            setAdding(false);
-            document.getElementById(`${base}-add`)?.focus();
-          }}
-          onAdded={(label) => {
-            setAdding(false);
-            setStatus({ kind: "done", text: `Added ${label}. Open it to add a model.` });
-            router.refresh();
-          }}
-        />
-      </Collapse>
+      {/* The form is a dialog rather than an inline panel — a provider is a
+          credentials ask, and it deserves the same surface the picker's BYOK
+          connect gets. */}
+      <AddProvider
+        open={adding}
+        addable={view.addable}
+        onSaving={setAddSaving}
+        onClose={() => setAdding(false)}
+        opener={() => document.getElementById(`${base}-add`)}
+        onAdded={(label) => {
+          setAdding(false);
+          setStatus({ kind: "done", text: `Added ${label}. Open it to add a model.` });
+          // The key mirrored into `byok.json` — the Studio block reads it.
+          window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
+          router.refresh();
+        }}
+      />
       {view.rows.length === 0 && byokOnly.length === 0 ? (
         <p className="text-[14px] text-text">No provider yet. Add one to give the tutor a model to call.</p>
       ) : (
@@ -206,9 +208,9 @@ export function Providers({ view }: { view: ProvidersView }) {
 const CUSTOM = "custom";
 
 /**
- * Add provider's form, under the card's text: a provider not listed yet and
- * its key, or a custom provider (a name, a base URL and a key), which
- * `/api/learner/custom-provider` stores whole or not at all.
+ * Add provider's dialog: a provider not listed yet and its key, or a custom
+ * provider (a name, a base URL and a key), which `/api/learner/custom-provider`
+ * stores whole or not at all.
  */
 function AddProvider({
   open,
@@ -216,12 +218,15 @@ function AddProvider({
   onSaving,
   onClose,
   onAdded,
+  opener,
 }: {
   open: boolean;
   addable: ProvidersView["addable"];
   onSaving: (saving: boolean) => void;
   onClose: () => void;
   onAdded: (label: string) => void;
+  /** The Add provider button, which the dialog returns focus to. */
+  opener: () => HTMLElement | null;
 }) {
   const [provider, setProvider] = useState<ProviderName | typeof CUSTOM>(addable[0]?.id ?? CUSTOM);
   const [draft, setDraft] = useState("");
@@ -231,7 +236,7 @@ function AddProvider({
   const [saving, setSaving] = useState(false);
   // In the page only while open, as the old key form: a password field kept
   // in the page is one a browser may fill with the sign-in password.
-  const form = usePresence(open, 300);
+  const form = usePresence(open, DIALOG_CLOSE_MS);
   const custom = provider === CUSTOM || addable.length === 0;
   const chosen = custom ? undefined : (addable.find((a) => a.id === provider) ?? addable[0]);
 
@@ -257,7 +262,9 @@ function AddProvider({
   if (!form.mounted) return null;
   const ready = draft.trim() !== "" && (!custom || (name.trim() !== "" && url.trim() !== ""));
   return (
-    <form onSubmit={(e) => void save(e)} aria-label="Add a provider" className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
+    <Dialog label="Add a provider" onClose={onClose} closing={form.leaving} size="compact" className="md:w-[520px]" opener={opener}>
+      <DialogHeader title="Add a provider" onClose={onClose} />
+      <form onSubmit={(e) => void save(e)} aria-label="Add a provider" className="flex flex-col gap-3 p-6 pt-5">
       <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
         <FormRow label="Provider">
           {({ id }) => (
@@ -364,7 +371,8 @@ function AddProvider({
           Cancel
         </Button>
       </div>
-    </form>
+      </form>
+    </Dialog>
   );
 }
 

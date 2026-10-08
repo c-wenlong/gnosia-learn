@@ -19,6 +19,15 @@ const { Providers } = await import("./Providers");
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom's dialog does not open itself. Add provider's dialog needs what a
+  // browser's does: it opens, and it is already `open` for Close to undo.
+  const proto = HTMLDialogElement.prototype as unknown as { showModal: () => void; close: () => void };
+  proto.showModal ??= function (this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  };
+  proto.close ??= function (this: HTMLDialogElement) {
+    this.removeAttribute("open");
+  };
 });
 
 const fetchMock = vi.fn();
