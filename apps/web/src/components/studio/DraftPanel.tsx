@@ -1148,10 +1148,11 @@ export function DraftPanel({
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
           {/* The conversation's model (D90): every turn and job it makes runs
               on this — except on BYOK, whose turns run the provider's model
-              from `byok.json` (D91), so the claude pick list would lie. */}
-          {shownHarness === "byok" ? (
-            <span title="This conversation's turns run on the BYOK model. Draw jobs still run on Claude, on each kind's saved pick.">
-              Model {agentMenu.byokModel ?? "byok"}
+              from `byok.json` (D91), and Codex, whose turns run its login's
+              model; the claude pick list would lie on either. */}
+          {shownHarness === "byok" || shownHarness === "codex" ? (
+            <span title="This conversation's turns run on the harness's own model. Draw jobs still run on Claude, on each kind's saved pick.">
+              Model {shownHarness === "byok" ? (agentMenu.byokModel ?? "byok") : "codex"}
             </span>
           ) : (
             <FilterMenu

@@ -47,7 +47,7 @@ interface Harness {
 
 const HARNESSES: readonly Harness[] = [
   { value: "claude", label: "Claude", detail: "Anthropic's agent harness. The default." },
-  { value: "codex", label: "Codex", detail: "OpenAI's agent harness. Not wired yet." },
+  { value: "codex", label: "Codex", detail: "OpenAI's agent harness, on your codex login." },
   { value: "byok", label: "BYOK", detail: "Your own provider key, run through Qwen Code." },
 ];
 

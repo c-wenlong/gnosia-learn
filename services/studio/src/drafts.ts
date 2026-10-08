@@ -14,10 +14,12 @@ import {
 
 import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
 import { byokEnv, loadByok } from "./byok";
+import { codexEnv, codexSignedIn, sealCodexHome } from "./codex";
 import { canvas, doctor, doctorChecks, type InspectReport } from "./canvas";
 import { conceptShow, draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "./catalog";
 import {
   agentAuth,
+  CODEX_BIN,
   PLANNER_CONCURRENCY,
   PLANNER_TURNS,
   plannerModel,
@@ -47,6 +49,7 @@ import {
   fence,
   isVideoBrief,
   mermaidBlocks,
+  codexPlannerArgv,
   plannerArgv,
   qwenPlannerArgv,
   PLANNER_BRIEF_FIELDS,
@@ -231,15 +234,16 @@ export interface DraftRecord {
   /**
    * The harness the conversation's turns spawn on: absent or null is `claude`,
    * the default; `"byok"` is the open harness (`qwen`, Qwen Code) on the key
-   * `byok.json` holds. Set at creation from the picker's pick and by
-   * `PUT .../harness` while no turn has run; a harness carries its own session
-   * store, so once a turn has run the pick is locked to it.
+   * `byok.json` holds; `"codex"` is OpenAI's `codex exec` on the owner's codex
+   * login. Set at creation from the picker's pick and by `PUT .../harness`
+   * while no turn has run; a harness carries its own session store, so once a
+   * turn has run the pick is locked to it.
    *
    * Jobs this draft draws or makes still run on `claude`: the job spawn's
    * hooks and Bash guard are a claude surface, and no open harness carries
    * the same ones yet.
    */
-  harness?: "byok" | null;
+  harness?: "byok" | "codex" | null;
   /**
    * The concept a hand-off from the concept tutor opened the draft on (D65 of
    * docs/STUDIO-TUTOR-HANDOFF.md). Absent or null on every other draft. The
@@ -444,8 +448,8 @@ export interface DraftView {
   name: string | null;
   /** The model the conversation's picker holds (D90); null is the runner's default. */
   model: string | null;
-  /** The harness the conversation's turns run on: `"claude"` or `"byok"` (the pane picker's pick). */
-  harness: "claude" | "byok";
+  /** The harness the conversation's turns run on: `"claude"`, `"byok"` or `"codex"` (the pane picker's pick). */
+  harness: "claude" | "byok" | "codex";
   transcript: TranscriptEntry[];
   /** The newest brief of any kind, kept one release for the web app from before (D61). */
   brief: AnyDraftBrief | null;
@@ -1357,6 +1361,12 @@ export class Drafts {
         reason: "byok-unconfigured",
       });
     }
+    if (harness === "codex" && !(await codexSignedIn(process.env))) {
+      throw new JobRefused(400, "codex is not signed in: `codex login` once, or an OPENAI_API_KEY in the runner's env", {
+        field: "harness",
+        reason: "codex-not-signed-in",
+      });
+    }
     // Any `tutor` at all, an empty list included, names a hand-off: without
     // its concept it is a malformed one, never an ordinary draft.
     if (concept === null && input.tutor !== undefined && input.tutor !== null) {
@@ -2228,7 +2238,8 @@ export class Drafts {
     const startedAt = new Date().toISOString();
     // The draft's harness (the pane picker's pick): absent is `claude`. BYOK
     // spawns `qwen` on the configured key; a draft made before the key was
-    // cleared reports the way a missing binary does.
+    // cleared reports the way a missing binary does. Codex is `codex exec` on
+    // the owner's codex login, checked the same way at pick time.
     const harness = record.harness ?? "claude";
     const byok = harness === "byok" ? await loadByok() : null;
     if (harness === "byok" && byok === null) {
@@ -2251,8 +2262,10 @@ export class Drafts {
       };
     }
     // The conversation's own pick (D90), else the runner's `STUDIO_PLANNER_MODEL`.
-    // A BYOK turn runs the provider's model, which only `byok.json` names.
-    const model = byok !== null ? byok.model : (record.model ?? plannerModel());
+    // A BYOK turn runs the provider's model, which only `byok.json` names; a
+    // codex turn takes its login's model — the pick names claude's, so the
+    // marker records what ran.
+    const model = byok !== null ? byok.model : harness === "codex" ? "codex" : (record.model ?? plannerModel());
     const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, model, ...(retry ? { retry: true } : {}) };
     let logChain: Promise<void> = appendFile(draftSessionLogPath(id), `${JSON.stringify(marker)}\n`, "utf8");
     const meter = new JobCostMeter(model);
@@ -2282,16 +2295,18 @@ export class Drafts {
     }
     const systemPromptFile = path.resolve(plannerSystemPath(id));
     const argv =
-      byok === null
-        ? plannerArgv({
-            // The file, never its text: nothing in the prompt is ever an argv element.
-            systemPromptFile,
-            settingsFile: plannerSettingsPath(id),
-            sessionId: record.plannerSessionId,
-            resume: record.sessionStarted,
-            model,
-          })
-        : qwenPlannerArgv({ sessionId: record.plannerSessionId, resume: record.sessionStarted, model });
+      harness === "codex"
+        ? codexPlannerArgv({ sessionId: record.plannerSessionId, resume: record.sessionStarted, systemPromptFile })
+        : byok === null
+          ? plannerArgv({
+              // The file, never its text: nothing in the prompt is ever an argv element.
+              systemPromptFile,
+              settingsFile: plannerSettingsPath(id),
+              sessionId: record.plannerSessionId,
+              resume: record.sessionStarted,
+              model,
+            })
+          : qwenPlannerArgv({ sessionId: record.plannerSessionId, resume: record.sessionStarted, model });
     let env: NodeJS.ProcessEnv | undefined;
     if (byok !== null) {
       // Qwen's seals are flags and env, not a settings file: `--safe-mode` and
@@ -2299,6 +2314,13 @@ export class Drafts {
       // own qwen config and logins never reach the spawn.
       await mkdir(draftTmpDir(id), { recursive: true });
       env = byokEnv(process.env, byok, draftTmpDir(id), systemPromptFile);
+    } else if (harness === "codex") {
+      // Codex's seal is the env: a draft-owned `CODEX_HOME` holding only the
+      // login's `auth.json` as a symlink, `HOME` sealed beside it, and the
+      // argv's `read-only`/`never`-approve config (`codexPlannerArgv`).
+      await mkdir(draftTmpDir(id), { recursive: true });
+      const sealed = await sealCodexHome(draftTmpDir(id), process.env);
+      env = codexEnv(process.env, draftTmpDir(id), sealed.home, { keepKey: !sealed.linked });
     }
     const live = { turn, text: "" };
     this.live.set(id, live);
@@ -2308,7 +2330,11 @@ export class Drafts {
       cwd: draftDir(id),
       auth: agentAuth(),
       tmp: draftTmpDir(id),
-      ...(byok === null ? {} : { bin: QWEN_BIN, env }),
+      ...(byok !== null
+        ? { bin: QWEN_BIN, env }
+        : harness === "codex"
+          ? { bin: CODEX_BIN, env, format: "codex" as const }
+          : {}),
       onLine: (line) => {
         meter.observe(line);
         logChain = logChain.then(() => appendFile(draftSessionLogPath(id), `${line}\n`, "utf8")).catch(() => undefined);
@@ -2317,9 +2343,15 @@ export class Drafts {
         live.text = text;
         this.publish(id, { event: "delta", data: { turn, text } });
       },
-      onInit: () => {
-        if (!this.require(id).sessionStarted) {
-          void this.write(id, () => this.save(id, { sessionStarted: true })).catch(() => undefined);
+      onInit: (init) => {
+        const current = this.require(id);
+        const patch: { sessionStarted?: boolean; plannerSessionId?: string } = {};
+        if (!current.sessionStarted) patch.sessionStarted = true;
+        // A codex spawn ignores the minted id and mints a `thread_id` itself;
+        // what its init reports is what the next turn's `resume` takes.
+        if (init.sessionId !== null && init.sessionId !== current.plannerSessionId) patch.plannerSessionId = init.sessionId;
+        if (patch.sessionStarted === true || patch.plannerSessionId !== undefined) {
+          void this.write(id, () => this.save(id, patch)).catch(() => undefined);
         }
       },
     });
@@ -3286,6 +3318,12 @@ export class Drafts {
         reason: "byok-unconfigured",
       });
     }
+    if (harness === "codex" && !(await codexSignedIn(process.env))) {
+      throw new JobRefused(400, "codex is not signed in: `codex login` once, or an OPENAI_API_KEY in the runner's env", {
+        field: "harness",
+        reason: "codex-not-signed-in",
+      });
+    }
     return this.write(id, async () => {
       const current = this.require(id);
       if ((current.harness ?? null) === harness) return { record: current, changed: false };
@@ -4075,22 +4113,20 @@ export function draftModel(raw: unknown): string | null {
 
 /**
  * A harness as a create or a `PUT .../harness` keeps it: `"byok"` for the open
- * harness (`qwen`), or null — absent, `""`, `"default"` or `"claude"` — for
- * `claude` itself. `"codex"` is a picker row only for now, refused outright;
- * anything else never was a row.
+ * harness (`qwen`), `"codex"` for OpenAI's `codex exec`, or null — absent,
+ * `""`, `"default"` or `"claude"` — for `claude` itself. Anything else never
+ * was a row.
  */
-export function draftHarness(raw: unknown): "byok" | null {
+export function draftHarness(raw: unknown): "byok" | "codex" | null {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== "string") {
-    throw new JobRefused(400, `"harness" is "claude", "byok", or null/"default" for the runner's default`, { field: "harness" });
+    throw new JobRefused(400, `"harness" is "claude", "byok", "codex", or null/"default" for the runner's default`, { field: "harness" });
   }
   const name = raw.trim().toLowerCase();
   if (name === "" || name === "default" || name === "claude") return null;
   if (name === "byok") return "byok";
-  if (name === "codex") {
-    throw new JobRefused(400, `"codex" is a placeholder row: it is not a harness this runner spawns yet`, { field: "harness" });
-  }
-  throw new JobRefused(400, `"harness" is "claude" or "byok"`, { field: "harness" });
+  if (name === "codex") return "codex";
+  throw new JobRefused(400, `"harness" is "claude", "byok" or "codex"`, { field: "harness" });
 }
 
 /**
