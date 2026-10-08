@@ -625,7 +625,7 @@ handler as every other route. Every response carries a `note`.
 
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
-| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model?, harness? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution. *Since D91:* `harness` is the pane picker's pick, `"claude"` or `"byok"` (`"codex"` is refused: a placeholder row); `byok` without a stored key is `400 { reason: "byok-unconfigured" }` |
+| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model?, harness? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution. *Since D91:* `harness` is the pane picker's pick, `"claude"`, `"byok"` or `"codex"`; `byok` without a stored key is `400 { reason: "byok-unconfigured" }`, `codex` without a login is `400 { reason: "codex-not-signed-in" }` |
 | `GET` | `/api/drafts` | `?state=&limit=&nonEmpty=&q=`; `state` may be a comma list (`open,briefed`); `nonEmpty=1` leaves out drafts with no person message (`turns` 0), before the limit is applied; *since D87:* `q` (at most 200 characters, else 400) keeps the drafts whose name, title, first message or concept title contains it, in any case, also before the limit and the `before` cursor | `{ drafts: [{ draftId, kind, state, title, name, firstMessage, source, turns, costUsd, updated, jobId }] }`. `name` is the owner's name for the conversation (see `PUT .../name`), or null. `firstMessage` is the person's first message, whitespace collapsed and cut to 120 characters, or null before one |
 | `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, title, name, model, transcript: [{ seq, role, text, at, brief?, edit? }], brief, briefSeq, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown. `briefSeq` is the seq of the transcript entry carrying `brief` (a planner reply, or the `studio` note of an edit, which has `edit: true`), null with no brief |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, no length cap of its own; a body over 1 MB is refused with 413 | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
@@ -1643,10 +1643,12 @@ it. A rename's rule applies to it too: it goes through the write chain so
 
 **Verdict (2026-11-26):** the pane header holds a harness picker at its left,
 the way Manus's top bar does, with the model picker keeping its place under
-the composer. Three rows: **Claude** (the default, absent on the record),
-**Codex** (a placeholder the runner refuses until it is wired) and **BYOK** —
-Qwen Code (`qwen`) on the key `byok.json` holds, chosen because its headless
-surface replicates `claude -p`'s flag for flag, stream-json shape included. A
+the composer, and the new-chat view carries the same picker in the same
+corner so the pick can be made before the draft exists. Three rows:
+**Claude** (the default, absent on the record), **Codex** — OpenAI's `codex
+exec`, on the owner's `codex login` — and **BYOK**, Qwen Code (`qwen`) on the
+key `byok.json` holds, chosen because its headless surface replicates
+`claude -p`'s flag for flag, stream-json shape included. A
 turn on `byok` spawns `qwen` rather than `claude`: no `-p` (piped stdin is
 the prompt and headless both), `--output-format stream-json
 --include-partial-messages`, `--model` from the stored config rather than the
@@ -1670,6 +1672,24 @@ cannot be aimed at a host the dialog never offered. `GET` answers status with
 the key's last four, never the key. A draft made on `byok` before the key is
 stored is refused at creation; one whose config is later cleared reports the
 turn the way a missing binary does.
+
+A turn on `codex` spawns `codex exec --json` rather than `claude`: the prompt
+on stdin (`-`, never argv), the draft's `planner-system.md` as
+`model_instructions_file`, and `thread.started`'s `thread_id` as the session
+id — codex mints its own, so the record's `plannerSessionId` is a placeholder
+until the first init reports the real one, and `exec resume <id>` continues
+it. Its NDJSON is a shape of its own (`thread.*`/`item.*`/`turn.*`), which
+`codexEvent` translates into the events `PlannerRun` knows. The seals are
+measured on codex-cli 0.161.0: a per-draft `CODEX_HOME` holding only a
+symlink to the real `auth.json` (the login shared, everything else — the
+owner's `config.toml`, `AGENTS.md`, skills and plugins — sealed out), `HOME`
+sealed to the draft's `tmp` beside it, and config flags: `read-only`
+sandbox, `approval_policy="never"`, `project_doc_max_bytes=0` (no
+`AGENTS.md`, the repo's own included) and `mcp_servers={}`. A pick on `codex`
+with no login file and no `OPENAI_API_KEY` is refused at pick time
+(`codex-not-signed-in`), as BYOK's missing key is. Codex reports token usage
+but no dollar figure, so a codex turn has no cost entry the way a claude one
+does.
 
 The pick is `harness` on `POST /api/drafts` — the remembered last pick, which
 is how a BYOK conversation begins before its pane exists — and
