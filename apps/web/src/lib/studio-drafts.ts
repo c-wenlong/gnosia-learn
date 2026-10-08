@@ -559,6 +559,16 @@ export function saveByokSettings(input: { provider: string; apiKey: string; mode
   );
 }
 
+/** `DELETE /api/settings/byok` (D94): unhook a provider — its key, tiers and the active pick go with it. */
+export function removeByokProvider(provider: string) {
+  return announceByokWrite(
+    call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok", {
+      method: "DELETE",
+      body: JSON.stringify({ provider }),
+    }),
+  );
+}
+
 /** `PUT /api/settings/byok/active` (D94): which connected provider a `byok` turn runs on. */
 export function setByokActive(provider: string) {
   return announceByokWrite(

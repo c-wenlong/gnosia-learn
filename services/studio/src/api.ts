@@ -4,7 +4,7 @@ import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief, type Vocabulary } from "./brief";
-import { byokStatus, checkByokProvider, listByokModels, loadByok, saveByok, saveByokModels, setByokActive } from "./byok";
+import { byokStatus, checkByokProvider, listByokModels, loadByok, removeByokProvider, saveByok, saveByokModels, setByokActive } from "./byok";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { preferenceSet, videoList } from "./catalog";
 import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@self-learn/schema/shared";
@@ -391,12 +391,12 @@ async function handle(
 
   /* /api/settings/byok/models: POST lists the provider's models; PUT saves a provider's tier picks (D94). */
   if (segments[1] === "settings" && segments[2] === "byok" && segments[3] === "models" && segments.length === 4) {
-    return byokModelsRoute(request, response, method);
+    return byokModelsRoute(request, response, method, probes);
   }
 
   /* /api/settings/byok/active: which connected provider a byok turn runs on (D94). */
   if (segments[1] === "settings" && segments[2] === "byok" && segments[3] === "active" && segments.length === 4) {
-    return byokActiveRoute(request, response, method);
+    return byokActiveRoute(request, response, method, probes);
   }
 
   /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
@@ -1829,7 +1829,7 @@ async function byokSettingsRoute(
   probes: HealthProbes,
 ): Promise<void> {
   if (method === "GET") return send(response, 200, await byokStatus());
-  if (method !== "PUT") return fail(response, 405, `${method} is not a thing /api/settings/byok does`);
+  if (method !== "PUT" && method !== "DELETE") return fail(response, 405, `${method} is not a thing /api/settings/byok does`);
   let body: Record<string, unknown>;
   try {
     const parsed = await readJson(request);
@@ -1839,7 +1839,7 @@ async function byokSettingsRoute(
     return badBody(response, error);
   }
   try {
-    const saved = await saveByok(body);
+    const saved = method === "PUT" ? await saveByok(body) : await removeByokProvider(body);
     // Health's copy of the agent block is now wrong.
     probes.agent.forget();
     return send(response, 200, saved);
@@ -1860,7 +1860,7 @@ async function byokSettingsRoute(
  * max? } }` (D94): a connected provider's tier picks, merged over what it
  * has — omitted keeps, empty clears.
  */
-async function byokModelsRoute(request: IncomingMessage, response: ServerResponse, method: string): Promise<void> {
+async function byokModelsRoute(request: IncomingMessage, response: ServerResponse, method: string, probes: HealthProbes): Promise<void> {
   let body: Record<string, unknown>;
   try {
     const parsed = await readJson(request);
@@ -1870,7 +1870,11 @@ async function byokModelsRoute(request: IncomingMessage, response: ServerRespons
     return badBody(response, error);
   }
   try {
-    if (method === "PUT") return send(response, 200, await saveByokModels(body));
+    if (method === "PUT") {
+      const saved = await saveByokModels(body);
+      probes.agent.forget();
+      return send(response, 200, saved);
+    }
     if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/settings/byok/models does`);
     const provider = checkByokProvider(body.provider);
     let apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
@@ -1893,7 +1897,7 @@ async function byokModelsRoute(request: IncomingMessage, response: ServerRespons
  * `PUT /api/settings/byok/active` `{ provider }`: which connected provider a
  * `byok` turn runs on (D94). Answers as `GET /api/settings/byok` does.
  */
-async function byokActiveRoute(request: IncomingMessage, response: ServerResponse, method: string): Promise<void> {
+async function byokActiveRoute(request: IncomingMessage, response: ServerResponse, method: string, probes: HealthProbes): Promise<void> {
   if (method !== "PUT") return fail(response, 405, `${method} is not a thing /api/settings/byok/active does`);
   let body: Record<string, unknown>;
   try {
@@ -1904,7 +1908,9 @@ async function byokActiveRoute(request: IncomingMessage, response: ServerRespons
     return badBody(response, error);
   }
   try {
-    return send(response, 200, await setByokActive(body));
+    const saved = await setByokActive(body);
+    probes.agent.forget();
+    return send(response, 200, saved);
   } catch (error) {
     if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
     throw error;
