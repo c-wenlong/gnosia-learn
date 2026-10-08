@@ -117,9 +117,10 @@ describe("GET /api/settings/agent (#207)", () => {
     expect(harnessModelOptions("claude", "default", null).map((o) => o.value)).toEqual(["default", "sonnet", "fable"]);
     expect(harnessModelOptions("codex", "default", null).map((o) => o.value)).toEqual(["default", "gpt-6-luna", "gpt-6-astra"]);
     expect(harnessModelOptions("codex", "gpt-6.1-sol", null).map((o) => o.value)).toEqual(["default", "gpt-6-luna", "gpt-6-astra", "gpt-6.1-sol"]);
-    expect(harnessModelOptions("claude", "default", { turns: "sonnet", video: "claude-opus-5-5", diagram: "claude-fable-5-1" })[0]!.detail).toBe(
-      "turns: Sonnet · video: Opus 5.5 · diagram: Fable 5.1",
-    );
+    expect(harnessModelOptions("claude", "default", { turns: "sonnet", video: "claude-opus-5-5", diagram: "claude-fable-5-1" })[0]).toMatchObject({
+      label: "Default",
+      detail: "turns: Sonnet · video: Opus 5.5 · diagram: Fable 5.1",
+    });
   });
 
   it("lists a model the runner offers under two names once, and says the default without its raw id", () => {

@@ -272,7 +272,7 @@ export function harnessModelOptions(harness: string, current: string, resolved: 
           { value: "gpt-6-astra", label: "Max", detail: "GPT-6 Astra — frontier, for the hard ones" },
         ]
       : [
-          runnerDefaultOption(resolved),
+          { ...runnerDefaultOption(resolved), label: "Default" },
           { value: "sonnet", label: "Lite", detail: "Sonnet — fast, for everyday asks" },
           { value: "fable", label: "Max", detail: "Fable — the strongest, for hard ones" },
         ];
