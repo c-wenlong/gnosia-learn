@@ -34,7 +34,7 @@ import { scratchDir, shotPath, studioHome, targetPath, workDir, workSvgPath } fr
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
-import { resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
+import { offeredModels, resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
 import { priceableAs, ratesFor } from "./cost";
 
 /** What a studio spawn with no `--model` runs on under the seal, measured (D53). */
@@ -412,7 +412,7 @@ async function handle(
         "/api/drafts/{id}",
         "/api/drafts/{id}/messages|events|draw|abandon",
         "PUT /api/drafts/{id}/brief",
-        "PUT /api/drafts/{id}/name",
+        "PUT /api/drafts/{id}/name|model",
         "/api/diagrams",
         "/api/diagrams/{name}",
         "/api/diagrams/{name}/svg",
@@ -1470,6 +1470,8 @@ async function draftRoutes(
         // as fenced data.
         concept: input.concept,
         tutor: input.tutor,
+        // The composer picker's pick (D90): checked in `drafts.ts`.
+        model: input.model,
       });
       return send(response, created ? 201 : 200, {
         draftId: record.id,
@@ -1608,6 +1610,24 @@ async function draftRoutes(
         return refusal(error);
       }
     }
+    case "PUT model": {
+      // The composer picker's pick for the whole conversation (D90): turns
+      // and the jobs its presses spawn all run on it.
+      const input = await body();
+      if (input === null) return;
+      if (!("model" in input)) return fail(response, 400, `"model" is required: a model name, or null/"default" to clear`, { field: "model" });
+      try {
+        const { record, changed } = await drafts.setModel(id, input.model);
+        return send(response, 200, {
+          draftId: id,
+          model: record.model ?? null,
+          changed,
+          note: !changed ? "the model is unchanged" : record.model == null ? "the model is cleared" : `the conversation runs on ${record.model}`,
+        });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
     case "PUT brief": {
       const input = await body();
       if (input === null) return;
@@ -1631,7 +1651,7 @@ async function draftRoutes(
     }
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`, {
-        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief", "PUT name", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
+        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief", "PUT name", "PUT model", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
       });
   }
 }
@@ -1679,16 +1699,6 @@ async function draftEvents(
 }
 
 /** What is and is not working right now. */
-/** The models the settings menu offers: every model the rate table prices, by the name `claude --model` takes. */
-const OFFERED_MODELS = [
-  { value: "fable", label: "Fable", id: "claude-fable-5-1" },
-  { value: "opus", label: "Opus", id: "claude-opus-5" },
-  { value: "sonnet", label: "Sonnet", id: "claude-sonnet-5" },
-  { value: "claude-fable-5-1", label: "Claude Fable 5.1", id: "claude-fable-5-1" },
-  { value: "claude-opus-5-5", label: "Claude Opus 5.5", id: "claude-opus-5-5" },
-  { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", id: "claude-sonnet-5-5" },
-] as const;
-
 /** One kind's row, as `GET /api/settings/agent` reports it. */
 async function agentSettingView(kind: "video" | "diagram"): Promise<Record<string, unknown>> {
   const resolved = kind === "video" ? await resolveVideoAgent() : await resolveDiagramAgent();
@@ -1719,7 +1729,7 @@ export async function agentSettingsView(): Promise<Record<string, unknown>> {
     video,
     diagram,
     defaults: claude,
-    models: OFFERED_MODELS.filter((model) => ratesFor(model.id) !== null),
+    models: offeredModels(),
     efforts: EFFORTS,
   };
 }

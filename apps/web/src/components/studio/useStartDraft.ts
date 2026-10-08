@@ -30,7 +30,7 @@ import { panelHref } from "@/lib/studio-view";
  * typed.
  */
 export function useStartDraft(path: string): {
-  start: (first?: MentionValue<DraftKind>) => Promise<boolean>;
+  start: (first?: MentionValue<DraftKind>, model?: string) => Promise<boolean>;
   busy: boolean;
   error: string | null;
 } {
@@ -39,12 +39,16 @@ export function useStartDraft(path: string): {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function start(first?: MentionValue<DraftKind>): Promise<boolean> {
+  async function start(first?: MentionValue<DraftKind>, model?: string): Promise<boolean> {
     if (busy) return false;
     setBusy(true);
     setError(null);
     const token = host?.begin(first ?? null) ?? null;
-    const result = await createDraft({ idempotencyKey: idempotencyKey("draft") });
+    const result = await createDraft({
+      idempotencyKey: idempotencyKey("draft"),
+      // The composer picker's pick (D90); unset is the runner's own default.
+      ...(model === undefined || model === "default" ? {} : { model }),
+    });
     if (!result.ok) {
       if (host !== null && token !== null) host.settle(token, null);
       setBusy(false);

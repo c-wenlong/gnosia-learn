@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Chip } from "@/components/ui/Chip";
 import { chipClasses, cx } from "@/components/ui/classes";
+import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
@@ -107,6 +108,7 @@ import {
   refusalReason,
   saveBrief,
   sendMessage,
+  setDraftModel,
   stopWaiting,
   releaseHold,
   videoAvailability,
@@ -117,6 +119,7 @@ import {
   type TranscriptEntry,
   type VideoAvailability,
 } from "@/lib/studio-drafts";
+import { modelOptions, runnerDefaultOption, runnerSettings, MODEL_CHOICES, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { switchedTool, type VideoToolOption } from "@/lib/studio-brief-video";
 import {
   arrivingPurpose,
@@ -232,6 +235,11 @@ export function DraftPanel({
   const [cap, setCap] = useState<CapStatus | null>(initialCap);
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
   const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
+  /** The picker's list and the Claude Code defaults, from health's `agent` (D90). */
+  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null }>({ models: null, defaults: null, resolved: null });
+  /** The pick sent to the runner and not yet seen in the record. */
+  const [modelPick, setModelPick] = useState<string | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
   /** The cards whose press is under way, each with its kind's job before the press. */
   const [pressing, setPressing] = useState<ReadonlyMap<DraftKind, string | null>>(new Map());
   const [refused, setRefused] = useState<Partial<Record<CardKey, DrawRefusal & { seq: number }>>>({});
@@ -400,6 +408,7 @@ export function DraftPanel({
     if (next !== null) setCap(next);
     setVideo(videoAvailability(health.video));
     setDiagramAgent(diagramAvailability(health.diagramAgent));
+    setAgentMenu(runnerSettings(health.agent));
   }, []);
   // Once on opening too: the page that drew the grid read health, and a
   // conversation opened in the browser (`PanelHost`) can be minutes
@@ -667,6 +676,32 @@ export function DraftPanel({
     const result = await stopWaiting(draftId, kind);
     if (!result.ok) setWaitError(`It is still waiting: ${result.refusal.error}`);
     void load();
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* The model pick (D90)                                              */
+  /* ---------------------------------------------------------------- */
+
+  // The chip shows the pick at once; the record's own value lands on the
+  // state event's reload. The render below clears the stand-in as soon as
+  // the record shows it, and `pickModel` clears it when its request settles,
+  // so a record set elsewhere never leaves a stale pick standing in.
+  const shownModel = modelPick ?? view?.model ?? "default";
+  if (modelPick !== null && (view?.model ?? "default") === modelPick) {
+    setModelPick(null);
+  }
+
+  async function pickModel(next: string) {
+    setModelPick(next);
+    setModelError(null);
+    const result = await setDraftModel(draftId, next === "default" ? null : next);
+    if (!result.ok) {
+      setModelError(`The model could not be set: ${result.refusal.error}`);
+    }
+    // Settled: the record's own value takes over on the next reload, whatever
+    // it now is, so a pick that never matched it does not stand in forever.
+    // A pick made since is newer; this request may not clear it.
+    setModelPick((held) => (held === next ? null : held));
   }
 
   // Arriving from Extend, from Talk it through on a failed job, or from a
@@ -1076,6 +1111,17 @@ export function DraftPanel({
           onModEnter={cards.length > 0 ? () => modEnter(null) : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
+          {/* The conversation's model (D90): every turn and job it makes runs
+              on this. Filled only when a pick stands. */}
+          <FilterMenu
+            label="Model"
+            bare
+            options={modelOptions(shownModel, agentMenu.defaults, agentMenu.models ?? MODEL_CHOICES, null, runnerDefaultOption(agentMenu.resolved))}
+            value={shownModel}
+            defaultValue="default"
+            busy={modelPick !== null}
+            onChange={(next) => void pickModel(next)}
+          />
           {/* The question and the press swap in place, each fading in. The
               problem card's Start over opens the question too. */}
           {(confirmStartOver || view.transcript.length > 0) && (
@@ -1090,7 +1136,10 @@ export function DraftPanel({
             />
           )}
           {downReason !== null && <span className="text-danger">The runner stopped answering: {downReason}</span>}
-          <Failure text={startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)} className="basis-full" />
+          <Failure
+            text={modelError ?? startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)}
+            className="basis-full"
+          />
         </div>
         <p role="status" aria-live="polite" className="sr-only">
           {announce}

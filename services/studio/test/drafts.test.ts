@@ -46,7 +46,7 @@ vi.mock("../src/canvas", async (importOriginal) => ({
 const { Drafts, emptySlot } = await import("../src/drafts");
 const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
-const { spendWindow } = await import("../src/cost");
+const { spendWindow, costFromLog } = await import("../src/cost");
 const { cacheDir, cachePath } = await import("../src/content-cache");
 const { studioOwner } = await import("../src/config");
 const { draftDir, draftJsonPath, draftSessionLogPath, draftTranscriptPath } = await import("../src/paths");
@@ -735,6 +735,53 @@ describe("a crash between two writes", () => {
     await restarted.load();
     await restarted.reconcile();
     expect((await restarted.view(record.id)).state).toBe("briefed");
+    drafts = restarted;
+  });
+});
+
+describe("a turn recovered after its model pick changed mid-run (D90)", () => {
+  const usage = { input_tokens: 10, cache_creation_input_tokens: 9000, cache_read_input_tokens: 0, output_tokens: 20 };
+
+  /** A dead runner's trace: the message on disk, the turn in flight at the pick's newer value, and this session log. */
+  async function leaveTurn(id: string, model: string, log: Record<string, unknown>[]): Promise<string> {
+    const transcript = await readFile(draftTranscriptPath(id), "utf8");
+    await writeFile(draftTranscriptPath(id), `${transcript}${JSON.stringify({ seq: 2, type: "message", at: new Date().toISOString(), text: "hi" })}\n`);
+    const onDisk = { ...drafts.get(id)!, seq: 2, turns: 1, model, inFlight: { turn: 2, startedAt: new Date().toISOString() } };
+    await writeFile(draftJsonPath(id), JSON.stringify(onDisk));
+    const body = `${log.map((line) => JSON.stringify(line)).join("\n")}\n`;
+    await writeFile(draftSessionLogPath(id), body);
+    return body;
+  }
+
+  it("prices the turn by the model its spawn ran, not the pick as it stands", async () => {
+    const { record } = await drafts.create({});
+    // The turn spawned on Opus; the pick moved to Sonnet while it ran, then
+    // the runner died. The log names a model the rate table does not know, so
+    // the marker's is the one that prices it.
+    const body = await leaveTurn(record.id, "claude-sonnet-5-5", [
+      { type: "studio-turn", turn: 2, at: new Date().toISOString(), model: "claude-opus-5-5" },
+      { type: "assistant", message: { id: "m1", model: "claude-future-9", content: [], usage } },
+    ]);
+    const restarted = build();
+    await restarted.load();
+    await restarted.reconcile();
+    const spend = restarted.get(record.id)!.spend;
+    expect(spend).toHaveLength(1);
+    expect(spend[0]!.costUsd).toBe(costFromLog(body, "claude-opus-5-5").usd);
+    expect(spend[0]!.costUsd).not.toBe(costFromLog(body, "claude-sonnet-5-5").usd);
+    drafts = restarted;
+  });
+
+  it("prices by the record's pick when an older marker names none", async () => {
+    const { record } = await drafts.create({});
+    const body = await leaveTurn(record.id, "claude-opus-5-5", [
+      { type: "studio-turn", turn: 2, at: new Date().toISOString() },
+      { type: "assistant", message: { id: "m1", model: "claude-future-9", content: [], usage } },
+    ]);
+    const restarted = build();
+    await restarted.load();
+    await restarted.reconcile();
+    expect(restarted.get(record.id)!.spend[0]!.costUsd).toBe(costFromLog(body, "claude-opus-5-5").usd);
     drafts = restarted;
   });
 });

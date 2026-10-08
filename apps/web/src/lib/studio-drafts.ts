@@ -228,6 +228,11 @@ export interface DraftView {
    * (`conversationTitle`). Optional: a runner from before it does not send it.
    */
   name?: string | null;
+  /**
+   * The model the conversation's own picker holds (D90), null for the
+   * runner's default. Optional: a runner from before it does not send it.
+   */
+  model?: string | null;
   transcript: TranscriptEntry[];
   brief: Brief | null;
   /** The seq of the entry carrying the brief in force. Optional: a runner from before phase 3 does not send it. */
@@ -422,8 +427,8 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<ApiResult<
   return { ok: true, status: response.status, data: body as T };
 }
 
-/** `POST /api/drafts`: a new conversation, or one opened on a diagram to extend it. */
-export function createDraft(input: { source?: string; sourceKind?: "diagram" | "video"; idempotencyKey: string }) {
+/** `POST /api/drafts`: a new conversation, or one opened on a diagram to extend it. `model` is the picker its composer carries (D90). */
+export function createDraft(input: { source?: string; sourceKind?: "diagram" | "video"; idempotencyKey: string; model?: string }) {
   return call<{ draftId: string; state: DraftState; note: string }>(BASE, {
     method: "POST",
     body: JSON.stringify(input),
@@ -474,6 +479,19 @@ export function renameDraft(draftId: string, name: string | null) {
   return call<{ draftId: string; name: string | null; title: string | null; changed: boolean; note: string }>(draftPath(draftId, "/name"), {
     method: "PUT",
     body: JSON.stringify({ name }),
+  });
+}
+
+/**
+ * `PUT /api/drafts/{id}/model`: the model the conversation's composer picker
+ * holds (D90 of docs/STUDIO-CHAT-FIRST.md), which every turn and every job
+ * this conversation makes then runs on. `null` (sent as `"default"`) hands it
+ * back to the runner's own default.
+ */
+export function setDraftModel(draftId: string, model: string | null) {
+  return call<{ draftId: string; model: string | null; changed: boolean; note: string }>(draftPath(draftId, "/model"), {
+    method: "PUT",
+    body: JSON.stringify({ model: model ?? "default" }),
   });
 }
 
@@ -765,10 +783,17 @@ export async function readDailyCap(): Promise<unknown> {
  * the Video suggestion can be used (T5, T25). Null when the runner did not
  * answer. Read at the same rate as the cap, for the same reason.
  */
-export async function readStudioHealth(): Promise<{ dailyCap: unknown; video: unknown; diagramAgent: unknown } | null> {
-  const result = await call<{ dailyCap?: unknown; video?: unknown; diagramAgent?: unknown }>("/studio/api/health");
+export async function readStudioHealth(): Promise<{ dailyCap: unknown; video: unknown; diagramAgent: unknown; agent: unknown } | null> {
+  const result = await call<{ dailyCap?: unknown; video?: unknown; diagramAgent?: unknown; agent?: unknown }>("/studio/api/health");
   return result.ok
-    ? { dailyCap: result.data.dailyCap ?? null, video: result.data.video ?? null, diagramAgent: result.data.diagramAgent ?? null }
+    ? {
+        dailyCap: result.data.dailyCap ?? null,
+        video: result.data.video ?? null,
+        diagramAgent: result.data.diagramAgent ?? null,
+        // The resolved agent settings and the pick list a composer's model
+        // menu offers (D90): `agent.models` from a runner that sends it.
+        agent: result.data.agent ?? null,
+      }
     : null;
 }
 
