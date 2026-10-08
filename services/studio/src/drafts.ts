@@ -13,7 +13,7 @@ import {
 } from "@self-learn/schema/shared";
 
 import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
-import { byokEnv, loadByok } from "./byok";
+import { byokEnv, loadByok, resolveByok } from "./byok";
 import { codexEnv, codexSignedIn, sealCodexHome } from "./codex";
 import { canvas, doctor, doctorChecks, type InspectReport } from "./canvas";
 import { conceptShow, draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "./catalog";
@@ -1355,8 +1355,8 @@ export class Drafts {
     const tutor = parseTutor(input.tutor);
     const harness = draftHarness(input.harness);
     const model = draftModel(input.model, harness);
-    if (harness === "byok" && (await loadByok()) === null) {
-      throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider and an API key first", {
+    if (harness === "byok" && resolveByok(await loadByok(), null) === null) {
+      throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider, an API key and a Default model first", {
         field: "harness",
         reason: "byok-unconfigured",
       });
@@ -2241,7 +2241,7 @@ export class Drafts {
     // cleared reports the way a missing binary does. Codex is `codex exec` on
     // the owner's codex login, checked the same way at pick time.
     const harness = record.harness ?? "claude";
-    const byok = harness === "byok" ? await loadByok() : null;
+    const byok = harness === "byok" ? resolveByok(await loadByok(), record.model ?? null) : null;
     if (harness === "byok" && byok === null) {
       return {
         run: {
@@ -3312,8 +3312,8 @@ export class Drafts {
     this.require(id);
     const harness = draftHarness(rawHarness);
     if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
-    if (harness === "byok" && (await loadByok()) === null) {
-      throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider and an API key first", {
+    if (harness === "byok" && resolveByok(await loadByok(), null) === null) {
+      throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider, an API key and a Default model first", {
         field: "harness",
         reason: "byok-unconfigured",
       });
@@ -4109,6 +4109,12 @@ export function draftModel(raw: unknown, harness: "byok" | "codex" | null = null
   if (name === "" || name === "default") return null;
   // A name only means something on its own CLI (D92): a `gpt-` slug belongs
   // to codex, and one that is not is a claude name codex cannot take either.
+  // BYOK's pick is a tier (D94): the provider's own model names live in
+  // `byok.json`, resolved at spawn, so a conversation holds the tier only.
+  if (harness === "byok") {
+    if (name === "lite" || name === "max") return name;
+    throw new JobRefused(400, `"${name}" is not a tier byok takes (lite, default, max)`, { field: "model" });
+  }
   if (harness === "codex") {
     if (!isCodexModel(name)) {
       throw new JobRefused(400, `"${name}" is not a model name codex takes (a gpt- slug)`, { field: "model" });
@@ -4131,7 +4137,9 @@ export function draftModel(raw: unknown, harness: "byok" | "codex" | null = null
  * `claude` spawn, so its own saved row stands instead.
  */
 function jobModelOf(record: DraftRecord): string | null {
-  if (record.harness === "codex") return null;
+  // Only a claude conversation's pick is a claude name: codex's is a `gpt-`
+  // slug, byok's a tier — neither means anything to a job's `claude` spawn.
+  if ((record.harness ?? "claude") !== "claude") return null;
   return record.model ?? null;
 }
 

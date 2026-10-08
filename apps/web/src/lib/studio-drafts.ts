@@ -521,19 +521,43 @@ export function setDraftHarness(draftId: string, harness: string) {
   });
 }
 
-/** `GET /api/settings/byok`: whether the open harness is set up, and on what. Never the key. */
+/** One connected BYOK provider as the API reports it: tiers and a key tail, never the key. */
+export interface ByokProviderStatus {
+  provider: string;
+  last4: string;
+  models: { default?: string; lite?: string; max?: string };
+}
+
+/** `GET /api/settings/byok`: the connected providers, the active one, and its Default model. Never a key. */
 export function getByokSettings() {
-  return call<{ configured: boolean; provider: string | null; model: string | null; last4: string | null }>("/studio/api/settings/byok");
+  return call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok");
 }
 
 /**
- * `PUT /api/settings/byok`: the BYOK dialog's Connect. The key is written to
- * `$STUDIO_HOME/byok.json` and never sent back; it powers `qwen` spawns only.
+ * `PUT /api/settings/byok`: the BYOK dialog's Connect — `{ provider, apiKey,
+ * model? }`. The key is written to `$STUDIO_HOME/byok.json` and never sent
+ * back; it powers `qwen` spawns only. Connecting makes the provider active.
  */
-export function saveByokSettings(input: { provider: string; apiKey: string; model: string }) {
-  return call<{ configured: boolean; provider: string | null; model: string | null; last4: string | null }>("/studio/api/settings/byok", {
+export function saveByokSettings(input: { provider: string; apiKey: string; model?: string }) {
+  return call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok", {
     method: "PUT",
     body: JSON.stringify(input),
+  });
+}
+
+/** `PUT /api/settings/byok/active` (D94): which connected provider a `byok` turn runs on. */
+export function setByokActive(provider: string) {
+  return call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok/active", {
+    method: "PUT",
+    body: JSON.stringify({ provider }),
+  });
+}
+
+/** `PUT /api/settings/byok/models` (D94): a connected provider's tier picks; omitted keeps, empty clears. */
+export function saveByokModels(provider: string, models: { default?: string; lite?: string; max?: string }) {
+  return call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok/models", {
+    method: "PUT",
+    body: JSON.stringify({ provider, models }),
   });
 }
 
