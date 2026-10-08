@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -13,53 +13,92 @@ import { Input } from "@/components/ui/Input";
 import { Menu, MenuItem } from "@/components/ui/Menu";
 import { Select } from "@/components/ui/Select";
 import { usePresence } from "@/components/ui/use-presence";
+import { getByokSettings, saveByokSettings } from "@/lib/studio-drafts";
+import { rememberHarness, storedHarness, type HarnessValue } from "@/lib/studio-harness";
 
 /**
- * Which harness a conversation runs on, picked at the left of its pane's
- * header, the way Manus's top bar picks a model (`docs/STUDIO-CHAT-FIRST.md`).
- * The model the harness runs is still the picker's under the composer (D90);
- * this one is the agent itself.
+ * Which harness a conversation's turns run on, picked at the left of its
+ * pane's header, the way Manus's top bar picks a model
+ * (`docs/STUDIO-CHAT-FIRST.md`). The model the harness runs is still the
+ * picker under the composer (D90); this one is the agent itself.
  *
- * Placeholder for now: the pick is kept in the pane's state and goes nowhere,
- * since only the Claude harness is wired to the runner. Codex stands in the
- * list, and BYOK ("bring your own key") opens the configuration dialog an
- * open harness will take once one is chosen — the dialog is drawn and wired
- * to the pick, but its Connect is the placeholder too.
+ * Two modes, since the picker outlives any one conversation:
+ *
+ * - Uncontrolled (`PanelHost`'s placeholder panes): the pick is remembered
+ *   for the next `POST /api/drafts`, which is how a conversation is started
+ *   on BYOK before its pane exists.
+ * - Controlled (`DraftPanel`, the draft's own `harness` as `value` and
+ *   `onPick` writing `PUT .../harness`): a pick shows at once and stands if
+ *   the runner takes it, which it does only while no turn has run.
+ *
+ * BYOK is Qwen Code (`qwen`) on the key the dialog's Connect stores
+ * (`PUT /api/settings/byok`); Codex is a placeholder the runner refuses until
+ * it is wired.
  *
  * A `Menu` rather than the `FilterMenu` the model picker is: its rows are
  * `menuitemradio`, so the BYOK row can reopen the dialog while it is the
  * chosen harness, where a listbox only reports a changed value.
  */
 interface Harness {
-  value: string;
+  value: HarnessValue;
   label: string;
   detail: string;
 }
 
 const HARNESSES: readonly Harness[] = [
   { value: "claude", label: "Claude", detail: "Anthropic's agent harness. The default." },
-  { value: "codex", label: "Codex", detail: "OpenAI's agent harness." },
-  { value: "byok", label: "BYOK", detail: "Bring your own model API key to power the agent." },
+  { value: "codex", label: "Codex", detail: "OpenAI's agent harness. Not wired yet." },
+  { value: "byok", label: "BYOK", detail: "Your own provider key, run through Qwen Code." },
 ];
 
-/** The providers a BYOK key can name, until the BYOK harness names its own. */
+/** The providers `byok.json` can name (`BYOK_PROVIDERS` in the runner), each with a model hint for its field. */
 const PROVIDERS = [
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "google", label: "Google" },
-  { value: "openrouter", label: "OpenRouter" },
+  { value: "openai", label: "OpenAI", modelHint: "e.g. gpt-5.4" },
+  { value: "anthropic", label: "Anthropic", modelHint: "e.g. claude-sonnet-4-5" },
+  { value: "google", label: "Google", modelHint: "e.g. gemini-3-pro" },
+  { value: "openrouter", label: "OpenRouter", modelHint: "e.g. anthropic/claude-sonnet-4.5" },
 ];
 
-export function HarnessPicker() {
-  const [harness, setHarness] = useState("claude");
+/** Nothing re-reads `localStorage` on its own; the store is written, never subscribed. */
+function noop() {
+  return () => undefined;
+}
+
+export function HarnessPicker({ value, onPick }: { value?: string | null; onPick?: (harness: HarnessValue) => void }) {
   const [byokOpen, setByokOpen] = useState(false);
   const byok = usePresence(byokOpen, DIALOG_CLOSE_MS);
+  // Controlled when a conversation hands its pick in; the remembered one else.
+  const controlled = onPick !== undefined;
+  // The remembered pick, read the way localStorage is read everywhere here:
+  // `useSyncExternalStore`, which is "claude" on the server and the stored
+  // value once hydrated. `held` is a pick made since, before it is written.
+  const stored = useSyncExternalStore(noop, storedHarness, () => "claude" as const);
+  const [held, setHeld] = useState<HarnessValue | null>(null);
+  const harness = (controlled ? (value ?? "claude") : (held ?? stored)) as HarnessValue;
   const name = HARNESSES.find((option) => option.value === harness)?.label ?? harness;
   // The dialog's `opener`: the BYOK row opens it through `afterClose`, which
   // skips putting focus back on the menu, and the row it was on is gone by
   // then. The trigger is the control that outlives both, so it is the one
   // close gives focus to.
   const wrap = useRef<HTMLSpanElement | null>(null);
+
+  // A controlled pick is the draft's own; keep the remembered default in step
+  // with what an open conversation actually runs on.
+  useEffect(() => {
+    if (controlled && (value === "claude" || value === "byok")) rememberHarness(value);
+  }, [controlled, value]);
+
+  function pick(next: HarnessValue) {
+    if (onPick !== undefined) {
+      // The record decides; the effect above remembers it once it stands. A
+      // refused pick ("codex" not wired, a spoken conversation locked) must
+      // not become the default new conversations start on.
+      onPick(next);
+    } else {
+      rememberHarness(next);
+      setHeld(next);
+    }
+  }
 
   return (
     <>
@@ -85,7 +124,7 @@ export function HarnessPicker() {
               // hands it the focus once the menu has shut, and it can open it
               // again while it is already the harness, since a menu row's press
               // fires every time.
-              onSelect={option.value === "byok" ? undefined : () => setHarness(option.value)}
+              onSelect={option.value === "byok" ? undefined : () => pick(option.value)}
               afterClose={option.value === "byok" ? () => setByokOpen(true) : undefined}
             >
               <HarnessRow option={option} />
@@ -99,7 +138,11 @@ export function HarnessPicker() {
           opener={() => wrap.current?.querySelector("button") ?? null}
           onClose={() => setByokOpen(false)}
           onConnect={() => {
-            setHarness("byok");
+            // A key just stored is meant to be used: remembered at once, so
+            // the next conversation runs on it even when this one is already
+            // locked to the harness it started on.
+            rememberHarness("byok");
+            pick("byok");
             setByokOpen(false);
           }}
         />
@@ -122,8 +165,13 @@ function HarnessRow({ option }: { option: Harness }) {
  * The BYOK configuration dialog, Manus's "Manus Flex" popup: the name with a
  * Beta badge in the kit header (its Close, as `DialogHeader.test.ts` asks of
  * every kit `Dialog`), the harness's mark, a line on what a third-party model
- * costs in guarantees, a Provider menu, the key with a Show toggle, and
- * Cancel and Connect as a pair of equal buttons at the foot.
+ * costs in guarantees, Provider and Model fields, the key with a Show toggle,
+ * and Cancel and Connect as a pair of equal buttons at the foot.
+ *
+ * Connect is real: `PUT /api/settings/byok` writes the key to the runner's
+ * `byok.json` (it never comes back — the dialog shows the stored `last4`),
+ * and the picker's pick becomes `byok`. A save that fails is said in place
+ * and keeps the dialog open.
  */
 function ByokDialog({
   closing,
@@ -139,10 +187,47 @@ function ByokDialog({
 }) {
   const id = useId();
   const providerId = `${id}-provider`;
+  const modelId = `${id}-model`;
   const keyId = `${id}-key`;
   const [provider, setProvider] = useState("");
+  const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  /** The stored key's tail and which provider it belongs to, never the key. */
+  const [held, setHeld] = useState<{ provider: string; last4: string } | null>(null);
   const [show, setShow] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // What the runner already holds, so a reopen shows the configured provider
+  // and model. The key itself never comes back; Connect on the same provider
+  // with the field left blank keeps the stored one.
+  useEffect(() => {
+    void getByokSettings().then((result) => {
+      if (!result.ok || !result.data.configured) return;
+      setProvider(result.data.provider ?? "");
+      setModel(result.data.model ?? "");
+      if (result.data.provider !== null && result.data.last4 !== null) {
+        setHeld({ provider: result.data.provider, last4: result.data.last4 });
+      }
+    });
+  }, []);
+
+  const modelHint = PROVIDERS.find((entry) => entry.value === provider)?.modelHint ?? "e.g. a model name";
+  // The stored key only stands in for its own provider; another provider's
+  // key is a different secret the dialog has to be given.
+  const keyHeld = held !== null && held.provider === provider;
+
+  async function connect() {
+    setSaving(true);
+    setError(null);
+    const result = await saveByokSettings({ provider, apiKey: apiKey.trim(), model: model.trim() });
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.refusal.error);
+      return;
+    }
+    onConnect();
+  }
 
   return (
     <Dialog label="BYOK" onClose={onClose} closing={closing} size="compact" className="md:w-[480px]" opener={opener}>
@@ -161,8 +246,8 @@ function ByokDialog({
             <Glyph name="link" size={26} />
           </span>
           <p className="max-w-[42ch] text-[13px] leading-5 text-text2">
-            Run the agent with your own API key and models. Third-party model performance may vary and is not
-            guaranteed.
+            Run the agent with your own API key and models through Qwen Code. Third-party model performance may vary and
+            is not guaranteed.
           </p>
         </div>
 
@@ -181,6 +266,21 @@ function ByokDialog({
         </div>
 
         <div className="flex flex-col gap-1.5">
+          <label htmlFor={modelId} className={LABEL}>
+            Model
+          </label>
+          <Input
+            id={modelId}
+            type="text"
+            value={model}
+            onChange={(event) => setModel(event.target.value)}
+            placeholder={modelHint}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
           <label htmlFor={keyId} className={LABEL}>
             API key
           </label>
@@ -190,7 +290,11 @@ function ByokDialog({
               type={show ? "text" : "password"}
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder="Enter your API key"
+              placeholder={
+                held === null || !keyHeld
+                  ? "Enter your API key"
+                  : `A key ending ${held.last4} is stored; leave blank to keep it`
+              }
               autoComplete="off"
               spellCheck={false}
               className="pr-11"
@@ -209,12 +313,22 @@ function ByokDialog({
           </div>
         </div>
 
+        {error !== null && (
+          <p role="alert" className="text-[13px] leading-5 text-danger">
+            {error}
+          </p>
+        )}
+
         <div className="flex gap-3">
           <Button variant="secondary" className="flex-1" onClick={onClose}>
             Cancel
           </Button>
-          <Button className="flex-1" disabled={provider === "" || apiKey.trim() === ""} onClick={onConnect}>
-            Connect
+          <Button
+            className="flex-1"
+            disabled={saving || provider === "" || model.trim() === "" || (apiKey.trim() === "" && !keyHeld)}
+            onClick={() => void connect()}
+          >
+            {saving ? "Connecting…" : "Connect"}
           </Button>
         </div>
       </div>
