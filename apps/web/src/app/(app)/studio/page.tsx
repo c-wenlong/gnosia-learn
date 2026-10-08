@@ -274,20 +274,20 @@ export default async function StudioPage({
         jobs={jobRows}
         drafts={drafts}
       >
+        {/* The harness picker wears the same corner it does on a
+            conversation's header (D91): a real h-12 row above the scroll, not
+            inside it — StudioStrip's own sticky top row would cover it once
+            the assets scrolled up, and a header is not meant to scroll away. */}
+        {shot === null && (
+          <div className="flex h-12 shrink-0 items-center px-3 md:px-5">
+            <HarnessPicker />
+          </div>
+        )}
         <div className="relative min-h-0 flex-1 overflow-y-auto">
           {/* The composer's the home view's; a picture takes its place. */}
           {/* The home view's first screen is the composer's: the assets panel
               under it shows only its head and the top of the first row, as
               Lovable's does, so the grid is there without competing. */}
-          {shot === null && (
-            /* The harness picker wears the same corner it does on a
-               conversation's header (D91): sticky so it holds while the grid
-               below scrolls, pulled back out of flow so the composer's pinned
-               offsets do not shift, and above that section's own stacking. */
-            <div className="sticky top-0 z-10 -mb-12 flex h-12 items-center px-3 md:px-5">
-              <HarnessPicker />
-            </div>
-          )}
           {shot === null && (
             <section
               aria-labelledby="studio-home"
