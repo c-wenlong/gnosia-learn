@@ -1,7 +1,7 @@
 import { CustomProviderError } from "@self-learn/catalog/state";
 import { NextResponse } from "next/server";
 
-import { dropByokProvider, pushByokKey, TUTOR_TO_BYOK } from "@/lib/byok-sync";
+import { dropByokProvider, pushByokKey } from "@/lib/byok-sync";
 import { KEY_WRITE_RATE_LIMIT, answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 import { checkKeyShape } from "@/lib/provider-keys/seal";
 import { failureCode, NoKeySecretError, removeProviderKey, saveProviderKey } from "@/lib/provider-keys/store";
@@ -44,7 +44,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     // it landed — `false` means the runner did not take it, and the tutor's
     // save still stands.
     const byok = await pushByokKey(provider, shape.key);
-    return answer({ ok: true, key, ...(TUTOR_TO_BYOK[provider] !== undefined ? { byok } : {}) });
+    return answer({ ok: true, key, ...(byok === undefined ? {} : { byok }) });
   } catch (error) {
     return failed("save", error);
   }
@@ -60,8 +60,11 @@ export async function DELETE(req: Request): Promise<NextResponse> {
 
   try {
     const removed = await removeProviderKey(owner, provider);
-    if (removed) await dropByokProvider(provider);
-    return answer({ ok: true, removed });
+    // The mirror is attempted whenever a preset's key went away, and the
+    // answer says whether it landed: `byok: false` tells the card the runner
+    // still has the key, so the row can say so and offer Remove there.
+    const byok = removed ? await dropByokProvider(provider) : undefined;
+    return answer({ ok: true, removed, ...(byok === undefined ? {} : { byok }) });
   } catch (error) {
     return failed("remove", error);
   }

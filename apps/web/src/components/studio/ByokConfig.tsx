@@ -12,7 +12,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { BYOK_PROVIDERS, byokToTutor } from "@/lib/byok-providers";
 import { sendJson } from "@/lib/send-json";
-import { getByokSettings, listByokModels, saveByokModels, saveByokSettings, setByokActive, type ByokProviderStatus } from "@/lib/studio-drafts";
+import { getByokSettings, listByokModels, saveByokModels, setByokActive, type ByokProviderStatus } from "@/lib/studio-drafts";
 
 type Tier = "default" | "lite" | "max";
 
@@ -154,6 +154,9 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
       setError(reply?.data.error ?? (reply === null ? "the server did not answer" : `not connected (HTTP ${reply.status})`));
       return;
     }
+    // The tutor route mirrors the key without moving Studio's pick; a
+    // provider just connected here is meant to run, so make it active now.
+    await setByokActive(newProvider);
     const fresh = await getByokSettings();
     setSaving(false);
     if (!fresh.ok || !fresh.data.providers.some((entry) => entry.provider === newProvider)) {
@@ -176,12 +179,16 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     setSaving(true);
     setError(null);
     // A typed key on a connected provider replaces the stored one first, so
-    // a rotated key and new tier picks land together.
+    // a rotated key and new tier picks land together — through the tutor's
+    // route, which mirrors it into `byok.json`, keeping both stores on one key.
     if (apiKey.trim() !== "") {
-      const keyResult = await saveByokSettings({ provider, apiKey: apiKey.trim() });
-      if (!keyResult.ok) {
+      const keyResult = await sendJson<{ ok?: boolean; error?: string }>("POST", "/api/learner/provider-key", {
+        provider: byokToTutor(provider),
+        key: apiKey.trim(),
+      });
+      if (keyResult === null || keyResult.status !== 200 || keyResult.data.ok !== true) {
         setSaving(false);
-        setError(keyResult.refusal.error);
+        setError(keyResult?.data.error ?? (keyResult === null ? "the server did not answer" : `key not saved (HTTP ${keyResult.status})`));
         return;
       }
       setApiKey("");

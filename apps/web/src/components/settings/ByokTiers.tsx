@@ -43,7 +43,7 @@ export function ByokTiers({
 }) {
   const modelId = `${useId()}-model`;
   const [tier, setTier] = useState<Tier>("default");
-  const [tiers, setTiers] = useState<Record<Tier, string>>({ default: "", lite: "", max: "" });
+  const [tiers, setTiers] = useState<Record<Tier, string>>({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -55,13 +55,25 @@ export function ByokTiers({
     setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
   }
 
+  // The provider's model list, asked once per key (a replaced key is another
+  // account) and again on Try again after a refusal.
   const [listed, setListed] = useState<{ models: { value: string; label: string | null }[] } | { error: string } | null>(null);
-  const asked = useRef(false);
+  const asked = useRef<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const keyStamp = entry?.last4 ?? "";
   useEffect(() => {
-    if (!visible || entry === null || asked.current) return;
-    asked.current = true;
-    void listByokModels(provider).then((result) => setListed(result.ok ? { models: result.data.models } : { error: result.refusal.error }));
-  }, [visible, entry, provider]);
+    if (!visible || entry === null || asked.current === keyStamp) return;
+    asked.current = keyStamp;
+    setListed(null);
+    void listByokModels(provider).then((result) => {
+      if (result.ok) {
+        setListed({ models: result.data.models });
+      } else {
+        asked.current = null;
+        setListed({ error: result.refusal.error });
+      }
+    });
+  }, [visible, entry, provider, keyStamp, retry]);
 
   if (entry === null) {
     return (
@@ -150,7 +162,14 @@ export function ByokTiers({
           />
         )}
       </FormRow>
-      {listed !== null && "error" in listed && <p className="text-[12px] leading-4 text-text3">{listed.error}</p>}
+      {listed !== null && "error" in listed && (
+        <p className="text-[12px] leading-4 text-text3">
+          {listed.error}{" "}
+          <button type="button" className="underline underline-offset-2" onClick={() => setRetry((n) => n + 1)}>
+            Try again
+          </button>
+        </p>
+      )}
       <div className="flex items-center gap-3">
         <Button
           size="sm"

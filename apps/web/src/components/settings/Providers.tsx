@@ -23,7 +23,7 @@ import type { ChainEntry } from "@/lib/agent/providers";
 import { byokToTutor, TUTOR_TO_BYOK } from "@/lib/byok-providers";
 import type { ProviderRowView, ProvidersView } from "@/lib/providers/view";
 import { sendJson } from "@/lib/send-json";
-import { BYOK_SETTINGS_CHANGED, getByokSettings, type ByokProviderStatus } from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED, getByokSettings, removeByokProvider, type ByokProviderStatus } from "@/lib/studio-drafts";
 
 /**
  * The Providers card (docs/TUTOR-MODELS.md, T12): the tutor's model
@@ -55,6 +55,8 @@ type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"
 interface Reply {
   ok?: boolean;
   error?: string;
+  /** The mirrored `byok.json` write's answer on preset providers: false when the runner did not take it (D95). */
+  byok?: boolean;
   chain?: ChainEntry[];
   models?: { id: string; free?: boolean }[];
   message?: string;
@@ -162,7 +164,7 @@ export function Providers({ view }: { view: ProvidersView }) {
           }}
         />
       </Collapse>
-      {view.rows.length === 0 ? (
+      {view.rows.length === 0 && byokOnly.length === 0 ? (
         <p className="text-[14px] text-text">No provider yet. Add one to give the tutor a model to call.</p>
       ) : (
         <ul className="flex flex-col divide-y-2 divide-border">
@@ -459,6 +461,7 @@ function ProviderRow({
     focusNext.current = `${base}-edit`;
     setMode("idle");
     setStatus({ kind: "done", text: row.custom !== undefined ? "Saved." : "Key saved." });
+    window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
     router.refresh();
   };
 
@@ -472,8 +475,10 @@ function ProviderRow({
       return setStatus({ kind: "error", text: failure("deleted", reply) });
     }
     setMode("idle");
-    const text = row.server ? `Deleted ${row.label}. The server's key still applies.` : `Deleted ${row.label}.`;
+    const kept = reply.data.byok === false ? " The studio runner did not answer, so it still has the key — its row below has a Remove." : "";
+    const text = row.server ? `Deleted ${row.label}. The server's key still applies.${kept}` : `Deleted ${row.label}.${kept}`;
     setStatus({ kind: "done", text });
+    window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
     if (!row.server) onGone(text);
     router.refresh();
   };
@@ -691,7 +696,7 @@ function ProviderRow({
             tutorId={row.id}
             entry={byok.entry}
             active={byokActive === byok.preset}
-            keyed={row.saved !== null || row.server}
+            keyed={row.saved?.readable === true}
             visible={expanded}
           />
         )}
@@ -708,6 +713,8 @@ function ProviderRow({
  */
 function ByokOnlyRow({ entry, active }: { entry: ByokProviderStatus; active: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const tutor = byokToTutor(entry.provider);
   const base = useId();
   return (
@@ -719,18 +726,39 @@ function ByokOnlyRow({ entry, active }: { entry: ByokProviderStatus; active: boo
           </p>
           <p className="text-[12px] text-text2">Studio BYOK key ending {entry.last4} — not saved for the tutor.</p>
           <p className="text-[12px] break-all text-text2">Studio chats{active ? " run on this provider" : ""}</p>
+          {note !== null && <p className="text-[12px] leading-4 text-danger">{note}</p>}
         </div>
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={`${base}-tiers`}
-          aria-label={`${expanded ? "Hide" : "Show"} ${entry.provider} Studio tiers`}
-          title={expanded ? "Hide tiers" : "Show tiers"}
-          onClick={() => setExpanded((was) => !was)}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-text2 transition-colors duration-100 hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          <Glyph name="expand" size={18} className={cx("transition-transform duration-200 motion-reduce:transition-none", expanded && "rotate-180")} />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* The runner-side remove, also the retry when a mirrored delete could not reach it. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                setNote(null);
+                const result = await removeByokProvider(entry.provider);
+                setBusy(false);
+                // A gone entry leaves with the BYOK_SETTINGS_CHANGED refetch.
+                if (!result.ok) setNote(result.refusal.error);
+              })();
+            }}
+          >
+            Remove
+          </Button>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-controls={`${base}-tiers`}
+            aria-label={`${expanded ? "Hide" : "Show"} ${entry.provider} Studio tiers`}
+            title={expanded ? "Hide tiers" : "Show tiers"}
+            onClick={() => setExpanded((was) => !was)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-text2 transition-colors duration-100 hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <Glyph name="expand" size={18} className={cx("transition-transform duration-200 motion-reduce:transition-none", expanded && "rotate-180")} />
+          </button>
+        </div>
       </div>
       <Collapse open={expanded} id={`${base}-tiers`}>
         {tutor !== undefined ? (

@@ -234,7 +234,11 @@ export function saveByok(raw: unknown): Promise<ByokStatus> {
       apiKey = held.apiKey;
     }
     config.providers[provider] = { apiKey, models: { ...(held?.models ?? {}), ...(model !== undefined ? { default: model } : {}) } };
-    config.active = provider;
+    // Connecting makes the provider the one that runs — unless the write is
+    // the shared-key mirror of a tutor save, which must not move Studio's
+    // pick (a rotated key is not a switch, and a new provider has no
+    // Default model to run yet).
+    if (input.activate !== false) config.active = provider;
     await persistByok(config);
     return statusOf(config);
   });

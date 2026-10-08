@@ -14,11 +14,13 @@ export { byokToTutor, TUTOR_TO_BYOK };
  * refused — the tutor write has already happened and stands alone, so the
  * caller reports the mismatch rather than failing the save.
  */
-export async function pushByokKey(provider: ProviderName, key: string): Promise<boolean> {
+export async function pushByokKey(provider: ProviderName, key: string): Promise<boolean | undefined> {
   const byok = TUTOR_TO_BYOK[provider];
-  if (byok === undefined || !studioEnabled()) return false;
+  // `undefined` is "nothing to sync" — a non-preset or a studio that is off —
+  // so the reply field appears only when a sync was really owed.
+  if (byok === undefined || !studioEnabled()) return undefined;
   try {
-    const result = await studioApi("/api/settings/byok", { method: "PUT", body: JSON.stringify({ provider: byok, apiKey: key }) });
+    const result = await studioApi("/api/settings/byok", { method: "PUT", body: JSON.stringify({ provider: byok, apiKey: key, activate: false }) });
     return result.ok;
   } catch {
     return false;
@@ -26,9 +28,9 @@ export async function pushByokKey(provider: ProviderName, key: string): Promise<
 }
 
 /** The mirror of `pushByokKey` for a delete: the provider leaves `byok.json` too — key, tiers and the active pick. */
-export async function dropByokProvider(provider: ProviderName): Promise<boolean> {
+export async function dropByokProvider(provider: ProviderName): Promise<boolean | undefined> {
   const byok = TUTOR_TO_BYOK[provider];
-  if (byok === undefined || !studioEnabled()) return false;
+  if (byok === undefined || !studioEnabled()) return undefined;
   try {
     const result = await studioApi("/api/settings/byok", { method: "DELETE", body: JSON.stringify({ provider: byok }) });
     return result.ok;
@@ -49,7 +51,7 @@ export async function syncByokFromSaved(owner: string, provider: ProviderName): 
   const key = (await openSavedKeys(owner))[provider];
   if (key === undefined) return false;
   try {
-    const result = await studioApi("/api/settings/byok", { method: "PUT", body: JSON.stringify({ provider: byok, apiKey: key }) });
+    const result = await studioApi("/api/settings/byok", { method: "PUT", body: JSON.stringify({ provider: byok, apiKey: key, activate: false }) });
     return result.ok;
   } catch {
     return false;
