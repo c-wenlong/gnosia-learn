@@ -227,6 +227,7 @@ function AddProvider({
   /** The Add provider button, which the dialog returns focus to. */
   opener: () => HTMLElement | null;
 }) {
+  const router = useRouter();
   const [provider, setProvider] = useState<ProviderName | typeof CUSTOM>(addable[0]?.id ?? CUSTOM);
   const [draft, setDraft] = useState("");
   const [name, setName] = useState("");
@@ -242,16 +243,18 @@ function AddProvider({
   // key: the ask is the first model, whose list the server key can fetch.
   const serverKeyed = chosen?.server === true;
   const [model, setModel] = useState("");
-  const [modelList, setModelList] = useState<{ value: string; label: string }[] | { error: string } | null>(null);
+  const [modelList, setModelList] = useState<{ provider: ProviderName; models?: { value: string; label: string }[]; error?: string } | null>(null);
+  // The list belongs to one provider: switching clears the pick and asks again.
   useEffect(() => {
-    if (!serverKeyed || modelList !== null || chosen === undefined) return;
+    if (!serverKeyed || chosen === undefined || modelList?.provider === chosen.id) return;
+    const forProvider = chosen.id;
     let held = true;
-    void sendJson<Reply>("POST", "/api/learner/tutor-model/models", { provider: chosen.id }).then((reply) => {
+    void sendJson<Reply>("POST", "/api/learner/tutor-model/models", { provider: forProvider }).then((reply) => {
       if (!held) return;
       setModelList(
         reply !== null && reply.status === 200 && reply.data.ok === true && Array.isArray(reply.data.models)
-          ? reply.data.models.map((m) => ({ value: m.id, label: m.id }))
-          : { error: "the list could not be loaded" },
+          ? { provider: forProvider, models: reply.data.models.map((m) => ({ value: m.id, label: m.id })) }
+          : { provider: forProvider, error: "the list could not be loaded" },
       );
     });
     return () => {
@@ -288,7 +291,10 @@ function AddProvider({
         if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
           setSaving(false);
           onSaving(false);
-          return setError(failure("added", reply));
+          // A key write that already landed is real: refresh so the row
+          // shows, and say exactly which half did not.
+          router.refresh();
+          return setError(key.trim() === "" ? failure("added", reply) : `The key saved. The model was not: ${failure("added", reply)}`);
         }
       }
       setSaving(false);
@@ -329,6 +335,7 @@ function AddProvider({
               value={custom ? CUSTOM : (chosen?.id ?? CUSTOM)}
               onChange={(v) => {
                 setProvider(v as ProviderName | typeof CUSTOM);
+                setModel("");
                 setError(null);
               }}
             />
@@ -364,14 +371,29 @@ function AddProvider({
         </FormRow>
       )}
       {serverKeyed && (
-        <FormRow label="Model" hint="The provider's real list — leave the key blank and the server's is used.">
+        <FormRow
+          label="Model"
+          hint={
+            modelList?.error !== undefined ? (
+              <>
+                {modelList.error} —{" "}
+                <button type="button" className="underline underline-offset-2" onClick={() => setModelList(null)}>
+                  Try again
+                </button>
+                . Or type the name yourself.
+              </>
+            ) : (
+              "The provider's real list — leave the key blank and the server's is used."
+            )
+          }
+        >
           {({ id, describedBy }) => (
             <Combobox
               id={id}
               label="Model"
               value={model}
               onChange={setModel}
-              options={Array.isArray(modelList) ? modelList : []}
+              options={modelList?.models ?? []}
               placeholder="e.g. a model name"
               autoComplete="off"
               spellCheck={false}
