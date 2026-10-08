@@ -122,7 +122,7 @@ import {
 } from "@/lib/studio-drafts";
 import { HarnessPicker } from "@/components/studio/HarnessPicker";
 import type { HarnessValue } from "@/lib/studio-harness";
-import { modelOptions, runnerDefaultOption, runnerSettings, MODEL_CHOICES, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
+import { harnessModelOptions, runnerSettings, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { switchedTool, type VideoToolOption } from "@/lib/studio-brief-video";
 import {
   arrivingPurpose,
@@ -1148,17 +1148,18 @@ export function DraftPanel({
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
           {/* The conversation's model (D90): every turn and job it makes runs
               on this — except on BYOK, whose turns run the provider's model
-              from `byok.json` (D91), and Codex, whose turns run its login's
-              model; the claude pick list would lie on either. */}
-          {shownHarness === "byok" || shownHarness === "codex" ? (
+              from `byok.json` (D91), so the claude pick list would lie. As
+              tiers (D92): each harness's own Lite/Default/Max rather than a
+              model list. */}
+          {shownHarness === "byok" ? (
             <span title="This conversation's turns run on the harness's own model. Draw jobs still run on Claude, on each kind's saved pick.">
-              Model {shownHarness === "byok" ? (agentMenu.byokModel ?? "byok") : "codex"}
+              Model {agentMenu.byokModel ?? "byok"}
             </span>
           ) : (
             <FilterMenu
               label="Model"
               bare
-              options={modelOptions(shownModel, agentMenu.defaults, agentMenu.models ?? MODEL_CHOICES, null, runnerDefaultOption(agentMenu.resolved))}
+              options={harnessModelOptions(shownHarness, shownModel, agentMenu.resolved)}
               value={shownModel}
               defaultValue="default"
               busy={modelPick !== null}

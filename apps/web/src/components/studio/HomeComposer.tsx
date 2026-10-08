@@ -9,6 +9,7 @@ import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { useStoredHarness } from "@/components/studio/HarnessPicker";
+import type { HarnessValue } from "@/lib/studio-harness";
 import { getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
@@ -23,7 +24,7 @@ import {
   type MentionValue,
 } from "@/components/ui/mention-text";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
-import { modelOptions, runnerDefaultOption, MODEL_CHOICES, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
+import { harnessModelOptions, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { DRAFT_KINDS, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 
 type Value = MentionValue<DraftKind>;
@@ -53,28 +54,23 @@ type Value = MentionValue<DraftKind>;
 export function HomeComposer({
   path,
   video,
-  models = null,
-  defaults = null,
   resolved = null,
 }: {
   path: string;
   video: VideoAvailability | null;
-  /** The runner's offered models (health's `agent.models`); `MODEL_CHOICES` when it did not say. */
-  models?: ModelChoice[] | null;
-  /** What "Claude Code default" resolves to, for the menu's first row. */
-  defaults?: AgentDefaults | null;
-  /** What each part of a conversation runs on with no pick (health's `agent`): turns, video, diagram. */
+  /** What each part of a conversation runs on with no pick (health's `agent`): turns, video, diagram — the Default tier's detail. */
   resolved?: RunnerResolved | null;
 }) {
   const { start, busy, error } = useStartDraft(path);
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   // The picker's pick (D90): sent on `POST /api/drafts`, so the whole
-  // conversation, its turns and the jobs they make, runs on it.
-  const [model, setModel] = useState("default");
-  // The harness pick (D91): `useStoredHarness` is live — a pick made here, in
-  // an open conversation's picker, or in another tab is the same store, so
-  // the row below can never show claude's list while a draft ships byok.
+  // conversation, its turns and the jobs they make, runs on it. One per
+  // harness (D92): a tier is a name on its own CLI, so `gpt-6-astra` can
+  // never ride a switch back to claude, nor `fable` onto codex.
+  const [picks, setPicks] = useState<Partial<Record<HarnessValue, string>>>({});
   const harness = useStoredHarness();
+  const model = picks[harness] ?? "default";
+  const setModel = (next: string) => setPicks((held) => ({ ...held, [harness]: next }));
   // The model `byok.json` names, read when BYOK is the pick — fresher than
   // health's, since Connect may have just written it.
   const [byokModel, setByokModel] = useState<string | null>(null);
@@ -96,7 +92,7 @@ export function HomeComposer({
   const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
   // The same list the settings panel's menus offer (`agent-settings.ts`),
   // with the default row saying what no pick means here: each part's own.
-  const modelMenu = useMemo(() => modelOptions(model, defaults, models ?? MODEL_CHOICES, null, runnerDefaultOption(resolved)), [model, defaults, models, resolved]);
+  const modelMenu = useMemo(() => harnessModelOptions(harness, model, resolved), [harness, model, resolved]);
   const block = valueSendBlock(value, true);
   const [announcement, setAnnouncement] = useState("");
 
@@ -143,12 +139,12 @@ export function HomeComposer({
             <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
           )),
           // The model the conversation runs on (D90), picked once at the
-          // start — unless the start is BYOK or Codex, whose turns take their
-          // own model (`byok.json`'s, the login's), so the claude list would
-          // lie (as the draft pane's does).
-          harness === "byok" || harness === "codex" ? (
-            <span key="model" title="This conversation's turns run on the harness's own model. Draw jobs still run on Claude, on each kind's saved pick.">
-              Model {harness === "byok" ? (byokModel ?? "byok") : "codex"}
+          // start — as tiers (D92): the picked harness's Lite/Default/Max,
+          // not a model list. On BYOK the turns take `byok.json`'s model,
+          // so the row says it and offers nothing.
+          harness === "byok" ? (
+            <span key="model" title="This conversation's turns run on the BYOK model. Draw jobs still run on Claude, on each kind's saved pick.">
+              Model {byokModel ?? "byok"}
             </span>
           ) : (
             <FilterMenu key="model" label="Model" bare options={modelMenu} value={model} defaultValue="default" onChange={setModel} />

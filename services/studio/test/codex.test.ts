@@ -207,6 +207,31 @@ describe("a codex conversation", () => {
     expect(envs[0]!.codexHome).toBe(path.join(draftTmpDir(record.id), "codex-home"));
   });
 
+  it("keeps a model pick on its own harness (D92)", async () => {
+    await signIn();
+    // A claude name on a codex draft, and a codex name on a claude one, are
+    // both refused at write time — the names mean nothing off their own CLI.
+    await expect(drafts.create({ idempotencyKey: "k1", harness: "codex", model: "fable" })).rejects.toThrow(/not a model name codex takes/);
+    await expect(drafts.create({ idempotencyKey: "k2", model: "gpt-6-astra" })).rejects.toThrow(/a codex model name/);
+
+    // A switch to a different harness drops the pick rather than carrying it.
+    const { record } = await drafts.create({ idempotencyKey: "k3", model: "fable" });
+    await drafts.setHarness(record.id, "codex");
+    expect(drafts.get(record.id)?.model).toBeNull();
+    await drafts.setHarness(record.id, "claude");
+    await expect(drafts.setModel(record.id, "gpt-6-luna")).rejects.toThrow(/a codex model name/);
+  });
+
+  it("passes the pick's model to codex as -m (D92)", async () => {
+    await signIn();
+    const { record } = await drafts.create({ idempotencyKey: "k1", harness: "codex", model: "gpt-6-astra" });
+    await fake.script([{ text: "Max answer." }]);
+    await drafts.send(record.id, "hello");
+    await drafts.settled(record.id);
+    const argv = (await fake.argvs())[0]!;
+    expect(argv[argv.indexOf("-m") + 1]).toBe("gpt-6-astra");
+  });
+
   it("reports the harness's own error when the turn fails", async () => {
     await signIn();
     await fake.script([{ refused: "[API Error: 401 Missing Authentication header]" }]);
