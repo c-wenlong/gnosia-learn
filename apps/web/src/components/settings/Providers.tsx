@@ -18,9 +18,12 @@ import { Select } from "@/components/ui/Select";
 import { TextLink } from "@/components/ui/TextLink";
 import { cx } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
+import { ByokTiers } from "@/components/settings/ByokTiers";
 import type { ChainEntry } from "@/lib/agent/providers";
+import { byokToTutor, TUTOR_TO_BYOK } from "@/lib/byok-providers";
 import type { ProviderRowView, ProvidersView } from "@/lib/providers/view";
 import { sendJson } from "@/lib/send-json";
+import { BYOK_SETTINGS_CHANGED, getByokSettings, type ByokProviderStatus } from "@/lib/studio-drafts";
 
 /**
  * The Providers card (docs/TUTOR-MODELS.md, T12): the tutor's model
@@ -77,6 +80,27 @@ export function Providers({ view }: { view: ProvidersView }) {
   const base = useId();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [adding, setAdding] = useState(false);
+  // The studio BYOK side of the same keys (D95): the connected providers,
+  // the one chats run on, and each one's tier picks, re-read whenever a
+  // BYOK write lands (the picker dialog or a sync button).
+  const [byok, setByok] = useState<{ active: string | null; providers: ByokProviderStatus[] } | null>(null);
+  useEffect(() => {
+    const read = async () => {
+      const result = await getByokSettings();
+      if (result.ok && Array.isArray(result.data.providers)) setByok({ active: result.data.active, providers: result.data.providers });
+    };
+    void read();
+    window.addEventListener(BYOK_SETTINGS_CHANGED, read);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, read);
+  }, []);
+  /** The BYOK preset a row answers to and its entry, or undefined when the provider is no preset. */
+  const byokFor = (id: ProviderName) => {
+    const preset = TUTOR_TO_BYOK[id];
+    return preset === undefined ? undefined : { preset, entry: byok?.providers.find((p) => p.provider === preset) ?? null };
+  };
+  // A provider connected for Studio but not for the tutor still gets a row —
+  // its key is real, so its tiers stay editable.
+  const byokOnly = (byok?.providers ?? []).filter((p) => !view.rows.some((row) => TUTOR_TO_BYOK[row.id] === p.provider));
   // While a new key is on its way the form must stay open: the toggle would
   // shut it under a save that is still going to land.
   const [addSaving, setAddSaving] = useState(false);
@@ -142,6 +166,12 @@ export function Providers({ view }: { view: ProvidersView }) {
         <p className="text-[14px] text-text">No provider yet. Add one to give the tutor a model to call.</p>
       ) : (
         <ul className="flex flex-col divide-y-2 divide-border">
+          {/* A provider Studio's BYOK has but the tutor does not (connected
+              before the stores merged) gets a slim row of its own, so its
+              tiers stay editable and its key is not invisible. */}
+          {byokOnly.map((entry) => (
+            <ByokOnlyRow key={`byok-${entry.provider}`} entry={entry} active={byok?.active === entry.provider} />
+          ))}
           {view.rows.map((row, index) => (
             <ProviderRow
               key={row.id}
@@ -150,6 +180,8 @@ export function Providers({ view }: { view: ProvidersView }) {
               last={index === view.rows.length - 1 || view.rows[index + 1]?.models.length === 0}
               usingDefaults={view.usingDefaults}
               full={view.full}
+              byok={byokFor(row.id)}
+              byokActive={byok?.active}
               disabled={!view.keysReachable || !view.chainReachable}
               // A deleted row leaves with the refresh, its status line with
               // it: the card says what happened, and Add provider takes focus.
@@ -342,6 +374,8 @@ function ProviderRow({
   last,
   usingDefaults,
   full,
+  byok,
+  byokActive,
   disabled,
   onGone,
 }: {
@@ -352,6 +386,10 @@ function ProviderRow({
   last: boolean;
   usingDefaults: boolean;
   full: boolean;
+  /** The BYOK preset this provider answers to and its `byok.json` entry (null = not connected there), or undefined for a non-preset provider. */
+  byok: { preset: string; entry: ByokProviderStatus | null } | undefined;
+  /** The provider Studio chats run on, for the "Use for Studio" switch. */
+  byokActive: string | null | undefined;
   disabled: boolean;
   /** This row was deleted and leaves with the refresh (no server key keeps it listed), with what to say. */
   onGone: (text: string) => void;
@@ -647,6 +685,59 @@ function ProviderRow({
 
       <Collapse open={expanded} id={`${base}-models`}>
         <Models row={row} usingDefaults={usingDefaults} full={full} disabled={disabled} visible={expanded} onTestKey={() => void testKey()} testKeyId={`${base}-test-key`} />
+        {byok !== undefined && (
+          <ByokTiers
+            provider={byok.preset}
+            tutorId={row.id}
+            entry={byok.entry}
+            active={byokActive === byok.preset}
+            keyed={row.saved !== null || row.server}
+            visible={expanded}
+          />
+        )}
+      </Collapse>
+    </li>
+  );
+}
+
+/**
+ * A provider `byok.json` holds that the tutor's list does not (connected
+ * before the stores merged, D95): a slim row — the name, the key's tail,
+ * and the Studio tiers under the same arrow. Saving the key above through
+ * Add provider turns it into a full row, since the one key is shared.
+ */
+function ByokOnlyRow({ entry, active }: { entry: ByokProviderStatus; active: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const tutor = byokToTutor(entry.provider);
+  const base = useId();
+  return (
+    <li className="flex flex-col py-4" aria-label={`${entry.provider} (Studio only)`}>
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2.5">
+        <div className="flex min-w-0 flex-1 basis-[240px] flex-col gap-0.5">
+          <p id={`${base}-name`} className="text-[14px] font-medium text-text">
+            {entry.provider}
+          </p>
+          <p className="text-[12px] text-text2">Studio BYOK key ending {entry.last4} — not saved for the tutor.</p>
+          <p className="text-[12px] break-all text-text2">Studio chats{active ? " run on this provider" : ""}</p>
+        </div>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={`${base}-tiers`}
+          aria-label={`${expanded ? "Hide" : "Show"} ${entry.provider} Studio tiers`}
+          title={expanded ? "Hide tiers" : "Show tiers"}
+          onClick={() => setExpanded((was) => !was)}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-text2 transition-colors duration-100 hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          <Glyph name="expand" size={18} className={cx("transition-transform duration-200 motion-reduce:transition-none", expanded && "rotate-180")} />
+        </button>
+      </div>
+      <Collapse open={expanded} id={`${base}-tiers`}>
+        {tutor !== undefined ? (
+          <ByokTiers provider={entry.provider} tutorId={tutor} entry={entry} active={active} keyed={false} visible={expanded} />
+        ) : (
+          <p className="pt-3 text-[12px] leading-4 text-text2">A provider the preset table dropped — remove it under Add provider on the runner.</p>
+        )}
       </Collapse>
     </li>
   );

@@ -10,15 +10,9 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
+import { BYOK_PROVIDERS, byokToTutor } from "@/lib/byok-providers";
+import { sendJson } from "@/lib/send-json";
 import { getByokSettings, listByokModels, saveByokModels, saveByokSettings, setByokActive, type ByokProviderStatus } from "@/lib/studio-drafts";
-
-/** The providers `byok.json` can name (`BYOK_PROVIDERS` in the runner), each with a model hint for its fields. */
-export const BYOK_PROVIDERS = [
-  { value: "openai", label: "OpenAI", modelHint: "e.g. gpt-5.4" },
-  { value: "anthropic", label: "Anthropic", modelHint: "e.g. claude-sonnet-4-5" },
-  { value: "google", label: "Google", modelHint: "e.g. gemini-3-pro" },
-  { value: "openrouter", label: "OpenRouter", modelHint: "e.g. anthropic/claude-sonnet-4.5" },
-] as const;
 
 type Tier = "default" | "lite" | "max";
 
@@ -146,13 +140,27 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
   async function connect() {
     setSaving(true);
     setError(null);
-    const result = await saveByokSettings({ provider: newProvider, apiKey: apiKey.trim() });
-    setSaving(false);
-    if (!result.ok) {
-      setError(result.refusal.error);
+    // One key, both stores (D95): the tutor's `/api/learner/provider-key`
+    // seals it, and the route itself mirrors it into the runner's
+    // `byok.json`. The tutor write is the canonical one — a refusal there
+    // means nothing is connected anywhere.
+    const tutor = byokToTutor(newProvider);
+    const reply = await sendJson<{ ok?: boolean; error?: string; byok?: boolean }>("POST", "/api/learner/provider-key", {
+      provider: tutor,
+      key: apiKey.trim(),
+    });
+    if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+      setSaving(false);
+      setError(reply?.data.error ?? (reply === null ? "the server did not answer" : `not connected (HTTP ${reply.status})`));
       return;
     }
-    setConnected(result.data.providers);
+    const fresh = await getByokSettings();
+    setSaving(false);
+    if (!fresh.ok || !fresh.data.providers.some((entry) => entry.provider === newProvider)) {
+      setError("Saved, but the studio runner did not take it — the tutor can use the key; Studio will when the runner is reachable.");
+      return;
+    }
+    setConnected(fresh.data.providers);
     setProvider(newProvider);
     setAdding(false);
     setApiKey("");

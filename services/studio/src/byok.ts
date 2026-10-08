@@ -264,6 +264,24 @@ export function saveByokModels(raw: unknown): Promise<ByokStatus> {
   });
 }
 
+/** `DELETE /api/settings/byok`'s body: unhook a provider — its key, tiers and the active pick go with it. */
+export function removeByokProvider(raw: unknown): Promise<ByokStatus> {
+  return queued(async () => {
+    const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const provider = checkByokProvider(input.provider);
+    const config = await loadByok();
+    if (config === null || config.providers[provider] === undefined) {
+      throw new JobRefused(400, `provider "${provider}" is not connected`, { field: "provider" });
+    }
+    delete config.providers[provider];
+    if (config.active === provider) {
+      config.active = (Object.keys(config.providers)[0] as ByokProviderName | undefined) ?? null;
+    }
+    await persistByok(config);
+    return statusOf(config);
+  });
+}
+
 /** `PUT /api/settings/byok/active`'s body: which connected provider a `byok` spawn runs on. */
 export function setByokActive(raw: unknown): Promise<ByokStatus> {
   return queued(async () => {

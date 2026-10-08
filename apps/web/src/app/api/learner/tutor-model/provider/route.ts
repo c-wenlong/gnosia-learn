@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { dropByokProvider } from "@/lib/byok-sync";
 import { answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 import { CHAIN_WRITE_RATE_LIMIT, chainFailed } from "@/lib/tutor-models/requests";
 import { deleteChainProvider, moveChainProvider } from "@/lib/tutor-models/store";
@@ -47,7 +48,10 @@ export async function DELETE(req: Request): Promise<NextResponse> {
   const got = await read(req);
   if (got instanceof NextResponse) return got;
   try {
-    return answer({ ok: true, ...(await deleteChainProvider(got.owner, got.provider)) });
+    const removed = await deleteChainProvider(got.owner, got.provider);
+    // The key went with the provider; it leaves `byok.json` too (D95).
+    if (removed.keyRemoved) await dropByokProvider(got.provider);
+    return answer({ ok: true, ...removed });
   } catch (error) {
     return chainFailed("remove", error);
   }
