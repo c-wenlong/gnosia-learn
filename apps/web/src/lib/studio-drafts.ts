@@ -537,6 +537,18 @@ export function saveByokSettings(input: { provider: string; apiKey: string; mode
   });
 }
 
+/**
+ * `POST /api/settings/byok/models` (D93): the provider's own model list, on
+ * the key typed into the dialog or the stored one when the field was left
+ * blank. The key rides the POST body, never a URL.
+ */
+export function listByokModels(provider: string, apiKey?: string) {
+  return call<{ models: { value: string; label: string | null }[] }>("/studio/api/settings/byok/models", {
+    method: "POST",
+    body: JSON.stringify(apiKey === undefined || apiKey === "" ? { provider } : { provider, apiKey }),
+  });
+}
+
 /** `GET /api/drafts/{id}`: the whole record. 404 means pruned or never existed (E9). */
 export function getDraft(draftId: string) {
   return call<DraftView>(draftPath(draftId));

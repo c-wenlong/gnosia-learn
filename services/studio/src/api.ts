@@ -4,7 +4,7 @@ import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief, type Vocabulary } from "./brief";
-import { byokStatus, saveByok } from "./byok";
+import { byokStatus, checkByokProvider, listByokModels, loadByok, saveByok } from "./byok";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { preferenceSet, videoList } from "./catalog";
 import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@self-learn/schema/shared";
@@ -387,6 +387,11 @@ async function handle(
   /* /api/settings/byok: the open harness's provider, key and model. */
   if (segments[1] === "settings" && segments[2] === "byok" && segments.length === 3) {
     return byokSettingsRoute(request, response, method, probes);
+  }
+
+  /* /api/settings/byok/models: the provider's model list for the dialog. */
+  if (segments[1] === "settings" && segments[2] === "byok" && segments[3] === "models" && segments.length === 4) {
+    return byokModelsRoute(request, response, method);
   }
 
   /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
@@ -1833,6 +1838,40 @@ async function byokSettingsRoute(
     // Health's copy of the agent block is now wrong.
     probes.agent.forget();
     return send(response, 200, saved);
+  } catch (error) {
+    if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
+    throw error;
+  }
+}
+
+/**
+ * `POST /api/settings/byok/models` `{ provider, apiKey? }`: the provider's own
+ * `/models` on the key the dialog holds — typed, or the stored one when the
+ * field was left blank on that provider (D93's combobox). A POST rather than a
+ * GET so the key is never in a URL. Answers `{ models: [{ value, label }] }`,
+ * `label` null when the provider sends ids only.
+ */
+async function byokModelsRoute(request: IncomingMessage, response: ServerResponse, method: string): Promise<void> {
+  if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/settings/byok/models does`);
+  let body: Record<string, unknown>;
+  try {
+    const parsed = await readJson(request);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return fail(response, 400, "the request body must be a JSON object");
+    body = parsed as Record<string, unknown>;
+  } catch (error) {
+    return badBody(response, error);
+  }
+  try {
+    const provider = checkByokProvider(body.provider);
+    let apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+    if (apiKey === "") {
+      const held = await loadByok();
+      if (held === null || held.provider !== provider) {
+        throw new JobRefused(400, `"apiKey" is the provider's key, or the stored one when the field is left blank`, { field: "apiKey" });
+      }
+      apiKey = held.apiKey;
+    }
+    return send(response, 200, { models: await listByokModels(provider, apiKey) });
   } catch (error) {
     if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
     throw error;

@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { cx, FOCUS, LABEL } from "@/components/ui/classes";
+import { Combobox } from "@/components/ui/Combobox";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { DialogHeader } from "@/components/ui/DialogHeader";
 import { Glyph } from "@/components/ui/Glyph";
@@ -13,7 +14,7 @@ import { Input } from "@/components/ui/Input";
 import { Menu, MenuItem } from "@/components/ui/Menu";
 import { Select } from "@/components/ui/Select";
 import { usePresence } from "@/components/ui/use-presence";
-import { getByokSettings, saveByokSettings } from "@/lib/studio-drafts";
+import { getByokSettings, listByokModels, saveByokSettings } from "@/lib/studio-drafts";
 import { rememberHarness, storedHarness, subscribeHarness, type HarnessValue } from "@/lib/studio-harness";
 
 /**
@@ -187,8 +188,10 @@ function HarnessRow({ option }: { option: Harness }) {
  * The BYOK configuration dialog, Manus's "Manus Flex" popup: the name with a
  * Beta badge in the kit header (its Close, as `DialogHeader.test.ts` asks of
  * every kit `Dialog`), the harness's mark, a line on what a third-party model
- * costs in guarantees, Provider and Model fields, the key with a Show toggle,
- * and Cancel and Connect as a pair of equal buttons at the foot.
+ * costs in guarantees, Provider and the key with a Show toggle, and the Model
+ * field — a combobox the provider's own `/models` feeds (D93), so the pick is
+ * real model names filtered as they are typed, with free text still allowed.
+ * Cancel and Connect are a pair of equal buttons at the foot.
  *
  * Connect is real: `PUT /api/settings/byok` writes the key to the runner's
  * `byok.json` (it never comes back — the dialog shows the stored `last4`),
@@ -239,6 +242,40 @@ function ByokDialog({
   // key is a different secret the dialog has to be given.
   const keyHeld = held !== null && held.provider === provider;
 
+  // The provider's own model list (D93), fetched on the key the field holds
+  // — or the stored one when it is blank — so the model field's combobox
+  // offers the provider's real models, typed against. A half-typed key asks
+  // nothing: the fetch waits for a pause in typing.
+  const [models, setModels] = useState<{ value: string; label: string | null }[]>([]);
+  const [modelsNote, setModelsNote] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const usable = provider !== "" && (apiKey.trim() !== "" || keyHeld);
+      if (!usable) {
+        if (!cancelled) {
+          setModels([]);
+          setModelsNote(null);
+        }
+        return;
+      }
+      setModelsNote("Loading models…");
+      const result = await listByokModels(provider, apiKey.trim() === "" ? undefined : apiKey.trim());
+      if (cancelled) return;
+      if (result.ok) {
+        setModels(result.data.models);
+        setModelsNote(null);
+      } else {
+        setModels([]);
+        setModelsNote(result.refusal.error);
+      }
+    }, apiKey.trim() === "" ? 0 : 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [provider, apiKey, keyHeld]);
+
   async function connect() {
     setSaving(true);
     setError(null);
@@ -288,21 +325,6 @@ function ByokDialog({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={modelId} className={LABEL}>
-            Model
-          </label>
-          <Input
-            id={modelId}
-            type="text"
-            value={model}
-            onChange={(event) => setModel(event.target.value)}
-            placeholder={modelHint}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
           <label htmlFor={keyId} className={LABEL}>
             API key
           </label>
@@ -333,6 +355,23 @@ function ByokDialog({
               <Glyph name={show ? "eye" : "eyeOff"} size={17} />
             </IconButton>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={modelId} className={LABEL}>
+            Model
+          </label>
+          <Combobox
+            id={modelId}
+            label="Model"
+            value={model}
+            onChange={setModel}
+            options={models.map((entry) => (entry.label === null || entry.label === entry.value ? { value: entry.value, label: entry.value } : { value: entry.value, label: entry.label, detail: entry.value }))}
+            placeholder={modelHint}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {modelsNote !== null && <p className="text-[12px] leading-4 text-text3">{modelsNote}</p>}
         </div>
 
         {error !== null && (

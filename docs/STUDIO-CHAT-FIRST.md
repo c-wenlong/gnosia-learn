@@ -1720,6 +1720,24 @@ the version is the tier's to carry and the runner's to retarget later. Per
 harness because a name only means something on its own CLI — there is no
 cross-harness "opus".
 
+### D93. BYOK's model field lists the provider's real models
+
+**Verdict (2026-10-09):** the Connect dialog's fields run Provider, key,
+Model: the model field is a combobox (`ui/Combobox`, the kit's text-plus-
+suggestions) the provider's own `/models` fills, fetched on the key the field
+holds — or the stored one when left blank — through
+`POST /api/settings/byok/models`, so the pick is the provider's real ids
+filtered as they are typed. Free text still stands, since a model the list
+does not name yet is still a valid `model`. The fetch is debounced through
+typing pauses; a refusal is said under the field and blocks nothing.
+
+**Why:** a model name typed by hand fails at spawn, a hundred turns later,
+the moment it is asked for — the list turns the failure into a pick. A POST
+with the key in the body rather than a GET with it in the path, so the key
+never sits in a URL. The provider table's `modelsUrl` and `auth` carry the
+per-provider endpoint and header, so a wrong one cannot be aimed at a host
+the dialog never offered.
+
 ## Later: other kinds of asset
 
 Diagrams first. The owner wants to chat to launch manimkc videos too, through
