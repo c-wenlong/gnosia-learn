@@ -158,9 +158,9 @@ export function Providers({ view }: { view: ProvidersView }) {
         onSaving={setAddSaving}
         onClose={() => setAdding(false)}
         opener={() => document.getElementById(`${base}-add`)}
-        onAdded={(label) => {
+        onAdded={(label, note) => {
           setAdding(false);
-          setStatus({ kind: "done", text: `Added ${label}. Open it to add a model.` });
+          setStatus({ kind: "done", text: note ?? `Added ${label}. Open it to add a model.` });
           // The key mirrored into `byok.json` — the Studio block reads it.
           window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
           router.refresh();
@@ -223,11 +223,11 @@ function AddProvider({
   addable: ProvidersView["addable"];
   onSaving: (saving: boolean) => void;
   onClose: () => void;
-  onAdded: (label: string) => void;
+  /** A provider went on the card. `text` overrides the stock message when only part of the ask landed. */
+  onAdded: (label: string, text?: string) => void;
   /** The Add provider button, which the dialog returns focus to. */
   opener: () => HTMLElement | null;
 }) {
-  const router = useRouter();
   const [provider, setProvider] = useState<ProviderName | typeof CUSTOM>(addable[0]?.id ?? CUSTOM);
   const [draft, setDraft] = useState("");
   const [name, setName] = useState("");
@@ -291,10 +291,12 @@ function AddProvider({
         if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
           setSaving(false);
           onSaving(false);
-          // A key write that already landed is real: refresh so the row
-          // shows, and say exactly which half did not.
-          router.refresh();
-          return setError(key.trim() === "" ? failure("added", reply) : `The key saved. The model was not: ${failure("added", reply)}`);
+          // A key write that already landed is real: close with the row on
+          // the card — keeping the dialog open would let a retry bind the
+          // model to whichever provider the refresh left in the picker.
+          if (key.trim() === "") return setError(failure("added", reply));
+          onAdded(chosen?.label ?? "the provider", `${chosen?.label ?? "The provider"}'s key saved, but the model was not: ${failure("added", reply)} Open its row to add one.`);
+          return;
         }
       }
       setSaving(false);
