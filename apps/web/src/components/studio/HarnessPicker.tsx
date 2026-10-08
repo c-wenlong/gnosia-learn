@@ -1,0 +1,223 @@
+"use client";
+
+import { useId, useRef, useState } from "react";
+
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { chipClasses, LABEL } from "@/components/ui/classes";
+import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
+import { DialogHeader } from "@/components/ui/DialogHeader";
+import { Glyph } from "@/components/ui/Glyph";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/Input";
+import { Menu, MenuItem } from "@/components/ui/Menu";
+import { Select } from "@/components/ui/Select";
+import { usePresence } from "@/components/ui/use-presence";
+
+/**
+ * Which harness a conversation runs on, picked at the left of its pane's
+ * header, the way Manus's top bar picks a model (`docs/STUDIO-CHAT-FIRST.md`).
+ * The model the harness runs is still the picker's under the composer (D90);
+ * this one is the agent itself.
+ *
+ * Placeholder for now: the pick is kept in the pane's state and goes nowhere,
+ * since only the Claude harness is wired to the runner. Codex stands in the
+ * list, and BYOK ("bring your own key") opens the configuration dialog an
+ * open harness will take once one is chosen — the dialog is drawn and wired
+ * to the pick, but its Connect is the placeholder too.
+ *
+ * A `Menu` rather than the `FilterMenu` the model picker is: its rows are
+ * `menuitemradio`, so the BYOK row can reopen the dialog while it is the
+ * chosen harness, where a listbox only reports a changed value.
+ */
+interface Harness {
+  value: string;
+  label: string;
+  detail: string;
+}
+
+const HARNESSES: readonly Harness[] = [
+  { value: "claude", label: "Claude", detail: "Anthropic's agent harness. The default." },
+  { value: "codex", label: "Codex", detail: "OpenAI's agent harness." },
+  { value: "byok", label: "BYOK", detail: "Bring your own model API key to power the agent." },
+];
+
+/** The providers a BYOK key can name, until the BYOK harness names its own. */
+const PROVIDERS = [
+  { value: "anthropic", label: "Anthropic" },
+  { value: "openai", label: "OpenAI" },
+  { value: "google", label: "Google" },
+  { value: "openrouter", label: "OpenRouter" },
+];
+
+export function HarnessPicker() {
+  const [harness, setHarness] = useState("claude");
+  const [byokOpen, setByokOpen] = useState(false);
+  const byok = usePresence(byokOpen, DIALOG_CLOSE_MS);
+  const name = HARNESSES.find((option) => option.value === harness)?.label ?? harness;
+  // The dialog's `opener`: the BYOK row opens it through `afterClose`, which
+  // skips putting focus back on the menu, and the row it was on is gone by
+  // then. The trigger is the control that outlives both, so it is the one
+  // close gives focus to.
+  const wrap = useRef<HTMLSpanElement | null>(null);
+
+  return (
+    <>
+      <span ref={wrap} className="contents">
+        <Menu
+          label={`Harness: ${name}`}
+          menuLabel="Harness"
+          align="start"
+          minWidth={320}
+          trigger={
+            <>
+              <span className="min-w-0 truncate">{name}</span>
+              <Glyph name="chevron" className="size-3.5" />
+            </>
+          }
+          triggerClassName={chipClasses({ className: "max-w-full pr-2.5" })}
+        >
+          {HARNESSES.map((option) => (
+            <MenuItem
+              key={option.value}
+              checked={harness === option.value}
+              // BYOK opens its configuration rather than picking: `afterClose`
+              // hands it the focus once the menu has shut, and it can open it
+              // again while it is already the harness, since a menu row's press
+              // fires every time.
+              onSelect={option.value === "byok" ? undefined : () => setHarness(option.value)}
+              afterClose={option.value === "byok" ? () => setByokOpen(true) : undefined}
+            >
+              <HarnessRow option={option} />
+            </MenuItem>
+          ))}
+        </Menu>
+      </span>
+      {byok.mounted && (
+        <ByokDialog
+          closing={byok.leaving}
+          opener={() => wrap.current?.querySelector("button") ?? null}
+          onClose={() => setByokOpen(false)}
+          onConnect={() => {
+            setHarness("byok");
+            setByokOpen(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/** A harness's row: its name with what it is on a muted line under it. */
+function HarnessRow({ option }: { option: Harness }) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className="truncate">{option.label}</span>{" "}
+      <span className="truncate text-[12px] font-normal text-text2">{option.detail}</span>
+    </span>
+  );
+}
+
+/**
+ * The BYOK configuration dialog, Manus's "Manus Flex" popup: the name with a
+ * Beta badge in the kit header (its Close, as `DialogHeader.test.ts` asks of
+ * every kit `Dialog`), the harness's mark, a line on what a third-party model
+ * costs in guarantees, a Provider menu, the key with a Show toggle, and
+ * Cancel and Connect as a pair of equal buttons at the foot.
+ */
+function ByokDialog({
+  closing,
+  opener,
+  onClose,
+  onConnect,
+}: {
+  closing: boolean;
+  /** The picker's trigger, which closing hands focus back to. */
+  opener: () => HTMLElement | null;
+  onClose: () => void;
+  onConnect: () => void;
+}) {
+  const id = useId();
+  const providerId = `${id}-provider`;
+  const keyId = `${id}-key`;
+  const [provider, setProvider] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [show, setShow] = useState(false);
+
+  return (
+    <Dialog label="BYOK" onClose={onClose} closing={closing} size="compact" className="md:w-[480px]" opener={opener}>
+      <DialogHeader
+        title={
+          <span className="flex items-center gap-2">
+            BYOK
+            <Badge tone="accent">Beta</Badge>
+          </span>
+        }
+        onClose={onClose}
+      />
+      <div className="relative flex flex-col gap-5 p-6 md:p-8">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span className="grid size-14 place-items-center rounded-2xl border border-border bg-surface2 text-text2">
+            <Glyph name="link" size={26} />
+          </span>
+          <p className="max-w-[42ch] text-[13px] leading-5 text-text2">
+            Run the agent with your own API key and models. Third-party model performance may vary and is not
+            guaranteed.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={providerId} className={LABEL}>
+            Provider
+          </label>
+          <Select
+            id={providerId}
+            label="Provider"
+            options={PROVIDERS}
+            value={provider}
+            onChange={setProvider}
+            placeholder="Select a provider"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={keyId} className={LABEL}>
+            API key
+          </label>
+          <div className="relative">
+            <Input
+              id={keyId}
+              type={show ? "text" : "password"}
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder="Enter your API key"
+              autoComplete="off"
+              spellCheck={false}
+              className="pr-11"
+            />
+            <IconButton
+              label="Show the API key"
+              pressed={show}
+              size="sm"
+              tone="muted"
+              inset
+              className="absolute top-1/2 right-2 -translate-y-1/2"
+              onClick={() => setShow((was) => !was)}
+            >
+              <Glyph name={show ? "eye" : "eyeOff"} size={17} />
+            </IconButton>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <Button variant="secondary" className="flex-1" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button className="flex-1" disabled={provider === "" || apiKey.trim() === ""} onClick={onConnect}>
+            Connect
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
