@@ -7,6 +7,7 @@ import { MentionComposerBox } from "@/components/studio/StudioComposer";
 import { useStartDraft } from "@/components/studio/useStartDraft";
 import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
+import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -20,6 +21,7 @@ import {
   type MentionValue,
 } from "@/components/ui/mention-text";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
+import { modelOptions, runnerDefaultOption, MODEL_CHOICES, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { DRAFT_KINDS, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 
 type Value = MentionValue<DraftKind>;
@@ -46,9 +48,27 @@ type Value = MentionValue<DraftKind>;
  * is in the message, typed with `@` included, so the buttons always say what
  * Send will ask for.
  */
-export function HomeComposer({ path, video }: { path: string; video: VideoAvailability | null }) {
+export function HomeComposer({
+  path,
+  video,
+  models = null,
+  defaults = null,
+  resolved = null,
+}: {
+  path: string;
+  video: VideoAvailability | null;
+  /** The runner's offered models (health's `agent.models`); `MODEL_CHOICES` when it did not say. */
+  models?: ModelChoice[] | null;
+  /** What "Claude Code default" resolves to, for the menu's first row. */
+  defaults?: AgentDefaults | null;
+  /** What each part of a conversation runs on with no pick (health's `agent`): turns, video, diagram. */
+  resolved?: RunnerResolved | null;
+}) {
   const { start, busy, error } = useStartDraft(path);
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
+  // The picker's pick (D90): sent on `POST /api/drafts`, so the whole
+  // conversation, its turns and the jobs they make, runs on it.
+  const [model, setModel] = useState("default");
   const composer = useRef<MentionComposerHandle | null>(null);
 
   useEffect(() => {
@@ -61,6 +81,9 @@ export function HomeComposer({ path, video }: { path: string; video: VideoAvaila
   // from its record, and a tag it cannot take comes back into its composer
   // with the reason.
   const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
+  // The same list the settings panel's menus offer (`agent-settings.ts`),
+  // with the default row saying what no pick means here: each part's own.
+  const modelMenu = useMemo(() => modelOptions(model, defaults, models ?? MODEL_CHOICES, null, runnerDefaultOption(resolved)), [model, defaults, models, resolved]);
   const block = valueSendBlock(value, true);
   const [announcement, setAnnouncement] = useState("");
 
@@ -80,7 +103,7 @@ export function HomeComposer({ path, video }: { path: string; video: VideoAvaila
   async function submit(next: Value) {
     const body = trimValue(next);
     if (busy || isEmptyValue(body) || valueSendBlock(body, true) !== null) return;
-    if (await start(body)) setValue(EMPTY_MENTION_VALUE);
+    if (await start(body, model)) setValue(EMPTY_MENTION_VALUE);
   }
 
   return (
@@ -102,9 +125,13 @@ export function HomeComposer({ path, video }: { path: string; video: VideoAvaila
         // the box on every tag was noise, and the disabled Send says enough.
         disabledReason={busy ? "Opening the conversation." : (block ?? undefined)}
         quietReason={!busy}
-        toolbar={options.map((option) => (
-          <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
-        ))}
+        toolbar={[
+          ...options.map((option) => (
+            <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
+          )),
+          // The model the conversation runs on (D90), picked once at the start.
+          <FilterMenu key="model" label="Model" bare options={modelMenu} value={model} defaultValue="default" onChange={setModel} />,
+        ]}
       />
       <p role="status" aria-live="polite" className="sr-only">
         {announcement}

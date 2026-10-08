@@ -9,8 +9,10 @@ import {
   modelOptions,
   rowPriced,
   rowWarning,
+  runnerDefaultOption,
   runnerSettings,
   storedAgent,
+  MODEL_CHOICES,
 } from "./studio-agent-settings";
 
 describe("the settings panel's menus (D53)", () => {
@@ -86,9 +88,28 @@ describe("GET /api/settings/agent (#207)", () => {
       models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }, { value: 3 }],
       defaults: { model: "claude-fable-5-1", effort: "high" },
     });
-    expect(read).toEqual({ models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }], defaults: { model: "claude-fable-5-1", effort: "high" } });
+    expect(read).toEqual({ models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }], defaults: { model: "claude-fable-5-1", effort: "high" }, resolved: { turns: null, video: "claude-fable-5-1", diagram: "claude-fable-5-1" } });
     expect(modelOptions("default", read.defaults, read.models!).map((option) => option.value)).toEqual(["default", "opus"]);
-    expect(runnerSettings(null)).toEqual({ models: null, defaults: null });
+    expect(runnerSettings(null)).toEqual({ models: null, defaults: null, resolved: null });
+  });
+
+  it("names the conversation picker's default by what each part runs (D90)", () => {
+    const read = runnerSettings({
+      planner: "sonnet",
+      video: { model: { requested: "claude-opus-5-5", passed: "claude-opus-5-5", source: "panel" } },
+      diagram: { model: { requested: "default", passed: null, source: "cli" } },
+      defaults: { model: "claude-fable-5-1", effort: "high" },
+    });
+    // The planner's env model for turns, the panel's saved row for videos,
+    // and the Claude default the diagram job passes nothing against.
+    expect(read.resolved).toEqual({ turns: "sonnet", video: "claude-opus-5-5", diagram: "claude-fable-5-1" });
+    const option = runnerDefaultOption(read.resolved);
+    expect(option.label).toBe("Runner default");
+    expect(option.detail).toBe("turns: Sonnet · video: Opus 5.5 · diagram: Fable 5.1");
+    // The row replaces the settings menu's "Claude Code default" one.
+    const menu = modelOptions("default", read.defaults, read.models ?? MODEL_CHOICES, null, option);
+    expect(menu[0]).toEqual(option);
+    expect(runnerDefaultOption(null).detail).toBe("each part keeps its own setting");
   });
 
   it("lists a model the runner offers under two names once, and says the default without its raw id", () => {

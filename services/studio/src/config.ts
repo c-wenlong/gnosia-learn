@@ -75,8 +75,6 @@ export const MAX_ATTEMPTS = integer("STUDIO_MAX_ATTEMPTS", 3, 1, 5);
 
 /** Drawing loops are mechanical, so the default is the cheaper tier. */
 export const DEFAULT_MODEL = "sonnet";
-export const MODELS = ["sonnet", "opus"] as const;
-export type Model = (typeof MODELS)[number];
 
 /** Seconds between SIGTERM to the process group and SIGKILL. */
 export const KILL_GRACE_MS = integer("STUDIO_KILL_GRACE_MS", 5_000, 500, 60_000);

@@ -75,6 +75,7 @@ const fenced = (tag: string, body: unknown) => `\`\`\`${tag}\n${JSON.stringify(b
 let server: Server;
 let base: string;
 let drafts: InstanceType<typeof Drafts>;
+let videoStore: InstanceType<typeof RecordStore>;
 let claudeDir: string;
 
 const post = (route: string, body: unknown) =>
@@ -102,7 +103,7 @@ beforeEach(async () => {
   catalogMock.status.mockReset().mockResolvedValue(ok());
   canvasMock.doctor.mockReset().mockResolvedValue({ code: 0, stdout: "", stderr: "", json: null, signal: null, timedOut: false });
   const store = new JobStore();
-  const videoStore = new RecordStore("video");
+  videoStore = new RecordStore("video");
   const runner = {
     enqueue: vi.fn(async (brief: { slug: string; idempotencyKey: string }, _p: unknown, options: { draftId: string }) => ({
       record: await store.create({ id: `job-d-${Math.random().toString(36).slice(2, 8)}`, kind: "diagram", state: "queued", slug: brief.slug, draftId: options.draftId, brief, idempotencyKey: brief.idempotencyKey, requestedAt: new Date().toISOString(), targetPath: "t", gate: null, error: null } as never),
@@ -265,6 +266,24 @@ describe("the slots routes and Make both", () => {
     const after = await get(`/api/drafts/${id}`);
     expect(after.transcript as { text: string }[]).toContainEqual(expect.objectContaining({ text: expect.stringContaining('- title: "Two boxes" -> "Attention, slowly"') }));
   });
+
+  it("stamps the conversation's model pick onto a video brief a Make posts (D90)", async () => {
+    await fake.script([{ text: `Here.\n\n${fenced("brief", video)}` }]);
+    const created = await post("/api/drafts", { idempotencyKey: `k-${Math.random()}`, model: "fable" });
+    expect(created.status).toBe(201);
+    const { draftId } = (await created.json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, { text: "@video attention", mentions: [{ kind: "video", start: 0, end: 6 }] });
+    await drafts.settled(draftId);
+    // The pick is the conversation's, not the brief's: the card's brief stays clean.
+    const view = await get(`/api/drafts/${draftId}`);
+    expect(view).toMatchObject({ model: "fable" });
+    expect((view.slots as Record<string, { brief: Record<string, unknown> }>).video!.brief).not.toHaveProperty("model");
+
+    const drawn = await post(`/api/drafts/${draftId}/draw`, { kind: "video", idempotencyKey: "v" });
+    expect(drawn.status).toBe(201);
+    const { jobId } = (await drawn.json()) as { jobId: string };
+    expect((videoStore.get(jobId) as { brief: { model?: string } } | undefined)?.brief.model).toBe("fable");
+  });
 });
 
 describe("GET /api/videos", () => {
@@ -329,5 +348,14 @@ describe("the agent settings (D53)", () => {
 
     const health = await get("/api/health");
     expect(health.agent).toMatchObject({ defaults: { model: "claude-fable-5-1[1m]", effort: "high" }, video: { model: { source: "claude-settings" } } });
+    // The same menu the settings table and a conversation's picker offer (D90).
+    expect(((health.agent as { models: { value: string }[] }).models).map((model) => model.value)).toEqual([
+      "fable",
+      "opus",
+      "sonnet",
+      "claude-fable-5-1",
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+    ]);
   });
 });

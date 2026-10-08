@@ -687,7 +687,9 @@ export class VideoRunner {
     let agentEffort = parent?.agentEffort ?? null;
     if (inherited === null || agentModel === null || agentEffort === null) {
       const resolved = await resolveAgentSettings(await readPreference("studioVideoAgent"), await readClaudeDefaults());
-      agentModel = resolved.model;
+      /* A brief that names a model (a conversation's pick, D90) beats the panel. */
+      const briefModel = record.brief.model ?? null;
+      agentModel = briefModel === null ? resolved.model : { requested: briefModel, passed: briefModel, source: "brief" };
       agentEffort = resolved.effort;
     }
     const auth = agentAuth();

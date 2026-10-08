@@ -1,4 +1,4 @@
-import { BriefError, SLUG_PATTERN, type Vocabulary } from "../brief";
+import { agentModelName, BriefError, SLUG_PATTERN, type Vocabulary } from "../brief";
 import { charsPerSecond } from "./narration";
 import { isVideoToolName, notInStudio, VIDEO_TOOL_NAMES, type VideoToolName } from "./tools";
 import { VOICES } from "./voices";
@@ -56,6 +56,12 @@ export interface VideoBrief {
   tool?: VideoToolName;
   /** The planner's one sentence on why that tool, naming the runner-up. */
   toolReason?: string;
+  /**
+   * Only when the brief named one: the conversation's own pick (D90) beats the
+   * settings panel's Videos row at job start. Absent is the ordinary case, so
+   * the panel stays the default.
+   */
+  model?: string;
 }
 
 /** The longest `toolReason`: one sentence, shown beside the chip on the card. */
@@ -247,6 +253,8 @@ export function validateVideoBrief(input: unknown, vocabulary: Vocabulary): Vali
     throw new BriefError("toolReason", `"toolReason" explains "tool"; name the tool too`);
   }
 
+  const model = raw.model === undefined ? undefined : agentModelName(raw.model);
+
   const brief: VideoBrief = {
     title,
     topic,
@@ -261,6 +269,7 @@ export function validateVideoBrief(input: unknown, vocabulary: Vocabulary): Vali
     ...(source === undefined ? {} : { source }),
     ...(tool === undefined ? {} : { tool }),
     ...(toolReason === undefined ? {} : { toolReason }),
+    ...(model === undefined ? {} : { model }),
   };
 
   const predicted = predictedSeconds(brief);
