@@ -136,7 +136,7 @@ export function Providers({ view }: { view: ProvidersView }) {
     <Card title="Providers" action={addButton}>
       <p className="text-[14px] text-text2">
         {view.usingDefaults
-          ? "Your model providers and their keys. Until you add a model, the tutor tries each provider's built-in default, in this order."
+          ? "Your model providers and their keys. The tutor calls only what you add — nothing is called until a model is on a row."
           : "Your model providers, their keys and their models. The tutor tries each provider's models top to bottom, then the next provider's, and skips a provider with no models."}
       </p>
       {!view.keysReachable && (
@@ -182,7 +182,6 @@ export function Providers({ view }: { view: ProvidersView }) {
               row={row}
               first={index === 0 || view.rows[index - 1]?.models.length === 0}
               last={index === view.rows.length - 1 || view.rows[index + 1]?.models.length === 0}
-              usingDefaults={view.usingDefaults}
               full={view.full}
               byok={byokFor(row.id)}
               byokActive={byok?.active}
@@ -387,7 +386,6 @@ function ProviderRow({
   row,
   first,
   last,
-  usingDefaults,
   full,
   byok,
   byokActive,
@@ -399,7 +397,6 @@ function ProviderRow({
   first: boolean;
   /** No provider with models below it: Move down does nothing. */
   last: boolean;
-  usingDefaults: boolean;
   full: boolean;
   /** The BYOK preset this provider answers to and its `byok.json` entry (null = not connected there), or undefined for a non-preset provider. */
   byok: { preset: string; entry: ByokProviderStatus | null } | undefined;
@@ -443,9 +440,7 @@ function ProviderRow({
         : `Your key, ending ${saved.last4}. Saved ${saved.savedOn}.`;
   const modelLine = hasModels
     ? `${row.models.length} ${row.models.length === 1 ? "model" : "models"}`
-    : usingDefaults && row.inUse !== null && row.custom === undefined
-      ? `Built-in default: ${row.model}`
-      : "No models";
+    : "No models";
 
   const saveKey = async (event: FormEvent) => {
     event.preventDefault();
@@ -489,10 +484,10 @@ function ProviderRow({
     }
     setMode("idle");
     const kept = reply.data.byok === false ? " The studio runner did not answer, so it still has the key — its row below has a Remove." : "";
-    const text = row.server ? `Deleted ${row.label}. The server's key still applies.${kept}` : `Deleted ${row.label}.${kept}`;
+    const text = `Deleted ${row.label}.${kept}`;
     setStatus({ kind: "done", text });
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
-    if (!row.server) onGone(text);
+    onGone(text);
     router.refresh();
   };
 
@@ -689,7 +684,6 @@ function ProviderRow({
         message={
           <>
             Delete {row.label}? {row.custom !== undefined ? "It is removed with your key and its models." : goes(saved !== null, row.models.length)}
-            {row.server ? " The server's key stays, so it is still listed." : ""}
           </>
         }
         confirmLabel="Delete"
@@ -702,7 +696,7 @@ function ProviderRow({
       <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-2.5" />
 
       <Collapse open={expanded} id={`${base}-models`}>
-        <Models row={row} usingDefaults={usingDefaults} full={full} disabled={disabled} visible={expanded} onTestKey={() => void testKey()} testKeyId={`${base}-test-key`} />
+        <Models row={row} full={full} disabled={disabled} visible={expanded} onTestKey={() => void testKey()} testKeyId={`${base}-test-key`} />
         {byok !== undefined && (
           <ByokTiers
             provider={byok.preset}
@@ -787,7 +781,6 @@ function ByokOnlyRow({ entry, active }: { entry: ByokProviderStatus; active: boo
 /** A row's models, opened under it: each with Test, Move up, Move down and Remove, then Add model. */
 function Models({
   row,
-  usingDefaults,
   full,
   disabled,
   visible,
@@ -795,7 +788,6 @@ function Models({
   testKeyId,
 }: {
   row: ProviderRowView;
-  usingDefaults: boolean;
   full: boolean;
   disabled: boolean;
   /** The row is open: the model list is fetched the first time it is. */
@@ -888,7 +880,7 @@ function Models({
       const mine = next.filter((e) => e.provider === row.id).map((e) => e.model);
       const neighbour = mine[Math.min(at, mine.length - 1)];
       return {
-        text: next.length === 0 ? `Removed ${m}. The tutor is back on the built-in defaults.` : `Removed ${m}.`,
+        text: next.length === 0 ? `Removed ${m}. The tutor has nothing to call until you add a model.` : `Removed ${m}.`,
         focus: neighbour === undefined ? `${base}-model` : idFor(neighbour, "remove"),
       };
     });
@@ -941,9 +933,7 @@ function Models({
       {row.models.length === 0 ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-text2">
           <p>
-            {usingDefaults && keyed && row.custom === undefined
-              ? `No models yet. Until you add one to any provider, the tutor calls ${row.label}'s built-in default, ${row.model}.`
-              : `No models yet, so the tutor skips ${row.label}.`}
+            {`No models yet — add one below for the tutor to call ${row.label}.`}
           </p>
           {keyed && row.custom === undefined && (
             <Button id={testKeyId} variant="ghost" size="sm" disabled={disabled} onClick={onTestKey}>

@@ -279,7 +279,8 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
     expect(await store.readChain("owner-b")).toEqual([]);
     await expect(store.removeChainEntry("owner-b", "nvidia", "a/one")).rejects.toMatchObject({ code: "NOT_FOUND" });
     const steps = await credentials.tutorCredentials("owner-b");
-    expect(steps.map((s) => (isCallable(s) ? [s.config.id, s.config.model] : s))).toEqual([["nvidia", "google/gemma-4-31b-it"]]);
+    // No chain at all means nothing to call — the built-in defaults are gone (T15).
+    expect(steps).toEqual([]);
     expect(await store.readChain("local")).toEqual([{ provider: "nvidia", model: "a/one" }]);
   });
 

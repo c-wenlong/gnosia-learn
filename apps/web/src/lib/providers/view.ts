@@ -20,14 +20,14 @@ export interface ProvidersView {
   keysReachable: boolean;
   /** False when the chain could not be read: the tutor uses the built-in defaults. */
   chainReachable: boolean;
-  /** No provider has a model, so the tutor uses each keyed provider's built-in default. */
+  /** No provider has a model, so the tutor has nothing to call (T15). */
   usingDefaults: boolean;
   /**
    * The providers the card lists, in the order the tutor tries them: those
-   * with models in the chain's order, then the rest that have a key (or a
-   * model, but no key). With no models at all the tutor walks the built-in
-   * defaults, your saved keys before the server's (`orderCredentials`), and
-   * the rows follow that order; otherwise the rest follow the built-in order.
+   * with models in the chain's order, then the rest the owner connected —
+   * a saved key — and the rest never list at all. The tutor's call set is
+   * the chain alone (T15): a server key by itself does not earn a row, the
+   * way a provider only the environment knows is not the owner's setup.
    */
   rows: ProviderRowView[];
   /** The providers not listed yet, for Add provider, each with where its key is made. */
@@ -41,7 +41,7 @@ export function providersView(keys: ProvidersKeysInput, chain: readonly ChainEnt
   const withModels = [...new Set(chain.map((e) => e.provider))].filter((id) => byId.has(id));
   const listed = (id: ProviderId) => {
     const row = byId.get(id);
-    return row !== undefined && (row.saved !== null || row.server || withModels.includes(id));
+    return row !== undefined && (row.saved !== null || withModels.includes(id));
   };
   const rest = PROVIDER_IDS.filter((id) => !withModels.includes(id) && listed(id));
   const rank = (id: ProviderId) => {
