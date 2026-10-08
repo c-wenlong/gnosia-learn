@@ -256,6 +256,32 @@ export function runnerDefaultOption(resolved: RunnerResolved | null): FilterOpti
   };
 }
 
+/**
+ * A conversation's model rows as tiers, the way Manus's picker offers Lite /
+ * Default / Max rather than a model list (D92): every harness's own three,
+ * and the tier's value is the model name the spawn takes, so a pick is a
+ * `model` write as it always was. A pick stored as a name no tier still
+ * covers is appended as itself, so the menu can always show what is set.
+ */
+export function harnessModelOptions(harness: string, current: string, resolved: RunnerResolved | null): FilterOption<string>[] {
+  const options: FilterOption<string>[] =
+    harness === "codex"
+      ? [
+          { value: "default", label: "Default", detail: "the model your codex login runs" },
+          { value: "gpt-6-luna", label: "Lite", detail: "GPT-6 Luna — fast, for everyday asks" },
+          { value: "gpt-6-astra", label: "Max", detail: "GPT-6 Astra — frontier, for the hard ones" },
+        ]
+      : [
+          runnerDefaultOption(resolved),
+          { value: "sonnet", label: "Lite", detail: "Sonnet — fast, for everyday asks" },
+          { value: "fable", label: "Max", detail: "Fable — the strongest, for hard ones" },
+        ];
+  if (current !== "default" && !options.some((option) => option.value === current) && isAgentModel(current)) {
+    options.push({ value: current, label: modelName(current) });
+  }
+  return options;
+}
+
 export function effortLabel(effort: string): string {
   return EFFORT_LABELS[effort as keyof typeof EFFORT_LABELS] ?? effort;
 }

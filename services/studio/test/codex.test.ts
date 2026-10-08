@@ -207,6 +207,16 @@ describe("a codex conversation", () => {
     expect(envs[0]!.codexHome).toBe(path.join(draftTmpDir(record.id), "codex-home"));
   });
 
+  it("passes the pick's model to codex as -m (D92)", async () => {
+    await signIn();
+    const { record } = await drafts.create({ idempotencyKey: "k1", harness: "codex", model: "gpt-6-astra" });
+    await fake.script([{ text: "Max answer." }]);
+    await drafts.send(record.id, "hello");
+    await drafts.settled(record.id);
+    const argv = (await fake.argvs())[0]!;
+    expect(argv[argv.indexOf("-m") + 1]).toBe("gpt-6-astra");
+  });
+
   it("reports the harness's own error when the turn fails", async () => {
     await signIn();
     await fake.script([{ refused: "[API Error: 401 Missing Authentication header]" }]);

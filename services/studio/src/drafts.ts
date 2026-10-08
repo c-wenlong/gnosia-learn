@@ -2265,7 +2265,7 @@ export class Drafts {
     // A BYOK turn runs the provider's model, which only `byok.json` names; a
     // codex turn takes its login's model — the pick names claude's, so the
     // marker records what ran.
-    const model = byok !== null ? byok.model : harness === "codex" ? "codex" : (record.model ?? plannerModel());
+    const model = byok !== null ? byok.model : harness === "codex" ? (record.model ?? "codex") : (record.model ?? plannerModel());
     const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, model, ...(retry ? { retry: true } : {}) };
     let logChain: Promise<void> = appendFile(draftSessionLogPath(id), `${JSON.stringify(marker)}\n`, "utf8");
     const meter = new JobCostMeter(model);
@@ -2296,7 +2296,7 @@ export class Drafts {
     const systemPromptFile = path.resolve(plannerSystemPath(id));
     const argv =
       harness === "codex"
-        ? codexPlannerArgv({ sessionId: record.plannerSessionId, resume: record.sessionStarted, systemPromptFile })
+        ? codexPlannerArgv({ sessionId: record.plannerSessionId, resume: record.sessionStarted, systemPromptFile, model: record.model ?? null })
         : byok === null
           ? plannerArgv({
               // The file, never its text: nothing in the prompt is ever an argv element.

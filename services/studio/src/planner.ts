@@ -421,14 +421,17 @@ export function qwenPlannerArgv(input: { sessionId: string; resume: boolean; mod
  * - `-c mcp_servers={}` and `-c include_environment_context=false`: no MCP
  *   servers and no environment block. A sealed `CODEX_HOME` (see `codex.ts`)
  *   carries the rest — the owner's `config.toml`, skills and plugins.
- * - No model flag: the pick names claude models, so codex runs its login's
- *   default.
+ * - `-m` only when the conversation picked a model: the picker's Codex rows
+ *   name codex slugs (a Lite/Default/Max tier each, D92), and `-m` takes the
+ *   same flag on `exec` and on `exec resume`. No pick, no flag — the login's
+ *   default stands.
  * - No turn cap: `exec` has none, and a text-only planner cannot spend one.
  */
-export function codexPlannerArgv(input: { sessionId: string; resume: boolean; systemPromptFile: string }): string[] {
+export function codexPlannerArgv(input: { sessionId: string; resume: boolean; systemPromptFile: string; model: string | null }): string[] {
   const seal = [
     "--json",
     "--skip-git-repo-check",
+    ...(input.model !== null ? ["-m", input.model] : []),
     "-c",
     'sandbox_mode="read-only"',
     "-c",
