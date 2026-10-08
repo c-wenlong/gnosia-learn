@@ -20,19 +20,24 @@ function safely<T>(run: () => T, fallback: T): T {
   }
 }
 
-/** The pick as last made this page load, for when storage cannot keep it. */
+/** The pick as last made this page load, for when storage cannot be read either. */
 let held: HarnessValue | null = null;
 
 export function storedHarness(): HarnessValue {
-  const stored = safely(() => (typeof window === "undefined" ? null : window.localStorage.getItem(KEY)), null);
-  if (stored !== null && KNOWN.includes(stored)) return stored as HarnessValue;
-  return held ?? "claude";
+  // `undefined` marks a read that threw, distinct from a store that read back
+  // empty: another tab's reset to claude lands as the empty kind, and wins.
+  const stored = safely(() => (typeof window === "undefined" ? undefined : window.localStorage.getItem(KEY)), undefined);
+  if (stored === undefined) return held ?? "claude";
+  return KNOWN.includes(stored ?? "") ? (stored as HarnessValue) : "claude";
 }
 
 export function rememberHarness(harness: HarnessValue): void {
-  held = harness;
-  safely(() => {
+  // Only a write that threw leaves a memory copy standing; one that landed is
+  // the store's to keep, so a reset elsewhere is not shadowed by it.
+  const wrote = safely(() => {
     if (harness === "claude") window.localStorage.removeItem(KEY);
     else window.localStorage.setItem(KEY, harness);
-  }, undefined);
+    return true;
+  }, false);
+  held = wrote ? null : harness;
 }
