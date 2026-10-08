@@ -400,6 +400,111 @@ export function qwenPlannerArgv(input: { sessionId: string; resume: boolean; mod
 }
 
 /**
+ * The Codex spawn's argv, measured on `codex-cli` 0.161.0:
+ *
+ * - `exec` is the headless mode; `-` reads the turn's prompt from stdin, so
+ *   nothing a person typed is ever an argv element — `exec resume <id> -` is
+ *   the same shape after the thread exists.
+ * - `--json`: codex's own NDJSON (`thread.started`, `item.*`, `turn.*`),
+ *   translated for `PlannerRun` by `codexEvent`.
+ * - `--skip-git-repo-check`: a draft directory is not a repository, and exec
+ *   refuses to run in one it does not find.
+ * - `-c sandbox_mode="read-only" -c approval_policy="never"`: nothing can be
+ *   written or run, and there is nobody to approve anything — the seal
+ *   `--tools ""` and `--permission-prompts none` give claude. `-s` exists on
+ *   `exec` but not on `exec resume`, so the config-key spellings run on both.
+ * - `-c model_instructions_file=<planner-system.md>`: the draft's prompt as
+ *   codex's developer instructions, the same file claude's
+ *   `--system-prompt-file` reads — verified live that it lands (0.161.0).
+ * - `-c project_doc_max_bytes=0`: no `AGENTS.md` discovery, so the repo's own
+ *   cannot reach the planner even though draft dirs sit inside it.
+ * - `-c mcp_servers={}` and `-c include_environment_context=false`: no MCP
+ *   servers and no environment block. A sealed `CODEX_HOME` (see `codex.ts`)
+ *   carries the rest — the owner's `config.toml`, skills and plugins.
+ * - No model flag: the pick names claude models, so codex runs its login's
+ *   default.
+ * - No turn cap: `exec` has none, and a text-only planner cannot spend one.
+ */
+export function codexPlannerArgv(input: { sessionId: string; resume: boolean; systemPromptFile: string }): string[] {
+  const seal = [
+    "--json",
+    "--skip-git-repo-check",
+    "-c",
+    'sandbox_mode="read-only"',
+    "-c",
+    'approval_policy="never"',
+    "-c",
+    `model_instructions_file=${JSON.stringify(input.systemPromptFile)}`,
+    "-c",
+    "project_doc_max_bytes=0",
+    "-c",
+    "mcp_servers={}",
+    "-c",
+    "include_environment_context=false",
+    "-",
+  ];
+  return input.resume ? ["exec", "resume", input.sessionId, ...seal] : ["exec", ...seal];
+}
+
+/**
+ * One `codex exec --json` line as the event shape `PlannerRun`'s handle knows
+ * — codex's NDJSON names are its own, so they are mapped rather than parsed
+ * twice:
+ *
+ * - `thread.started` is the init event; its `thread_id` is the session id the
+ *   next turn's `exec resume` takes, carried as `session_id`. `tools` and
+ *   `mcp_servers` report empty: codex does not list its built-ins, and the
+ *   seal is the argv's `read-only`/`never`/`mcp_servers={}`, not the report.
+ * - `item.completed` on an `agent_message` is an assistant message.
+ * - `turn.completed` is a successful `result`; its `usage` is codex's own
+ *   shape, so it does not feed the meter — a codex turn has no dollar cost
+ *   the way a claude one does.
+ * - `turn.failed`, `error`, `stream_error` and `turn_aborted` are the error
+ *   `result`: the message is wherever the event put it.
+ */
+export function codexEvent(line: string): Record<string, unknown> | null {
+  const event = parse(line);
+  if (event === null) return null;
+  switch (event.type) {
+    case "thread.started":
+      return {
+        type: "system",
+        subtype: "init",
+        session_id: typeof event.thread_id === "string" ? event.thread_id : null,
+        tools: [],
+        mcp_servers: [],
+        model: null,
+      };
+    case "item.completed": {
+      const item = record(event.item);
+      if (item?.type !== "agent_message" || typeof item.text !== "string") return null;
+      return { type: "assistant", message: { content: [{ type: "text", text: item.text }] } };
+    }
+    case "turn.completed":
+      return { type: "result", subtype: "success", is_error: false };
+    case "turn.failed":
+    case "error":
+    case "stream_error":
+    case "turn_aborted": {
+      const error = record(event.error);
+      return {
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        result:
+          typeof error?.message === "string"
+            ? error.message
+            : typeof event.message === "string"
+              ? event.message
+              : `codex reported ${String(event.type)}`,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
  * The planner's argv. Every flag earns its place:
  *
  * - `--tools ""`: no built-in tool; the `system/init` event reports `tools: []`.
@@ -474,6 +579,12 @@ export interface PlannerInit {
   memoryPaths: unknown;
   apiKeySource: string | null;
   model: string | null;
+  /**
+   * The harness's own session id, when its init names one. Codex mints its
+   * `thread_id` itself — the draft's `plannerSessionId` is a placeholder
+   * until this lands, then `resume` takes what it reported.
+   */
+  sessionId: string | null;
 }
 
 export type PlannerStop = "turn-timeout" | "idle-timeout" | "sealed" | "abandoned" | "shutdown" | null;
@@ -509,6 +620,8 @@ export interface PlannerOptions {
   bin?: string;
   /** The spawn's environment; absent builds `agentEnv`, BYOK builds `byokEnv`. */
   env?: NodeJS.ProcessEnv;
+  /** The stream's shape: claude's NDJSON by default; codex's is translated first. */
+  format?: "claude" | "codex";
   /** Every raw stdout line, before anything else happens to it. */
   onLine: (line: string) => void;
   /** The reply so far, whole, each time a text delta arrives. */
@@ -556,7 +669,7 @@ export class PlannerRun {
 
       const handle = (line: string): void => {
         this.options.onLine(line);
-        const event = parse(line);
+        const event = this.options.format === "codex" ? codexEvent(line) : parse(line);
         if (event === null) return;
         if (event.type === "system" && event.subtype === "init") {
           init = {
@@ -565,6 +678,7 @@ export class PlannerRun {
             memoryPaths: "memory_paths" in event ? event.memory_paths : null,
             apiKeySource: typeof event.apiKeySource === "string" ? event.apiKeySource : null,
             model: typeof event.model === "string" ? event.model : null,
+            sessionId: typeof event.session_id === "string" ? event.session_id : null,
           };
           // C15: a seal that did not hold ends the turn before its first
           // request carries a tool definition anywhere.
