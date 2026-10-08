@@ -22,11 +22,18 @@ beforeAll(() => {
 });
 
 const fetchMock = vi.fn();
+/** The model-list fetches — the card also reads `/studio/api/settings/byok` on mount (D95), which is not this test's subject. */
+const modelsCalls = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes("tutor-model/models"));
 beforeEach(() => {
   vi.useFakeTimers();
   fetchMock
     .mockReset()
-    .mockResolvedValue(new Response(JSON.stringify({ ok: true, models: [{ id: "m-1" }, { id: "m-2", free: true }] }), { status: 200 }));
+    .mockImplementation(() =>
+      // A fresh body per call: the card's mount read (BYOK status) and a
+      // row's model list are both fetches, and a shared Response's body can
+      // be read once.
+      Promise.resolve(new Response(JSON.stringify({ ok: true, models: [{ id: "m-1" }, { id: "m-2", free: true }] }), { status: 200 })),
+    );
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -80,20 +87,24 @@ describe("the Providers card", () => {
     const panel = document.getElementById(arrow.getAttribute("aria-controls")!)!;
     expect(arrow.getAttribute("aria-expanded")).toBe("false");
     expect(panel.closest("[inert]") ?? panel.hasAttribute("inert")).toBeTruthy();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(modelsCalls()).toHaveLength(0);
 
     await act(async () => arrow.click());
     expect(arrow.getAttribute("aria-expanded")).toBe("true");
     expect(panel.hasAttribute("inert")).toBe(false);
     expect(container.textContent).toContain("m-1");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("/api/learner/tutor-model/models");
+    expect(modelsCalls()).toHaveLength(1);
     expect(container.textContent).toContain("2 models from OpenRouter");
   });
 
   it("asks for the list again when the key changes while the row is open, and keeps only the newest answer", async () => {
     let answer!: (r: Response) => void;
-    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+    let held = false;
+    fetchMock.mockImplementation((url) =>
+      !held && String(url).includes("tutor-model/models")
+        ? ((held = true), new Promise<Response>((resolve) => (answer = resolve)))
+        : Promise.resolve(new Response(JSON.stringify({ ok: true, models: [{ id: "m-1" }] }), { status: 200 })),
+    );
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -104,11 +115,15 @@ describe("the Providers card", () => {
     act(() => root.render(createElement(Providers, { view: view() })));
     await act(async () => button(container, "Show OpenRouter models").click());
     // The key is replaced while the first ask is still out: the row asks again.
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, models: [{ id: "new-account" }] }), { status: 200 }));
+    fetchMock.mockImplementation((url) =>
+      Promise.resolve(
+        new Response(JSON.stringify({ ok: true, models: String(url).includes("tutor-model/models") ? [{ id: "new-account" }] : [] }), { status: 200 }),
+      ),
+    );
     await act(async () =>
       root.render(createElement(Providers, { view: view({ rows: [row({ saved: { last4: "wxyz", savedOn: "5 Oct 2026", readable: true } })] }) })),
     );
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(modelsCalls()).toHaveLength(2);
     expect(container.textContent).toContain("1 model from OpenRouter");
     // The first, slower answer arrives last and is dropped.
     await act(async () => answer(new Response(JSON.stringify({ ok: true, models: [{ id: "old-1" }, { id: "old-2" }] }), { status: 200 })));
@@ -146,7 +161,7 @@ describe("the Providers card", () => {
   });
 
   it("gives focus to Add provider once a deleted row has left with the refresh", async () => {
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -183,7 +198,6 @@ describe("the Providers card", () => {
   });
 
   it("adds a custom provider in one request with its name, base URL and key", async () => {
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     const container = mount(createElement(Providers, { view: view({ addable: [] }) }));
     act(() => button(container, "Add provider").click());
     const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a provider"]')!;
@@ -199,9 +213,9 @@ describe("the Providers card", () => {
       set(inputs.find((i) => i.type === "password")!, "gw-key-0123456789abcdef");
     });
     await act(async () => form.requestSubmit());
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/learner/custom-provider");
-    expect(JSON.parse(String(init.body))).toEqual({ label: "My gateway", baseUrl: "https://gw.example/v1", key: "gw-key-0123456789abcdef" });
+    const write = fetchMock.mock.calls.find(([u]) => u === "/api/learner/custom-provider") as [string, RequestInit];
+    expect(write[0]).toBe("/api/learner/custom-provider");
+    expect(JSON.parse(String(write[1].body))).toEqual({ label: "My gateway", baseUrl: "https://gw.example/v1", key: "gw-key-0123456789abcdef" });
   });
 
   it("shows a custom provider's base URL, and its Edit takes the name and the URL with the key optional", () => {

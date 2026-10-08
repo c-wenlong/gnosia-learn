@@ -234,7 +234,11 @@ export function saveByok(raw: unknown): Promise<ByokStatus> {
       apiKey = held.apiKey;
     }
     config.providers[provider] = { apiKey, models: { ...(held?.models ?? {}), ...(model !== undefined ? { default: model } : {}) } };
-    config.active = provider;
+    // Connecting makes the provider the one that runs — unless the write is
+    // the shared-key mirror of a tutor save, which must not move Studio's
+    // pick (a rotated key is not a switch, and a new provider has no
+    // Default model to run yet).
+    if (input.activate !== false) config.active = provider;
     await persistByok(config);
     return statusOf(config);
   });
@@ -260,6 +264,24 @@ export function saveByokModels(raw: unknown): Promise<ByokStatus> {
       else if (typeof model === "string") held.models[tier] = model.trim();
     }
     await persistByok(config!);
+    return statusOf(config);
+  });
+}
+
+/** `DELETE /api/settings/byok`'s body: unhook a provider — its key, tiers and the active pick go with it. */
+export function removeByokProvider(raw: unknown): Promise<ByokStatus> {
+  return queued(async () => {
+    const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const provider = checkByokProvider(input.provider);
+    const config = await loadByok();
+    if (config === null || config.providers[provider] === undefined) {
+      throw new JobRefused(400, `provider "${provider}" is not connected`, { field: "provider" });
+    }
+    delete config.providers[provider];
+    if (config.active === provider) {
+      config.active = (Object.keys(config.providers)[0] as ByokProviderName | undefined) ?? null;
+    }
+    await persistByok(config);
     return statusOf(config);
   });
 }
