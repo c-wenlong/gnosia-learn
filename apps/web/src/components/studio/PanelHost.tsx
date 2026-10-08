@@ -17,6 +17,7 @@ import { loadStudioSettings, type StudioSettingsData } from "@/app/(app)/studio/
 import { usePublishStudioChats } from "@/components/shell/shell-context";
 import { DiagramPanelBody, type JobRow } from "@/components/studio/DiagramInspector";
 import { DraftPanel } from "@/components/studio/DraftPanel";
+import { HarnessPicker } from "@/components/studio/HarnessPicker";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { HostContext, NEW_CHAT_EVENT } from "@/components/studio/panel-host";
@@ -310,13 +311,13 @@ export function PanelHost({
     );
   } else if (view.draft !== null) {
     chat = (
-      <StudioPane key="conversation" closeHref={closeHref} navigate={pushUrl} label="Conversation">
+      <StudioPane key="conversation" closeHref={closeHref} navigate={pushUrl} label="Conversation" leading={<HarnessPicker />}>
         <DraftPanel key={view.draft} draftId={view.draft} jobId={view.job} path={path} {...conversation} />
       </StudioPane>
     );
   } else if (opening !== null) {
     chat = (
-      <StudioPane key="conversation" closeHref={closeHref} navigate={cancel} label="Conversation">
+      <StudioPane key="conversation" closeHref={closeHref} navigate={cancel} label="Conversation" leading={<HarnessPicker />}>
         <DialogHeader title="New conversation" />
         <div role="log" aria-busy aria-label="Conversation" className={cx("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto py-5", PANE_GUTTER)}>
           {opening.first !== null && (

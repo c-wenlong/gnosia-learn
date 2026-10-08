@@ -193,7 +193,7 @@ export function StudioDialog({
  * here it goes home, to the composer and the grid. Nothing is modal: the
  * sidebar stays usable, so another conversation or New chat is one press
  * away, and Escape does nothing. The header has no Close of its own for the
- * same reason; on a phone it carries the sidebar's toggle instead
+ * same reason; it carries the harness picker before the title instead
  * (`leading`).
  */
 export function StudioPane({
