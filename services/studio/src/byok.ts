@@ -223,7 +223,13 @@ export async function listByokModels(provider: keyof typeof BYOK_PROVIDERS, apiK
     throw new JobRefused(502, `${provider}'s model list refused: HTTP ${answer.status}`, { reason: "provider" });
   }
   const body = (await answer.json().catch(() => null)) as { data?: unknown } | null;
-  const data = Array.isArray(body?.data) ? body.data : [];
+  if (body === null || typeof body !== "object" || !Array.isArray(body.data)) {
+    // A "success" the parser cannot read (bad JSON, a different shape, a body
+    // that timed out) is a refusal, not an empty list — the dialog says so
+    // rather than offering nothing with no reason.
+    throw new JobRefused(502, `${provider}'s model list came back unreadable`, { reason: "provider" });
+  }
+  const data = body.data;
   const seen = new Set<string>();
   const models: ByokModel[] = [];
   for (const row of data) {

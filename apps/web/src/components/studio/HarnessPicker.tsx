@@ -245,16 +245,20 @@ function ByokDialog({
   // The provider's own model list (D93), fetched on the key the field holds
   // — or the stored one when it is blank — so the model field's combobox
   // offers the provider's real models, typed against. A half-typed key asks
-  // nothing: the fetch waits for a pause in typing.
-  const [models, setModels] = useState<{ value: string; label: string | null }[]>([]);
+  // nothing: the fetch waits for a pause in typing. The list answers under
+  // the signature that asked for it — a provider or key change makes the old
+  // rows stop matching the field at once, never after the next fetch lands.
+  const modelSig = `${provider}:${apiKey.trim() === "" ? "stored" : apiKey.trim().slice(-8)}`;
+  const [listed, setListed] = useState<{ sig: string; models: { value: string; label: string | null }[] } | null>(null);
   const [modelsNote, setModelsNote] = useState<string | null>(null);
+  const models = listed !== null && listed.sig === modelSig ? listed.models : [];
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
       const usable = provider !== "" && (apiKey.trim() !== "" || keyHeld);
       if (!usable) {
         if (!cancelled) {
-          setModels([]);
+          setListed(null);
           setModelsNote(null);
         }
         return;
@@ -263,10 +267,10 @@ function ByokDialog({
       const result = await listByokModels(provider, apiKey.trim() === "" ? undefined : apiKey.trim());
       if (cancelled) return;
       if (result.ok) {
-        setModels(result.data.models);
+        setListed({ sig: modelSig, models: result.data.models });
         setModelsNote(null);
       } else {
-        setModels([]);
+        setListed(null);
         setModelsNote(result.refusal.error);
       }
     }, apiKey.trim() === "" ? 0 : 500);
@@ -274,7 +278,7 @@ function ByokDialog({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [provider, apiKey, keyHeld]);
+  }, [provider, apiKey, keyHeld, modelSig]);
 
   async function connect() {
     setSaving(true);
