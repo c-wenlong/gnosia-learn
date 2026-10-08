@@ -30,17 +30,17 @@ describe("providersView", () => {
     expect(view.full).toBe(false);
   });
 
-  it("lists a provider that has models but lost its key, and one with only a server key", () => {
+  it("lists a provider that has models but lost its key, and leaves a server-only key to Add provider", () => {
     const view = providersView(
       { reachable: true, rows: [row("nvidia"), row("gemini", { server: true, inUse: "server" }), row("openrouter")] },
       [{ provider: "nvidia", model: "m" }],
       true,
     );
-    expect(view.rows.map((r) => r.id)).toEqual(["nvidia", "gemini"]);
-    expect(view.addable.map((a) => a.id)).toEqual(["openrouter"]);
+    expect(view.rows.map((r) => r.id)).toEqual(["nvidia"]);
+    expect(view.addable.map((a) => a.id)).toEqual(["gemini", "openrouter"]);
   });
 
-  it("orders rows as the defaults are tried while there are no models: saved keys before the server's", () => {
+  it("lists only providers the owner connected: a saved key, not a server's alone (T15)", () => {
     const view = providersView(
       {
         reachable: true,
@@ -49,10 +49,11 @@ describe("providersView", () => {
       [],
       true,
     );
-    expect(view.rows.map((r) => r.id)).toEqual(["openrouter", "nvidia"]);
+    expect(view.rows.map((r) => r.id)).toEqual(["openrouter"]);
+    expect(view.addable.map((a) => a.id)).toEqual(["nvidia", "gemini"]);
   });
 
-  it("says when the tutor is on the built-in defaults, and when the chain is full", () => {
+  it("says when the tutor has nothing to call, and when the chain is full", () => {
     expect(providersView({ reachable: true, rows: [row("nvidia", { saved: SAVED })] }, [], true).usingDefaults).toBe(true);
     const ten = Array.from({ length: 10 }, (_, i) => ({ provider: "nvidia" as const, model: `m${i}` }));
     expect(providersView({ reachable: true, rows: [row("nvidia")] }, ten, true).full).toBe(true);

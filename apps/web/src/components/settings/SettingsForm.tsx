@@ -241,7 +241,7 @@ export function TutorSettings({
         note={
           chain
             ? "Your models, tried in this order. Change them under Providers below."
-            : "The built-in defaults, tried in this order: your own keys first, then the server's. Choose your own under Providers below."
+            : "The tutor calls only the models you add — connect a provider below, then add one on its row."
         }
       >
         {(field) => (
@@ -249,7 +249,7 @@ export function TutorSettings({
             {providers.length === 0
               ? chain
                 ? "None: no model in your list has a key"
-                : "None yet: add a provider below"
+                : "None yet: add a model below"
               : providers.map((p) => `${p.id} (${p.source === "saved" ? "yours" : "server"})`).join(" → ")}
           </ReadOnly>
         )}

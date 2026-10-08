@@ -4,7 +4,6 @@ import {
   availableProviderSummary,
   completeWithFallback,
   DEFAULT_ATTEMPT_TIMEOUT_MS,
-  DEFAULT_NVIDIA_MODEL,
   DEFAULT_TURN_DEADLINE_MS,
   isCallable,
   keyFor,
@@ -22,8 +21,9 @@ import {
 
 /**
  * The tutor's model chain (docs/TUTOR-MODELS.md): resolution order, entries
- * with no key kept and skipped, the built-in defaults when there is no chain,
- * and a provider's model list, read and redacted. `fetch` is stubbed
+ * with no key kept and skipped, an empty step list when there is no chain
+ * (the built-in defaults are gone, T15), and a provider's model list, read
+ * and redacted. `fetch` is stubbed
  * throughout; no test calls a provider.
  */
 
@@ -44,17 +44,10 @@ function fail(status: number, text = "nope") {
 }
 
 describe("tutorSteps", () => {
-  it("is exactly today's cascade when the owner has no chain: the built-in defaults, own keys first", () => {
-    const steps = tutorSteps([], { gemini: OWN_GEMINI }, ENV);
-    const today = orderCredentials({ gemini: OWN_GEMINI }, ENV);
-    expect(steps.every(isCallable)).toBe(true);
-    expect(steps.map((s) => (isCallable(s) ? [s.config.id, s.config.model, s.source, s.apiKey] : null))).toEqual(
-      today.map((c) => [c.config.id, c.config.model, c.source, c.apiKey]),
-    );
-    expect(steps.map((s) => (isCallable(s) ? s.config.model : null))).toEqual(["gemini-2.5-flash", DEFAULT_NVIDIA_MODEL, "openrouter/free"]);
-    // The env overrides still apply to the defaults.
-    const overridden = tutorSteps([], {}, { ...ENV, NVIDIA_MODEL: "nvidia/other" });
-    expect(isCallable(overridden[0]!) && overridden[0].config.model).toBe("nvidia/other");
+  it("is empty when the owner has no chain: the built-in defaults are gone (T15)", () => {
+    expect(tutorSteps([], { gemini: OWN_GEMINI }, ENV)).toEqual([]);
+    expect(tutorSteps([], {}, ENV)).toEqual([]);
+    expect(tutorSteps([], {}, { ...ENV, NVIDIA_MODEL: "nvidia/other" })).toEqual([]);
   });
 
   it("follows the chain's order and model ids, with the key keyFor finds for each", () => {
@@ -383,8 +376,8 @@ describe("a turn's time limits", () => {
 });
 
 describe("missingKeyMessage", () => {
-  it("keeps the old message when there is no chain and no key", () => {
-    expect(missingKeyMessage(tutorSteps([], {}, {}))).toBe("No model provider key is set. Add one in Settings, under Providers.");
+  it("says a model is missing when there is no chain and no key (T15)", () => {
+    expect(missingKeyMessage(tutorSteps([], {}, {}))).toBe("No model is set up. In Settings, add a provider and then a model, under Providers.");
   });
 
   it("names the providers that need a key and those that could take a model instead", () => {
@@ -406,14 +399,16 @@ describe("missingKeyMessage", () => {
 });
 
 describe("keyTestModel", () => {
-  it("is the first chain entry for the provider, else the default, used only when there is no chain", () => {
+  it("is the first chain entry for the provider, else the default — never used, the tutor calls the chain alone", () => {
     const chain: ChainEntry[] = [
       { provider: "openrouter", model: "x/one" },
       { provider: "nvidia", model: "n/first" },
       { provider: "nvidia", model: "n/second" },
     ];
     expect(keyTestModel(chain, "nvidia", {})).toEqual({ model: "n/first", modelFrom: "chain", used: true });
+    // The provider's default still feeds a key Test, but `used` is false
+    // either way now — the tutor calls nothing but the chain (T15).
     expect(keyTestModel(chain, "gemini", {})).toEqual({ model: "gemini-2.5-flash", modelFrom: "default", used: false });
-    expect(keyTestModel([], "gemini", {})).toEqual({ model: "gemini-2.5-flash", modelFrom: "default", used: true });
+    expect(keyTestModel([], "gemini", {})).toEqual({ model: "gemini-2.5-flash", modelFrom: "default", used: false });
   });
 });
