@@ -45,7 +45,7 @@ vi.mock("../src/canvas", async (importOriginal) => ({
 const { Drafts } = await import("../src/drafts");
 const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
-const { saveByok, loadByok, byokStatus } = await import("../src/byok");
+const { saveByok, loadByok, byokStatus, listByokModels } = await import("../src/byok");
 const { draftDir, draftTmpDir } = await import("../src/paths");
 
 type DraftsT = InstanceType<typeof Drafts>;
@@ -128,6 +128,44 @@ describe("the byok.json store", () => {
     expect((await loadByok())?.apiKey).toBe("sk-or-test-key-0001");
     // A provider change needs its own key; the old one is never moved across.
     await expect(saveByok({ provider: "openai", apiKey: "", model: "gpt-5.4" })).rejects.toThrow(/"apiKey"/);
+  });
+});
+
+describe("the provider's model list (D93)", () => {
+  function stubbed(json: unknown, status = 200) {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    vi.stubGlobal("fetch", async (url: unknown, init?: { headers?: Record<string, string> }) => {
+      calls.push({ url: String(url), headers: init?.headers ?? {} });
+      return new Response(JSON.stringify(json), { status });
+    });
+    return calls;
+  }
+
+  it("asks the provider's /models on the given key and normalizes the rows", async () => {
+    const calls = stubbed({ data: [{ id: "gpt-5.4" }, { id: "gpt-5.4" }, { id: "gpt-5-mini" }, { id: "other", display_name: "Other 1" }, { id: "" }, "junk"] });
+    const models = await listByokModels("openai", "sk-test");
+    expect(calls).toEqual([{ url: "https://api.openai.com/v1/models", headers: { authorization: "Bearer sk-test" } }]);
+    expect(models).toEqual([
+      { value: "gpt-5-mini", label: null },
+      { value: "gpt-5.4", label: null },
+      { value: "other", label: "Other 1" },
+    ]);
+    vi.unstubAllGlobals();
+  });
+
+  it("signs anthropic's with x-api-key and the version header", async () => {
+    const calls = stubbed({ data: [{ id: "claude-sonnet-4-5", display_name: "Claude Sonnet 4.5" }] });
+    const models = await listByokModels("anthropic", "sk-ant-test");
+    expect(calls[0]!.url).toBe("https://api.anthropic.com/v1/models");
+    expect(calls[0]!.headers).toEqual({ "x-api-key": "sk-ant-test", "anthropic-version": "2023-06-01" });
+    expect(models).toEqual([{ value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" }]);
+    vi.unstubAllGlobals();
+  });
+
+  it("reports the provider's refusal, never as a crash", async () => {
+    stubbed({ error: { message: "bad key" } }, 401);
+    await expect(listByokModels("openrouter", "sk-bad")).rejects.toThrow(/refused: HTTP 401/);
+    vi.unstubAllGlobals();
   });
 });
 
