@@ -14,7 +14,7 @@ import { Menu, MenuItem } from "@/components/ui/Menu";
 import { Select } from "@/components/ui/Select";
 import { usePresence } from "@/components/ui/use-presence";
 import { getByokSettings, saveByokSettings } from "@/lib/studio-drafts";
-import { rememberHarness, storedHarness, type HarnessValue } from "@/lib/studio-harness";
+import { rememberHarness, storedHarness, subscribeHarness, type HarnessValue } from "@/lib/studio-harness";
 
 /**
  * Which harness a conversation's turns run on, picked at the left of its
@@ -59,14 +59,13 @@ const PROVIDERS = [
   { value: "openrouter", label: "OpenRouter", modelHint: "e.g. anthropic/claude-sonnet-4.5" },
 ];
 
-/** Nothing re-reads `localStorage` on its own; the store is written, never subscribed. */
-function noop() {
-  return () => undefined;
-}
-
-/** The remembered pick, for a surface that needs it as state (the home composer's model row). */
+/**
+ * The remembered pick as React state: `subscribeHarness` notifies on every
+ * write here and on another tab's `storage` event, so every mounted picker
+ * and `createDraft` read the same value.
+ */
 export function useStoredHarness(): HarnessValue {
-  return useSyncExternalStore(noop, storedHarness, () => "claude");
+  return useSyncExternalStore(subscribeHarness, storedHarness, () => "claude");
 }
 
 /**
@@ -81,12 +80,10 @@ export function HarnessPicker({ value, onPick }: { value?: string | null; onPick
   const byok = usePresence(byokOpen, DIALOG_CLOSE_MS);
   // Controlled when a conversation hands its pick in; the remembered one else.
   const controlled = value !== undefined && value !== null;
-  // The remembered pick, read the way localStorage is read everywhere here:
-  // `useSyncExternalStore`, which is "claude" on the server and the stored
-  // value once hydrated. `held` is a pick made since, before it is written.
-  const stored = useSyncExternalStore(noop, storedHarness, () => "claude" as const);
-  const [held, setHeld] = useState<HarnessValue | null>(null);
-  const harness = (controlled ? (value ?? "claude") : (held ?? stored)) as HarnessValue;
+  // The remembered pick, "claude" on the server and the stored value once
+  // hydrated. `rememberHarness` notifies the store, so this re-renders.
+  const stored = useStoredHarness();
+  const harness = (controlled ? (value ?? "claude") : stored) as HarnessValue;
   const name = HARNESSES.find((option) => option.value === harness)?.label ?? harness;
   // The dialog's `opener`: the BYOK row opens it through `afterClose`, which
   // skips putting focus back on the menu, and the row it was on is gone by
@@ -101,15 +98,12 @@ export function HarnessPicker({ value, onPick }: { value?: string | null; onPick
   }, [controlled, value]);
 
   function pick(next: HarnessValue) {
-    if (!controlled) {
-      rememberHarness(next);
-      setHeld(next);
-    }
     // A controlled pick is the draft's own: the record decides, and the
     // effect above remembers it once it stands — a refused pick ("codex" not
     // wired, a spoken conversation locked) must not become the default new
-    // conversations start on. Uncontrolled, the pick is remembered at once
-    // and `onPick` is only told.
+    // conversations start on. Uncontrolled, the pick is remembered at once;
+    // the store's notification is what re-renders this chip.
+    if (!controlled) rememberHarness(next);
     onPick?.(next);
   }
 

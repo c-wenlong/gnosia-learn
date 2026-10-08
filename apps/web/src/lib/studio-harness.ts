@@ -23,6 +23,22 @@ function safely<T>(run: () => T, fallback: T): T {
 /** The pick as last made this page load, for when storage cannot be read either. */
 let held: HarnessValue | null = null;
 
+/**
+ * The pick as a subscribed store: every `rememberHarness` notifies, so the
+ * picker in a pane and the composer's model row cannot disagree, and a
+ * storage event carries another tab's pick the same way.
+ */
+const listeners = new Set<() => void>();
+
+export function subscribeHarness(onChange: () => void): () => void {
+  listeners.add(onChange);
+  if (typeof window !== "undefined") window.addEventListener("storage", onChange);
+  return () => {
+    listeners.delete(onChange);
+    if (typeof window !== "undefined") window.removeEventListener("storage", onChange);
+  };
+}
+
 export function storedHarness(): HarnessValue {
   // `undefined` marks a read that threw, distinct from a store that read back
   // empty: another tab's reset to claude lands as the empty kind, and wins.
@@ -40,4 +56,5 @@ export function rememberHarness(harness: HarnessValue): void {
     return true;
   }, false);
   held = wrote ? null : harness;
+  for (const listener of listeners) listener();
 }

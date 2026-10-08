@@ -9,7 +9,7 @@ import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { HarnessPicker, useStoredHarness } from "@/components/studio/HarnessPicker";
-import type { HarnessValue } from "@/lib/studio-harness";
+import { getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -56,7 +56,6 @@ export function HomeComposer({
   models = null,
   defaults = null,
   resolved = null,
-  byokModel = null,
 }: {
   path: string;
   video: VideoAvailability | null;
@@ -66,19 +65,23 @@ export function HomeComposer({
   defaults?: AgentDefaults | null;
   /** What each part of a conversation runs on with no pick (health's `agent`): turns, video, diagram. */
   resolved?: RunnerResolved | null;
-  /** The model `byok.json` names (health's `agent.byok`), for the row a BYOK start swaps in. */
-  byokModel?: string | null;
 }) {
   const { start, busy, error } = useStartDraft(path);
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   // The picker's pick (D90): sent on `POST /api/drafts`, so the whole
   // conversation, its turns and the jobs they make, runs on it.
   const [model, setModel] = useState("default");
-  // The harness pick (D91): the picker keeps and writes it; here we only need
-  // to know, for the model row a BYOK start replaces.
-  const storedHarnessNow = useStoredHarness();
-  const [harnessPicked, setHarnessPicked] = useState<HarnessValue | null>(null);
-  const harness = harnessPicked ?? storedHarnessNow;
+  // The harness pick (D91): `useStoredHarness` is live — a pick made here, in
+  // an open conversation's picker, or in another tab is the same store, so
+  // the row below can never show claude's list while a draft ships byok.
+  const harness = useStoredHarness();
+  // The model `byok.json` names, read when BYOK is the pick — fresher than
+  // health's, since Connect may have just written it.
+  const [byokModel, setByokModel] = useState<string | null>(null);
+  useEffect(() => {
+    if (harness !== "byok") return;
+    void getByokSettings().then((result) => setByokModel(result.ok && result.data.configured ? result.data.model : null));
+  }, [harness]);
   const composer = useRef<MentionComposerHandle | null>(null);
 
   useEffect(() => {
@@ -138,7 +141,7 @@ export function HomeComposer({
         toolbar={[
           // The harness the conversation runs on (D91): its pick is
           // remembered, and `createDraft` sends it on `POST /api/drafts`.
-          <HarnessPicker key="harness" onPick={setHarnessPicked} />,
+          <HarnessPicker key="harness" />,
           ...options.map((option) => (
             <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
           )),
