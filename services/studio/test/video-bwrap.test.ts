@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync, symlinkSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,7 +10,7 @@ import { bwrapArgv, bwrapProfileArgv, bwrapProfileText, prepareBwrap, type Bwrap
 import { rebasePaths } from "../src/video/checkout";
 import { videoPaths, type VideoPaths } from "../src/video/paths";
 import { buildProfile, file, ProfileError, sandboxed, tree } from "../src/video/sandbox";
-import { which, type Toolchain } from "../src/video/toolchain";
+import { foreignLibs, which, type Toolchain } from "../src/video/toolchain";
 
 /**
  * The Linux sandbox's own text: the argv a `.bwrap.json` carries, the skeleton
@@ -226,6 +226,29 @@ function bwrapWorks(bwrap: string): boolean {
   const probe = spawnSync(bwrap, ["--unshare-all", "--ro-bind", "/", "/", "--", "/usr/bin/true"], { timeout: 15_000 });
   return probe.status === 0;
 }
+
+describe("foreignLibs", () => {
+  // The nix layout that broke the render profile: `ldd` reports
+  // `gcc-lib/lib/libgcc_s.so.1`, which is a symlink into a *separate* store
+  // path (`gcc-libgcc`); binding only the reported path leaves the target out.
+  it("adds a library's real root when the reported path is a symlink", async (context) => {
+    if (process.platform !== "linux") return context.skip("linux only");
+    const cc = which("cc");
+    if (cc === undefined || which("ldd") === undefined) return context.skip("needs cc and ldd");
+    const target = path.join(root, "target-lib", "lib");
+    const alias = path.join(root, "alias-lib", "lib");
+    await mkdir(target, { recursive: true });
+    await mkdir(alias, { recursive: true });
+    const lib = path.join(target, "libdep.so.1");
+    const made = spawnSync(cc, ["-shared", "-fPIC", "-Wl,-soname,libdep.so.1", "-x", "c", "-o", lib, "-"], { input: "int dep(void) { return 0; }\n" });
+    expect(made.status, String(made.stderr)).toBe(0);
+    symlinkSync(lib, path.join(alias, "libdep.so.1"));
+    const prog = path.join(root, "prog");
+    const linked = spawnSync(cc, ["-x", "c", "-o", prog, "-", `-Wl,-rpath,${alias}`, `-L${alias}`, "-l:libdep.so.1"], { input: "int dep(void); int main(void) { return dep(); }\n" });
+    expect(linked.status, String(linked.stderr)).toBe(0);
+    expect(await foreignLibs([prog])).toEqual([alias, target].sort());
+  }, 15_000);
+});
 
 describe("a real bwrap run", () => {
   const bwrap = which("bwrap") ?? (existsSync("/usr/bin/bwrap") ? "/usr/bin/bwrap" : null);

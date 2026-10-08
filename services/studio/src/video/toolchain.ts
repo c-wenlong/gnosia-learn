@@ -154,8 +154,11 @@ const STANDARD_LIB_DIRS = /^\/(usr\/lib|usr\/lib64|usr\/lib32|usr\/local\/lib|li
 /**
  * The library roots a set of binaries needs beyond the standard directories:
  * `ldd` on each, then every resolved path reduced to its nix store path or
- * its own directory, minus the platform ones. A statically linked binary
- * answers none; a missing one is skipped. Linux only.
+ * its own directory, minus the platform ones. Each path counts twice — as
+ * reported and fully resolved — because nix ships libraries as symlinks into
+ * sibling store paths (`gcc-lib` symlinking into `gcc-libgcc`), and the bind
+ * list needs both. A statically linked binary answers none; a missing one is
+ * skipped. Linux only.
  */
 export async function foreignLibs(binaries: (string | null)[]): Promise<string[]> {
   const roots = new Set<string>();
@@ -164,10 +167,11 @@ export async function foreignLibs(binaries: (string | null)[]): Promise<string[]
     const result = await run("ldd", [binary], { timeoutMs: 15_000 }).catch(() => null);
     if (result === null || result.code !== 0) continue;
     for (const match of result.stdout.matchAll(/(?:=>\s+)?(\/[^\s()]+)\s+\(0x[0-9a-f]+\)/g)) {
-      const lib = match[1]!;
-      if (STANDARD_LIB_DIRS.test(lib)) continue;
-      const store = /^(\/nix\/store\/[^/]+)\//.exec(lib)?.[1];
-      roots.add(store ?? path.dirname(lib));
+      for (const lib of [match[1]!, resolveOr(match[1]!)]) {
+        if (STANDARD_LIB_DIRS.test(lib)) continue;
+        const store = /^(\/nix\/store\/[^/]+)\//.exec(lib)?.[1];
+        roots.add(store ?? path.dirname(lib));
+      }
     }
   }
   return [...roots].sort();
