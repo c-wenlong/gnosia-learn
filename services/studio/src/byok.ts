@@ -22,22 +22,35 @@ import { JobRefused } from "./runner";
  * typed for.
  */
 
-/** What the BYOK dialog saves: a provider, its key, and the model to run. */
-export interface ByokConfig {
-  provider: keyof typeof BYOK_PROVIDERS;
-  /** The key verbatim. Never leaves this file except into a spawn's env. */
-  apiKey: string;
-  /** The model `qwen --model` takes for that provider. */
-  model: string;
+/** The model tiers a BYOK provider configures (D94): the names a conversation's Lite/Default/Max pick resolves against. */
+export interface ByokTierModels {
+  default?: string;
+  lite?: string;
+  max?: string;
 }
 
-/** What `GET /api/settings/byok` reports: enough to render the dialog, never the key. */
+/** One connected provider: its key (never leaves the file except into a spawn's env) and its tier models. */
+export interface ByokProviderEntry {
+  apiKey: string;
+  models: ByokTierModels;
+}
+
+export type ByokProviderName = keyof typeof BYOK_PROVIDERS;
+
+/** What `byok.json` holds: every provider the owner has connected, and which a `byok` spawn uses. */
+export interface ByokConfig {
+  active: ByokProviderName | null;
+  providers: Partial<Record<ByokProviderName, ByokProviderEntry>>;
+}
+
+/** What `GET /api/settings/byok` reports: enough to render the dialog and the tier menu, never a key. */
 export interface ByokStatus {
   configured: boolean;
-  provider: string | null;
+  /** The provider a `byok` turn runs on. */
+  active: string | null;
+  /** The active provider's default-tier model, for the row that says what runs. */
   model: string | null;
-  /** The last four characters of the stored key, for "configured" to be believed. */
-  last4: string | null;
+  providers: { provider: string; last4: string; models: ByokTierModels }[];
 }
 
 interface ByokProvider {
@@ -124,54 +137,52 @@ export async function loadByok(): Promise<ByokConfig | null> {
     return null;
   }
   try {
-    const config = checkByok(JSON.parse(raw));
-    // A file edited by hand until its key is empty is no config at all.
-    return config.apiKey === "" ? null : config;
+    const config = readByokFile(JSON.parse(raw));
+    // Providers a hand edit left keyless are no providers at all.
+    if (config !== null && Object.keys(config.providers).length === 0) return null;
+    return config;
   } catch {
     return null;
   }
 }
 
-/** What a save stores: the provider checked against the table, the key non-empty, the model non-empty. */
-function checkByok(raw: unknown): ByokConfig {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new JobRefused(400, `"byok" is an object: { provider, apiKey, model }`, { field: "byok" });
-  }
-  const input = raw as Record<string, unknown>;
-  const provider = checkByokProvider(input.provider);
-  const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
-  const model = typeof input.model === "string" ? input.model.trim() : "";
-  if (model === "") throw new JobRefused(400, `"model" is the name qwen runs for that provider`, { field: "model" });
-  return { provider, apiKey, model };
-}
-
-/** A provider name checked against the table: own-property only, so `"constructor"` and `"__proto__"` are not providers. */
-export function checkByokProvider(raw: unknown): keyof typeof BYOK_PROVIDERS {
-  const provider = (typeof raw === "string" ? raw.trim().toLowerCase() : "") as keyof typeof BYOK_PROVIDERS;
-  if (!Object.hasOwn(BYOK_PROVIDERS, provider)) {
-    throw new JobRefused(400, `"provider" is one of ${Object.keys(BYOK_PROVIDERS).join(", ")}`, { field: "provider" });
-  }
-  return provider;
-}
-
 /**
- * `PUT /api/settings/byok`'s body, checked. The key is written mode 0600 under
- * the studio home, beside the drafts it will power. An empty `apiKey` keeps
- * the stored one when the provider did not change (Connect pressed again with
- * the saved row standing); a new provider's key is its own.
+ * The file's `ByokConfig`, either shape: v2 `{ active, providers }` read as
+ * written, or the v1 `{ provider, apiKey, model }` a first save wrote — read
+ * as its one provider, its model the `default` tier, active, and rewritten
+ * in v2 on the next save.
  */
-export async function saveByok(raw: unknown): Promise<ByokStatus> {
-  const config = checkByok(raw);
-  if (config.apiKey === "") {
-    const held = await loadByok();
-    if (held === null || held.provider !== config.provider) {
-      throw new JobRefused(400, `"apiKey" is the provider's key`, { field: "apiKey" });
-    }
-    config.apiKey = held.apiKey;
+function readByokFile(raw: unknown): ByokConfig | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const input = raw as Record<string, unknown>;
+  if (typeof input.provider === "string" && Object.hasOwn(BYOK_PROVIDERS, input.provider.trim().toLowerCase())) {
+    const provider = input.provider.trim().toLowerCase() as ByokProviderName;
+    const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
+    if (apiKey === "") return null;
+    const model = typeof input.model === "string" ? input.model.trim() : "";
+    return { active: provider, providers: { [provider]: { apiKey, models: model === "" ? {} : { default: model } } } };
   }
+  const providersIn = typeof input.providers === "object" && input.providers !== null ? (input.providers as Record<string, unknown>) : {};
+  const providers: ByokConfig["providers"] = {};
+  for (const [name, entry] of Object.entries(providersIn)) {
+    if (!Object.hasOwn(BYOK_PROVIDERS, name) || typeof entry !== "object" || entry === null) continue;
+    const apiKey = typeof (entry as { apiKey?: unknown }).apiKey === "string" ? (entry as { apiKey: string }).apiKey.trim() : "";
+    if (apiKey === "") continue;
+    const modelsIn = typeof (entry as { models?: unknown }).models === "object" && (entry as { models?: unknown }).models !== null ? (entry as { models: Record<string, unknown> }).models : {};
+    const models: ByokTierModels = {};
+    for (const tier of ["default", "lite", "max"] as const) {
+      const model = modelsIn[tier];
+      if (typeof model === "string" && model.trim() !== "") models[tier] = model.trim();
+    }
+    providers[name as ByokProviderName] = { apiKey, models };
+  }
+  const active = typeof input.active === "string" && Object.hasOwn(providers, input.active) ? (input.active as ByokProviderName) : (Object.keys(providers)[0] as ByokProviderName | undefined) ?? null;
+  return { active, providers };
+}
+
+/** The whole config, written mode 0600 — temp file and rename, never a half file. */
+async function persistByok(config: ByokConfig): Promise<void> {
   await mkdir(studioHome(), { recursive: true });
-  // Temp file and rename, never a write into the live path: a turn or a GET
-  // mid-write must see the old key whole or the new one, never a half file.
   const temporary = `${byokPath()}.${process.pid}.tmp`;
   try {
     await writeFile(temporary, `${JSON.stringify(config, null, 1)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -180,12 +191,123 @@ export async function saveByok(raw: unknown): Promise<ByokStatus> {
     await rm(temporary, { force: true }).catch(() => undefined);
     throw error;
   }
-  return statusOf(config);
+}
+
+/** A provider name checked against the table: own-property only, so `"constructor"` and `"__proto__"` are not providers. */
+export function checkByokProvider(raw: unknown): ByokProviderName {
+  const provider = (typeof raw === "string" ? raw.trim().toLowerCase() : "") as ByokProviderName;
+  if (!Object.hasOwn(BYOK_PROVIDERS, provider)) {
+    throw new JobRefused(400, `"provider" is one of ${Object.keys(BYOK_PROVIDERS).join(", ")}`, { field: "provider" });
+  }
+  return provider;
+}
+
+/**
+ * The write queue: every save reads the file, changes it and replaces it, so
+ * two overlapping writes would lose one of them (and share a temp path).
+ * Serialize them all through this — each body runs its own load.
+ */
+let writing: Promise<unknown> = Promise.resolve();
+
+function queued<T>(work: () => Promise<T>): Promise<T> {
+  const next = writing.then(work);
+  writing = next.catch(() => undefined);
+  return next;
+}
+
+/**
+ * `PUT /api/settings/byok`'s body: connect a provider — `{ provider, apiKey }`,
+ * an optional `model` for its Default tier — and make it the one `byok`
+ * spawns run on. An empty `apiKey` keeps the stored one when the provider is
+ * already connected; a new provider's key is its own.
+ */
+export function saveByok(raw: unknown): Promise<ByokStatus> {
+  return queued(async () => {
+    const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const provider = checkByokProvider(input.provider);
+    const model = typeof input.model === "string" && input.model.trim() !== "" ? input.model.trim() : undefined;
+    const config = (await loadByok()) ?? { active: null, providers: {} };
+    let apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
+    const held = config.providers[provider];
+    if (apiKey === "") {
+      if (held === undefined) throw new JobRefused(400, `"apiKey" is the provider's key`, { field: "apiKey" });
+      apiKey = held.apiKey;
+    }
+    config.providers[provider] = { apiKey, models: { ...(held?.models ?? {}), ...(model !== undefined ? { default: model } : {}) } };
+    config.active = provider;
+    await persistByok(config);
+    return statusOf(config);
+  });
+}
+
+/**
+ * `PUT /api/settings/byok/models`'s body: a connected provider's tier picks
+ * `{ lite?, default?, max? }`, merged over what it has — a tier omitted keeps
+ * its model, an empty string clears it.
+ */
+export function saveByokModels(raw: unknown): Promise<ByokStatus> {
+  return queued(async () => {
+    const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const provider = checkByokProvider(input.provider);
+    const modelsIn = typeof input.models === "object" && input.models !== null && !Array.isArray(input.models) ? (input.models as Record<string, unknown>) : {};
+    const config = await loadByok();
+    const held = config?.providers[provider];
+    if (held === undefined) throw new JobRefused(400, `provider "${provider}" is not connected`, { field: "provider" });
+    for (const tier of ["default", "lite", "max"] as const) {
+      const model = modelsIn[tier];
+      if (model === undefined) continue;
+      if (model === null || (typeof model === "string" && model.trim() === "")) delete held.models[tier];
+      else if (typeof model === "string") held.models[tier] = model.trim();
+    }
+    await persistByok(config!);
+    return statusOf(config);
+  });
+}
+
+/** `PUT /api/settings/byok/active`'s body: which connected provider a `byok` spawn runs on. */
+export function setByokActive(raw: unknown): Promise<ByokStatus> {
+  return queued(async () => {
+    const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const provider = checkByokProvider(input.provider);
+    const config = await loadByok();
+    if (config === null || config.providers[provider] === undefined) {
+      throw new JobRefused(400, `provider "${provider}" is not connected`, { field: "provider" });
+    }
+    config.active = provider;
+    await persistByok(config);
+    return statusOf(config);
+  });
+}
+
+/**
+ * What a `byok` spawn runs: the active provider's key and the model its tier
+ * says — the conversation's `model` is a tier name (`lite`/`max`, absent or
+ * `default` for the Default tier), so the record never holds a provider's
+ * id. A tier with no configured model falls back to Default's; none at all
+ * means BYOK is not set up.
+ */
+export function resolveByok(config: ByokConfig | null, tier: string | null): { provider: ByokProviderName; apiKey: string; model: string } | null {
+  if (config === null || config.active === null) return null;
+  const entry = config.providers[config.active];
+  if (entry === undefined) return null;
+  const named = tier === "lite" || tier === "max" ? entry.models[tier] : undefined;
+  const model = named ?? entry.models.default;
+  if (model === undefined || model === "") return null;
+  return { provider: config.active, apiKey: entry.apiKey, model };
 }
 
 function statusOf(config: ByokConfig | null): ByokStatus {
-  if (config === null) return { configured: false, provider: null, model: null, last4: null };
-  return { configured: true, provider: config.provider, model: config.model, last4: config.apiKey.slice(-4) };
+  const providers =
+    config === null
+      ? []
+      : Object.entries(config.providers).map(([provider, entry]) => ({
+          provider,
+          last4: entry.apiKey.slice(-4),
+          models: { ...entry.models },
+        }));
+  const active = config?.active ?? null;
+  const model = active !== null ? (config?.providers[active]?.models.default ?? null) : null;
+  return { configured: model !== null, active, model, providers };
 }
 
 /** `GET /api/settings/byok`: whether BYOK can run and on what, for the dialog and for health. */
@@ -249,7 +371,7 @@ export async function listByokModels(provider: keyof typeof BYOK_PROVIDERS, apiK
  * or the Anthropic seal could leak, plus the configured provider's own set.
  * The caller adds `QWEN_SYSTEM_MD` and `TMPDIR`.
  */
-export function byokEnv(base: NodeJS.ProcessEnv, config: ByokConfig, tmp: string, systemPromptFile: string): NodeJS.ProcessEnv {
+export function byokEnv(base: NodeJS.ProcessEnv, spawn: { provider: ByokProviderName; apiKey: string; model: string }, tmp: string, systemPromptFile: string): NodeJS.ProcessEnv {
   // `login`, always: the Anthropic seal holds under BYOK too, since a stray
   // `ANTHROPIC_API_KEY` in the runner's shell would outbid the configured
   // provider the same way it outbids the login. `TMPDIR` lands in `tmp` on
@@ -257,10 +379,10 @@ export function byokEnv(base: NodeJS.ProcessEnv, config: ByokConfig, tmp: string
   const env = agentEnv(base, "login", tmp);
   // A key already in the runner's shell must not outbid the configured one.
   for (const name of BYOK_ENV_VARS) delete env[name];
-  const preset = BYOK_PROVIDERS[config.provider];
-  env[preset.keyVar] = config.apiKey;
+  const preset = BYOK_PROVIDERS[spawn.provider];
+  env[preset.keyVar] = spawn.apiKey;
   if (preset.baseUrl !== "") env[preset.baseUrlVar] = preset.baseUrl;
-  env[preset.modelVar] = config.model;
+  env[preset.modelVar] = spawn.model;
   env.TMPDIR = tmp;
   // The draft's `tmp` stands in for HOME, so `~/.qwen` resolves under it: the
   // owner's user settings and any stored `qwen auth` can never reach a spawn,

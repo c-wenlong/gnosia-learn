@@ -89,9 +89,9 @@ describe("GET /api/settings/agent (#207)", () => {
       models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }, { value: 3 }],
       defaults: { model: "claude-fable-5-1", effort: "high" },
     });
-    expect(read).toEqual({ models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }], defaults: { model: "claude-fable-5-1", effort: "high" }, resolved: { turns: null, video: "claude-fable-5-1", diagram: "claude-fable-5-1" }, byokModel: null });
+    expect(read).toEqual({ models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }], defaults: { model: "claude-fable-5-1", effort: "high" }, resolved: { turns: null, video: "claude-fable-5-1", diagram: "claude-fable-5-1" }, byokModel: null, byokTiers: null });
     expect(modelOptions("default", read.defaults, read.models!).map((option) => option.value)).toEqual(["default", "opus"]);
-    expect(runnerSettings(null)).toEqual({ models: null, defaults: null, resolved: null, byokModel: null });
+    expect(runnerSettings(null)).toEqual({ models: null, defaults: null, resolved: null, byokModel: null, byokTiers: null });
   });
 
   it("names the conversation picker's default by what each part runs (D90)", () => {

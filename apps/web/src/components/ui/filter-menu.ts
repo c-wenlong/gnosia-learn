@@ -19,6 +19,8 @@ export interface FilterOption<V extends string = string> {
   count?: number;
   /** A muted second line under the label, for what a short label stands for. */
   detail?: string;
+  /** Shown but not pickable — a tier the harness has no model for, said so on the row. */
+  disabled?: boolean;
   /**
    * The heading of the section this row sits in. Consecutive options with the
    * same section are one group; an option with none sits in the unheaded

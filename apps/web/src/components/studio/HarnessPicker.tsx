@@ -1,20 +1,16 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { cx, FOCUS, LABEL } from "@/components/ui/classes";
-import { Combobox } from "@/components/ui/Combobox";
+import { cx, FOCUS } from "@/components/ui/classes";
+import { ByokConfig } from "@/components/studio/ByokConfig";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { DialogHeader } from "@/components/ui/DialogHeader";
 import { Glyph } from "@/components/ui/Glyph";
-import { IconButton } from "@/components/ui/IconButton";
-import { Input } from "@/components/ui/Input";
 import { Menu, MenuItem } from "@/components/ui/Menu";
-import { Select } from "@/components/ui/Select";
 import { usePresence } from "@/components/ui/use-presence";
-import { getByokSettings, listByokModels, saveByokSettings } from "@/lib/studio-drafts";
 import { rememberHarness, storedHarness, subscribeHarness, type HarnessValue } from "@/lib/studio-harness";
 
 /**
@@ -50,14 +46,6 @@ const HARNESSES: readonly Harness[] = [
   { value: "claude", label: "Claude", detail: "Anthropic's agent harness. The default." },
   { value: "codex", label: "Codex", detail: "OpenAI's agent harness, on your codex login." },
   { value: "byok", label: "BYOK", detail: "Your own provider key, run through Qwen Code." },
-];
-
-/** The providers `byok.json` can name (`BYOK_PROVIDERS` in the runner), each with a model hint for its field. */
-const PROVIDERS = [
-  { value: "openai", label: "OpenAI", modelHint: "e.g. gpt-5.4" },
-  { value: "anthropic", label: "Anthropic", modelHint: "e.g. claude-sonnet-4-5" },
-  { value: "google", label: "Google", modelHint: "e.g. gemini-3-pro" },
-  { value: "openrouter", label: "OpenRouter", modelHint: "e.g. anthropic/claude-sonnet-4.5" },
 ];
 
 /**
@@ -161,12 +149,13 @@ export function HarnessPicker({ value, onPick }: { value?: string | null; onPick
           opener={() => wrap.current?.querySelector("button") ?? null}
           onClose={() => setByokOpen(false)}
           onConnect={() => {
-            // A key just stored is meant to be used: remembered at once, so
-            // the next conversation runs on it even when this one is already
-            // locked to the harness it started on.
+            // A provider just connected or chosen is meant to be used:
+            // remembered at once, and the picker's pick becomes `byok` —
+            // but the dialog stays open so the Lite/Default/Max tiers are
+            // right there to set before Done (a provider without a Default
+            // model cannot run yet).
             rememberHarness("byok");
             pick("byok");
-            setByokOpen(false);
           }}
         />
       )}
@@ -188,15 +177,10 @@ function HarnessRow({ option }: { option: Harness }) {
  * The BYOK configuration dialog, Manus's "Manus Flex" popup: the name with a
  * Beta badge in the kit header (its Close, as `DialogHeader.test.ts` asks of
  * every kit `Dialog`), the harness's mark, a line on what a third-party model
- * costs in guarantees, Provider and the key with a Show toggle, and the Model
- * field — a combobox the provider's own `/models` feeds (D93), so the pick is
- * real model names filtered as they are typed, with free text still allowed.
- * Cancel and Connect are a pair of equal buttons at the foot.
- *
- * Connect is real: `PUT /api/settings/byok` writes the key to the runner's
- * `byok.json` (it never comes back — the dialog shows the stored `last4`),
- * and the picker's pick becomes `byok`. A save that fails is said in place
- * and keeps the dialog open.
+ * costs in guarantees, and `ByokConfig` — the provider dropdown and the
+ * Lite/Default/Max tiers it shares with the Models settings card (D94).
+ * Done just closes; a Connect or Save inside lands through `ByokConfig`
+ * itself, and connecting a provider also picks the harness.
  */
 function ByokDialog({
   closing,
@@ -210,88 +194,6 @@ function ByokDialog({
   onClose: () => void;
   onConnect: () => void;
 }) {
-  const id = useId();
-  const providerId = `${id}-provider`;
-  const modelId = `${id}-model`;
-  const keyId = `${id}-key`;
-  const [provider, setProvider] = useState("");
-  const [model, setModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  /** The stored key's tail and which provider it belongs to, never the key. */
-  const [held, setHeld] = useState<{ provider: string; last4: string } | null>(null);
-  const [show, setShow] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // What the runner already holds, so a reopen shows the configured provider
-  // and model. The key itself never comes back; Connect on the same provider
-  // with the field left blank keeps the stored one.
-  useEffect(() => {
-    void getByokSettings().then((result) => {
-      if (!result.ok || !result.data.configured) return;
-      setProvider(result.data.provider ?? "");
-      setModel(result.data.model ?? "");
-      if (result.data.provider !== null && result.data.last4 !== null) {
-        setHeld({ provider: result.data.provider, last4: result.data.last4 });
-      }
-    });
-  }, []);
-
-  const modelHint = PROVIDERS.find((entry) => entry.value === provider)?.modelHint ?? "e.g. a model name";
-  // The stored key only stands in for its own provider; another provider's
-  // key is a different secret the dialog has to be given.
-  const keyHeld = held !== null && held.provider === provider;
-
-  // The provider's own model list (D93), fetched on the key the field holds
-  // — or the stored one when it is blank — so the model field's combobox
-  // offers the provider's real models, typed against. A half-typed key asks
-  // nothing: the fetch waits for a pause in typing. The list answers under
-  // the signature that asked for it — a provider or key change makes the old
-  // rows stop matching the field at once, never after the next fetch lands.
-  const modelSig = `${provider}:${apiKey.trim() === "" ? "stored" : apiKey.trim().slice(-8)}`;
-  const [listed, setListed] = useState<{ sig: string; models: { value: string; label: string | null }[] } | null>(null);
-  const [modelsNote, setModelsNote] = useState<string | null>(null);
-  const models = listed !== null && listed.sig === modelSig ? listed.models : [];
-  useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      const usable = provider !== "" && (apiKey.trim() !== "" || keyHeld);
-      if (!usable) {
-        if (!cancelled) {
-          setListed(null);
-          setModelsNote(null);
-        }
-        return;
-      }
-      setModelsNote("Loading models…");
-      const result = await listByokModels(provider, apiKey.trim() === "" ? undefined : apiKey.trim());
-      if (cancelled) return;
-      if (result.ok) {
-        setListed({ sig: modelSig, models: result.data.models });
-        setModelsNote(null);
-      } else {
-        setListed(null);
-        setModelsNote(result.refusal.error);
-      }
-    }, apiKey.trim() === "" ? 0 : 500);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [provider, apiKey, keyHeld, modelSig]);
-
-  async function connect() {
-    setSaving(true);
-    setError(null);
-    const result = await saveByokSettings({ provider, apiKey: apiKey.trim(), model: model.trim() });
-    setSaving(false);
-    if (!result.ok) {
-      setError(result.refusal.error);
-      return;
-    }
-    onConnect();
-  }
-
   return (
     <Dialog label="BYOK" onClose={onClose} closing={closing} size="compact" className="md:w-[480px]" opener={opener}>
       <DialogHeader
@@ -313,90 +215,12 @@ function ByokDialog({
             is not guaranteed.
           </p>
         </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor={providerId} className={LABEL}>
-            Provider
-          </label>
-          <Select
-            id={providerId}
-            label="Provider"
-            options={PROVIDERS}
-            value={provider}
-            onChange={setProvider}
-            placeholder="Select a provider"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor={keyId} className={LABEL}>
-            API key
-          </label>
-          <div className="relative">
-            <Input
-              id={keyId}
-              type={show ? "text" : "password"}
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              placeholder={
-                held === null || !keyHeld
-                  ? "Enter your API key"
-                  : `A key ending ${held.last4} is stored; leave blank to keep it`
-              }
-              autoComplete="off"
-              spellCheck={false}
-              className="pr-11"
-            />
-            <IconButton
-              label="Show the API key"
-              pressed={show}
-              size="sm"
-              tone="muted"
-              inset
-              className="absolute top-1/2 right-2 -translate-y-1/2"
-              onClick={() => setShow((was) => !was)}
-            >
-              <Glyph name={show ? "eye" : "eyeOff"} size={17} />
-            </IconButton>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor={modelId} className={LABEL}>
-            Model
-          </label>
-          <Combobox
-            id={modelId}
-            label="Model"
-            value={model}
-            onChange={setModel}
-            options={models.map((entry) => (entry.label === null || entry.label === entry.value ? { value: entry.value, label: entry.value } : { value: entry.value, label: entry.label, detail: entry.value }))}
-            placeholder={modelHint}
-            autoComplete="off"
-            spellCheck={false}
-          />
-          {modelsNote !== null && <p className="text-[12px] leading-4 text-text3">{modelsNote}</p>}
-        </div>
-
-        {error !== null && (
-          <p role="alert" className="text-[13px] leading-5 text-danger">
-            {error}
-          </p>
-        )}
-
-        <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            className="flex-1"
-            disabled={saving || provider === "" || model.trim() === "" || (apiKey.trim() === "" && !keyHeld)}
-            onClick={() => void connect()}
-          >
-            {saving ? "Connecting…" : "Connect"}
-          </Button>
-        </div>
+        <ByokConfig onConnected={onConnect} />
+        <Button variant="secondary" className="w-full" onClick={onClose}>
+          Done
+        </Button>
       </div>
     </Dialog>
   );
 }
+
