@@ -297,6 +297,39 @@ export function plannerSettings(): PlannerSettings {
   return { permissions: { defaultMode: "default", allow: [], deny: [...PLANNER_DENY] } };
 }
 
+/**
+ * The BYOK turn's project settings (`<draft>/.qwen/settings.json`), where
+ * `qwen` takes what claude takes as flags: `mcpServers` empty so none is ever
+ * defined, and `tools.exclude` naming every built-in so no tool's definition
+ * rides a request — the shape `--tools ""` and `--strict-mcp-config` give the
+ * claude spawn. A name the build does not have is a rule for nothing, never
+ * an opening.
+ */
+export function qwenPlannerSettings(): Record<string, unknown> {
+  return {
+    mcpServers: {},
+    tools: {
+      exclude: [
+        "run_shell_command",
+        "read_file",
+        "write_file",
+        "replace",
+        "edit",
+        "glob",
+        "search_file_content",
+        "read_many_files",
+        "web_fetch",
+        "web_search",
+        "save_memory",
+        "write_todos",
+        "task",
+        "exit_plan_mode",
+        "enter_plan_mode",
+      ],
+    },
+  };
+}
+
 /** The MCP config the planner is given: none at all, with `--strict-mcp-config` so nothing else loads either. */
 export const EMPTY_MCP_CONFIG = '{"mcpServers":{}}';
 
@@ -311,6 +344,43 @@ export interface PlannerArgvInput {
   /** True once the session has a transcript: continue it rather than start it. */
   resume: boolean;
   model: string;
+}
+
+/**
+ * The BYOK spawn's argv, for `qwen` (Qwen Code). Where the claude argv above
+ * seals the session with flags, qwen's seals live where it reads them:
+ *
+ * - No `-p`: a prompt on stdin is itself headless without a TTY, and nothing a
+ *   person typed is ever an argv element, the same rule `plannerArgv` keeps.
+ * - `--output-format stream-json --include-partial-messages`: qwen emits the
+ *   same `system`/`assistant`/`user`/`result` NDJSON Claude Code does, so
+ *   `PlannerRun`'s parser and the session log are unchanged.
+ * - `--model`: the provider's own name for it, from `byok.json` — the draft's
+ *   `model` pick names claude models, so it is not consulted here.
+ * - `--max-session-turns`: the same cap `plannerArgv` passes as `--max-turns`.
+ * - `--approval-mode default`: headless has nobody to ask; anything that would
+ *   prompt resolves to a denial, which is `--permission-prompts none`'s shape.
+ * - Tools and MCP are sealed by the draft's `.qwen/settings.json`
+ *   (`qwenSettings` in drafts.ts), since qwen has no `--settings` or
+ *   `--strict-mcp-config` flags; and the system prompt arrives as
+ *   `QWEN_SYSTEM_MD`, its replace-the-prompt variable, in the spawn's env.
+ * - `--session-id` on the first turn and `--resume` after: the id is minted
+ *   the same way, and qwen's sessions live under the draft's `tmp/` (`HOME` in
+ *   `byokEnv`), so a resume reaches the transcript an earlier turn left.
+ */
+export function qwenPlannerArgv(input: { sessionId: string; resume: boolean; model: string }): string[] {
+  return [
+    "--output-format",
+    "stream-json",
+    "--include-partial-messages",
+    "--model",
+    input.model,
+    "--max-session-turns",
+    String(PLANNER_MAX_TURNS),
+    "--approval-mode",
+    "default",
+    ...(input.resume ? ["--resume", input.sessionId] : ["--session-id", input.sessionId]),
+  ];
 }
 
 /**
@@ -419,6 +489,19 @@ export interface PlannerOptions {
   cwd: string;
   auth: AgentAuth;
   tmp: string;
+  /** The binary spawned: `claude` unless the draft's harness is BYOK (`qwen`). */
+  bin?: string;
+  /** The spawn's environment; absent builds `agentEnv`, BYOK builds `byokEnv`. */
+  env?: NodeJS.ProcessEnv;
+  /** The `system` event's `subtype` that starts a session: `init` for claude, `session_start` for qwen. */
+  initSubtype?: string;
+  /**
+   * What the seal demands the init event carry none of. `tools-and-mcp` is
+   * claude's `--tools ""`; qwen's built-in tools still list on the init event
+   * (denied by its settings file instead), so `mcp` asks only that no MCP
+   * server rode in.
+   */
+  seal?: "tools-and-mcp" | "mcp";
   /** Every raw stdout line, before anything else happens to it. */
   onLine: (line: string) => void;
   /** The reply so far, whole, each time a text delta arrives. */
@@ -468,7 +551,7 @@ export class PlannerRun {
         this.options.onLine(line);
         const event = parse(line);
         if (event === null) return;
-        if (event.type === "system" && event.subtype === "init") {
+        if (event.type === "system" && event.subtype === (this.options.initSubtype ?? "init")) {
           init = {
             tools: Array.isArray(event.tools) ? event.tools.map(String) : [],
             mcpServers: Array.isArray(event.mcp_servers) ? event.mcp_servers : [],
@@ -477,8 +560,11 @@ export class PlannerRun {
             model: typeof event.model === "string" ? event.model : null,
           };
           // C15: a seal that did not hold ends the turn before its first
-          // request carries a tool definition anywhere.
-          if (init.tools.length > 0 || init.mcpServers.length > 0) {
+          // request carries a tool definition anywhere. A `mcp` seal asks only
+          // for no MCP servers: the harness's own tools are denied by its
+          // settings file, and its init still lists them.
+          const unsealed = (this.options.seal ?? "tools-and-mcp") === "mcp" ? init.mcpServers.length > 0 : init.tools.length > 0 || init.mcpServers.length > 0;
+          if (unsealed) {
             sealBroken =
               `the planner started with ${init.tools.length} tool(s) and ${init.mcpServers.length} MCP server(s) ` +
               `(${[...init.tools, ...init.mcpServers.map((server) => JSON.stringify(server))].slice(0, 6).join(", ")}), ` +
@@ -559,7 +645,7 @@ export class PlannerRun {
           stopReason: this.stopReason,
           sealBroken: null,
           spawnFailed: true,
-          stderr: `could not start ${CLAUDE_BIN}: ${error.message}`,
+          stderr: `could not start ${this.options.bin ?? CLAUDE_BIN}: ${error.message}`,
         });
       });
     });
@@ -591,11 +677,11 @@ export class PlannerRun {
  * are stripped so the CLI uses this machine's `claude` login.
  */
 export function startPlanner(options: PlannerOptions): PlannerRun {
-  const child = spawn(CLAUDE_BIN, options.argv, {
+  const child = spawn(options.bin ?? CLAUDE_BIN, options.argv, {
     cwd: options.cwd,
     detached: true,
     stdio: ["pipe", "pipe", "pipe"],
-    env: agentEnv(process.env, options.auth, options.tmp),
+    env: options.env ?? agentEnv(process.env, options.auth, options.tmp),
   });
   // The prompt as data on stdin, read by `-p` when no positional is given.
   // A process that dies before reading it raises EPIPE here, which the

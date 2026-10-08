@@ -625,7 +625,7 @@ handler as every other route. Every response carries a `note`.
 
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
-| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution |
+| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model?, harness? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution. *Since D91:* `harness` is the pane picker's pick, `"claude"` or `"byok"` (`"codex"` is refused: a placeholder row); `byok` without a stored key is `400 { reason: "byok-unconfigured" }` |
 | `GET` | `/api/drafts` | `?state=&limit=&nonEmpty=&q=`; `state` may be a comma list (`open,briefed`); `nonEmpty=1` leaves out drafts with no person message (`turns` 0), before the limit is applied; *since D87:* `q` (at most 200 characters, else 400) keeps the drafts whose name, title, first message or concept title contains it, in any case, also before the limit and the `before` cursor | `{ drafts: [{ draftId, kind, state, title, name, firstMessage, source, turns, costUsd, updated, jobId }] }`. `name` is the owner's name for the conversation (see `PUT .../name`), or null. `firstMessage` is the person's first message, whitespace collapsed and cut to 120 characters, or null before one |
 | `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, title, name, model, transcript: [{ seq, role, text, at, brief?, edit? }], brief, briefSeq, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown. `briefSeq` is the seq of the transcript entry carrying `brief` (a planner reply, or the `studio` note of an edit, which has `edit: true`), null with no brief |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, no length cap of its own; a body over 1 MB is refused with 413 | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
@@ -1626,7 +1626,7 @@ and each kind's `passed` in health's `agent` block. The offered list is
 `/api/settings/agent` and `/api/health`'s `agent.models` all report, so a
 stale web build falls back to its own copy and never a different one. Only
 the Claude Code harness has a model to pass; other runners keep this inert
-until one exists.
+until one exists. D91 names the first one that does.
 
 **Why:** the model is a choice a person makes per piece of work ("draft this
 hard one on Opus"), not a site policy; the panel's row stays the default a
@@ -1638,6 +1638,50 @@ invariant true (`modelOf` keeps whatever a brief already held; a pick adds
 none) and lets a changed pick reach a brief already proposed without editing
 it. A rename's rule applies to it too: it goes through the write chain so
 `drain` waits, and it leaves `updated` alone so a pick moves nothing.
+
+### D91. A conversation carries the harness its turns run on
+
+**Verdict (2026-11-26):** the pane header holds a harness picker at its left,
+the way Manus's top bar does, with the model picker keeping its place under
+the composer. Three rows: **Claude** (the default, absent on the record),
+**Codex** (a placeholder the runner refuses until it is wired) and **BYOK** —
+Qwen Code (`qwen`) on the key `byok.json` holds, chosen because its headless
+surface replicates `claude -p`'s flag for flag, stream-json shape included. A
+turn on `byok` spawns `qwen` rather than `claude`: no `-p` (piped stdin is
+the prompt and headless both), `--output-format stream-json
+--include-partial-messages`, `--model` from the stored config rather than the
+conversation's pick (D90's names are claude's), `--max-session-turns` for
+`--max-turns`, `--approval-mode default` for `--permission-prompts none`, and
+`--session-id`/`--resume` on the same minted `plannerSessionId`. Where claude
+takes its seals as flags, qwen takes them as files and env: the draft's
+`.qwen/settings.json` (`qwenPlannerSettings`: no MCP servers, every built-in
+tool excluded), `QWEN_SYSTEM_MD` carrying the same `planner-system.md` file,
+and the spawn's `HOME` pointed at the draft's `tmp` so the owner's own
+`~/.qwen` is never read and the session it writes is where the next turn's
+resume looks. The init event is `system/session_start`, and the seal check
+asks it for no MCP servers rather than no tools, since qwen's denied
+built-ins still list on it. Jobs a byok draft draws still run on `claude`:
+the job spawn's hooks and Bash guard are a claude surface.
+
+`byok.json` (`$STUDIO_HOME`, mode 0600) is what `PUT /api/settings/byok`
+writes and the picker's Connect dialog sends: `{ provider, apiKey, model }`,
+the provider naming a fixed endpoint preset (`BYOK_PROVIDERS`), so a key
+cannot be aimed at a host the dialog never offered. `GET` answers status with
+the key's last four, never the key. A draft made on `byok` before the key is
+stored is refused at creation; one whose config is later cleared reports the
+turn the way a missing binary does.
+
+The pick is `harness` on `POST /api/drafts` — the remembered last pick, which
+is how a BYOK conversation begins before its pane exists — and
+`PUT /api/drafts/{id}/harness` while no turn has run: a harness carries its
+own session store, so a spoken conversation keeps the one it started on (409
+`harness-locked`), and a change mints a new `plannerSessionId`.
+
+**Why:** the model picker changes which Claude answers; the harness picker
+changes which agent does. Before the first turn is the honest line for moving
+it: a reply the earlier harness wrote is not a session the new one can resume
+without inventing continuity, and "start a new conversation" is the rule a
+person already knows from the model picker's resume semantics.
 
 ## Later: other kinds of asset
 

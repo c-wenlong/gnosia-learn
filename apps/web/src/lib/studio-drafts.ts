@@ -1,4 +1,5 @@
 import type { Mention } from "@/components/ui/mention-text";
+import { storedHarness } from "@/lib/studio-harness";
 import { VIDEO_TOOL_NAMES, type VideoBrief, type VideoToolName, type VideoToolOption } from "@/lib/studio-brief-video";
 import type { Brief } from "@/lib/studio-jobs";
 
@@ -233,6 +234,12 @@ export interface DraftView {
    * runner's default. Optional: a runner from before it does not send it.
    */
   model?: string | null;
+  /**
+   * The harness the conversation's turns run on: `"claude"` or `"byok"`
+   * (Qwen Code on the owner's key). Optional: a runner from before it does
+   * not send it.
+   */
+  harness?: string | null;
   transcript: TranscriptEntry[];
   brief: Brief | null;
   /** The seq of the entry carrying the brief in force. Optional: a runner from before phase 3 does not send it. */
@@ -427,11 +434,18 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<ApiResult<
   return { ok: true, status: response.status, data: body as T };
 }
 
-/** `POST /api/drafts`: a new conversation, or one opened on a diagram to extend it. `model` is the picker its composer carries (D90). */
-export function createDraft(input: { source?: string; sourceKind?: "diagram" | "video"; idempotencyKey: string; model?: string }) {
+/**
+ * `POST /api/drafts`: a new conversation, or one opened on a diagram to
+ * extend it. `model` is the picker its composer carries (D90); `harness` is
+ * the pane picker's last pick, so the conversation's turns run on the harness
+ * it shows. `"claude"` is the runner's default and is not sent.
+ */
+export function createDraft(input: { source?: string; sourceKind?: "diagram" | "video"; idempotencyKey: string; model?: string; harness?: string }) {
+  const { harness: picked, ...rest } = input;
+  const harness = picked ?? storedHarness();
   return call<{ draftId: string; state: DraftState; note: string }>(BASE, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...rest, ...(harness === "claude" ? {} : { harness }) }),
   });
 }
 
@@ -492,6 +506,34 @@ export function setDraftModel(draftId: string, model: string | null) {
   return call<{ draftId: string; model: string | null; changed: boolean; note: string }>(draftPath(draftId, "/model"), {
     method: "PUT",
     body: JSON.stringify({ model: model ?? "default" }),
+  });
+}
+
+/**
+ * `PUT /api/drafts/{id}/harness`: the pane picker's write. The runner refuses
+ * a conversation that has already spoken (`harness-locked`): a harness's
+ * session store is its own, so the pick moves only before the first turn.
+ */
+export function setDraftHarness(draftId: string, harness: string) {
+  return call<{ draftId: string; harness: string; changed: boolean; note: string }>(draftPath(draftId, "/harness"), {
+    method: "PUT",
+    body: JSON.stringify({ harness }),
+  });
+}
+
+/** `GET /api/settings/byok`: whether the open harness is set up, and on what. Never the key. */
+export function getByokSettings() {
+  return call<{ configured: boolean; provider: string | null; model: string | null; last4: string | null }>("/studio/api/settings/byok");
+}
+
+/**
+ * `PUT /api/settings/byok`: the BYOK dialog's Connect. The key is written to
+ * `$STUDIO_HOME/byok.json` and never sent back; it powers `qwen` spawns only.
+ */
+export function saveByokSettings(input: { provider: string; apiKey: string; model: string }) {
+  return call<{ configured: boolean; provider: string | null; model: string | null; last4: string | null }>("/studio/api/settings/byok", {
+    method: "PUT",
+    body: JSON.stringify(input),
   });
 }
 
