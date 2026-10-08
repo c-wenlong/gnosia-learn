@@ -4,7 +4,7 @@ import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief, type Vocabulary } from "./brief";
-import { byokStatus, checkByokProvider, listByokModels, loadByok, saveByok } from "./byok";
+import { byokStatus, checkByokProvider, listByokModels, loadByok, saveByok, saveByokModels, setByokActive } from "./byok";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { preferenceSet, videoList } from "./catalog";
 import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@self-learn/schema/shared";
@@ -389,9 +389,14 @@ async function handle(
     return byokSettingsRoute(request, response, method, probes);
   }
 
-  /* /api/settings/byok/models: the provider's model list for the dialog. */
+  /* /api/settings/byok/models: POST lists the provider's models; PUT saves a provider's tier picks (D94). */
   if (segments[1] === "settings" && segments[2] === "byok" && segments[3] === "models" && segments.length === 4) {
     return byokModelsRoute(request, response, method);
+  }
+
+  /* /api/settings/byok/active: which connected provider a byok turn runs on (D94). */
+  if (segments[1] === "settings" && segments[2] === "byok" && segments[3] === "active" && segments.length === 4) {
+    return byokActiveRoute(request, response, method);
   }
 
   /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
@@ -1850,9 +1855,12 @@ async function byokSettingsRoute(
  * field was left blank on that provider (D93's combobox). A POST rather than a
  * GET so the key is never in a URL. Answers `{ models: [{ value, label }] }`,
  * `label` null when the provider sends ids only.
+ *
+ * `PUT /api/settings/byok/models` `{ provider, models: { lite?, default?,
+ * max? } }` (D94): a connected provider's tier picks, merged over what it
+ * has — omitted keeps, empty clears.
  */
 async function byokModelsRoute(request: IncomingMessage, response: ServerResponse, method: string): Promise<void> {
-  if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/settings/byok/models does`);
   let body: Record<string, unknown>;
   try {
     const parsed = await readJson(request);
@@ -1862,16 +1870,41 @@ async function byokModelsRoute(request: IncomingMessage, response: ServerRespons
     return badBody(response, error);
   }
   try {
+    if (method === "PUT") return send(response, 200, await saveByokModels(body));
+    if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/settings/byok/models does`);
     const provider = checkByokProvider(body.provider);
     let apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
     if (apiKey === "") {
       const held = await loadByok();
-      if (held === null || held.provider !== provider) {
+      const entry = held === null ? undefined : held.providers[provider];
+      if (entry === undefined) {
         throw new JobRefused(400, `"apiKey" is the provider's key, or the stored one when the field is left blank`, { field: "apiKey" });
       }
-      apiKey = held.apiKey;
+      apiKey = entry.apiKey;
     }
     return send(response, 200, { models: await listByokModels(provider, apiKey) });
+  } catch (error) {
+    if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
+    throw error;
+  }
+}
+
+/**
+ * `PUT /api/settings/byok/active` `{ provider }`: which connected provider a
+ * `byok` turn runs on (D94). Answers as `GET /api/settings/byok` does.
+ */
+async function byokActiveRoute(request: IncomingMessage, response: ServerResponse, method: string): Promise<void> {
+  if (method !== "PUT") return fail(response, 405, `${method} is not a thing /api/settings/byok/active does`);
+  let body: Record<string, unknown>;
+  try {
+    const parsed = await readJson(request);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return fail(response, 400, "the request body must be a JSON object");
+    body = parsed as Record<string, unknown>;
+  } catch (error) {
+    return badBody(response, error);
+  }
+  try {
+    return send(response, 200, await setByokActive(body));
   } catch (error) {
     if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
     throw error;

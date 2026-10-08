@@ -68,8 +68,15 @@ export { modelName } from "@/lib/model-name";
  * answer or sent something else, and the page falls back to health's
  * `agent.defaults` and `MODEL_CHOICES`.
  */
-export function runnerSettings(raw: unknown): { models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null; byokModel: string | null } {
-  if (typeof raw !== "object" || raw === null) return { models: null, defaults: null, resolved: null, byokModel: null };
+export function runnerSettings(raw: unknown): {
+  models: ModelChoice[] | null;
+  defaults: AgentDefaults | null;
+  resolved: RunnerResolved | null;
+  byokModel: string | null;
+  /** The active BYOK provider's tier models (D94): what its Lite/Default/Max rows run. */
+  byokTiers: { default?: string; lite?: string; max?: string } | null;
+} {
+  if (typeof raw !== "object" || raw === null) return { models: null, defaults: null, resolved: null, byokModel: null, byokTiers: null };
   const body = raw as { models?: unknown; defaults?: unknown; planner?: unknown; byok?: unknown } & Record<string, unknown>;
   const models = Array.isArray(body.models)
     ? body.models
@@ -90,8 +97,25 @@ export function runnerSettings(raw: unknown): { models: ModelChoice[] | null; de
     video: passed("video") ?? defaults?.model ?? null,
     diagram: passed("diagram") ?? defaults?.model ?? null,
   };
-  const byok = typeof body.byok === "object" && body.byok !== null ? (body.byok as { configured?: unknown; model?: unknown }) : null;
+  const byok = typeof body.byok === "object" && body.byok !== null ? (body.byok as { configured?: unknown; model?: unknown; active?: unknown; providers?: unknown }) : null;
   const byokModel = byok !== null && byok.configured === true && typeof byok.model === "string" && byok.model !== "" ? byok.model : null;
+  // The active provider's tier picks, for a BYOK conversation's Lite/Default/
+  // Max rows: read off the providers list, not the flat `model` (which is the
+  // default tier only).
+  const byokTiers = (() => {
+    if (byok === null || typeof byok.active !== "string" || !Array.isArray(byok.providers)) return null;
+    const entry = byok.providers.find(
+      (row): row is { provider: string; models: Record<string, unknown> } =>
+        typeof row === "object" && row !== null && (row as { provider?: unknown }).provider === byok.active && typeof (row as { models?: unknown }).models === "object" && (row as { models?: unknown }).models !== null,
+    );
+    if (entry === undefined) return null;
+    const tiers: { default?: string; lite?: string; max?: string } = {};
+    for (const tier of ["default", "lite", "max"] as const) {
+      const model = entry.models[tier];
+      if (typeof model === "string" && model !== "") tiers[tier] = model;
+    }
+    return tiers;
+  })();
   return {
     models: models.length > 0 ? models : null,
     defaults,
@@ -99,6 +123,7 @@ export function runnerSettings(raw: unknown): { models: ModelChoice[] | null; de
     // The model `byok.json` names, for a BYOK conversation's meta row — its
     // turns run on it, not on the claude pick this menu otherwise offers.
     byokModel,
+    byokTiers,
   };
 }
 
@@ -260,10 +285,28 @@ export function runnerDefaultOption(resolved: RunnerResolved | null): FilterOpti
  * A conversation's model rows as tiers, the way Manus's picker offers Lite /
  * Default / Max rather than a model list (D92): every harness's own three,
  * and the tier's value is the model name the spawn takes, so a pick is a
- * `model` write as it always was. A pick stored as a name no tier still
- * covers is appended as itself, so the menu can always show what is set.
+ * `model` write as it always was. BYOK's tiers carry the active provider's
+ * configured models (D94) — one with none is shown but greyed out, never
+ * pickable. A pick stored as a name no tier still covers is appended as
+ * itself, so the menu can always show what is set.
  */
-export function harnessModelOptions(harness: string, current: string, resolved: RunnerResolved | null): FilterOption<string>[] {
+export function harnessModelOptions(
+  harness: string,
+  current: string,
+  resolved: RunnerResolved | null,
+  byokTiers: { default?: string; lite?: string; max?: string } | null = null,
+): FilterOption<string>[] {
+  if (harness === "byok") {
+    return (["default", "lite", "max"] as const).map((tier) => {
+      const model = byokTiers?.[tier];
+      return {
+        value: tier,
+        label: tier === "default" ? "Default" : tier === "lite" ? "Lite" : "Max",
+        detail: model ?? "not configured",
+        disabled: model === undefined,
+      };
+    });
+  }
   const options: FilterOption<string>[] =
     harness === "codex"
       ? [

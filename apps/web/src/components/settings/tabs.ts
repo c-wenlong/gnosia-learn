@@ -3,7 +3,7 @@
  * value that opens each. React-free so the server page and the tests can
  * read it without the client component.
  */
-export const SETTINGS_TABS = ["general", "profile", "tutor", "data"] as const;
+export const SETTINGS_TABS = ["general", "profile", "models", "data"] as const;
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 

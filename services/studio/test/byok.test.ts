@@ -45,7 +45,7 @@ vi.mock("../src/canvas", async (importOriginal) => ({
 const { Drafts } = await import("../src/drafts");
 const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
-const { saveByok, loadByok, byokStatus, listByokModels } = await import("../src/byok");
+const { saveByok, loadByok, byokStatus, listByokModels, saveByokModels, setByokActive, resolveByok } = await import("../src/byok");
 const { draftDir, draftTmpDir } = await import("../src/paths");
 
 type DraftsT = InstanceType<typeof Drafts>;
@@ -105,27 +105,84 @@ describe("the byok.json store", () => {
   it("round-trips the config, mode 0600, and reports everything but the key", async () => {
     expect(await loadByok()).toBeNull();
     const saved = await connect("openai", "gpt-5.4");
-    expect(saved).toEqual({ configured: true, provider: "openai", model: "gpt-5.4", last4: "0001" });
+    expect(saved).toEqual({
+      configured: true,
+      active: "openai",
+      model: "gpt-5.4",
+      providers: [{ provider: "openai", last4: "0001", models: { default: "gpt-5.4" } }],
+    });
     expect(await byokStatus()).toEqual(saved);
     const stored = JSON.parse(await readFile(path.join(process.env.STUDIO_HOME!, "byok.json"), "utf8"));
-    expect(stored).toEqual({ provider: "openai", apiKey: "sk-or-test-key-0001", model: "gpt-5.4" });
+    expect(stored).toEqual({ active: "openai", providers: { openai: { apiKey: "sk-or-test-key-0001", models: { default: "gpt-5.4" } } } });
   });
 
-  it("refuses a provider the table does not have, an empty key, and an empty model", async () => {
+  it("reads a v1 file as one provider on its Default tier, active", async () => {
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(path.join(process.env.STUDIO_HOME!, "byok.json"), JSON.stringify({ provider: "openrouter", apiKey: "sk-old", model: "m-old" }));
+    expect(await loadByok()).toEqual({
+      active: "openrouter",
+      providers: { openrouter: { apiKey: "sk-old", models: { default: "m-old" } } },
+    });
+  });
+
+  it("holds several providers, switches the active one, and merges tier models", async () => {
+    await connect("openrouter", "anthropic/claude-sonnet-4.5");
+    const second = await saveByok({ provider: "openai", apiKey: "sk-oai-2", model: "gpt-5.4" });
+    expect(second.active).toBe("openai");
+    expect(second.providers).toHaveLength(2);
+    // Active is the one just connected; switching back is its own write.
+    const back = await setByokActive({ provider: "openrouter" });
+    expect(back.active).toBe("openrouter");
+    await expect(setByokActive({ provider: "google" })).rejects.toThrow(/not connected/);
+    // Tier picks merge over what a provider has; an empty one clears it.
+    const tiers = await saveByokModels({ provider: "openrouter", models: { lite: "m-lite", max: "m-max" } });
+    expect(tiers.providers[0]!.models).toEqual({ default: "anthropic/claude-sonnet-4.5", lite: "m-lite", max: "m-max" });
+    expect((await saveByokModels({ provider: "openrouter", models: { lite: "" } })).providers[0]!.models).toEqual({
+      default: "anthropic/claude-sonnet-4.5",
+      max: "m-max",
+    });
+  });
+
+  it("serializes overlapping writes — a tier save and a provider switch both land", async () => {
+    await connect("openrouter", "anthropic/claude-sonnet-4.5");
+    await saveByok({ provider: "openai", apiKey: "sk-oai-2", model: "gpt-5.4" });
+    const [tiers, active] = await Promise.all([
+      saveByokModels({ provider: "openrouter", models: { lite: "m-lite" } }),
+      setByokActive({ provider: "openrouter" }),
+    ]);
+    expect(tiers.providers[0]!.models.lite).toBe("m-lite");
+    expect(active.active).toBe("openrouter");
+    const held = await loadByok();
+    expect(held?.active).toBe("openrouter");
+    expect(held?.providers.openrouter?.models.lite).toBe("m-lite");
+  });
+
+  it("refuses a provider the table does not have, and a keyless first connect", async () => {
     await expect(saveByok({ provider: "anthropicx", apiKey: "k", model: "m" })).rejects.toThrow(JobRefused);
     // Inherited object members are not providers either.
     await expect(saveByok({ provider: "constructor", apiKey: "k", model: "m" })).rejects.toThrow(/"provider" is one of/);
     await expect(saveByok({ provider: "openai", apiKey: "", model: "m" })).rejects.toThrow(JobRefused);
-    await expect(saveByok({ provider: "openai", apiKey: "k", model: " " })).rejects.toThrow(JobRefused);
-    await expect(loadByok()).resolves.toBeNull();
+    // A key with no Default model connects but cannot run: the pick gate asks
+    // `resolveByok`, which needs a `default` tier, not just a file.
+    await saveByok({ provider: "openai", apiKey: "sk-keyless-model", model: " " });
+    expect(resolveByok(await loadByok(), null)).toBeNull();
+    expect((await byokStatus()).configured).toBe(false);
+  });
+
+  it("resolves a tier pick to the active provider's model, Default when a tier is unset", async () => {
+    await connect("openrouter", "anthropic/claude-sonnet-4.5");
+    await saveByokModels({ provider: "openrouter", models: { max: "anthropic/claude-opus-4.6" } });
+    const config = await loadByok();
+    expect(resolveByok(config, null)).toEqual({ provider: "openrouter", apiKey: "sk-or-test-key-0001", model: "anthropic/claude-sonnet-4.5" });
+    expect(resolveByok(config, "lite")).toMatchObject({ model: "anthropic/claude-sonnet-4.5" });
+    expect(resolveByok(config, "max")).toMatchObject({ model: "anthropic/claude-opus-4.6" });
   });
 
   it("keeps the stored key on a save that names no new one, same provider only", async () => {
     await connect("openrouter", "anthropic/claude-sonnet-4.5");
     const again = await saveByok({ provider: "openrouter", apiKey: "", model: "anthropic/claude-opus-4.6" });
-    expect(again.last4).toBe("0001");
     expect(again.model).toBe("anthropic/claude-opus-4.6");
-    expect((await loadByok())?.apiKey).toBe("sk-or-test-key-0001");
+    expect((await loadByok())?.providers.openrouter?.apiKey).toBe("sk-or-test-key-0001");
     // A provider change needs its own key; the old one is never moved across.
     await expect(saveByok({ provider: "openai", apiKey: "", model: "gpt-5.4" })).rejects.toThrow(/"apiKey"/);
   });

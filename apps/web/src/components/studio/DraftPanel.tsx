@@ -103,6 +103,8 @@ import {
   drawBoth,
   drawDraft,
   getDraft,
+  getByokSettings,
+  BYOK_SETTINGS_CHANGED,
   openDraftEvents,
   readStudioHealth,
   refusalReason,
@@ -239,7 +241,13 @@ export function DraftPanel({
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
   const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
   /** The picker's list and the Claude Code defaults, from health's `agent` (D90). */
-  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null; byokModel: string | null }>({ models: null, defaults: null, resolved: null, byokModel: null });
+  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null; byokModel: string | null; byokTiers: { default?: string; lite?: string; max?: string } | null }>({
+    models: null,
+    defaults: null,
+    resolved: null,
+    byokModel: null,
+    byokTiers: null,
+  });
   /** The pick sent to the runner and not yet seen in the record. */
   const [modelPick, setModelPick] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -415,7 +423,25 @@ export function DraftPanel({
     setVideo(videoAvailability(health.video));
     setDiagramAgent(diagramAvailability(health.diagramAgent));
     setAgentMenu(runnerSettings(health.agent));
-  }, []);
+    // The BYOK tier models, read fresh — health's copy can be older than a
+    // Connect that just wrote them.
+    if (view?.harness === "byok") {
+      const result = await getByokSettings();
+      if (result.ok && result.data.configured) {
+        const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
+        if (entry !== undefined) {
+          setAgentMenu((held) => ({ ...held, byokModel: result.data.model, byokTiers: entry.models }));
+        }
+      }
+    }
+  }, [view?.harness]);
+  // A BYOK write from the dialog or Settings re-reads the tiers at once
+  // (D94), so a tier just configured is pickable without a health refresh.
+  useEffect(() => {
+    const on = () => void readHealth();
+    window.addEventListener(BYOK_SETTINGS_CHANGED, on);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, on);
+  }, [readHealth]);
   // Once on opening too: the page that drew the grid read health, and a
   // conversation opened in the browser (`PanelHost`) can be minutes
   // younger than that read.
@@ -1146,26 +1172,19 @@ export function DraftPanel({
           onModEnter={cards.length > 0 ? () => modEnter(null) : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
-          {/* The conversation's model (D90): every turn and job it makes runs
-              on this — except on BYOK, whose turns run the provider's model
-              from `byok.json` (D91), so the claude pick list would lie. As
-              tiers (D92): each harness's own Lite/Default/Max rather than a
-              model list. */}
-          {shownHarness === "byok" ? (
-            <span title="This conversation's turns run on the harness's own model. Draw jobs still run on Claude, on each kind's saved pick.">
-              Model {agentMenu.byokModel ?? "byok"}
-            </span>
-          ) : (
-            <FilterMenu
-              label="Model"
-              bare
-              options={harnessModelOptions(shownHarness, shownModel, agentMenu.resolved)}
-              value={shownModel}
-              defaultValue="default"
-              busy={modelPick !== null}
-              onChange={(next) => void pickModel(next)}
-            />
-          )}
+          {/* The conversation's model (D90), as tiers (D92): each harness's
+              own Lite/Default/Max rather than a model list. On BYOK the tiers
+              name the active provider's configured models (D94); one left
+              unconfigured shows greyed out and cannot be picked. */}
+          <FilterMenu
+            label="Model"
+            bare
+            options={harnessModelOptions(shownHarness, shownModel, agentMenu.resolved, agentMenu.byokTiers)}
+            value={shownModel}
+            defaultValue="default"
+            busy={modelPick !== null}
+            onChange={(next) => void pickModel(next)}
+          />
           {/* The question and the press swap in place, each fading in. The
               problem card's Start over opens the question too. */}
           {(confirmStartOver || view.transcript.length > 0) && (

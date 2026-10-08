@@ -27,7 +27,7 @@ beforeAll(() => {
 const SECTIONS: SettingsSection[] = [
   { id: "general", label: "General", glyph: "sliders", content: "general body" },
   { id: "profile", label: "Profile", glyph: "person", content: "profile body" },
-  { id: "tutor", label: "Tutor", glyph: "chat", content: "tutor body" },
+  { id: "models", label: "Models", glyph: "sparkle", content: "models body" },
   { id: "data", label: "Data", glyph: "data", content: "data body" },
 ];
 
@@ -59,10 +59,10 @@ function mount(initial: SettingsSection["id"]) {
 
 describe("parseSettingsTab", () => {
   it("reads a known tab and falls back to General for anything else", () => {
-    expect(parseSettingsTab(["tutor"])).toBe("tutor");
+    expect(parseSettingsTab(["models"])).toBe("models");
     expect(parseSettingsTab([])).toBe("general");
     expect(parseSettingsTab(["nope"])).toBe("general");
-    expect(parseSettingsTab(["tutor", "data"])).toBe("general");
+    expect(parseSettingsTab(["models", "data"])).toBe("general");
   });
 
   it("keeps General at the bare path", () => {
@@ -73,8 +73,8 @@ describe("parseSettingsTab", () => {
 
 describe("SettingsTabs", () => {
   it("opens the tab it is given and keeps every panel mounted", () => {
-    const { tabs, shown, container } = mount("tutor");
-    expect(shown()).toEqual(["tutor body"]);
+    const { tabs, shown, container } = mount("models");
+    expect(shown()).toEqual(["models body"]);
     expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(4);
     expect(tabs().map((t) => t.tabIndex)).toEqual([-1, -1, 0, -1]);
     expect(tabs()[2].getAttribute("aria-selected")).toBe("true");
@@ -100,7 +100,7 @@ describe("SettingsTabs", () => {
     expect(shown()).toEqual(["profile body"]);
     expect(document.activeElement).toBe(tabs()[1]);
     press("ArrowRight");
-    expect(shown()).toEqual(["tutor body"]);
+    expect(shown()).toEqual(["models body"]);
     press("End");
     expect(shown()).toEqual(["data body"]);
     press("ArrowDown");
@@ -113,20 +113,20 @@ describe("SettingsTabs", () => {
 
   it("follows a link to another tab while the page is open", () => {
     const { draw, shown } = mount("general");
-    draw("tutor");
-    expect(shown()).toEqual(["tutor body"]);
+    draw("models");
+    expect(shown()).toEqual(["models body"]);
   });
 
   it("goes back to General on a link to the bare path after a press chose another tab", () => {
     const { draw, tabs, shown } = mount("general");
     act(() => tabs()[2].click());
-    expect(shown()).toEqual(["tutor body"]);
+    expect(shown()).toEqual(["models body"]);
     draw("general");
     expect(shown()).toEqual(["general body"]);
   });
 
   it("opens General for a repeated tab in the address", () => {
-    window.history.replaceState(null, "", "/settings?tab=tutor&tab=data");
+    window.history.replaceState(null, "", "/settings?tab=models&tab=data");
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);

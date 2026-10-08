@@ -1738,6 +1738,34 @@ never sits in a URL. The provider table's `modelsUrl` and `auth` carry the
 per-provider endpoint and header, so a wrong one cannot be aimed at a host
 the dialog never offered.
 
+### D94. BYOK is a set of providers, each with tier models
+
+**Verdict (2026-10-09):** `byok.json` is a set — `{ active, providers:
+{ name: { apiKey, models: { default?, lite?, max? } } } }` — with a v1
+`{ provider, apiKey, model }` file read as its one provider on the Default
+tier and rewritten on the next save. Settings' Tutor tab is Models now, and
+the BYOK card there shares the dialog's configuration: a provider dropdown
+of the connected ones plus "+ Add provider", a Lite/Default/Max tab set
+holding one `/models`-fed combobox each, and the same writes the picker's
+dialog sends — `PUT /api/settings/byok` to connect (which also makes the
+provider active), `PUT /api/settings/byok/active` to switch, `PUT
+/api/settings/byok/models` to save a provider's tiers. A byok
+conversation's model pick is a tier, `lite` or `max` with absent meaning
+Default — the record never holds a provider model id, so a pick survives a
+provider switch and `setHarness`'s model reset still applies; the spawn
+resolves it through the active provider at turn time, an unset tier running
+Default's model. The chat row offers the three tiers; one the provider has
+no model for is shown greyed out, not pickable. Since the pick is no longer
+a claude name either, a byok draft's draw jobs inherit nothing, as codex's
+do.
+
+**Why:** "Lite" is a wish about how much model a turn wants, and which model
+that is changes with the provider — putting the names on the provider, not
+the conversation, keeps a pick meaningful when the provider underneath
+moves. The keys' home is Settings because a key is a credential, and
+credentials live where the other providers' already did; the dialog keeps a
+Connect affordance because a picker row is where the want starts.
+
 ## Later: other kinds of asset
 
 Diagrams first. The owner wants to chat to launch manimkc videos too, through
