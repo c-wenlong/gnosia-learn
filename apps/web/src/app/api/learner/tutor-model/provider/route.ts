@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { dropByokProvider, TUTOR_TO_BYOK } from "@/lib/byok-sync";
+import { dropByokProvider } from "@/lib/byok-sync";
 import { answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 import { CHAIN_WRITE_RATE_LIMIT, chainFailed } from "@/lib/tutor-models/requests";
 import { deleteChainProvider, moveChainProvider } from "@/lib/tutor-models/store";
