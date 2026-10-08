@@ -191,6 +191,32 @@ describe("the Providers card", () => {
     expect(document.activeElement).toBe(button(container, "Add provider"));
   });
 
+  it("opens Add provider as a dialog whose Escape and Close give the button back focus", async () => {
+    const container = mount(createElement(Providers, { view: view() }));
+    const add = button(container, "Add provider");
+    act(() => add.click());
+    const dialog = container.querySelector("dialog")!;
+    expect(dialog.getAttribute("open")).not.toBeNull();
+    expect(dialog.textContent).toContain("API key");
+
+    // Escape asks to close; the exit runs, and focus goes back to the button.
+    act(() => dialog.dispatchEvent(new Event("cancel", { cancelable: true, bubbles: true })));
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(container.querySelector("dialog")).toBeNull();
+    expect(document.activeElement).toBe(add);
+
+    act(() => add.click());
+    const again = container.querySelector("dialog")!;
+    act(() => button(container, "Close").click());
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(again.isConnected).toBe(false);
+    expect(document.activeElement).toBe(add);
+  });
+
   it("offers only the providers not listed in Add provider, and hides the button when none is left", () => {
     const container = mount(createElement(Providers, { view: view() }));
     act(() => button(container, "Add provider").click());

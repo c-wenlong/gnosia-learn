@@ -261,10 +261,15 @@ function AddProvider({
 
   if (!form.mounted) return null;
   const ready = draft.trim() !== "" && (!custom || (name.trim() !== "" && url.trim() !== ""));
+  // A save in flight is not dismissed: Escape, the backdrop and Close all
+  // ask the same way, and the ask waits — a hid error is a silent failure.
+  const askClose = () => {
+    if (!saving) onClose();
+  };
   return (
-    <Dialog label="Add a provider" onClose={onClose} closing={form.leaving} size="compact" className="md:w-[520px]" opener={opener}>
-      <DialogHeader title="Add a provider" onClose={onClose} />
-      <form onSubmit={(e) => void save(e)} aria-label="Add a provider" className="flex flex-col gap-3 p-6 pt-5">
+    <Dialog label="Add a provider" onClose={askClose} closing={form.leaving} size="compact" className="md:w-[520px]" opener={opener}>
+      <DialogHeader title="Add a provider" onClose={askClose} />
+      <form onSubmit={(e) => void save(e)} aria-label="Add a provider" className="flex min-h-0 flex-col gap-3 overflow-y-auto p-6 pt-5">
       <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
         <FormRow label="Provider">
           {({ id }) => (
