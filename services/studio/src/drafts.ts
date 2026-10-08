@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   DRAFT_TRANSITIONS,
+  isAgentModel,
   LOCAL_LEARNER_ID,
   canTransition,
   type DraftErrorKind,
@@ -217,6 +218,14 @@ export interface DraftRecord {
    */
   name?: string | null;
   /**
+   * The model the composer's picker chose for this conversation (D90), or
+   * null for the runner's own default: `plannerModel()` for turns and the
+   * settings panel for jobs. Set at creation and by `PUT .../model`, never by
+   * a turn; every planner spawn and every brief pressed off this draft runs
+   * on it while it stands.
+   */
+  model?: string | null;
+  /**
    * The concept a hand-off from the concept tutor opened the draft on (D65 of
    * docs/STUDIO-TUTOR-HANDOFF.md). Absent or null on every other draft. The
    * note itself is kept only in the system prompt.
@@ -418,6 +427,8 @@ export interface DraftView {
   title: string | null;
   /** The owner's name for the conversation, which every page shows before `title`. */
   name: string | null;
+  /** The model the conversation's picker holds (D90); null is the runner's default. */
+  model: string | null;
   transcript: TranscriptEntry[];
   /** The newest brief of any kind, kept one release for the web app from before (D61). */
   brief: AnyDraftBrief | null;
@@ -470,6 +481,8 @@ interface TurnMarker {
   turn: number;
   at: string;
   retry?: boolean;
+  /** The model this spawn passed to the CLI (D90): what a recovery prices by, not the record's pick now. */
+  model?: string;
 }
 
 let writeCounter = 0;
@@ -545,6 +558,8 @@ export interface CreateInput {
   concept?: unknown;
   /** The tutor's last turns, oldest first: `[{ role: "user" | "assistant", content }]`, at most six (D69). */
   tutor?: unknown;
+  /** The model the new conversation's picker holds (D90); absent or `"default"` is the runner's own default. */
+  model?: unknown;
 }
 
 /** A concept as a draft records it: what the planner was told, less the note. */
@@ -809,7 +824,7 @@ export class Drafts {
     for (const record of this.records.values()) {
       if (record.inFlight === null) continue;
       const turn = record.inFlight;
-      const { lines, startedAt, spawns } = await this.linesOfTurn(record.id, turn.turn);
+      const { lines, startedAt, spawns, model: spawnModel } = await this.linesOfTurn(record.id, turn.turn);
       const events = await this.events(record.id);
       const replies = events.filter((event) => event.type === "reply" && event.turn === turn.turn);
       // The runner died after the last spawn's reply was written: nothing is
@@ -826,7 +841,9 @@ export class Drafts {
       // so a crash between the two leaves an answered turn whose cost is still
       // to be counted, from the same stream lines, exactly once.
       const counted = record.spend.some((entry) => entry.startedAt === startedAt);
-      const cost = costFromLog(lines.join("\n"), plannerModel());
+      // The spawn's own model, not the pick as it stands now: a model chosen
+      // mid-turn does not reprice the turn that was already running (D90).
+      const cost = costFromLog(lines.join("\n"), spawnModel ?? record.model ?? plannerModel());
       const spend: TurnSpend = {
         turn: turn.turn,
         startedAt: startedAt ?? turn.startedAt,
@@ -879,11 +896,12 @@ export class Drafts {
   private async linesOfTurn(
     id: string,
     turn: number,
-  ): Promise<{ lines: string[]; startedAt: string | null; spawns: number }> {
+  ): Promise<{ lines: string[]; startedAt: string | null; spawns: number; model: string | null }> {
     const body = await readFile(draftSessionLogPath(id), "utf8").catch(() => "");
     const lines = body.split("\n").filter((line) => line.trim() !== "");
     let start = -1;
     let startedAt: string | null = null;
+    let model: string | null = null;
     let spawns = 0;
     for (let i = 0; i < lines.length; i += 1) {
       const marker = safeJson(lines[i]!);
@@ -891,9 +909,10 @@ export class Drafts {
         start = i;
         spawns += 1;
         startedAt = typeof marker.at === "string" ? marker.at : null;
+        model = typeof marker.model === "string" ? marker.model : null;
       }
     }
-    return { lines: start === -1 ? [] : lines.slice(start + 1), startedAt, spawns };
+    return { lines: start === -1 ? [] : lines.slice(start + 1), startedAt, spawns, model };
   }
 
   /* ------------------------------------------------------------------ */
@@ -997,6 +1016,7 @@ export class Drafts {
       sourceRevision: record.source === null ? null : record.sourceRevision,
       title: record.title,
       name: record.name ?? null,
+      model: record.model ?? null,
       transcript: transcriptOf(await this.events(id)),
       brief: record.brief,
       briefSeq: record.brief === null ? null : (record.briefSeq ?? null),
@@ -1190,6 +1210,7 @@ export class Drafts {
       turns: record.turns,
       costUsd: record.costUsd,
       costSource: record.costSource,
+      model: record.model ?? null,
     };
   }
 
@@ -1307,6 +1328,7 @@ export class Drafts {
     }
     const concept = parseConcept(input.concept);
     const tutor = parseTutor(input.tutor);
+    const model = draftModel(input.model);
     // Any `tutor` at all, an empty list included, names a hand-off: without
     // its concept it is a malformed one, never an ordinary draft.
     if (concept === null && input.tutor !== undefined && input.tutor !== null) {
@@ -1422,6 +1444,7 @@ export class Drafts {
       sourceHash,
       sourceRevision,
       title: null,
+      model,
       ...(conceptRecord === null ? {} : { concept: conceptRecord, tutorTurns }),
       plannerSessionId: randomUUID(),
       sessionStarted: false,
@@ -2174,9 +2197,11 @@ export class Drafts {
     // that began between two spawns of one turn must not start a paid one.
     if (record.state === "abandoned" || this.draining) return null;
     const startedAt = new Date().toISOString();
-    const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, ...(retry ? { retry: true } : {}) };
+    // The conversation's own pick (D90), else the runner's `STUDIO_PLANNER_MODEL`.
+    const model = record.model ?? plannerModel();
+    const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, model, ...(retry ? { retry: true } : {}) };
     let logChain: Promise<void> = appendFile(draftSessionLogPath(id), `${JSON.stringify(marker)}\n`, "utf8");
-    const meter = new JobCostMeter(plannerModel());
+    const meter = new JobCostMeter(model);
     const systemPrompt = await readFile(plannerSystemPath(id), "utf8").catch(() => null);
     if (systemPrompt === null) {
       // A crash between the record and the prompt at creation: write it now,
@@ -2207,7 +2232,7 @@ export class Drafts {
       settingsFile: plannerSettingsPath(id),
       sessionId: record.plannerSessionId,
       resume: record.sessionStarted,
-      model: plannerModel(),
+      model,
     });
     const live = { turn, text: "" };
     this.live.set(id, live);
@@ -2474,7 +2499,16 @@ export class Drafts {
       }
       // C8: a flowchart the person pasted rides along, never through the planner.
       const mermaid = await this.latestMermaid(id);
-      const ready: Prepared = { kind: "diagram", jobKey: item.jobKey, briefSeq, brief, pending, mermaid, parent: null };
+      const ready: Prepared = {
+        kind: "diagram",
+        jobKey: item.jobKey,
+        briefSeq,
+        brief,
+        pending,
+        mermaid,
+        model: record.model ?? null,
+        parent: null,
+      };
       await this.runner.admit(validDiagram(ready, await vocabularyFor(pending)));
       return ready;
     }
@@ -2502,7 +2536,16 @@ export class Drafts {
         : newest !== undefined && newest.state === "accepted" && newest.slug === brief.slug && brief.mode === "change"
           ? { jobId: newest.id, discard: false }
           : null;
-    const ready: Prepared = { kind: "video", jobKey: item.jobKey, briefSeq, brief, pending, mermaid: null, parent };
+    const ready: Prepared = {
+      kind: "video",
+      jobKey: item.jobKey,
+      briefSeq,
+      brief,
+      pending,
+      mermaid: null,
+      model: record.model ?? null,
+      parent,
+    };
     try {
       await this.video.runner.admit(validVideo(ready, await vocabularyFor(pending)), parent?.discard === true ? parent.jobId : null);
     } catch (error) {
@@ -3141,6 +3184,23 @@ export class Drafts {
     });
   }
 
+  /**
+   * `PUT /api/drafts/{id}/model`: the composer picker's write (D90). The pick
+   * lands on the next planner spawn and the next press; a turn in flight keeps
+   * the model it started with. `touch: false` for the same reason as a rename:
+   * a pick moves nothing up the list.
+   */
+  async setModel(id: string, rawModel: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
+    this.require(id);
+    const model = draftModel(rawModel);
+    if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
+    return this.write(id, async () => {
+      const current = this.require(id);
+      if ((current.model ?? null) === model) return { record: current, changed: false };
+      return { record: await this.save(id, { model }, { touch: false }), changed: true };
+    });
+  }
+
   /* ------------------------------------------------------------------ */
   /* Abandon and shutdown                                               */
   /* ------------------------------------------------------------------ */
@@ -3359,6 +3419,8 @@ interface Prepared {
   brief: AnyDraftBrief;
   pending: PendingTopic | null;
   mermaid: string | null;
+  /** The conversation's own model pick (D90), stamped onto the brief unless the brief names one itself. */
+  model: string | null;
   /** Video: the job this one starts from, and whether the catalog discards it in the same transaction. */
   parent: { jobId: string; discard: boolean } | null;
 }
@@ -3396,7 +3458,15 @@ async function vocabularyFor(pending: PendingTopic | null): Promise<Vocabulary> 
 
 /** The stored diagram brief through the job path byte for byte, with the press's key and any pasted flowchart. */
 function validDiagram(ready: Prepared, vocabulary: Vocabulary): ValidBrief {
-  const posted = { ...(ready.brief as DraftBrief), ...(ready.mermaid === null ? {} : { mermaid: ready.mermaid }), idempotencyKey: ready.jobKey };
+  const stored = ready.brief as DraftBrief;
+  // D90: the conversation's pick lands on the job, but a brief that names its
+  // own model keeps it: a person's explicit choice is the stronger one (D53).
+  const posted = {
+    ...stored,
+    ...(stored.model === undefined && ready.model !== null ? { model: ready.model } : {}),
+    ...(ready.mermaid === null ? {} : { mermaid: ready.mermaid }),
+    idempotencyKey: ready.jobKey,
+  };
   try {
     return validateBrief(posted, vocabulary);
   } catch (error) {
@@ -3407,8 +3477,16 @@ function validDiagram(ready: Prepared, vocabulary: Vocabulary): ValidBrief {
 
 /** The stored video brief through `validateVideoBrief`, with the press's key. */
 function validVideo(ready: Prepared, vocabulary: Vocabulary): ValidVideoBrief {
+  const stored = ready.brief as DraftVideoBrief;
   try {
-    return validateVideoBrief({ ...(ready.brief as DraftVideoBrief), idempotencyKey: ready.jobKey }, vocabulary);
+    return validateVideoBrief(
+      {
+        ...stored,
+        ...(stored.model === undefined && ready.model !== null ? { model: ready.model } : {}),
+        idempotencyKey: ready.jobKey,
+      },
+      vocabulary,
+    );
   } catch (error) {
     if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
     throw error;
@@ -3872,6 +3950,25 @@ export function cleanName(raw: unknown): string | null {
   }
   const line = raw.replace(/\s+/g, " ").trim().slice(0, DRAFT_NAME_LIMIT).trim();
   return line === "" ? null : line;
+}
+
+/**
+ * A model as a create or a `PUT .../model` keeps it: a name `claude --model`
+ * takes, the same rule the settings panel's save applies, or null, posted as
+ * `null`, `""` or `"default"`, which clears the pick and hands the runner's
+ * own default back (D90).
+ */
+export function draftModel(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string") {
+    throw new JobRefused(400, `"model" is a model name, or null/"default" for the runner's default`, { field: "model" });
+  }
+  const name = raw.trim();
+  if (name === "" || name === "default") return null;
+  if (!isAgentModel(name)) {
+    throw new JobRefused(400, `"${name}" is not a model name the claude CLI takes`, { field: "model" });
+  }
+  return name;
 }
 
 /**

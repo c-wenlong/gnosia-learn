@@ -1,4 +1,5 @@
 import { DEFAULT_MODEL } from "./config";
+import { ratesFor } from "./cost";
 import {
   DEFAULT_PREFERENCE,
   readClaudeDefaults,
@@ -68,4 +69,24 @@ export async function resolveDiagramAgent(briefModel?: string | null): Promise<R
 export async function resolveVideoAgent(): Promise<ResolvedAgent> {
   const [stored, claude] = await Promise.all([readStoredPreference("studioVideoAgent"), readClaudeDefaults()]);
   return { stored, claude, ...(await resolveAgentSettings(stored ?? DEFAULT_PREFERENCE, claude)) };
+}
+
+/**
+ * The models a menu offers: every model the rate table prices, by the name
+ * `claude --model` takes. The settings panel and a conversation's picker read
+ * the same list, so the two cannot disagree about what can be picked (D90 of
+ * docs/STUDIO-CHAT-FIRST.md).
+ */
+const OFFERED_MODELS = [
+  { value: "fable", label: "Fable", id: "claude-fable-5-1" },
+  { value: "opus", label: "Opus", id: "claude-opus-5" },
+  { value: "sonnet", label: "Sonnet", id: "claude-sonnet-5" },
+  { value: "claude-fable-5-1", label: "Claude Fable 5.1", id: "claude-fable-5-1" },
+  { value: "claude-opus-5-5", label: "Claude Opus 5.5", id: "claude-opus-5-5" },
+  { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", id: "claude-sonnet-5-5" },
+] as const;
+
+/** What `GET /api/settings/agent` and `/api/health`'s agent block report as `models`. */
+export function offeredModels(): readonly { value: string; label: string; id: string }[] {
+  return OFFERED_MODELS.filter((model) => ratesFor(model.id) !== null);
 }
