@@ -155,12 +155,19 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
       return;
     }
     // The tutor route mirrors the key without moving Studio's pick; a
-    // provider just connected here is meant to run, so make it active now.
-    await setByokActive(newProvider);
+    // provider just connected here is meant to run, so make it active now —
+    // and a switch that failed is said rather than silently kept on the old
+    // provider.
+    const switched = await setByokActive(newProvider);
     const fresh = await getByokSettings();
     setSaving(false);
     if (!fresh.ok || !fresh.data.providers.some((entry) => entry.provider === newProvider)) {
       setError("Saved, but the studio runner did not take it — the tutor can use the key; Studio will when the runner is reachable.");
+      return;
+    }
+    if (!switched.ok || fresh.data.active !== newProvider) {
+      setError("Connected, but Studio chats still run on the previous provider — pick it again from the dropdown to switch.");
+      setConnected(fresh.data.providers);
       return;
     }
     setConnected(fresh.data.providers);
@@ -182,13 +189,21 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     // a rotated key and new tier picks land together — through the tutor's
     // route, which mirrors it into `byok.json`, keeping both stores on one key.
     if (apiKey.trim() !== "") {
-      const keyResult = await sendJson<{ ok?: boolean; error?: string }>("POST", "/api/learner/provider-key", {
+      const keyResult = await sendJson<{ ok?: boolean; error?: string; byok?: boolean }>("POST", "/api/learner/provider-key", {
         provider: byokToTutor(provider),
         key: apiKey.trim(),
       });
       if (keyResult === null || keyResult.status !== 200 || keyResult.data.ok !== true) {
         setSaving(false);
         setError(keyResult?.data.error ?? (keyResult === null ? "the server did not answer" : `key not saved (HTTP ${keyResult.status})`));
+        return;
+      }
+      // The tutor write succeeded but the runner did not take its mirror:
+      // say the key Studio still uses is the old one, and do not save tiers
+      // against a provider whose key just did not land.
+      if (keyResult.data.byok === false) {
+        setSaving(false);
+        setError("The key saved for the tutor, but the studio runner did not take it — Studio keeps the old key until the runner answers.");
         return;
       }
       setApiKey("");

@@ -59,13 +59,18 @@ export function ByokTiers({
   // account) and again on Try again after a refusal.
   const [listed, setListed] = useState<{ models: { value: string; label: string | null }[] } | { error: string } | null>(null);
   const asked = useRef<string | null>(null);
+  // Only the newest ask's answer is shown, so a slow earlier one cannot put
+  // an old key's list back over the current one.
+  const latest = useRef(0);
   const [retry, setRetry] = useState(0);
   const keyStamp = entry?.last4 ?? "";
   useEffect(() => {
     if (!visible || entry === null || asked.current === keyStamp) return;
     asked.current = keyStamp;
     setListed(null);
+    const seq = ++latest.current;
     void listByokModels(provider).then((result) => {
+      if (seq !== latest.current) return;
       if (result.ok) {
         setListed({ models: result.data.models });
       } else {
@@ -165,7 +170,7 @@ export function ByokTiers({
       {listed !== null && "error" in listed && (
         <p className="text-[12px] leading-4 text-text3">
           {listed.error}{" "}
-          <button type="button" className="underline underline-offset-2" onClick={() => setRetry((n) => n + 1)}>
+          <button type="button" className="underline underline-offset-2" onClick={() => { latest.current += 1; setRetry((n) => n + 1); }}>
             Try again
           </button>
         </p>
