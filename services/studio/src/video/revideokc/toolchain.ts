@@ -1,9 +1,9 @@
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { accessSync, constants, existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { REPO_ROOT } from "../../paths";
 import { scriptShells } from "../script-shells";
-import { discoverToolchain, programAt, toolchainProblems, type Program, type Toolchain } from "../toolchain";
+import { discoverToolchain, foreignLibs, programAt, toolchainProblems, type Program, type Toolchain } from "../toolchain";
 
 /**
  * What a revideokc job renders with on this machine (phase 2c of
@@ -47,6 +47,12 @@ export interface RevideokcTools {
   nodeVersion: string;
   /** The owner's own revideokc data root, from the environment or the checkout's `.env`: the clean-room rule denies it. Null when it is the checkout. */
   ownerHome: string | null;
+  /**
+   * Library roots this half's binaries resolve against beyond the standard
+   * directories, measured with `ldd` (`../toolchain.ts` `foreignLibs`): on
+   * Linux they are bound into every profile, on macOS the list stays empty.
+   */
+  libs: string[];
 }
 
 /** A revideokc job's toolchain: manimkc's discovery, and revideokc's own half. */
@@ -68,10 +74,42 @@ export function revideokcRoot(): string {
 }
 
 /**
+ * A small wrapper script's real binary: Debian's `/usr/bin/chromium` is a
+ * shell script that execs the one in `/usr/lib/chromium`, and the install
+ * directory is what a profile binds, so the script's own folder (`/usr/bin`,
+ * every program in it) must never be the bundle.
+ */
+function scriptTarget(script: string): string | null {
+  try {
+    const stat = statSync(script);
+    if (!stat.isFile() || stat.size > 16384) return null;
+    const body = readFileSync(script, "utf8");
+    if (!body.startsWith("#!")) return null;
+    for (const match of body.matchAll(/\/(?:[\w.+-]+\/)+[\w.+-]+/g)) {
+      const target = resolveOr(match[0]);
+      if (target === null || target === script) continue;
+      const found = statSync(target);
+      if (found.isFile() && found.size > 16384) {
+        accessSync(target, constants.X_OK);
+        return target;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** The directories a resolved binary may sit in without being its installation: binding one would name every program on the box. */
+const BIN_DIRS = new Set(["/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin", "/snap/bin"]);
+
+/**
  * The Chrome revideokc's own CLI would use (`tools/cli/lib/node.mjs`
  * `chromePath`): `REVIDEOKC_CHROME`, else the system Chrome, else Chromium.
  * The bundle is the `.app` the binary sits in, whose helper apps Chrome
  * starts for its renderer and GPU processes; on Linux, the binary's folder.
+ * A binary that resolves into a bare `bin` directory (a wrapper script, an
+ * unsplit install) keeps itself as the bundle rather than the directory.
  */
 export function findChrome(env: NodeJS.ProcessEnv = process.env): { binary: string; bundle: string } | null {
   const candidates = [
@@ -79,14 +117,19 @@ export function findChrome(env: NodeJS.ProcessEnv = process.env): { binary: stri
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
     "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
     "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
   ].filter((candidate): candidate is string => candidate !== undefined && candidate !== "");
   for (const candidate of candidates) {
     if (!existsSync(candidate)) continue;
-    const binary = resolveOr(candidate);
-    if (binary === null) continue;
+    const resolved = resolveOr(candidate);
+    if (resolved === null) continue;
+    const binary = scriptTarget(resolved) ?? resolved;
     const app = /^(.*?\.app)\//.exec(binary)?.[1];
-    return { binary, bundle: app ?? path.dirname(binary) };
+    const dir = path.dirname(binary);
+    return { binary, bundle: app ?? (BIN_DIRS.has(dir) ? binary : dir) };
   }
   return null;
 }
@@ -132,7 +175,8 @@ function ownerDataRoot(root: string): string | null {
   return resolveOr(expanded) ?? path.resolve(expanded);
 }
 
-export function discoverRevideokc(): RevideokcTools {
+/** The synchronous half of the discovery; `libs` is `ldd` work, so only `discoverRevideokcToolchain` fills it. */
+export function discoverRevideokc(): Omit<RevideokcTools, "libs"> {
   const root = revideokcRoot();
   const nodeModules = resolveOr(path.join(root, "node_modules"));
   const venv = resolveOr(path.join(root, ".venv"));
@@ -154,8 +198,31 @@ export function discoverRevideokc(): RevideokcTools {
   };
 }
 
+/** The executable regular files in a directory — a package dir's shipped binaries — for `foreignLibs`. */
+function executablesIn(dir: string | null): string[] {
+  if (dir === null) return [];
+  try {
+    return readdirSync(dir)
+      .map((name) => path.join(dir!, name))
+      .filter((file) => {
+        try {
+          return statSync(file).isFile() && accessSync(file, constants.X_OK) === undefined;
+        } catch {
+          return false;
+        }
+      });
+  } catch {
+    return [];
+  }
+}
+
 export async function discoverRevideokcToolchain(): Promise<RevideokcToolchain> {
-  return { ...(await discoverToolchain()), revideokc: discoverRevideokc() };
+  const own = discoverRevideokc();
+  const libs =
+    process.platform === "linux"
+      ? await foreignLibs([own.chrome?.binary ?? null, ...executablesIn(own.ffmpegInstaller), ...executablesIn(own.ffprobeInstaller)])
+      : [];
+  return { ...(await discoverToolchain()), revideokc: { ...own, libs } };
 }
 
 /** A toolchain as a revideokc job sees it; throws when it was discovered without revideokc's half. */

@@ -358,7 +358,9 @@ describe("the video brief", () => {
 describe("the sandbox profiles", () => {
   const tools: Toolchain = {
     platform: "darwin",
+    sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
+    libs: [],
     manimkcRoot: "/opt/manimkc",
     manimkcDirs: { manim: "/opt/manimkc/manim", venv: "/opt/manimkc/.venv", venvTts: "/opt/manimkc/.venv-tts", tools: "/opt/manimkc/tools" },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },

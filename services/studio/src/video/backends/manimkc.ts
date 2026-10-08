@@ -6,6 +6,7 @@ import type { BackendJob, VideoBackend, VideoProfile } from "../backend";
 import { buildCheckout, resolvedPaths, scaffold } from "../checkout";
 import { safeHash, safeRead } from "../copy";
 import { runVideoDoctor } from "../doctor";
+import { prepareBwrap } from "../bwrap";
 import { sandboxedGateTools } from "../gate-tools";
 import { apiListing, manualText } from "../manual";
 import { buildVideoPrompt, buildVideoResumePrompt, buildVideoRetryPrompt, buildVideoRevisePrompt } from "../prompt";
@@ -54,10 +55,10 @@ export const manimkcBackend: VideoBackend = {
   async prepare(job) {
     await buildCheckout(job.tools, job.paths, job.voice);
     // Each profile built and written in turn, as the runner always did.
-    for (const kind of PROFILE_KINDS) {
-      const written = profile(job, kind);
-      await writeFile(written.file, written.text, "utf8");
-    }
+    const written = PROFILE_KINDS.map((kind) => profile(job, kind));
+    for (const each of written) await writeFile(each.file, each.text, "utf8");
+    // The skeleton every bwrap profile mounts: stubs for each destination.
+    if (job.tools.sandboxKind === "bwrap") await prepareBwrap(job.paths, written.map((each) => each.text));
     // matplotlib's font cache, built once by the doctor, so no job pays the
     // ten seconds a fresh MPLCONFIGDIR costs (measured).
     await cp(path.join(cacheDir(), "video-mpl"), job.paths.mpl, { recursive: true, verbatimSymlinks: true, force: false, errorOnExist: false }).catch(() => undefined);

@@ -15,7 +15,7 @@ and points there.
 | S2 | The database moves as a dump, never as an export. | `catalog export` is content only. The learner state (`event`, `mastery`, `review`, `progress`, `recap`), `content_revision`, the studio's `job`, `session` and `draft` rows, and the sealed `provider_key` are only in the dump. |
 | S3 | The blob store moves as files without its `.owner` marker, and the server's copy is claimed by its own database. | The `fs` store is content-addressed, so the bytes are the same on both machines and every key still resolves. Its `.owner` marker names the database by name, `pg_database` oid and port (`services/catalog/src/content/blob-owner.ts`), and a restored database has a new oid, so a copied marker would name a database that is not there and the root would refuse uploads and `--fix`. Left out of the copy, `blob audit --fix` or the first upload claims the root by writing a new one (`claimRoot` in that module); a plain audit only reads. |
 | S4 | `AUTH_SECRET` is the same on both machines. | The provider key saved in Settings is encrypted under a key derived from it ([BYOK.md](BYOK.md)). A different secret makes the restored row read as "re-enter this key". `OWNER_PASSWORD` can differ freely; it is checked, not used to encrypt anything. |
-| S5 | The studio runs diagram jobs on the homeserver and no video jobs. | Diagram jobs are bounded by the Claude Code permission file and the `PreToolUse` hook in `services/studio/src/diagram-guard.ts`, which run anywhere `claude` does. Video jobs run inside a Seatbelt profile through `/usr/bin/sandbox-exec`, and the runner refuses them on any other platform (`toolchainProblems` in `services/studio/src/video/toolchain.ts`, decision V4 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)). The Linux boundary, bubblewrap, is designed there and not measured, and there is no unsandboxed fallback. Videos stay a Mac job until someone builds and measures that profile. |
+| S5 | The studio runs diagram jobs on the homeserver and no video jobs. | Diagram jobs are bounded by the Claude Code permission file and the `PreToolUse` hook in `services/studio/src/diagram-guard.ts`, which run anywhere `claude` does. Video jobs run inside a Seatbelt profile on macOS and a bubblewrap one on Linux (`services/studio/src/video/bwrap.ts`, decision V4 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)), and the runner refuses them where the sandbox does not come up; there is no unsandboxed fallback. The bubblewrap side is written but not yet measured against the hostile-scene test, and Ubuntu 24.04's `kernel.apparmor_restrict_unprivileged_userns=1` refuses the user namespaces it needs until the packaged `/etc/apparmor.d/bwrap` profile is installed. Videos stay a Mac job until both are done on the server. |
 | S6 | `tailscale serve` in front of port 3000, tailnet only, no Funnel. | The owner's setup (2026-10-04): every served port on the machine is `tailscale serve` with tailnet-only access and an empty `AllowFunnel`. Serve terminates TLS with the machine's tailnet certificate, keeps the incoming `Host` (`r.Out.Host = r.In.Host` in `ipn/ipnlocal/serve.go`) and sets `X-Forwarded-Proto: https`, which is exactly what the app reads: the session cookie goes `Secure` on that header (`apps/web/src/app/api/auth/shared.ts`) and the same-origin check builds the origin from `Host` plus that header (`originFromHeaders` in `apps/web/src/lib/auth/core.ts`), so sign-in and every POST work with no app-side setting. The 600 ms per wrong password stays the only brake on `/api/auth/sign-in`, which is proportionate while the tailnet is the perimeter; turning Funnel on would need a per-IP rate limit in front first (see Open). Plain `http://<machine>:3000` inside the tailnet also works, since the cookie is `Secure` only over https. |
 | S7 | The nightly export runs on the homeserver too, under a systemd timer. | It is the readable copy of the content ([DEPLOYMENT.md](DEPLOYMENT.md#the-nightly-export)), and a database that diverges from the laptop's needs its own. The launchd wrapper's logic (pull, `npm ci` when the commit moved, export) ports as a shell script; only the scheduler changes. |
 
@@ -258,9 +258,10 @@ and points there.
     `ExecStart=/usr/bin/npm run studio`; it binds `127.0.0.1:7250` and
     the web app reaches it through its own route handler. Set
     `STUDIO_ENABLED=1` in `apps/web/.env.local` and restart `gnosia`.
-    `/studio/api/health` should report `video` off with the V4 reason and
-    `manual` fresh. Set `STUDIO_DAILY_USD` in the unit's `Environment=` if
-    the machine should have a spend cap.
+    `/studio/api/health` should report `video` off with the V4 reason (no
+    `bwrap`, or the kernel refusing its user namespaces) and `manual`
+    fresh. Set `STUDIO_DAILY_USD` in the unit's `Environment=` if the
+    machine should have a spend cap.
 
 13. The `/learn` and `/review` skills. They open with `npm run learn --
     status` against the database `services/catalog/.env` names, so a
@@ -326,10 +327,13 @@ and points there.
 
 ## Open
 
-- [ ] A Linux video sandbox. Bubblewrap, designed in
-      [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md) and never measured; the hostile-scene
-      test there is the bar. Until then the studio on Ubuntu refuses video
-      jobs by design (S5).
+- [ ] The Linux video sandbox, measured. Bubblewrap is implemented
+      (`services/studio/src/video/bwrap.ts`, the "What is not covered" list in
+      [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)); what is left is the hostile-scene
+      test on a Linux host, which first needs
+      `kernel.apparmor_restrict_unprivileged_userns` lifted for `bwrap` (the
+      packaged `/etc/apparmor.d/bwrap` profile) and the toolchain installed.
+      Until then the studio on Ubuntu refuses video jobs by design (S5).
 - [ ] Whether the homeserver should also be the laptop's database over the
       tailnet, so there is one history again. S1 says not for now; the
       change would be the compose port bound to the machine's Tailscale

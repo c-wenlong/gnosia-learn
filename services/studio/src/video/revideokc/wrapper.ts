@@ -41,6 +41,8 @@ import type { RevideokcToolchain } from "./toolchain";
 
 export interface RevideokcWrapperConfig {
   jobId: string;
+  /** Which sandbox `sandboxExec` is, so the body knows whether a profile file holds Seatbelt text or a bwrap argv. */
+  sandbox: "seatbelt" | "bwrap";
   sandboxExec: string;
   node: string;
   checkout: string;
@@ -69,11 +71,12 @@ export function revideokcWrapperConfig(input: {
   apiNames: string[];
 }): RevideokcWrapperConfig {
   const { tools, paths } = input;
-  if (tools.sandboxExec === null) throw new Error("the toolchain cannot run a wrapper");
+  if (tools.sandboxExec === null || tools.sandboxKind === null) throw new Error("the toolchain cannot run a wrapper");
   const own = revideokcPaths(paths);
   const envInput = { tools, paths, home: input.home, voice: input.voice, base: input.base };
   return {
     jobId: path.basename(paths.job),
+    sandbox: tools.sandboxKind,
     sandboxExec: tools.sandboxExec,
     node: tools.node,
     checkout: paths.checkout,
@@ -174,7 +177,12 @@ function sandboxed(step, profile, argv) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(CONFIG.sandboxExec, ["-f", CONFIG.profiles[profile], ...argv], {
+      // Seatbelt reads the profile file itself; a bwrap profile carries the argv.
+      const boxed =
+        CONFIG.sandbox === "bwrap"
+          ? [...JSON.parse(fs.readFileSync(CONFIG.profiles[profile], "utf8")).argv, ...argv]
+          : ["-f", CONFIG.profiles[profile], ...argv];
+      child = spawn(CONFIG.sandboxExec, boxed, {
         cwd: CONFIG.checkout,
         env: CONFIG.env[profile],
         stdio: ["ignore", "pipe", "pipe"],
@@ -304,7 +312,8 @@ main(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error)
 /** The program's text: the shebang, the compiled-in configuration, the body. */
 export function revideokcWrapperSource(node: string, config: RevideokcWrapperConfig): string {
   if (!/^[A-Za-z0-9/._-]+$/.test(node)) throw new Error("node's path cannot go on a shebang line");
-  return `#!/usr/bin/env -i ${node}\n// Written by the studio runner for revideokc job ${config.jobId}. Nothing may edit it.\nconst CONFIG = ${JSON.stringify(config, null, 1)};\n${REVIDEOKC_WRAPPER_BODY}`;
+  const shebang = process.platform === "linux" ? `#!/usr/bin/env -S -i ${node}` : `#!/usr/bin/env -i ${node}`;
+  return `${shebang}\n// Written by the studio runner for revideokc job ${config.jobId}. Nothing may edit it.\nconst CONFIG = ${JSON.stringify(config, null, 1)};\n${REVIDEOKC_WRAPPER_BODY}`;
 }
 
 /** Write `bin/video`, read-and-execute only. */

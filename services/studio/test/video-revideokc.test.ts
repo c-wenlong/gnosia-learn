@@ -61,7 +61,9 @@ const REVIDEOKC = "/Users/me/self-learn/tools/revideokc";
 function fixedTools(): RevideokcToolchain {
   return {
     platform: "darwin",
+    sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
+    libs: [],
     manimkcRoot: "/Users/me/self-learn/tools/manimkc",
     manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/self-learn/tools/manimkc/.venv-tts", tools: "/m/tools" },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },
@@ -88,6 +90,7 @@ function fixedTools(): RevideokcToolchain {
       splitBuild: true,
       nodeVersion: "22.23.1",
       ownerHome: "/Users/me/.self-learn/revideokc",
+      libs: [],
     },
   };
 }

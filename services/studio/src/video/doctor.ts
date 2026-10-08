@@ -9,6 +9,7 @@ import { buildCheckout, resolvedPaths } from "./checkout";
 import { runSandboxed } from "./exec";
 import { WORKED_HEADER, WORKED_NARRATED } from "./manual";
 import { commandPathProblem } from "./bash-guard";
+import { prepareBwrap } from "./bwrap";
 import { buildProfile, resolvedStudioHome } from "./sandbox";
 import { discoverToolchain, toolchainProblems, type Toolchain } from "./toolchain";
 import type { VideoPaths } from "./paths";
@@ -87,7 +88,10 @@ def attempt(name, fn):
     except Exception as e:
         out[name] = "blocked: " + type(e).__name__
 def read_home():
-    os.listdir(os.path.join(home, ".ssh")) if os.path.isdir(os.path.join(home, ".ssh")) else os.listdir(home)
+    # The owner's ssh keys by name: a skeleton rootfs lets a listdir of the
+    # home stub succeed on Linux (it shows only mount points), so the probe
+    # names the directory that would hold secrets.
+    os.listdir(os.path.join(home, ".ssh"))
 def read_claude():
     open(os.path.join(home, ".claude.json")).read(1)
 def write_home():
@@ -115,8 +119,13 @@ def list_var_folders():
     os.listdir(os.environ.get("DARWIN_USER_TEMP_DIR", "/private/var/folders"))
 def symlink_out():
     p = os.path.join(os.environ["MANIMKC_HOME"], "probe-link-%d" % os.getpid())
-    os.symlink("/etc/hosts", p)
-    os.remove(p)
+    # A namespace cannot refuse the link itself, so the boundary being
+    # probed is the target: a denied path resolves nowhere inside.
+    os.symlink(os.path.join(home, ".ssh", "config"), p)
+    try:
+        open(p).read(1)
+    finally:
+        os.remove(p)
 def list_brew_var():
     os.listdir("/opt/homebrew/var") if os.path.isdir("/opt/homebrew/var") else os.listdir("/usr/local/var")
 attempt("read home", read_home)
@@ -143,8 +152,14 @@ print(json.dumps(out))
  * suite's hostile-scene test is the proof, on a machine where each target
  * exists.
  */
-export function probeBlocked(report: Record<string, string>): { ok: boolean; allowed: string[] } {
-  const allowed = Object.entries(report).filter(([, verdict]) => !verdict.startsWith("blocked")).map(([name]) => name);
+export function probeBlocked(report: Record<string, string>, platform: NodeJS.Platform = process.platform): { ok: boolean; allowed: string[] } {
+  // A private netns cannot refuse a listen on an unallocated port the way a
+  // Seatbelt port list did; the boundary it keeps is that nothing can reach
+  // it, which the connect lines already probe.
+  const tolerated = platform === "linux" ? new Set(["listen on a port that is not the job's"]) : new Set<string>();
+  const allowed = Object.entries(report)
+    .filter(([name, verdict]) => !verdict.startsWith("blocked") && !tolerated.has(name))
+    .map(([name]) => name);
   return { ok: allowed.length === 0 && Object.keys(report).length > 0, allowed };
 }
 
@@ -160,9 +175,12 @@ export async function scratchJob(tools: Toolchain, directory: string, voice = "a
   const paths = await resolvedPaths("doctor", "doctor-fixture", directory);
   const home = realpathSync(process.env.HOME ?? "/");
   await buildCheckout(tools, paths, voice);
-  for (const [kind, file] of [["render", paths.renderProfile], ["narrate", paths.narrateProfile], ["gate", paths.gateProfile]] as const) {
-    await writeFile(file, buildProfile(kind, { tools, paths, home, studioHome: resolvedStudioHome() }), "utf8");
-  }
+  const written = ([["render", paths.renderProfile], ["narrate", paths.narrateProfile], ["gate", paths.gateProfile]] as const).map(([kind, file]) => ({
+    file,
+    text: buildProfile(kind, { tools, paths, home, studioHome: resolvedStudioHome() }),
+  }));
+  for (const each of written) await writeFile(each.file, each.text, "utf8");
+  if (tools.sandboxKind === "bwrap") await prepareBwrap(paths, written.map((each) => each.text));
   await mkdir(paths.candidate, { recursive: true });
   return { tools, paths, home };
 }
