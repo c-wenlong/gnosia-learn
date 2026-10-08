@@ -23,21 +23,42 @@ function safely<T>(run: () => T, fallback: T): T {
 /** The pick as last made this page load, for when storage cannot be read either. */
 let held: HarnessValue | null = null;
 
+/**
+ * The pick as a subscribed store: every `rememberHarness` notifies, so the
+ * picker in a pane and the composer's model row cannot disagree, and a
+ * storage event carries another tab's pick the same way.
+ */
+const listeners = new Set<() => void>();
+
+export function subscribeHarness(onChange: () => void): () => void {
+  listeners.add(onChange);
+  if (typeof window !== "undefined") window.addEventListener("storage", onChange);
+  return () => {
+    listeners.delete(onChange);
+    if (typeof window !== "undefined") window.removeEventListener("storage", onChange);
+  };
+}
+
 export function storedHarness(): HarnessValue {
-  // `undefined` marks a read that threw, distinct from a store that read back
-  // empty: another tab's reset to claude lands as the empty kind, and wins.
+  // Three cases, kept distinct: a read that threw is storage blocked outright
+  // (`undefined`); a read that came back a known value is shared truth, the
+  // latest write from any tab; null is "no write ever landed" — since claude
+  // is written rather than removed, an empty slot cannot be a reset, so the
+  // in-memory pick a failed write left still stands.
   const stored = safely(() => (typeof window === "undefined" ? undefined : window.localStorage.getItem(KEY)), undefined);
-  if (stored === undefined) return held ?? "claude";
-  return KNOWN.includes(stored ?? "") ? (stored as HarnessValue) : "claude";
+  if (stored !== undefined && stored !== null && KNOWN.includes(stored)) return stored as HarnessValue;
+  return held ?? "claude";
 }
 
 export function rememberHarness(harness: HarnessValue): void {
-  // Only a write that threw leaves a memory copy standing; one that landed is
-  // the store's to keep, so a reset elsewhere is not shadowed by it.
+  // Write "claude" rather than remove the key: a readable null then means
+  // only "this write failed", which is what the memory fallback is for. Only
+  // a write that threw leaves a copy standing; one that landed is the store's
+  // to keep, so a pick elsewhere is not shadowed by it.
   const wrote = safely(() => {
-    if (harness === "claude") window.localStorage.removeItem(KEY);
-    else window.localStorage.setItem(KEY, harness);
+    window.localStorage.setItem(KEY, harness);
     return true;
   }, false);
   held = wrote ? null : harness;
+  for (const listener of listeners) listener();
 }
