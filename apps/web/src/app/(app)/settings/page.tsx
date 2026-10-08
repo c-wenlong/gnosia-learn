@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { Providers } from "@/components/settings/Providers";
+import { ByokModelsCard } from "@/components/settings/ByokModelsCard";
 import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
 import { ShortcutsCard } from "@/components/settings/ShortcutsCard";
@@ -74,13 +75,14 @@ export default async function SettingsPage() {
           },
           { id: "profile", label: "Profile", glyph: "person", content: <ProfileSettings /> },
           {
-            id: "tutor",
-            label: "Tutor",
-            glyph: "chat",
+            id: "models",
+            label: "Models",
+            glyph: "sparkle",
             content: (
               <>
                 <TutorSettings settings={settings} providers={providers} chain={models.chain.length > 0} />
                 <Providers view={providersView(keys, models.chain, models.reachable)} />
+                <ByokModelsCard />
               </>
             ),
           },

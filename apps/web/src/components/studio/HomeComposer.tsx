@@ -10,7 +10,7 @@ import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { useStoredHarness } from "@/components/studio/HarnessPicker";
 import type { HarnessValue } from "@/lib/studio-harness";
-import { getByokSettings } from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED, getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -71,12 +71,22 @@ export function HomeComposer({
   const harness = useStoredHarness();
   const model = picks[harness] ?? "default";
   const setModel = (next: string) => setPicks((held) => ({ ...held, [harness]: next }));
-  // The model `byok.json` names, read when BYOK is the pick — fresher than
-  // health's, since Connect may have just written it.
-  const [byokModel, setByokModel] = useState<string | null>(null);
+  // The BYOK tiers the active provider configured (D94), read when BYOK is
+  // the pick — fresher than health's, since Connect may have just written it —
+  // and again whenever a BYOK write lands (`BYOK_SETTINGS_CHANGED`), so tiers
+  // set in the dialog or Settings are enabled at once.
+  const [byokTiers, setByokTiers] = useState<{ default?: string; lite?: string; max?: string } | null>(null);
   useEffect(() => {
     if (harness !== "byok") return;
-    void getByokSettings().then((result) => setByokModel(result.ok && result.data.configured ? result.data.model : null));
+    const read = async () => {
+      const result = await getByokSettings();
+      if (!result.ok || !result.data.configured) return;
+      const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
+      setByokTiers(entry?.models ?? null);
+    };
+    void read();
+    window.addEventListener(BYOK_SETTINGS_CHANGED, read);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, read);
   }, [harness]);
   const composer = useRef<MentionComposerHandle | null>(null);
 
@@ -92,7 +102,7 @@ export function HomeComposer({
   const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
   // The same list the settings panel's menus offer (`agent-settings.ts`),
   // with the default row saying what no pick means here: each part's own.
-  const modelMenu = useMemo(() => harnessModelOptions(harness, model, resolved), [harness, model, resolved]);
+  const modelMenu = useMemo(() => harnessModelOptions(harness, model, resolved, byokTiers), [harness, model, resolved, byokTiers]);
   const block = valueSendBlock(value, true);
   const [announcement, setAnnouncement] = useState("");
 
@@ -139,16 +149,10 @@ export function HomeComposer({
             <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
           )),
           // The model the conversation runs on (D90), picked once at the
-          // start — as tiers (D92): the picked harness's Lite/Default/Max,
-          // not a model list. On BYOK the turns take `byok.json`'s model,
-          // so the row says it and offers nothing.
-          harness === "byok" ? (
-            <span key="model" title="This conversation's turns run on the BYOK model. Draw jobs still run on Claude, on each kind's saved pick.">
-              Model {byokModel ?? "byok"}
-            </span>
-          ) : (
-            <FilterMenu key="model" label="Model" bare options={modelMenu} value={model} defaultValue="default" onChange={setModel} />
-          ),
+          // start — as tiers (D92): the picked harness's Lite/Default/Max.
+          // On BYOK the tiers are the active provider's configured models
+          // (D94); one left unconfigured shows greyed out, never pickable.
+          <FilterMenu key="model" label="Model" bare options={modelMenu} value={model} defaultValue="default" onChange={setModel} />,
         ]}
       />
       <p role="status" aria-live="polite" className="sr-only">
