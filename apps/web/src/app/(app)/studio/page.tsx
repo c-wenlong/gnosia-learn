@@ -315,7 +315,7 @@ export default async function StudioPage({
                     Talk an idea through, then make it a diagram or a video.
                   </p>
                 </div>
-                <HomeComposer path={path} video={videoState} models={agent.models} defaults={agent.defaults} resolved={agent.resolved} />
+                <HomeComposer path={path} video={videoState} resolved={agent.resolved} />
               </div>
             </section>
           )}
