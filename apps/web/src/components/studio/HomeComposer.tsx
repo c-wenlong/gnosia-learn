@@ -10,7 +10,7 @@ import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { useStoredHarness } from "@/components/studio/HarnessPicker";
 import type { HarnessValue } from "@/lib/studio-harness";
-import { getByokSettings } from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED, getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -72,15 +72,21 @@ export function HomeComposer({
   const model = picks[harness] ?? "default";
   const setModel = (next: string) => setPicks((held) => ({ ...held, [harness]: next }));
   // The BYOK tiers the active provider configured (D94), read when BYOK is
-  // the pick — fresher than health's, since Connect may have just written it.
+  // the pick — fresher than health's, since Connect may have just written it —
+  // and again whenever a BYOK write lands (`BYOK_SETTINGS_CHANGED`), so tiers
+  // set in the dialog or Settings are enabled at once.
   const [byokTiers, setByokTiers] = useState<{ default?: string; lite?: string; max?: string } | null>(null);
   useEffect(() => {
     if (harness !== "byok") return;
-    void getByokSettings().then((result) => {
+    const read = async () => {
+      const result = await getByokSettings();
       if (!result.ok || !result.data.configured) return;
       const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
-      if (entry !== undefined) setByokTiers(entry.models);
-    });
+      setByokTiers(entry?.models ?? null);
+    };
+    void read();
+    window.addEventListener(BYOK_SETTINGS_CHANGED, read);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, read);
   }, [harness]);
   const composer = useRef<MentionComposerHandle | null>(null);
 

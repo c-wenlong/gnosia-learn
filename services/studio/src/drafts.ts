@@ -3294,7 +3294,7 @@ export class Drafts {
     if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
     return this.write(id, async () => {
       const current = this.require(id);
-      const model = draftModel(rawModel, current.harness === "codex" ? "codex" : null);
+      const model = draftModel(rawModel, current.harness ?? null);
       if ((current.model ?? null) === model) return { record: current, changed: false };
       return { record: await this.save(id, { model }, { touch: false }), changed: true };
     });
@@ -4100,7 +4100,7 @@ export function cleanName(raw: unknown): string | null {
  * `null`, `""` or `"default"`, which clears the pick and hands the runner's
  * own default back (D90).
  */
-export function draftModel(raw: unknown, harness: "byok" | "codex" | null = null): string | null {
+export function draftModel(raw: unknown, harness: "claude" | "byok" | "codex" | null = null): string | null {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== "string") {
     throw new JobRefused(400, `"model" is a model name, or null/"default" for the runner's default`, { field: "model" });

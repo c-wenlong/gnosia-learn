@@ -203,26 +203,41 @@ export function checkByokProvider(raw: unknown): ByokProviderName {
 }
 
 /**
+ * The write queue: every save reads the file, changes it and replaces it, so
+ * two overlapping writes would lose one of them (and share a temp path).
+ * Serialize them all through this — each body runs its own load.
+ */
+let writing: Promise<unknown> = Promise.resolve();
+
+function queued<T>(work: () => Promise<T>): Promise<T> {
+  const next = writing.then(work);
+  writing = next.catch(() => undefined);
+  return next;
+}
+
+/**
  * `PUT /api/settings/byok`'s body: connect a provider — `{ provider, apiKey }`,
  * an optional `model` for its Default tier — and make it the one `byok`
  * spawns run on. An empty `apiKey` keeps the stored one when the provider is
  * already connected; a new provider's key is its own.
  */
-export async function saveByok(raw: unknown): Promise<ByokStatus> {
-  const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  const provider = checkByokProvider(input.provider);
-  const model = typeof input.model === "string" && input.model.trim() !== "" ? input.model.trim() : undefined;
-  const config = (await loadByok()) ?? { active: null, providers: {} };
-  let apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
-  const held = config.providers[provider];
-  if (apiKey === "") {
-    if (held === undefined) throw new JobRefused(400, `"apiKey" is the provider's key`, { field: "apiKey" });
-    apiKey = held.apiKey;
-  }
-  config.providers[provider] = { apiKey, models: { ...(held?.models ?? {}), ...(model !== undefined ? { default: model } : {}) } };
-  config.active = provider;
-  await persistByok(config);
-  return statusOf(config);
+export function saveByok(raw: unknown): Promise<ByokStatus> {
+  return queued(async () => {
+    const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const provider = checkByokProvider(input.provider);
+    const model = typeof input.model === "string" && input.model.trim() !== "" ? input.model.trim() : undefined;
+    const config = (await loadByok()) ?? { active: null, providers: {} };
+    let apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
+    const held = config.providers[provider];
+    if (apiKey === "") {
+      if (held === undefined) throw new JobRefused(400, `"apiKey" is the provider's key`, { field: "apiKey" });
+      apiKey = held.apiKey;
+    }
+    config.providers[provider] = { apiKey, models: { ...(held?.models ?? {}), ...(model !== undefined ? { default: model } : {}) } };
+    config.active = provider;
+    await persistByok(config);
+    return statusOf(config);
+  });
 }
 
 /**
@@ -230,34 +245,38 @@ export async function saveByok(raw: unknown): Promise<ByokStatus> {
  * `{ lite?, default?, max? }`, merged over what it has — a tier omitted keeps
  * its model, an empty string clears it.
  */
-export async function saveByokModels(raw: unknown): Promise<ByokStatus> {
-  const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  const provider = checkByokProvider(input.provider);
-  const modelsIn = typeof input.models === "object" && input.models !== null && !Array.isArray(input.models) ? (input.models as Record<string, unknown>) : {};
-  const config = await loadByok();
-  const held = config?.providers[provider];
-  if (held === undefined) throw new JobRefused(400, `provider "${provider}" is not connected`, { field: "provider" });
-  for (const tier of ["default", "lite", "max"] as const) {
-    const model = modelsIn[tier];
-    if (model === undefined) continue;
-    if (model === null || (typeof model === "string" && model.trim() === "")) delete held.models[tier];
-    else if (typeof model === "string") held.models[tier] = model.trim();
-  }
-  await persistByok(config!);
-  return statusOf(config);
+export function saveByokModels(raw: unknown): Promise<ByokStatus> {
+  return queued(async () => {
+    const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const provider = checkByokProvider(input.provider);
+    const modelsIn = typeof input.models === "object" && input.models !== null && !Array.isArray(input.models) ? (input.models as Record<string, unknown>) : {};
+    const config = await loadByok();
+    const held = config?.providers[provider];
+    if (held === undefined) throw new JobRefused(400, `provider "${provider}" is not connected`, { field: "provider" });
+    for (const tier of ["default", "lite", "max"] as const) {
+      const model = modelsIn[tier];
+      if (model === undefined) continue;
+      if (model === null || (typeof model === "string" && model.trim() === "")) delete held.models[tier];
+      else if (typeof model === "string") held.models[tier] = model.trim();
+    }
+    await persistByok(config!);
+    return statusOf(config);
+  });
 }
 
 /** `PUT /api/settings/byok/active`'s body: which connected provider a `byok` spawn runs on. */
-export async function setByokActive(raw: unknown): Promise<ByokStatus> {
-  const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  const provider = checkByokProvider(input.provider);
-  const config = await loadByok();
-  if (config === null || config.providers[provider] === undefined) {
-    throw new JobRefused(400, `provider "${provider}" is not connected`, { field: "provider" });
-  }
-  config.active = provider;
-  await persistByok(config);
-  return statusOf(config);
+export function setByokActive(raw: unknown): Promise<ByokStatus> {
+  return queued(async () => {
+    const input = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const provider = checkByokProvider(input.provider);
+    const config = await loadByok();
+    if (config === null || config.providers[provider] === undefined) {
+      throw new JobRefused(400, `provider "${provider}" is not connected`, { field: "provider" });
+    }
+    config.active = provider;
+    await persistByok(config);
+    return statusOf(config);
+  });
 }
 
 /**

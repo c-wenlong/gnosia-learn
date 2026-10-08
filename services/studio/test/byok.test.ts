@@ -143,6 +143,20 @@ describe("the byok.json store", () => {
     });
   });
 
+  it("serializes overlapping writes — a tier save and a provider switch both land", async () => {
+    await connect("openrouter", "anthropic/claude-sonnet-4.5");
+    await saveByok({ provider: "openai", apiKey: "sk-oai-2", model: "gpt-5.4" });
+    const [tiers, active] = await Promise.all([
+      saveByokModels({ provider: "openrouter", models: { lite: "m-lite" } }),
+      setByokActive({ provider: "openrouter" }),
+    ]);
+    expect(tiers.providers[0]!.models.lite).toBe("m-lite");
+    expect(active.active).toBe("openrouter");
+    const held = await loadByok();
+    expect(held?.active).toBe("openrouter");
+    expect(held?.providers.openrouter?.models.lite).toBe("m-lite");
+  });
+
   it("refuses a provider the table does not have, and a keyless first connect", async () => {
     await expect(saveByok({ provider: "anthropicx", apiKey: "k", model: "m" })).rejects.toThrow(JobRefused);
     // Inherited object members are not providers either.

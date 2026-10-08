@@ -149,12 +149,13 @@ export function HarnessPicker({ value, onPick }: { value?: string | null; onPick
           opener={() => wrap.current?.querySelector("button") ?? null}
           onClose={() => setByokOpen(false)}
           onConnect={() => {
-            // A key just stored is meant to be used: remembered at once, so
-            // the next conversation runs on it even when this one is already
-            // locked to the harness it started on.
+            // A provider just connected or chosen is meant to be used:
+            // remembered at once, and the picker's pick becomes `byok` —
+            // but the dialog stays open so the Lite/Default/Max tiers are
+            // right there to set before Done (a provider without a Default
+            // model cannot run yet).
             rememberHarness("byok");
             pick("byok");
-            setByokOpen(false);
           }}
         />
       )}

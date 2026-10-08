@@ -131,7 +131,12 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     const entry = connected?.find((held) => held.provider === next);
     setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
     const result = await setByokActive(next);
-    if (!result.ok) setError(result.refusal.error);
+    if (!result.ok) {
+      setError(result.refusal.error);
+      return;
+    }
+    // Picking a connected provider is picking the harness it runs on.
+    onConnected?.();
   }
 
   async function connect() {
@@ -148,6 +153,9 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     setAdding(false);
     setApiKey("");
     setTiers({ default: "", lite: "", max: "" });
+    // The provider is connected and active — the picker's pick becomes
+    // `byok`, but the dialog stays open for the tier models: a provider
+    // with no Default model still cannot run.
     onConnected?.();
   }
 
@@ -155,6 +163,17 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     if (selected === null) return;
     setSaving(true);
     setError(null);
+    // A typed key on a connected provider replaces the stored one first, so
+    // a rotated key and new tier picks land together.
+    if (apiKey.trim() !== "") {
+      const keyResult = await saveByokSettings({ provider, apiKey: apiKey.trim() });
+      if (!keyResult.ok) {
+        setSaving(false);
+        setError(keyResult.refusal.error);
+        return;
+      }
+      setApiKey("");
+    }
     const result = await saveByokModels(provider, {
       default: tiers.default.trim(),
       lite: tiers.lite.trim(),
@@ -210,38 +229,47 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
               placeholder="Select a provider"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={keyId} className={LABEL}>
-              API key
-            </label>
-            <div className="relative">
-              <Input
-                id={keyId}
-                type={show ? "text" : "password"}
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder="Enter your API key"
-                autoComplete="off"
-                spellCheck={false}
-                className="pr-11"
-              />
-              <IconButton
-                label="Show the API key"
-                pressed={show}
-                size="sm"
-                tone="muted"
-                inset
-                className="absolute top-1/2 right-2 -translate-y-1/2"
-                onClick={() => setShow((was) => !was)}
-              >
-                <Glyph name={show ? "eye" : "eyeOff"} size={17} />
-              </IconButton>
-            </div>
-          </div>
-          <Button className="self-start" disabled={saving || newProvider === "" || apiKey.trim() === ""} onClick={() => void connect()}>
-            {saving ? "Connecting…" : "Connect"}
-          </Button>
         </>
+      )}
+
+      {/* The key field sits under the provider for both flows: required when
+          adding, a replacement for a connected one (blank keeps the stored
+          key). Its tail names what is stored, never the key itself. */}
+      {(adding || selected !== null) && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={keyId} className={LABEL}>
+            API key
+          </label>
+          <div className="relative">
+            <Input
+              id={keyId}
+              type={show ? "text" : "password"}
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder={selected !== null ? `Leave blank to keep ··${selected.last4}` : "Enter your API key"}
+              autoComplete="off"
+              spellCheck={false}
+              className="pr-11"
+            />
+            <IconButton
+              label="Show the API key"
+              pressed={show}
+              size="sm"
+              tone="muted"
+              inset
+              className="absolute top-1/2 right-2 -translate-y-1/2"
+              onClick={() => setShow((was) => !was)}
+            >
+              <Glyph name={show ? "eye" : "eyeOff"} size={17} />
+            </IconButton>
+          </div>
+        </div>
+      )}
+
+      {adding && (
+        <Button className="self-start" disabled={saving || newProvider === "" || apiKey.trim() === ""} onClick={() => void connect()}>
+          {saving ? "Connecting…" : "Connect"}
+        </Button>
       )}
 
       {!adding && provider !== "" && (

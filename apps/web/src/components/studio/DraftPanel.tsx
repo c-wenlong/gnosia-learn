@@ -104,6 +104,7 @@ import {
   drawDraft,
   getDraft,
   getByokSettings,
+  BYOK_SETTINGS_CHANGED,
   openDraftEvents,
   readStudioHealth,
   refusalReason,
@@ -434,6 +435,13 @@ export function DraftPanel({
       }
     }
   }, [view?.harness]);
+  // A BYOK write from the dialog or Settings re-reads the tiers at once
+  // (D94), so a tier just configured is pickable without a health refresh.
+  useEffect(() => {
+    const on = () => void readHealth();
+    window.addEventListener(BYOK_SETTINGS_CHANGED, on);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, on);
+  }, [readHealth]);
   // Once on opening too: the page that drew the grid read health, and a
   // conversation opened in the browser (`PanelHost`) can be minutes
   // younger than that read.
