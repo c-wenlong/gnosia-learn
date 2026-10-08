@@ -191,6 +191,22 @@ describe("a codex conversation", () => {
     expect(path.join(draftTmpDir(record.id), "codex-home", "auth.json")).not.toBe(realHome);
   });
 
+  it("runs on the runner's OPENAI_API_KEY when there is no login file", async () => {
+    // The gate and the spawn agree: the key that passed `codexSignedIn` is
+    // the credential the process gets, sealed home or not.
+    const home = path.join(process.env.STUDIO_HOME!, "empty-codex-home");
+    await mkdir(home, { recursive: true });
+    process.env.CODEX_HOME = home;
+    await fake.script([{ text: "Key answer." }]);
+    const { record } = await drafts.create({ idempotencyKey: "k1", harness: "codex" });
+    await drafts.send(record.id, "hello");
+    await drafts.settled(record.id);
+    expect((await drafts.view(record.id)).transcript.at(-1)).toMatchObject({ role: "planner", text: "Key answer." });
+    const envs = await fake.envs();
+    expect(envs[0]!.openaiKey).toBe("sk-stray");
+    expect(envs[0]!.codexHome).toBe(path.join(draftTmpDir(record.id), "codex-home"));
+  });
+
   it("reports the harness's own error when the turn fails", async () => {
     await signIn();
     await fake.script([{ refused: "[API Error: 401 Missing Authentication header]" }]);

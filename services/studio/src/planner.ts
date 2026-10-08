@@ -709,7 +709,13 @@ export class PlannerRun {
             .filter((block) => block?.type === "text" && typeof block.text === "string")
             .map((block) => block!.text as string)
             .join("");
-          if (text !== "") assistantText = assistantText === "" ? text : `${assistantText}\n\n${text}`;
+          if (text !== "") {
+            assistantText = assistantText === "" ? text : `${assistantText}\n\n${text}`;
+            // Codex has no deltas — `item.completed` is the whole reply — so
+            // the live update goes out here instead; on claude and qwen this
+            // only repeats what the deltas already showed.
+            this.options.onDelta?.(assistantText);
+          }
           return;
         }
         if (event.type === "result") {

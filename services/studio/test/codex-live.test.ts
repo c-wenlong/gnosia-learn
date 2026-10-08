@@ -29,12 +29,12 @@ const LIVE = process.env.STUDIO_CODEX_LIVE === "1";
     }
     const tmp = await mkdtemp(path.join(tmpdir(), "codex-live-"));
     try {
-      const home = await sealCodexHome(tmp, process.env);
+      const sealed = await sealCodexHome(tmp, process.env);
       const systemFile = path.join(tmp, "planner-system.md");
       await writeFile(systemFile, "Answer briefly.", "utf8");
       const child = spawn("codex", codexPlannerArgv({ sessionId: "unused", resume: false, systemPromptFile: systemFile }), {
         cwd: tmp,
-        env: codexEnv(process.env, tmp, home),
+        env: codexEnv(process.env, tmp, sealed.home, { keepKey: !sealed.linked }),
         stdio: ["pipe", "pipe", "ignore"],
       });
       try {

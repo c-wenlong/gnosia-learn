@@ -2319,7 +2319,8 @@ export class Drafts {
       // login's `auth.json` as a symlink, `HOME` sealed beside it, and the
       // argv's `read-only`/`never`-approve config (`codexPlannerArgv`).
       await mkdir(draftTmpDir(id), { recursive: true });
-      env = codexEnv(process.env, draftTmpDir(id), await sealCodexHome(draftTmpDir(id), process.env));
+      const sealed = await sealCodexHome(draftTmpDir(id), process.env);
+      env = codexEnv(process.env, draftTmpDir(id), sealed.home, { keepKey: !sealed.linked });
     }
     const live = { turn, text: "" };
     this.live.set(id, live);
