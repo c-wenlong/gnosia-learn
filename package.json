@@ -16,6 +16,7 @@
   "//canvas": "A launcher rather than `node tools/tldrawkc/dist/cli/index.js`, so this script and the diagram indexer resolve TLDRAWKC_ROOT through one function in services/catalog/src/env.ts. Shell expansion cannot: it reads only the process environment, so a root set in services/catalog/.env would reach the indexer and not this, and it leaves a leading ~ literal. The launcher forwards every argument and exits with the child's code, so exit 3 for `inspect` still means lints remain.",
   "scripts": {
     "dev": "npm run dev --workspace @self-learn/web",
+    "dev:all": "npm run dev & npm run studio & wait",
     "build": "npm run build --workspace @self-learn/web",
     "start": "npm run start --workspace @self-learn/web",
     "lint": "eslint",
