@@ -30,8 +30,8 @@ export interface ProvidersView {
    * way a provider only the environment knows is not the owner's setup.
    */
   rows: ProviderRowView[];
-  /** The providers not listed yet, for Add provider, each with where its key is made. */
-  addable: { id: ProviderId; label: string; keyUrl?: string }[];
+  /** The providers not listed yet, for Add provider, each with where its key is made — `server` marks one the environment already keys, which connects without a personal key. */
+  addable: { id: ProviderId; label: string; keyUrl?: string; server?: boolean }[];
   /** The chain holds as many models as it may. */
   full: boolean;
 }
@@ -62,7 +62,12 @@ export function providersView(keys: ProvidersKeysInput, chain: readonly ChainEnt
     rows,
     addable: keys.rows
       .filter((row): row is ProviderKeyView & { id: ProviderId } => row.custom === undefined && !order.includes(row.id))
-      .map((row) => (row.keyUrl === undefined ? { id: row.id, label: row.label } : { id: row.id, label: row.label, keyUrl: row.keyUrl })),
+      .map((row) => {
+        const addable: ProvidersView["addable"][number] = { id: row.id, label: row.label };
+        if (row.keyUrl !== undefined) addable.keyUrl = row.keyUrl;
+        if (row.server) addable.server = true;
+        return addable;
+      }),
     full: chain.length >= TUTOR_MODEL_LIMITS.maxEntries,
   };
 }

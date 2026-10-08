@@ -146,7 +146,7 @@ export function Providers({ view }: { view: ProvidersView }) {
       )}
       {!view.chainReachable && (
         <Callout role="status" bordered>
-          Your models could not be read: the database is unreachable. The tutor is using the built-in defaults.
+          Your models could not be read: the database is unreachable. The tutor cannot call anything until they are back.
         </Callout>
       )}
       {/* The form is a dialog rather than an inline panel — a provider is a
@@ -238,6 +238,26 @@ function AddProvider({
   const form = usePresence(open, DIALOG_CLOSE_MS);
   const custom = provider === CUSTOM || addable.length === 0;
   const chosen = custom ? undefined : (addable.find((a) => a.id === provider) ?? addable[0]);
+  // A provider the environment already keys connects without a personal
+  // key: the ask is the first model, whose list the server key can fetch.
+  const serverKeyed = chosen?.server === true;
+  const [model, setModel] = useState("");
+  const [modelList, setModelList] = useState<{ value: string; label: string }[] | { error: string } | null>(null);
+  useEffect(() => {
+    if (!serverKeyed || modelList !== null || chosen === undefined) return;
+    let held = true;
+    void sendJson<Reply>("POST", "/api/learner/tutor-model/models", { provider: chosen.id }).then((reply) => {
+      if (!held) return;
+      setModelList(
+        reply !== null && reply.status === 200 && reply.data.ok === true && Array.isArray(reply.data.models)
+          ? reply.data.models.map((m) => ({ value: m.id, label: m.id }))
+          : { error: "the list could not be loaded" },
+      );
+    });
+    return () => {
+      held = false;
+    };
+  }, [serverKeyed, chosen, modelList]);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -246,20 +266,47 @@ function AddProvider({
     setSaving(true);
     onSaving(true);
     setError(null);
-    const reply = custom
-      ? await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key })
-      : await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen?.id, key });
-    setSaving(false);
-    onSaving(false);
-    if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
+    if (custom) {
+      const reply = await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key });
+      setSaving(false);
+      onSaving(false);
+      if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
+    } else {
+      // A typed key connects through the key route (which also mirrors BYOK);
+      // a model connects through the chain — either alone is an add.
+      if (key.trim() !== "") {
+        const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen?.id, key });
+        if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+          setSaving(false);
+          onSaving(false);
+          return setError(failure("added", reply));
+        }
+      }
+      const first = model.trim();
+      if (first !== "") {
+        const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", { provider: chosen?.id, model: first });
+        if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+          setSaving(false);
+          onSaving(false);
+          return setError(failure("added", reply));
+        }
+      }
+      setSaving(false);
+      onSaving(false);
+    }
     const label = custom ? name.trim() : (chosen?.label ?? "the provider");
     setName("");
     setUrl("");
+    setModel("");
     onAdded(label);
   };
 
   if (!form.mounted) return null;
-  const ready = draft.trim() !== "" && (!custom || (name.trim() !== "" && url.trim() !== ""));
+  const ready = custom
+    ? draft.trim() !== "" && name.trim() !== "" && url.trim() !== ""
+    : serverKeyed
+      ? draft.trim() !== "" || model.trim() !== ""
+      : draft.trim() !== "";
   // A save in flight is not dismissed: Escape, the backdrop and Close all
   // ask the same way, and the ask waits — a hid error is a silent failure.
   const askClose = () => {
@@ -316,10 +363,28 @@ function AddProvider({
           )}
         </FormRow>
       )}
+      {serverKeyed && (
+        <FormRow label="Model" hint="The provider's real list — leave the key blank and the server's is used.">
+          {({ id, describedBy }) => (
+            <Combobox
+              id={id}
+              label="Model"
+              value={model}
+              onChange={setModel}
+              options={Array.isArray(modelList) ? modelList : []}
+              placeholder="e.g. a model name"
+              autoComplete="off"
+              spellCheck={false}
+              describedBy={describedBy}
+            />
+          )}
+        </FormRow>
+      )}
       <FormRow
-        label="API key"
+        label={serverKeyed ? "API key (optional)" : "API key"}
         hint={
           <>
+            {serverKeyed ? "Leave blank and the server's key is used; enter yours to replace it. " : ""}
             Sent once and stored encrypted. Only its last four characters are shown again.
             {custom && " For a local server that needs no key, type any 16 characters."}
             {chosen?.keyUrl !== undefined && (
@@ -344,6 +409,7 @@ function AddProvider({
             spellCheck={false}
             value={draft}
             minLength={PROVIDER_KEY_LIMITS.minChars}
+            required={!serverKeyed && !custom}
             onChange={(e) => {
               setDraft(e.target.value);
               setError(null);
