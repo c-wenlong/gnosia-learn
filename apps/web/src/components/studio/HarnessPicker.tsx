@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { LABEL } from "@/components/ui/classes";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
+import { DialogHeader } from "@/components/ui/DialogHeader";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { Glyph } from "@/components/ui/Glyph";
@@ -73,17 +74,14 @@ export function HarnessPicker() {
 }
 
 /**
- * The BYOK configuration dialog, Manus's "Manus Flex" popup: the harness's
- * mark, its name with a Beta badge, a line on what a third-party model costs
- * in guarantees, a Provider menu, the key with a Show toggle, and Cancel and
- * Connect as a pair of equal buttons at the foot.
- *
- * Close comes last in the document, so `showModal()` puts the opening focus
- * on Provider, the first field; the row's absolute corner place is unchanged.
+ * The BYOK configuration dialog, Manus's "Manus Flex" popup: the name with a
+ * Beta badge in the kit header (its Close, as `DialogHeader.test.ts` asks of
+ * every kit `Dialog`), the harness's mark, a line on what a third-party model
+ * costs in guarantees, a Provider menu, the key with a Show toggle, and
+ * Cancel and Connect as a pair of equal buttons at the foot.
  */
 function ByokDialog({ closing, onClose, onConnect }: { closing: boolean; onClose: () => void; onConnect: () => void }) {
   const id = useId();
-  const titleId = `${id}-title`;
   const providerId = `${id}-provider`;
   const keyId = `${id}-key`;
   const [provider, setProvider] = useState("");
@@ -91,16 +89,21 @@ function ByokDialog({ closing, onClose, onConnect }: { closing: boolean; onClose
   const [show, setShow] = useState(false);
 
   return (
-    <Dialog labelledBy={titleId} onClose={onClose} closing={closing} size="compact" className="md:w-[480px]">
+    <Dialog label="BYOK" onClose={onClose} closing={closing} size="compact" className="md:w-[480px]">
+      <DialogHeader
+        title={
+          <span className="flex items-center gap-2">
+            BYOK
+            <Badge tone="accent">Beta</Badge>
+          </span>
+        }
+        onClose={onClose}
+      />
       <div className="relative flex flex-col gap-5 p-6 md:p-8">
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="grid size-14 place-items-center rounded-2xl border border-border bg-surface2 text-text2">
             <Glyph name="link" size={26} />
           </span>
-          <h2 id={titleId} className="flex items-center gap-2 text-[18px] leading-6 font-semibold">
-            BYOK
-            <Badge tone="accent">Beta</Badge>
-          </h2>
           <p className="max-w-[42ch] text-[13px] leading-5 text-text2">
             Run the agent with your own API key and models. Third-party model performance may vary and is not
             guaranteed.
@@ -158,10 +161,6 @@ function ByokDialog({ closing, onClose, onConnect }: { closing: boolean; onClose
             Connect
           </Button>
         </div>
-
-        <IconButton label="Close" size="md" tone="muted" inset className="absolute top-3 right-3" onClick={onClose}>
-          <Glyph name="close" size={16} />
-        </IconButton>
       </div>
     </Dialog>
   );
