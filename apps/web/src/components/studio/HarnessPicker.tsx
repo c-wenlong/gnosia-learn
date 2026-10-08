@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -55,40 +55,48 @@ export function HarnessPicker() {
   const [byokOpen, setByokOpen] = useState(false);
   const byok = usePresence(byokOpen, DIALOG_CLOSE_MS);
   const name = HARNESSES.find((option) => option.value === harness)?.label ?? harness;
+  // The dialog's `opener`: the BYOK row opens it through `afterClose`, which
+  // skips putting focus back on the menu, and the row it was on is gone by
+  // then. The trigger is the control that outlives both, so it is the one
+  // close gives focus to.
+  const wrap = useRef<HTMLSpanElement | null>(null);
 
   return (
     <>
-      <Menu
-        label={`Harness: ${name}`}
-        menuLabel="Harness"
-        align="start"
-        minWidth={320}
-        trigger={
-          <>
-            <span className="min-w-0 truncate">{name}</span>
-            <Glyph name="chevron" className="size-3.5" />
-          </>
-        }
-        triggerClassName={chipClasses({ className: "max-w-full pr-2.5" })}
-      >
-        {HARNESSES.map((option) => (
-          <MenuItem
-            key={option.value}
-            checked={harness === option.value}
-            // BYOK opens its configuration rather than picking: `afterClose`
-            // hands it the focus once the menu has shut, and it can open it
-            // again while it is already the harness, since a menu row's press
-            // fires every time.
-            onSelect={option.value === "byok" ? undefined : () => setHarness(option.value)}
-            afterClose={option.value === "byok" ? () => setByokOpen(true) : undefined}
-          >
-            <HarnessRow option={option} />
-          </MenuItem>
-        ))}
-      </Menu>
+      <span ref={wrap} className="contents">
+        <Menu
+          label={`Harness: ${name}`}
+          menuLabel="Harness"
+          align="start"
+          minWidth={320}
+          trigger={
+            <>
+              <span className="min-w-0 truncate">{name}</span>
+              <Glyph name="chevron" className="size-3.5" />
+            </>
+          }
+          triggerClassName={chipClasses({ className: "max-w-full pr-2.5" })}
+        >
+          {HARNESSES.map((option) => (
+            <MenuItem
+              key={option.value}
+              checked={harness === option.value}
+              // BYOK opens its configuration rather than picking: `afterClose`
+              // hands it the focus once the menu has shut, and it can open it
+              // again while it is already the harness, since a menu row's press
+              // fires every time.
+              onSelect={option.value === "byok" ? undefined : () => setHarness(option.value)}
+              afterClose={option.value === "byok" ? () => setByokOpen(true) : undefined}
+            >
+              <HarnessRow option={option} />
+            </MenuItem>
+          ))}
+        </Menu>
+      </span>
       {byok.mounted && (
         <ByokDialog
           closing={byok.leaving}
+          opener={() => wrap.current?.querySelector("button") ?? null}
           onClose={() => setByokOpen(false)}
           onConnect={() => {
             setHarness("byok");
@@ -117,7 +125,18 @@ function HarnessRow({ option }: { option: Harness }) {
  * costs in guarantees, a Provider menu, the key with a Show toggle, and
  * Cancel and Connect as a pair of equal buttons at the foot.
  */
-function ByokDialog({ closing, onClose, onConnect }: { closing: boolean; onClose: () => void; onConnect: () => void }) {
+function ByokDialog({
+  closing,
+  opener,
+  onClose,
+  onConnect,
+}: {
+  closing: boolean;
+  /** The picker's trigger, which closing hands focus back to. */
+  opener: () => HTMLElement | null;
+  onClose: () => void;
+  onConnect: () => void;
+}) {
   const id = useId();
   const providerId = `${id}-provider`;
   const keyId = `${id}-key`;
@@ -126,7 +145,7 @@ function ByokDialog({ closing, onClose, onConnect }: { closing: boolean; onClose
   const [show, setShow] = useState(false);
 
   return (
-    <Dialog label="BYOK" onClose={onClose} closing={closing} size="compact" className="md:w-[480px]">
+    <Dialog label="BYOK" onClose={onClose} closing={closing} size="compact" className="md:w-[480px]" opener={opener}>
       <DialogHeader
         title={
           <span className="flex items-center gap-2">
