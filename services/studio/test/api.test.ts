@@ -761,6 +761,10 @@ describe("the agent's model and effort", () => {
       model: { requested: "default", passed: "claude-fable-5-1", source: "claude-settings" },
       effort: { requested: "default", passed: "high", source: "claude-settings" },
     });
+    // What a conversation's "Runner default" resolves to per part (D90):
+    // turns on `plannerModel()`, jobs on each kind's row above.
+    expect(body.agent.planner).toBe("sonnet");
+    expect((body.agent.models as unknown[]).length).toBeGreaterThan(0);
   });
 });
 

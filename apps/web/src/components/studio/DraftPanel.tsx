@@ -119,7 +119,7 @@ import {
   type TranscriptEntry,
   type VideoAvailability,
 } from "@/lib/studio-drafts";
-import { modelOptions, runnerSettings, MODEL_CHOICES, type AgentDefaults, type ModelChoice } from "@/lib/studio-agent-settings";
+import { modelOptions, runnerDefaultOption, runnerSettings, MODEL_CHOICES, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { switchedTool, type VideoToolOption } from "@/lib/studio-brief-video";
 import {
   arrivingPurpose,
@@ -236,7 +236,7 @@ export function DraftPanel({
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
   const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
   /** The picker's list and the Claude Code defaults, from health's `agent` (D90). */
-  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null }>({ models: null, defaults: null });
+  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null }>({ models: null, defaults: null, resolved: null });
   /** The pick sent to the runner and not yet seen in the record. */
   const [modelPick, setModelPick] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -683,7 +683,9 @@ export function DraftPanel({
   /* ---------------------------------------------------------------- */
 
   // The chip shows the pick at once; the record's own value lands on the
-  // state event's reload, and the render below clears the stand-in.
+  // state event's reload. The render below clears the stand-in as soon as
+  // the record shows it, and `pickModel` clears it when its request settles,
+  // so a record set elsewhere never leaves a stale pick standing in.
   const shownModel = modelPick ?? view?.model ?? "default";
   if (modelPick !== null && (view?.model ?? "default") === modelPick) {
     setModelPick(null);
@@ -694,9 +696,12 @@ export function DraftPanel({
     setModelError(null);
     const result = await setDraftModel(draftId, next === "default" ? null : next);
     if (!result.ok) {
-      setModelPick(null);
       setModelError(`The model could not be set: ${result.refusal.error}`);
     }
+    // Settled: the record's own value takes over on the next reload, whatever
+    // it now is, so a pick that never matched it does not stand in forever.
+    // A pick made since is newer; this request may not clear it.
+    setModelPick((held) => (held === next ? null : held));
   }
 
   // Arriving from Extend, from Talk it through on a failed job, or from a
@@ -1111,7 +1116,7 @@ export function DraftPanel({
           <FilterMenu
             label="Model"
             bare
-            options={modelOptions(shownModel, agentMenu.defaults, agentMenu.models ?? MODEL_CHOICES)}
+            options={modelOptions(shownModel, agentMenu.defaults, agentMenu.models ?? MODEL_CHOICES, null, runnerDefaultOption(agentMenu.resolved))}
             value={shownModel}
             defaultValue="default"
             busy={modelPick !== null}

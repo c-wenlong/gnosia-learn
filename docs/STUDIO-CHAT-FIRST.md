@@ -1614,12 +1614,19 @@ the next planner spawn (`--model` on the argv) and to the brief a press
 posts: Draw stamps it onto the job's brief when the brief names none of its
 own, so a person's explicit `model` on a posted brief still wins (D53), and
 the stored brief the card shows stays clean of it. A pick made while a turn
-is in flight does not restart that turn; it is the next spawn's. The offered
-list is `offeredModels()` in `agent-settings.ts`, the one list the settings
-table, `/api/settings/agent` and `/api/health`'s `agent.models` all report,
-so a stale web build falls back to its own copy and never a different one.
-Only the Claude Code harness has a model to pass; other runners keep this
-inert until one exists.
+is in flight does not restart that turn; it is the next spawn's. Each spawn
+records the model it ran on its `studio-turn` marker, so a recovery after a
+mid-turn pick change prices the interrupted turn by the model that ran it,
+not the pick as it stands. The picker's "default" row is "Runner default":
+with no pick, turns run on `plannerModel()` and each job on its kind's saved
+setting, so it cannot borrow the settings menus' "Claude Code default"
+label; its detail names the resolved model per surface, from `agent.planner`
+and each kind's `passed` in health's `agent` block. The offered list is
+`offeredModels()` in `agent-settings.ts`, the one list the settings table,
+`/api/settings/agent` and `/api/health`'s `agent.models` all report, so a
+stale web build falls back to its own copy and never a different one. Only
+the Claude Code harness has a model to pass; other runners keep this inert
+until one exists.
 
 **Why:** the model is a choice a person makes per piece of work ("draft this
 hard one on Opus"), not a site policy; the panel's row stays the default a

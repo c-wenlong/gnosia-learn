@@ -21,7 +21,7 @@ import {
   type MentionValue,
 } from "@/components/ui/mention-text";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
-import { modelOptions, MODEL_CHOICES, type AgentDefaults, type ModelChoice } from "@/lib/studio-agent-settings";
+import { modelOptions, runnerDefaultOption, MODEL_CHOICES, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { DRAFT_KINDS, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 
 type Value = MentionValue<DraftKind>;
@@ -53,6 +53,7 @@ export function HomeComposer({
   video,
   models = null,
   defaults = null,
+  resolved = null,
 }: {
   path: string;
   video: VideoAvailability | null;
@@ -60,11 +61,13 @@ export function HomeComposer({
   models?: ModelChoice[] | null;
   /** What "Claude Code default" resolves to, for the menu's first row. */
   defaults?: AgentDefaults | null;
+  /** What each part of a conversation runs on with no pick (health's `agent`): turns, video, diagram. */
+  resolved?: RunnerResolved | null;
 }) {
   const { start, busy, error } = useStartDraft(path);
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   // The picker's pick (D90): sent on `POST /api/drafts`, so the whole
-  // conversation — its turns and the jobs they make — runs on it.
+  // conversation, its turns and the jobs they make, runs on it.
   const [model, setModel] = useState("default");
   const composer = useRef<MentionComposerHandle | null>(null);
 
@@ -78,8 +81,9 @@ export function HomeComposer({
   // from its record, and a tag it cannot take comes back into its composer
   // with the reason.
   const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
-  // The same list the settings panel's menus offer (`agent-settings.ts`).
-  const modelMenu = useMemo(() => modelOptions(model, defaults, models ?? MODEL_CHOICES), [model, defaults, models]);
+  // The same list the settings panel's menus offer (`agent-settings.ts`),
+  // with the default row saying what no pick means here: each part's own.
+  const modelMenu = useMemo(() => modelOptions(model, defaults, models ?? MODEL_CHOICES, null, runnerDefaultOption(resolved)), [model, defaults, models, resolved]);
   const block = valueSendBlock(value, true);
   const [announcement, setAnnouncement] = useState("");
 

@@ -481,6 +481,8 @@ interface TurnMarker {
   turn: number;
   at: string;
   retry?: boolean;
+  /** The model this spawn passed to the CLI (D90): what a recovery prices by, not the record's pick now. */
+  model?: string;
 }
 
 let writeCounter = 0;
@@ -822,7 +824,7 @@ export class Drafts {
     for (const record of this.records.values()) {
       if (record.inFlight === null) continue;
       const turn = record.inFlight;
-      const { lines, startedAt, spawns } = await this.linesOfTurn(record.id, turn.turn);
+      const { lines, startedAt, spawns, model: spawnModel } = await this.linesOfTurn(record.id, turn.turn);
       const events = await this.events(record.id);
       const replies = events.filter((event) => event.type === "reply" && event.turn === turn.turn);
       // The runner died after the last spawn's reply was written: nothing is
@@ -839,7 +841,9 @@ export class Drafts {
       // so a crash between the two leaves an answered turn whose cost is still
       // to be counted, from the same stream lines, exactly once.
       const counted = record.spend.some((entry) => entry.startedAt === startedAt);
-      const cost = costFromLog(lines.join("\n"), record.model ?? plannerModel());
+      // The spawn's own model, not the pick as it stands now: a model chosen
+      // mid-turn does not reprice the turn that was already running (D90).
+      const cost = costFromLog(lines.join("\n"), spawnModel ?? record.model ?? plannerModel());
       const spend: TurnSpend = {
         turn: turn.turn,
         startedAt: startedAt ?? turn.startedAt,
@@ -892,11 +896,12 @@ export class Drafts {
   private async linesOfTurn(
     id: string,
     turn: number,
-  ): Promise<{ lines: string[]; startedAt: string | null; spawns: number }> {
+  ): Promise<{ lines: string[]; startedAt: string | null; spawns: number; model: string | null }> {
     const body = await readFile(draftSessionLogPath(id), "utf8").catch(() => "");
     const lines = body.split("\n").filter((line) => line.trim() !== "");
     let start = -1;
     let startedAt: string | null = null;
+    let model: string | null = null;
     let spawns = 0;
     for (let i = 0; i < lines.length; i += 1) {
       const marker = safeJson(lines[i]!);
@@ -904,9 +909,10 @@ export class Drafts {
         start = i;
         spawns += 1;
         startedAt = typeof marker.at === "string" ? marker.at : null;
+        model = typeof marker.model === "string" ? marker.model : null;
       }
     }
-    return { lines: start === -1 ? [] : lines.slice(start + 1), startedAt, spawns };
+    return { lines: start === -1 ? [] : lines.slice(start + 1), startedAt, spawns, model };
   }
 
   /* ------------------------------------------------------------------ */
@@ -2191,10 +2197,10 @@ export class Drafts {
     // that began between two spawns of one turn must not start a paid one.
     if (record.state === "abandoned" || this.draining) return null;
     const startedAt = new Date().toISOString();
-    const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, ...(retry ? { retry: true } : {}) };
-    let logChain: Promise<void> = appendFile(draftSessionLogPath(id), `${JSON.stringify(marker)}\n`, "utf8");
     // The conversation's own pick (D90), else the runner's `STUDIO_PLANNER_MODEL`.
     const model = record.model ?? plannerModel();
+    const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, model, ...(retry ? { retry: true } : {}) };
+    let logChain: Promise<void> = appendFile(draftSessionLogPath(id), `${JSON.stringify(marker)}\n`, "utf8");
     const meter = new JobCostMeter(model);
     const systemPrompt = await readFile(plannerSystemPath(id), "utf8").catch(() => null);
     if (systemPrompt === null) {

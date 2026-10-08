@@ -68,15 +68,33 @@ export { modelName } from "@/lib/model-name";
  * answer or sent something else, and the page falls back to health's
  * `agent.defaults` and `MODEL_CHOICES`.
  */
-export function runnerSettings(raw: unknown): { models: ModelChoice[] | null; defaults: AgentDefaults | null } {
-  if (typeof raw !== "object" || raw === null) return { models: null, defaults: null };
-  const body = raw as { models?: unknown; defaults?: unknown };
+export function runnerSettings(raw: unknown): { models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null } {
+  if (typeof raw !== "object" || raw === null) return { models: null, defaults: null, resolved: null };
+  const body = raw as { models?: unknown; defaults?: unknown; planner?: unknown } & Record<string, unknown>;
   const models = Array.isArray(body.models)
     ? body.models
         .filter((model): model is ModelChoice => typeof model === "object" && model !== null && typeof (model as { value?: unknown }).value === "string" && typeof (model as { label?: unknown }).label === "string")
         .map((model) => (typeof model.id === "string" && model.id !== "" ? { value: model.value, label: model.label, id: model.id } : { value: model.value, label: model.label }))
     : [];
-  return { models: models.length > 0 ? models : null, defaults: agentDefaults({ defaults: body.defaults }) };
+  const defaults = agentDefaults({ defaults: body.defaults });
+  const passed = (kind: string): string | null => {
+    const row = body[kind];
+    const model = typeof row === "object" && row !== null ? (row as { model?: unknown }).model : undefined;
+    const value = typeof model === "object" && model !== null ? (model as { passed?: unknown }).passed : undefined;
+    return typeof value === "string" && value !== "" ? value : null;
+  };
+  const resolved: RunnerResolved = {
+    turns: typeof body.planner === "string" && body.planner !== "" ? body.planner : null,
+    // A `passed` of null means no `--model` flag, so the job runs on what
+    // "Claude Code default" resolves to, which `defaults` names when known.
+    video: passed("video") ?? defaults?.model ?? null,
+    diagram: passed("diagram") ?? defaults?.model ?? null,
+  };
+  return {
+    models: models.length > 0 ? models : null,
+    defaults,
+    resolved: resolved.turns === null && resolved.video === null && resolved.diagram === null ? null : resolved,
+  };
 }
 
 const EFFORT_LABELS: Record<(typeof AGENT_EFFORTS)[number], string> = {
@@ -101,6 +119,16 @@ export function storedAgent(kind: AgentKind, raw: unknown): StudioAgentPreferenc
 export interface AgentDefaults {
   model: string | null;
   effort: string | null;
+}
+
+/** The model each part of a conversation defaults to, as health's `agent` block resolved it (D90). */
+export interface RunnerResolved {
+  /** `agent.planner`: the model turns run on. */
+  turns: string | null;
+  /** `agent.video.model.passed`, or the Claude default it falls to. */
+  video: string | null;
+  /** `agent.diagram.model.passed`, likewise. */
+  diagram: string | null;
 }
 
 /**
@@ -164,6 +192,7 @@ export function modelOptions(
   defaults: AgentDefaults | null,
   models: readonly ModelChoice[] = MODEL_CHOICES,
   currentPriced: boolean | null = null,
+  defaultOption?: FilterOption<string>,
 ): FilterOption<string>[] {
   const byModel = new Map<string, FilterOption<string>>();
   const idOf = new Map<string, string>();
@@ -189,7 +218,7 @@ export function modelOptions(
   const options: FilterOption<string>[] = [
     // The resolved default without its context window: the menu is narrow,
     // and "Claude Code default (Fable 5.1, 1M context)" was cut off there.
-    { value: "default", label: defaultLabel(defaults?.model, defaults !== null, (model) => modelName(model, { context: false })) },
+    defaultOption ?? { value: "default", label: defaultLabel(defaults?.model, defaults !== null, (model) => modelName(model, { context: false })) },
     ...offered,
   ];
   // A stored model outside the menu's list is offered only when it is a model
@@ -200,6 +229,26 @@ export function modelOptions(
     options.push({ value: current, label: currentPriced === false ? `${name} (no price)` : name });
   }
   return options;
+}
+
+/**
+ * The conversation picker's "default" row (D90), passed to `modelOptions` as
+ * its `defaultOption`. Clearing a conversation's pick sends no model, so
+ * turns run on the planner's model and each job on its kind's saved setting:
+ * the settings menus' "Claude Code default" names a different thing, and the
+ * detail names what each part uses, as far as the runner said.
+ */
+export function runnerDefaultOption(resolved: RunnerResolved | null): FilterOption<string> {
+  const parts = [
+    resolved?.turns ? `turns: ${modelName(resolved.turns)}` : null,
+    resolved?.video ? `video: ${modelName(resolved.video)}` : null,
+    resolved?.diagram ? `diagram: ${modelName(resolved.diagram)}` : null,
+  ].filter((part): part is string => part !== null);
+  return {
+    value: "default",
+    label: "Runner default",
+    detail: parts.length > 0 ? parts.join(" · ") : "each part keeps its own setting",
+  };
 }
 
 export function effortLabel(effort: string): string {
