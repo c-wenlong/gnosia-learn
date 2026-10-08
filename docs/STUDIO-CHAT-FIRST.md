@@ -625,7 +625,7 @@ handler as every other route. Every response carries a `note`.
 
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
-| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model?, harness? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution. *Since D91:* `harness` is the pane picker's pick, `"claude"`, `"byok"` or `"codex"`; `byok` without a stored key is `400 { reason: "byok-unconfigured" }`, `codex` without a login is `400 { reason: "codex-not-signed-in" }` |
+| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model?, harness? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution. *Since D91:* `harness` is the pane picker's pick, `"claude"`, `"byok"` or `"codex"`; `byok` without a stored key is `400 { reason: "byok-unconfigured" }`, `codex` without a login is `400 { reason: "codex-not-signed-in" }`. *Since D92:* `model` on a codex draft names a `codex -m` slug (the picker's tiers), not a claude name |
 | `GET` | `/api/drafts` | `?state=&limit=&nonEmpty=&q=`; `state` may be a comma list (`open,briefed`); `nonEmpty=1` leaves out drafts with no person message (`turns` 0), before the limit is applied; *since D87:* `q` (at most 200 characters, else 400) keeps the drafts whose name, title, first message or concept title contains it, in any case, also before the limit and the `before` cursor | `{ drafts: [{ draftId, kind, state, title, name, firstMessage, source, turns, costUsd, updated, jobId }] }`. `name` is the owner's name for the conversation (see `PUT .../name`), or null. `firstMessage` is the person's first message, whitespace collapsed and cut to 120 characters, or null before one |
 | `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, title, name, model, transcript: [{ seq, role, text, at, brief?, edit? }], brief, briefSeq, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown. `briefSeq` is the seq of the transcript entry carrying `brief` (a planner reply, or the `studio` note of an edit, which has `edit: true`), null with no brief |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, no length cap of its own; a body over 1 MB is refused with 413 | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
@@ -1702,6 +1702,23 @@ changes which agent does. Before the first turn is the honest line for moving
 it: a reply the earlier harness wrote is not a session the new one can resume
 without inventing continuity, and "start a new conversation" is the rule a
 person already knows from the model picker's resume semantics.
+
+### D92. The model pick is a tier the harness names
+
+**Verdict (2026-11-26):** the conversation's model menu is three rows per
+harness, the way Manus offers Manus 2.0 Max / 2.0 / 2.0 Lite rather than a
+model list — **Lite**, **Default** and **Max**, each a name the spawn takes,
+so the pick is still a `model` write and nothing about the record changes.
+On `claude` they are `sonnet` / the runner's own resolution / `fable`; on
+`codex`, `gpt-6-luna` / the login's model / `gpt-6-astra`, which `codex
+exec -m` takes on a start and on a `resume` alike (verified on 0.161.0). A
+name a stored pick holds that no tier covers is appended as itself. BYOK has
+no menu: its model is `byok.json`'s, and the row says so.
+
+**Why:** a person picks "how much agent" a task wants, not a model version;
+the version is the tier's to carry and the runner's to retarget later. Per
+harness because a name only means something on its own CLI — there is no
+cross-harness "opus".
 
 ## Later: other kinds of asset
 

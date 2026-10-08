@@ -5,6 +5,7 @@ import {
   agentDefaults,
   checkedAgent,
   effortOptions,
+  harnessModelOptions,
   modelName,
   modelOptions,
   rowPriced,
@@ -88,9 +89,9 @@ describe("GET /api/settings/agent (#207)", () => {
       models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }, { value: 3 }],
       defaults: { model: "claude-fable-5-1", effort: "high" },
     });
-    expect(read).toEqual({ models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }], defaults: { model: "claude-fable-5-1", effort: "high" }, resolved: { turns: null, video: "claude-fable-5-1", diagram: "claude-fable-5-1" } });
+    expect(read).toEqual({ models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }], defaults: { model: "claude-fable-5-1", effort: "high" }, resolved: { turns: null, video: "claude-fable-5-1", diagram: "claude-fable-5-1" }, byokModel: null });
     expect(modelOptions("default", read.defaults, read.models!).map((option) => option.value)).toEqual(["default", "opus"]);
-    expect(runnerSettings(null)).toEqual({ models: null, defaults: null, resolved: null });
+    expect(runnerSettings(null)).toEqual({ models: null, defaults: null, resolved: null, byokModel: null });
   });
 
   it("names the conversation picker's default by what each part runs (D90)", () => {
@@ -110,6 +111,15 @@ describe("GET /api/settings/agent (#207)", () => {
     const menu = modelOptions("default", read.defaults, read.models ?? MODEL_CHOICES, null, option);
     expect(menu[0]).toEqual(option);
     expect(runnerDefaultOption(null).detail).toBe("each part keeps its own setting");
+  });
+
+  it("offers each harness its own tiers (D92), and a stored name no tier covers", () => {
+    expect(harnessModelOptions("claude", "default", null).map((o) => o.value)).toEqual(["default", "sonnet", "fable"]);
+    expect(harnessModelOptions("codex", "default", null).map((o) => o.value)).toEqual(["default", "gpt-6-luna", "gpt-6-astra"]);
+    expect(harnessModelOptions("codex", "gpt-6.1-sol", null).map((o) => o.value)).toEqual(["default", "gpt-6-luna", "gpt-6-astra", "gpt-6.1-sol"]);
+    expect(harnessModelOptions("claude", "default", { turns: "sonnet", video: "claude-opus-5-5", diagram: "claude-fable-5-1" })[0]!.detail).toBe(
+      "turns: Sonnet · video: Opus 5.5 · diagram: Fable 5.1",
+    );
   });
 
   it("lists a model the runner offers under two names once, and says the default without its raw id", () => {
