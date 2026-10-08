@@ -46,7 +46,7 @@ const { Drafts } = await import("../src/drafts");
 const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
 const { saveByok, loadByok, byokStatus } = await import("../src/byok");
-const { draftDir, draftTmpDir, qwenSettingsPath } = await import("../src/paths");
+const { draftDir, draftTmpDir } = await import("../src/paths");
 
 type DraftsT = InstanceType<typeof Drafts>;
 
@@ -154,6 +154,12 @@ describe("a byok conversation", () => {
       expect(argv).toContain("--output-format");
       expect(argv).toContain("stream-json");
       expect(argv).toContain("--approval-mode");
+      expect(argv).toContain("default");
+      expect(argv).toContain("--safe-mode");
+      expect(argv).toContain("--exclude-tools");
+      // Every built-in the real binary lists, so the init's `tools` is [].
+      expect(argv).toContain("run_shell_command");
+      expect(argv).toContain("manage_memory");
       expect(argv).toContain("--max-session-turns");
       expect(argv).toContain("2");
       expect(argv).toContain("anthropic/claude-sonnet-4.5");
@@ -176,14 +182,9 @@ describe("a byok conversation", () => {
       // The shell's stray Anthropic key was stripped by the same seal as claude's.
       expect(env.anthropicKey).toBeNull();
     }
-
-    // The project seal: the file qwen reads from its working directory.
-    const settings = JSON.parse(await readFile(qwenSettingsPath(record.id), "utf8"));
-    expect(settings.mcpServers).toEqual({});
-    expect(settings.tools.exclude).toContain("run_shell_command");
   });
 
-  it("seals a turn whose session_start reports an MCP server", async () => {
+  it("seals a turn whose init reports an MCP server", async () => {
     await connect();
     await fake.script([{ text: "should not arrive", mcpServers: [{ name: "gmail" }] }]);
     const { record } = await drafts.create({ idempotencyKey: "k1", harness: "byok" });

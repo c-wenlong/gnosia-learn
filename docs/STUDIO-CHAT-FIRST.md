@@ -1652,16 +1652,16 @@ the prompt and headless both), `--output-format stream-json
 --include-partial-messages`, `--model` from the stored config rather than the
 conversation's pick (D90's names are claude's), `--max-session-turns` for
 `--max-turns`, `--approval-mode default` for `--permission-prompts none`, and
-`--session-id`/`--resume` on the same minted `plannerSessionId`. Where claude
-takes its seals as flags, qwen takes them as files and env: the draft's
-`.qwen/settings.json` (`qwenPlannerSettings`: no MCP servers, every built-in
-tool excluded), `QWEN_SYSTEM_MD` carrying the same `planner-system.md` file,
+`--session-id`/`--resume` on the same minted `plannerSessionId` (a UUID, as
+`qwen` requires). The seals stay flags and env, measured on 0.25.0:
+`--safe-mode` (no hooks, extensions, skills, MCP servers or context files —
+`--setting-sources ""` and `--strict-mcp-config`'s shape), `--exclude-tools`
+naming every built-in so the init event's `tools` is `[]`, `QWEN_SYSTEM_MD`
+carrying the same `planner-system.md` file (honored under `--safe-mode`),
 and the spawn's `HOME` pointed at the draft's `tmp` so the owner's own
 `~/.qwen` is never read and the session it writes is where the next turn's
-resume looks. The init event is `system/session_start`, and the seal check
-asks it for no MCP servers rather than no tools, since qwen's denied
-built-ins still list on it. Jobs a byok draft draws still run on `claude`:
-the job spawn's hooks and Bash guard are a claude surface.
+resume looks. Jobs a byok draft draws still run on `claude`: the job spawn's
+hooks and Bash guard are a claude surface.
 
 `byok.json` (`$STUDIO_HOME`, mode 0600) is what `PUT /api/settings/byok`
 writes and the picker's Connect dialog sends: `{ provider, apiKey, model }`,

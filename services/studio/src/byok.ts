@@ -24,7 +24,7 @@ import { JobRefused } from "./runner";
 
 /** What the BYOK dialog saves: a provider, its key, and the model to run. */
 export interface ByokConfig {
-  provider: string;
+  provider: keyof typeof BYOK_PROVIDERS;
   /** The key verbatim. Never leaves this file except into a spawn's env. */
   apiKey: string;
   /** The model `qwen --model` takes for that provider. */
@@ -59,7 +59,7 @@ interface ByokProvider {
  * documents for native-protocol endpoints; if a released CLI names them
  * differently, this table is the one place that changes.
  */
-export const BYOK_PROVIDERS: Record<string, ByokProvider> = {
+export const BYOK_PROVIDERS = {
   openai: { keyVar: "OPENAI_API_KEY", baseUrlVar: "OPENAI_BASE_URL", baseUrl: "https://api.openai.com/v1", modelVar: "OPENAI_MODEL" },
   openrouter: {
     keyVar: "OPENAI_API_KEY",
@@ -80,7 +80,7 @@ export const BYOK_PROVIDERS: Record<string, ByokProvider> = {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
     modelVar: "OPENAI_MODEL",
   },
-};
+} satisfies Record<string, ByokProvider>;
 
 /** Every env name a BYOK spawn may carry, so a spawn builds a sealed set rather than adding to the runner's own. */
 const BYOK_ENV_VARS = [
@@ -119,7 +119,7 @@ function checkByok(raw: unknown): ByokConfig {
     throw new JobRefused(400, `"byok" is an object: { provider, apiKey, model }`, { field: "byok" });
   }
   const input = raw as Record<string, unknown>;
-  const provider = typeof input.provider === "string" ? input.provider.trim().toLowerCase() : "";
+  const provider = (typeof input.provider === "string" ? input.provider.trim().toLowerCase() : "") as keyof typeof BYOK_PROVIDERS;
   if (!(provider in BYOK_PROVIDERS)) {
     throw new JobRefused(400, `"provider" is one of ${Object.keys(BYOK_PROVIDERS).join(", ")}`, { field: "provider" });
   }

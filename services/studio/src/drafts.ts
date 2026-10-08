@@ -36,7 +36,6 @@ import {
   draftTranscriptRef,
   plannerSettingsPath,
   plannerSystemPath,
-  qwenSettingsPath,
   studioHome,
   workPath,
 } from "./paths";
@@ -50,7 +49,6 @@ import {
   mermaidBlocks,
   plannerArgv,
   qwenPlannerArgv,
-  qwenPlannerSettings,
   PLANNER_BRIEF_FIELDS,
   PLANNER_VIDEO_FIELDS,
   plannerSettings,
@@ -2296,12 +2294,10 @@ export class Drafts {
         : qwenPlannerArgv({ sessionId: record.plannerSessionId, resume: record.sessionStarted, model });
     let env: NodeJS.ProcessEnv | undefined;
     if (byok !== null) {
-      // Qwen's seals are files and env, not flags: the draft's `.qwen` project
-      // settings deny every tool and name no MCP server, and `byokEnv` seals
-      // HOME so the owner's own qwen config and logins never reach the spawn.
-      await mkdir(path.dirname(qwenSettingsPath(id)), { recursive: true });
+      // Qwen's seals are flags and env, not a settings file: `--safe-mode` and
+      // `--exclude-tools` on its argv, and `byokEnv` seals HOME so the owner's
+      // own qwen config and logins never reach the spawn.
       await mkdir(draftTmpDir(id), { recursive: true });
-      await writeFile(qwenSettingsPath(id), `${JSON.stringify(qwenPlannerSettings(), null, 1)}\n`, "utf8");
       env = byokEnv(process.env, byok, draftTmpDir(id), systemPromptFile);
     }
     const live = { turn, text: "" };
@@ -2312,7 +2308,7 @@ export class Drafts {
       cwd: draftDir(id),
       auth: agentAuth(),
       tmp: draftTmpDir(id),
-      ...(byok === null ? {} : { bin: QWEN_BIN, env, initSubtype: "session_start", seal: "mcp" as const }),
+      ...(byok === null ? {} : { bin: QWEN_BIN, env }),
       onLine: (line) => {
         meter.observe(line);
         logChain = logChain.then(() => appendFile(draftSessionLogPath(id), `${line}\n`, "utf8")).catch(() => undefined);

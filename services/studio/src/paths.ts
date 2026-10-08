@@ -281,17 +281,6 @@ export function draftTmpDir(draftId: string): string {
   return path.join(draftDir(draftId), "tmp");
 }
 
-/**
- * The BYOK harness's project settings file, `<draft>/.qwen/settings.json`:
- * `qwen` has no `--settings` flag, but reads a project file from its working
- * directory, which a planner turn's cwd is. Written per spawn so nothing the
- * owner keeps under `~/.qwen` is asked for (the spawn's `HOME` is the draft's
- * `tmp`, which makes that moot besides).
- */
-export function qwenSettingsPath(draftId: string): string {
-  return path.join(draftDir(draftId), ".qwen", "settings.json");
-}
-
 /* -------------------------------------------------------------------------- */
 /* The tldraw manual (docs/STUDIO-CHAT-FIRST.md, "The drawing agent's prompt") */
 /* -------------------------------------------------------------------------- */

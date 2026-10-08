@@ -11,8 +11,8 @@ import path from "node:path";
  * Each spawn takes the next reply off `replies.json`, records its argv in
  * `argv.ndjson`, its stdin in `prompts.ndjson`, and the provider variables its
  * environment carried in `env.ndjson`, and prints the `stream-json` shape the
- * real CLI prints: a `system/session_start` event, `stream_event` deltas, an
- * `assistant` message with its usage, and a `result`.
+ * real CLI prints (measured on 0.25.0): a `system/init` event, `stream_event`
+ * deltas, an `assistant` message with its usage, and a `result`.
  */
 
 export interface FakeQwenReply {
@@ -20,7 +20,9 @@ export interface FakeQwenReply {
   text?: string;
   /** A refused first request: `is_error` with this as the result text, and no reply text. */
   refused?: string;
-  /** MCP servers the `session_start` event lists, to break the seal. */
+  /** What the init event lists, to break the seal. */
+  tools?: string[];
+  /** MCP servers the init event lists, to break the seal. */
   mcpServers?: unknown[];
 }
 
@@ -48,10 +50,10 @@ fs.writeFileSync(countFile, String(n + 1));
 const reply = replies[Math.min(n, replies.length - 1)] || {};
 const out = (event) => process.stdout.write(JSON.stringify(event) + "\n");
 const at = (flag) => argv.indexOf(flag) === -1 ? null : argv[argv.indexOf(flag) + 1];
-out({ type: "system", subtype: "session_start", session_id: at("--resume") ?? at("--session-id"), model: process.env.OPENAI_MODEL ?? null,
-  // The real CLI lists its built-in tools whatever the settings file denies;
-  // the seal on this harness is the MCP list, not this one.
-  tools: ["run_shell_command", "read_file"], mcp_servers: reply.mcpServers || [], permission_mode: "default" });
+// Under --exclude-tools <every name> the real init reports an empty tools
+// list, the seal the spawn is required to keep.
+out({ type: "system", subtype: "init", session_id: at("--resume") ?? at("--session-id"), model: process.env.OPENAI_MODEL ?? null,
+  tools: reply.tools || [], mcp_servers: reply.mcpServers || [], permission_mode: "default" });
 const text = reply.refused ? "" : (reply.text || "");
 const usage = { input_tokens: 10, output_tokens: 5 };
 const failed = !!reply.refused;
