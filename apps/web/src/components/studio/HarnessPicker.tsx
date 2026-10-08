@@ -64,11 +64,23 @@ function noop() {
   return () => undefined;
 }
 
+/** The remembered pick, for a surface that needs it as state (the home composer's model row). */
+export function useStoredHarness(): HarnessValue {
+  return useSyncExternalStore(noop, storedHarness, () => "claude");
+}
+
+/**
+ * The harness picker. Controlled when `value` is a draft's own `harness` —
+ * `onPick` then writes it through the record and the record decides what
+ * shows. Uncontrolled (no `value`) holds the remembered pick for the next
+ * conversation itself, and still reports each pick to `onPick`, for a parent
+ * that only needs to know.
+ */
 export function HarnessPicker({ value, onPick }: { value?: string | null; onPick?: (harness: HarnessValue) => void }) {
   const [byokOpen, setByokOpen] = useState(false);
   const byok = usePresence(byokOpen, DIALOG_CLOSE_MS);
   // Controlled when a conversation hands its pick in; the remembered one else.
-  const controlled = onPick !== undefined;
+  const controlled = value !== undefined && value !== null;
   // The remembered pick, read the way localStorage is read everywhere here:
   // `useSyncExternalStore`, which is "claude" on the server and the stored
   // value once hydrated. `held` is a pick made since, before it is written.
@@ -89,15 +101,16 @@ export function HarnessPicker({ value, onPick }: { value?: string | null; onPick
   }, [controlled, value]);
 
   function pick(next: HarnessValue) {
-    if (onPick !== undefined) {
-      // The record decides; the effect above remembers it once it stands. A
-      // refused pick ("codex" not wired, a spoken conversation locked) must
-      // not become the default new conversations start on.
-      onPick(next);
-    } else {
+    if (!controlled) {
       rememberHarness(next);
       setHeld(next);
     }
+    // A controlled pick is the draft's own: the record decides, and the
+    // effect above remembers it once it stands — a refused pick ("codex" not
+    // wired, a spoken conversation locked) must not become the default new
+    // conversations start on. Uncontrolled, the pick is remembered at once
+    // and `onPick` is only told.
+    onPick?.(next);
   }
 
   return (
