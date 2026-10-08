@@ -113,9 +113,21 @@ describe("the byok.json store", () => {
 
   it("refuses a provider the table does not have, an empty key, and an empty model", async () => {
     await expect(saveByok({ provider: "anthropicx", apiKey: "k", model: "m" })).rejects.toThrow(JobRefused);
+    // Inherited object members are not providers either.
+    await expect(saveByok({ provider: "constructor", apiKey: "k", model: "m" })).rejects.toThrow(/"provider" is one of/);
     await expect(saveByok({ provider: "openai", apiKey: "", model: "m" })).rejects.toThrow(JobRefused);
     await expect(saveByok({ provider: "openai", apiKey: "k", model: " " })).rejects.toThrow(JobRefused);
     await expect(loadByok()).resolves.toBeNull();
+  });
+
+  it("keeps the stored key on a save that names no new one, same provider only", async () => {
+    await connect("openrouter", "anthropic/claude-sonnet-4.5");
+    const again = await saveByok({ provider: "openrouter", apiKey: "", model: "anthropic/claude-opus-4.6" });
+    expect(again.last4).toBe("0001");
+    expect(again.model).toBe("anthropic/claude-opus-4.6");
+    expect((await loadByok())?.apiKey).toBe("sk-or-test-key-0001");
+    // A provider change needs its own key; the old one is never moved across.
+    await expect(saveByok({ provider: "openai", apiKey: "", model: "gpt-5.4" })).rejects.toThrow(/"apiKey"/);
   });
 });
 

@@ -239,7 +239,7 @@ export function DraftPanel({
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
   const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
   /** The picker's list and the Claude Code defaults, from health's `agent` (D90). */
-  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null }>({ models: null, defaults: null, resolved: null });
+  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null; byokModel: string | null }>({ models: null, defaults: null, resolved: null, byokModel: null });
   /** The pick sent to the runner and not yet seen in the record. */
   const [modelPick, setModelPick] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -1147,16 +1147,23 @@ export function DraftPanel({
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
           {/* The conversation's model (D90): every turn and job it makes runs
-              on this. Filled only when a pick stands. */}
-          <FilterMenu
-            label="Model"
-            bare
-            options={modelOptions(shownModel, agentMenu.defaults, agentMenu.models ?? MODEL_CHOICES, null, runnerDefaultOption(agentMenu.resolved))}
-            value={shownModel}
-            defaultValue="default"
-            busy={modelPick !== null}
-            onChange={(next) => void pickModel(next)}
-          />
+              on this — except on BYOK, whose turns run the provider's model
+              from `byok.json` (D91), so the claude pick list would lie. */}
+          {shownHarness === "byok" ? (
+            <span title="This conversation's turns run on the BYOK model. Draw jobs still run on Claude, on each kind's saved pick.">
+              Model {agentMenu.byokModel ?? "byok"}
+            </span>
+          ) : (
+            <FilterMenu
+              label="Model"
+              bare
+              options={modelOptions(shownModel, agentMenu.defaults, agentMenu.models ?? MODEL_CHOICES, null, runnerDefaultOption(agentMenu.resolved))}
+              value={shownModel}
+              defaultValue="default"
+              busy={modelPick !== null}
+              onChange={(next) => void pickModel(next)}
+            />
+          )}
           {/* The question and the press swap in place, each fading in. The
               problem card's Start over opens the question too. */}
           {(confirmStartOver || view.transcript.length > 0) && (

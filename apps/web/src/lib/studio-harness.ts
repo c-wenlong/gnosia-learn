@@ -1,27 +1,33 @@
 /**
  * The pane picker's last pick, kept in `localStorage`: a draft is made before
- * its pane is, so the harness it should run on has to outlive the picker that
- * named it. `POST /api/drafts` reads this when the caller does not name one.
- *
- * The values are the picker's rows: `"claude"` (the runner's default),
- * `"codex"` (a placeholder the runner refuses until it is wired) and `"byok"`
- * (Qwen Code on the key `byok.json` holds, set through the picker's dialog).
+ * its pane exists, and `POST /api/drafts`'s `harness` is read from here so the
+ * next conversation keeps the harness the last one ran on. `"claude"` is the
+ * default and is never written.
  */
 
-const KEY = "self-learn:studio-harness";
+const KEY = "studio:harness";
 
-export const HARNESS_VALUES = ["claude", "codex", "byok"] as const;
-export type HarnessValue = (typeof HARNESS_VALUES)[number];
+export type HarnessValue = "claude" | "codex" | "byok";
 
-/** The last pick, or `"claude"` when none was ever made or storage is gone. */
-export function storedHarness(): HarnessValue {
-  if (typeof window === "undefined") return "claude";
-  const held = window.localStorage.getItem(KEY);
-  return (HARNESS_VALUES as readonly string[]).includes(held ?? "") ? (held as HarnessValue) : "claude";
+const KNOWN: readonly string[] = ["claude", "codex", "byok"];
+
+/** A read or write that throws (a private window, blocked site data) is a convenience lost, never an error. */
+function safely<T>(run: () => T, fallback: T): T {
+  try {
+    return run();
+  } catch {
+    return fallback;
+  }
 }
 
-/** The picker's write: the next `POST /api/drafts` runs on it. */
+export function storedHarness(): HarnessValue {
+  const held = safely(() => (typeof window === "undefined" ? null : window.localStorage.getItem(KEY)), null);
+  return held !== null && KNOWN.includes(held) ? (held as HarnessValue) : "claude";
+}
+
 export function rememberHarness(harness: HarnessValue): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(KEY, harness);
+  safely(() => {
+    if (harness === "claude") window.localStorage.removeItem(KEY);
+    else window.localStorage.setItem(KEY, harness);
+  }, undefined);
 }

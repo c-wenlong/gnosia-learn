@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { agentEnv } from "./agent";
@@ -107,7 +107,9 @@ export async function loadByok(): Promise<ByokConfig | null> {
     return null;
   }
   try {
-    return checkByok(JSON.parse(raw));
+    const config = checkByok(JSON.parse(raw));
+    // A file edited by hand until its key is empty is no config at all.
+    return config.apiKey === "" ? null : config;
   } catch {
     return null;
   }
@@ -120,11 +122,11 @@ function checkByok(raw: unknown): ByokConfig {
   }
   const input = raw as Record<string, unknown>;
   const provider = (typeof input.provider === "string" ? input.provider.trim().toLowerCase() : "") as keyof typeof BYOK_PROVIDERS;
-  if (!(provider in BYOK_PROVIDERS)) {
+  // Own-property only: "constructor" and "__proto__" are inherited names, not providers.
+  if (!Object.hasOwn(BYOK_PROVIDERS, provider)) {
     throw new JobRefused(400, `"provider" is one of ${Object.keys(BYOK_PROVIDERS).join(", ")}`, { field: "provider" });
   }
   const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
-  if (apiKey === "") throw new JobRefused(400, `"apiKey" is the provider's key`, { field: "apiKey" });
   const model = typeof input.model === "string" ? input.model.trim() : "";
   if (model === "") throw new JobRefused(400, `"model" is the name qwen runs for that provider`, { field: "model" });
   return { provider, apiKey, model };
@@ -132,12 +134,30 @@ function checkByok(raw: unknown): ByokConfig {
 
 /**
  * `PUT /api/settings/byok`'s body, checked. The key is written mode 0600 under
- * the studio home, beside the drafts it will power.
+ * the studio home, beside the drafts it will power. An empty `apiKey` keeps
+ * the stored one when the provider did not change (Connect pressed again with
+ * the saved row standing); a new provider's key is its own.
  */
 export async function saveByok(raw: unknown): Promise<ByokStatus> {
   const config = checkByok(raw);
+  if (config.apiKey === "") {
+    const held = await loadByok();
+    if (held === null || held.provider !== config.provider) {
+      throw new JobRefused(400, `"apiKey" is the provider's key`, { field: "apiKey" });
+    }
+    config.apiKey = held.apiKey;
+  }
   await mkdir(studioHome(), { recursive: true });
-  await writeFile(byokPath(), `${JSON.stringify(config, null, 1)}\n`, { encoding: "utf8", mode: 0o600 });
+  // Temp file and rename, never a write into the live path: a turn or a GET
+  // mid-write must see the old key whole or the new one, never a half file.
+  const temporary = `${byokPath()}.${process.pid}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(config, null, 1)}\n`, { encoding: "utf8", mode: 0o600 });
+    await rename(temporary, byokPath());
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
   return statusOf(config);
 }
 

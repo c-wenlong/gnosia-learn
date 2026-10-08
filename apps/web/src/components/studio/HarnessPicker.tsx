@@ -192,23 +192,30 @@ function ByokDialog({
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [last4, setLast4] = useState<string | null>(null);
+  /** The stored key's tail and which provider it belongs to, never the key. */
+  const [held, setHeld] = useState<{ provider: string; last4: string } | null>(null);
   const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // What the runner already holds, so a reopen shows the configured provider
-  // and model. The key itself never comes back; a new one replaces it.
+  // and model. The key itself never comes back; Connect on the same provider
+  // with the field left blank keeps the stored one.
   useEffect(() => {
     void getByokSettings().then((result) => {
       if (!result.ok || !result.data.configured) return;
       setProvider(result.data.provider ?? "");
       setModel(result.data.model ?? "");
-      setLast4(result.data.last4);
+      if (result.data.provider !== null && result.data.last4 !== null) {
+        setHeld({ provider: result.data.provider, last4: result.data.last4 });
+      }
     });
   }, []);
 
   const modelHint = PROVIDERS.find((entry) => entry.value === provider)?.modelHint ?? "e.g. a model name";
+  // The stored key only stands in for its own provider; another provider's
+  // key is a different secret the dialog has to be given.
+  const keyHeld = held !== null && held.provider === provider;
 
   async function connect() {
     setSaving(true);
@@ -283,7 +290,11 @@ function ByokDialog({
               type={show ? "text" : "password"}
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder={last4 === null ? "Enter your API key" : `A key ending ${last4} is stored; enter a new one to replace it`}
+              placeholder={
+                held === null || !keyHeld
+                  ? "Enter your API key"
+                  : `A key ending ${held.last4} is stored; leave blank to keep it`
+              }
               autoComplete="off"
               spellCheck={false}
               className="pr-11"
@@ -314,7 +325,7 @@ function ByokDialog({
           </Button>
           <Button
             className="flex-1"
-            disabled={saving || provider === "" || model.trim() === "" || apiKey.trim() === ""}
+            disabled={saving || provider === "" || model.trim() === "" || (apiKey.trim() === "" && !keyHeld)}
             onClick={() => void connect()}
           >
             {saving ? "Connecting…" : "Connect"}
