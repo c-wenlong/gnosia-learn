@@ -13,6 +13,7 @@ import {
 } from "@self-learn/schema/shared";
 
 import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
+import { byokEnv, loadByok } from "./byok";
 import { canvas, doctor, doctorChecks, type InspectReport } from "./canvas";
 import { conceptShow, draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "./catalog";
 import {
@@ -20,6 +21,7 @@ import {
   PLANNER_CONCURRENCY,
   PLANNER_TURNS,
   plannerModel,
+  QWEN_BIN,
   studioOwner,
   VERB_TIMEOUT_MS,
 } from "./config";
@@ -46,6 +48,7 @@ import {
   isVideoBrief,
   mermaidBlocks,
   plannerArgv,
+  qwenPlannerArgv,
   PLANNER_BRIEF_FIELDS,
   PLANNER_VIDEO_FIELDS,
   plannerSettings,
@@ -225,6 +228,18 @@ export interface DraftRecord {
    * on it while it stands.
    */
   model?: string | null;
+  /**
+   * The harness the conversation's turns spawn on: absent or null is `claude`,
+   * the default; `"byok"` is the open harness (`qwen`, Qwen Code) on the key
+   * `byok.json` holds. Set at creation from the picker's pick and by
+   * `PUT .../harness` while no turn has run; a harness carries its own session
+   * store, so once a turn has run the pick is locked to it.
+   *
+   * Jobs this draft draws or makes still run on `claude`: the job spawn's
+   * hooks and Bash guard are a claude surface, and no open harness carries
+   * the same ones yet.
+   */
+  harness?: "byok" | null;
   /**
    * The concept a hand-off from the concept tutor opened the draft on (D65 of
    * docs/STUDIO-TUTOR-HANDOFF.md). Absent or null on every other draft. The
@@ -429,6 +444,8 @@ export interface DraftView {
   name: string | null;
   /** The model the conversation's picker holds (D90); null is the runner's default. */
   model: string | null;
+  /** The harness the conversation's turns run on: `"claude"` or `"byok"` (the pane picker's pick). */
+  harness: "claude" | "byok";
   transcript: TranscriptEntry[];
   /** The newest brief of any kind, kept one release for the web app from before (D61). */
   brief: AnyDraftBrief | null;
@@ -560,6 +577,8 @@ export interface CreateInput {
   tutor?: unknown;
   /** The model the new conversation's picker holds (D90); absent or `"default"` is the runner's own default. */
   model?: unknown;
+  /** The harness the conversation's turns run on; absent, `"default"` or `"claude"` is `claude`. */
+  harness?: unknown;
 }
 
 /** A concept as a draft records it: what the planner was told, less the note. */
@@ -1017,6 +1036,8 @@ export class Drafts {
       title: record.title,
       name: record.name ?? null,
       model: record.model ?? null,
+      // The picker's pick, spelled out so a pane never guesses the default.
+      harness: record.harness ?? "claude",
       transcript: transcriptOf(await this.events(id)),
       brief: record.brief,
       briefSeq: record.brief === null ? null : (record.briefSeq ?? null),
@@ -1329,6 +1350,13 @@ export class Drafts {
     const concept = parseConcept(input.concept);
     const tutor = parseTutor(input.tutor);
     const model = draftModel(input.model);
+    const harness = draftHarness(input.harness);
+    if (harness === "byok" && (await loadByok()) === null) {
+      throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider and an API key first", {
+        field: "harness",
+        reason: "byok-unconfigured",
+      });
+    }
     // Any `tutor` at all, an empty list included, names a hand-off: without
     // its concept it is a malformed one, never an ordinary draft.
     if (concept === null && input.tutor !== undefined && input.tutor !== null) {
@@ -1445,6 +1473,7 @@ export class Drafts {
       sourceRevision,
       title: null,
       model,
+      harness,
       ...(conceptRecord === null ? {} : { concept: conceptRecord, tutorTurns }),
       plannerSessionId: randomUUID(),
       sessionStarted: false,
@@ -2197,8 +2226,33 @@ export class Drafts {
     // that began between two spawns of one turn must not start a paid one.
     if (record.state === "abandoned" || this.draining) return null;
     const startedAt = new Date().toISOString();
+    // The draft's harness (the pane picker's pick): absent is `claude`. BYOK
+    // spawns `qwen` on the configured key; a draft made before the key was
+    // cleared reports the way a missing binary does.
+    const harness = record.harness ?? "claude";
+    const byok = harness === "byok" ? await loadByok() : null;
+    if (harness === "byok" && byok === null) {
+      return {
+        run: {
+          exitCode: null,
+          signal: null,
+          text: "",
+          result: null,
+          isError: true,
+          subtype: null,
+          turns: null,
+          init: null,
+          stopReason: null,
+          sealBroken: null,
+          spawnFailed: true,
+          stderr: "BYOK is not set up: the picker's BYOK row takes a provider and an API key first",
+        },
+        cost: { costUsd: null, costSource: null },
+      };
+    }
     // The conversation's own pick (D90), else the runner's `STUDIO_PLANNER_MODEL`.
-    const model = record.model ?? plannerModel();
+    // A BYOK turn runs the provider's model, which only `byok.json` names.
+    const model = byok !== null ? byok.model : (record.model ?? plannerModel());
     const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, model, ...(retry ? { retry: true } : {}) };
     let logChain: Promise<void> = appendFile(draftSessionLogPath(id), `${JSON.stringify(marker)}\n`, "utf8");
     const meter = new JobCostMeter(model);
@@ -2226,14 +2280,26 @@ export class Drafts {
       await atomicWrite(plannerSystemPath(id), rewritten);
       await writeFile(plannerSettingsPath(id), `${JSON.stringify(plannerSettings(), null, 1)}\n`, "utf8");
     }
-    const argv = plannerArgv({
-      // The file, never its text: nothing in the prompt is ever an argv element.
-      systemPromptFile: path.resolve(plannerSystemPath(id)),
-      settingsFile: plannerSettingsPath(id),
-      sessionId: record.plannerSessionId,
-      resume: record.sessionStarted,
-      model,
-    });
+    const systemPromptFile = path.resolve(plannerSystemPath(id));
+    const argv =
+      byok === null
+        ? plannerArgv({
+            // The file, never its text: nothing in the prompt is ever an argv element.
+            systemPromptFile,
+            settingsFile: plannerSettingsPath(id),
+            sessionId: record.plannerSessionId,
+            resume: record.sessionStarted,
+            model,
+          })
+        : qwenPlannerArgv({ sessionId: record.plannerSessionId, resume: record.sessionStarted, model });
+    let env: NodeJS.ProcessEnv | undefined;
+    if (byok !== null) {
+      // Qwen's seals are flags and env, not a settings file: `--safe-mode` and
+      // `--exclude-tools` on its argv, and `byokEnv` seals HOME so the owner's
+      // own qwen config and logins never reach the spawn.
+      await mkdir(draftTmpDir(id), { recursive: true });
+      env = byokEnv(process.env, byok, draftTmpDir(id), systemPromptFile);
+    }
     const live = { turn, text: "" };
     this.live.set(id, live);
     const run = startPlanner({
@@ -2242,6 +2308,7 @@ export class Drafts {
       cwd: draftDir(id),
       auth: agentAuth(),
       tmp: draftTmpDir(id),
+      ...(byok === null ? {} : { bin: QWEN_BIN, env }),
       onLine: (line) => {
         meter.observe(line);
         logChain = logChain.then(() => appendFile(draftSessionLogPath(id), `${line}\n`, "utf8")).catch(() => undefined);
@@ -3201,6 +3268,41 @@ export class Drafts {
     });
   }
 
+  /**
+   * `PUT /api/drafts/{id}/harness`: the pane picker's write. A harness carries
+   * its own session store, so the pick is for a conversation that has not
+   * spoken: after a turn, a new conversation is the way to change it. The
+   * record's `harness` names what the next spawn is given; it is only ever
+   * `"byok"` or absent, since `claude` is the default and `codex` is refused
+   * until it is wired.
+   */
+  async setHarness(id: string, rawHarness: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
+    this.require(id);
+    const harness = draftHarness(rawHarness);
+    if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
+    if (harness === "byok" && (await loadByok()) === null) {
+      throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider and an API key first", {
+        field: "harness",
+        reason: "byok-unconfigured",
+      });
+    }
+    return this.write(id, async () => {
+      const current = this.require(id);
+      if ((current.harness ?? null) === harness) return { record: current, changed: false };
+      if (current.turns > 0 || current.sessionStarted) {
+        throw new JobRefused(409, "a conversation keeps the harness it started on; a new one picks afresh", {
+          reason: "harness-locked",
+        });
+      }
+      // The session id is one harness's own: a changed pick mints a new one so
+      // no resume is ever handed to a CLI that did not write it.
+      return {
+        record: await this.save(id, { harness, plannerSessionId: randomUUID(), sessionStarted: false }, { touch: false }),
+        changed: true,
+      };
+    });
+  }
+
   /* ------------------------------------------------------------------ */
   /* Abandon and shutdown                                               */
   /* ------------------------------------------------------------------ */
@@ -3969,6 +4071,26 @@ export function draftModel(raw: unknown): string | null {
     throw new JobRefused(400, `"${name}" is not a model name the claude CLI takes`, { field: "model" });
   }
   return name;
+}
+
+/**
+ * A harness as a create or a `PUT .../harness` keeps it: `"byok"` for the open
+ * harness (`qwen`), or null — absent, `""`, `"default"` or `"claude"` — for
+ * `claude` itself. `"codex"` is a picker row only for now, refused outright;
+ * anything else never was a row.
+ */
+export function draftHarness(raw: unknown): "byok" | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string") {
+    throw new JobRefused(400, `"harness" is "claude", "byok", or null/"default" for the runner's default`, { field: "harness" });
+  }
+  const name = raw.trim().toLowerCase();
+  if (name === "" || name === "default" || name === "claude") return null;
+  if (name === "byok") return "byok";
+  if (name === "codex") {
+    throw new JobRefused(400, `"codex" is a placeholder row: it is not a harness this runner spawns yet`, { field: "harness" });
+  }
+  throw new JobRefused(400, `"harness" is "claude" or "byok"`, { field: "harness" });
 }
 
 /**

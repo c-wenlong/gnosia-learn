@@ -88,6 +88,9 @@ export const RUNNER_NAME = "studio-diagrams";
 /** The `claude` binary. Overridable the way manimkc's `MANIMKC_CLAUDE_BIN` is. */
 export const CLAUDE_BIN = process.env.STUDIO_CLAUDE_BIN?.trim() || "claude";
 
+/** The `qwen` binary (Qwen Code), the BYOK harness. Overridable like `STUDIO_CLAUDE_BIN`. */
+export const QWEN_BIN = process.env.STUDIO_QWEN_BIN?.trim() || "qwen";
+
 /**
  * Where the spawned agent's credential comes from: `login` or `env`.
  *

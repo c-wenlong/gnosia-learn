@@ -68,9 +68,9 @@ export { modelName } from "@/lib/model-name";
  * answer or sent something else, and the page falls back to health's
  * `agent.defaults` and `MODEL_CHOICES`.
  */
-export function runnerSettings(raw: unknown): { models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null } {
-  if (typeof raw !== "object" || raw === null) return { models: null, defaults: null, resolved: null };
-  const body = raw as { models?: unknown; defaults?: unknown; planner?: unknown } & Record<string, unknown>;
+export function runnerSettings(raw: unknown): { models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null; byokModel: string | null } {
+  if (typeof raw !== "object" || raw === null) return { models: null, defaults: null, resolved: null, byokModel: null };
+  const body = raw as { models?: unknown; defaults?: unknown; planner?: unknown; byok?: unknown } & Record<string, unknown>;
   const models = Array.isArray(body.models)
     ? body.models
         .filter((model): model is ModelChoice => typeof model === "object" && model !== null && typeof (model as { value?: unknown }).value === "string" && typeof (model as { label?: unknown }).label === "string")
@@ -90,10 +90,15 @@ export function runnerSettings(raw: unknown): { models: ModelChoice[] | null; de
     video: passed("video") ?? defaults?.model ?? null,
     diagram: passed("diagram") ?? defaults?.model ?? null,
   };
+  const byok = typeof body.byok === "object" && body.byok !== null ? (body.byok as { configured?: unknown; model?: unknown }) : null;
+  const byokModel = byok !== null && byok.configured === true && typeof byok.model === "string" && byok.model !== "" ? byok.model : null;
   return {
     models: models.length > 0 ? models : null,
     defaults,
     resolved: resolved.turns === null && resolved.video === null && resolved.diagram === null ? null : resolved,
+    // The model `byok.json` names, for a BYOK conversation's meta row — its
+    // turns run on it, not on the claude pick this menu otherwise offers.
+    byokModel,
   };
 }
 

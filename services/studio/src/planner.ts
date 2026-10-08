@@ -297,6 +297,47 @@ export function plannerSettings(): PlannerSettings {
   return { permissions: { defaultMode: "default", allow: [], deny: [...PLANNER_DENY] } };
 }
 
+/**
+ * Every built-in `qwen` 0.25 reports on its init event, given to
+ * `--exclude-tools` so the turn's `tools` list is empty — the seal `--tools
+ * ""` gives the claude spawn. A name a newer build does not have is a rule
+ * for nothing, never an opening.
+ */
+const QWEN_TOOL_DENY = [
+  "read_mcp_resource",
+  "read_file",
+  "write_file",
+  "replace",
+  "edit",
+  "zoom_image",
+  "grep_search",
+  "search_memory",
+  "manage_memory",
+  "glob",
+  "web_fetch",
+  "web_search",
+  "run_shell_command",
+  "tool_call",
+  "tool_search",
+  "list_agents",
+  "task_stop",
+  "send_message",
+  "agent",
+  "report_findings",
+  "skill",
+  "record_artifact",
+  "loop_wakeup",
+  "get_goal",
+  "update_goal",
+  "enter_worktree",
+  "exit_worktree",
+  "cron_create",
+  "cron_list",
+  "cron_delete",
+  "exit_plan_mode",
+  "enter_plan_mode",
+] as const;
+
 /** The MCP config the planner is given: none at all, with `--strict-mcp-config` so nothing else loads either. */
 export const EMPTY_MCP_CONFIG = '{"mcpServers":{}}';
 
@@ -311,6 +352,51 @@ export interface PlannerArgvInput {
   /** True once the session has a transcript: continue it rather than start it. */
   resume: boolean;
   model: string;
+}
+
+/**
+ * The BYOK spawn's argv, for `qwen` (Qwen Code), measured on 0.25.0:
+ *
+ * - No `-p`: a prompt on stdin is itself headless without a TTY, and nothing a
+ *   person typed is ever an argv element, the same rule `plannerArgv` keeps.
+ * - `--output-format stream-json --include-partial-messages`: qwen emits the
+ *   same `system`/`assistant`/`result` NDJSON Claude Code does — init, deltas,
+ *   usage included — so `PlannerRun`'s parser and the session log are
+ *   unchanged.
+ * - `--model`: the provider's own name for it, from `byok.json` — the draft's
+ *   `model` pick names claude models, so it is not consulted here.
+ * - `--max-session-turns`: per-run despite the name (the counter is the
+ *   process's own `limitedTurnCount`), the cap `plannerArgv` passes as
+ *   `--max-turns`.
+ * - `--approval-mode default`: headless has nobody to ask; anything that would
+ *   prompt resolves to a denial, which is `--permission-prompts none`'s shape.
+ * - `--safe-mode`: no hooks, extensions, skills, MCP servers or context files
+ *   — the seal `--setting-sources ""` and `--strict-mcp-config` give claude.
+ *   `QWEN_SYSTEM_MD` is still honored under it (measured).
+ * - `--exclude-tools` naming every built-in: the init event's `tools` comes
+ *   back `[]`, verified against the installed binary, so the C15 seal check
+ *   holds exactly as it does for claude.
+ * - `--session-id` on the first turn and `--resume` after: the id is minted
+ *   the same way (qwen requires a UUID, which it is), and qwen's sessions live
+ *   under the draft's `tmp/` (`HOME` in `byokEnv`), so a resume reaches the
+ *   transcript an earlier turn left.
+ */
+export function qwenPlannerArgv(input: { sessionId: string; resume: boolean; model: string }): string[] {
+  return [
+    "--output-format",
+    "stream-json",
+    "--include-partial-messages",
+    "--model",
+    input.model,
+    "--max-session-turns",
+    String(PLANNER_MAX_TURNS),
+    "--approval-mode",
+    "default",
+    "--safe-mode",
+    "--exclude-tools",
+    ...QWEN_TOOL_DENY,
+    ...(input.resume ? ["--resume", input.sessionId] : ["--session-id", input.sessionId]),
+  ];
 }
 
 /**
@@ -419,6 +505,10 @@ export interface PlannerOptions {
   cwd: string;
   auth: AgentAuth;
   tmp: string;
+  /** The binary spawned: `claude` unless the draft's harness is BYOK (`qwen`). */
+  bin?: string;
+  /** The spawn's environment; absent builds `agentEnv`, BYOK builds `byokEnv`. */
+  env?: NodeJS.ProcessEnv;
   /** Every raw stdout line, before anything else happens to it. */
   onLine: (line: string) => void;
   /** The reply so far, whole, each time a text delta arrives. */
@@ -509,7 +599,14 @@ export class PlannerRun {
           return;
         }
         if (event.type === "result") {
-          result = typeof event.result === "string" ? event.result : null;
+          // `qwen` reports an error's text on `error.message`, not `result`.
+          const failure = record(event.error);
+          result =
+            typeof event.result === "string"
+              ? event.result
+              : typeof failure?.message === "string"
+                ? failure.message
+                : null;
           isError = event.is_error === true;
           subtype = typeof event.subtype === "string" ? event.subtype : null;
           turns = typeof event.num_turns === "number" ? event.num_turns : null;
@@ -559,7 +656,7 @@ export class PlannerRun {
           stopReason: this.stopReason,
           sealBroken: null,
           spawnFailed: true,
-          stderr: `could not start ${CLAUDE_BIN}: ${error.message}`,
+          stderr: `could not start ${this.options.bin ?? CLAUDE_BIN}: ${error.message}`,
         });
       });
     });
@@ -591,11 +688,11 @@ export class PlannerRun {
  * are stripped so the CLI uses this machine's `claude` login.
  */
 export function startPlanner(options: PlannerOptions): PlannerRun {
-  const child = spawn(CLAUDE_BIN, options.argv, {
+  const child = spawn(options.bin ?? CLAUDE_BIN, options.argv, {
     cwd: options.cwd,
     detached: true,
     stdio: ["pipe", "pipe", "pipe"],
-    env: agentEnv(process.env, options.auth, options.tmp),
+    env: options.env ?? agentEnv(process.env, options.auth, options.tmp),
   });
   // The prompt as data on stdin, read by `-p` when no positional is given.
   // A process that dies before reading it raises EPIPE here, which the
