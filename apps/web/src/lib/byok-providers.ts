@@ -12,6 +12,7 @@ export const TUTOR_TO_BYOK: Partial<Record<ProviderName, string>> = {
   anthropic: "anthropic",
   gemini: "google",
   openrouter: "openrouter",
+  nvidia: "nvidia",
 };
 
 /** The tutors' provider id a BYOK preset answers to, or undefined for a name the tutor does not know. */
@@ -25,4 +26,5 @@ export const BYOK_PROVIDERS = [
   { value: "anthropic", label: "Anthropic", modelHint: "e.g. claude-sonnet-4-5" },
   { value: "google", label: "Google", modelHint: "e.g. gemini-3-pro" },
   { value: "openrouter", label: "OpenRouter", modelHint: "e.g. anthropic/claude-sonnet-4.5" },
+  { value: "nvidia", label: "NVIDIA NIM", modelHint: "e.g. qwen/qwen3-coder-480b-a35b-instruct" },
 ] as const;
