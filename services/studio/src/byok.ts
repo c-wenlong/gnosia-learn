@@ -48,6 +48,10 @@ interface ByokProvider {
   baseUrl: string;
   /** The env var the model goes into. */
   modelVar: string;
+  /** Where the provider's model list lives, for the dialog's combobox. */
+  modelsUrl: string;
+  /** How the key reaches that endpoint. */
+  auth: "bearer" | "x-api-key";
 }
 
 /**
@@ -60,18 +64,29 @@ interface ByokProvider {
  * differently, this table is the one place that changes.
  */
 export const BYOK_PROVIDERS = {
-  openai: { keyVar: "OPENAI_API_KEY", baseUrlVar: "OPENAI_BASE_URL", baseUrl: "https://api.openai.com/v1", modelVar: "OPENAI_MODEL" },
+  openai: {
+    keyVar: "OPENAI_API_KEY",
+    baseUrlVar: "OPENAI_BASE_URL",
+    baseUrl: "https://api.openai.com/v1",
+    modelVar: "OPENAI_MODEL",
+    modelsUrl: "https://api.openai.com/v1/models",
+    auth: "bearer",
+  },
   openrouter: {
     keyVar: "OPENAI_API_KEY",
     baseUrlVar: "OPENAI_BASE_URL",
     baseUrl: "https://openrouter.ai/api/v1",
     modelVar: "OPENAI_MODEL",
+    modelsUrl: "https://openrouter.ai/api/v1/models",
+    auth: "bearer",
   },
   anthropic: {
     keyVar: "ANTHROPIC_API_KEY",
     baseUrlVar: "ANTHROPIC_BASE_URL",
     baseUrl: "https://api.anthropic.com",
     modelVar: "ANTHROPIC_MODEL",
+    modelsUrl: "https://api.anthropic.com/v1/models",
+    auth: "x-api-key",
   },
   // Google's OpenAI-compatible endpoint, so the same three variables carry it.
   google: {
@@ -79,6 +94,8 @@ export const BYOK_PROVIDERS = {
     baseUrlVar: "OPENAI_BASE_URL",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
     modelVar: "OPENAI_MODEL",
+    modelsUrl: "https://generativelanguage.googleapis.com/v1beta/openai/models",
+    auth: "bearer",
   },
 } satisfies Record<string, ByokProvider>;
 
@@ -121,15 +138,20 @@ function checkByok(raw: unknown): ByokConfig {
     throw new JobRefused(400, `"byok" is an object: { provider, apiKey, model }`, { field: "byok" });
   }
   const input = raw as Record<string, unknown>;
-  const provider = (typeof input.provider === "string" ? input.provider.trim().toLowerCase() : "") as keyof typeof BYOK_PROVIDERS;
-  // Own-property only: "constructor" and "__proto__" are inherited names, not providers.
-  if (!Object.hasOwn(BYOK_PROVIDERS, provider)) {
-    throw new JobRefused(400, `"provider" is one of ${Object.keys(BYOK_PROVIDERS).join(", ")}`, { field: "provider" });
-  }
+  const provider = checkByokProvider(input.provider);
   const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
   const model = typeof input.model === "string" ? input.model.trim() : "";
   if (model === "") throw new JobRefused(400, `"model" is the name qwen runs for that provider`, { field: "model" });
   return { provider, apiKey, model };
+}
+
+/** A provider name checked against the table: own-property only, so `"constructor"` and `"__proto__"` are not providers. */
+export function checkByokProvider(raw: unknown): keyof typeof BYOK_PROVIDERS {
+  const provider = (typeof raw === "string" ? raw.trim().toLowerCase() : "") as keyof typeof BYOK_PROVIDERS;
+  if (!Object.hasOwn(BYOK_PROVIDERS, provider)) {
+    throw new JobRefused(400, `"provider" is one of ${Object.keys(BYOK_PROVIDERS).join(", ")}`, { field: "provider" });
+  }
+  return provider;
 }
 
 /**
@@ -169,6 +191,57 @@ function statusOf(config: ByokConfig | null): ByokStatus {
 /** `GET /api/settings/byok`: whether BYOK can run and on what, for the dialog and for health. */
 export async function byokStatus(): Promise<ByokStatus> {
   return statusOf(await loadByok());
+}
+
+/** One model the provider's `/models` returned: the id `qwen --model` takes and a display name when the provider sends one. */
+export interface ByokModel {
+  value: string;
+  label: string | null;
+}
+
+/**
+ * `POST /api/settings/byok/models`'s call: the provider's own `/models` on
+ * the dialog's key — typed, or the stored one when the field was left blank —
+ * normalized to `{ value, label }` rows for the combobox. Every preset's
+ * endpoint answers the OpenAI list shape (`{ data: [{ id, ... }] }`,
+ * anthropic's `display_name` being its label), so one parse serves all four.
+ * A refusal is the provider's status, not a runner error.
+ */
+export async function listByokModels(provider: keyof typeof BYOK_PROVIDERS, apiKey: string): Promise<ByokModel[]> {
+  const preset = BYOK_PROVIDERS[provider];
+  const headers: Record<string, string> =
+    preset.auth === "x-api-key" ? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" } : { authorization: `Bearer ${apiKey}` };
+  let answer: Response;
+  try {
+    answer = await fetch(preset.modelsUrl, { headers, signal: AbortSignal.timeout(10_000) });
+  } catch (error) {
+    throw new JobRefused(502, `${provider}'s model list could not be reached: ${error instanceof Error ? error.message : "no reason given"}`, {
+      reason: "provider-unreachable",
+    });
+  }
+  if (!answer.ok) {
+    throw new JobRefused(502, `${provider}'s model list refused: HTTP ${answer.status}`, { reason: "provider" });
+  }
+  const body = (await answer.json().catch(() => null)) as { data?: unknown } | null;
+  if (body === null || typeof body !== "object" || !Array.isArray(body.data)) {
+    // A "success" the parser cannot read (bad JSON, a different shape, a body
+    // that timed out) is a refusal, not an empty list — the dialog says so
+    // rather than offering nothing with no reason.
+    throw new JobRefused(502, `${provider}'s model list came back unreadable`, { reason: "provider" });
+  }
+  const data = body.data;
+  const seen = new Set<string>();
+  const models: ByokModel[] = [];
+  for (const row of data) {
+    if (typeof row !== "object" || row === null) continue;
+    const id = (row as { id?: unknown }).id;
+    if (typeof id !== "string" || id === "" || seen.has(id)) continue;
+    seen.add(id);
+    const named = row as { display_name?: unknown; name?: unknown };
+    const label = typeof named.display_name === "string" && named.display_name !== "" ? named.display_name : typeof named.name === "string" && named.name !== "" ? named.name : null;
+    models.push({ value: id, label });
+  }
+  return models.sort((a, b) => a.value.localeCompare(b.value, "en"));
 }
 
 /**
