@@ -8,6 +8,8 @@ import { useStartDraft } from "@/components/studio/useStartDraft";
 import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
+import { HarnessPicker, useStoredHarness } from "@/components/studio/HarnessPicker";
+import { getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -69,6 +71,17 @@ export function HomeComposer({
   // The picker's pick (D90): sent on `POST /api/drafts`, so the whole
   // conversation, its turns and the jobs they make, runs on it.
   const [model, setModel] = useState("default");
+  // The harness pick (D91): `useStoredHarness` is live — a pick made here, in
+  // an open conversation's picker, or in another tab is the same store, so
+  // the row below can never show claude's list while a draft ships byok.
+  const harness = useStoredHarness();
+  // The model `byok.json` names, read when BYOK is the pick — fresher than
+  // health's, since Connect may have just written it.
+  const [byokModel, setByokModel] = useState<string | null>(null);
+  useEffect(() => {
+    if (harness !== "byok") return;
+    void getByokSettings().then((result) => setByokModel(result.ok && result.data.configured ? result.data.model : null));
+  }, [harness]);
   const composer = useRef<MentionComposerHandle | null>(null);
 
   useEffect(() => {
@@ -126,11 +139,22 @@ export function HomeComposer({
         disabledReason={busy ? "Opening the conversation." : (block ?? undefined)}
         quietReason={!busy}
         toolbar={[
+          // The harness the conversation runs on (D91): its pick is
+          // remembered, and `createDraft` sends it on `POST /api/drafts`.
+          <HarnessPicker key="harness" />,
           ...options.map((option) => (
             <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
           )),
-          // The model the conversation runs on (D90), picked once at the start.
-          <FilterMenu key="model" label="Model" bare options={modelMenu} value={model} defaultValue="default" onChange={setModel} />,
+          // The model the conversation runs on (D90), picked once at the
+          // start — unless the start is BYOK, whose turns take `byok.json`'s
+          // model, so the claude list would lie (as the draft pane's does).
+          harness === "byok" ? (
+            <span key="model" title="This conversation's turns run on the BYOK model. Draw jobs still run on Claude, on each kind's saved pick.">
+              Model {byokModel ?? "byok"}
+            </span>
+          ) : (
+            <FilterMenu key="model" label="Model" bare options={modelMenu} value={model} defaultValue="default" onChange={setModel} />
+          ),
         ]}
       />
       <p role="status" aria-live="polite" className="sr-only">
