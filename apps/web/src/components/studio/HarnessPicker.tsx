@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { chipClasses, LABEL } from "@/components/ui/classes";
+import { cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { DialogHeader } from "@/components/ui/DialogHeader";
 import { Glyph } from "@/components/ui/Glyph";
@@ -77,6 +77,7 @@ export function useStoredHarness(): HarnessValue {
  */
 export function HarnessPicker({ value, onPick }: { value?: string | null; onPick?: (harness: HarnessValue) => void }) {
   const [byokOpen, setByokOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const byok = usePresence(byokOpen, DIALOG_CLOSE_MS);
   // Controlled when a conversation hands its pick in; the remembered one else.
   const controlled = value !== undefined && value !== null;
@@ -102,7 +103,7 @@ export function HarnessPicker({ value, onPick }: { value?: string | null; onPick
     // effect above remembers it once it stands — a refused pick ("codex" not
     // wired, a spoken conversation locked) must not become the default new
     // conversations start on. Uncontrolled, the pick is remembered at once;
-    // the store's notification is what re-renders this chip.
+    // the store's notification is what re-renders this trigger.
     if (!controlled) rememberHarness(next);
     onPick?.(next);
   }
@@ -115,13 +116,27 @@ export function HarnessPicker({ value, onPick }: { value?: string | null; onPick
           menuLabel="Harness"
           align="start"
           minWidth={320}
+          onOpenChange={setMenuOpen}
           trigger={
             <>
               <span className="min-w-0 truncate">{name}</span>
-              <Glyph name="chevron" className="size-3.5" />
+              <Glyph
+                name="chevron"
+                className={cx(
+                  "size-3.5 text-text3 transition-[rotate] duration-150 ease-soft motion-reduce:transition-none",
+                  menuOpen && "rotate-180",
+                )}
+              />
             </>
           }
-          triggerClassName={chipClasses({ className: "max-w-full pr-2.5" })}
+          // Bare text, not a chip: the way Manus's top bar wears the same
+          // picker — the name itself is the affordance, and a border around it
+          // read as a filter chip, not a title.
+          triggerClassName={cx(
+            "inline-flex max-w-full shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5",
+            "font-sans text-[13px] font-medium text-text not-disabled:hover:bg-surface2",
+            FOCUS,
+          )}
         >
           {HARNESSES.map((option) => (
             <MenuItem
@@ -162,7 +177,7 @@ export function HarnessPicker({ value, onPick }: { value?: string | null; onPick
 function HarnessRow({ option }: { option: Harness }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="truncate">{option.label}</span>{" "}
+      <span className="truncate font-medium">{option.label}</span>{" "}
       <span className="truncate text-[12px] font-normal text-text2">{option.detail}</span>
     </span>
   );
