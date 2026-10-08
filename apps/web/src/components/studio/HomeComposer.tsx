@@ -9,6 +9,7 @@ import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { useStoredHarness } from "@/components/studio/HarnessPicker";
+import type { HarnessValue } from "@/lib/studio-harness";
 import { getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
@@ -63,12 +64,13 @@ export function HomeComposer({
   const { start, busy, error } = useStartDraft(path);
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   // The picker's pick (D90): sent on `POST /api/drafts`, so the whole
-  // conversation, its turns and the jobs they make, runs on it.
-  const [model, setModel] = useState("default");
-  // The harness pick (D91): `useStoredHarness` is live — a pick made here, in
-  // an open conversation's picker, or in another tab is the same store, so
-  // the row below can never show claude's list while a draft ships byok.
+  // conversation, its turns and the jobs they make, runs on it. One per
+  // harness (D92): a tier is a name on its own CLI, so `gpt-6-astra` can
+  // never ride a switch back to claude, nor `fable` onto codex.
+  const [picks, setPicks] = useState<Partial<Record<HarnessValue, string>>>({});
   const harness = useStoredHarness();
+  const model = picks[harness] ?? "default";
+  const setModel = (next: string) => setPicks((held) => ({ ...held, [harness]: next }));
   // The model `byok.json` names, read when BYOK is the pick — fresher than
   // health's, since Connect may have just written it.
   const [byokModel, setByokModel] = useState<string | null>(null);

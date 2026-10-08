@@ -1353,8 +1353,8 @@ export class Drafts {
     }
     const concept = parseConcept(input.concept);
     const tutor = parseTutor(input.tutor);
-    const model = draftModel(input.model);
     const harness = draftHarness(input.harness);
+    const model = draftModel(input.model, harness);
     if (harness === "byok" && (await loadByok()) === null) {
       throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider and an API key first", {
         field: "harness",
@@ -2605,7 +2605,7 @@ export class Drafts {
         brief,
         pending,
         mermaid,
-        model: record.model ?? null,
+        model: jobModelOf(record),
         parent: null,
       };
       await this.runner.admit(validDiagram(ready, await vocabularyFor(pending)));
@@ -2642,7 +2642,7 @@ export class Drafts {
       brief,
       pending,
       mermaid: null,
-      model: record.model ?? null,
+      model: jobModelOf(record),
       parent,
     };
     try {
@@ -3291,10 +3291,10 @@ export class Drafts {
    */
   async setModel(id: string, rawModel: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
     this.require(id);
-    const model = draftModel(rawModel);
     if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
     return this.write(id, async () => {
       const current = this.require(id);
+      const model = draftModel(rawModel, current.harness === "codex" ? "codex" : null);
       if ((current.model ?? null) === model) return { record: current, changed: false };
       return { record: await this.save(id, { model }, { touch: false }), changed: true };
     });
@@ -3333,9 +3333,11 @@ export class Drafts {
         });
       }
       // The session id is one harness's own: a changed pick mints a new one so
-      // no resume is ever handed to a CLI that did not write it.
+      // no resume is ever handed to a CLI that did not write it. The model is
+      // one harness's too (D92): a `gpt-` pick that survives onto claude, or a
+      // `fable` that survives onto codex, would fail the next spawn outright.
       return {
-        record: await this.save(id, { harness, plannerSessionId: randomUUID(), sessionStarted: false }, { touch: false }),
+        record: await this.save(id, { harness, plannerSessionId: randomUUID(), sessionStarted: false, model: null }, { touch: false }),
         changed: true,
       };
     });
@@ -4098,17 +4100,47 @@ export function cleanName(raw: unknown): string | null {
  * `null`, `""` or `"default"`, which clears the pick and hands the runner's
  * own default back (D90).
  */
-export function draftModel(raw: unknown): string | null {
+export function draftModel(raw: unknown, harness: "byok" | "codex" | null = null): string | null {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== "string") {
     throw new JobRefused(400, `"model" is a model name, or null/"default" for the runner's default`, { field: "model" });
   }
   const name = raw.trim();
   if (name === "" || name === "default") return null;
+  // A name only means something on its own CLI (D92): a `gpt-` slug belongs
+  // to codex, and one that is not is a claude name codex cannot take either.
+  if (harness === "codex") {
+    if (!isCodexModel(name)) {
+      throw new JobRefused(400, `"${name}" is not a model name codex takes (a gpt- slug)`, { field: "model" });
+    }
+    return name;
+  }
+  if (isCodexModel(name)) {
+    throw new JobRefused(400, `"${name}" is a codex model name; this conversation runs on claude`, { field: "model" });
+  }
   if (!isAgentModel(name)) {
     throw new JobRefused(400, `"${name}" is not a model name the claude CLI takes`, { field: "model" });
   }
   return name;
+}
+
+/**
+ * The `model` a draft's draw jobs inherit (D92): the conversation's pick, or
+ * each kind's saved setting when there is none — but never a codex name. A
+ * codex draft's pick is a `codex -m` slug, and every job the draft makes is a
+ * `claude` spawn, so its own saved row stands instead.
+ */
+function jobModelOf(record: DraftRecord): string | null {
+  if (record.harness === "codex") return null;
+  return record.model ?? null;
+}
+
+/**
+ * A model as `codex -m` takes: a `gpt-` slug, the shape every name in
+ * `codex debug models`' catalog has (D92's tiers are its rows).
+ */
+export function isCodexModel(value: unknown): value is string {
+  return typeof value === "string" && /^gpt-[0-9a-z][0-9a-z.-]*$/.test(value);
 }
 
 /**
