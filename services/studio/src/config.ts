@@ -91,6 +91,9 @@ export const CLAUDE_BIN = process.env.STUDIO_CLAUDE_BIN?.trim() || "claude";
 /** The `qwen` binary (Qwen Code), the BYOK harness. Overridable like `STUDIO_CLAUDE_BIN`. */
 export const QWEN_BIN = process.env.STUDIO_QWEN_BIN?.trim() || "qwen";
 
+/** The `codex` binary (Codex CLI), the OpenAI harness. Overridable like `STUDIO_CLAUDE_BIN`. */
+export const CODEX_BIN = process.env.STUDIO_CODEX_BIN?.trim() || "codex";
+
 /**
  * Where the spawned agent's credential comes from: `login` or `env`.
  *

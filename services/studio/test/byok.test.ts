@@ -136,8 +136,8 @@ describe("a byok conversation", () => {
     await expect(drafts.create({ idempotencyKey: "k1", harness: "byok" })).rejects.toThrow(/BYOK is not set up/);
   });
 
-  it("refuses a harness the picker only pretends to have", async () => {
-    await expect(drafts.create({ idempotencyKey: "k1", harness: "codex" })).rejects.toThrow(/placeholder/);
+  it("refuses a harness the picker never had", async () => {
+    // Codex is a real pick now — `codex.test.ts` owns its refusals.
     await expect(drafts.create({ idempotencyKey: "k1", harness: "perl" })).rejects.toThrow(JobRefused);
   });
 
@@ -225,7 +225,7 @@ describe("the pick", () => {
     const { record } = await drafts.create({ idempotencyKey: "k1" });
     expect(record.harness ?? "claude").toBe("claude");
 
-    await expect(drafts.setHarness(record.id, "codex")).rejects.toThrow(/placeholder/);
+    await expect(drafts.setHarness(record.id, "perl")).rejects.toThrow(JobRefused);
     await expect(drafts.setHarness(record.id, "byok")).resolves.toMatchObject({ changed: true });
     expect(drafts.get(record.id)?.harness).toBe("byok");
 

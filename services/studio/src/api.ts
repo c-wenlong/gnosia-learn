@@ -1891,10 +1891,11 @@ async function health(
   // starts a refresh for the next call (health-probes.ts has the measurements
   // that made this necessary). Only a probe that has never answered is waited
   // for, which `npm run studio` avoids by warming them all at start.
-  const [doctorRead, claudeRead, qwenRead, catalogRead, agentRead, vocabulary] = await Promise.all([
+  const [doctorRead, claudeRead, qwenRead, codexRead, catalogRead, agentRead, vocabulary] = await Promise.all([
     probes.doctor.read(),
     probes.claude.read(),
     probes.qwen.read(),
+    probes.codex.read(),
     probes.catalog.read(),
     probes.agent.read(),
     // The last read any route made, however old, rather than a `catalog topic
@@ -1904,6 +1905,7 @@ async function health(
   const checked = doctorRead.value.result;
   const claudeVersion = claudeRead.value;
   const qwenVersion = qwenRead.value;
+  const codexVersion = codexRead.value;
   const catalog = catalogRead.value;
   const agent = agentRead.value;
   // The video doctor's cached answer: it takes seconds, so health never
@@ -1956,6 +1958,11 @@ async function health(
     // picker's BYOK row is the only thing that uses it.
     qwen: qwenVersion !== null && qwenVersion.code === 0,
     qwenVersion: qwenVersion?.stdout.trim() ?? null,
+    // OpenAI's harness (Codex CLI), the picker's Codex row: absent does not
+    // warn for the same reason. `codex login` state is checked at pick time,
+    // not here — the file check is cheap but health should not stat it.
+    codex: codexVersion !== null && codexVersion.code === 0,
+    codexVersion: codexVersion?.stdout.trim() ?? null,
     // Which credential the next agent will run on, and whether a key is in
     // the runner's environment at all. A job whose first request is refused
     // offers "doctor", and this is the line that answers it.
@@ -2001,6 +2008,7 @@ async function health(
       tldrawkc: freshness(doctorRead),
       claude: freshness(claudeRead),
       qwen: freshness(qwenRead),
+      codex: freshness(codexRead),
       postgres: freshness(catalogRead),
       agent: freshness(agentRead),
     },

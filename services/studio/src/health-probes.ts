@@ -3,7 +3,7 @@ import { byokStatus } from "./byok";
 import { vocabularyStatus } from "./brief";
 import { doctor, doctorAnsweredAt, DOCTOR_TTL_MS } from "./canvas";
 import { status as catalogStatus, type CatalogResult } from "./catalog";
-import { CLAUDE_BIN, plannerModel, QWEN_BIN } from "./config";
+import { CLAUDE_BIN, CODEX_BIN, plannerModel, QWEN_BIN } from "./config";
 import { Probe } from "./probe";
 import { run, type RunResult } from "./proc";
 
@@ -49,6 +49,7 @@ export interface HealthProbeTtls {
   doctor: number;
   claude: number;
   qwen: number;
+  codex: number;
   catalog: number;
   agent: number;
 }
@@ -58,6 +59,8 @@ export class HealthProbes {
   readonly claude: Probe<RunResult | null>;
   /** `qwen --version`: the BYOK harness's binary on PATH, like `claude`'s. */
   readonly qwen: Probe<RunResult | null>;
+  /** `codex --version`: the OpenAI harness's binary on PATH, like `claude`'s. */
+  readonly codex: Probe<RunResult | null>;
   readonly catalog: Probe<CatalogResult | null>;
   readonly agent: Probe<Record<string, unknown> | null>;
 
@@ -81,6 +84,10 @@ export class HealthProbes {
     this.qwen = new Probe(
       () => run(QWEN_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
       ttls.qwen ?? CLAUDE_PROBE_TTL_MS,
+    );
+    this.codex = new Probe(
+      () => run(CODEX_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
+      ttls.codex ?? CLAUDE_PROBE_TTL_MS,
     );
     this.catalog = new Probe(() => catalogStatus().catch(() => null), ttls.catalog ?? CATALOG_PROBE_TTL_MS);
     this.agent = new Probe(() => agentSettings().catch(() => null), ttls.agent ?? AGENT_PROBE_TTL_MS);
@@ -107,6 +114,7 @@ export class HealthProbes {
     this.doctor.warm();
     this.claude.warm();
     this.qwen.warm();
+    this.codex.warm();
     this.catalog.warm();
     this.agent.warm();
   }

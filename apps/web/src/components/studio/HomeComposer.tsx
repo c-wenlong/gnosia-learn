@@ -143,11 +143,12 @@ export function HomeComposer({
             <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
           )),
           // The model the conversation runs on (D90), picked once at the
-          // start — unless the start is BYOK, whose turns take `byok.json`'s
-          // model, so the claude list would lie (as the draft pane's does).
-          harness === "byok" ? (
-            <span key="model" title="This conversation's turns run on the BYOK model. Draw jobs still run on Claude, on each kind's saved pick.">
-              Model {byokModel ?? "byok"}
+          // start — unless the start is BYOK or Codex, whose turns take their
+          // own model (`byok.json`'s, the login's), so the claude list would
+          // lie (as the draft pane's does).
+          harness === "byok" || harness === "codex" ? (
+            <span key="model" title="This conversation's turns run on the harness's own model. Draw jobs still run on Claude, on each kind's saved pick.">
+              Model {harness === "byok" ? (byokModel ?? "byok") : "codex"}
             </span>
           ) : (
             <FilterMenu key="model" label="Model" bare options={modelMenu} value={model} defaultValue="default" onChange={setModel} />
