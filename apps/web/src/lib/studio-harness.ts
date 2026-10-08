@@ -20,12 +20,17 @@ function safely<T>(run: () => T, fallback: T): T {
   }
 }
 
+/** The pick as last made this page load, for when storage cannot keep it. */
+let held: HarnessValue | null = null;
+
 export function storedHarness(): HarnessValue {
-  const held = safely(() => (typeof window === "undefined" ? null : window.localStorage.getItem(KEY)), null);
-  return held !== null && KNOWN.includes(held) ? (held as HarnessValue) : "claude";
+  const stored = safely(() => (typeof window === "undefined" ? null : window.localStorage.getItem(KEY)), null);
+  if (stored !== null && KNOWN.includes(stored)) return stored as HarnessValue;
+  return held ?? "claude";
 }
 
 export function rememberHarness(harness: HarnessValue): void {
+  held = harness;
   safely(() => {
     if (harness === "claude") window.localStorage.removeItem(KEY);
     else window.localStorage.setItem(KEY, harness);
