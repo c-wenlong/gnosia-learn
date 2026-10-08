@@ -85,16 +85,20 @@ function scriptTarget(script: string): string | null {
     if (!stat.isFile() || stat.size > 16384) return null;
     const body = readFileSync(script, "utf8");
     if (!body.startsWith("#!")) return null;
-    for (const match of body.matchAll(/\/(?:[\w.+-]+\/)+[\w.+-]+/g)) {
+    // The shebang names an interpreter (`/bin/sh`), which is itself a large
+    // executable — scan only what comes after it, and prefer the path that
+    // looks like a browser when a launcher names more than one.
+    const targets: string[] = [];
+    for (const match of body.slice(body.indexOf("\n")).matchAll(/\/(?:[\w.+-]+\/)+[\w.+-]+/g)) {
       const target = resolveOr(match[0]);
       if (target === null || target === script) continue;
       const found = statSync(target);
       if (found.isFile() && found.size > 16384) {
         accessSync(target, constants.X_OK);
-        return target;
+        targets.push(target);
       }
     }
-    return null;
+    return targets.find((target) => /chrom(e|ium)/i.test(path.basename(target))) ?? targets[0] ?? null;
   } catch {
     return null;
   }
