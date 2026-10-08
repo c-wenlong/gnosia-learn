@@ -47,6 +47,11 @@ const PATHS = {
   send: "M4.5 10h11M11 5.5l4.5 4.5-4.5 4.5",
   // A padlock.
   lock: "M6 9V7a4 4 0 0 1 8 0v2M5 9h10v8H5z",
+  // An eye: a hidden field made readable, as an API key's Show.
+  eye: "M1.8 10C3.2 7.6 6 5 10 5s6.8 2.6 8.2 5c-1.4 2.4-4.2 5-8.2 5S3.2 12.4 1.8 10zM10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
+  // The eye crossed out: a readable field made hidden again.
+  eyeOff:
+    "M3 3.5l14 13M6.3 6.2C4.4 7.2 3 8.5 1.8 10c1.4 2.4 4.2 5 8.2 5 1.2 0 2.3-.3 3.4-.8M8.2 5.1c.6-.1 1.2-.1 1.8-.1 4 0 6.8 2.6 8.2 5-.5 1-1.5 2.1-2.9 3.1M8 8.3a2.5 2.5 0 0 0 3.4 3.4",
   // A clipboard with a tick: a module's week check.
   check: "M7 4H5v13h10V4h-2M7.5 3h5v2.5h-5zM7.5 11.5l1.8 1.8 3.4-3.6",
   // Arrows for the previous and next module.
