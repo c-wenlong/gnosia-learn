@@ -101,6 +101,15 @@ export const BYOK_PROVIDERS = {
     modelsUrl: "https://api.anthropic.com/v1/models",
     auth: "x-api-key",
   },
+  // NVIDIA NIM is OpenAI-compatible too — the same three variables carry it.
+  nvidia: {
+    keyVar: "OPENAI_API_KEY",
+    baseUrlVar: "OPENAI_BASE_URL",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
+    modelVar: "OPENAI_MODEL",
+    modelsUrl: "https://integrate.api.nvidia.com/v1/models",
+    auth: "bearer",
+  },
   // Google's OpenAI-compatible endpoint, so the same three variables carry it.
   google: {
     keyVar: "OPENAI_API_KEY",
