@@ -4,14 +4,13 @@ import { useId, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { LABEL } from "@/components/ui/classes";
+import { chipClasses, LABEL } from "@/components/ui/classes";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { DialogHeader } from "@/components/ui/DialogHeader";
-import { FilterMenu } from "@/components/ui/FilterMenu";
-import type { FilterOption } from "@/components/ui/filter-menu";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
+import { Menu, MenuItem } from "@/components/ui/Menu";
 import { Select } from "@/components/ui/Select";
 import { usePresence } from "@/components/ui/use-presence";
 
@@ -26,15 +25,25 @@ import { usePresence } from "@/components/ui/use-presence";
  * list, and BYOK ("bring your own key") opens the configuration dialog an
  * open harness will take once one is chosen — the dialog is drawn and wired
  * to the pick, but its Connect is the placeholder too.
+ *
+ * A `Menu` rather than the `FilterMenu` the model picker is: its rows are
+ * `menuitemradio`, so the BYOK row can reopen the dialog while it is the
+ * chosen harness, where a listbox only reports a changed value.
  */
-const HARNESSES: readonly FilterOption[] = [
+interface Harness {
+  value: string;
+  label: string;
+  detail: string;
+}
+
+const HARNESSES: readonly Harness[] = [
   { value: "claude", label: "Claude", detail: "Anthropic's agent harness. The default." },
   { value: "codex", label: "Codex", detail: "OpenAI's agent harness." },
   { value: "byok", label: "BYOK", detail: "Bring your own model API key to power the agent." },
 ];
 
 /** The providers a BYOK key can name, until the BYOK harness names its own. */
-const PROVIDERS: readonly FilterOption[] = [
+const PROVIDERS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
   { value: "google", label: "Google" },
@@ -45,20 +54,38 @@ export function HarnessPicker() {
   const [harness, setHarness] = useState("claude");
   const [byokOpen, setByokOpen] = useState(false);
   const byok = usePresence(byokOpen, DIALOG_CLOSE_MS);
-
-  const pick = (next: string) => {
-    // The BYOK row opens its configuration rather than picking itself: it
-    // becomes the harness once the dialog's Connect stands.
-    if (next === "byok") {
-      setByokOpen(true);
-      return;
-    }
-    setHarness(next);
-  };
+  const name = HARNESSES.find((option) => option.value === harness)?.label ?? harness;
 
   return (
     <>
-      <FilterMenu label="Harness" bare options={HARNESSES} value={harness} onChange={pick} />
+      <Menu
+        label={`Harness: ${name}`}
+        menuLabel="Harness"
+        align="start"
+        minWidth={320}
+        trigger={
+          <>
+            <span className="min-w-0 truncate">{name}</span>
+            <Glyph name="chevron" className="size-3.5" />
+          </>
+        }
+        triggerClassName={chipClasses({ className: "max-w-full pr-2.5" })}
+      >
+        {HARNESSES.map((option) => (
+          <MenuItem
+            key={option.value}
+            checked={harness === option.value}
+            // BYOK opens its configuration rather than picking: `afterClose`
+            // hands it the focus once the menu has shut, and it can open it
+            // again while it is already the harness, since a menu row's press
+            // fires every time.
+            onSelect={option.value === "byok" ? undefined : () => setHarness(option.value)}
+            afterClose={option.value === "byok" ? () => setByokOpen(true) : undefined}
+          >
+            <HarnessRow option={option} />
+          </MenuItem>
+        ))}
+      </Menu>
       {byok.mounted && (
         <ByokDialog
           closing={byok.leaving}
@@ -70,6 +97,16 @@ export function HarnessPicker() {
         />
       )}
     </>
+  );
+}
+
+/** A harness's row: its name with what it is on a muted line under it. */
+function HarnessRow({ option }: { option: Harness }) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className="truncate">{option.label}</span>{" "}
+      <span className="truncate text-[12px] font-normal text-text2">{option.detail}</span>
+    </span>
   );
 }
 
