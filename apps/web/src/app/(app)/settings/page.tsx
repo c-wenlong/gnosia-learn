@@ -46,16 +46,13 @@ export default async function SettingsPage() {
   const mac = isMacUserAgent(request.get("user-agent"));
   const models = await loadTutorModels(owner, keys);
   // Ids rather than labels: "NVIDIA NIM → Google Gemini → OpenRouter" does
-  // not fit the 300px box. Each says whose key it is. With a model chain, the
-  // chain's entries that have a key, by model id, in the order tried.
+  // not fit the 300px box. Each says whose key it is. The tutor calls the
+  // chain alone (T15): nothing configured means the field is empty.
   const keyed = new Map(models.providers.map((p) => [p.id, p]));
-  const providers =
-    models.chain.length > 0
-      ? models.chain.flatMap((entry) => {
-          const provider = keyed.get(entry.provider);
-          return provider?.key ? [{ id: entry.model, label: `${provider.label} ${entry.model}`, source: provider.key }] : [];
-        })
-      : keys.order.map((p) => ({ id: p.id, label: p.label, source: p.source }));
+  const providers = models.chain.flatMap((entry) => {
+    const provider = keyed.get(entry.provider);
+    return provider?.key ? [{ id: entry.model, label: `${provider.label} ${entry.model}`, source: provider.key }] : [];
+  });
   return (
     <div data-layout="app" className={cx("flex max-w-[1084px] flex-col gap-4", PAGE_ENTER)}>
       <h1 className={PAGE_TITLE}>Settings</h1>

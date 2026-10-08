@@ -136,7 +136,7 @@ export function Providers({ view }: { view: ProvidersView }) {
     <Card title="Providers" action={addButton}>
       <p className="text-[14px] text-text2">
         {view.usingDefaults
-          ? "Your model providers and their keys. Until you add a model, the tutor tries each provider's built-in default, in this order."
+          ? "Your model providers and their keys. The tutor calls only what you add — nothing is called until a model is on a row."
           : "Your model providers, their keys and their models. The tutor tries each provider's models top to bottom, then the next provider's, and skips a provider with no models."}
       </p>
       {!view.keysReachable && (
@@ -146,7 +146,7 @@ export function Providers({ view }: { view: ProvidersView }) {
       )}
       {!view.chainReachable && (
         <Callout role="status" bordered>
-          Your models could not be read: the database is unreachable. The tutor is using the built-in defaults.
+          Your models could not be read: the database is unreachable. The tutor cannot call anything until they are back.
         </Callout>
       )}
       {/* The form is a dialog rather than an inline panel — a provider is a
@@ -158,9 +158,9 @@ export function Providers({ view }: { view: ProvidersView }) {
         onSaving={setAddSaving}
         onClose={() => setAdding(false)}
         opener={() => document.getElementById(`${base}-add`)}
-        onAdded={(label) => {
+        onAdded={(label, note) => {
           setAdding(false);
-          setStatus({ kind: "done", text: `Added ${label}. Open it to add a model.` });
+          setStatus({ kind: "done", text: note ?? `Added ${label}. Open it to add a model.` });
           // The key mirrored into `byok.json` — the Studio block reads it.
           window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
           router.refresh();
@@ -182,7 +182,6 @@ export function Providers({ view }: { view: ProvidersView }) {
               row={row}
               first={index === 0 || view.rows[index - 1]?.models.length === 0}
               last={index === view.rows.length - 1 || view.rows[index + 1]?.models.length === 0}
-              usingDefaults={view.usingDefaults}
               full={view.full}
               byok={byokFor(row.id)}
               byokActive={byok?.active}
@@ -224,7 +223,8 @@ function AddProvider({
   addable: ProvidersView["addable"];
   onSaving: (saving: boolean) => void;
   onClose: () => void;
-  onAdded: (label: string) => void;
+  /** A provider went on the card. `text` overrides the stock message when only part of the ask landed. */
+  onAdded: (label: string, text?: string) => void;
   /** The Add provider button, which the dialog returns focus to. */
   opener: () => HTMLElement | null;
 }) {
@@ -239,6 +239,28 @@ function AddProvider({
   const form = usePresence(open, DIALOG_CLOSE_MS);
   const custom = provider === CUSTOM || addable.length === 0;
   const chosen = custom ? undefined : (addable.find((a) => a.id === provider) ?? addable[0]);
+  // A provider the environment already keys connects without a personal
+  // key: the ask is the first model, whose list the server key can fetch.
+  const serverKeyed = chosen?.server === true;
+  const [model, setModel] = useState("");
+  const [modelList, setModelList] = useState<{ provider: ProviderName; models?: { value: string; label: string }[]; error?: string } | null>(null);
+  // The list belongs to one provider: switching clears the pick and asks again.
+  useEffect(() => {
+    if (!serverKeyed || chosen === undefined || modelList?.provider === chosen.id) return;
+    const forProvider = chosen.id;
+    let held = true;
+    void sendJson<Reply>("POST", "/api/learner/tutor-model/models", { provider: forProvider }).then((reply) => {
+      if (!held) return;
+      setModelList(
+        reply !== null && reply.status === 200 && reply.data.ok === true && Array.isArray(reply.data.models)
+          ? { provider: forProvider, models: reply.data.models.map((m) => ({ value: m.id, label: m.id })) }
+          : { provider: forProvider, error: "the list could not be loaded" },
+      );
+    });
+    return () => {
+      held = false;
+    };
+  }, [serverKeyed, chosen, modelList]);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -247,20 +269,52 @@ function AddProvider({
     setSaving(true);
     onSaving(true);
     setError(null);
-    const reply = custom
-      ? await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key })
-      : await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen?.id, key });
-    setSaving(false);
-    onSaving(false);
-    if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
+    if (custom) {
+      const reply = await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key });
+      setSaving(false);
+      onSaving(false);
+      if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
+    } else {
+      // A typed key connects through the key route (which also mirrors BYOK);
+      // a model connects through the chain — either alone is an add.
+      if (key.trim() !== "") {
+        const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen?.id, key });
+        if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+          setSaving(false);
+          onSaving(false);
+          return setError(failure("added", reply));
+        }
+      }
+      const first = model.trim();
+      if (first !== "") {
+        const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", { provider: chosen?.id, model: first });
+        if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+          setSaving(false);
+          onSaving(false);
+          // A key write that already landed is real: close with the row on
+          // the card — keeping the dialog open would let a retry bind the
+          // model to whichever provider the refresh left in the picker.
+          if (key.trim() === "") return setError(failure("added", reply));
+          onAdded(chosen?.label ?? "the provider", `${chosen?.label ?? "The provider"}'s key saved, but the model was not: ${failure("added", reply)} Open its row to add one.`);
+          return;
+        }
+      }
+      setSaving(false);
+      onSaving(false);
+    }
     const label = custom ? name.trim() : (chosen?.label ?? "the provider");
     setName("");
     setUrl("");
+    setModel("");
     onAdded(label);
   };
 
   if (!form.mounted) return null;
-  const ready = draft.trim() !== "" && (!custom || (name.trim() !== "" && url.trim() !== ""));
+  const ready = custom
+    ? draft.trim() !== "" && name.trim() !== "" && url.trim() !== ""
+    : serverKeyed
+      ? draft.trim() !== "" || model.trim() !== ""
+      : draft.trim() !== "";
   // A save in flight is not dismissed: Escape, the backdrop and Close all
   // ask the same way, and the ask waits — a hid error is a silent failure.
   const askClose = () => {
@@ -283,6 +337,7 @@ function AddProvider({
               value={custom ? CUSTOM : (chosen?.id ?? CUSTOM)}
               onChange={(v) => {
                 setProvider(v as ProviderName | typeof CUSTOM);
+                setModel("");
                 setError(null);
               }}
             />
@@ -317,10 +372,43 @@ function AddProvider({
           )}
         </FormRow>
       )}
+      {serverKeyed && (
+        <FormRow
+          label="Model"
+          hint={
+            modelList?.error !== undefined ? (
+              <>
+                {modelList.error} —{" "}
+                <button type="button" className="underline underline-offset-2" onClick={() => setModelList(null)}>
+                  Try again
+                </button>
+                . Or type the name yourself.
+              </>
+            ) : (
+              "The provider's real list — leave the key blank and the server's is used."
+            )
+          }
+        >
+          {({ id, describedBy }) => (
+            <Combobox
+              id={id}
+              label="Model"
+              value={model}
+              onChange={setModel}
+              options={modelList?.models ?? []}
+              placeholder="e.g. a model name"
+              autoComplete="off"
+              spellCheck={false}
+              describedBy={describedBy}
+            />
+          )}
+        </FormRow>
+      )}
       <FormRow
-        label="API key"
+        label={serverKeyed ? "API key (optional)" : "API key"}
         hint={
           <>
+            {serverKeyed ? "Leave blank and the server's key is used; enter yours to replace it. " : ""}
             Sent once and stored encrypted. Only its last four characters are shown again.
             {custom && " For a local server that needs no key, type any 16 characters."}
             {chosen?.keyUrl !== undefined && (
@@ -345,6 +433,7 @@ function AddProvider({
             spellCheck={false}
             value={draft}
             minLength={PROVIDER_KEY_LIMITS.minChars}
+            required={!serverKeyed && !custom}
             onChange={(e) => {
               setDraft(e.target.value);
               setError(null);
@@ -387,7 +476,6 @@ function ProviderRow({
   row,
   first,
   last,
-  usingDefaults,
   full,
   byok,
   byokActive,
@@ -399,7 +487,6 @@ function ProviderRow({
   first: boolean;
   /** No provider with models below it: Move down does nothing. */
   last: boolean;
-  usingDefaults: boolean;
   full: boolean;
   /** The BYOK preset this provider answers to and its `byok.json` entry (null = not connected there), or undefined for a non-preset provider. */
   byok: { preset: string; entry: ByokProviderStatus | null } | undefined;
@@ -443,9 +530,7 @@ function ProviderRow({
         : `Your key, ending ${saved.last4}. Saved ${saved.savedOn}.`;
   const modelLine = hasModels
     ? `${row.models.length} ${row.models.length === 1 ? "model" : "models"}`
-    : usingDefaults && row.inUse !== null && row.custom === undefined
-      ? `Built-in default: ${row.model}`
-      : "No models";
+    : "No models";
 
   const saveKey = async (event: FormEvent) => {
     event.preventDefault();
@@ -489,10 +574,10 @@ function ProviderRow({
     }
     setMode("idle");
     const kept = reply.data.byok === false ? " The studio runner did not answer, so it still has the key — its row below has a Remove." : "";
-    const text = row.server ? `Deleted ${row.label}. The server's key still applies.${kept}` : `Deleted ${row.label}.${kept}`;
+    const text = `Deleted ${row.label}.${kept}`;
     setStatus({ kind: "done", text });
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
-    if (!row.server) onGone(text);
+    onGone(text);
     router.refresh();
   };
 
@@ -689,7 +774,6 @@ function ProviderRow({
         message={
           <>
             Delete {row.label}? {row.custom !== undefined ? "It is removed with your key and its models." : goes(saved !== null, row.models.length)}
-            {row.server ? " The server's key stays, so it is still listed." : ""}
           </>
         }
         confirmLabel="Delete"
@@ -702,7 +786,7 @@ function ProviderRow({
       <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-2.5" />
 
       <Collapse open={expanded} id={`${base}-models`}>
-        <Models row={row} usingDefaults={usingDefaults} full={full} disabled={disabled} visible={expanded} onTestKey={() => void testKey()} testKeyId={`${base}-test-key`} />
+        <Models row={row} full={full} disabled={disabled} visible={expanded} onTestKey={() => void testKey()} testKeyId={`${base}-test-key`} />
         {byok !== undefined && (
           <ByokTiers
             provider={byok.preset}
@@ -787,7 +871,6 @@ function ByokOnlyRow({ entry, active }: { entry: ByokProviderStatus; active: boo
 /** A row's models, opened under it: each with Test, Move up, Move down and Remove, then Add model. */
 function Models({
   row,
-  usingDefaults,
   full,
   disabled,
   visible,
@@ -795,7 +878,6 @@ function Models({
   testKeyId,
 }: {
   row: ProviderRowView;
-  usingDefaults: boolean;
   full: boolean;
   disabled: boolean;
   /** The row is open: the model list is fetched the first time it is. */
@@ -888,7 +970,7 @@ function Models({
       const mine = next.filter((e) => e.provider === row.id).map((e) => e.model);
       const neighbour = mine[Math.min(at, mine.length - 1)];
       return {
-        text: next.length === 0 ? `Removed ${m}. The tutor is back on the built-in defaults.` : `Removed ${m}.`,
+        text: next.length === 0 ? `Removed ${m}. The tutor has nothing to call until you add a model.` : `Removed ${m}.`,
         focus: neighbour === undefined ? `${base}-model` : idFor(neighbour, "remove"),
       };
     });
@@ -941,9 +1023,7 @@ function Models({
       {row.models.length === 0 ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-text2">
           <p>
-            {usingDefaults && keyed && row.custom === undefined
-              ? `No models yet. Until you add one to any provider, the tutor calls ${row.label}'s built-in default, ${row.model}.`
-              : `No models yet, so the tutor skips ${row.label}.`}
+            {`No models yet — add one below for the tutor to call ${row.label}.`}
           </p>
           {keyed && row.custom === undefined && (
             <Button id={testKeyId} variant="ghost" size="sm" disabled={disabled} onClick={onTestKey}>

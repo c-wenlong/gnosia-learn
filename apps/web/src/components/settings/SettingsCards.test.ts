@@ -283,8 +283,9 @@ describe("the Providers card", () => {
     expect(button(container, "Move Google Gemini up")).toBeUndefined();
   });
 
-  it("names the built-in default while the tutor has no models", () => {
+  it("says No models while none is added — the tutor calls nothing until then (T15)", () => {
     const container = mount(createElement(Providers, { view: view({ usingDefaults: true, rows: [row({ models: [] })] }) }));
-    expect(container.textContent).toContain("Built-in default: openrouter/free");
+    expect(container.textContent).toContain("No models");
+    expect(container.textContent).not.toContain("Built-in default");
   });
 });
