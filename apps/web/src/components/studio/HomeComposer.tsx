@@ -8,7 +8,7 @@ import { useStartDraft } from "@/components/studio/useStartDraft";
 import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
-import { HarnessPicker, useStoredHarness } from "@/components/studio/HarnessPicker";
+import { useStoredHarness } from "@/components/studio/HarnessPicker";
 import { getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
@@ -139,9 +139,6 @@ export function HomeComposer({
         disabledReason={busy ? "Opening the conversation." : (block ?? undefined)}
         quietReason={!busy}
         toolbar={[
-          // The harness the conversation runs on (D91): its pick is
-          // remembered, and `createDraft` sends it on `POST /api/drafts`.
-          <HarnessPicker key="harness" />,
           ...options.map((option) => (
             <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
           )),
