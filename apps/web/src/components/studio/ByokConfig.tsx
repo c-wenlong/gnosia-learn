@@ -128,6 +128,10 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     }
     setAdding(false);
     setProvider(next);
+    // A key typed for one provider is never another's: clear it on every
+    // switch, or a replacement meant for A would write over B's saved key.
+    setApiKey("");
+    setShow(false);
     const entry = connected?.find((held) => held.provider === next);
     setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
     const result = await setByokActive(next);
