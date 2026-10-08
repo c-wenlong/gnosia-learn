@@ -234,7 +234,7 @@ describe("foreignLibs", () => {
   it("adds a library's real root when the reported path is a symlink", async (context) => {
     if (process.platform !== "linux") return context.skip("linux only");
     const cc = which("cc");
-    if (cc === undefined || which("ldd") === undefined) return context.skip("needs cc and ldd");
+    if (cc === null || which("ldd") === null) return context.skip("needs cc and ldd");
     const target = path.join(root, "target-lib", "lib");
     const alias = path.join(root, "alias-lib", "lib");
     await mkdir(target, { recursive: true });
