@@ -3,24 +3,25 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ChainEntry } from "@/lib/agent/providers";
 import type { ProviderRowView, ProvidersView } from "@/lib/providers/view";
 
 /**
  * The Providers card folds its controls in and out rather than swapping
  * them, and focus follows: into the field that opened, back to the button
- * that opened it on Cancel. Rows start closed and the arrow opens one onto
- * its models, fetching the provider's model list the first time. A key's
- * password field is in the page only while its form is open.
+ * that opened it on Cancel. Model selection fetches a provider's model list
+ * when the pick lands on it. A key's password field is in the page only
+ * while its form is open.
  */
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 const { Providers } = await import("./Providers");
-const { TutorModels } = await import("./TutorModels");
+const { ModelSelection } = await import("./ModelSelection");
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // jsdom's dialog does not open itself. Add provider's dialog needs what a
+  // jsdom's dialog does not open itself. Add custom provider's dialog needs what a
   // browser's does: it opens, and it is already `open` for Close to undo.
   const proto = HTMLDialogElement.prototype as unknown as { showModal: () => void; close: () => void };
   proto.showModal ??= function (this: HTMLDialogElement) {
@@ -34,15 +35,26 @@ beforeAll(() => {
 const fetchMock = vi.fn();
 /** The model-list fetches — the card also reads `/studio/api/settings/byok` on mount (D95), which is not this test's subject. */
 const modelsCalls = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes("tutor-model/models"));
+const chainWrites = (method: string) =>
+  fetchMock.mock.calls.filter((c) => String(c[0]) === "/api/learner/tutor-model" && (c[1] as RequestInit | undefined)?.method === method);
 beforeEach(() => {
   vi.useFakeTimers();
   fetchMock
     .mockReset()
-    .mockImplementation(() =>
+    .mockImplementation((url) =>
       // A fresh body per call: the card's mount read (BYOK status) and a
-      // row's model list are both fetches, and a shared Response's body can
-      // be read once.
-      Promise.resolve(new Response(JSON.stringify({ ok: true, models: [{ id: "m-1" }, { id: "m-2", free: true }] }), { status: 200 })),
+      // provider's model list are both fetches, and a shared Response's body
+      // can be read once.
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            String(url).includes("/studio/api/settings/byok")
+              ? { configured: false, active: null, providers: [] }
+              : { ok: true, chain: [], models: [{ id: "m-1" }, { id: "m-2", free: true }] },
+          ),
+          { status: 200 },
+        ),
+      ),
     );
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -85,59 +97,25 @@ const view = (over: Partial<ProvidersView> = {}): ProvidersView => ({
   chainReachable: true,
   usingDefaults: false,
   rows: [row()],
-  addable: [{ id: "gemini", label: "Google Gemini" }],
-  full: false,
   ...over,
 });
 
+const selection = (viewOver: Partial<ProvidersView> = {}, chain: ChainEntry[] = [{ provider: "openrouter", model: "m-1" }]) =>
+  createElement(ModelSelection, { view: view(viewOver), chain, tutorStyle: "guide-concise", savedForTutor: [] });
+
 describe("the Providers card", () => {
-  it("starts a row closed, and the arrow opens it onto its models, fetching the list once", async () => {
-    const container = mount(createElement(TutorModels, { view: view() }));
-    const arrow = button(container, "Show OpenRouter models");
-    const panel = document.getElementById(arrow.getAttribute("aria-controls")!)!;
-    expect(arrow.getAttribute("aria-expanded")).toBe("false");
-    expect(panel.closest("[inert]") ?? panel.hasAttribute("inert")).toBeTruthy();
-    expect(modelsCalls()).toHaveLength(0);
-
-    await act(async () => arrow.click());
-    expect(arrow.getAttribute("aria-expanded")).toBe("true");
-    expect(panel.hasAttribute("inert")).toBe(false);
-    expect(container.textContent).toContain("m-1");
-    expect(modelsCalls()).toHaveLength(1);
-    expect(container.textContent).toContain("2 models from OpenRouter");
-  });
-
-  it("asks for the list again when the key changes while the row is open, and keeps only the newest answer", async () => {
-    let answer!: (r: Response) => void;
-    let held = false;
-    fetchMock.mockImplementation((url) =>
-      !held && String(url).includes("tutor-model/models")
-        ? ((held = true), new Promise<Response>((resolve) => (answer = resolve)))
-        : Promise.resolve(new Response(JSON.stringify({ ok: true, models: [{ id: "m-1" }] }), { status: 200 })),
+  it("lists every row it is handed, an unkeyed one with Add key", () => {
+    const container = mount(
+      createElement(Providers, {
+        view: view({
+          rows: [row(), row({ id: "nvidia", label: "NVIDIA NIM", saved: null, inUse: null, models: [] })],
+        }),
+      }),
     );
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    mounted.push(() => {
-      act(() => root.unmount());
-      container.remove();
-    });
-    act(() => root.render(createElement(TutorModels, { view: view() })));
-    await act(async () => button(container, "Show OpenRouter models").click());
-    // The key is replaced while the first ask is still out: the row asks again.
-    fetchMock.mockImplementation((url) =>
-      Promise.resolve(
-        new Response(JSON.stringify({ ok: true, models: String(url).includes("tutor-model/models") ? [{ id: "new-account" }] : [] }), { status: 200 }),
-      ),
-    );
-    await act(async () =>
-      root.render(createElement(TutorModels, { view: view({ rows: [row({ saved: { last4: "wxyz", savedOn: "5 Oct 2026", readable: true } })] }) })),
-    );
-    expect(modelsCalls()).toHaveLength(2);
-    expect(container.textContent).toContain("1 model from OpenRouter");
-    // The first, slower answer arrives last and is dropped.
-    await act(async () => answer(new Response(JSON.stringify({ ok: true, models: [{ id: "old-1" }, { id: "old-2" }] }), { status: 200 })));
-    expect(container.textContent).toContain("1 model from OpenRouter");
+    expect(container.textContent).toContain("OpenRouter");
+    expect(container.textContent).toContain("NVIDIA NIM");
+    expect(container.textContent).toContain("No key yet");
+    expect(button(container, "Add key")).not.toBeUndefined();
   });
 
   it("opens Edit into its key field, and Cancel gives focus back to Edit and drops the field", () => {
@@ -170,7 +148,7 @@ describe("the Providers card", () => {
     expect(document.activeElement).toBe(button(container, "Delete"));
   });
 
-  it("gives focus to Add provider once a deleted row has left with the refresh", async () => {
+  it("keeps a built-in's row after its key is deleted, and a custom row leaves to Add custom provider", async () => {
     fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
     const container = document.createElement("div");
     document.body.append(container);
@@ -179,7 +157,7 @@ describe("the Providers card", () => {
       act(() => root.unmount());
       container.remove();
     });
-    act(() => root.render(createElement(Providers, { view: view() })));
+    act(() => root.render(createElement(Providers, { view: view({ rows: [row({ id: "custom-gw", label: "My gateway", custom: { baseUrl: "https://gw.example/v1" }, models: [] })] }) })));
     act(() => button(container, "Delete").click());
     const group = container.querySelector('[role="group"][aria-label^="Confirm deleting"]')!;
     const confirm = [...group.querySelectorAll("button")].find((b) => b.textContent === "Delete")!;
@@ -187,18 +165,19 @@ describe("the Providers card", () => {
       confirm.focus();
       confirm.click();
     });
-    // The refresh's answer: the row is gone and the provider can be added again.
-    act(() => root.render(createElement(Providers, { view: view({ rows: [], addable: [{ id: "openrouter", label: "OpenRouter" }] }) })));
-    expect(document.activeElement).toBe(button(container, "Add provider"));
+    // The refresh's answer: the custom row is gone and Add custom provider takes focus.
+    act(() => root.render(createElement(Providers, { view: view({ rows: [] }) })));
+    expect(document.activeElement).toBe(button(container, "Add custom provider"));
   });
 
-  it("opens Add provider as a dialog whose Escape and Close give the button back focus", async () => {
+  it("opens Add custom provider as a dialog whose Escape and Close give the button back focus", async () => {
     const container = mount(createElement(Providers, { view: view() }));
-    const add = button(container, "Add provider");
+    const add = button(container, "Add custom provider");
     act(() => add.click());
     const dialog = container.querySelector("dialog")!;
     expect(dialog.getAttribute("open")).not.toBeNull();
     expect(dialog.textContent).toContain("API key");
+    expect(dialog.textContent).toContain("Base URL");
 
     // Escape asks to close; the exit runs, and focus goes back to the button.
     act(() => dialog.dispatchEvent(new Event("cancel", { cancelable: true, bubbles: true })));
@@ -218,25 +197,10 @@ describe("the Providers card", () => {
     expect(document.activeElement).toBe(add);
   });
 
-  it("offers only the providers not listed in Add provider, and hides the button when none is left", () => {
-    const container = mount(createElement(Providers, { view: view() }));
-    act(() => button(container, "Add provider").click());
-    const form = container.querySelector('form[aria-label="Add a provider"]')!;
-    expect(form).not.toBeNull();
-    expect(form.textContent).toContain("Google Gemini");
-
-    // With every built-in listed, Add provider still offers a custom one: the form opens on its fields.
-    const none = mount(createElement(Providers, { view: view({ addable: [] }) }));
-    act(() => button(none, "Add provider").click());
-    const custom = none.querySelector('form[aria-label="Add a provider"]')!;
-    expect(custom.textContent).toContain("Base URL");
-    expect(custom.textContent).toContain("Name");
-  });
-
   it("adds a custom provider in one request with its name, base URL and key", async () => {
-    const container = mount(createElement(Providers, { view: view({ addable: [] }) }));
-    act(() => button(container, "Add provider").click());
-    const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a provider"]')!;
+    const container = mount(createElement(Providers, { view: view() }));
+    act(() => button(container, "Add custom provider").click());
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a custom provider"]')!;
     const inputs = [...form.querySelectorAll("input")];
     const set = (input: HTMLInputElement, value: string) => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -261,8 +225,6 @@ describe("the Providers card", () => {
       }),
     );
     expect(container.textContent).toContain("https://gw.example/v1");
-    expect(container.textContent).toContain("No models");
-    expect(container.textContent).not.toContain("Built-in default");
     act(() => button(container, "Edit").click());
     const form = container.querySelector('form[aria-label="My gateway key"]')!;
     expect(form.querySelector<HTMLInputElement>('input[type="url"]')?.value).toBe("https://gw.example/v1");
@@ -270,23 +232,56 @@ describe("the Providers card", () => {
     // Nothing changed yet: Save waits for a change.
     expect([...form.querySelectorAll("button")].find((b) => b.textContent === "Save")?.disabled).toBe(true);
   });
+});
 
-  it("moves a provider only where there is a provider with models to pass", () => {
-    const container = mount(
-      createElement(TutorModels, {
-        view: view({ rows: [row(), row({ id: "nvidia", label: "NVIDIA NIM", models: ["n-1"] }), row({ id: "gemini", label: "Google Gemini", models: [] })] }),
-      }),
-    );
-    expect(button(container, "Move OpenRouter up").disabled).toBe(true);
-    expect(button(container, "Move OpenRouter down").disabled).toBe(false);
-    // NVIDIA is the last with models: Gemini, below it, has none and no place to swap with.
-    expect(button(container, "Move NVIDIA NIM down").disabled).toBe(true);
-    expect(button(container, "Move Google Gemini up")).toBeUndefined();
+describe("the Model selection card", () => {
+  it("says to add a key first when no provider has one", () => {
+    const container = mount(selection({ rows: [row({ saved: null, inUse: null, models: [] })] }, []));
+    expect(container.textContent).toContain("No provider has a key yet");
   });
 
-  it("says No models while none is added — the tutor calls nothing until then (T15)", () => {
-    const container = mount(createElement(Providers, { view: view({ usingDefaults: true, rows: [row({ models: [] })] }) }));
-    expect(container.textContent).toContain("No models");
-    expect(container.textContent).not.toContain("Built-in default");
+  it("shows the chain's first entry as the pick and fetches the provider's model list", async () => {
+    const container = mount(selection());
+    await act(async () => {});
+    expect(modelsCalls().length).toBeGreaterThan(0);
+    expect(container.textContent).toContain("2 models from OpenRouter");
+    expect(button(container, "Use this model")).not.toBeUndefined();
+    expect(button(container, "Test")).not.toBeUndefined();
+  });
+
+  it("saving a new pick adds it and removes what the chain held", async () => {
+    fetchMock.mockImplementation((url) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            String(url).includes("/studio/api/settings/byok")
+              ? { configured: false, active: null, providers: [] }
+              : String(url).includes("tutor-model/models")
+                ? { ok: true, models: [{ id: "m-9" }] }
+                : { ok: true, chain: [] },
+          ),
+          { status: 200 },
+        ),
+      ),
+    );
+    const chain: ChainEntry[] = [
+      { provider: "openrouter", model: "m-1" },
+      { provider: "openrouter", model: "m-2" },
+    ];
+    const container = mount(selection({}, chain));
+    const input = container.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(input, "m-9");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => button(container, "Use this model").click());
+    const added = chainWrites("POST")[0];
+    expect(JSON.parse(String((added?.[1] as RequestInit).body))).toEqual({ provider: "openrouter", model: "m-9" });
+    const removed = chainWrites("DELETE").map((c) => JSON.parse(String((c[1] as RequestInit).body)));
+    expect(removed).toEqual([
+      { provider: "openrouter", model: "m-1" },
+      { provider: "openrouter", model: "m-2" },
+    ]);
   });
 });

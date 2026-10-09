@@ -440,13 +440,13 @@ function either(labels: readonly string[]): string {
  */
 export function missingKeyMessage(steps: readonly ChainStep[]): string {
   const skips = steps.filter((s): s is SkippedEntry => !isCallable(s));
-  if (skips.length === 0) return "No model is set up. In Settings, add a provider and then a model, under Providers.";
+  if (skips.length === 0) return "No model is set up. In Settings, add a key under Providers and pick a model under Model selection.";
   const lacking = [...new Set(skips.map((s) => s.reason.replace(/^no key for /, "")))];
   const keyed = (skips[0]?.keyed ?? []).map((id) => providerLabel(id));
   const addKey = `add a key for ${either(lacking)} under Providers`;
   return keyed.length === 0
     ? `None of your models has a key. In Settings, ${addKey}.`
-    : `None of your models has a key. In Settings, ${addKey}, or add a model from ${either(keyed)} there.`;
+    : `None of your models has a key. In Settings, ${addKey}, or pick a model from ${either(keyed)} under Model selection.`;
 }
 
 /** A provider's error body, with every key the caller holds taken out, then clipped. */
@@ -634,7 +634,7 @@ function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string, model
   const variable = (["nvidia", "gemini", "openrouter"] as string[]).includes(attempt.provider)
     ? `${attempt.provider.toUpperCase()}_MODEL`
     : `TUTOR_${attempt.provider.toUpperCase()}_MODEL`;
-  const fix = modelFrom === "chain" ? "replace it under Providers in Settings" : `set ${variable}`;
+  const fix = modelFrom === "chain" ? "replace it under Model selection in Settings" : `set ${variable}`;
   console.error(
     attempt.status === 410
       ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, ${fix}`

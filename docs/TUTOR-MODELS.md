@@ -26,7 +26,7 @@ prefix T to keep them apart from BYOK's D1 to D11.
 | Move or delete a whole provider | `PATCH` and `DELETE /api/learner/tutor-model/provider` (T12) |
 | Test one entry | `POST /api/learner/tutor-model/test` |
 | List a provider's models | `POST /api/learner/tutor-model/models` |
-| The Settings card | `apps/web/src/components/settings/Providers.tsx`, fed by `apps/web/src/lib/providers/view.ts` (T12) |
+| The Settings cards | `apps/web/src/components/settings/Providers.tsx` (every provider, keyed or not) and `apps/web/src/components/settings/ModelSelection.tsx` (the tutor's pick and Studio chats), fed by `apps/web/src/lib/providers/view.ts` (T12, T16) |
 
 A turn of the tutor, with and without a chain:
 
@@ -328,3 +328,21 @@ built-in default still feeds one place: the key Test, which needs a model
 to call (`keyTestModel`, `used` false). `orderCredentials` remains for
 callers with no owner — scripts and tests — and is not the tutor's
 fallback anymore.
+
+## T16. Two cards: every provider listed, and the picks as dropdowns
+
+**Decided 2026-10-09.** The owner asked for the Models tab to shrink to
+Providers and Model selection. The Providers card now lists every built-in,
+keyed or not, then the custom providers — an unkeyed row is where its key
+goes ("Add key" opens the same form Edit does), so no provider waits behind
+the add dialog, which remains only for custom providers (T14). A built-in's
+Delete takes the key and the models but the row stays.
+
+Model selection replaces the Tutor models card and the Studio chats (BYOK)
+card. The tutor's side is one provider-and-model pick, the provider's own
+`/models` list behind a `Combobox`, saved as the whole chain it replaces —
+the chain's storage and routes are unchanged, the pick is its first entry.
+The Studio chats side is the picker's `ByokConfig` trimmed to selection
+(`manageKeys` off): connected providers and tutor-saved ones that connect
+with their key, no key field, the Lite/Default/Max tiers unchanged. The
+harness picker's dialog keeps the full `ByokConfig`, key entry included.

@@ -1529,10 +1529,10 @@ async function run() {
 
   await step('settings: change the tutor style, see Saved', page, async () => {
     await go('/settings');
-    // The page opens on General since #342; the style is under Tutor, and a
+    // The page opens on General since #342; the style is under Models, and a
     // press on the tab puts it in the address.
-    await clickHydrated(page, main.getByRole('tab', { name: 'Tutor' }));
-    await page.waitForURL((url) => url.searchParams.get('tab') === 'tutor');
+    await clickHydrated(page, main.getByRole('tab', { name: 'Models' }));
+    await page.waitForURL((url) => url.searchParams.get('tab') === 'models');
     // A kit menu since #355: the trigger is named "Tutor style: <current>".
     await clickHydrated(page, main.getByRole('button', { name: /^Tutor style:/ }));
     const next = page.getByRole('listbox', { name: 'Tutor style' }).locator('[role=option][aria-selected=false]').first();
@@ -1545,48 +1545,40 @@ async function run() {
   });
 
   await step('provider keys: save a key, see its last four, remove it', page, async () => {
-    // The keys are under Tutor (#342), which `?tab=tutor` opens.
-    if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
+    // The keys are under Models, which `?tab=models` opens.
+    if (new URL(page.url()).searchParams.get('tab') !== 'models') await go('/settings?tab=models');
     // docs/BYOK.md: a key goes in once and never comes back out. The Providers
-    // card (#383) lists a provider only once it has a key or a model; the
-    // rest are offered under Add provider. From the seed that is all three,
-    // but a `--copy` may hold some already, so the step takes whichever
-    // provider the form offers first, which it chooses on its own.
-    const add = main.getByRole('button', { name: 'Add provider', expanded: false });
-    assert((await add.count()) > 0, 'every provider is listed already, so none can be added');
-    await clickHydrated(page, add);
-    const form = main.getByRole('form', { name: 'Add a provider' });
-    // A kit menu: the trigger is named "Provider: <current>".
-    const chosen = form.getByRole('button', { name: /^Provider: / });
-    await chosen.waitFor();
-    const label = (await chosen.getAttribute('aria-label'))?.replace(/^Provider: /, '') ?? '';
-    assert(label !== '', 'the provider menu names no provider');
+    // card lists every provider, keyed or not; an unkeyed row's Add key opens
+    // its key form. The step takes the first row holding no saved key, so a
+    // `--copy` that keyed some already still has somewhere to write — and the
+    // delete at the end puts the row back as it was.
+    const row = main.getByRole('listitem').filter({ hasNotText: /Your key, ending|can no longer be read/ }).first();
+    await row.getByRole('button', { name: 'Add key', expanded: false }).click();
     const fake = 'e2e-not-a-real-provider-key-000000000000wxyz';
-    await form.getByLabel('API key', { exact: true }).fill(fake);
+    await row.locator('input[type="password"]').fill(fake);
     const saving = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/learner/provider-key' && r.request().method() === 'POST',
     );
-    await form.getByRole('button', { name: 'Add provider' }).click();
+    await row.getByRole('button', { name: 'Save key' }).click();
     const response = await saving;
     assert(response.status() === 200, `the save answered ${response.status()}`);
     assert(!(await response.text()).includes(fake), 'the save answered with the key in it');
-    const row = main.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
     await row.getByText(/^Your key, ending wxyz\. Saved /).waitFor();
     assert(!(await page.content()).includes(fake), 'the page still holds the key after saving');
-    // Delete opens a confirm; its own Delete takes the key, and with no
-    // server key and no models the row leaves the list, as it was.
+    // Delete opens a confirm; its own Delete takes the key, and the built-in
+    // row stays listed, back to having no key (or back on the server's).
     await row.getByRole('button', { name: 'Delete', exact: true, expanded: false }).click();
-    await row.getByRole('group', { name: `Confirm deleting ${label}` }).getByRole('button', { name: 'Delete', exact: true }).click();
-    await row.waitFor({ state: 'detached' });
+    await row.getByRole('group', { name: /^Confirm deleting / }).getByRole('button', { name: 'Delete', exact: true }).click();
+    await row.getByText(/No key yet|Using the server's key/).waitFor();
   });
 
   await step('settings: the sidebar reaches the bottom with every fold shut', page, async () => {
     // #405: an `sr-only` line (position: absolute) inside a shut fold escaped
     // the fold's clip and made the document taller than the shell, so the
-    // sticky sidebar stopped short with a blank strip under it. The Tutor tab
-    // holds shut folds with such lines (Add provider, each row's panels).
-    if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
-    await main.getByRole('button', { name: 'Add provider', expanded: false }).waitFor();
+    // sticky sidebar stopped short with a blank strip under it. The Models tab
+    // holds shut folds with such lines (each row's key form and confirm).
+    if (new URL(page.url()).searchParams.get('tab') !== 'models') await go('/settings?tab=models');
+    await main.getByRole('button', { name: 'Add custom provider', expanded: false }).waitFor();
     for (const height of [860, 600]) {
       await page.setViewportSize({ width: 1280, height });
       const m = await page.evaluate(async () => {

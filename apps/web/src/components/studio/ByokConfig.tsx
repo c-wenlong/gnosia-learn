@@ -26,14 +26,22 @@ const ADD_PROVIDER = "__add__";
  * holding a combobox each — the provider's own `/models`, fetched on the key
  * the field holds or the stored one. Provider picks switch what `byok` turns
  * run on; "Save models" writes the three tiers.
+ *
+ * `manageKeys` false trims it to selection alone (the settings card, where
+ * keys live on Providers above): no "+ Add provider", no key field, no
+ * Connect and no Remove — the dropdown lists connected providers and the
+ * tutor-saved ones that connect with their saved key.
  */
 export function ByokConfig({
   onConnected,
   savedForTutor = [],
+  manageKeys = true,
 }: {
   onConnected?: () => void;
   /** BYOK preset names with a key saved on the Providers card — listed so they connect with that key, no re-typing (D95). */
   savedForTutor?: string[];
+  /** False hides every key control: the surface picks and models only. */
+  manageKeys?: boolean;
 }) {
   const id = useId();
   const providerId = `${id}-provider`;
@@ -74,7 +82,7 @@ export function ByokConfig({
           setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
           if (active !== null) {
             setProvider(active);
-          } else {
+          } else if (manageKeys) {
             setProvider(ADD_PROVIDER);
             setAdding(true);
           }
@@ -88,14 +96,14 @@ export function ByokConfig({
           const entry = result.data.providers.find((entry) => entry.provider === active);
           setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
           setApiKey("");
-          return active ?? ADD_PROVIDER;
+          return active ?? (manageKeys ? ADD_PROVIDER : "");
         });
-        if (result.data.providers.length === 0) setAdding(true);
+        if (result.data.providers.length === 0 && manageKeys) setAdding(true);
       });
     load();
     window.addEventListener(BYOK_SETTINGS_CHANGED, load);
     return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, load);
-  }, []);
+  }, [manageKeys]);
 
   const selected = connected?.find((entry) => entry.provider === provider) ?? null;
   // The provider the model list and Save are about: the connected pick, or
@@ -337,15 +345,18 @@ export function ByokConfig({
               value: `saved:${p}`,
               label: `${BYOK_PROVIDERS.find((known) => known.value === p)?.label ?? p} · use saved key`,
             })),
-            { value: ADD_PROVIDER, label: "+ Add provider" },
+            ...(manageKeys ? [{ value: ADD_PROVIDER, label: "+ Add provider" }] : []),
           ]}
           value={adding ? ADD_PROVIDER : provider}
           onChange={(next) => void chooseProvider(next)}
           placeholder={connected === null ? "Loading…" : "Select a provider"}
         />
+        {!manageKeys && connected !== null && connected.length === 0 && tutorSaved.length === 0 && (
+          <p className="text-[12px] leading-4 text-text3">No provider has a key yet — add one under Providers above.</p>
+        )}
       </div>
 
-      {adding && (
+      {manageKeys && adding && (
         <>
           <div className="flex flex-col gap-1.5">
             <label htmlFor={newProviderId} className={LABEL}>
@@ -365,8 +376,9 @@ export function ByokConfig({
 
       {/* The key field sits under the provider for both flows: required when
           adding, a replacement for a connected one (blank keeps the stored
-          key). Its tail names what is stored, never the key itself. */}
-      {(adding || selected !== null) && (
+          key). Its tail names what is stored, never the key itself. Keys are
+          managed on the Providers card where `manageKeys` is off. */}
+      {manageKeys && (adding || selected !== null) && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor={keyId} className={LABEL}>
             API key
@@ -397,7 +409,7 @@ export function ByokConfig({
         </div>
       )}
 
-      {adding && (
+      {manageKeys && adding && (
         <Button className="self-start" disabled={saving || newProvider === "" || apiKey.trim() === ""} onClick={() => void connect()}>
           {saving ? "Connecting…" : "Connect"}
         </Button>
@@ -443,7 +455,7 @@ export function ByokConfig({
               {saving ? "Saving…" : "Save models"}
             </Button>
             {note !== null && <p className="text-[12px] leading-4 text-text3">{note}</p>}
-            {selected !== null && (
+            {manageKeys && selected !== null && (
               <button type="button" className="ml-auto text-[12px] leading-4 text-text3 underline-offset-2 hover:underline" disabled={saving} onClick={() => void remove()}>
                 Remove
               </button>
