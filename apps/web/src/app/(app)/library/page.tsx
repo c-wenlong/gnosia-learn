@@ -253,7 +253,7 @@ export default async function LibraryPage({
         <Notice title="Nothing indexed yet" command="npm run catalog -- import">
           The catalog is reachable and holds no assets. The rows here are written by the catalog
           itself: an import of an export tree or the seed, the note, log and diagram writers, and
-          the manimkc, remotionkc and revideokc indexers for the videos. None of those has run against this database yet.
+          the manimkc, remotionkc, revideokc and blenderkc indexers for the videos. None of those has run against this database yet.
         </Notice>
       ) : (
         <>

@@ -62,6 +62,10 @@ describe("the problem table", () => {
       kind: "command",
       text: "npm run catalog -- asset upload --source revideokc",
     });
+    expect(assetProblem("not-uploaded", "blenderkc").fix).toEqual({
+      kind: "command",
+      text: "npm run catalog -- asset upload --source blenderkc",
+    });
     expect(assetProblem("not-uploaded", "manimkc")).toEqual(ASSET_PROBLEMS["not-uploaded"]);
     // Not a render, or not known: the table's own sentence.
     expect(assetProblem("not-uploaded", "tldrawkc")).toBe(ASSET_PROBLEMS["not-uploaded"]);

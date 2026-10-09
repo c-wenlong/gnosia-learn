@@ -120,6 +120,7 @@ describe("assetMetaLine", () => {
     expect(assetMetaLine(asset())).toBe("manim · 25 MB");
     expect(assetMetaLine(asset({ sourceRepo: "remotionkc" }))).toBe("remotion · 25 MB");
     expect(assetMetaLine(asset({ sourceRepo: "revideokc" }))).toBe("revideo · 25 MB");
+    expect(assetMetaLine(asset({ sourceRepo: "blenderkc" }))).toBe("blender · 25 MB");
     expect(
       assetMetaLine(asset({ kind: "diagram_svg", sourceRepo: "tldrawkc", bytes: 12_000 })),
     ).toBe("SVG · tldraw · 12 kB");

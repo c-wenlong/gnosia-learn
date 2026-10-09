@@ -122,8 +122,8 @@ Commands:
                            were edited. <dir> defaults to the repository,
                            which has held no content since the cut-over: on a
                            database that owns every type, a bare \`import\`
-                           refreshes manimkc, remotionkc, revideokc and the
-                           mirror ledger.
+                           refreshes manimkc, remotionkc, revideokc,
+                           blenderkc and the mirror ledger.
   index                    The old name of \`import\` with no directory. Still
                            works, and says the new name once on stderr.
   export --out <dir>       Write the database back out as content/ and learn/
@@ -204,8 +204,9 @@ Commands:
                            parent's (D24); --fix restamps those.
   asset upload             Copy rendered files into the blob store and point
                            their asset rows at them: --source manimkc reads
-                           manimkc topics --json (--source remotionkc and
-                           --source revideokc, their own topics --json),
+                           manimkc topics --json (--source remotionkc,
+                           --source revideokc and --source blenderkc, their
+                           own topics --json),
                            uploads every indexed video
                            and sidecar whose bytes match its row, cuts a
                            poster per video with ffmpeg, and sets blob_key.
@@ -292,8 +293,8 @@ Options:
   --json                   Machine-readable output. Supported by every command.
   --only a,b               import, index: run only these sources. Known
                            sources are topics, tags, courses, concepts,
-                           manimkc, remotionkc, revideokc, diagrams,
-                           sessions, mirrors; they always
+                           manimkc, remotionkc, revideokc, blenderkc,
+                           diagrams, sessions, mirrors; they always
                            run in dependency order, and selecting one selects
                            everything downstream of it and everything it
                            reads. export, parity: only these types, of
@@ -301,7 +302,7 @@ Options:
   --out DIR                export: where to write. Created if missing.
                            course export: the file to write.
   --source NAME            asset upload: what to upload: manimkc,
-                           remotionkc or revideokc.
+                           remotionkc, revideokc or blenderkc.
   --dry-run                asset upload: hash and report, write nothing.
                            topic add: validate, place and list near
                            matches, write nothing. course import: plan the
@@ -337,6 +338,9 @@ Options:
   --revideokc-root PATH    import, asset upload: the revideokc checkout to
                            read. Relative to the working directory. Default:
                            $REVIDEOKC_ROOT, else <repo>/tools/revideokc.
+  --blenderkc-root PATH    import, asset upload: the blenderkc checkout to
+                           read. Relative to the working directory. Default:
+                           $BLENDERKC_ROOT, else <repo>/tools/blenderkc.
   --from PATH              backfill: the directory holding events.jsonl,
                            model.json and reviews.json.
                            Default: <repo>/${DEFAULT_STATE_DIR}.
@@ -399,6 +403,8 @@ Environment:
                  Same variable and same meaning as remotionkc's own CLI.
   REVIDEOKC_ROOT The revideokc checkout. Defaults to <repo>/tools/revideokc.
                  Same variable and same meaning as revideokc's own CLI.
+  BLENDERKC_ROOT The blenderkc checkout. Defaults to <repo>/tools/blenderkc.
+                 Same variable and same meaning as blenderkc's own CLI.
   TLDRAWKC_ROOT  The tldrawkc checkout, whose dist/ build reads the .tldr
                  files. Defaults to <repo>/tools/tldrawkc.
   LEARN_ROOT     The knowledge base's repo root, for tests. Defaults to
@@ -407,7 +413,7 @@ Environment:
                  1 lets this process write to a database marked copy. For
                  tests and scripts/e2e.mjs only; migrate sets it itself.
 
-  All seven are documented in services/catalog/.env.example, all seven take a
+  All eight are documented in services/catalog/.env.example, all eight take a
   default that needs no configuration, and the shell always wins over
   services/catalog/.env.
 `;
@@ -534,6 +540,7 @@ export async function main(argv: string[]): Promise<number> {
         "manimkc-root": { type: "string" },
         "remotionkc-root": { type: "string" },
         "revideokc-root": { type: "string" },
+        "blenderkc-root": { type: "string" },
         from: { type: "string" },
         kind: { type: "string" },
         job: { type: "string" },
@@ -650,6 +657,7 @@ export async function main(argv: string[]): Promise<number> {
         const root = values["manimkc-root"];
         const remotionkcRoot = values["remotionkc-root"];
         const revideokcRoot = values["revideokc-root"];
+        const blenderkcRoot = values["blenderkc-root"];
         const only = values.only === undefined ? undefined : parseSources(values.only);
         await schemaCurrent();
         const result = await runImportCommand({
@@ -658,6 +666,7 @@ export async function main(argv: string[]): Promise<number> {
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
           remotionkcRoot: remotionkcRoot === undefined ? undefined : path.resolve(remotionkcRoot),
           revideokcRoot: revideokcRoot === undefined ? undefined : path.resolve(revideokcRoot),
+          blenderkcRoot: blenderkcRoot === undefined ? undefined : path.resolve(blenderkcRoot),
         });
         emit(result, formatIndex(result));
         break;
@@ -715,6 +724,7 @@ export async function main(argv: string[]): Promise<number> {
           manimkc: values["manimkc-root"],
           remotionkc: values["remotionkc-root"],
           revideokc: values["revideokc-root"],
+          blenderkc: values["blenderkc-root"],
         };
         // Each root flag names one tool's checkout; another tool's is a
         // mistake that would otherwise be ignored without a word.
@@ -732,6 +742,7 @@ export async function main(argv: string[]): Promise<number> {
           manimkcRoot: resolved(roots.manimkc),
           remotionkcRoot: resolved(roots.remotionkc),
           revideokcRoot: resolved(roots.revideokc),
+          blenderkcRoot: resolved(roots.blenderkc),
           reason: reasons[0],
         });
         emit(result, formatAssetUpload(result));

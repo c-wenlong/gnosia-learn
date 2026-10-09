@@ -135,9 +135,9 @@ console.log(`e2e: screenshots and the server log go to ${OUT}`);
  * the server reads it from: under OUT, never `~/.self-learn`. And an empty
  * manimkc root, so the import runs no manimkc source: the seed maps no topic
  * folder (it has no videos), and a real checkout's renders would be refused
- * as folders no topic maps. The same empty directory is the remotionkc and
- * revideokc root, for the same reason: their topic.yml files name topics the
- * seed lacks.
+ * as folders no topic maps. The same empty directory is the remotionkc,
+ * revideokc and blenderkc root, for the same reason: their topic.yml files
+ * name topics the seed lacks.
  */
 const SEED_HOME = SEED ? join(OUT, 'home') : null;
 const NO_MANIMKC = SEED ? mkdtempSync(join(OUT, 'no-manimkc-')) : null;
@@ -258,6 +258,7 @@ function seedEnv() {
     MANIMKC_ROOT: NO_MANIMKC,
     REMOTIONKC_ROOT: NO_MANIMKC,
     REVIDEOKC_ROOT: NO_MANIMKC,
+    BLENDERKC_ROOT: NO_MANIMKC,
     // The knowledge base is the seed's, for any learn command that still
     // looks at files; after the flips below it reads the notes from rows.
     LEARN_ROOT: join(ROOT, 'seed'),

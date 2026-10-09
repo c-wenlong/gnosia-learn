@@ -23,6 +23,13 @@ import { testVocabulary } from "./vocabulary";
 
 const docs = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "docs");
 
+/**
+ * The tools VIDEO-TOOLS.md routes to that the studio does not offer: made at
+ * a terminal only, with no backend and no place in the planner's TOOLS block
+ * (blenderkc, photoreal 3D: its page row and column say so).
+ */
+const TERMINAL_ONLY = ["blenderkc"];
+
 /** VIDEO-TOOLS.md's "Pick by what the video needs" table, as cells. */
 function routingRows(): { need: string; tool: string; why: string }[] {
   const text = readFileSync(path.join(docs, "VIDEO-TOOLS.md"), "utf8");
@@ -35,10 +42,19 @@ function routingRows(): { need: string; tool: string; why: string }[] {
 }
 
 describe("the routing rows", () => {
-  it("are VIDEO-TOOLS.md's table, word for word and in its order", () => {
+  it("are VIDEO-TOOLS.md's table, word for word and in its order, bar a terminal-only tool's", () => {
     const rows = routingRows();
     expect(rows.length).toBeGreaterThan(5);
-    expect(VIDEO_TOOL_ROUTES).toEqual(rows);
+    expect(VIDEO_TOOL_ROUTES).toEqual(rows.filter((row) => !TERMINAL_ONLY.includes(row.tool)));
+  });
+
+  it("say a terminal-only tool's row is one the studio cannot take", () => {
+    const terminal = routingRows().filter((row) => TERMINAL_ONLY.includes(row.tool));
+    expect(terminal.map((row) => row.tool)).toEqual(TERMINAL_ONLY);
+    for (const row of terminal) {
+      expect(row.why).toContain("At a terminal only");
+      expect(VIDEO_TOOL_NAMES as readonly string[]).not.toContain(row.tool);
+    }
   });
 
   it("name only the three tools, bar the series row", () => {
@@ -46,22 +62,31 @@ describe("the routing rows", () => {
   });
 });
 
-/** VIDEO-TOOLS.md's capability matrix, as cells. */
-function matrixRows(): { capability: string; manimkc: string; remotionkc: string; revideokc: string }[] {
+/** VIDEO-TOOLS.md's capability matrix, as cells: the studio's three tools, then blenderkc's column. */
+function matrixRows(): { capability: string; manimkc: string; remotionkc: string; revideokc: string; blenderkc: string }[] {
   const text = readFileSync(path.join(docs, "VIDEO-TOOLS.md"), "utf8");
   const section = text.slice(text.indexOf("## The capability matrix"), text.indexOf("## Shared ground"));
-  const rows = section.split("\n").filter((line) => line.startsWith("| ")).slice(2);
-  return rows.map((row) => {
-    const [capability = "", manimkc = "", remotionkc = "", revideokc = ""] = row.replace(/^\| /, "").replace(/ \|$/, "").split(" | ");
-    return { capability, manimkc, remotionkc, revideokc };
+  const lines = section.split("\n").filter((line) => line.startsWith("| "));
+  expect(lines[0]).toBe("| Capability | manimkc | remotionkc | revideokc | blenderkc |");
+  return lines.slice(2).map((row) => {
+    const [capability = "", manimkc = "", remotionkc = "", revideokc = "", blenderkc = ""] = row.replace(/^\| /, "").replace(/ \|$/, "").split(" | ");
+    return { capability, manimkc, remotionkc, revideokc, blenderkc };
   });
 }
 
 describe("the capability matrix", () => {
-  it("is VIDEO-TOOLS.md's matrix, word for word and in its order", () => {
+  it("is VIDEO-TOOLS.md's matrix, word for word and in its order, without the terminal-only column", () => {
     const rows = matrixRows();
     expect(rows.length).toBeGreaterThan(10);
-    expect(VIDEO_TOOL_CAPABILITIES).toEqual(rows);
+    expect(VIDEO_TOOL_CAPABILITIES).toEqual(
+      rows.map((row) => ({ capability: row.capability, manimkc: row.manimkc, remotionkc: row.remotionkc, revideokc: row.revideokc })),
+    );
+  });
+
+  it("fills the terminal-only column on every row, and never says the studio makes it", () => {
+    const rows = matrixRows();
+    for (const row of rows) expect(row.blenderkc, row.capability).not.toBe("");
+    expect(rows.find((row) => row.capability === "Studio can make it unattended")?.blenderkc).toBe("no (not in the studio)");
   });
 });
 

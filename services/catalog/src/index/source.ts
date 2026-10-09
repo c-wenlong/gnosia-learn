@@ -61,6 +61,8 @@ export interface IndexContext {
   remotionkcRoot?: string;
   /** The revideokc checkout, the same way: only the revideokc source uses it. */
   revideokcRoot?: string;
+  /** The blenderkc checkout, the same way: only the blenderkc source uses it. */
+  blenderkcRoot?: string;
   /**
    * Whether this database is under phase 2's contract (migration 0013): a
    * stored-kind asset row must name its blob, so the manimkc source hands
@@ -244,6 +246,7 @@ export const ASSET_PREFIX = {
   manimkc: "manimkc:",
   remotionkc: "remotionkc:",
   revideokc: "revideokc:",
+  blenderkc: "blenderkc:",
   diagrams: "diagram:",
   sessions: "session:",
 } as const satisfies Partial<Record<IndexSource, string>>;

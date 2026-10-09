@@ -8,6 +8,11 @@
  * in its order; `test/video-tools.test.ts` fails when the two disagree, so
  * that page stays the one place routing is decided, for an agent at a
  * terminal and for the studio alike.
+ *
+ * The page also routes to blenderkc, the fourth video tool, which is made at
+ * a terminal only: the studio has no backend for it, so its row and its
+ * matrix column are left out here, and a studio job takes the next row that
+ * fits. The test holds that too.
  */
 
 export const VIDEO_TOOL_NAMES = ["manimkc", "remotionkc", "revideokc"] as const;

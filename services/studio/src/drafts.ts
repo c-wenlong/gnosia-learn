@@ -3645,7 +3645,12 @@ async function readVideoCorpus(): Promise<VideoCorpusEntry[] | null> {
     .filter((video): video is Record<string, unknown> => typeof video === "object" && video !== null)
     .map((video) => ({
       origin:
-        video.origin === "manimkc" || video.origin === "remotionkc" || video.origin === "revideokc"
+        video.origin === "manimkc" ||
+        video.origin === "remotionkc" ||
+        video.origin === "revideokc" ||
+        // A render the studio cannot make (no backend) is still a video
+        // that exists, which is what the VIDEOS block tells the planner.
+        video.origin === "blenderkc"
           ? video.origin
           : "studio",
       slug: typeof video.slug === "string" ? video.slug : null,
