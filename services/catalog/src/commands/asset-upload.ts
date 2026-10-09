@@ -5,7 +5,7 @@ import { databaseUrl, REPO_ROOT, redactUrl } from "../env";
 import { findFfmpeg } from "../poster/extract";
 
 /**
- * `catalog asset upload --source manimkc|remotionkc|revideokc [--dry-run]`:
+ * `catalog asset upload --source manimkc|remotionkc|revideokc|blenderkc [--dry-run]`:
  * the connection, the store and the printing. What it uploads and why each
  * rule holds is in `../content/asset-upload.ts`.
  *
@@ -22,6 +22,7 @@ export interface AssetUploadCommandOptions {
   manimkcRoot?: string;
   remotionkcRoot?: string;
   revideokcRoot?: string;
+  blenderkcRoot?: string;
   reason?: string;
 }
 
@@ -46,6 +47,7 @@ export async function runAssetUpload(options: AssetUploadCommandOptions): Promis
       manimkcRoot: options.manimkcRoot,
       remotionkcRoot: options.remotionkcRoot,
       revideokcRoot: options.revideokcRoot,
+      blenderkcRoot: options.blenderkcRoot,
       dryRun: options.dryRun,
       ffmpeg,
       reason: options.reason,

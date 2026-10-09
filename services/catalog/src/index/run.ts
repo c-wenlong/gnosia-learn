@@ -35,7 +35,8 @@ import type { CatalogDatabase } from "../db";
 import { findFfmpeg } from "../poster/extract";
 import { videosWithStoredPoster } from "../state/blobs";
 import { sqlstate } from "../state/errors";
-import { REPO_ROOT, resolveManimkcRoot, resolveRemotionkcRoot, resolveRevideokcRoot } from "../env";
+import { REPO_ROOT, resolveBlenderkcRoot, resolveManimkcRoot, resolveRemotionkcRoot, resolveRevideokcRoot } from "../env";
+import { blenderkcIndexer } from "./blenderkc";
 import { conceptsIndexer } from "./concepts";
 import { asIndexError } from "./content-errors";
 import { coursesIndexer } from "./courses";
@@ -49,7 +50,7 @@ import { sessionsIndexer } from "./sessions";
 import { tagsIndexer } from "./tags";
 import type { IndexContext, Indexer } from "./source";
 import { topicsIndexer } from "./topics";
-import { hasToolCli, isVideoToolName, MANIMKC, REMOTIONKC, REVIDEOKC, type VideoTool } from "./video-tool";
+import { BLENDERKC, hasToolCli, isVideoToolName, MANIMKC, REMOTIONKC, REVIDEOKC, type VideoTool } from "./video-tool";
 import { loadVocabulary, vocabularyOf } from "./vocabulary";
 import { pruneHeldTopics, writeSource, type SourceWrite } from "./writer";
 
@@ -79,7 +80,7 @@ import { pruneHeldTopics, writeSource, type SourceWrite } from "./writer";
  */
 const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   // Every other source resolves a slug from the vocabulary.
-  topics: ["courses", "concepts", "manimkc", "remotionkc", "revideokc", "diagrams", "sessions"],
+  topics: ["courses", "concepts", "manimkc", "remotionkc", "revideokc", "blenderkc", "diagrams", "sessions"],
   // A course's `collection_tag` rows point at tags, and pruning a tag clears
   // them (`pruneEntity`), so the courses source has to write them back.
   tags: ["courses"],
@@ -87,18 +88,19 @@ const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   // the concept link is the courses source's own row, and progress and recap
   // are learner state, not index output.
   courses: [],
-  // A course row's `concepts:` list, diagrams, sessions and the three video
+  // A course row's `concepts:` list, diagrams, sessions and the four video
   // tools (a topic.yml's `concepts:`) all link to concepts by slug, and a
   // concept prune cascades through their `asset_concept` rows.
-  concepts: ["courses", "diagrams", "sessions", "manimkc", "remotionkc", "revideokc"],
+  concepts: ["courses", "diagrams", "sessions", "manimkc", "remotionkc", "revideokc", "blenderkc"],
   // `mirror` rows hang off manimkc's asset rows and cascade when one is
   // pruned, so re-reading manimkc alone would silently empty the ledger for a
   // renamed video. `topics` reaches mirrors through here, transitively.
   manimkc: ["mirrors"],
-  // Nothing points at remotionkc's or revideokc's rows: neither has a mirror
-  // ledger.
+  // Nothing points at remotionkc's, revideokc's or blenderkc's rows: none
+  // has a mirror ledger.
   remotionkc: [],
   revideokc: [],
+  blenderkc: [],
   diagrams: [],
   sessions: [],
   mirrors: [],
@@ -131,6 +133,7 @@ const REQUIRES: Record<IndexSource, readonly IndexSource[]> = {
   manimkc: [],
   remotionkc: [],
   revideokc: [],
+  blenderkc: [],
   diagrams: [],
   sessions: [],
   mirrors: ["manimkc"],
@@ -138,7 +141,7 @@ const REQUIRES: Record<IndexSource, readonly IndexSource[]> = {
 
 /**
  * The content type each source reads, for its `content_source` row. `mirrors`
- * reads none, and neither do `remotionkc` and `revideokc`: their renders are
+ * reads none, and neither do `remotionkc`, `revideokc` and `blenderkc`: their renders are
  * always read from their CLIs, as manimkc's are today, and a type nobody can
  * flip needs no row.
  */
@@ -166,6 +169,7 @@ export const INDEXERS: readonly Indexer[] = [
   manimkcIndexer,
   remotionkcIndexer,
   revideokcIndexer,
+  blenderkcIndexer,
   diagramsIndexer,
   sessionsIndexer,
   // Last: it reads no content tree, only the ledger and the asset rows manimkc
@@ -183,6 +187,7 @@ const TOOL_COMMAND = {
   manimkc: { tool: MANIMKC, command: "manimkc topics --json" },
   remotionkc: { tool: REMOTIONKC, command: "remotionkc topics --json" },
   revideokc: { tool: REVIDEOKC, command: "revideokc topics --json" },
+  blenderkc: { tool: BLENDERKC, command: "blenderkc topics --json" },
   mirrors: { tool: MANIMKC, command: "manimkc mirrors --json" },
 } as const satisfies Partial<Record<IndexSource, { tool: VideoTool; command: string }>>;
 
@@ -205,6 +210,8 @@ export interface RunOptions {
   remotionkcRoot?: string;
   /** The revideokc checkout to read. Defaults to `$REVIDEOKC_ROOT`, else the submodule. */
   revideokcRoot?: string;
+  /** The blenderkc checkout to read. Defaults to `$BLENDERKC_ROOT`, else the submodule. */
+  blenderkcRoot?: string;
   /** Sources to run. Defaults to all of them; always reordered to dependency order. */
   only?: readonly IndexSource[];
   /** The author the run's `import` revisions carry. Defaults to `import:<git sha>` of the tree. */
@@ -281,6 +288,7 @@ export interface RunResult {
   manimkcRoot: string;
   remotionkcRoot: string;
   revideokcRoot: string;
+  blenderkcRoot: string;
   sources: SourceWrite[];
   /**
    * Sources `--only` did not name but that had to run anyway, and which of the
@@ -376,6 +384,7 @@ export async function runIndex(
   const manimkcRoot = options.manimkcRoot ?? resolveManimkcRoot(toolsRoot);
   const remotionkcRoot = options.remotionkcRoot ?? resolveRemotionkcRoot(toolsRoot);
   const revideokcRoot = options.revideokcRoot ?? resolveRevideokcRoot(toolsRoot);
+  const blenderkcRoot = options.blenderkcRoot ?? resolveBlenderkcRoot(toolsRoot);
   const requested = options.only ?? INDEX_SOURCES;
   const wanted = selection(requested);
   const prerequisites = new Set([...wanted].flatMap((source) => REQUIRES[source]));
@@ -435,6 +444,7 @@ export async function runIndex(
     manimkcRoot,
     remotionkcRoot,
     revideokcRoot,
+    blenderkcRoot,
     vocabulary,
     owner,
     blobsRequired: await blobContractInForce(db),
@@ -516,7 +526,8 @@ export async function runIndex(
   // The optional sources: their reader is a video tool's CLI (manimkc's at
   // `tools/manimkc/tools/cli/manimkc`, remotionkc's at
   // `tools/remotionkc/tools/cli/remotionkc.mjs`, revideokc's at
-  // `tools/revideokc/tools/cli/revideokc.mjs`), which lives in a submodule
+  // `tools/revideokc/tools/cli/revideokc.mjs`, blenderkc's at
+  // `tools/blenderkc/tools/cli/blenderkc`), which lives in a submodule
   // that a fresh clone and CI deliberately do not fetch. Leaving one out is safe only when it has never been indexed, because
   // otherwise pruning a topic cascades through its asset_topic and mirror rows
   // and nothing puts them back. So: refuse when it was asked for, refuse when
@@ -658,6 +669,7 @@ export async function runIndex(
             manimkcRoot,
             remotionkcRoot,
             revideokcRoot,
+            blenderkcRoot,
             report,
             ffmpeg: await ffmpeg,
             owner,
@@ -744,6 +756,7 @@ export async function runIndex(
     manimkcRoot,
     remotionkcRoot,
     revideokcRoot,
+    blenderkcRoot,
     sources,
     // Sorted into run order, so the reported lists read the way they ran.
     addedForSafety: INDEXERS.map((i) => i.source).filter(

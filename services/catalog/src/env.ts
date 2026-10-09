@@ -32,11 +32,16 @@ export const REMOTIONKC_DIR = path.join("tools", "remotionkc");
 /** The revideokc submodule, relative to the repo root. The third video tool. */
 export const REVIDEOKC_DIR = path.join("tools", "revideokc");
 
+/** The blenderkc submodule, relative to the repo root. The fourth video tool. */
+export const BLENDERKC_DIR = path.join("tools", "blenderkc");
+
 export const MANIMKC_ROOT_ENV = "MANIMKC_ROOT";
 
 export const REMOTIONKC_ROOT_ENV = "REMOTIONKC_ROOT";
 
 export const REVIDEOKC_ROOT_ENV = "REVIDEOKC_ROOT";
+
+export const BLENDERKC_ROOT_ENV = "BLENDERKC_ROOT";
 
 /**
  * Set to `1` to write to a database whose `catalog_instance` row says `copy`
@@ -157,6 +162,16 @@ export function resolveRemotionkcRoot(repoRoot: string = REPO_ROOT): string {
  */
 export function resolveRevideokcRoot(repoRoot: string = REPO_ROOT): string {
   return checkoutRoot(REVIDEOKC_ROOT_ENV, REVIDEOKC_DIR, repoRoot);
+}
+
+/**
+ * The blenderkc checkout, the same way again: `--blenderkc-root`, else this
+ * variable (blenderkc's own, with the same meaning), else the submodule. Its
+ * renders land under `$BLENDERKC_HOME`, which arrives as the report's
+ * `outRoot` and is never read here.
+ */
+export function resolveBlenderkcRoot(repoRoot: string = REPO_ROOT): string {
+  return checkoutRoot(BLENDERKC_ROOT_ENV, BLENDERKC_DIR, repoRoot);
 }
 
 /**

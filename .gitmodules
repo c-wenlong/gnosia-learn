@@ -10,3 +10,6 @@
 [submodule "revideokc"]
 	path = tools/revideokc
 	url = https://github.com/c-wenlong/revideokc.git
+[submodule "blenderkc"]
+	path = tools/blenderkc
+	url = https://github.com/c-wenlong/blenderkc.git

@@ -123,9 +123,9 @@ describe.skipIf(!reachable.ok)("revideokc through catalog import", () => {
     const result = await runImportCommand({ dir: SEED });
     expect(result.revideokcRoot).toBe(checkout);
     expect(result.sources.map((s) => s.source)).toContain("revideokc");
-    // remotionkc's root is nothing in the suites (vitest.setup.ts), so it is
-    // skipped beside manimkc's two.
-    expect(result.skipped.map((s) => s.source)).toEqual(["manimkc", "remotionkc", "mirrors"]);
+    // remotionkc's and blenderkc's roots are nothing in the suites
+    // (vitest.setup.ts), so they are skipped beside manimkc's two.
+    expect(result.skipped.map((s) => s.source)).toEqual(["manimkc", "remotionkc", "blenderkc", "mirrors"]);
 
     const rows = await revideokcRows();
     expect(rows.map((r) => [r.id, r.kind, r.sourceRepo])).toEqual([

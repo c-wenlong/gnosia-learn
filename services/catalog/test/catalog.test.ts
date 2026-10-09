@@ -110,27 +110,29 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
   });
 
   describe("import", () => {
-    it("skips the manimkc, remotionkc and revideokc sources with a reason, since there is no CLI to run", async () => {
+    it("skips the manimkc, remotionkc, revideokc and blenderkc sources with a reason, since there is no CLI to run", async () => {
       const result = await importSeed();
       const ran = result.sources.map((s) => s.source);
       // `mirrors` reads the same CLI out of the same checkout, so it is
       // absent for exactly the same reason `manimkc` is and never on its own.
       expect(ran).not.toContain("manimkc");
       expect(ran).not.toContain("mirrors");
-      // remotionkc's and revideokc's roots are directories that do not exist
-      // (vitest.setup.ts), so each is left out the same way, and says which
-      // submodule is missing.
+      // remotionkc's, revideokc's and blenderkc's roots are directories that
+      // do not exist (vitest.setup.ts), so each is left out the same way, and
+      // says which submodule is missing.
       expect(ran).not.toContain("remotionkc");
       expect(ran).not.toContain("revideokc");
+      expect(ran).not.toContain("blenderkc");
       expect(result.skipped).toEqual([
         { source: "manimkc", reason: expect.stringContaining("never been indexed") },
         { source: "remotionkc", reason: "the remotionkc submodule is not initialised, and it has never been indexed here" },
         { source: "revideokc", reason: "the revideokc submodule is not initialised, and it has never been indexed here" },
+        { source: "blenderkc", reason: "the blenderkc submodule is not initialised, and it has never been indexed here" },
         { source: "mirrors", reason: expect.stringContaining("never been indexed") },
       ]);
     });
 
-    it("refuses --only manimkc, mirrors, remotionkc or revideokc when its CLI is not there", async () => {
+    it("refuses --only manimkc, mirrors, remotionkc, revideokc or blenderkc when its CLI is not there", async () => {
       // Asked for explicitly, so dropping it silently would answer a different
       // question than the one put to it.
       await expect(runImportCommand({ dir: SEED, only: ["manimkc"] })).rejects.toThrow(
@@ -144,6 +146,9 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       );
       await expect(runImportCommand({ dir: SEED, only: ["revideokc"] })).rejects.toThrow(
         /the revideokc submodule is not initialised, so `revideokc topics --json` cannot run\. Run `git submodule update --init tools\/revideokc`, or set REVIDEOKC_ROOT/,
+      );
+      await expect(runImportCommand({ dir: SEED, only: ["blenderkc"] })).rejects.toThrow(
+        /the blenderkc submodule is not initialised, so `blenderkc topics --json` cannot run\. Run `git submodule update --init tools\/blenderkc`, or set BLENDERKC_ROOT/,
       );
     });
 
