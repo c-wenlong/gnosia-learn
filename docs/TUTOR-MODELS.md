@@ -340,8 +340,9 @@ Delete takes the key and the models but the row stays.
 
 Model selection replaces the Tutor models card and the Studio chats (BYOK)
 card. The tutor's side is one provider-and-model pick, the provider's own
-`/models` list behind a `Combobox`, saved as the whole chain it replaces —
-the chain's storage and routes are unchanged, the pick is its first entry.
+`/models` list behind a `Combobox`, saved as the whole chain it replaces
+through `PUT /api/learner/tutor-model`, one locked rewrite (`setTutorModel`)
+so a refused save keeps the chain it would have replaced.
 The Studio chats side is the picker's `ByokConfig` trimmed to selection
 (`manageKeys` off): connected providers and tutor-saved ones that connect
 with their key, no key field, the Lite/Default/Max tiers unchanged. The

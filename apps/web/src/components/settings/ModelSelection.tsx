@@ -33,7 +33,6 @@ type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"
 interface Reply {
   ok?: boolean;
   error?: string;
-  code?: string;
   chain?: ChainEntry[];
   models?: { id: string; free?: boolean }[];
   message?: string;
@@ -189,37 +188,13 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
   const save = async () => {
     setStatus({ kind: "busy", text: "Saving…" });
     setError(null);
-    let rest = chain.filter((e) => !(e.provider === picked.provider && e.model === picked.model));
-    if (!already) {
-      let reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", picked);
-      // A full chain counts the models being replaced against the new pick:
-      // drop them first, then ask again.
-      if (reply !== null && reply.status === 409 && reply.data.code === "FULL") {
-        for (const entry of rest) {
-          const removed = await sendJson<Reply>("DELETE", "/api/learner/tutor-model", { provider: entry.provider, model: entry.model });
-          if (removed === null || removed.status !== 200 || removed.data.ok !== true) {
-            setStatus({ kind: "error", text: `Not saved: ${entry.model} could not be removed first (${failure("removed", removed)}).` });
-            router.refresh();
-            return;
-          }
-        }
-        rest = [];
-        reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", picked);
-      }
-      if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-        focusNext.current = `${base}-model`;
-        setStatus({ kind: "idle" });
-        return setError(failure("saved", reply));
-      }
-    }
-    // Whatever the chain held besides the pick goes: the pick is the chain.
-    for (const entry of rest) {
-      const reply = await sendJson<Reply>("DELETE", "/api/learner/tutor-model", { provider: entry.provider, model: entry.model });
-      if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-        setStatus({ kind: "error", text: `${picked.model} saved, but ${entry.model} was not removed: ${failure("removed", reply)}` });
-        router.refresh();
-        return;
-      }
+    // One write for the whole chain (`PUT`): a refused save keeps the chain
+    // it would have replaced.
+    const reply = await sendJson<Reply>("PUT", "/api/learner/tutor-model", picked);
+    if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+      focusNext.current = `${base}-model`;
+      setStatus({ kind: "idle" });
+      return setError(failure("saved", reply));
     }
     setStatus({ kind: "done", text: `Saved. The tutor calls ${picked.model}.` });
     router.refresh();

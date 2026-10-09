@@ -249,21 +249,7 @@ describe("the Model selection card", () => {
     expect(button(container, "Test")).not.toBeUndefined();
   });
 
-  it("saving a new pick adds it and removes what the chain held", async () => {
-    fetchMock.mockImplementation((url) =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify(
-            String(url).includes("/studio/api/settings/byok")
-              ? { configured: false, active: null, providers: [] }
-              : String(url).includes("tutor-model/models")
-                ? { ok: true, models: [{ id: "m-9" }] }
-                : { ok: true, chain: [] },
-          ),
-          { status: 200 },
-        ),
-      ),
-    );
+  it("saving a new pick replaces the whole chain in one write", async () => {
     const chain: ChainEntry[] = [
       { provider: "openrouter", model: "m-1" },
       { provider: "openrouter", model: "m-2" },
@@ -276,12 +262,8 @@ describe("the Model selection card", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => button(container, "Use this model").click());
-    const added = chainWrites("POST")[0];
-    expect(JSON.parse(String((added?.[1] as RequestInit).body))).toEqual({ provider: "openrouter", model: "m-9" });
-    const removed = chainWrites("DELETE").map((c) => JSON.parse(String((c[1] as RequestInit).body)));
-    expect(removed).toEqual([
-      { provider: "openrouter", model: "m-1" },
-      { provider: "openrouter", model: "m-2" },
-    ]);
+    const writes = chainWrites("PUT");
+    expect(writes).toHaveLength(1);
+    expect(JSON.parse(String((writes[0]?.[1] as RequestInit).body))).toEqual({ provider: "openrouter", model: "m-9" });
   });
 });
