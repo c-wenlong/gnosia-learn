@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
@@ -12,7 +12,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { BYOK_PROVIDERS, byokToTutor } from "@/lib/byok-providers";
 import { sendJson } from "@/lib/send-json";
-import { getByokSettings, listByokModels, saveByokModels, setByokActive, type ByokProviderStatus } from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED, getByokSettings, listByokModels, removeByokProvider, saveByokModels, setByokActive, type ByokProviderStatus } from "@/lib/studio-drafts";
 
 type Tier = "default" | "lite" | "max";
 
@@ -27,7 +27,14 @@ const ADD_PROVIDER = "__add__";
  * the field holds or the stored one. Provider picks switch what `byok` turns
  * run on; "Save models" writes the three tiers.
  */
-export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
+export function ByokConfig({
+  onConnected,
+  savedForTutor = [],
+}: {
+  onConnected?: () => void;
+  /** BYOK preset names with a key saved on the Providers card — listed so they connect with that key, no re-typing (D95). */
+  savedForTutor?: string[];
+}) {
   const id = useId();
   const providerId = `${id}-provider`;
   const newProviderId = `${id}-new-provider`;
@@ -48,22 +55,46 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
 
   // What the runner already holds: the dropdown lists only connected
   // providers (+ Add provider), and the selected one's tiers fill the fields.
+  // A key write on the Providers card mirrors into `byok.json` too, so the
+  // list re-reads whenever that lands.
+  const loaded = useRef(false);
   useEffect(() => {
-    void getByokSettings().then((result) => {
-      if (!result.ok) return;
-      setConnected(result.data.providers);
-      const active = result.data.active ?? result.data.providers[0]?.provider ?? null;
-      if (active !== null) {
-        setProvider(active);
-        const entry = result.data.providers.find((entry) => entry.provider === active);
-        if (entry !== undefined) {
-          setTiers({ default: entry.models.default ?? "", lite: entry.models.lite ?? "", max: entry.models.max ?? "" });
+    const load = () =>
+      void getByokSettings().then((result) => {
+        if (!result.ok) return;
+        setConnected(result.data.providers);
+        // Only the first read lands a pick: a later one (a key write
+        // announced from the Providers card) refreshes the list without
+        // moving the provider or retyping over edited tiers — unless the
+        // pick itself was deleted, which falls back to the active one.
+        const active = result.data.active ?? result.data.providers[0]?.provider ?? null;
+        if (!loaded.current) {
+          loaded.current = true;
+          const entry = result.data.providers.find((entry) => entry.provider === active);
+          setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
+          if (active !== null) {
+            setProvider(active);
+          } else {
+            setProvider(ADD_PROVIDER);
+            setAdding(true);
+          }
+          return;
         }
-      } else {
-        setProvider(ADD_PROVIDER);
-        setAdding(true);
-      }
-    });
+        setProvider((was) => {
+          if (was === "" || was === ADD_PROVIDER) return was;
+          if (result.data.providers.some((entry) => entry.provider === was)) return was;
+          // The pick itself was deleted: the fallback provider is a
+          // different account, so its tiers load and any typed key drops.
+          const entry = result.data.providers.find((entry) => entry.provider === active);
+          setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
+          setApiKey("");
+          return active ?? ADD_PROVIDER;
+        });
+        if (result.data.providers.length === 0) setAdding(true);
+      });
+    load();
+    window.addEventListener(BYOK_SETTINGS_CHANGED, load);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, load);
   }, []);
 
   const selected = connected?.find((entry) => entry.provider === provider) ?? null;
@@ -77,7 +108,7 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
 
   const [listed, setListed] = useState<{ sig: string; models: { value: string; label: string | null }[] } | null>(null);
   const [modelsNote, setModelsNote] = useState<string | null>(null);
-  const modelSig = `${listProvider}:${apiKey.trim() === "" ? "stored" : apiKey.trim().slice(-8)}`;
+  const modelSig = `${listProvider}:${apiKey.trim() === "" ? `stored:${selected?.last4 ?? ""}` : apiKey.trim().slice(-8)}`;
   const models = listed !== null && listed.sig === modelSig ? listed.models : [];
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +142,12 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     () => BYOK_PROVIDERS.filter((entry) => !connected?.some((held) => held.provider === entry.value)),
     [connected],
   );
+  // A tutor-keyed provider that is not connected gets a dropdown entry of
+  // its own: picking it pushes the saved key over instead of asking for one.
+  const tutorSaved = useMemo(
+    () => savedForTutor.filter((p) => connected !== null && !connected.some((entry) => entry.provider === p)),
+    [savedForTutor, connected],
+  );
 
   async function chooseProvider(next: string) {
     setError(null);
@@ -118,6 +155,10 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     if (next === ADD_PROVIDER) {
       setAdding(true);
       setNewProvider("");
+      return;
+    }
+    if (next.startsWith("saved:")) {
+      await connectSaved(next.slice("saved:".length));
       return;
     }
     setAdding(false);
@@ -134,6 +175,43 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
       return;
     }
     // Picking a connected provider is picking the harness it runs on.
+    onConnected?.();
+  }
+
+  /**
+   * A provider whose key the tutor already has, connected by pushing that
+   * key to the runner (`/api/learner/provider-key/sync`) — the same key,
+   * never re-typed.
+   */
+  async function connectSaved(byokName: string) {
+    const tutor = byokToTutor(byokName);
+    if (tutor === undefined) return;
+    setSaving(true);
+    setError(null);
+    const reply = await sendJson<{ ok?: boolean; synced?: boolean }>("POST", "/api/learner/provider-key/sync", { provider: tutor });
+    if (reply === null || reply.status !== 200 || reply.data.synced !== true) {
+      setSaving(false);
+      setError("Not connected — the runner is not answering.");
+      return;
+    }
+    const switched = await setByokActive(byokName);
+    const fresh = await getByokSettings();
+    setSaving(false);
+    if (!fresh.ok || !fresh.data.providers.some((entry) => entry.provider === byokName)) {
+      setError("Connected, but the studio runner did not answer — try again.");
+      return;
+    }
+    if (!switched.ok || fresh.data.active !== byokName) {
+      setError("Connected, but Studio chats still run on the previous provider — pick it again from the dropdown to switch.");
+      setConnected(fresh.data.providers);
+      return;
+    }
+    setConnected(fresh.data.providers);
+    setAdding(false);
+    setProvider(byokName);
+    setApiKey("");
+    const entry = fresh.data.providers.find((held) => held.provider === byokName);
+    setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
     onConnected?.();
   }
 
@@ -179,6 +257,21 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
     // `byok`, but the dialog stays open for the tier models: a provider
     // with no Default model still cannot run.
     onConnected?.();
+  }
+
+  /** The selected provider leaves `byok.json` whole — key, tiers and the pick. */
+  async function remove() {
+    if (selected === null) return;
+    setSaving(true);
+    setError(null);
+    const result = await removeByokProvider(provider);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.refusal.error);
+      return;
+    }
+    setNote(null);
+    window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
   }
 
   async function saveTiers() {
@@ -239,6 +332,10 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
             ...(connected ?? []).map((entry) => ({
               value: entry.provider,
               label: `${BYOK_PROVIDERS.find((known) => known.value === entry.provider)?.label ?? entry.provider} ··${entry.last4}`,
+            })),
+            ...tutorSaved.map((p) => ({
+              value: `saved:${p}`,
+              label: `${BYOK_PROVIDERS.find((known) => known.value === p)?.label ?? p} · use saved key`,
             })),
             { value: ADD_PROVIDER, label: "+ Add provider" },
           ]}
@@ -346,6 +443,11 @@ export function ByokConfig({ onConnected }: { onConnected?: () => void }) {
               {saving ? "Saving…" : "Save models"}
             </Button>
             {note !== null && <p className="text-[12px] leading-4 text-text3">{note}</p>}
+            {selected !== null && (
+              <button type="button" className="ml-auto text-[12px] leading-4 text-text3 underline-offset-2 hover:underline" disabled={saving} onClick={() => void remove()}>
+                Remove
+              </button>
+            )}
           </div>
         </>
       )}

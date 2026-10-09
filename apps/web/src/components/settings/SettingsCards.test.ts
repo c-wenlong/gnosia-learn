@@ -16,6 +16,7 @@ import type { ProviderRowView, ProvidersView } from "@/lib/providers/view";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 const { Providers } = await import("./Providers");
+const { TutorModels } = await import("./TutorModels");
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -91,7 +92,7 @@ const view = (over: Partial<ProvidersView> = {}): ProvidersView => ({
 
 describe("the Providers card", () => {
   it("starts a row closed, and the arrow opens it onto its models, fetching the list once", async () => {
-    const container = mount(createElement(Providers, { view: view() }));
+    const container = mount(createElement(TutorModels, { view: view() }));
     const arrow = button(container, "Show OpenRouter models");
     const panel = document.getElementById(arrow.getAttribute("aria-controls")!)!;
     expect(arrow.getAttribute("aria-expanded")).toBe("false");
@@ -121,7 +122,7 @@ describe("the Providers card", () => {
       act(() => root.unmount());
       container.remove();
     });
-    act(() => root.render(createElement(Providers, { view: view() })));
+    act(() => root.render(createElement(TutorModels, { view: view() })));
     await act(async () => button(container, "Show OpenRouter models").click());
     // The key is replaced while the first ask is still out: the row asks again.
     fetchMock.mockImplementation((url) =>
@@ -130,7 +131,7 @@ describe("the Providers card", () => {
       ),
     );
     await act(async () =>
-      root.render(createElement(Providers, { view: view({ rows: [row({ saved: { last4: "wxyz", savedOn: "5 Oct 2026", readable: true } })] }) })),
+      root.render(createElement(TutorModels, { view: view({ rows: [row({ saved: { last4: "wxyz", savedOn: "5 Oct 2026", readable: true } })] }) })),
     );
     expect(modelsCalls()).toHaveLength(2);
     expect(container.textContent).toContain("1 model from OpenRouter");
@@ -272,7 +273,7 @@ describe("the Providers card", () => {
 
   it("moves a provider only where there is a provider with models to pass", () => {
     const container = mount(
-      createElement(Providers, {
+      createElement(TutorModels, {
         view: view({ rows: [row(), row({ id: "nvidia", label: "NVIDIA NIM", models: ["n-1"] }), row({ id: "gemini", label: "Google Gemini", models: [] })] }),
       }),
     );
