@@ -158,7 +158,7 @@ describe("completeWithFallback over a chain", () => {
       [{ role: "user", content: "hi" }],
       tutorSteps([{ provider: "nvidia", model: "old" }, { provider: "openrouter", model: "b" }], {}, ENV),
     );
-    expect(String(errorSpy.mock.calls[0]?.[0])).toContain("under Providers in Settings");
+    expect(String(errorSpy.mock.calls[0]?.[0])).toContain("under Model selection in Settings");
     expect(String(errorSpy.mock.calls[0]?.[0])).not.toContain("NVIDIA_MODEL");
   });
 
@@ -377,7 +377,7 @@ describe("a turn's time limits", () => {
 
 describe("missingKeyMessage", () => {
   it("says a model is missing when there is no chain and no key (T15)", () => {
-    expect(missingKeyMessage(tutorSteps([], {}, {}))).toBe("No model is set up. In Settings, add a provider and then a model, under Providers.");
+    expect(missingKeyMessage(tutorSteps([], {}, {}))).toBe("No model is set up. In Settings, add a key under Providers and pick a model under Model selection.");
   });
 
   it("names the providers that need a key and those that could take a model instead", () => {
@@ -390,7 +390,7 @@ describe("missingKeyMessage", () => {
       ENV,
     );
     expect(missingKeyMessage(steps)).toBe(
-      "None of your models has a key. In Settings, add a key for Google Gemini under Providers, or add a model from NVIDIA NIM or OpenRouter there.",
+      "None of your models has a key. In Settings, add a key for Google Gemini under Providers, or pick a model from NVIDIA NIM or OpenRouter under Model selection.",
     );
     expect(missingKeyMessage(tutorSteps([{ provider: "gemini", model: "a" }, { provider: "nvidia", model: "b" }], {}, {}))).toBe(
       "None of your models has a key. In Settings, add a key for Google Gemini or NVIDIA NIM under Providers.",

@@ -138,15 +138,6 @@ export async function addTutorModel(
   options: { requireKey?: { server: boolean } } = {},
 ): Promise<StoredTutorModel[]> {
   const entry = tutorModelEntry(provider, model);
-  const before =
-    options.requireKey === undefined || options.requireKey.server
-      ? undefined
-      : async (tx: CatalogDatabase) => {
-          const saved = await readProviderKeys(tx, owner);
-          if (!saved.some((row) => row.provider === entry.provider)) {
-            throw new TutorModelError("NO_KEY", "That provider has no key any more. Add its key first.");
-          }
-        };
   return rewrite(db, owner, (current) => {
     if (current.some((row) => same(row, entry))) {
       throw new TutorModelError("DUPLICATE", "That model is already in the chain.");
@@ -155,7 +146,47 @@ export async function addTutorModel(
       throw new TutorModelError("FULL", `The chain holds at most ${TUTOR_MODEL_LIMITS.maxEntries} models. Remove one first.`);
     }
     return [...current, entry];
-  }, { before });
+  }, { before: requireKey(entry, owner, options.requireKey) });
+}
+
+/**
+ * The `before` hook an add and a replace share: inside the learner lock the
+ * provider's key must still be there — the server's (`server: true`, read by
+ * the caller from the environment) or a saved one. Checking again under the
+ * lock is what stops a write that raced the provider's Delete
+ * (`deleteTutorProvider`, which takes the same lock) from leaving a model
+ * with no key behind (NO_KEY).
+ */
+function requireKey(
+  entry: TutorModelEntry,
+  owner: string,
+  option: { server: boolean } | undefined,
+): ((tx: CatalogDatabase) => Promise<void>) | undefined {
+  if (option === undefined || option.server) return undefined;
+  return async (tx: CatalogDatabase) => {
+    const saved = await readProviderKeys(tx, owner);
+    if (!saved.some((row) => row.provider === entry.provider)) {
+      throw new TutorModelError("NO_KEY", "That provider has no key any more. Add its key first.");
+    }
+  };
+}
+
+/**
+ * The whole chain becomes this one entry (T16): Model selection's pick. One
+ * rewrite under the learner lock, so a refused write keeps the chain it
+ * would have replaced — a remove-then-add pair could not promise that,
+ * since a failed add would leave the old entries gone. The key rule is the
+ * add's (`requireKey`).
+ */
+export async function setTutorModel(
+  db: CatalogDatabase,
+  owner: string,
+  provider: unknown,
+  model: unknown,
+  options: { requireKey?: { server: boolean } } = {},
+): Promise<StoredTutorModel[]> {
+  const entry = tutorModelEntry(provider, model);
+  return rewrite(db, owner, () => [entry], { before: requireKey(entry, owner, options.requireKey) });
 }
 
 /** Remove an entry; the ones below it move up, so the positions stay 0 to n-1. */
