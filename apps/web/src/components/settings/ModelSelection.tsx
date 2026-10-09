@@ -121,7 +121,7 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
 
   const keyed = view.rows.filter((row) => row.inUse !== null);
   const current = chain[0];
-  const [provider, setProvider] = useState(current?.provider ?? "");
+  const [provider, setProvider] = useState<string>(current?.provider ?? "");
   const [model, setModel] = useState(current?.model ?? "");
   // The fields follow the saved pick until the person changes them: a row
   // deleted above refreshes the chain without its entry, and a field still
