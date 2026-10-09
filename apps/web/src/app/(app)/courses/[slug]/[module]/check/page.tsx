@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, module: moduleSlug } = await params;
   const course = await getCourse(slug);
   const mod = course ? getModule(course, moduleSlug) : undefined;
-  return { title: course && mod ? `${course.code} · Week check · ${mod.title}` : "Week check" };
+  return { title: course && mod ? `${course.code} · Module check · ${mod.title}` : "Module check" };
 }
 
 export default async function WeekCheckPage({ params }: Props) {
@@ -69,7 +69,7 @@ function Unreachable({ href }: { href: string }) {
   return (
     <div data-layout="focus">
       <div className="mx-auto flex max-w-[720px] flex-col items-center gap-4 px-4 pt-16 text-center">
-        <h1 className={PAGE_TITLE}>The week check cannot start</h1>
+        <h1 className={PAGE_TITLE}>The module check cannot start</h1>
         <p className="text-[14px] text-text2">
           The database could not be reached, so there is no mastery to start from and nowhere to record an answer.
           Nothing is lost. Start Postgres and reload.

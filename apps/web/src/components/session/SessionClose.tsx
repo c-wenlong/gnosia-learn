@@ -73,7 +73,7 @@ export function SessionClose({
     <div className="flex flex-col gap-4 md:gap-[22px]">
       <div className="flex flex-col items-center gap-1.5 pt-2 text-center md:pt-0">
         <h1 tabIndex={-1} className={cx(CLOSE_TITLE, "outline-none")}>
-          {walked === "" ? "Nothing to ask" : weekCheck === null ? "Session closed" : "Week check done"}
+          {walked === "" ? "Nothing to ask" : weekCheck === null ? "Session closed" : "Module check done"}
         </h1>
         <p className="text-[13px] text-text2">
           {walked === "" ? title : `${title} · ${minutes} min · ${weekCheck === null ? walked : asked}`}
