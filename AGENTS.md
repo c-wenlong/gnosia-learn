@@ -31,14 +31,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/proposals/knowledge-map.md](docs/proposals/knowledge-map.md) | Built, then superseded the same day (2026-10-04) except G1: the island map, a pannable, zoomable canvas of the prerequisite graph titled by course. G1 (the graph is `/learn`'s default view, the table at `?view=table`) still stands; G2 to G8 gave way to domain-map.md |
 | [docs/proposals/domain-map.md](docs/proposals/domain-map.md) | Built 2026-10-04: the Learn map grouped by domain (the topic's), one card per domain, then one bounded domain picture of topic groups with the list beside it; hover lights a concept's edges, drag moves it, no pan or zoom; legend chips preview and filter (D9), labels and topic titles keep 11px and the ones that collide are culled (D10), and an Axes layout places each concept by learning order and how many need it (D11). Replaces G2 to G8 of knowledge-map.md. Decisions D1 to D11 |
 | [docs/proposals/recall-in-chat.md](docs/proposals/recall-in-chat.md) | Accepted 2026-10-04, all three phases built (R2: tap to record): a check inside the concept tutor's chat, or the course topic tutor's (naming its concept), is evidence. The tutor marks a check, a second call judges the answer, the learner commits the verdict with one tap, and `recordObservation` writes it, so mastery, the map and the review card move from the conversation; recall becomes the tutor's opening move on a due concept. Review left the sidebar first (#343). Decisions R1 to R6, three phases |
-| [docs/proposals/blenderkc.md](docs/proposals/blenderkc.md) | Proposed 2026-10-09: blenderkc, photoreal 3D through Blender's `bpy` from PyPI, as silent plates that revideokc (then remotionkc) composes with its own narration, labels and captions, rather than a fourth video tool. The test shot's measurements (6.0 s a 1080p Cycles frame on the M4 Pro, the wheel matching the app), the plate request timed from narration words, anchors that let 2D labels track 3D objects, GPL-3.0-or-later, four phases. Decisions D96 to D104
+| [docs/proposals/blenderkc.md](docs/proposals/blenderkc.md) | Proposed 2026-10-09, then built as a fourth video tool by the owner's call the same day (D96 amended): blenderkc, photoreal 3D through Blender's `bpy` from PyPI, narrated, with its own sidecars and its own `topics --json`, imported by the catalog as `blenderkc:` rows. The test shot's measurements (6.0 s a 1080p Cycles frame on the M4 Pro, the wheel matching the app), the homeserver's GTX 1070 with OptiX (3.2 s a frame), anchors that let 2D labels track 3D objects, the repository private like the other tools (D103). Decisions D96 to D104
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
 | [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) | The diagram studio at `/studio`: the session and job schema, the runner, the UI, and the decisions behind them |
 | [docs/STUDIO-CHAT-FIRST.md](docs/STUDIO-CHAT-FIRST.md) | The studio's chat-first redesign, accepted and being built: the planner agent, the `draft` table, the plus card and chat panel, and the tldraw manual in the drawing prompt |
 | [docs/STUDIO-VIDEOS.md](docs/STUDIO-VIDEOS.md) | Proposed: manimkc videos through the studio's chat. The video runner, the per-job sandbox around agent-written Python, the script as the brief, the gate, `catalog video put`, and the panel for the agent's model and effort |
 | [docs/STUDIO-MENTIONS.md](docs/STUDIO-MENTIONS.md) | Proposed: choosing what the studio's chat makes with @ tags. The menu, the inline chip and the studio's Lexical `MentionComposer`, tags as data on a message, untagged messages as conversation with one-click suggestions, one live brief per kind and Make both, the combined planner prompt, and "Add from library" as a later phase. Supersedes D51 of STUDIO-VIDEOS.md; ships with video phase 2 |
 | [docs/STUDIO-TUTOR-HANDOFF.md](docs/STUDIO-TUTOR-HANDOFF.md) | Accepted, phases 1 (the runner) and 2 (the web app) built and measured, the paid hand-offs and the iOS Safari touch check included; Android Chrome and VoiceOver are the owner's to run: the concept tutor on `/learn/<concept>` gets the @ composer, and a Diagram or Video tag hands the concept to a new studio conversation (the note and the last tutor turns as data blocks, the message sent on arrival). When tags show, when Lexical loads, the runner change, D64 to D70 |
-| [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the three video tools (manimkc, remotionkc, revideokc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
+| [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the four video tools (manimkc, remotionkc, revideokc, blenderkc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
 | [docs/STUDIO-VIDEO-TOOLS.md](docs/STUDIO-VIDEO-TOOLS.md) | Built in phases, phase 3 (remotionkc) the last: the studio picks a video tool. The planner proposes manimkc, remotionkc or revideokc in the brief with a reason (a TOOLS block pinned to VIDEO-TOOLS.md), the card shows it as a switchable chip, the runner gets a backend per tool, and headless Chrome runs inside the job's Seatbelt profile (measured). D71 to D80 |
 | [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into Postgres and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
@@ -85,8 +85,9 @@ this repository is refused, since notes written there are untracked files in
 
 ## Video tools: choosing one
 
-Three submodules make narrated videos: manimkc (ManimGL), remotionkc
-(Remotion) and revideokc (Revideo, the Motion Canvas fork). They share one
+Four submodules make narrated videos: manimkc (ManimGL), remotionkc
+(Remotion), revideokc (Revideo, the Motion Canvas fork) and blenderkc
+(Blender's Cycles, photoreal 3D, made at a terminal only). They share one
 voice, one report shape and one deliverable format, and differ in what they
 draw well. **Before making a video, run the `video-router` skill**
 (`.claude/skills/video-router/`); it applies
@@ -153,9 +154,9 @@ Rules of engagement:
   nothing in this repo reads it: the indexers take that from each report's
   `outRoot`. `TLDRAWKC_ROOT` is the same idea for the other submodule, read by
   `npm run canvas` as well so the two cannot run different builds, and
-  `REMOTIONKC_ROOT` and `REVIDEOKC_ROOT` the same for remotionkc and
-  revideokc. All five default to the paths in `.gitmodules`, so a clone
-  configures nothing.
+  `REMOTIONKC_ROOT`, `REVIDEOKC_ROOT` and `BLENDERKC_ROOT` the same for
+  remotionkc, revideokc and blenderkc. All six default to the paths in
+  `.gitmodules`, so a clone configures nothing.
 - **Drive it through its CLI, not by hand.** `tools/manimkc/tools/cli/manimkc` is
   stdlib-only Python, so it still runs when a venv is broken:
   `doctor` (venvs, ffmpeg, narration backend, output dirs), `home` (the data
@@ -163,7 +164,7 @@ Rules of engagement:
   and every `lib/` helper with a real usage line), `example`, `new` (scaffold a
   topic), `lint`, `preview`, `build`, `topics`, `mirrors`. Run it from any
   checkout, or install with `uv tool install -e tools/cli`.
-- **A topic.yml's `concepts:` is read by the catalog, for all three video
+- **A topic.yml's `concepts:` is read by the catalog, for all four video
   tools.** Each slug becomes an `asset_concept` row on the video and its
   sidecars, which is how a video lands on a concept's step of a module path.
   A slug the importing owner cannot read, or a `concepts:` that is not a list
@@ -274,6 +275,68 @@ Rules of engagement:
   gnosia-audio falls back to its own voice, which is not the series'.
 - The end-to-end process is the `revideokc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/revideokc-video`.
+
+## Asset generation: tools/blenderkc/
+
+`tools/blenderkc/` is the fifth git **submodule** (its own private repo,
+github.com/c-wenlong/blenderkc): narrated explainer videos whose pictures are
+photoreal 3D, rendered by Blender's Cycles through `bpy` 5.2.2 from PyPI, the
+fourth video tool. It is shaped like revideokc: the same CLI verbs, the same
+`topics --json` report, the same narration through gnosia-audio and the same
+sidecars, so the catalog indexes it through the same descriptor in
+`services/catalog/src/index/video-tool.ts`, labelled "blender" in the web app.
+It is for videos whose subject is a physical object (a chip package, a die
+stack, a board), where its 3D is the picture and 2D labels sit on top. The
+studio has no blenderkc backend: it is made at a terminal only.
+
+Rules of engagement:
+
+- **Read `tools/blenderkc/docs/DESIGN.md` before working in there**, and
+  `docs/KIT.md` before writing a shot. DESIGN.md is the contract between the
+  library (Python 3.13 with bpy, in its `.venv`) and the CLI (standard library
+  only, which never imports bpy), the two cache keys per scene, the build and
+  `--host`. The proposal behind it is
+  [docs/proposals/blenderkc.md](docs/proposals/blenderkc.md).
+- **Commits inside `tools/blenderkc/` belong to that repo.** Commit and push
+  there first, then commit the updated submodule pointer here. Never commit a
+  dirty submodule pointer.
+- **Drive it through its CLI.** `python3 tools/blenderkc/tools/cli/blenderkc
+  --root <checkout> topics --json` answers with manimkc's report shape.
+  `catalog import` runs it with `python3` (`--only blenderkc`,
+  `--blenderkc-root`), and `catalog asset upload --source blenderkc` stores
+  the bytes and cuts the posters. A bare import with no CLI skips blenderkc,
+  and refuses once it has rows here, as for the other three.
+- **Each topic.yml's `topic:` is required**, as for remotionkc and revideokc;
+  there is no maps vocabulary. Its optional `concepts:` is read as manimkc's
+  is. A folder whose topic the owner cannot read refuses the import even
+  before it is rendered, so a new topic.yml names a real catalog topic from
+  its first commit.
+- **`BLENDERKC_ROOT` is the checkout, `BLENDERKC_HOME` the data root**, with
+  the same split as the others: the catalog reads the first
+  (`services/catalog/src/env.ts`, defaulting to `tools/blenderkc`) and takes
+  the second from the report's `outRoot`. On the owner's Mac the data root is
+  `~/.self-learn/blenderkc`, set by a `BLENDERKC_HOME=` line in the
+  checkout's `.env` (blenderkc reads the checkout's `.env`, never the data
+  root's). A worktree's submodule has no `.env`, so set the variable in the
+  environment there. **Never join a blenderkc path onto the submodule root.**
+- **`make deps` then `make narration-deps` in `tools/blenderkc`** make its one
+  `.venv`: Python 3.13 with bpy and Pillow, and the pinned gnosia-audio
+  beside them (non-editable, with uv). Run them after a fresh clone and after
+  any pointer move that changes either pin. Only `topics --json`, which the
+  catalog runs, works without them
+  (`services/catalog/test/blenderkc-pinned.test.ts` holds that). Like the
+  others it hands gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a
+  sibling `../manimkc`) for the series' voice.
+- **The 3D renders on the homeserver**: `build <topic> --host home` copies a
+  snapshot of the checkout to the host (Ubuntu, a GTX 1070), renders each
+  scene's frames there with Cycles on CUDA and the OptiX denoiser, copies
+  each scene's plate back, and does every 2D step (overlays, joining,
+  narration, sidecars) on the Mac. Measured: 3.2 s a frame on the host
+  against 4.0 s on the M4 Pro, and 17 s when the denoiser falls back to OIDN
+  on the CPU. A build is resumable: run it again and it renders only
+  the frames that are missing. `still` renders here, at half resolution.
+- There is no blenderkc skill yet; until there is, the process is DESIGN.md's
+  verbs (`new`, `narrate`, `still`, `build`, `sheet`, `topics`).
 
 ## Diagrams: tools/tldrawkc/
 
@@ -652,7 +715,7 @@ anything it finds out first. Then
 `git worktree prune`), and never run `git submodule deinit` in one to make
 that work. The `submodule.<name>.*`
 settings live in the `.git/config` every worktree shares, so a deinit in any
-of them unregisters all four submodules in the main checkout and in every
+of them unregisters all five submodules in the main checkout and in every
 other session's worktree: their files stay, but `git submodule status`
 prints `-` and `update` answers "not initialized". It happened on
 2026-10-04; `git submodule init` re-reads `.gitmodules` and repairs it
@@ -792,7 +855,7 @@ not have to be worked out again.
   `https://`, and
   falls back to localhost when parsing fails, because a bad value should cost a
   link preview and not the whole app.
-- **All four submodules and `coverage/` are lint-ignored in `eslint.config.mjs`.**
+- **All five submodules and `coverage/` are lint-ignored in `eslint.config.mjs`.**
   ESLint walks the whole tree from the repo root, so without those entries a
   local `npm run lint` walks manimkc's Python virtualenvs and reports 100k+
   findings from code this repo does not own, and lints tldrawkc's TypeScript
@@ -941,7 +1004,8 @@ not have to be worked out again.
   the phase 3 cut-over removed `content/` and `learn/`. A database of your own
   to look at is `createdb`, `migrate`,
   `MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent
-  REVIDEOKC_ROOT=/nonexistent npm run catalog -- import seed`, then
+  REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog --
+  import seed`, then
   `catalog flip` for topics, tags, concepts, sessions, courses and diagrams in
   that order (`scripts/lib/flip-order.mjs`; README.md, "Install"). `npm run
   e2e` builds exactly that database on its own.

@@ -72,10 +72,10 @@ export const BLOB_KEY_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}/[0-9a-f]{64}[.][a-z0-
 
 /**
  * Which repository an asset's bytes live in, or which tool made them:
- * `manimkc`, `remotionkc` and `revideokc` are the video tools, `tldrawkc` the
- * diagrams.
+ * `manimkc`, `remotionkc`, `revideokc` and `blenderkc` are the video tools,
+ * `tldrawkc` the diagrams.
  */
-export const SOURCE_REPOS = ["self-learn", "manimkc", "tldrawkc", "remotionkc", "revideokc"] as const;
+export const SOURCE_REPOS = ["self-learn", "manimkc", "tldrawkc", "remotionkc", "revideokc", "blenderkc"] as const;
 export type SourceRepo = (typeof SOURCE_REPOS)[number];
 
 /** A `collection` is any ordered container. Courses and modules today, decks next. */

@@ -123,7 +123,7 @@ function pointAt(name: string): () => void {
 describe("a listed video's prefixes", () => {
   it("are the video tools' asset prefixes and a studio video's, the ones the catalog mints", () => {
     expect([...VIDEO_ASSET_PREFIXES].sort()).toEqual(
-      [ASSET_PREFIX.manimkc, ASSET_PREFIX.remotionkc, ASSET_PREFIX.revideokc, VIDEO_PREFIX].sort(),
+      [ASSET_PREFIX.manimkc, ASSET_PREFIX.remotionkc, ASSET_PREFIX.revideokc, ASSET_PREFIX.blenderkc, VIDEO_PREFIX].sort(),
     );
   });
 });

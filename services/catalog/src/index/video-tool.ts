@@ -13,10 +13,13 @@ import {
 } from "@self-learn/schema";
 
 import {
+  BLENDERKC_DIR,
+  BLENDERKC_ROOT_ENV,
   MANIMKC_DIR,
   MANIMKC_ROOT_ENV,
   REMOTIONKC_DIR,
   REMOTIONKC_ROOT_ENV,
+  resolveBlenderkcRoot,
   resolveManimkcRoot,
   resolveRemotionkcRoot,
   resolveRevideokcRoot,
@@ -33,20 +36,21 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * report shape, and whose renders the catalog indexes as `video` assets with
  * transcript, chapters and captions sidecars.
  *
- * Three of them: manimkc (ManimGL, narrated), remotionkc (Remotion) and
- * revideokc (Revideo). The report is the same document from all three, so
- * everything that turns a report into rows is here once, and what differs is
- * a descriptor:
+ * Four of them: manimkc (ManimGL, narrated), remotionkc (Remotion),
+ * revideokc (Revideo) and blenderkc (Blender's Cycles). The report is the
+ * same document from all four, so everything that turns a report into rows
+ * is here once, and what differs is a descriptor:
  *
  * - the name, which is the index source, the `asset.source_repo` and the
- *   asset id prefix (`manimkc:`, `remotionkc:`, `revideokc:`);
+ *   asset id prefix (`manimkc:`, `remotionkc:`, `revideokc:`, `blenderkc:`);
  * - where the checkout is (`$MANIMKC_ROOT`, `$REMOTIONKC_ROOT`,
- *   `$REVIDEOKC_ROOT`, else the submodule `.gitmodules` puts under `tools/`),
- *   and how its CLI runs (`python3 tools/cli/manimkc`,
- *   `node tools/cli/remotionkc.mjs`, `node tools/cli/revideokc.mjs`);
+ *   `$REVIDEOKC_ROOT`, `$BLENDERKC_ROOT`, else the submodule `.gitmodules`
+ *   puts under `tools/`), and how its CLI runs (`python3 tools/cli/manimkc`,
+ *   `node tools/cli/remotionkc.mjs`, `node tools/cli/revideokc.mjs`,
+ *   `python3 tools/cli/blenderkc`);
  * - how a topic folder finds its catalog topic. manimkc's folders are mapped
  *   by the vocabulary's `maps.manimkc`, and a `topic:` in its topic.yml must
- *   agree with that map. remotionkc and revideokc have no map: a topic.yml's
+ *   agree with that map. remotionkc, revideokc and blenderkc have no map: a topic.yml's
  *   `topic:` is required and is the answer, and must name a topic the
  *   importing owner can read.
  *
@@ -65,13 +69,14 @@ import { VOCABULARY_FILE } from "./vocabulary";
  *
  * The long reasoning behind the two roots (the checkout, and the report's
  * `outRoot` the rendered files are under) is on `manimkc.ts`, where it was
- * first written; it holds for remotionkc and revideokc word for word, with
- * `$REMOTIONKC_HOME` and `$REVIDEOKC_HOME` as their data roots.
+ * first written; it holds for remotionkc, revideokc and blenderkc word for
+ * word, with `$REMOTIONKC_HOME`, `$REVIDEOKC_HOME` and `$BLENDERKC_HOME` as
+ * their data roots.
  */
 
 const run = promisify(execFile);
 
-export type VideoToolName = "manimkc" | "remotionkc" | "revideokc";
+export type VideoToolName = "manimkc" | "remotionkc" | "revideokc" | "blenderkc";
 
 export interface VideoTool {
   /** The index source, the `asset.source_repo`, and the name in every message. */
@@ -140,7 +145,23 @@ export const REVIDEOKC: VideoTool = {
   topics: "declared",
 };
 
-export const VIDEO_TOOLS: readonly VideoTool[] = [MANIMKC, REMOTIONKC, REVIDEOKC];
+export const BLENDERKC: VideoTool = {
+  name: "blenderkc",
+  prefix: ASSET_PREFIX.blenderkc,
+  dir: BLENDERKC_DIR,
+  rootEnv: BLENDERKC_ROOT_ENV,
+  rootFlag: "--blenderkc-root",
+  homeEnv: "BLENDERKC_HOME",
+  cli: path.join("tools", "cli", "blenderkc"),
+  resolveRoot: resolveBlenderkcRoot,
+  // Python's standard library only, as manimkc's CLI: `topics` never imports
+  // bpy, so it runs in a checkout whose `.venv` was never made. `--root` is
+  // a global flag and must precede the subcommand.
+  topicsArgv: (cli, root) => ["python3", [cli, "--root", root, "topics", "--json"]],
+  topics: "declared",
+};
+
+export const VIDEO_TOOLS: readonly VideoTool[] = [MANIMKC, REMOTIONKC, REVIDEOKC, BLENDERKC];
 
 /** The names, in the order the tools run: each one an index source and an upload source. */
 export const VIDEO_TOOL_NAMES: readonly VideoToolName[] = VIDEO_TOOLS.map((tool) => tool.name);
@@ -204,7 +225,8 @@ interface Orphan {
 export interface TopicsReport {
   /**
    * Absolute path the `out/…` strings below are relative to: the tool's data
-   * root (`$MANIMKC_HOME`, `$REMOTIONKC_HOME`, `$REVIDEOKC_HOME`), which
+   * root (`$MANIMKC_HOME`, `$REMOTIONKC_HOME`, `$REVIDEOKC_HOME`,
+   * `$BLENDERKC_HOME`), which
    * defaults to the checkout root. Optional only for defensive parsing; every
    * version of each CLI this repo pins reports it.
    */
@@ -276,8 +298,8 @@ function str(value: unknown): string | null {
 
 /**
  * How topic folders become topic slugs. `manimkc` reads the vocabulary's map
- * and checks a declared topic against it; `remotionkc` and `revideokc` read
- * the declared topic alone.
+ * and checks a declared topic against it; `remotionkc`, `revideokc` and
+ * `blenderkc` read the declared topic alone.
  */
 /** What `buildToolRows` is told beyond the report and the topic lookups. */
 export interface VideoToolRowOptions {
@@ -637,7 +659,7 @@ export async function buildToolRows(
 
 /**
  * The indexer of a tool whose folders declare their own topic (remotionkc,
- * revideokc): the pinned CLI's report against the checkout, each folder filed
+ * revideokc, blenderkc): the pinned CLI's report against the checkout, each folder filed
  * under its topic.yml's `topic:`, which must be one the owner can read.
  * `named` picks the checkout the run named out of the context; absent, it is
  * the tool's variable, else its submodule under the tools root.

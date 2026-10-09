@@ -6,7 +6,7 @@ export default defineConfig({
     environment: "node",
     // apps/web holds the Next app (TypeScript); scripts/ holds the learning
     // pipeline (plain ESM, no build step). Both are covered by `npm test`.
-    // tools/ is deliberately absent: the four submodules run their own suites
+    // tools/ is deliberately absent: the five submodules run their own suites
     // in their own repos.
     include: [
       "apps/**/*.test.ts",

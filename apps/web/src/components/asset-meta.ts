@@ -136,6 +136,7 @@ const SOURCE_LABEL: Record<string, string> = {
   manimkc: "manim",
   remotionkc: "remotion",
   revideokc: "revideo",
+  blenderkc: "blender",
   tldrawkc: "tldraw",
 };
 
