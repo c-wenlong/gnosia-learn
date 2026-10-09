@@ -1552,14 +1552,19 @@ async function run() {
     // its key form. The step takes the first row holding no saved key, so a
     // `--copy` that keyed some already still has somewhere to write — and the
     // delete at the end puts the row back as it was.
-    const row = main.getByRole('listitem').filter({ hasNotText: /Your key, ending|can no longer be read/ }).first();
-    await row.getByRole('button', { name: 'Add key', expanded: false }).click();
+    const unkeyed = main.getByRole('listitem').filter({ hasNotText: /Your key, ending|can no longer be read/ }).first();
+    // The row stops matching `hasNotText` the moment the key lands, so the
+    // checks after the save locate it by its provider's name instead.
+    const label = (await unkeyed.locator('p').first().textContent())?.trim() ?? '';
+    assert(label !== '', 'the row names no provider');
+    const row = main.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
+    await unkeyed.getByRole('button', { name: 'Add key', expanded: false }).click();
     const fake = 'e2e-not-a-real-provider-key-000000000000wxyz';
-    await row.locator('input[type="password"]').fill(fake);
+    await unkeyed.locator('input[type="password"]').fill(fake);
     const saving = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/learner/provider-key' && r.request().method() === 'POST',
     );
-    await row.getByRole('button', { name: 'Save key' }).click();
+    await unkeyed.getByRole('button', { name: 'Save key' }).click();
     const response = await saving;
     assert(response.status() === 200, `the save answered ${response.status()}`);
     assert(!(await response.text()).includes(fake), 'the save answered with the key in it');

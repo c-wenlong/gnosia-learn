@@ -33,6 +33,7 @@ type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"
 interface Reply {
   ok?: boolean;
   error?: string;
+  code?: string;
   chain?: ChainEntry[];
   models?: { id: string; free?: boolean }[];
   message?: string;
@@ -123,6 +124,19 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
   const current = chain[0];
   const [provider, setProvider] = useState(current?.provider ?? "");
   const [model, setModel] = useState(current?.model ?? "");
+  // The fields follow the saved pick until the person changes them: a row
+  // deleted above refreshes the chain without its entry, and a field still
+  // showing that pick moves on with it rather than keeping a deleted model.
+  const savedPick = useRef(chain[0]);
+  useEffect(() => {
+    const first = chain[0];
+    const was = savedPick.current;
+    savedPick.current = first;
+    if (provider === (was?.provider ?? "") && model === (was?.model ?? "")) {
+      setProvider(first?.provider ?? "");
+      setModel(first?.model ?? "");
+    }
+  }, [chain, provider, model]);
 
   // The provider's model list, asked once per provider and again when its
   // key changes: a replaced key is another account, and the server's cache
@@ -175,9 +189,23 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
   const save = async () => {
     setStatus({ kind: "busy", text: "Saving…" });
     setError(null);
-    const rest = chain.filter((e) => !(e.provider === picked.provider && e.model === picked.model));
+    let rest = chain.filter((e) => !(e.provider === picked.provider && e.model === picked.model));
     if (!already) {
-      const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", picked);
+      let reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", picked);
+      // A full chain counts the models being replaced against the new pick:
+      // drop them first, then ask again.
+      if (reply !== null && reply.status === 409 && reply.data.code === "FULL") {
+        for (const entry of rest) {
+          const removed = await sendJson<Reply>("DELETE", "/api/learner/tutor-model", { provider: entry.provider, model: entry.model });
+          if (removed === null || removed.status !== 200 || removed.data.ok !== true) {
+            setStatus({ kind: "error", text: `Not saved: ${entry.model} could not be removed first (${failure("removed", removed)}).` });
+            router.refresh();
+            return;
+          }
+        }
+        rest = [];
+        reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", picked);
+      }
       if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
         focusNext.current = `${base}-model`;
         setStatus({ kind: "idle" });

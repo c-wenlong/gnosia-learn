@@ -374,7 +374,7 @@ function ProviderRow({
       return setStatus({ kind: "error", text: failure("deleted", reply) });
     }
     setMode("idle");
-    const kept = reply.data.byok === false ? " The studio runner did not answer, so it still has the key — Remove it on the Studio chats card below." : "";
+    const kept = reply.data.byok === false ? " The studio runner did not answer, so it may still hold the key — remove the provider in a chat's BYOK settings." : "";
     const text = `Deleted ${row.label}.${kept}`;
     setStatus({ kind: "done", text });
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
