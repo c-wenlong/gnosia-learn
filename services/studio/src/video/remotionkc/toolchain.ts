@@ -232,7 +232,7 @@ export async function discoverRemotionkcToolchain(): Promise<RemotionkcToolchain
   const own = discoverRemotionkc();
   const libs =
     process.platform === "linux"
-      ? await foreignLibs([own.headlessShell?.binary ?? null, own.esbuild, own.tsc, ...executablesIn(own.compositor)])
+      ? await foreignLibs([own.gnosiaPython?.real ?? null, own.headlessShell?.binary ?? null, own.esbuild, own.tsc, ...executablesIn(own.compositor)])
       : [];
   return { ...(await discoverToolchain()), remotionkc: { ...own, libs } };
 }

@@ -224,7 +224,7 @@ export async function discoverRevideokcToolchain(): Promise<RevideokcToolchain> 
   const own = discoverRevideokc();
   const libs =
     process.platform === "linux"
-      ? await foreignLibs([own.chrome?.binary ?? null, ...executablesIn(own.ffmpegInstaller), ...executablesIn(own.ffprobeInstaller)])
+      ? await foreignLibs([own.gnosiaPython?.real ?? null, own.chrome?.binary ?? null, ...executablesIn(own.ffmpegInstaller), ...executablesIn(own.ffprobeInstaller)])
       : [];
   return { ...(await discoverToolchain()), revideokc: { ...own, libs } };
 }
