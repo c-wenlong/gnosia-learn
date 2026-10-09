@@ -519,7 +519,7 @@ function ProviderRow({
       return setStatus({ kind: "error", text: failure("deleted", reply) });
     }
     setMode("idle");
-    const kept = reply.data.byok === false ? " The studio runner did not answer, so it still has the key — its row below has a Remove." : "";
+    const kept = reply.data.byok === false ? " The studio runner did not answer, so it still has the key — Remove it on the Studio chats card below." : "";
     const text = `Deleted ${row.label}.${kept}`;
     setStatus({ kind: "done", text });
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));

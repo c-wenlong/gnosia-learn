@@ -12,7 +12,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { BYOK_PROVIDERS, byokToTutor } from "@/lib/byok-providers";
 import { sendJson } from "@/lib/send-json";
-import { BYOK_SETTINGS_CHANGED, getByokSettings, listByokModels, saveByokModels, setByokActive, type ByokProviderStatus } from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED, getByokSettings, listByokModels, removeByokProvider, saveByokModels, setByokActive, type ByokProviderStatus } from "@/lib/studio-drafts";
 
 type Tier = "default" | "lite" | "max";
 
@@ -82,7 +82,13 @@ export function ByokConfig({
         }
         setProvider((was) => {
           if (was === "" || was === ADD_PROVIDER) return was;
-          return result.data.providers.some((entry) => entry.provider === was) ? was : (active ?? ADD_PROVIDER);
+          if (result.data.providers.some((entry) => entry.provider === was)) return was;
+          // The pick itself was deleted: the fallback provider is a
+          // different account, so its tiers load and any typed key drops.
+          const entry = result.data.providers.find((entry) => entry.provider === active);
+          setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
+          setApiKey("");
+          return active ?? ADD_PROVIDER;
         });
         if (result.data.providers.length === 0) setAdding(true);
       });
@@ -102,7 +108,7 @@ export function ByokConfig({
 
   const [listed, setListed] = useState<{ sig: string; models: { value: string; label: string | null }[] } | null>(null);
   const [modelsNote, setModelsNote] = useState<string | null>(null);
-  const modelSig = `${listProvider}:${apiKey.trim() === "" ? "stored" : apiKey.trim().slice(-8)}`;
+  const modelSig = `${listProvider}:${apiKey.trim() === "" ? `stored:${selected?.last4 ?? ""}` : apiKey.trim().slice(-8)}`;
   const models = listed !== null && listed.sig === modelSig ? listed.models : [];
   useEffect(() => {
     let cancelled = false;
@@ -188,11 +194,16 @@ export function ByokConfig({
       setError("Not connected — the runner is not answering.");
       return;
     }
-    await setByokActive(byokName);
+    const switched = await setByokActive(byokName);
     const fresh = await getByokSettings();
     setSaving(false);
     if (!fresh.ok || !fresh.data.providers.some((entry) => entry.provider === byokName)) {
       setError("Connected, but the studio runner did not answer — try again.");
+      return;
+    }
+    if (!switched.ok || fresh.data.active !== byokName) {
+      setError("Connected, but Studio chats still run on the previous provider — pick it again from the dropdown to switch.");
+      setConnected(fresh.data.providers);
       return;
     }
     setConnected(fresh.data.providers);
@@ -246,6 +257,21 @@ export function ByokConfig({
     // `byok`, but the dialog stays open for the tier models: a provider
     // with no Default model still cannot run.
     onConnected?.();
+  }
+
+  /** The selected provider leaves `byok.json` whole — key, tiers and the pick. */
+  async function remove() {
+    if (selected === null) return;
+    setSaving(true);
+    setError(null);
+    const result = await removeByokProvider(provider);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.refusal.error);
+      return;
+    }
+    setNote(null);
+    window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
   }
 
   async function saveTiers() {
@@ -417,6 +443,11 @@ export function ByokConfig({
               {saving ? "Saving…" : "Save models"}
             </Button>
             {note !== null && <p className="text-[12px] leading-4 text-text3">{note}</p>}
+            {selected !== null && (
+              <button type="button" className="ml-auto text-[12px] leading-4 text-text3 underline-offset-2 hover:underline" disabled={saving} onClick={() => void remove()}>
+                Remove
+              </button>
+            )}
           </div>
         </>
       )}
