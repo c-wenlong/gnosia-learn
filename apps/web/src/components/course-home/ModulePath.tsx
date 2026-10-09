@@ -149,7 +149,7 @@ export function ModulePath({
           <StepRow
             href={weekCheckHref(course.slug, module.slug)}
             glyph="check"
-            title="Week check"
+            title="Module check"
             meta={weekCheckMeta(path.check)}
           />
         </ol>

@@ -327,7 +327,7 @@ async function readableModule(
       .limit(1),
   );
   if (row === undefined) {
-    throw new StateError(`no live module "${id}" in the catalog. A week check answers against a module its course still lists.`);
+    throw new StateError(`no live module "${id}" in the catalog. A module check answers against a module its course still lists.`);
   }
   return row;
 }
