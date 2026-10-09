@@ -5,7 +5,7 @@ import { keyFor } from "@/lib/agent/providers";
 import { answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 import { failureCode, openSavedKeys } from "@/lib/provider-keys/store";
 import { CHAIN_WRITE_RATE_LIMIT, chainFailed, readModel } from "@/lib/tutor-models/requests";
-import { addChainEntry, moveChainEntry, removeChainEntry } from "@/lib/tutor-models/store";
+import { addChainEntry, moveChainEntry, removeChainEntry, setChainEntry } from "@/lib/tutor-models/store";
 
 export const runtime = "nodejs";
 
@@ -13,10 +13,12 @@ export const runtime = "nodejs";
  * The owner's model chain (docs/TUTOR-MODELS.md): the provider and model
  * pairs the tutor tries, top to bottom.
  *
- * `POST { provider, model }` adds an entry at the bottom. `DELETE { provider,
- * model }` removes one. `PATCH { provider, model, direction: "up" | "down" }`
- * moves one a place. Each answers 200 `{ ok: true, chain }`, the whole chain
- * after the change, top first.
+ * `POST { provider, model }` adds an entry at the bottom. `PUT { provider,
+ * model }` makes the entry the whole chain (T16): Model selection's pick,
+ * replaced in one write so a refused save keeps the chain it would have
+ * replaced. `DELETE { provider, model }` removes one. `PATCH { provider,
+ * model, direction: "up" | "down" }` moves one a place. Each answers 200
+ * `{ ok: true, chain }`, the whole chain after the change, top first.
  *
  * 400 `BAD_REQUEST` for a body that is not a provider and a model id of the
  * right shape (a model id that looks like, or is, an API key included), 400
@@ -42,18 +44,49 @@ async function entry(req: Request) {
 export async function POST(req: Request): Promise<NextResponse> {
   const read = await entry(req);
   if (read instanceof NextResponse) return read;
-  const { owner, provider, model } = read;
+  const gate = await keyGate(read.owner, read.provider, read.model, "added");
+  if (gate instanceof NextResponse) return gate;
 
-  // Settings offers only providers with a key; this holds the route to the
-  // same rule. A key removed later leaves the entry in place, skipped (T4).
-  // A saved key that cannot be read because the database is down is not "no
-  // key": say so, and let the person try again.
+  try {
+    return answer({ ok: true, chain: await addChainEntry(read.owner, read.provider, read.model, gate.serverKey) });
+  } catch (error) {
+    return chainFailed("add", error);
+  }
+}
+
+export async function PUT(req: Request): Promise<NextResponse> {
+  const read = await entry(req);
+  if (read instanceof NextResponse) return read;
+  const gate = await keyGate(read.owner, read.provider, read.model, "saved");
+  if (gate instanceof NextResponse) return gate;
+
+  try {
+    return answer({ ok: true, chain: await setChainEntry(read.owner, read.provider, read.model, gate.serverKey) });
+  } catch (error) {
+    return chainFailed("saved", error);
+  }
+}
+
+/**
+ * The key gate an add and a replace share (docs/TUTOR-MODELS.md): Settings
+ * offers only providers with a key, and the route holds the same rule — a
+ * key removed later leaves the entry in place, skipped (T4). A saved key
+ * that cannot be read because the database is down is not "no key": say so,
+ * and let the person try again. Answers the refusal, or the server's
+ * key-holding for the write's own under-lock check.
+ */
+async function keyGate(
+  owner: string,
+  provider: ProviderName,
+  model: string,
+  what: "added" | "saved",
+): Promise<NextResponse | { serverKey: boolean }> {
   let saved: Partial<Record<ProviderName, string>>;
   try {
     saved = await openSavedKeys(owner);
   } catch (error) {
-    console.warn(`tutor model add: saved provider keys unavailable (${failureCode(error)})`);
-    return refuse("Not added: your saved keys could not be read just now. Try again in a moment.", "STORE_UNAVAILABLE", 503);
+    console.warn(`tutor model ${what === "added" ? "add" : "set"}: saved provider keys unavailable (${failureCode(error)})`);
+    return refuse(`Not ${what}: your saved keys could not be read just now. Try again in a moment.`, "STORE_UNAVAILABLE", 503);
   }
   if (keyFor(provider, saved) === null) {
     return refuse(`There is no key for ${providerLabel(provider)}. Add one under Providers first.`, "NO_KEY");
@@ -65,12 +98,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (echoesKey(model, saved)) {
     return refuse("That is one of your API keys, not a model id. Keys go in a provider's API key field.");
   }
-
-  try {
-    return answer({ ok: true, chain: await addChainEntry(owner, provider, model, keyFor(provider, {}) !== null) });
-  } catch (error) {
-    return chainFailed("add", error);
-  }
+  return { serverKey: keyFor(provider, {}) !== null };
 }
 
 /** Whether `model` is, holds, or is a long part of any key the tutor could call with. */

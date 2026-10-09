@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDER_KEY_LIMITS, type ProviderName } from "@self-learn/schema/shared";
+import { PROVIDER_KEY_LIMITS } from "@self-learn/schema/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
@@ -8,13 +8,11 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
-import { Combobox } from "@/components/ui/Combobox";
 import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow } from "@/components/ui/FormRow";
 import { Glyph } from "@/components/ui/Glyph";
 import { Input } from "@/components/ui/Input";
 import { LiveStatus } from "@/components/ui/LiveStatus";
-import { Select } from "@/components/ui/Select";
 import { TextLink } from "@/components/ui/TextLink";
 import { cx } from "@/components/ui/classes";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
@@ -26,28 +24,23 @@ import { sendJson } from "@/lib/send-json";
 import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-drafts";
 
 /**
- * The Providers card (docs/TUTOR-MODELS.md, T12): the tutor's model
- * providers, each with its key and its models, in the order the tutor tries
- * them. It replaces the Provider keys and Models cards, which kept the key
- * and the models of one provider on two cards.
+ * The Providers card: every model provider in one list — each built-in,
+ * keyed or not, then the custom ones — each row holding its key's state
+ * with Edit (replace the key), Delete (the key and the provider's models,
+ * after a confirm) and Test the key. An unkeyed built-in stays listed: its
+ * row is where the key goes, so a provider is never hidden behind the add
+ * dialog. Add custom provider takes a name, a base URL and a key for any
+ * OpenAI-compatible endpoint (T14).
  *
- * Add provider takes a provider not listed yet and its key. A row shows the
- * key's state with Edit (replace the key), Delete (the key and the
- * provider's models, after a confirm), Move up and Move down (the provider's
- * models together, `PATCH /api/learner/tutor-model/provider`), and an arrow
- * at the far right that opens the row onto its models. Rows start closed.
- * Inside, each model has Test, Move up, Move down and Remove, and Add model
- * is the kit's `Combobox` over the provider's live model list
- * (`/api/learner/tutor-model/models`), fetched when the row first opens, so
- * picking from the list and typing an id are the same field.
+ * Which model a provider serves is picked under Model selection below
+ * (`ModelSelection.tsx`); this card answers whose key the call spends.
  *
  * Keys are write-only, as on the old card (docs/BYOK.md): typed into a
  * password field, sent once, dropped from state whatever the answer. The
  * card is handed last four characters and dates, never a key.
  *
- * Nothing swaps in a frame: every form, confirm and model list glides open
- * and shut (`Collapse`), the arrow turns, a model that arrives fades in, and
- * the status lines glide (`LiveStatus`).
+ * Nothing swaps in a frame: every form and confirm glides open and shut
+ * (`Collapse`), and the status lines glide (`LiveStatus`).
  */
 
 type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"; text: string } | { kind: "error"; text: string };
@@ -100,16 +93,15 @@ export function Providers({ view }: { view: ProvidersView }) {
       onClick={() => setAdding(true)}
     >
       <Glyph name="add" size={16} />
-      Add provider
+      Add custom provider
     </Button>
   );
 
   return (
     <Card title="Providers" action={addButton}>
       <p className="text-[14px] text-text2">
-        {view.usingDefaults
-          ? "Your model providers and their keys. The tutor calls only what you add — nothing is called until a model is on a row."
-          : "Your model providers, their keys and their models. The tutor tries each provider's models top to bottom, then the next provider's, and skips a provider with no models."}
+        Your model providers and the keys they run on, shared by the tutor and Studio chats below. A row without a key
+        calls nothing until you add one.
       </p>
       {!view.keysReachable && (
         <Callout role="status" bordered>
@@ -126,13 +118,12 @@ export function Providers({ view }: { view: ProvidersView }) {
           connect gets. */}
       <AddProvider
         open={adding}
-        addable={view.addable}
         onSaving={setAddSaving}
         onClose={() => setAdding(false)}
         opener={() => document.getElementById(`${base}-add`)}
         onAdded={(label, note) => {
           setAdding(false);
-          setStatus({ kind: "done", text: note ?? `Added ${label}. Open it to add a model.` });
+          setStatus({ kind: "done", text: note ?? `Added ${label}. Pick a model for it below.` });
           // The key mirrored into `byok.json` — the Studio block reads it.
           window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
           router.refresh();
@@ -164,32 +155,26 @@ export function Providers({ view }: { view: ProvidersView }) {
   );
 }
 
-/** The Add provider menu's last choice: any OpenAI-compatible endpoint (T14). */
-const CUSTOM = "custom";
-
 /**
- * Add provider's dialog: a provider not listed yet and its key, or a custom
- * provider (a name, a base URL and a key), which `/api/learner/custom-provider`
+ * Add custom provider's dialog: a name, a base URL and a key for any
+ * OpenAI-compatible endpoint (T14), which `/api/learner/custom-provider`
  * stores whole or not at all.
  */
 function AddProvider({
   open,
-  addable,
   onSaving,
   onClose,
   onAdded,
   opener,
 }: {
   open: boolean;
-  addable: ProvidersView["addable"];
   onSaving: (saving: boolean) => void;
   onClose: () => void;
   /** A provider went on the card. `text` overrides the stock message when only part of the ask landed. */
   onAdded: (label: string, text?: string) => void;
-  /** The Add provider button, which the dialog returns focus to. */
+  /** The Add custom provider button, which the dialog returns focus to. */
   opener: () => HTMLElement | null;
 }) {
-  const [provider, setProvider] = useState<ProviderName | typeof CUSTOM>(addable[0]?.id ?? CUSTOM);
   const [draft, setDraft] = useState("");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -198,30 +183,6 @@ function AddProvider({
   // In the page only while open, as the old key form: a password field kept
   // in the page is one a browser may fill with the sign-in password.
   const form = usePresence(open, DIALOG_CLOSE_MS);
-  const custom = provider === CUSTOM || addable.length === 0;
-  const chosen = custom ? undefined : (addable.find((a) => a.id === provider) ?? addable[0]);
-  // A provider the environment already keys connects without a personal
-  // key: the ask is the first model, whose list the server key can fetch.
-  const serverKeyed = chosen?.server === true;
-  const [model, setModel] = useState("");
-  const [modelList, setModelList] = useState<{ provider: ProviderName; models?: { value: string; label: string }[]; error?: string } | null>(null);
-  // The list belongs to one provider: switching clears the pick and asks again.
-  useEffect(() => {
-    if (!serverKeyed || chosen === undefined || modelList?.provider === chosen.id) return;
-    const forProvider = chosen.id;
-    let held = true;
-    void sendJson<Reply>("POST", "/api/learner/tutor-model/models", { provider: forProvider }).then((reply) => {
-      if (!held) return;
-      setModelList(
-        reply !== null && reply.status === 200 && reply.data.ok === true && Array.isArray(reply.data.models)
-          ? { provider: forProvider, models: reply.data.models.map((m) => ({ value: m.id, label: m.id })) }
-          : { provider: forProvider, error: "the list could not be loaded" },
-      );
-    });
-    return () => {
-      held = false;
-    };
-  }, [serverKeyed, chosen, modelList]);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -230,89 +191,32 @@ function AddProvider({
     setSaving(true);
     onSaving(true);
     setError(null);
-    if (custom) {
-      const reply = await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key });
-      setSaving(false);
-      onSaving(false);
-      if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
-    } else {
-      // A typed key connects through the key route (which also mirrors BYOK);
-      // a model connects through the chain — either alone is an add.
-      if (key.trim() !== "") {
-        const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen?.id, key });
-        if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-          setSaving(false);
-          onSaving(false);
-          return setError(failure("added", reply));
-        }
-      }
-      const first = model.trim();
-      if (first !== "") {
-        const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", { provider: chosen?.id, model: first });
-        if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-          setSaving(false);
-          onSaving(false);
-          // A key write that already landed is real: close with the row on
-          // the card — keeping the dialog open would let a retry bind the
-          // model to whichever provider the refresh left in the picker.
-          if (key.trim() === "") return setError(failure("added", reply));
-          onAdded(chosen?.label ?? "the provider", `${chosen?.label ?? "The provider"}'s key saved, but the model was not: ${failure("added", reply)} Open its row to add one.`);
-          return;
-        }
-      }
-      setSaving(false);
-      onSaving(false);
-    }
-    const label = custom ? name.trim() : (chosen?.label ?? "the provider");
+    const reply = await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key });
+    setSaving(false);
+    onSaving(false);
+    if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
+    const label = name.trim();
     setName("");
     setUrl("");
-    setModel("");
     onAdded(label);
   };
 
   if (!form.mounted) return null;
-  const ready = custom
-    ? draft.trim() !== "" && name.trim() !== "" && url.trim() !== ""
-    : serverKeyed
-      ? draft.trim() !== "" || model.trim() !== ""
-      : draft.trim() !== "";
+  const ready = draft.trim() !== "" && name.trim() !== "" && url.trim() !== "";
   // A save in flight is not dismissed: Escape, the backdrop and Close all
   // ask the same way, and the ask waits — a hid error is a silent failure.
   const askClose = () => {
     if (!saving) onClose();
   };
   return (
-    <Dialog label="Add a provider" onClose={askClose} closing={form.leaving} size="compact" className="md:w-[520px]" opener={opener}>
-      <DialogHeader title="Add a provider" onClose={askClose} />
-      <form onSubmit={(e) => void save(e)} aria-label="Add a provider" className="flex min-h-0 flex-col gap-3 overflow-y-auto p-6 pt-5">
-      <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
-        <FormRow label="Provider">
-          {({ id }) => (
-            <Select
-              id={id}
-              label="Provider"
-              options={[
-                ...addable.map((a) => ({ value: a.id as string, label: a.label })),
-                { value: CUSTOM, label: "Custom provider", detail: "Any OpenAI-compatible API", section: "Your own" },
-              ]}
-              value={custom ? CUSTOM : (chosen?.id ?? CUSTOM)}
-              onChange={(v) => {
-                setProvider(v as ProviderName | typeof CUSTOM);
-                setModel("");
-                setError(null);
-              }}
-            />
+    <Dialog label="Add a custom provider" onClose={askClose} closing={form.leaving} size="compact" className="md:w-[520px]" opener={opener}>
+      <DialogHeader title="Add a custom provider" onClose={askClose} />
+      <form onSubmit={(e) => void save(e)} aria-label="Add a custom provider" className="flex min-h-0 flex-col gap-3 overflow-y-auto p-6 pt-5">
+        <FormRow label="Name" hint="How it is listed here and named in the tutor's messages.">
+          {({ id, describedBy }) => (
+            <Input id={id} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="My gateway" aria-describedby={describedBy} />
           )}
         </FormRow>
-        {custom && (
-          <FormRow label="Name" hint="How it is listed here and named in the tutor's messages.">
-            {({ id, describedBy }) => (
-              <Input id={id} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="My gateway" aria-describedby={describedBy} />
-            )}
-          </FormRow>
-        )}
-      </div>
-      {custom && (
         <FormRow
           label="Base URL"
           hint="The part before /chat/completions, as the provider documents it. https:// only, or http:// for a model server on this machine."
@@ -332,100 +236,53 @@ function AddProvider({
             />
           )}
         </FormRow>
-      )}
-      {serverKeyed && (
         <FormRow
-          label="Model"
-          hint={
-            modelList?.error !== undefined ? (
-              <>
-                {modelList.error} —{" "}
-                <button type="button" className="underline underline-offset-2" onClick={() => setModelList(null)}>
-                  Try again
-                </button>
-                . Or type the name yourself.
-              </>
-            ) : (
-              "The provider's real list — leave the key blank and the server's is used."
-            )
-          }
+          label="API key"
+          hint="Sent once and stored encrypted. Only its last four characters are shown again. For a local server that needs no key, type any 16 characters."
         >
-          {({ id, describedBy }) => (
-            <Combobox
+          {({ id, describedBy, invalid }) => (
+            <Input
               id={id}
-              label="Model"
-              value={model}
-              onChange={setModel}
-              options={modelList?.models ?? []}
-              placeholder="e.g. a model name"
+              type="password"
+              name="custom-api-key"
               autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
               spellCheck={false}
-              describedBy={describedBy}
+              value={draft}
+              minLength={PROVIDER_KEY_LIMITS.minChars}
+              required
+              onChange={(e) => {
+                setDraft(e.target.value);
+                setError(null);
+              }}
+              aria-describedby={describedBy}
+              aria-invalid={invalid}
             />
           )}
         </FormRow>
-      )}
-      <FormRow
-        label={serverKeyed ? "API key (optional)" : "API key"}
-        hint={
-          <>
-            {serverKeyed ? "Leave blank and the server's key is used; enter yours to replace it. " : ""}
-            Sent once and stored encrypted. Only its last four characters are shown again.
-            {custom && " For a local server that needs no key, type any 16 characters."}
-            {chosen?.keyUrl !== undefined && (
-              <>
-                {" "}
-                <TextLink href={chosen.keyUrl} external size="xs">
-                  Get a {chosen.label} key<span aria-hidden> ↗</span>
-                </TextLink>
-              </>
-            )}
-          </>
-        }
-      >
-        {({ id, describedBy, invalid }) => (
-          <Input
-            id={id}
-            type="password"
-            name={`${custom ? "custom" : (chosen?.id ?? "provider")}-api-key`}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            value={draft}
-            minLength={PROVIDER_KEY_LIMITS.minChars}
-            required={!serverKeyed && !custom}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              setError(null);
-            }}
-            aria-describedby={describedBy}
-            aria-invalid={invalid}
-          />
+        {/* The refusal can be about any field (the name, the URL, the key), so it sits above the buttons, not under one of them. */}
+        {error !== null && (
+          <p role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
+            {error} {draft === "" && "Enter the key again: it is never kept after a send."}
+          </p>
         )}
-      </FormRow>
-      {/* The refusal can be about any field (the name, the URL, the key), so it sits above the buttons, not under one of them. */}
-      {error !== null && (
-        <p role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
-          {error} {draft === "" && "Enter the key again: it is never kept after a send."}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-2.5">
-        <Button type="submit" size="sm" disabled={saving || !ready}>
-          Add provider
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={saving}
-          onClick={() => {
-            setDraft("");
-            onClose();
-          }}
-        >
-          Cancel
-        </Button>
-      </div>
+        <div className="flex flex-wrap gap-2.5">
+          <Button type="submit" size="sm" disabled={saving || !ready}>
+            Add provider
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={saving}
+            onClick={() => {
+              setDraft("");
+              onClose();
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
       </form>
     </Dialog>
   );
@@ -470,13 +327,10 @@ function ProviderRow({
     saved === null
       ? row.server
         ? "Using the server's key."
-        : "No key, so the tutor skips this provider."
+        : "No key yet — nothing calls this provider."
       : unreadable
         ? "Your saved key can no longer be read, most likely because the server's secret changed. Edit to re-enter it."
         : `Your key, ending ${saved.last4}. Saved ${saved.savedOn}.`;
-  const modelLine = hasModels
-    ? `${row.models.length} ${row.models.length === 1 ? "model" : "models"}`
-    : "No models";
 
   const saveKey = async (event: FormEvent) => {
     event.preventDefault();
@@ -513,17 +367,19 @@ function ProviderRow({
     setStatus({ kind: "busy", text: "Deleting…" });
     const reply = await sendJson<Reply>("DELETE", "/api/learner/tutor-model/provider", { provider: row.id });
     // Focus after either answer is the fold's (`ConfirmFold`): back to its
-    // Delete when the delete failed, to the row's Delete once it closes, and
-    // to Add provider when the row itself goes (`onGone`).
+    // Delete when the delete failed, to the row's own Add key once the row
+    // stays (a built-in is always listed), and to Add custom provider when a
+    // custom row leaves with the refresh (`onGone`).
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
       return setStatus({ kind: "error", text: failure("deleted", reply) });
     }
     setMode("idle");
-    const kept = reply.data.byok === false ? " The studio runner did not answer, so it still has the key — Remove it on the Studio chats card below." : "";
+    const kept = reply.data.byok === false ? " The studio runner did not answer, so it may still hold the key — remove the provider in a chat's BYOK settings." : "";
     const text = `Deleted ${row.label}.${kept}`;
     setStatus({ kind: "done", text });
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
-    onGone(text);
+    if (row.custom === undefined) focusNext.current = `${base}-edit`;
+    else onGone(text);
     router.refresh();
   };
 
@@ -560,7 +416,6 @@ function ProviderRow({
           </p>
           {row.custom !== undefined && <p className="font-mono text-[12px] break-all text-text2">{row.custom.baseUrl}</p>}
           <p className={cx("text-[12px]", unreadable || (row.inUse === null && hasModels) ? "text-danger" : "text-text2")}>{keyLine}</p>
-          <p className="text-[12px] break-all text-text2">{modelLine}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {row.inUse !== null && row.custom === undefined && (
@@ -576,7 +431,7 @@ function ProviderRow({
             disabled={disabled || busy}
             onClick={() => open(mode === "edit" ? "idle" : "edit")}
           >
-            Edit
+            {saved === null && row.custom === undefined ? "Add key" : "Edit"}
           </Button>
           <Button
             ref={deleteButton}
@@ -623,9 +478,21 @@ function ProviderRow({
                 id={`${base}-key`}
                 label={saved === null ? `Your ${row.label} key` : `A new ${row.label} key`}
                 hint={
-                  row.custom !== undefined
-                    ? "Leave it empty to keep the key saved now. A new one is sent once and stored encrypted."
-                    : "Sent once and stored encrypted. It replaces the key saved now."
+                  <>
+                    {row.custom !== undefined
+                      ? "Leave it empty to keep the key saved now. A new one is sent once and stored encrypted."
+                      : saved === null
+                        ? "Sent once and stored encrypted. Only its last four characters are shown again."
+                        : "Sent once and stored encrypted. It replaces the key saved now."}
+                    {row.keyUrl !== undefined && (
+                      <>
+                        {" "}
+                        <TextLink href={row.keyUrl} external size="xs">
+                          Get a {row.label} key<span aria-hidden> ↗</span>
+                        </TextLink>
+                      </>
+                    )}
+                  </>
                 }
               >
                 {({ id, describedBy }) => (

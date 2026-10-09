@@ -204,6 +204,7 @@ export {
   moveTutorProvider,
   readTutorModels,
   removeTutorModel,
+  setTutorModel,
   TutorModelError,
   tutorModelEntry,
   type StoredTutorModel,

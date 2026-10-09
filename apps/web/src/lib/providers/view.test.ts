@@ -9,7 +9,7 @@ function row(id: ProviderKeyView["id"], over: Partial<ProviderKeyView> = {}): Pr
 const SAVED = { last4: "abcd", savedOn: "4 Oct 2026", readable: true };
 
 describe("providersView", () => {
-  it("lists providers with models in chain order, then keyed ones, and offers the rest to add", () => {
+  it("lists every provider in the keys view's order, keyed or not, with its chain models attached", () => {
     const view = providersView(
       {
         reachable: true,
@@ -22,40 +22,26 @@ describe("providersView", () => {
       true,
     );
     expect(view.rows.map((r) => [r.id, r.models])).toEqual([
-      ["openrouter", ["x", "y"]],
       ["nvidia", []],
+      ["gemini", []],
+      ["openrouter", ["x", "y"]],
     ]);
-    expect(view.addable).toEqual([{ id: "gemini", label: "GEMINI" }]);
     expect(view.usingDefaults).toBe(false);
-    expect(view.full).toBe(false);
   });
 
-  it("lists a provider that has models but lost its key, and leaves a server-only key to Add provider", () => {
+  it("keeps a provider listed when its key is gone and its models stay", () => {
     const view = providersView(
-      { reachable: true, rows: [row("nvidia"), row("gemini", { server: true, inUse: "server" }), row("openrouter")] },
+      { reachable: true, rows: [row("nvidia"), row("gemini", { server: true, inUse: "server" })] },
       [{ provider: "nvidia", model: "m" }],
       true,
     );
-    expect(view.rows.map((r) => r.id)).toEqual(["nvidia"]);
-    expect(view.addable.map((a) => a.id)).toEqual(["gemini", "openrouter"]);
+    expect(view.rows.map((r) => [r.id, r.models, r.inUse])).toEqual([
+      ["nvidia", ["m"], null],
+      ["gemini", [], "server"],
+    ]);
   });
 
-  it("lists only providers the owner connected: a saved key, not a server's alone (T15)", () => {
-    const view = providersView(
-      {
-        reachable: true,
-        rows: [row("nvidia", { server: true, inUse: "server" }), row("gemini"), row("openrouter", { saved: SAVED, inUse: "saved" })],
-      },
-      [],
-      true,
-    );
-    expect(view.rows.map((r) => r.id)).toEqual(["openrouter"]);
-    expect(view.addable.map((a) => a.id)).toEqual(["nvidia", "gemini"]);
-  });
-
-  it("says when the tutor has nothing to call, and when the chain is full", () => {
+  it("says when the tutor has nothing to call", () => {
     expect(providersView({ reachable: true, rows: [row("nvidia", { saved: SAVED })] }, [], true).usingDefaults).toBe(true);
-    const ten = Array.from({ length: 10 }, (_, i) => ({ provider: "nvidia" as const, model: `m${i}` }));
-    expect(providersView({ reachable: true, rows: [row("nvidia")] }, ten, true).full).toBe(true);
   });
 });
