@@ -1,0 +1,443 @@
+{
+ "outRoot": "/placeholder/blenderkc-home",
+ "topics": [
+  {
+   "path": "computer-architecture/gpu-architecture/hbm-how-it-is-built",
+   "title": "How HBM works and how it is built",
+   "topic": "gpu-architecture",
+   "concepts": [],
+   "tags": [],
+   "prerequisites": [],
+   "materials": [],
+   "prefix": "HB",
+   "out_dir": "out/computer-architecture/gpu-architecture/hbm-how-it-is-built",
+   "sections": [
+    {
+     "section": "narrated",
+     "files": [
+      {
+       "file": "shots/HB1_GamingCard.py",
+       "scenes": [
+        "HB1_GamingCard"
+       ]
+      },
+      {
+       "file": "shots/HB2_ServerTray.py",
+       "scenes": [
+        "HB2_ServerTray"
+       ]
+      },
+      {
+       "file": "shots/HB3_InsidePackage.py",
+       "scenes": [
+        "HB3_InsidePackage"
+       ]
+      },
+      {
+       "file": "shots/HB4_Questions.py",
+       "scenes": [
+        "HB4_Questions"
+       ]
+      },
+      {
+       "file": "shots/HB5_OnTheWire.py",
+       "scenes": [
+        "HB5_OnTheWire"
+       ]
+      },
+      {
+       "file": "shots/HB6_TwoWays.py",
+       "scenes": [
+        "HB6_TwoWays"
+       ]
+      },
+      {
+       "file": "shots/HB7_RiseTime.py",
+       "scenes": [
+        "HB7_RiseTime"
+       ]
+      },
+      {
+       "file": "shots/HB8_Crosstalk.py",
+       "scenes": [
+        "HB8_Crosstalk"
+       ]
+      },
+      {
+       "file": "shots/HB9_GddrWidth.py",
+       "scenes": [
+        "HB9_GddrWidth"
+       ]
+      },
+      {
+       "file": "shots/HB10_HbmWidth.py",
+       "scenes": [
+        "HB10_HbmWidth"
+       ]
+      },
+      {
+       "file": "shots/HB11_TheTrade.py",
+       "scenes": [
+        "HB11_TheTrade"
+       ]
+      },
+      {
+       "file": "shots/HB12_OneBitOneWire.py",
+       "scenes": [
+        "HB12_OneBitOneWire"
+       ]
+      },
+      {
+       "file": "shots/HB13_MoreThanData.py",
+       "scenes": [
+        "HB13_MoreThanData"
+       ]
+      },
+      {
+       "file": "shots/HB14_ThousandsOfWires.py",
+       "scenes": [
+        "HB14_ThousandsOfWires"
+       ]
+      },
+      {
+       "file": "shots/HB15_BareDie.py",
+       "scenes": [
+        "HB15_BareDie"
+       ]
+      },
+      {
+       "file": "shots/HB16_FlipChip.py",
+       "scenes": [
+        "HB16_FlipChip"
+       ]
+      },
+      {
+       "file": "shots/HB17_FanOut.py",
+       "scenes": [
+        "HB17_FanOut"
+       ]
+      },
+      {
+       "file": "shots/HB18_Laminate.py",
+       "scenes": [
+        "HB18_Laminate"
+       ]
+      },
+      {
+       "file": "shots/HB19_Expose.py",
+       "scenes": [
+        "HB19_Expose"
+       ]
+      },
+      {
+       "file": "shots/HB20_Etch.py",
+       "scenes": [
+        "HB20_Etch"
+       ]
+      },
+      {
+       "file": "shots/HB21_Bubbles.py",
+       "scenes": [
+        "HB21_Bubbles"
+       ]
+      },
+      {
+       "file": "shots/HB22_BoardLimit.py",
+       "scenes": [
+        "HB22_BoardLimit"
+       ]
+      },
+      {
+       "file": "shots/HB23_Silicon.py",
+       "scenes": [
+        "HB23_Silicon"
+       ]
+      },
+      {
+       "file": "shots/HB24_Interposer.py",
+       "scenes": [
+        "HB24_Interposer"
+       ]
+      },
+      {
+       "file": "shots/HB25_SideBySide.py",
+       "scenes": [
+        "HB25_SideBySide"
+       ]
+      },
+      {
+       "file": "shots/HB26_Bridges.py",
+       "scenes": [
+        "HB26_Bridges"
+       ]
+      },
+      {
+       "file": "shots/HB27_Capacity.py",
+       "scenes": [
+        "HB27_Capacity"
+       ]
+      },
+      {
+       "file": "shots/HB28_BuildUp.py",
+       "scenes": [
+        "HB28_BuildUp"
+       ]
+      },
+      {
+       "file": "shots/HB29_TopDieProblem.py",
+       "scenes": [
+        "HB29_TopDieProblem"
+       ]
+      },
+      {
+       "file": "shots/HB30_ThroughSilicon.py",
+       "scenes": [
+        "HB30_ThroughSilicon"
+       ]
+      },
+      {
+       "file": "shots/HB31_BoschIntro.py",
+       "scenes": [
+        "HB31_BoschIntro"
+       ]
+      },
+      {
+       "file": "shots/HB32_Resist.py",
+       "scenes": [
+        "HB32_Resist"
+       ]
+      },
+      {
+       "file": "shots/HB33_Fluorine.py",
+       "scenes": [
+        "HB33_Fluorine"
+       ]
+      },
+      {
+       "file": "shots/HB34_Passivate.py",
+       "scenes": [
+        "HB34_Passivate"
+       ]
+      },
+      {
+       "file": "shots/HB35_Ions.py",
+       "scenes": [
+        "HB35_Ions"
+       ]
+      },
+      {
+       "file": "shots/HB36_Cycle.py",
+       "scenes": [
+        "HB36_Cycle"
+       ]
+      },
+      {
+       "file": "shots/HB37_Depth.py",
+       "scenes": [
+        "HB37_Depth"
+       ]
+      },
+      {
+       "file": "shots/HB38_Liner.py",
+       "scenes": [
+        "HB38_Liner"
+       ]
+      },
+      {
+       "file": "shots/HB39_Barrier.py",
+       "scenes": [
+        "HB39_Barrier"
+       ]
+      },
+      {
+       "file": "shots/HB40_Plating.py",
+       "scenes": [
+        "HB40_Plating"
+       ]
+      },
+      {
+       "file": "shots/HB41_Thinning.py",
+       "scenes": [
+        "HB41_Thinning"
+       ]
+      },
+      {
+       "file": "shots/HB42_Microbumps.py",
+       "scenes": [
+        "HB42_Microbumps"
+       ]
+      },
+      {
+       "file": "shots/HB43_Fragile.py",
+       "scenes": [
+        "HB43_Fragile"
+       ]
+      },
+      {
+       "file": "shots/HB44_MassReflow.py",
+       "scenes": [
+        "HB44_MassReflow"
+       ]
+      },
+      {
+       "file": "shots/HB45_Film.py",
+       "scenes": [
+        "HB45_Film"
+       ]
+      },
+      {
+       "file": "shots/HB46_Tradeoff.py",
+       "scenes": [
+        "HB46_Tradeoff"
+       ]
+      },
+      {
+       "file": "shots/HB47_Heat.py",
+       "scenes": [
+        "HB47_Heat"
+       ]
+      },
+      {
+       "file": "shots/HB48_Totals.py",
+       "scenes": [
+        "HB48_Totals"
+       ]
+      },
+      {
+       "file": "shots/HB49_Hbm4.py",
+       "scenes": [
+        "HB49_Hbm4"
+       ]
+      },
+      {
+       "file": "shots/HB50_PitchLimit.py",
+       "scenes": [
+        "HB50_PitchLimit"
+       ]
+      },
+      {
+       "file": "shots/HB51_HybridBonding.py",
+       "scenes": [
+        "HB51_HybridBonding"
+       ]
+      },
+      {
+       "file": "shots/HB52_WhenHybrid.py",
+       "scenes": [
+        "HB52_WhenHybrid"
+       ]
+      },
+      {
+       "file": "shots/HB53_SameFabs.py",
+       "scenes": [
+        "HB53_SameFabs"
+       ]
+      },
+      {
+       "file": "shots/HB54_Recap.py",
+       "scenes": [
+        "HB54_Recap"
+       ]
+      }
+     ],
+     "output": "hbm-how-it-is-built.mp4",
+     "deliverable": {
+      "path": "out/computer-architecture/gpu-architecture/hbm-how-it-is-built/hbm-how-it-is-built.mp4",
+      "exists": true,
+      "duration": null,
+      "sidecars": {
+       "transcript": {
+        "path": "out/computer-architecture/gpu-architecture/hbm-how-it-is-built/hbm-how-it-is-built.transcript.json",
+        "exists": true
+       },
+       "chapters": {
+        "path": "out/computer-architecture/gpu-architecture/hbm-how-it-is-built/hbm-how-it-is-built.chapters.json",
+        "exists": true
+       },
+       "vtt": {
+        "path": "out/computer-architecture/gpu-architecture/hbm-how-it-is-built/hbm-how-it-is-built.vtt",
+        "exists": true
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "path": "demo/kit-tour",
+   "title": "A tour of the blenderkc kit",
+   "topic": "gpu-architecture",
+   "concepts": [],
+   "tags": [
+    "demo"
+   ],
+   "prerequisites": [],
+   "materials": [],
+   "prefix": "KT",
+   "out_dir": "out/demo/kit-tour",
+   "sections": [
+    {
+     "section": "narrated",
+     "files": [
+      {
+       "file": "shots/KT1_Package.py",
+       "scenes": [
+        "KT1_Package"
+       ]
+      },
+      {
+       "file": "shots/KT2_Boards.py",
+       "scenes": [
+        "KT2_Boards"
+       ]
+      },
+      {
+       "file": "shots/KT3_Wires.py",
+       "scenes": [
+        "KT3_Wires"
+       ]
+      },
+      {
+       "file": "shots/KT4_Etch.py",
+       "scenes": [
+        "KT4_Etch"
+       ]
+      },
+      {
+       "file": "shots/KT5_Substrate.py",
+       "scenes": [
+        "KT5_Substrate"
+       ]
+      }
+     ],
+     "output": "kit-tour.mp4",
+     "deliverable": {
+      "path": "out/demo/kit-tour/kit-tour.mp4",
+      "exists": false,
+      "duration": null,
+      "sidecars": {
+       "transcript": {
+        "path": "out/demo/kit-tour/kit-tour.transcript.json",
+        "exists": false
+       },
+       "chapters": {
+        "path": "out/demo/kit-tour/kit-tour.chapters.json",
+        "exists": false
+       },
+       "vtt": {
+        "path": "out/demo/kit-tour/kit-tour.vtt",
+        "exists": false
+       }
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "drift": {
+  "orphans": [],
+  "unrendered": [
+   "demo/kit-tour"
+  ]
+ }
+}

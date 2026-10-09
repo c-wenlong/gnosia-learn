@@ -54,6 +54,10 @@ export const INDEX_SOURCES = [
   // The third, the same way: Revideo renders through `revideokc topics
   // --json`, folders that name their own topic, and no mirror ledger.
   "revideokc",
+  // The fourth, the same way again: Blender's Cycles renders through
+  // `blenderkc topics --json` (Python, like manimkc's CLI), folders that name
+  // their own topic, and no mirror ledger.
+  "blenderkc",
   "diagrams",
   "sessions",
   "mirrors",
@@ -99,8 +103,8 @@ export const indexRun = pgTable(
      * could not reach keeps its old rows, so without this the table would
      * claim an audit that never happened.
      *
-     * `manimkc`, `remotionkc` and `revideokc` record `outRoot`, the absolute
-     * base their `out/…` asset paths are relative to. That is the one thing
+     * `manimkc`, `remotionkc`, `revideokc` and `blenderkc` record `outRoot`,
+     * the absolute base their `out/…` asset paths are relative to. That is the one thing
      * about the run nothing downstream can recompute (`source_root` is the
      * checkout it read, which is a different directory whenever the tool's
      * data root is set), so a reader that wants to open one of those files

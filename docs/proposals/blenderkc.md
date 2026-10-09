@@ -1,11 +1,20 @@
 # Proposal: blenderkc, photoreal 3D plates for the narrated videos
 
-Status: proposed, 2026-10-09. Nothing is built. The one thing measured is a
-test shot, described under "What was measured": 150 rendered frames (5
-seconds at 30fps), delivered as a 7-second clip by holding the last frame for
-2 seconds so its labels can be read. D96 (plates, not a
-fourth video tool) is the owner's call and is the first open question; the
-rest of the decisions follow from it.
+Status: proposed 2026-10-09, and decided the same day: the owner chose a
+full fourth video tool over plates (D96, amended below). blenderkc is built
+as its own repository (github.com/c-wenlong/blenderkc, private): it narrates
+through gnosia-audio, writes its own sidecars and answers `topics --json`
+with manimkc's report shape, and the catalog imports its renders as
+`blenderkc:` rows (`tools/blenderkc` here, its section in
+[AGENTS.md](../../AGENTS.md)). The studio does not offer it. Its first video,
+on HBM under `gpu-architecture`, is written and not yet rendered. Its own
+contract as built is `tools/blenderkc/docs/DESIGN.md`; where it and this page
+differ, DESIGN.md is current, and this page is the record of why.
+
+The first thing measured was a test shot, described under "What was
+measured": 150 rendered frames (5 seconds at 30fps), delivered as a
+7-second clip by holding the last frame for 2 seconds so its labels can be
+read. The measurements since are below it.
 
 ## The problem
 
@@ -84,9 +93,37 @@ cell grid, depth of field, soft reflections, emissive copper. What it lacks
 is detail (the fibre weave, die markings, wear) and effects (the plasma
 cloud). Blender does all of those; each is modelling time, not another tool.
 
+### Measured since: the homeserver
+
+The Linux wheel runs on the homeserver (Ubuntu, an NVIDIA GTX 1070), where
+Cycles renders on CUDA with the OptiX denoiser. On the same frames:
+
+| Where | Seconds a frame |
+| --- | --- |
+| Homeserver, GTX 1070, OptiX denoiser | 3.2 |
+| The owner's M4 Pro, Metal | 4.0 |
+| Homeserver, when the denoiser falls back to OIDN on the CPU | 17 |
+
+So the 3D of a build renders on the homeserver (`blenderkc build <topic>
+--host home`), one scene at a time, and every 2D step (overlays, joining,
+narration, sidecars) stays on the Mac. The OIDN fallback is five times
+slower, which is why `doctor --host` checks the GPU before a build.
+
 ## Decisions
 
 ### D96. blenderkc renders plates, and never a narrated video
+
+**Amended 2026-10-09: the owner chose the fourth video tool.** blenderkc
+makes the whole narrated video: its narration, its sidecars and its entry in
+the catalog are its own, through the same gnosia-audio, the same sidecar
+format and the same `topics --json` report as the other three, so the
+catalog registers it as one more video tool (`blenderkc:` rows, `source_repo`
+`blenderkc`, migration 0029, labelled "blender" in the web app). Labels and
+equations are 2D overlays composited onto the rendered frames, cued on
+narration words, so text never has to be modelled in Blender. The plate
+design below is kept as the record of the alternative; D97 (plate requests
+timed by a composing tool) and the composing work in phases 2 and 3 do not
+apply.
 
 A **plate** is a silent shot of 3D: a frame sequence of a given length, with
 an encoded copy and a report. A narrated video stays the work of revideokc
@@ -238,6 +275,12 @@ and the rest of the video is 2D.
 
 ### D103. The blenderkc repository is GPL-3.0-or-later
 
+**Amended 2026-10-09: the question is moot for now.** The repository is
+private, like the other video tools' repositories, and nothing of it is
+published or distributed, so the GPL's terms, which attach on distribution,
+ask nothing of it today. If it is ever made public, this decision applies as
+written below.
+
 Blender's licence page: scripts using the Python API, "if published", must be
 shared under a GPL compliant licence, because the API is "an integral part of
 the software" ([blender.org/about/license](https://www.blender.org/about/license/)).
@@ -257,6 +300,12 @@ Not legal advice; the owner may want a second look before the repository is
 public.
 
 ### D104. Shaped like the other tools, and outside the studio until measured
+
+**As built, 2026-10-09:** topics rather than plates, under
+`topics/<domain>/[<sub>/]<slug>/` with a `topic.yml`, a `narration.json` and
+one shot script per scene, and the verbs DESIGN.md lists (`doctor`, `home`,
+`api`, `new`, `narrate`, `still`, `build`, `sidecars`, `sheet`, `topics`).
+There is no skill yet. The studio part below stands unchanged.
 
 The repository and CLI follow remotionkc and revideokc so that nothing about
 it is new to learn: `tools/blenderkc/` as a submodule
@@ -285,7 +334,7 @@ worth making by hand.
 | [VIDEO-TOOLS.md](../VIDEO-TOOLS.md) | A routing row ("a physical object, photoreal: revideokc with blenderkc plates"), a matrix row, and a "Not built yet" entry until phase 2 lands | 2 |
 | `tools/remotionkc` | The same `Plate` component over `OffthreadVideo` | 3 |
 | `services/studio` | A plate step in the revideokc backend, Seatbelt rules for Cycles, the planner's TOOLS block | 4 |
-| The catalog, the web app, the schema | Nothing (D96) | none |
+| The catalog, the web app, the schema | Nothing under plates; under D96 as amended, blenderkc registered as the fourth video tool (its source, `--blenderkc-root`, migration 0029, the "blender" label) | done |
 
 ## Phases
 
@@ -358,8 +407,9 @@ propose plates in a brief. This phase gets its own design section, here or in
 
 ## Open questions
 
-1. **Plates or a fourth tool (D96).** Proposed: plates.
-2. **The name.** Proposed: blenderkc, after the other four.
-3. **GPL-3.0-or-later for a public repository (D103).** Proposed: yes.
-4. **The first video.** Proposed: HBM, filed under the `gpu-architecture`
-   topic, since the reference and the test shot already exist.
+1. **Plates or a fourth tool (D96).** Decided 2026-10-09: a fourth tool.
+2. **The name.** Decided: blenderkc.
+3. **GPL-3.0-or-later for a public repository (D103).** Moot while the
+   repository is private.
+4. **The first video.** Decided: HBM, filed under the `gpu-architecture`
+   topic.

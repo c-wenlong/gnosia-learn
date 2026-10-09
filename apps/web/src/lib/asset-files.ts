@@ -339,7 +339,7 @@ const noStoredCopy = (row: AssetRef): AssetFileProblem =>
  * The command that stores this kind's bytes. A diagram's SVG is stored by the
  * diagram writer, never by the manimkc upload, which would walk the videos
  * and leave the SVG missing. A render names the upload of the tool that made
- * it, manimkc's, remotionkc's or revideokc's.
+ * it, manimkc's, remotionkc's, revideokc's or blenderkc's.
  */
 function uploadHint(row: AssetRef): string {
   if (row.kind === "diagram_svg") {

@@ -40,7 +40,7 @@ owns every type (the web app reads nothing else):
 ```sh
 createdb self_learn
 npm run catalog -- migrate
-MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent npm run catalog -- import seed
+MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
 ```
 
@@ -51,9 +51,9 @@ your own, put `DATABASE_URL=postgres://localhost:5432/self_learn_seed` in front
 of each command after a `createdb self_learn_seed`.
 
 `MANIMKC_ROOT` points at a directory with no manimkc CLI so the import leaves
-manimkc out, and `REMOTIONKC_ROOT` and `REVIDEOKC_ROOT` do the same for
-remotionkc and revideokc, whose topic.yml files name topics the seed does not
-hold. On a machine with the submodule checked out, the manimkc source
+manimkc out, and `REMOTIONKC_ROOT`, `REVIDEOKC_ROOT` and `BLENDERKC_ROOT` do
+the same for remotionkc, revideokc and blenderkc, whose topic.yml files name
+topics the seed does not hold. On a machine with the submodule checked out, the manimkc source
 would otherwise read every rendered video and refuse each topic folder, since
 no seed topic maps one. The diagram's SVG and the course's cover photo go
 into the blob store `SELF_LEARN_HOME` names; set it to a scratch directory

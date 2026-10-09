@@ -1,28 +1,29 @@
 # Video tools: which one makes this video
 
-self-learn has three tools that turn a narrated script into an MP4, each a
-submodule under `tools/` with its own CLI, skill and operating manual. They
+self-learn has four tools that turn a narrated script into an MP4, each a
+submodule under `tools/` with its own CLI and operating manual. They
 share one voice (manimkc's narration layer), one report shape (`topics
 --json`, indexed by one reader in `services/catalog/src/index/video-tool.ts`)
 and one deliverable format (1080p30 H.264, AAC at 48 kHz, transcript,
 chapters and VTT sidecars). So the choice between them is about what the
-picture needs, not about plumbing.
+picture needs, not about plumbing. The fourth, blenderkc, is made at a
+terminal only: the studio offers the other three.
 
 The `video-router` skill (`.claude/skills/video-router/`) runs the procedure
 at the end of this page before any tool-specific skill. This page is its
 source of truth: change routing here, and the skill follows.
 
-## The three tools
+## The four tools
 
-| | manimkc | remotionkc | revideokc |
-| --- | --- | --- | --- |
-| Engine | ManimGL 1.7.2 (3blue1brown's), vendored | Remotion 4 (React, rendered in Chrome) | Revideo 0.11 (the Motion Canvas fork that renders headless), three.js |
-| Language | Python | TypeScript and React | TypeScript, generator timelines on a canvas |
-| Scene model | Mobjects and `self.play` animations, narration blocks | A React component per frame, cued on spoken words | One generator per topic on a 2D canvas with signals and flexbox, cued on spoken words |
-| Skill | `manimkc-video` | `remotionkc-video` | `revideokc-video` |
-| Capability doc | [tools/manimkc/docs/CAPABILITIES.md](../tools/manimkc/docs/CAPABILITIES.md) | Remotion's own skills, vendored in `tools/remotionkc/.claude/skills/` | [tools/revideokc/docs/CAPABILITIES.md](../tools/revideokc/docs/CAPABILITIES.md) |
-| The studio can drive it | On macOS (the video runner, [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)); off on Linux until its sandbox is measured there, and anywhere with `STUDIO_VIDEO_KIND=off` | Not yet | Not yet |
-| Licence | MIT | Remotion License: free for a person or a company of up to three, a company licence above that | MIT |
+| | manimkc | remotionkc | revideokc | blenderkc |
+| --- | --- | --- | --- | --- |
+| Engine | ManimGL 1.7.2 (3blue1brown's), vendored | Remotion 4 (React, rendered in Chrome) | Revideo 0.11 (the Motion Canvas fork that renders headless), three.js | Blender 5.2's Cycles path tracer, through `bpy` from PyPI |
+| Language | Python | TypeScript and React | TypeScript, generator timelines on a canvas | Python 3.13, one `build(shot)` per scene |
+| Scene model | Mobjects and `self.play` animations, narration blocks | A React component per frame, cued on spoken words | One generator per topic on a 2D canvas with signals and flexbox, cued on spoken words | A 3D scene per narration scene from a kit of parts and materials, camera moves and 2D labels cued on spoken words, labels composited after the render |
+| Skill | `manimkc-video` | `remotionkc-video` | `revideokc-video` | None yet: [tools/blenderkc/docs/DESIGN.md](../tools/blenderkc/docs/DESIGN.md) |
+| Capability doc | [tools/manimkc/docs/CAPABILITIES.md](../tools/manimkc/docs/CAPABILITIES.md) | Remotion's own skills, vendored in `tools/remotionkc/.claude/skills/` | [tools/revideokc/docs/CAPABILITIES.md](../tools/revideokc/docs/CAPABILITIES.md) | [tools/blenderkc/docs/KIT.md](../tools/blenderkc/docs/KIT.md) |
+| The studio can drive it | On macOS (the video runner, [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)); off on Linux until its sandbox is measured there, and anywhere with `STUDIO_VIDEO_KIND=off` | On macOS, as manimkc ([STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md)) | On macOS, as manimkc | No: not offered by the studio, made at a terminal only |
+| Licence | MIT | Remotion License: free for a person or a company of up to three, a company licence above that | MIT | A private repository; Blender's API is GPL, which binds blenderkc's code only if it is ever distributed ([proposal](proposals/blenderkc.md), D103) |
 
 ## Pick by what the video needs
 
@@ -32,6 +33,7 @@ higher up wins.
 | The video mainly needs | Tool | Why | Proven in |
 | --- | --- | --- | --- |
 | A new week of a series that already exists (CS3230, CS4223, CS4225 lecture videos) | the series' tool, usually manimkc | Viewers watch a series in order; a change of look between weeks reads as a mistake | the week folders under `tools/manimkc/topics/` |
+| A physical object shown photoreal (a chip package, a die stack, a board), with real materials, depth of field and lighting | blenderkc | Cycles path-traces it, so it looks like a camera filmed it; labels and equations are 2D on top. At a terminal only: the studio has no blenderkc backend, so a studio job takes the next row that fits | `computer-architecture/gpu-architecture/hbm-how-it-is-built` (written, not yet rendered) |
 | Continuous maths: function plots, areas, Riemann sums, geometric proofs, linear maps, vector fields | manimkc | `Axes`, `get_graph`, `NumberPlane` with `ApplyMatrix`, `VectorField` and `StreamLines` exist and are exact; nothing else here has them | manimkc CAPABILITIES.md, "Graphs and plots" (built; no topic yet) |
 | An equation whose symbols slide into their new places (a derivation, a recurrence being unrolled) | manimkc | `TransformMatchingTex` moves glyphs; Revideo's `Latex` is an image that only cross-fades, and remotionkc's label-to-label morph is weaker than manim's glyph transforms | manimkc CAPABILITIES.md (built; not yet rendered in a topic) |
 | 3D maths objects: surfaces, solids, cutaways, a camera orbiting a shape | manimkc | Lit `Sphere`, `Torus`, `Prismify`, `ThreeDAxes.get_graph`, clip planes, `fix_in_frame` labels, all headless | manimkc CAPABILITIES.md, three 3D renders |
@@ -55,37 +57,37 @@ For lookup. "Yes" means rendered in a topic or a check; "built" means
 constructed and driven but not rendered in a narrated topic; "no" means
 missing or poor.
 
-| Capability | manimkc | remotionkc | revideokc |
-| --- | --- | --- | --- |
-| Function plots, axes, areas | built | via d3 and SVG | no |
-| Glyph-level equation morphs | built | weak | no (cross-fade) |
-| Typeset maths | yes (Tex through Tectonic) | yes (KaTeX) | yes (MathJax) |
-| 3D maths surfaces and solids | yes | via three.js | via three.js |
-| 3D scene with lights and shadows | yes (shading, moving light) | yes (`@remotion/three`; looked plain in the prototype) | yes (spotlight, shadow maps, glass) |
-| Vector fields, stream lines | built | no | no |
-| Boolean shape ops (Venn, overlaps) | built | via SVG paths | no |
-| Data charts from real data | built (`BarChart`, `Axes`) | yes | possible, untested |
-| Word-level captions | no | yes | no |
-| Code panel with syntax highlighting | built (`Code`, Pango) | yes | yes (Lezer) |
-| Code edited in place with reflow | no | by hand | yes |
-| Terminal and UI mock-ups | by hand | yes | by hand |
-| Footage, screen recordings, transitions, SFX | no | yes | partial (`Video`, few transitions) |
-| Springs, masks, additive light, filters | partial | yes (CSS) | yes |
-| Visuals cued on the spoken word | yes (`narration.word_times`) | yes | yes |
-| Studio can make it unattended | on macOS only | on macOS only | on macOS only |
-| Footage, a screen recording or any media from outside, in the studio | no (nothing can supply it) | no (nothing can supply it) | no (nothing can supply it) |
-| Render speed, 1080p, measured on the owner's Mac | about 30 s for a 79 s scene, 8 scenes in parallel | 32 to 75 s for 68 to 113 s videos, concurrency 3 | about 25 s for a 62 s video with a 3D stage, 2 workers |
+| Capability | manimkc | remotionkc | revideokc | blenderkc |
+| --- | --- | --- | --- | --- |
+| Function plots, axes, areas | built | via d3 and SVG | no | no |
+| Glyph-level equation morphs | built | weak | no (cross-fade) | no |
+| Typeset maths | yes (Tex through Tectonic) | yes (KaTeX) | yes (MathJax) | no (plain Unicode `equation` overlays) |
+| 3D maths surfaces and solids | yes | via three.js | via three.js | by hand in bpy |
+| 3D scene with lights and shadows | yes (shading, moving light) | yes (`@remotion/three`; looked plain in the prototype) | yes (spotlight, shadow maps, glass) | yes, path-traced (materials, depth of field, reflections, volumes) |
+| Vector fields, stream lines | built | no | no | no |
+| Boolean shape ops (Venn, overlaps) | built | via SVG paths | no | no |
+| Data charts from real data | built (`BarChart`, `Axes`) | yes | possible, untested | no |
+| Word-level captions | no | yes | no | no |
+| Code panel with syntax highlighting | built (`Code`, Pango) | yes | yes (Lezer) | no |
+| Code edited in place with reflow | no | by hand | yes | no |
+| Terminal and UI mock-ups | by hand | yes | by hand | no |
+| Footage, screen recordings, transitions, SFX | no | yes | partial (`Video`, few transitions) | no |
+| Springs, masks, additive light, filters | partial | yes (CSS) | yes | glow and emission in 3D |
+| Visuals cued on the spoken word | yes (`narration.word_times`) | yes | yes | yes (`shot.at(word)`) |
+| Studio can make it unattended | on macOS only | on macOS only | on macOS only | no (not in the studio) |
+| Footage, a screen recording or any media from outside, in the studio | no (nothing can supply it) | no (nothing can supply it) | no (nothing can supply it) | no (not in the studio) |
+| Render speed, 1080p, measured on the owner's Mac | about 30 s for a 79 s scene, 8 scenes in parallel | 32 to 75 s for 68 to 113 s videos, concurrency 3 | about 25 s for a 62 s video with a 3D stage, 2 workers | 4.0 s a frame (about 2 hours a minute); 3.2 s a frame on the homeserver's GTX 1070 with OptiX |
 
 ## Shared ground, and what it allows
 
-- **One voice.** All three narrate through gnosia-audio, each pinned in its
-  own `.venv`, with manimkc's voice settings, so all three sound the same and
+- **One voice.** All four narrate through gnosia-audio, each pinned in its
+  own `.venv`, with manimkc's voice settings, so all four sound the same and
   share the kokoro clip cache. None of them has a narration layer of its own,
   on purpose.
 - **One report.** Every tool's `topics --json` has manimkc's shape, so a
   video from any of them lands in the catalog, the library and a session log
   the same way.
-- **One format.** All three deliver 1080p30 H.264 with AAC at 48 kHz and the
+- **One format.** All four deliver 1080p30 H.264 with AAC at 48 kHz and the
   index first. Chapters from different tools could be joined into one video
   with a stream copy; nothing does that yet.
 
@@ -98,7 +100,14 @@ missing or poor.
 - **Remotion's licence changes in 5.0**: contractors count toward the
   three-person free limit, and server renders take a licence key
   (`"free-license"` for free users). Free for this project today.
-- **The studio makes all three unattended, and only on macOS**: the video
+- **blenderkc is slow and runs at a terminal.** A minute of 3D is about two
+  hours of rendering, so its 3D renders on the homeserver (`build --host
+  home`, Cycles on the GTX 1070 with the OptiX denoiser) while every 2D step
+  stays on the Mac; on the Mac, or when OptiX falls back to OIDN on the CPU
+  (17 s a frame), it is slower still. Its cache renders a scene again only
+  when its 3D changed, so lock the narration before the final build. The
+  studio has no backend for it.
+- **The studio makes the other three unattended, and only on macOS**: the video
   runner's sandbox is Seatbelt, one backend per tool
   ([STUDIO-VIDEO-TOOLS.md](STUDIO-VIDEO-TOOLS.md)), so the video kind is off
   on Linux until a bubblewrap profile is measured (`videoKindBuilt` in
@@ -111,13 +120,14 @@ This is what the `video-router` skill does, in this order. Hard constraints
 come before preferences, so a later step can never undo an earlier one.
 
 1. **Unattended or not.** If the video has to come out of the studio with no
-   one at a terminal, any of the three can make it, and only on macOS. On
-   Linux, say it cannot be made unattended there, and stop. A studio job has
+   one at a terminal, manimkc, remotionkc or revideokc can make it, and only
+   on macOS; blenderkc cannot, so a photoreal video goes to the next row
+   that fits. On Linux, say it cannot be made unattended there, and stop. A studio job has
    no way to be given footage, a screen recording, an image or a sound from
    outside, and its render has no network to fetch one: when the video is
    about such media, say so and ask; when one beat wants it, draw that beat
    as an animation and say so. Otherwise carry on: the steps below choose
-   among the three as they would at a terminal.
+   among the four as they would at a terminal.
 2. **The user named a tool.** Use it, and stop.
 3. **Series.** Is this a week or a part of an existing series? Use that
    series' tool, and stop.
@@ -139,6 +149,7 @@ flowchart TD
   N -- no --> B{Part of an existing series?}
   B -- yes --> S[That series' tool]
   B -- no --> C{Main visual}
+  C -- a physical object, photoreal --> K[blenderkc]
   C -- plots, equation morphs, 3D maths --> M[manimkc]
   C -- real data, captions, editor and terminal, footage --> R[remotionkc]
   C -- depth and light, code edited in place, choreographed motion --> V[revideokc]
@@ -146,6 +157,7 @@ flowchart TD
   M --> D{Does a second beat need what it lacks?}
   R --> D
   V --> D
+  K --> D
   D -- yes --> D2[The tool that does both, else simplify the beat]
   D -- no --> E[Record the tool, the step or row, and the runner-up, then run its skill]
   D2 --> E
@@ -156,3 +168,6 @@ flowchart TD
 ## Not built yet
 
 - **Joining chapters from different tools** into one deliverable.
+- **blenderkc in the studio.** Cycles needs paths and Mach services the
+  video sandbox denies, which is a measurement of its own (phase 4 of the
+  [proposal](proposals/blenderkc.md)).

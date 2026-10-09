@@ -4,8 +4,9 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { MANIMKC_ROOT_ENV, REMOTIONKC_ROOT_ENV, REVIDEOKC_ROOT_ENV } from "../src/env";
+import { BLENDERKC_ROOT_ENV, MANIMKC_ROOT_ENV, REMOTIONKC_ROOT_ENV, REVIDEOKC_ROOT_ENV } from "../src/env";
 import { buildRows, manimkcIndexer } from "../src/index/manimkc";
+import { blenderkcIndexer, buildBlenderkcRows } from "../src/index/blenderkc";
 import { buildRemotionkcRows, remotionkcIndexer } from "../src/index/remotionkc";
 import { buildRevideokcRows, revideokcIndexer } from "../src/index/revideokc";
 import type { Indexer } from "../src/index/source";
@@ -104,6 +105,8 @@ const TOOLS: Record<
     buildRemotionkcRows(report, dataRoot, BY_SLUG, knownConcepts === undefined ? {} : { knownConcepts }),
   revideokc: (report, knownConcepts) =>
     buildRevideokcRows(report, dataRoot, BY_SLUG, knownConcepts === undefined ? {} : { knownConcepts }),
+  blenderkc: (report, knownConcepts) =>
+    buildBlenderkcRows(report, dataRoot, BY_SLUG, knownConcepts === undefined ? {} : { knownConcepts }),
 };
 
 describe.each(Object.keys(TOOLS) as VideoToolName[])("%s: a topic's concepts", (tool) => {
@@ -194,7 +197,7 @@ describe.each(Object.keys(TOOLS) as VideoToolName[])("%s: a topic's concepts", (
 describe("each tool's source asks the run which concepts the owner can read", () => {
   let fixture: Fixture;
   const saved = Object.fromEntries(
-    [MANIMKC_ROOT_ENV, REMOTIONKC_ROOT_ENV, REVIDEOKC_ROOT_ENV].map((key) => [key, process.env[key]]),
+    [MANIMKC_ROOT_ENV, REMOTIONKC_ROOT_ENV, REVIDEOKC_ROOT_ENV, BLENDERKC_ROOT_ENV].map((key) => [key, process.env[key]]),
   );
 
   afterEach(async () => {
@@ -223,6 +226,7 @@ describe("each tool's source asks the run which concepts the owner can read", ()
     ["manimkc", manimkcIndexer, MANIMKC_ROOT_ENV, "tools/cli/manimkc"],
     ["remotionkc", remotionkcIndexer, REMOTIONKC_ROOT_ENV, "tools/cli/remotionkc.mjs"],
     ["revideokc", revideokcIndexer, REVIDEOKC_ROOT_ENV, "tools/cli/revideokc.mjs"],
+    ["blenderkc", blenderkcIndexer, BLENDERKC_ROOT_ENV, "tools/cli/blenderkc"],
   ] as [VideoToolName, Indexer, string, string][])("%s", async (tool, indexer, rootEnv, cli) => {
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: TOPIC, manimkc: ["algo/witness"] }]));

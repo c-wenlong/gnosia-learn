@@ -350,7 +350,7 @@ export function combinedPrompt(kinds: readonly BriefKind[], options: { concept?:
 
 /** What the VIDEOS block needs of one video: `catalog video list`'s summary. */
 export interface VideoCorpusEntry {
-  origin: "studio" | "manimkc" | "remotionkc" | "revideokc";
+  origin: "studio" | "manimkc" | "remotionkc" | "revideokc" | "blenderkc";
   slug: string | null;
   assetId: string;
   title: string | null;
@@ -370,7 +370,7 @@ export function lengthOf(seconds: number | null | undefined): string {
 /**
  * The VIDEOS block (STUDIO-VIDEOS.md's CORPUS, renamed so the two corpora do
  * not share a name): `slug | title | topic | length | studio, manimkc,
- * remotionkc or revideokc`. A tool's render has no slug, so it is named by
+ * remotionkc, revideokc or blenderkc`. A tool's render has no slug, so it is named by
  * its asset id: it tells the planner one already exists, never a slug a
  * change could name.
  */

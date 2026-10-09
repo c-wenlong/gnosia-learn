@@ -111,7 +111,7 @@ path puts it after the lessons, not under "Read alongside".
 
 **`videos:` lists videos by catalog asset id**, on a module (the whole week)
 or on a lesson. An id is a video tool's or a studio video's: `manimkc:`,
-`remotionkc:`, `revideokc:` or `video:`, then the rest of the id as `catalog
+`remotionkc:`, `revideokc:`, `blenderkc:` or `video:`, then the rest of the id as `catalog
 asset ls` shows it. Only the shape is checked at import, never that the video
 exists, because the courses import runs before the video tools and a clone may
 have none of them; a page leaves an id it cannot read off the path. A video

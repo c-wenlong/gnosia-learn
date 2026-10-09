@@ -59,6 +59,7 @@ Knowing what is worth learning and actually learning it are two different proble
 | Asset generation | `tools/manimkc/` (submodule) | Narrated manim animations for concepts with moving parts |
 | Asset generation | `tools/remotionkc/` (submodule) | Narrated Remotion explainer videos, indexed like manimkc's and labelled "remotion" |
 | Asset generation | `tools/revideokc/` (submodule) | Narrated Revideo explainer videos, indexed like manimkc's and labelled "revideo" |
+| Asset generation | `tools/blenderkc/` (submodule) | Narrated photoreal 3D explainer videos rendered by Blender's Cycles, indexed like manimkc's and labelled "blender" |
 | Diagrams | [`tools/tldrawkc/`](tools/tldrawkc/README.md) (submodule) | Teaching diagrams drawn on a real tldraw canvas, exported as self-contained SVG with the editable `.tldr` committed beside it |
 | Catalog | `packages/schema/`, `services/catalog/` | The Postgres database that owns the content and the learner state, and the `catalog` CLI that writes and reads it |
 
@@ -91,6 +92,7 @@ docs/             Long-form docs, the pipeline's among them (docs/LEARN.md)
 tools/manimkc/    Submodule: narrated manim videos
 tools/remotionkc/ Submodule: narrated Remotion videos
 tools/revideokc/  Submodule: narrated Revideo videos
+tools/blenderkc/  Submodule: narrated photoreal 3D videos (Blender)
 tools/tldrawkc/   Submodule: tldraw diagrams
 .claude/          launch.json, the four skills symlinked from the submodules, and video-router
 ```
@@ -108,7 +110,8 @@ goes through a `catalog` or `learn` command with a reason, and `catalog export
 --out <dir>` writes them out as files whenever you want a copy. `npm run
 catalog -- import <dir>` reads such a tree into a database, and a bare
 `import` refreshes what it reads from `manimkc topics --json`,
-`remotionkc topics --json` and `revideokc topics --json`. Agents read it
+`remotionkc topics --json`, `revideokc topics --json` and `blenderkc topics
+--json`. Agents read it
 back in layers with `ls`, `show`, `path` and `search`, every one of them
 `--json` and bounded. The design is in
 [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md), the export format in
@@ -135,11 +138,11 @@ The app reads its courses, topics, notes and diagrams from Postgres, and nothing
 ```bash
 createdb self_learn                                         # first checkout only; a second checkout reuses it
 npm run catalog -- migrate                                  # creates the tables, or brings them up to date
-MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent npm run catalog -- import seed    # the seed, leaving the video tools out
+MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed    # the seed, leaving the video tools out
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done   # the database owns each type
 ```
 
-The flips run in that order, the one `scripts/lib/flip-order.mjs` keeps. `MANIMKC_ROOT=/nonexistent` leaves manimkc out, since no seed topic maps a video folder and the import would refuse the renders it found, and `REMOTIONKC_ROOT=/nonexistent` and `REVIDEOKC_ROOT=/nonexistent` do the same for remotionkc and revideokc, whose folders name topics the seed does not hold; the seed's README says more. With your own content, import an export of it (`catalog import <dir>`) in place of `seed`. Once topics map their folders (`catalog topic map`), a bare `npm run catalog -- import` takes in the submodules' videos and `npm run catalog -- asset upload --source manimkc` (and `--source remotionkc`, `--source revideokc`) copies them, their captions and posters into the blob store. `npm run e2e` builds exactly this database on its own, under a throwaway name, so the smoke test needs none of these steps.
+The flips run in that order, the one `scripts/lib/flip-order.mjs` keeps. `MANIMKC_ROOT=/nonexistent` leaves manimkc out, since no seed topic maps a video folder and the import would refuse the renders it found, and `REMOTIONKC_ROOT=/nonexistent`, `REVIDEOKC_ROOT=/nonexistent` and `BLENDERKC_ROOT=/nonexistent` do the same for remotionkc, revideokc and blenderkc, whose folders name topics the seed does not hold; the seed's README says more. With your own content, import an export of it (`catalog import <dir>`) in place of `seed`. Once topics map their folders (`catalog topic map`), a bare `npm run catalog -- import` takes in the submodules' videos and `npm run catalog -- asset upload --source manimkc` (and `--source remotionkc`, `--source revideokc`) copies them, their captions and posters into the blob store. `npm run e2e` builds exactly this database on its own, under a throwaway name, so the smoke test needs none of these steps.
 
 A type that has not been flipped is refused by name rather than read from the files: the page says it could not read its content, and the server log names the `catalog flip` to run ([CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) has the flip-day details). Without Postgres the app shows a banner saying nothing you change is saved, and each page that shows content says it could not read it.
 

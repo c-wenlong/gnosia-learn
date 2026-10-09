@@ -32,17 +32,17 @@ import { ContentWriteError, writeContents, type WriteContentInput } from "./writ
 import { CLI_OWNER } from "./scope";
 
 /**
- * `catalog asset upload --source manimkc|remotionkc|revideokc`: a video
+ * `catalog asset upload --source manimkc|remotionkc|revideokc|blenderkc`: a video
  * tool's rendered videos and their sidecars into the blob store, a poster made for each video on the way, and
  * every `asset` row pointed at its blob (docs/CONTENT-MIGRATION.md, Track E;
  * D5, D7, D8, D11; edge cases 5 and 9).
  *
  * **Which files.** The same report the tool's indexer reads,
  * `<tool> topics --json`, with its `outRoot`: nothing here re-derives the
- * tool's layout. manimkc is described below; remotionkc's and revideokc's
- * reports have the same shape and their rows the `remotionkc:` and
- * `revideokc:` namespaces, and everything holds for them with that name in
- * place of manimkc's. A deliverable is only uploaded onto an asset row the
+ * tool's layout. manimkc is described below; remotionkc's, revideokc's and
+ * blenderkc's reports have the same shape and their rows the `remotionkc:`,
+ * `revideokc:` and `blenderkc:` namespaces, and everything holds for them
+ * with that name in place of manimkc's. A deliverable is only uploaded onto an asset row the
  * indexer already wrote (`manimkc:<out/...>`), because the
  * row is what the page asks for and a blob no row points at is an orphan on
  * arrival.
@@ -106,12 +106,13 @@ export interface AssetUploadOptions {
   /**
    * The checkout the source's CLI reads, as `catalog import` takes it:
    * `manimkcRoot` for manimkc, `remotionkcRoot` for remotionkc,
-   * `revideokcRoot` for revideokc. Absent, the tool's variable, else its
-   * submodule under `repoRoot`.
+   * `revideokcRoot` for revideokc, `blenderkcRoot` for blenderkc. Absent,
+   * the tool's variable, else its submodule under `repoRoot`.
    */
   manimkcRoot?: string;
   remotionkcRoot?: string;
   revideokcRoot?: string;
+  blenderkcRoot?: string;
   dryRun?: boolean;
   /** Absolute path to ffmpeg, or null when there is none: posters are then skipped and said so. */
   ffmpeg: string | null;
@@ -349,6 +350,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     manimkc: options.manimkcRoot,
     remotionkc: options.remotionkcRoot,
     revideokc: options.revideokcRoot,
+    blenderkc: options.blenderkcRoot,
   };
   const checkout = named[source] ?? tool.resolveRoot(options.repoRoot);
   const report = options.report ?? (await readToolReport(tool, options.repoRoot, checkout));
