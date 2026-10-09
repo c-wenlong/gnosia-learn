@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { PAGE_ENTER } from "@/components/PageLoading";
+import { ByokCard } from "@/components/settings/ByokCard";
 import { Providers } from "@/components/settings/Providers";
+import { TutorModels } from "@/components/settings/TutorModels";
 import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
 import { ShortcutsCard } from "@/components/settings/ShortcutsCard";
@@ -11,6 +13,7 @@ import { getAllTopicIds, getCourses } from "@/data/courses";
 import { currentOwner } from "@/lib/owner";
 import { loadProviderKeys } from "@/lib/provider-keys/settings";
 import { loadSettings } from "@/lib/settings";
+import { TUTOR_TO_BYOK } from "@/lib/byok-providers";
 import { providersView } from "@/lib/providers/view";
 import { isMacUserAgent } from "@/lib/shortcuts";
 import { loadTutorModels } from "@/lib/tutor-models/settings";
@@ -78,6 +81,15 @@ export default async function SettingsPage() {
               <>
                 <TutorSettings settings={settings} providers={providers} chain={models.chain.length > 0} />
                 <Providers view={providersView(keys, models.chain, models.reachable)} />
+                <TutorModels view={providersView(keys, models.chain, models.reachable)} />
+                <ByokCard
+                  savedForTutor={keys.rows
+                    .filter((row) => row.saved?.readable === true)
+                    .flatMap((row) => {
+                      const preset = TUTOR_TO_BYOK[row.id];
+                      return preset === undefined ? [] : [preset];
+                    })}
+                />
               </>
             ),
           },
