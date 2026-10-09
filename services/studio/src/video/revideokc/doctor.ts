@@ -5,7 +5,8 @@ import path from "node:path";
 import { studioHome } from "../../paths";
 import { parseJson } from "../../proc";
 import { commandPathProblem } from "../bash-guard";
-import type { VideoDoctorCheck, VideoDoctorReport } from "../doctor";
+import { prepareBwrap } from "../bwrap";
+import { probeBlocked, type VideoDoctorCheck, type VideoDoctorReport } from "../doctor";
 import { runSandboxed } from "../exec";
 import { HOSTILE_PROBE_JS } from "../hostile-probe";
 import { installedFingerprint } from "../installed";
@@ -91,9 +92,12 @@ export async function revideokcScratchJob(tools: RevideokcToolchain, directory: 
   const home = realpathSync(process.env.HOME ?? "/");
   await buildRevideokcCheckout(tools, paths);
   await writePorts(paths, base);
-  for (const [kind, file] of [["render", paths.renderProfile], ["narrate", paths.narrateProfile], ["gate", paths.gateProfile]] as const) {
-    await writeFile(file, buildRevideokcProfile(kind, { tools, paths, home, studioHome: resolvedStudioHome(), base }), "utf8");
-  }
+  const written = ([["render", paths.renderProfile], ["narrate", paths.narrateProfile], ["gate", paths.gateProfile]] as const).map(([kind, file]) => ({
+    file,
+    text: buildRevideokcProfile(kind, { tools, paths, home, studioHome: resolvedStudioHome(), base }),
+  }));
+  for (const each of written) await writeFile(each.file, each.text, "utf8");
+  if (tools.sandboxKind === "bwrap") await prepareBwrap(paths, written.map((each) => each.text));
   await mkdir(paths.topicDir, { recursive: true });
   await writeFile(paths.topicYml, FIXTURE_TOPIC_YML, "utf8");
   await writeFile(revideokcPaths(paths).narration, `${JSON.stringify(FIXTURE_NARRATION, null, 1)}\n`, "utf8");
@@ -181,9 +185,9 @@ export async function runRevideokcDoctor(): Promise<VideoDoctorReport> {
       timeoutMs: 60_000,
     }).catch(() => null);
     const verdicts = probe === null ? {} : ((parseJson(probe.stdout.trim().split("\n").at(-1) ?? "") as Record<string, string> | null) ?? {});
-    const allowed = Object.entries(verdicts).filter(([, verdict]) => !verdict.startsWith("blocked")).map(([name]) => name);
-    sandbox = Object.keys(verdicts).length > 0 && allowed.length === 0;
-    checks.push({ name: "hostile probe", ok: sandbox, detail: sandbox ? `${Object.keys(verdicts).length} attempts, every one blocked` : `allowed: ${allowed.join(", ") || "the probe did not run"}` });
+    const blocked = probeBlocked(verdicts, tools.platform);
+    sandbox = blocked.ok;
+    checks.push({ name: "hostile probe", ok: sandbox, detail: sandbox ? `${Object.keys(verdicts).length} attempts, every one blocked` : `allowed: ${blocked.allowed.join(", ") || "the probe did not run"}` });
 
     const key = await renderKey(tools, voice);
     if (lastRender !== null && lastRender.key === key && Date.now() - lastRender.at < RENDER_KEPT_MS) {
