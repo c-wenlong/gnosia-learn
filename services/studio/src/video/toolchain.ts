@@ -35,8 +35,23 @@ export interface Program {
 
 export interface Toolchain {
   platform: NodeJS.Platform;
-  /** `/usr/bin/sandbox-exec`, or null when this machine has none (V3). */
+  /**
+   * The confinement mechanism `sandboxExec` speaks: Seatbelt profile text on
+   * macOS, a bubblewrap argv file on Linux (V4). Null when this machine has
+   * no sandbox program, which `sandboxExec` mirrors.
+   */
+  sandboxKind: "seatbelt" | "bwrap" | null;
+  /** `/usr/bin/sandbox-exec`, `bwrap` on Linux, or null when this machine has none (V3). */
   sandboxExec: string | null;
+  /**
+   * Directories the sandboxed programs' shared libraries live under, outside
+   * the standard `/lib`, `/usr/lib` and friends the Linux profile binds
+   * anyway: `/nix/store/<hash>-*` roots when a binary comes from nix. Seatbelt
+   * profiles never needed the list — their blanket `file-read*` covered every
+   * library a process would load — but a bwrap namespace starts empty, so the
+   * linker paths are measured with `ldd` here. Empty on macOS.
+   */
+  libs: string[];
   /** The real manimkc checkout, every symlink resolved: the venvs, `manim/` and `tools/` the job links to. */
   manimkcRoot: string;
   /**
@@ -88,12 +103,14 @@ export function which(name: string, searchPath: string = process.env.PATH ?? "")
   return null;
 }
 
-/** The installation a resolved program belongs to: its Homebrew keg or its framework. */
+/** The installation a resolved program belongs to: its Homebrew keg, its framework, or its nix store path. */
 export function installationOf(real: string): string | null {
   const cellar = /^(.*\/Cellar\/[^/]+\/[^/]+)\//.exec(real);
   if (cellar?.[1] !== undefined) return cellar[1];
   const framework = /^(.*\/[^/]+\.framework)\//.exec(real);
   if (framework?.[1] !== undefined) return framework[1];
+  const store = /^(\/nix\/store\/[^/]+)\//.exec(real);
+  if (store?.[1] !== undefined) return store[1];
   return null;
 }
 
@@ -129,6 +146,45 @@ function resolveOr(target: string): string {
   } catch {
     return target;
   }
+}
+
+/** The directories the standard Linux binds already cover, which `foreignLibs` never reports. */
+const STANDARD_LIB_DIRS = /^\/(usr\/lib|usr\/lib64|usr\/lib32|usr\/local\/lib|lib|lib64|lib32)(\/|$)/;
+
+/**
+ * The library roots a set of binaries needs beyond the standard directories:
+ * `ldd` on each, then every resolved path reduced to its nix store path or
+ * its own directory, minus the platform ones. Each path counts twice — as
+ * reported and fully resolved — because nix ships libraries as symlinks into
+ * sibling store paths (`gcc-lib` symlinking into `gcc-libgcc`), and the bind
+ * list needs both. A statically linked binary answers none; a missing one is
+ * skipped. Linux only.
+ */
+export async function foreignLibs(binaries: (string | null)[]): Promise<string[]> {
+  const roots = new Set<string>();
+  for (const binary of binaries) {
+    if (binary === null) continue;
+    const result = await run("ldd", [binary], { timeoutMs: 15_000 }).catch(() => null);
+    if (result === null || result.code !== 0) continue;
+    for (const match of result.stdout.matchAll(/(?:=>\s+)?(\/[^\s()]+)\s+\(0x[0-9a-f]+\)/g)) {
+      for (const lib of [match[1]!, resolveOr(match[1]!)]) {
+        if (STANDARD_LIB_DIRS.test(lib)) continue;
+        const store = /^(\/nix\/store\/[^/]+)\//.exec(lib)?.[1];
+        roots.add(store ?? path.dirname(lib));
+      }
+    }
+  }
+  return [...roots].sort();
+}
+
+/** The sandbox program this machine has: `/usr/bin/sandbox-exec` on macOS, `bwrap` on Linux (V4). */
+function sandboxProgram(platform: NodeJS.Platform): { kind: Toolchain["sandboxKind"]; exec: string } | null {
+  if (platform === "darwin") return existsSync("/usr/bin/sandbox-exec") ? { kind: "seatbelt", exec: "/usr/bin/sandbox-exec" } : null;
+  if (platform === "linux") {
+    const bwrap = which("bwrap") ?? ["/usr/bin/bwrap", "/bin/bwrap", "/usr/local/bin/bwrap"].find((candidate) => existsSync(candidate));
+    return bwrap === undefined || bwrap === null ? null : { kind: "bwrap", exec: bwrap };
+  }
+  return null;
 }
 
 function hubCache(): string {
@@ -185,6 +241,9 @@ export async function discoverToolchain(): Promise<Toolchain> {
   const root = manimkcRoot();
   const python3 = programAt(which("python3"));
   const venvPython = programAt(path.join(root, ".venv", "bin", "python"));
+  const ffmpeg = programAt(which("ffmpeg"));
+  const ffprobe = programAt(which("ffprobe"));
+  const ttsPython = programAt(path.join(root, ".venv-tts", "bin", "python"));
   // Kept for the brief's validator and the card as well, which read it
   // synchronously. A failed read clears it, so health says `fallback` rather
   // than reporting an installation that no longer answers as current, and
@@ -196,9 +255,16 @@ export async function discoverToolchain(): Promise<Toolchain> {
   const hub = hubCache();
   const model = path.join(hub, "models--hexgrad--Kokoro-82M");
   const kokoroModel = existsSync(model) ? realpathSync(model) : null;
+  const sandbox = sandboxProgram(process.platform);
+  const libs =
+    process.platform === "linux"
+      ? await foreignLibs([process.execPath, ffmpeg?.real ?? null, ffprobe?.real ?? null, python3?.real ?? null, venvPython?.real ?? null, ttsPython?.real ?? null])
+      : [];
   return {
     platform: process.platform,
-    sandboxExec: existsSync("/usr/bin/sandbox-exec") ? "/usr/bin/sandbox-exec" : null,
+    sandboxKind: sandbox?.kind ?? null,
+    sandboxExec: sandbox?.exec ?? null,
+    libs,
     manimkcRoot: root,
     manimkcDirs: {
       manim: resolveOr(path.join(root, "manim")),
@@ -206,11 +272,11 @@ export async function discoverToolchain(): Promise<Toolchain> {
       venvTts: resolveOr(path.join(root, ".venv-tts")),
       tools: resolveOr(path.join(root, "tools")),
     },
-    ffmpeg: programAt(which("ffmpeg")),
-    ffprobe: programAt(which("ffprobe")),
+    ffmpeg,
+    ffprobe,
     python3,
     venvPython,
-    ttsPython: programAt(path.join(root, ".venv-tts", "bin", "python")),
+    ttsPython,
     node: process.execPath,
     hfHubCache: existsSync(hub) ? realpathSync(hub) : hub,
     kokoroModel,
@@ -223,12 +289,16 @@ export async function discoverToolchain(): Promise<Toolchain> {
 /** Why a toolchain cannot run a video job, one line each; empty when it can. */
 export function toolchainProblems(tools: Toolchain): string[] {
   const problems: string[] = [];
-  if (tools.platform !== "darwin") {
+  if (tools.platform !== "darwin" && tools.platform !== "linux") {
+    problems.push(`the video kind runs on macOS and Linux for now: ${tools.platform} has no measured sandbox backend, so video jobs stay off here (V4)`);
+  }
+  if (tools.sandboxExec === null) {
     problems.push(
-      `the video kind runs only on macOS for now: its Linux sandbox (bubblewrap) is designed and not measured, so video jobs stay off here (V4)`,
+      tools.platform === "linux"
+        ? "bubblewrap (bwrap) is missing, and a video job never renders unsandboxed (V3)"
+        : "sandbox-exec is missing, and a video job never renders unsandboxed (V3)",
     );
   }
-  if (tools.sandboxExec === null) problems.push("sandbox-exec is missing, and a video job never renders unsandboxed (V3)");
   if (tools.ffmpeg === null) problems.push("ffmpeg is not on PATH");
   if (tools.ffprobe === null) problems.push("ffprobe is not on PATH");
   if (tools.python3 === null) problems.push("python3 is not on PATH (the manimkc CLI runs on it)");

@@ -2,6 +2,8 @@ import path from "node:path";
 
 import { jobDir } from "../paths";
 
+import type { ProfileKind } from "./sandbox";
+
 /**
  * Every path a video job uses, built here (layering rule 5: one module
  * resolves paths, and every one is absolute).
@@ -15,7 +17,10 @@ import { jobDir } from "../paths";
  *     inflight/<pid>.json                    a wrapper call that has started and not ended
  *     reads.ndjson                           every sheet Read the stream showed, the runner's
  *     bin/video                              the wrapper
- *     render.sb, narrate.sb, gate.sb         the three sandbox profiles
+ *     render.sb, narrate.sb, gate.sb         the three sandbox profiles (Seatbelt)
+ *     render.bwrap.json, …                   the same three on Linux (bwrap argv)
+ *     sandbox-root/, sandbox-empty/          the bwrap skeleton rootfs and the
+ *       sandbox-empty-file                   read-only shadows it mounts
  *     checkout/                              a synthetic manimkc checkout, MANIMKC_ROOT
  *       topics/studio/<slug>/<module>.py     the one file the agent edits
  *     render/                                MANIMKC_HOME, the only place a render writes
@@ -47,6 +52,15 @@ export interface VideoPaths {
   renderProfile: string;
   narrateProfile: string;
   gateProfile: string;
+  /**
+   * The directory a Linux profile mounts read-only at `/`, one stub per mount
+   * point, and the empty directory and file it mounts over a denied place.
+   * Only the bwrap backend builds them; on macOS the three are named but
+   * never created.
+   */
+  sandboxRoot: string;
+  sandboxEmpty: string;
+  sandboxEmptyFile: string;
   checkout: string;
   lib: string;
   topicDir: string;
@@ -76,6 +90,11 @@ export interface VideoPaths {
   tmp: string;
 }
 
+/** A profile's file name on this machine: Seatbelt text on macOS, a bwrap argv on Linux (V4). */
+function profileName(kind: ProfileKind): string {
+  return process.platform === "linux" ? `${kind}.bwrap.json` : `${kind}.sb`;
+}
+
 export function videoPaths(jobId: string, slug: string): VideoPaths {
   const job = jobDir(jobId);
   const moduleName = moduleOf(slug);
@@ -84,6 +103,7 @@ export function videoPaths(jobId: string, slug: string): VideoPaths {
   const topicDir = path.join(checkout, "topics", STUDIO_DOMAIN, slug);
   const outTopic = path.join(render, "out", STUDIO_DOMAIN, slug);
   const candidate = path.join(job, "candidate");
+  const sandboxRoot = path.join(job, "sandbox-root");
   return {
     job,
     bin: path.join(job, "bin"),
@@ -93,9 +113,12 @@ export function videoPaths(jobId: string, slug: string): VideoPaths {
     reads: path.join(job, "reads.ndjson"),
     brief: path.join(job, "brief.json"),
     settings: path.join(job, "agent-settings.json"),
-    renderProfile: path.join(job, "render.sb"),
-    narrateProfile: path.join(job, "narrate.sb"),
-    gateProfile: path.join(job, "gate.sb"),
+    renderProfile: path.join(job, profileName("render")),
+    narrateProfile: path.join(job, profileName("narrate")),
+    gateProfile: path.join(job, profileName("gate")),
+    sandboxRoot,
+    sandboxEmpty: path.join(job, "sandbox-empty"),
+    sandboxEmptyFile: path.join(job, "sandbox-empty-file"),
     checkout,
     lib: path.join(checkout, "lib"),
     topicDir,

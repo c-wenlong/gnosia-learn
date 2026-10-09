@@ -65,7 +65,9 @@ const PARSER = "/Users/me/self-learn/node_modules/typescript/lib/typescript.js";
 function fixedTools(): RemotionkcToolchain {
   return {
     platform: "darwin",
+    sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
+    libs: [],
     manimkcRoot: "/Users/me/self-learn/tools/manimkc",
     manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/self-learn/tools/manimkc/.venv-tts", tools: "/m/tools" },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },
@@ -93,6 +95,7 @@ function fixedTools(): RemotionkcToolchain {
       nodeVersion: "22.23.1",
       ownerHome: "/Users/me/.self-learn/remotionkc",
       parser: PARSER,
+      libs: [],
     },
   };
 }
@@ -535,10 +538,10 @@ describe("the doctor's kept build", () => {
 
 const execFileAsync = promisify(execFile);
 
-// The wrapper's shebang is `#!/usr/bin/env -i <node>`, which only macOS splits
-// into arguments (Linux hands env "-i <node>" as one, and env exits 125); the
-// video runner is macOS-only anyway (Seatbelt), as manimkc's wrapper test says.
-describe.skipIf(process.platform !== "darwin")("the remotionkc wrapper", () => {
+// The wrapper's shebang is `#!/usr/bin/env -i <node>` on macOS, which the
+// kernel splits on spaces, and `#!/usr/bin/env -S -i <node>` on Linux, where
+// coreutils does the splitting (`wrapperSource` in src/video/wrapper.ts).
+describe("the remotionkc wrapper", () => {
   let paths: VideoPaths;
   let recordFile: string;
 

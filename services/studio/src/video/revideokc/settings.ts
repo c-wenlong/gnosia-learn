@@ -109,7 +109,7 @@ export function buildRevideokcSettings(input: RevideokcSettingsInput): VideoAgen
     rule("Edit", path.join(paths.checkout, PUPPETEER_CONFIG)),
     rule("Edit", paths.render, "/**"),
     // This job's records, profiles and wrapper.
-    ...[paths.bin, paths.inflight, paths.candidate, paths.source, paths.clips, paths.rejected].flatMap((dir) => [rule("Read", dir, "/**"), rule("Edit", dir, "/**")]),
+    ...[paths.bin, paths.inflight, paths.candidate, paths.source, paths.clips, paths.rejected, paths.sandboxRoot, paths.sandboxEmpty].flatMap((dir) => [rule("Read", dir, "/**"), rule("Edit", dir, "/**")]),
     ...[
       paths.calls,
       paths.reads,
@@ -118,6 +118,7 @@ export function buildRevideokcSettings(input: RevideokcSettingsInput): VideoAgen
       paths.renderProfile,
       paths.narrateProfile,
       paths.gateProfile,
+      paths.sandboxEmptyFile,
       portsFile(paths),
       path.join(paths.job, "job.json"),
       path.join(paths.job, "session.ndjson"),
