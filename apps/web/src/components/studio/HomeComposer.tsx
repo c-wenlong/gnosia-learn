@@ -80,9 +80,11 @@ export function HomeComposer({
     if (harness !== "byok") return;
     const read = async () => {
       const result = await getByokSettings();
-      if (!result.ok || !result.data.configured) return;
+      // A read that says nothing is configured clears what an earlier one
+      // found — a removed provider's tiers go with it.
+      if (!result.ok) return;
       const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
-      setByokTiers(entry?.models ?? null);
+      setByokTiers(result.data.configured ? (entry?.models ?? null) : null);
     };
     void read();
     window.addEventListener(BYOK_SETTINGS_CHANGED, read);

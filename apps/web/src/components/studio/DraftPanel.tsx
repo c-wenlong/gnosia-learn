@@ -427,11 +427,16 @@ export function DraftPanel({
     // Connect that just wrote them.
     if (view?.harness === "byok") {
       const result = await getByokSettings();
-      if (result.ok && result.data.configured) {
-        const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
-        if (entry !== undefined) {
-          setAgentMenu((held) => ({ ...held, byokModel: result.data.model, byokTiers: entry.models }));
-        }
+      // A read that says nothing is configured clears what an earlier one
+      // found — a removed provider's tiers go with it.
+      if (!result.ok) return;
+      if (!result.data.configured) {
+        setAgentMenu((held) => ({ ...held, byokModel: null, byokTiers: null }));
+        return;
+      }
+      const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
+      if (entry !== undefined) {
+        setAgentMenu((held) => ({ ...held, byokModel: result.data.model, byokTiers: entry.models }));
       }
     }
   }, [view?.harness]);
