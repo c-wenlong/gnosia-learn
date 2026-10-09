@@ -1,7 +1,9 @@
 # Proposal: blenderkc, photoreal 3D plates for the narrated videos
 
 Status: proposed, 2026-10-09. Nothing is built. The one thing measured is a
-7-second test shot, described under "What was measured". D96 (plates, not a
+test shot, described under "What was measured": 150 rendered frames (5
+seconds at 30fps), delivered as a 7-second clip by holding the last frame for
+2 seconds so its labels can be read. D96 (plates, not a
 fourth video tool) is the owner's call and is the first open question; the
 rest of the decisions follow from it.
 
@@ -57,7 +59,7 @@ shows: a 335-line script already holds its core.
 One shot, built and rendered from a Python script on 2026-10-09 on the
 owner's M4 Pro: a wide GPU package, a camera move in, one HBM stack lifting
 into a logic die and 8 DRAM dies, its copper TSVs lighting up, two labels
-laid over afterwards. 150 frames at 1080p30, Cycles on Metal, 48 samples with
+laid over afterwards, and the last frame held 2 seconds. 150 frames at 1080p30, Cycles on Metal, 48 samples with
 adaptive sampling at 0.02, denoised, AgX.
 
 | Measure | Value |
@@ -123,9 +125,14 @@ from the plate's script.
    `{ plate, seconds, fps, width, height, beats: { lift: 1.84, glow: 4.20 } }`.
 3. `blenderkc build <plate> --request <file>` renders exactly that. The
    plate's script reads `beats` and never hard-codes a time.
-4. The request's hash names the render. A narration change that moves a beat
-   renders the plate again; one that does not, reuses it. Re-rendering is the
-   expensive step, so this cache is the main defence of the budget (D102).
+4. A hash names the render, over everything that decides its pixels: the
+   request, the plate script, the blenderkc library and kit files it
+   imports (the source set, as the studio's `sourceHash` does for a topic),
+   the render settings (samples, seed, resolution, engine), and the `bpy`
+   version. A narration change that moves a beat renders the plate again,
+   and so does an edit to a material or a camera move; a change to none of
+   them reuses the render. Re-rendering is the expensive step, so this
+   cache is the main defence of the budget (D102).
 
 ```mermaid
 flowchart LR
@@ -224,8 +231,8 @@ one picture.
 At 6 s a frame, a careless request is hours. `build` prints its estimate from
 the half-resolution still's time before it starts, refuses a plate longer than
 15 seconds without `--long`, and records every build's seconds a frame in
-`state/builds.jsonl`. The routing guidance in
-[VIDEO-TOOLS.md](../VIDEO-TOOLS.md) says it plainly: a plate is for the
+`state/builds.jsonl`. Phase 2 adds routing guidance to
+[VIDEO-TOOLS.md](../VIDEO-TOOLS.md) that says it plainly: a plate is for the
 moments where the subject is a physical object, a video holds a few of them,
 and the rest of the video is 2D.
 
@@ -262,7 +269,7 @@ plates under `plates/<domain>/[<sub>/]<slug>/<name>.py` mirroring topics, a
 The studio does not drive it in this proposal. A studio video job runs
 inside a Seatbelt profile, and manimkc's render profile already proves Metal
 works there with `iokit-open` and one Mach service,
-`com.apple.MTLCompilerService` (`services/studio/src/video/manimkc/sandbox.ts`).
+`com.apple.MTLCompilerService` (`buildProfile` in `services/studio/src/video/sandbox.ts`).
 Cycles adds things that profile denies: its kernel cache and Metal's shader
 cache under the home directory, and possibly more Mach services. That is a
 measurement, and it belongs in its own phase (phase 4) once a plate has been
@@ -296,8 +303,9 @@ Done when:
 - `blenderkc build hbm/stack --request <fixture>` reproduces the 2026-10-09
   shot from a request file, and a build killed half way resumes without
   re-rendering a frame.
-- Moving a beat in the request moves the explode in the render, and an
-  unchanged request reuses the encode.
+- Moving a beat in the request moves the explode in the render, an edit to
+  the plate script or a kit material renders it again, and a rebuild with
+  neither change reuses the encode.
 - `anchors.json` follows the top die across all 150 frames (checked by
   drawing the anchor onto five frames and looking).
 
