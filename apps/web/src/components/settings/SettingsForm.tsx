@@ -18,12 +18,7 @@ import { statusProps, useSaveStatus, type SaveStatus } from "@/components/ui/sav
 import { useLearner } from "@/lib/learner-context";
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
 import { sendJson } from "@/lib/send-json";
-import {
-  MOTION_MODES,
-  TUTOR_STYLES,
-  type MotionMode,
-  type TutorStyle,
-} from "@/lib/preferences";
+import { MOTION_MODES, type MotionMode } from "@/lib/preferences";
 import type { SettingsSnapshot } from "@/lib/settings";
 
 /**
@@ -53,7 +48,7 @@ async function savePreference(key: string, value: unknown): Promise<string | nul
  * save reports (`useSaveStatus`). A failed save leaves the new choice on
  * screen, with the error beside it, rather than putting the old one back.
  */
-function usePreference<T>(key: string, initial: T) {
+export function usePreference<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(initial);
   const { status, track } = useSaveStatus();
   const chain = useRef<Promise<unknown>>(Promise.resolve());
@@ -199,62 +194,6 @@ export function AvatarPicker() {
       </div>
       <LiveStatus {...statusProps(status)} />
     </fieldset>
-  );
-}
-
-/**
- * The top of the Tutor tab: how the tutor talks, and the models it tries in
- * order, read-only. The Providers card follows it on the tab.
- */
-export function TutorSettings({
-  settings,
-  providers,
-  chain,
-}: {
-  settings: SettingsSnapshot;
-  /**
-   * What the tutor tries, in order, and whose key each uses: the providers
-   * with a key, or with a model chain the chain's entries with a key, by
-   * model id (docs/TUTOR-MODELS.md).
-   */
-  providers: { id: string; label: string; source: "saved" | "server" }[];
-  /** Whether `providers` is the owner's model chain rather than the built-in defaults. */
-  chain: boolean;
-}) {
-  const tutor = usePreference<TutorStyle>(PREFERENCE_KEYS.tutorStyle, settings.tutorStyle);
-  return (
-    <Card title="Style and model order">
-      <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>
-        {({ id, describedBy }) => (
-          <Select
-            id={id}
-            label="Tutor style"
-            describedBy={describedBy}
-            options={TUTOR_STYLES.map((t) => ({ value: t.id, label: t.label }))}
-            value={tutor.value}
-            onChange={(v) => tutor.save(v as TutorStyle)}
-          />
-        )}
-      </Field>
-      <Field
-        label="Model providers"
-        note={
-          chain
-            ? "Your models, tried in this order. Change them under Providers below."
-            : "The tutor calls only the models you add — connect a provider below, then add one on its row."
-        }
-      >
-        {(field) => (
-          <ReadOnly field={field} title={providers.map((p) => `${p.label}, ${p.source === "saved" ? "your key" : "server key"}`).join(" → ")}>
-            {providers.length === 0
-              ? chain
-                ? "None: no model in your list has a key"
-                : "None yet: add a model below"
-              : providers.map((p) => `${p.id} (${p.source === "saved" ? "yours" : "server"})`).join(" → ")}
-          </ReadOnly>
-        )}
-      </Field>
-    </Card>
   );
 }
 
