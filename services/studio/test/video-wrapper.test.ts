@@ -21,9 +21,9 @@ import { until } from "./wait";
  * the compiled-in allowlist whatever the caller exported, and one line per
  * call in `calls.ndjson`.
  *
- * macOS only: the wrapper's first line is `#!/usr/bin/env -i <node>`, which
- * relies on the kernel splitting a shebang on spaces, as macOS does and Linux
- * does not (and the video kind is off on Linux, V4).
+ * Both platforms: the first line is `#!/usr/bin/env -i <node>` on macOS, which
+ * splits a shebang on spaces in the kernel, and `env -S` on Linux, where
+ * coreutils does the splitting (`wrapperSource` in src/video/wrapper.ts).
  */
 
 const execFileAsync = promisify(execFile);
@@ -42,6 +42,7 @@ async function config(): Promise<WrapperConfig> {
   await chmod(fake, 0o755);
   return {
     jobId: "job",
+    sandbox: "seatbelt",
     sandboxExec: fake,
     python3: "/usr/bin/python3",
     checkout: paths.checkout,
@@ -87,7 +88,7 @@ async function sandboxCalls(): Promise<{ argv: string[]; env: Record<string, str
   return body.split("\n").filter(Boolean).map((line) => JSON.parse(line) as { argv: string[]; env: Record<string, string> });
 }
 
-describe.skipIf(process.platform !== "darwin")("the wrapper", () => {
+describe("the wrapper", () => {
   it("is read-and-execute only", async () => {
     expect((await stat(paths.wrapper)).mode & 0o777).toBe(0o555);
   });
@@ -112,6 +113,19 @@ describe.skipIf(process.platform !== "darwin")("the wrapper", () => {
     expect(call?.env.PYTHONPATH).toBeUndefined();
     expect(call?.env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(call?.env.MANIMKC_HOME).toBe(paths.render);
+  });
+
+  it("hands a bwrap profile's argv to the sandbox program rather than -f", async () => {
+    // The same wrapper body, compiled with `sandbox: "bwrap"`, reads the
+    // profile file itself and prefixes the step's argv with what it carries.
+    for (const profile of [paths.renderProfile, paths.narrateProfile]) {
+      await writeFile(profile, `${JSON.stringify({ version: 1, argv: ["--unshare-all", "--"] })}\n`, "utf8");
+    }
+    await writeWrapper(process.execPath, paths, { ...(await config()), sandbox: "bwrap" });
+    const result = await video(["lint"]);
+    expect(result.code).toBe(0);
+    const [call] = await sandboxCalls();
+    expect(call?.argv).toEqual(["--unshare-all", "--", "/usr/bin/python3", `${paths.checkout}/tools/cli/manimkc`, "--root", paths.checkout, "lint", paths.sceneFile]);
   });
 
   it("voices under the narration profile before a preview, and records the call", async () => {

@@ -394,11 +394,29 @@ PR (phase 0) rather than worked around in the studio:
 - `sandbox-exec` is marked deprecated in its man page, and still works on
   26.5.2. If a future macOS removes it, the video doctor fails and video jobs
   are refused. There is no unsandboxed fallback, ever.
-- On Linux the same boundary is bubblewrap (`--unshare-net`, the checkout and
-  venvs bound read-only, `render/` read-write, `/dev/dri` for the Vulkan
-  adapter manimkc's server preflight asks for). It is designed and **not
-  measured**, so the video kind is disabled on Linux until the hostile-scene
-  test passes there.
+- On Linux the same boundary is bubblewrap, implemented in
+  `services/studio/src/video/bwrap.ts`: `--unshare-all --die-with-parent
+  --new-session` plus `--unshare-net` (kept explicit so a bwrap that makes
+  `--unshare-net` opt-in still gets it), the read set bound read-only onto a
+  skeleton rootfs, the write set bound read-write, denied reads shadowed with
+  an empty directory or file, `/dev/dri` for the Vulkan adapter manimkc's
+  server preflight asks for, and localhost-bound `AF_UNIX` sockets re-bound
+  for revideokc and remotionkc. Instead of Seatbelt's exec list, the
+  interpreter chains are bound over `/usr` and each toolchain binary's own
+  path, and the shared libraries `ldd` resolves outside the standard roots
+  are bound at their real paths. `prepareBwrap` builds the skeleton
+  (`<studio>/sandbox/rootfs` plus `empty/` and `empty-file` shadows) at each
+  backend's `prepare()` and each doctor's scratch job. Where Seatbelt's deny
+  list hides other jobs' directories, they simply are not bound on Linux;
+  where Seatbelt's exec list kept `/bin` and `/usr/bin` open so a scene could
+  not fork a server that outlives the profile, bwrap's bind of only the
+  named programs is stricter. It is written and unit-tested against a real
+  `bwrap` where one runs (`test/video-bwrap.test.ts`), and the doctor's own
+  scratch job gates jobs on it exactly as on macOS, but the hostile-scene
+  measurement from the macOS section has not been run on a Linux host yet.
+  Ubuntu 24.04's default `kernel.apparmor_restrict_unprivileged_userns=1`
+  refuses unprivileged user namespaces, so a host there needs the packaged
+  `/etc/apparmor.d/bwrap` profile (or the sysctl off) before anything runs.
 
 ### What a prompt-injected brief could do
 
@@ -1372,7 +1390,7 @@ V for video, so they do not collide with C, M, E or U.
 | V1 | The runner dies mid-render | Reconcile marks the job `interrupted`, as for diagrams, and the orphan sweep kills what it finds by the job's path. A scene that forked out of its group with new arguments can survive the sweep; it can still write only into that job's `render/`, and a resume starts a fresh `render/` from the source |
 | V2 | Metal finds no adapter (a headless session, a VM, a future sandbox change) | The video doctor's fixture render fails, the Video option is disabled with the reason, and Make video answers 503. Nothing falls back to rendering unsandboxed |
 | V3 | `sandbox-exec` is missing | As V2 |
-| V4 | The runner is on Linux | The video kind is off until the bubblewrap profile passes the hostile-scene test there |
+| V4 | The runner is on Linux | The bubblewrap backend (`video/bwrap.ts`) runs the same boundary; if `bwrap` is missing, the kernel refuses unprivileged user namespaces, or the doctor's scratch job fails under it, video jobs are refused with the reason, as V2. The hostile-scene measurement itself is still a macOS measurement |
 | V5 | A scene builds a narration line at run time (an f-string) | Lint refuses it (phase 0 rule). If it got past, the render fails on a missing clip, and the gate's script step names the line |
 | V6 | A render never finishes | The Bash tool stops the call at its 600 s ceiling and the agent sees the timeout, as it would by hand; if the agent itself stops producing anything and runs no command for 20 minutes, the hang timer stops the job, whatever a scene keeps writing |
 | V7 | A scene writes until the disk fills | Only `render/` is writable, so it fills the disk with its own job's files and nothing else; the render fails, the agent sees why. No cap, by the owner's decision |

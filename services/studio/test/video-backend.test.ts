@@ -47,7 +47,9 @@ afterEach(async () => {
 function fixedTools(manimkcRoot: string): Toolchain {
   return {
     platform: "darwin",
+    sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
+    libs: [],
     manimkcRoot,
     manimkcDirs: { manim: `${manimkcRoot}/manim`, venv: `${manimkcRoot}/.venv`, venvTts: `${manimkcRoot}/.venv-tts`, tools: `${manimkcRoot}/tools` },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },

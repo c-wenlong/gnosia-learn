@@ -22,7 +22,7 @@ import { buildRevideokcProfile, profilePorts, RENDER_SERVICES, revideokcEnv } fr
 import { buildRevideokcSettings } from "../src/video/revideokc/settings";
 import { combinedHash, COMBINED_HASH_JS, currentSourceHash, readSources } from "../src/video/revideokc/source";
 import type { RevideokcToolchain } from "../src/video/revideokc/toolchain";
-import { revideokcProblems } from "../src/video/revideokc/toolchain";
+import { findChrome, revideokcProblems } from "../src/video/revideokc/toolchain";
 import { revideokcWrapperConfig, writeRevideokcWrapper } from "../src/video/revideokc/wrapper";
 import type { WrapperCall } from "../src/video/calls";
 
@@ -61,7 +61,9 @@ const REVIDEOKC = "/Users/me/self-learn/tools/revideokc";
 function fixedTools(): RevideokcToolchain {
   return {
     platform: "darwin",
+    sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
+    libs: [],
     manimkcRoot: "/Users/me/self-learn/tools/manimkc",
     manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/self-learn/tools/manimkc/.venv-tts", tools: "/m/tools" },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },
@@ -88,6 +90,7 @@ function fixedTools(): RevideokcToolchain {
       splitBuild: true,
       nodeVersion: "22.23.1",
       ownerHome: "/Users/me/.self-learn/revideokc",
+      libs: [],
     },
   };
 }
@@ -448,6 +451,22 @@ describe("the backend's own parts", () => {
       /no build --no-narrate[\s\S]*22\.18[\s\S]*Chrome[\s\S]*narration-deps/,
     );
   });
+
+  it("resolves a distro launcher script to the browser it execs, never to the script's own shell", async () => {
+    // Greptile on #445: the shebang's `/bin/sh` is itself a large executable
+    // and won over the browser path the launcher execs.
+    const bindir = path.join(root, "usr", "bin");
+    const libdir = path.join(root, "usr", "lib", "chromium");
+    const real = path.join(libdir, "chromium");
+    const script = path.join(bindir, "chromium");
+    await mkdir(bindir, { recursive: true });
+    await mkdir(libdir, { recursive: true });
+    await writeFile(real, Buffer.alloc(20000, 1));
+    await chmod(real, 0o755);
+    await writeFile(script, `#!/bin/sh\nexec ${real} "$@"\n`);
+    await chmod(script, 0o755);
+    expect(findChrome({ REVIDEOKC_CHROME: script })).toEqual({ binary: real, bundle: libdir });
+  });
 });
 
 describe("the doctor's kept build", () => {
@@ -512,10 +531,10 @@ describe("the doctor's kept build", () => {
 
 const execFileAsync = promisify(execFile);
 
-// The wrapper's shebang is `#!/usr/bin/env -i <node>`, which only macOS splits
-// into arguments (Linux hands env "-i <node>" as one, and env exits 125); the
-// video runner is macOS-only anyway (Seatbelt), as manimkc's wrapper test says.
-describe.skipIf(process.platform !== "darwin")("the revideokc wrapper", () => {
+// The wrapper's shebang is `#!/usr/bin/env -i <node>` on macOS, which the
+// kernel splits on spaces, and `#!/usr/bin/env -S -i <node>` on Linux, where
+// coreutils does the splitting (`wrapperSource` in src/video/wrapper.ts).
+describe("the revideokc wrapper", () => {
   let paths: VideoPaths;
   let recordFile: string;
 

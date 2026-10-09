@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 
 import type { VideoPaths } from "../paths";
+import { bwrapProfileText } from "../bwrap";
 import { ancestorRules, deniedReadsFor, file, literal, ProfileError, quoted, tree, unique, type ProfileKind, type Rule } from "../sandbox";
 import type { Program } from "../toolchain";
 import { remotionkcPaths } from "./paths";
@@ -152,9 +153,27 @@ export function buildRemotionkcProfile(kind: ProfileKind, input: RemotionkcProfi
   const exec = execRules(kind, input);
   const reads = readRules(kind, input);
   const writes = writeRules(kind, input);
+  const render = kind === "render";
+  if (input.tools.sandboxKind === "bwrap") {
+    // The same lists, as a namespace: every exec and read a mount, every
+    // denied place under one an empty shadow, the ports private to the job's
+    // netns, Chrome's devices only when a render asks for them.
+    return bwrapProfileText({
+      kind,
+      exec,
+      reads,
+      writes,
+      deniedReads,
+      libs: [...input.tools.libs, ...input.tools.remotionkc.libs],
+      rootfs: paths.sandboxRoot,
+      empty: paths.sandboxEmpty,
+      emptyFile: paths.sandboxEmptyFile,
+      ports: render ? [base, base + 1] : undefined,
+      gpu: render,
+    });
+  }
   const ancestors = ancestorRules([...exec, ...reads, ...writes], deniedReads);
   const ports = [base, base + 1];
-  const render = kind === "render";
   return [
     `; The ${kind} profile for one studio remotionkc job. Written by the runner; see services/studio/src/video/remotionkc/sandbox.ts.`,
     "(version 1)",
@@ -215,6 +234,11 @@ export function remotionkcEnv(kind: ProfileKind, { tools, paths, home, voice, ba
     HOME: home,
     LANG: "en_US.UTF-8",
     TMPDIR: paths.renderTmp,
+    // Linux: $HOME points at a read-only skeleton stub, so caches (fontconfig's,
+    // Chrome's) that default under it are pointed at the job's instead.
+    ...(tools.platform === "linux"
+      ? { XDG_CACHE_HOME: path.join(paths.renderTmp, "xdg"), XDG_CONFIG_HOME: path.join(paths.renderTmp, "xdg-config") }
+      : {}),
   };
   if (kind === "gate") return env;
   Object.assign(env, {
