@@ -374,9 +374,9 @@ describe("CourseHome: the module as one path", () => {
   it("ends the path on the week check, after practice: one row with its counts, not a heading over it", () => {
     const host = renderPath();
     const check = [...main(host).querySelectorAll("a")].find((a) => a.getAttribute("href") === "/courses/pc/p1/check")!;
-    expect(check.textContent).toBe("Week check3 concepts · up to 9 questions");
+    expect(check.textContent).toBe("Module check3 concepts · up to 9 questions");
     const groups = [...main(host).querySelectorAll("h2")].map((h) => h.textContent);
-    expect(groups).not.toContain("Week check");
+    expect(groups).not.toContain("Module check");
   });
 
   it("keeps the learner's own resources and the add form under read alongside", () => {

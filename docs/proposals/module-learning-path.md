@@ -247,6 +247,8 @@ split it into per-lesson segments; that is out of scope here.
 
 ### The week check
 
+Renamed on screen to "Module check" on 2026-10-09, when the self-paced roadmap.sh courses arrived: they have no weeks. The code, routes and this document keep the old name (`weekCheck`, `week-check.ts`).
+
 A new session mode, `?mode=module`, at `/courses/<slug>/<module>/check`,
 reuses `SessionFocus` and its Quiz me flow. The plan takes the module's
 concepts in path order and keeps asking about each one until it is mastered,
