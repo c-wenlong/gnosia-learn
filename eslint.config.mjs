@@ -39,6 +39,11 @@ const eslintConfig = defineConfig([
     // The fifth, blenderkc: its own repo, Python like manimkc, and a .venv
     // holding bpy once installed.
     "tools/blenderkc/**",
+    // Symlinks into the design-systems library, another repo with its own
+    // capture scripts and tooling (docs/design/reference/README.md). Locally
+    // they resolve and would be linted with this repo's config; in CI they
+    // dangle.
+    "docs/design/reference/**",
     // The desktop app makes a git worktree per session under
     // .claude/worktrees/<name>/, each a full checkout with its own
     // node_modules and tools/tldrawkc/dist. Linting from the repo root walks
