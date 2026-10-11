@@ -1,6 +1,0 @@
-{
-  "replace": [
-    ["your-workspace-name", "g", "My workspace"]
-  ],
-  "badges": []
-}
