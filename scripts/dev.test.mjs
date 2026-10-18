@@ -60,9 +60,9 @@ case "$1" in
     esac ;;
 esac`);
   stub(bin, "npm", `echo "npm $* STUDIO_ENABLED=\${STUDIO_ENABLED:-unset}" >> "$CALLS_LOG"`);
-  // The Postgres tools log what libpq would read, never the password itself.
-  const pg = (name, ok) =>
-    stub(bin, name, `echo "${name} $* PGHOST=$PGHOST PGPORT=$PGPORT PGUSER=$PGUSER PGDATABASE=$PGDATABASE pw=\${PGPASSWORD:+set}" >> "$CALLS_LOG"; ${ok}`);
+  // The Postgres tools log their arguments, and only whether a password came
+  // in the environment, never the password itself.
+  const pg = (name, ok) => stub(bin, name, `echo "${name} $* pw=\${PGPASSWORD:+set}" >> "$CALLS_LOG"; ${ok}`);
   pg("pg_isready", `[ ! -f "$STATE_DIR/pg_down" ]`);
   pg("psql", `[ ! -f "$STATE_DIR/no_database" ]`);
   stub(bin, "lsof", `[ -n "$BUSY_PORT" ] || exit 1
@@ -215,7 +215,8 @@ describe("scripts/dev.sh start", () => {
     // tmux's arguments, and the Postgres tools', carry no password ...
     expect(ran.calls.filter((c) => c.includes("hunter2"))).toEqual([]);
     expect(ran.out + ran.err).not.toContain("hunter2");
-    expect(ran.calls).toContain("pg_isready -q PGHOST=db.example PGPORT=5433 PGUSER=catalog PGDATABASE=learn pw=set");
+    expect(ran.calls).toContain("pg_isready -q -d postgres://catalog@db.example:5433/learn pw=set");
+    expect(ran.calls).toContain("psql -d postgres://catalog@db.example:5433/learn -Atqc select 1 pw=set");
     // ... and the one place it is, is a private file the pane reads and deletes.
     expect(paneEnv(tmuxCall(ran.calls, "new-session")[0]).text).toContain("hunter2");
   });
@@ -293,7 +294,15 @@ describe("scripts/dev.sh checks", () => {
     const envFile = 'DATABASE_URL="postgres://catalog@db.example:5433/learn" # local database\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n';
     const ran = sandbox({ envFile }).run(["--detach"]);
     expect(ran.code).toBe(0);
-    expect(ran.calls).toContain("pg_isready -q PGHOST=db.example PGPORT=5433 PGUSER=catalog PGDATABASE=learn pw=");
+    expect(ran.calls).toContain("pg_isready -q -d postgres://catalog@db.example:5433/learn pw=");
+  });
+
+  it("passes every connection option on, certificate paths included", () => {
+    const query = "sslmode=verify-full&sslrootcert=/etc/ca.pem&sslcert=/c.pem&sslkey=/k.pem";
+    const ran = sandbox().run(["--detach"], { env: { DATABASE_URL: `postgres://u:pw@h/db?${query}` } });
+    expect(ran.code).toBe(0);
+    expect(ran.calls).toContain(`pg_isready -q -d postgres://u@h/db?${query} pw=set`);
+    expect(ran.calls).toContain(`psql -d postgres://u@h/db?${query} -Atqc select 1 pw=set`);
   });
 
   it("refuses, with the password hidden, when Postgres is not accepting connections", () => {
@@ -311,10 +320,10 @@ describe("scripts/dev.sh checks", () => {
   it("uses DATABASE_URL from the environment before the file, and the Homebrew default last", () => {
     const { run } = sandbox({ envFile: "DATABASE_URL=postgres://file/db\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n" });
     expect(run(["--detach"], { env: { DATABASE_URL: "postgres://env/db" } }).calls).toContain(
-      "pg_isready -q PGHOST=env PGPORT= PGUSER= PGDATABASE=db pw=",
+      "pg_isready -q -d postgres://env/db pw=",
     );
     expect(sandbox().run(["--detach"]).calls).toContain(
-      "pg_isready -q PGHOST=localhost PGPORT=5432 PGUSER= PGDATABASE=self_learn pw=",
+      "pg_isready -q -d postgres://localhost:5432/self_learn pw=",
     );
   });
 

@@ -118,7 +118,7 @@ port_busy() {
 # ---------------------------------------------------------------------- checks
 # Errors stop the start; warnings say what will not work and carry on.
 preflight() {
-  local errors=0 major url shown isready psql_bin line
+  local errors=0 major url shown isready psql_bin line conn safe_url
   local -a pgenv=()
 
   # Without these nothing else can be read or run, so they stop the checks.
@@ -131,16 +131,22 @@ preflight() {
   url="$(env_value DATABASE_URL)"
   url="${url:-postgres://localhost:5432/self_learn}"
   shown="$(printf '%s' "$url" | sed -E 's#://[^@/]*@#://***@#')"
-  # libpq reads the connection from PG* variables, so the URL, and a password
-  # in it, is never an argument that `ps` would show.
-  if ! line="$(node "$DEV_ENV" pg "$url" 2>/dev/null)"; then
+  # The URL goes to pg_isready and psql with its password taken out; libpq
+  # reads that from PGPASSWORD, so the secret is never an argument that `ps`
+  # would show.
+  if ! conn="$(node "$DEV_ENV" pg "$url" 2>/dev/null)"; then
     warn "DATABASE_URL ($shown) is not a postgres URL, so Postgres was not checked"
   elif isready="$(pg_tool pg_isready)"; then
-    while IFS= read -r line; do pgenv+=("$line"); done <<<"$line"
-    if ! env ${pgenv[@]+"${pgenv[@]}"} "$isready" -q 2>/dev/null; then
+    while IFS= read -r line; do
+      case "$line" in
+        URL=*) safe_url="${line#URL=}" ;;
+        PGPASSWORD=*) pgenv+=("$line") ;;
+      esac
+    done <<<"$conn"
+    if ! env ${pgenv[@]+"${pgenv[@]}"} "$isready" -q -d "$safe_url" 2>/dev/null; then
       warn "Postgres is not accepting connections at $shown (brew services start postgresql@17)"
       errors=1
-    elif psql_bin="$(pg_tool psql)" && ! env ${pgenv[@]+"${pgenv[@]}"} "$psql_bin" -Atqc 'select 1' >/dev/null 2>&1; then
+    elif psql_bin="$(pg_tool psql)" && ! env ${pgenv[@]+"${pgenv[@]}"} "$psql_bin" -d "$safe_url" -Atqc 'select 1' >/dev/null 2>&1; then
       warn "cannot open the database at $shown: createdb self_learn, then npm run catalog -- migrate (README, Install)"
       errors=1
     fi

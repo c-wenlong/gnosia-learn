@@ -6,10 +6,10 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { pgEnv } from "./dev-env.mjs";
+import { splitDatabaseUrl } from "./dev-env.mjs";
 
 // What scripts/dev.sh asks of Node: the app's env files read the way Next
-// reads them, and a DATABASE_URL turned into the variables libpq reads.
+// reads them, and a DATABASE_URL with its password taken out.
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), "dev-env.mjs");
 const dirs = [];
@@ -29,51 +29,58 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe("pgEnv", () => {
-  it("splits a URL into the variables libpq reads", () => {
-    expect(pgEnv("postgres://catalog:secret@db.example:5433/learn")).toEqual({
-      PGHOST: "db.example",
-      PGPORT: "5433",
-      PGUSER: "catalog",
-      PGPASSWORD: "secret",
-      PGDATABASE: "learn",
+describe("splitDatabaseUrl", () => {
+  it("takes the password out and leaves the rest of the URL as it was", () => {
+    expect(splitDatabaseUrl("postgres://catalog:secret@db.example:5433/learn")).toEqual({
+      url: "postgres://catalog@db.example:5433/learn",
+      password: "secret",
     });
   });
 
-  it("leaves out what the URL does not say, so libpq's own defaults apply", () => {
-    expect(pgEnv("postgres://localhost/self_learn")).toEqual({ PGHOST: "localhost", PGDATABASE: "self_learn" });
-    expect(pgEnv("postgresql://localhost")).toEqual({ PGHOST: "localhost" });
-  });
-
-  it("decodes percent-escapes in the user and password", () => {
-    const env = pgEnv("postgres://us%40er:p%40ss%3Aw%2Frd@h/db");
-    expect(env.PGUSER).toBe("us@er");
-    expect(env.PGPASSWORD).toBe("p@ss:w/rd");
-  });
-
-  it("takes an IPv6 host without its brackets", () => {
-    expect(pgEnv("postgres://[::1]:5432/db").PGHOST).toBe("::1");
-  });
-
-  it("honours the query parameters that move the connection", () => {
-    expect(pgEnv("postgres:///db?host=/var/run/postgresql&sslmode=require")).toMatchObject({
-      PGHOST: "/var/run/postgresql",
-      PGSSLMODE: "require",
-      PGDATABASE: "db",
+  it("leaves a URL with no password exactly as it was", () => {
+    expect(splitDatabaseUrl("postgres://localhost:5432/self_learn")).toEqual({
+      url: "postgres://localhost:5432/self_learn",
+      password: "",
     });
+    expect(splitDatabaseUrl("postgresql://localhost").url).toBe("postgresql://localhost");
+  });
+
+  it("decodes percent-escapes in the password, and keeps them in the user", () => {
+    expect(splitDatabaseUrl("postgres://us%40er:p%40ss%3Aw%2Frd@h/db")).toEqual({
+      url: "postgres://us%40er@h/db",
+      password: "p@ss:w/rd",
+    });
+  });
+
+  it("keeps every connection option, certificate paths included", () => {
+    const query = "sslmode=verify-full&sslrootcert=/etc/ca.pem&sslcert=/c.pem&sslkey=/k.pem&connect_timeout=5&options=-c%20search_path%3Dx";
+    expect(splitDatabaseUrl(`postgres://u:pw@h/db?${query}`).url).toBe(`postgres://u@h/db?${query}`);
+  });
+
+  it("keeps a socket-directory host", () => {
+    expect(splitDatabaseUrl("postgres:///db?host=/var/run/postgresql").url).toBe("postgres:///db?host=/var/run/postgresql");
+  });
+
+  it("cuts a password given as a query parameter and leaves the other parameters untouched", () => {
+    expect(splitDatabaseUrl("postgres://u@h/db?sslmode=require&password=via%20query&application_name=a%20b")).toEqual({
+      url: "postgres://u@h/db?sslmode=require&application_name=a%20b",
+      password: "via query",
+    });
+    expect(splitDatabaseUrl("postgres://u@h/db?password=only")).toEqual({ url: "postgres://u@h/db", password: "only" });
   });
 
   it("refuses a URL that is not a postgres one", () => {
-    expect(() => pgEnv("mysql://x/y")).toThrow("not a postgres URL");
-    expect(() => pgEnv("not a url")).toThrow();
+    expect(() => splitDatabaseUrl("mysql://x/y")).toThrow("not a postgres URL");
+    expect(() => splitDatabaseUrl("not a url")).toThrow();
   });
 });
 
 describe("dev-env.mjs pg", () => {
-  it("prints NAME=value lines, and exits 3 on a URL it cannot use", () => {
-    const ok = cli(["pg", "postgres://u:p@h:1/d"]);
+  it("prints the URL without its password, then the password, and exits 3 on a URL it cannot use", () => {
+    const ok = cli(["pg", "postgres://u:p@h:1/d?sslmode=require"]);
     expect(ok.code).toBe(0);
-    expect(ok.out.split("\n").filter(Boolean)).toEqual(["PGHOST=h", "PGPORT=1", "PGUSER=u", "PGPASSWORD=p", "PGDATABASE=d"]);
+    expect(ok.out.split("\n").filter(Boolean)).toEqual(["URL=postgres://u@h:1/d?sslmode=require", "PGPASSWORD=p"]);
+    expect(cli(["pg", "postgres://h/d"]).out).toBe("URL=postgres://h/d\n");
     const bad = cli(["pg", "mysql://x/y"]);
     expect(bad.code).toBe(3);
     expect(bad.out).toBe("");
