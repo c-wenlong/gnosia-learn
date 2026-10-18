@@ -20,11 +20,13 @@ Options for start:
   --no-checks   skip the checks
   -h, --help    show this help
 
-The panes inherit PATH, DATABASE_URL, PORT, SELF_LEARN_HOME and STUDIO_*
-from the shell that ran this, because a tmux server that was already running
-would otherwise hand them its own environment. Everything else belongs in
-apps/web/.env.local or services/catalog/.env, which the processes read
-themselves. STUDIO_ENABLED is set for the web pane here, to 1 or (with
+The panes get PATH, DATABASE_URL, PORT, SELF_LEARN_HOME and STUDIO_* from the
+shell that ran this (a variable it does not have is unset for them), because
+a tmux server that was already running would otherwise hand them its own
+environment. They are passed in a private file the pane reads and deletes, so
+a password in DATABASE_URL never appears in a command line. Everything else
+belongs in apps/web/.env.local or services/catalog/.env, which the processes
+read themselves. STUDIO_ENABLED is set for the web pane here, to 1 or (with
 --no-studio) 0, whatever that file says: a runner with nothing proxying to it
 is no use, and Studio with no runner behind it only errors.
 
@@ -39,11 +41,12 @@ say() { printf '%s\n' "$*"; }
 
 # Overridable so the tests can stand in for tmux and the repository.
 TMUX_BIN="${DEV_TMUX_BIN:-tmux}"
-root="${DEV_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+root="${DEV_ROOT:-$script_root}"
 cd "$root"
+DEV_ENV="$script_root/scripts/lib/dev-env.mjs"
 
 SESSION="${DEV_SESSION:-self-learn}"
-ENV_FILE="$root/apps/web/.env.local"
 WEB_PORT="${PORT:-3000}"
 STUDIO_PORT="${STUDIO_PORT:-7250}"
 
@@ -82,10 +85,19 @@ any_pane_alive() {
   return 1
 }
 
-# The last assignment of KEY in apps/web/.env.local, unquoted. Never printed.
+# The app's configuration as `next dev` reads it (its own env loader, so a
+# quoted value or a trailing comment means what it means there), loaded once
+# by load_env and then answered from memory. Never printed.
+ENV_CACHE=""
+load_env() {
+  ENV_CACHE="$(node "$DEV_ENV" get "$root/apps/web" DATABASE_URL OWNER_PASSWORD AUTH_SECRET 2>/dev/null)" || ENV_CACHE=""
+}
 env_value() {
-  [ -f "$ENV_FILE" ] || return 0
-  { grep -E "^$1=" "$ENV_FILE" || true; } | tail -n 1 | sed -e "s/^$1=//" -e 's/^["'\'']//' -e 's/["'\'']$//'
+  local line
+  while IFS= read -r line; do
+    case "$line" in "$1="*) printf '%s\n' "${line#*=}"; return 0 ;; esac
+  done <<<"$ENV_CACHE"
+  return 0
 }
 
 # `pg_isready` and `psql`: PATH first, then PG_BIN, then Homebrew's keg-only
@@ -106,24 +118,29 @@ port_busy() {
 # ---------------------------------------------------------------------- checks
 # Errors stop the start; warnings say what will not work and carry on.
 preflight() {
-  local errors=0 major url shown isready psql_bin
+  local errors=0 major url shown isready psql_bin line
+  local -a pgenv=()
 
+  # Without these nothing else can be read or run, so they stop the checks.
   major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-  if [ "$major" -lt 22 ]; then
-    warn "Node 22 or newer is required (found ${major:-none})"; errors=1
-  fi
-  if [ ! -d node_modules ]; then
-    warn "node_modules is missing: run npm ci"; errors=1
-  fi
+  [ "$major" -ge 22 ] || die "Node 22 or newer is required (found $major)"
+  [ -d node_modules ] || die "node_modules is missing: run npm ci"
 
-  url="${DATABASE_URL:-$(env_value DATABASE_URL)}"
+  load_env
+
+  url="$(env_value DATABASE_URL)"
   url="${url:-postgres://localhost:5432/self_learn}"
   shown="$(printf '%s' "$url" | sed -E 's#://[^@/]*@#://***@#')"
-  if isready="$(pg_tool pg_isready)"; then
-    if ! "$isready" -q -d "$url" 2>/dev/null; then
+  # libpq reads the connection from PG* variables, so the URL, and a password
+  # in it, is never an argument that `ps` would show.
+  if ! line="$(node "$DEV_ENV" pg "$url" 2>/dev/null)"; then
+    warn "DATABASE_URL ($shown) is not a postgres URL, so Postgres was not checked"
+  elif isready="$(pg_tool pg_isready)"; then
+    while IFS= read -r line; do pgenv+=("$line"); done <<<"$line"
+    if ! env ${pgenv[@]+"${pgenv[@]}"} "$isready" -q 2>/dev/null; then
       warn "Postgres is not accepting connections at $shown (brew services start postgresql@17)"
       errors=1
-    elif psql_bin="$(pg_tool psql)" && ! "$psql_bin" "$url" -Atqc 'select 1' >/dev/null 2>&1; then
+    elif psql_bin="$(pg_tool psql)" && ! env ${pgenv[@]+"${pgenv[@]}"} "$psql_bin" -Atqc 'select 1' >/dev/null 2>&1; then
       warn "cannot open the database at $shown: createdb self_learn, then npm run catalog -- migrate (README, Install)"
       errors=1
     fi
@@ -131,7 +148,7 @@ preflight() {
     warn "no pg_isready on PATH or in Homebrew's postgresql@17, so Postgres was not checked"
   fi
 
-  if [ -z "${OWNER_PASSWORD:-$(env_value OWNER_PASSWORD)}" ] || [ -z "${AUTH_SECRET:-$(env_value AUTH_SECRET)}" ]; then
+  if [ -z "$(env_value OWNER_PASSWORD)" ] || [ -z "$(env_value AUTH_SECRET)" ]; then
     warn "OWNER_PASSWORD or AUTH_SECRET is not set in apps/web/.env.local, so nobody can sign in (see .env.example)"
   fi
 
@@ -151,20 +168,53 @@ preflight() {
   [ "$errors" = 0 ] || die "fix the above, or pass --no-checks"
 }
 
-# "env VAR=value ..." for the pane commands: PATH and the variables the two
-# processes read. A tmux server that predates this shell would otherwise hand
-# the panes its own environment.
-pane_env() {
-  local assigns=("PATH=$PATH") name
-  while IFS='=' read -r name _; do
-    case "$name" in
-      STUDIO_*|PORT|DATABASE_URL|SELF_LEARN_HOME) assigns+=("$name=${!name}") ;;
-    esac
-  done < <(env)
-  # Set either way: the process environment wins over apps/web/.env.local.
-  if [ "$studio" = 1 ]; then assigns+=("STUDIO_ENABLED=1"); else assigns+=("STUDIO_ENABLED=0"); fi
-  printf 'env'
-  printf ' %q' "${assigns[@]}"
+# The command for one pane: a private file of its environment, which it reads
+# and deletes before running the process. A tmux server that predates this
+# shell would hand a pane its own environment, so the file sets what this
+# shell has and unsets what it has not, among the names the processes read.
+# It also keeps a password in DATABASE_URL out of every command line.
+PANE_FILES=()
+PANE_CMD=""
+CREATED=0
+STARTED=0
+# A start that fails part-way must not leave a half-started session, or files
+# a pane never read, behind.
+cleanup_failed_start() {
+  [ "$STARTED" = 1 ] && return 0
+  rm -f ${PANE_FILES[@]+"${PANE_FILES[@]}"}
+  [ "$CREATED" = 0 ] || "$TMUX_BIN" kill-session -t "=$SESSION" 2>/dev/null || true
+}
+trap cleanup_failed_start EXIT
+
+# Sets PANE_CMD, rather than printing it, so the file it makes is remembered
+# by this shell and not lost in a subshell.
+pane_command() { # pane_command <process command...>
+  local file name line
+  local -a held=()
+  file="$(mktemp "${TMPDIR:-/tmp}/self-learn-dev.XXXXXX")" || die "could not create a temporary file"
+  PANE_FILES+=("$file")
+
+  # Names a running tmux server holds that this shell may have since dropped.
+  while IFS= read -r line; do
+    case "$line" in STUDIO_*=*) held+=("${line%%=*}") ;; esac
+  done < <("$TMUX_BIN" show-environment -g 2>/dev/null || true)
+
+  {
+    printf 'export PATH=%q\n' "$PATH"
+    for name in DATABASE_URL PORT SELF_LEARN_HOME ${held[@]+"${held[@]}"}; do
+      case "$name" in STUDIO_ENABLED) continue ;; esac
+      if [ -n "${!name+x}" ]; then printf 'export %s=%q\n' "$name" "${!name}"; else printf 'unset %s\n' "$name"; fi
+    done
+    while IFS='=' read -r name _; do
+      case "$name" in
+        STUDIO_*) [ "$name" = STUDIO_ENABLED ] || printf 'export %s=%q\n' "$name" "${!name}" ;;
+      esac
+    done < <(env)
+    # Set either way: the process environment wins over apps/web/.env.local.
+    if [ "$studio" = 1 ]; then printf 'export STUDIO_ENABLED=1\n'; else printf 'export STUDIO_ENABLED=0\n'; fi
+  } > "$file"
+
+  PANE_CMD="$(printf '%q ' bash -c 'set -a; . "$1"; rm -f "$1"; shift; exec "$@"' dev-pane "$file" "$@")"
 }
 
 # Failing to attach (no terminal, say, when an agent runs this) leaves a
@@ -214,19 +264,25 @@ cmd_start() {
 
   [ "$checks" = 0 ] || preflight
 
-  local prefix
-  prefix="$(pane_env)"
-  "$TMUX_BIN" new-session -d -s "$SESSION" -c "$root" -n dev "$prefix npm run dev"
+  # Panes are addressed by the id tmux returns, not by index: a user's
+  # pane-base-index or base-index would move every index.
+  local web_pane studio_pane
+  pane_command npm run dev
+  web_pane="$("$TMUX_BIN" new-session -d -P -F '#{pane_id}' -s "$SESSION" -c "$root" -n dev "$PANE_CMD")"
+  CREATED=1
   # Keep a pane that exited on screen with its error, rather than closing it.
   "$TMUX_BIN" set-option -w -t "=$SESSION:dev" remain-on-exit on
   "$TMUX_BIN" set-option -t "=$SESSION:" mouse on
   "$TMUX_BIN" set-option -w -t "=$SESSION:dev" pane-border-status top
   "$TMUX_BIN" set-option -w -t "=$SESSION:dev" pane-border-format ' #{pane_title} '
-  "$TMUX_BIN" select-pane -t "=$SESSION:dev.0" -T "web :$WEB_PORT"
+  "$TMUX_BIN" select-pane -t "$web_pane" -T "web :$WEB_PORT"
   if [ "$studio" = 1 ]; then
-    "$TMUX_BIN" split-window -h -t "=$SESSION:dev" -c "$root" "$prefix npm run studio"
-    "$TMUX_BIN" select-pane -t "=$SESSION:dev.1" -T "studio :$STUDIO_PORT"
+    pane_command npm run studio
+    studio_pane="$("$TMUX_BIN" split-window -h -P -F '#{pane_id}' -t "$web_pane" -c "$root" "$PANE_CMD")"
+    "$TMUX_BIN" select-pane -t "$studio_pane" -T "studio :$STUDIO_PORT"
   fi
+  # The panes delete their files once they have read them.
+  STARTED=1
 
   print_urls
   [ "$attach" = 0 ] || attach_to_session
