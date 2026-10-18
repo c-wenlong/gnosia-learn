@@ -133,6 +133,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required.
 
+The diagram studio at `/studio` needs its runner beside the app. `npm run dev:up` starts both in one tmux session, a pane each, after checking Node, `node_modules`, Postgres, your sign-in variables and the tldrawkc build; `npm run dev:down` stops them, the runner first so it can finish what it is writing. Without tmux it runs both in the one terminal, as `npm run dev:all` does. `scripts/dev.sh --help` lists the options.
+
 The app reads its courses, topics, notes and diagrams from Postgres, and nothing else, so it needs Postgres 17 running locally (`brew install postgresql@17 && brew services start postgresql@17`). The repository holds no content of its own beyond [`seed/`](seed/README.md), a small real slice in the export format, so a fresh clone builds its database from that. With Postgres up, the first time:
 
 ```bash
@@ -298,6 +300,8 @@ Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the brow
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Dev server |
+| `npm run dev:up` / `npm run dev:down` | The dev server and the studio runner together in one tmux session, with Studio on; stop both. `-- --detach` starts without attaching, `-- --no-studio` runs the app alone. See [Install](#install) |
+| `npm run dev:all` | The same two processes in the current terminal, with no checks |
 | `npm run build` | Production build |
 | `npm run start` | Serve a production build |
 | `npm run lint` / `npm run typecheck` | ESLint / `tsc --noEmit` |

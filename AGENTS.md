@@ -430,7 +430,10 @@ catalog until a person says so.
 Rules of engagement:
 
 - Run it with `npm run studio` from the repository root; it binds
-  `127.0.0.1:7250` and nothing else. `/studio` routes 404 unless
+  `127.0.0.1:7250` and nothing else. `npm run dev:up` starts it together with
+  the app, in one tmux session with a pane each (`npm run dev:down` stops both,
+  the runner first: it drains on SIGINT or SIGTERM but not on the SIGHUP that
+  ending a session sends); `scripts/dev.sh` is the script. `/studio` routes 404 unless
   `STUDIO_ENABLED` is set. Studio thumbnails depend on that same flag alone:
   from the browser they are served from
   `/studio/api/diagrams/{name}/svg` (the runner's own `/api/diagrams/{name}/svg`
