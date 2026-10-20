@@ -178,15 +178,15 @@ export function resolveVaultDir(given: string | undefined): string {
   return dir;
 }
 
-/** The root `package.json`'s name, which every checkout of this repository carries. */
-const REPOSITORY_NAME = "gnosia";
+/** The root `package.json`'s name, which every checkout of this repository carries, now and before the rename. */
+const REPOSITORY_NAMES = new Set(["gnosia", "self-learn"]);
 
 /** The nearest folder at or above `dir` whose `package.json` names this repository, or null. */
 function checkoutAbove(dir: string): string | null {
   for (let at = dir; ; at = path.dirname(at)) {
     try {
       const manifest = JSON.parse(readFileSync(path.join(at, "package.json"), "utf8")) as { name?: unknown };
-      if (manifest.name === REPOSITORY_NAME) return at;
+      if (typeof manifest.name === "string" && REPOSITORY_NAMES.has(manifest.name)) return at;
     } catch {
       // No package.json here, or not JSON: not a checkout, keep walking up.
     }

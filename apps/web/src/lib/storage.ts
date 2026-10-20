@@ -15,7 +15,7 @@ import {
  * Pure state transitions for the learner state.
  *
  * What this module used to be: the localStorage layer. `loadState`,
- * `saveState` and `migrateState` read and wrote `gnosia:v1`, and the
+ * `saveState` and `migrateState` read and wrote `self-learn:v1`, and the
  * reducers below existed to keep that testable without a DOM.
  *
  * What it is now: only the reducers. Postgres holds the state, the provider
