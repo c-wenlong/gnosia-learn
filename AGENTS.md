@@ -87,9 +87,10 @@ this repository is refused, since notes written there are untracked files in
 
 Four submodules make narrated videos: manimkc (ManimGL), remotionkc
 (Remotion), revideokc (Revideo, the Motion Canvas fork) and blenderkc
-(Blender's Cycles, photoreal 3D, made at a terminal only). All four are
-private repositories, so a clone without access leaves `tools/` empty and
-needs nothing from them; `tools/tldrawkc` is the only public submodule. They share one
+(Blender's Cycles, photoreal 3D, made at a terminal only). Three are
+private repositories, so a clone without access leaves their `tools/`
+directories empty and needs nothing from them; tldrawkc and blenderkc are
+public. They share one
 voice, one report shape and one deliverable format, and differ in what they
 draw well. **Before making a video, run the `video-router` skill**
 (`.claude/skills/video-router/`); it applies
@@ -280,7 +281,7 @@ Rules of engagement:
 
 ## Asset generation: tools/blenderkc/
 
-`tools/blenderkc/` is the fifth git **submodule** (its own private repo,
+`tools/blenderkc/` is the fifth git **submodule** (its own public repo,
 github.com/c-wenlong/blenderkc): narrated explainer videos whose pictures are
 photoreal 3D, rendered by Blender's Cycles through `bpy` 5.2.2 from PyPI, the
 fourth video tool. It is shaped like revideokc: the same CLI verbs, the same
