@@ -277,6 +277,15 @@ export function connect(options: ConnectOptions = {}): Connection {
     if (typeof pattern !== "string" || typeof value !== "string") return 0;
     return new RegExp(pattern).test(value) ? 1 : 0;
   });
+  /**
+   * `regexp_replace(subject, pattern, replacement[, flags])` for the one
+   * caller pg left behind (a title de-dupe). `g` is the only flag SQLite
+   * callers ever passed; the JS RegExp always replaces globally.
+   */
+  sqlite.function("regexp_replace", (value: unknown, pattern: unknown, replacement: unknown) => {
+    if (value === null || pattern === null || replacement === null) return null;
+    return String(value).replace(new RegExp(String(pattern), "g"), String(replacement));
+  });
   /** What the copy guards ask: may this connection write on a copy? */
   sqlite.function("catalog_copy_ok", () => (flags.copyOk ? 1 : 0));
   /** What the write-seam guards ask: which revision is this connection writing? */
@@ -304,9 +313,47 @@ export function connect(options: ConnectOptions = {}): Connection {
   });
 
   const db = drizzle(sqlite, { schema: tables }) as unknown as CatalogDatabase;
-  db.execute = async <T = Record<string, unknown>>(query: SQLWrapper | string) => ({
-    rows: db.all<T>(typeof query === "string" ? sql.raw(query) : query),
-  });
+  db.execute = async <T = Record<string, unknown>>(query: SQLWrapper | string) => {
+    const session = (db as unknown as { $client: Database.Database }).$client;
+    const dialect = (db as unknown as { dialect: { sqlToQuery: (q: SQLWrapper) => { sql: string; params: unknown[] } } }).dialect;
+    const prepared = dialect.sqlToQuery(typeof query === "string" ? sql.raw(query) : query);
+    let statement;
+    try {
+      statement = session.prepare(prepared.sql);
+    } catch (error) {
+      // node-postgres ran a whole string of statements in one execute; tests
+      // still send them. better-sqlite3's exec is the multi-statement entry
+      // point, and a batch carrying parameters cannot be one by definition.
+      if (error instanceof Error && error.message.includes("more than one statement")) {
+        if (prepared.params.length > 0) throw error;
+        session.exec(prepared.sql);
+        return { rows: [] as T[] };
+      }
+      throw error;
+    }
+    if (!statement.reader) {
+      statement.run(...(prepared.params as never[]));
+      return { rows: [] as T[] };
+    }
+    const rows = statement.all(...(prepared.params as never[])) as T[];
+    // Postgres's driver parsed jsonb columns itself, so raw `sql` call sites
+    // read objects. SQLite hands every text value back as a string, and
+    // better-sqlite3 cannot say which column was declared JSON; a value that
+    // is itself well-formed JSON object or array text is the closest marker.
+    for (const row of rows as Record<string, unknown>[]) {
+      for (const key of Object.keys(row)) {
+        const value = row[key];
+        if (typeof value === "string" && value.length > 1 && (value[0] === "{" || value[0] === "[")) {
+          try {
+            row[key] = JSON.parse(value);
+          } catch {
+            /* not JSON: a text value that merely opens like one */
+          }
+        }
+      }
+    }
+    return { rows };
+  };
   FLAGS.set(db, flags);
   return {
     sqlite,

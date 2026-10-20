@@ -18,7 +18,7 @@ import { connect, type Connection } from "../src/db";
 import type { TopicsReport } from "../src/index/manimkc";
 import { applyMigrations } from "../src/migrations";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { createScratchDatabase, probe, type Scratch, withoutConstraint } from "./scratch-database";
 
 /**
  * The blob store against a second writer (docs/CONTENT-MIGRATION.md, phase 1
@@ -103,10 +103,12 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
   beforeAll(async () => {
     a = await createScratchDatabase();
     b = await createScratchDatabase();
-    // Before the contract (0013), as flip day's upload is: see asset-upload.test.ts.
-    const beforeContract = await partialMigrations(BEFORE_BLOB_CONTRACT);
-    await applyMigrations(a.db, { folder: beforeContract });
-    await applyMigrations(b.db, { folder: beforeContract });
+    // Without the contract-era check, as flip day's upload was: see
+    // asset-upload.test.ts for why the fixture rebuilds the table.
+    await applyMigrations(a.db);
+    await applyMigrations(b.db);
+    await withoutConstraint(a.db, "asset", "asset_stored_blob_check");
+    await withoutConstraint(b.db, "asset", "asset_stored_blob_check");
     two = connect({ url: a.url });
     base = await mkdtemp(path.join(tmpdir(), "blob-owner-"));
     outRoot = path.join(base, "manimkc-home");
@@ -124,7 +126,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
   });
 
   beforeEach(async () => {
-    await a.db.execute(sql`truncate asset, blob_object, content_revision cascade`);
+    await a.db.execute(sql`delete from asset; delete from blob_object; delete from content_revision;`);
     root = await mkdtemp(path.join(base, "blobs-"));
     store = fsStore(root);
   });

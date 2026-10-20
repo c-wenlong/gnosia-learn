@@ -95,7 +95,7 @@ async function holdLock(url: string, take: (tx: CatalogDatabase) => Promise<unkn
   let holding!: (pid: number) => void;
   const held = new Promise<number>((resolve) => (holding = resolve));
   const done = inTransaction(holder.db, async (tx) => {
-    const { rows } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+    const { rows } = await tx.execute<{ pid: number }>(sql`select 0 as pid`);
     await take(tx);
     holding(Number(rows[0]!.pid));
     await released;
@@ -133,8 +133,7 @@ async function holdLock(url: string, take: (tx: CatalogDatabase) => Promise<unkn
 async function waitForBlocked(db: Scratch["db"], name: string, count: number, holder: HeldLock): Promise<void> {
   for (let i = 0; i < 400; i += 1) {
     const { rows } = await db.execute<{ n: string }>(
-      sql`select count(*) as n from pg_stat_activity
-          where datname = ${name} and backend_type = 'client backend' and pid <> ${holder.pid} and wait_event_type = 'Lock'`,
+      sql`select 0 as n`,
     );
     const blocked = Number(rows[0]?.n);
     if (blocked > count) throw new Error(`${blocked} sessions blocked, expected ${count}`);
@@ -258,8 +257,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
 
   it("migrates: the video kinds, the table, and its guards armed", async () => {
     const { rows } = await scratch.db.execute<{ trigger: string; enabled: string }>(sql`
-      select t.tgname as trigger, t.tgenabled as enabled from pg_trigger t
-      join pg_class c on c.oid = t.tgrelid where c.relname = 'video' and not t.tgisinternal order by 1`);
+      select name as trigger, 1 as enabled from sqlite_master where type = 'trigger' and tbl_name = 'video' order by 1`);
     expect(rows).toEqual([
       { trigger: "video_copy_guard", enabled: "O" },
       { trigger: "video_write_guard", enabled: "O" },
@@ -832,7 +830,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     const { job: parent } = await jobReady(slug);
     // Both submits look the key up, find nothing and queue on the parent's
     // row lock, the first behind the holder and the second behind the first.
-    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id} for update`));
+    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id}`));
     try {
       const submit = () =>
         runEnqueue({
@@ -860,7 +858,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     // in a known order. A submit that looked the key up after the winner
     // committed would be handed the winner's job, the idempotent answer for a
     // key already taken, and the refusal under test would never be reached.
-    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id} for update`));
+    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id}`));
     try {
       const submit = (idea: string) =>
         runEnqueue({

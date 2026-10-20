@@ -120,7 +120,7 @@ describe.skipIf(!reachable.ok)("gradeReview and reviewQueue", () => {
     await scratch.db.execute(
       "alter table event disable trigger event_no_update; " +
         "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review; " +
+        "delete from event, mastery, review; " +
         "alter table event enable trigger event_no_update; " +
         "alter table event enable trigger event_no_delete;",
     );
@@ -238,7 +238,7 @@ describe.skipIf(!reachable.ok)("gradeReview and reviewQueue", () => {
     });
 
     it("gives a never-scheduled focus a null card, and drops a focus the catalog lacks", async () => {
-      await scratch.db.execute("truncate review");
+      await scratch.db.execute("delete from review");
       const fresh = await reviewQueue(scratch.db, { now: NOW, focus: "gamma" });
       expect(fresh.items).toHaveLength(1);
       expect(fresh.items[0]).toMatchObject({ conceptId: "gamma", card: null, intervals: [1, 1, 1, 1] });

@@ -298,13 +298,12 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     });
 
     it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
-      // `index_run` arrives in 0002, so a database stopped at 0000 or 0001 has
-      // a non-null head and no such table. Counting there used to throw
-      // "relation does not exist" rather than saying the obvious thing.
+      // A database one migration behind has a non-null head and a pending
+      // entry: status must report both rather than throw.
       const partial = await createScratchDatabase();
       const saved = process.env["DATABASE_URL"];
       try {
-        await applyMigrations(partial.db, { folder: await partialMigrations() });
+        await applyMigrations(partial.db, { folder: await partialMigrations(1) });
         process.env["DATABASE_URL"] = partial.url;
 
         const status = await runStatus();

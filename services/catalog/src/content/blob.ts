@@ -150,8 +150,8 @@ export async function ownerUsage(
   // in or out of it. `now` is for a caller that reports as of a moment.
   const since =
     options.now === undefined
-      ? sql`cast(unixepoch('subsec') * 1000 as integer) - make_interval(secs => ${UPLOAD_WINDOW_MS / 1000})`
-      : sql`${new Date(options.now.getTime() - UPLOAD_WINDOW_MS).toISOString()}`;
+      ? sql`cast(unixepoch('subsec') * 1000 as integer) - ${UPLOAD_WINDOW_MS}`
+      : sql`${options.now.getTime() - UPLOAD_WINDOW_MS}`;
   // By `owner_id`, which the table's check ties to the key's prefix
   // (`starts_with(key, owner_id || '/' || sha256)`), so this is the prefix the
   // store lists by and the column the owner index serves.

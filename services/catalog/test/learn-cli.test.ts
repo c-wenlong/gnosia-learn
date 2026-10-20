@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { readReviews, upsertReview } from "../src/state";
-import { markImported, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { clearTables, markImported, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent, TOPIC_SLUG } from "./state-fixture";
 
 /**
@@ -85,13 +85,7 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, progress, recap, preference; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
 
   describe("the pinned --json shapes", () => {

@@ -19,7 +19,7 @@ import {
   type ReviewCard,
 } from "../src/state";
 import { replayReviews } from "../src/learn/replay";
-import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { clearTables, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { fixtureGraph, seedContent } from "./state-fixture";
 import { collection, learner, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
@@ -58,13 +58,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   });
 
   async function reset() {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, session cascade; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "session"]);
   }
 
   beforeEach(reset);

@@ -1361,7 +1361,7 @@ async function renameUnder(
       select id, state from job
       where state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)})
         and (topic_slug = ${from} or brief ->> 'topic' = ${from})
-      order by id for update`);
+      order by id`);
     const busy = open.filter((job) => job.state !== "queued");
     if (busy.length > 0) {
       throw new TopicError(

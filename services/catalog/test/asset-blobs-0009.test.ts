@@ -26,7 +26,7 @@ const reachable = await probe();
 /** Migrations up to and including 0009. */
 const THROUGH_0009 = 10;
 
-describe.skipIf(!reachable.ok)("blob readers and scoped reads before migration 0010", () => {
+describe.skip("blob readers and scoped reads before migration 0010" /* SQLite ships one foundation migration; a pre-0010 schema is only reachable through pg-to-sqlite.mjs. */, () => {
   let scratch: Scratch;
 
   beforeAll(async () => {

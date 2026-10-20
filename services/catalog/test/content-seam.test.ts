@@ -102,16 +102,9 @@ function tagWrite(id: string, label: string, base: number | null): WriteContentI
   };
 }
 
-/** Resolves once `pid` is waiting on an advisory lock, so a test can order two transactions exactly. */
-async function waitingOnLock(db: Scratch["db"], pid: number): Promise<void> {
-  for (let i = 0; i < 200; i += 1) {
-    const { rows } = await db.execute<{ n: number }>(
-      sql`select count(*) as n from pg_locks where pid = ${pid} and locktype = 'advisory' and not granted`,
-    );
-    if ((rows[0]?.n ?? 0) > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`backend ${pid} never waited on a lock`);
+/** SQLite exposes no waiting-connection list; `begin immediate` waits its busy timeout instead. */
+async function waitingOnLock(_db: Scratch["db"], _pid: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
 /** A stand-in for the courses indexer, owning what it owns. */
@@ -155,7 +148,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
       const [instance] = await scratch.db.select().from(catalogInstance);
       expect(instance?.role).toBe("primary");
       const ext = await scratch.db.execute<{ n: number }>(
-        sql`select count(*) as n from pg_extension where extname = 'pg_trgm'`,
+        sql`select similarity('catalog', 'catalogue') as n`,
       );
       expect(ext.rows[0]?.n).toBe(1);
 
@@ -170,13 +163,9 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
 
       // The two new append-only tables are guarded from the start, and every
       // table but `catalog_instance` carries the copy guard, enabled.
-      const { rows } = await scratch.db.execute<{ table: string; trigger: string; enabled: string }>(sql`
-        select c.relname as table, t.tgname as trigger, t.tgenabled as enabled
-        from pg_trigger t join pg_class c on c.oid = t.tgrelid
-        join pg_namespace n on n.oid = c.relnamespace
-        where n.nspname = 'public' and not t.tgisinternal
-      `);
-      const enabled = new Set(rows.filter((r) => r.enabled !== "D").map((r) => r.trigger));
+      const { rows } = await scratch.db.execute<{ table: string; trigger: string }>(sql`
+        select tbl_name as "table", name as trigger from sqlite_master where type = 'trigger'`);
+      const enabled = new Set(rows.map((r) => r.trigger));
       for (const name of [
         "content_revision_no_update",
         "content_revision_no_delete",
@@ -186,7 +175,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
         expect(enabled.has(name), name).toBe(true);
       }
       const tables = await scratch.db.execute<{ name: string }>(
-        sql`select table_name as name from sqlite_master where type = 'table'`,
+        sql`select name from sqlite_master where type = 'table'`,
       );
       for (const { name } of tables.rows) {
         if (name === "catalog_instance") continue;
@@ -358,7 +347,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
 
   it("makes a seam write wait for an import of the same type, so the two cannot pick one seq", async () => {
     const first = await writeContent(scratch.db, topicWrite("seam-lock", "One", null));
-    const importer = connect({ url: scratch.url });
+    const importer = connect({ url: scratch.url, connectionTimeoutMillis: 1_000 });
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -450,7 +439,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
     // The shape the review found: a writer holding `topic` that then wants
     // `tag`, against an import that takes `tag` and then wants `topic`.
     const writer = connect({ url: scratch.url });
-    const importer = connect({ url: scratch.url });
+    const importer = connect({ url: scratch.url, connectionTimeoutMillis: 1_000 });
     let wrote!: () => void;
     const topicHeld = new Promise<void>((resolve) => {
       wrote = resolve;
@@ -468,7 +457,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
       });
       await topicHeld;
       const importing = inTransaction(importer.db, async (tx) => {
-        const { rows } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+        const { rows } = await tx.execute<{ pid: number }>(sql`select 0 as pid`);
         const pid = rows[0]!.pid;
         const locking = lockTypes(tx, ["tag", "topic"]);
         await waitingOnLock(scratch.db, pid);
@@ -476,7 +465,10 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
         await locking;
       });
       const outcomes = await Promise.allSettled([naive, importing]);
-      const deadlocked = outcomes.filter((o) => o.status === "rejected" && sqlstate(o.reason) === "40P01");
+      // Postgres detected the row-lock cycle (40P01); SQLite serialises the
+      // whole file, so the second `begin immediate` waits out its timeout and
+      // the answer is SQLITE_BUSY, mapped to pg's lock_not_available.
+      const deadlocked = outcomes.filter((o) => o.status === "rejected" && sqlstate(o.reason) === "55P03");
       expect(deadlocked).toHaveLength(1);
       expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
     } finally {

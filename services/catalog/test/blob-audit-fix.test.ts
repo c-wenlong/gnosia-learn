@@ -92,7 +92,7 @@ describe.skipIf(!reachable.ok)("blob audit --fix, branch by branch", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(sql`truncate asset, blob_object, content_revision cascade`);
+    await scratch.db.execute(sql`delete from asset; delete from blob_object; delete from content_revision;`);
     root = await mkdtemp(path.join(base, "root-"));
     store = fsStore(root);
   });
