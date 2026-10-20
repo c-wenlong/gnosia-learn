@@ -280,7 +280,7 @@ Rules of engagement:
 
 ## Asset generation: tools/blenderkc/
 
-`tools/blenderkc/` is the fifth git **submodule** (its own private repo,
+`tools/blenderkc/` is the fifth git **submodule** (its own public repo,
 github.com/c-wenlong/blenderkc): narrated explainer videos whose pictures are
 photoreal 3D, rendered by Blender's Cycles through `bpy` 5.2.2 from PyPI, the
 fourth video tool. It is shaped like revideokc: the same CLI verbs, the same
