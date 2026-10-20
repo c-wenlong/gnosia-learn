@@ -670,9 +670,6 @@ async function snapshot(url, out) {
     const assetNames = await client.query(`SELECT learner_id, asset_id, title,
       extract(epoch from created_at)::double precision AS created_at,
       extract(epoch from updated_at)::double precision AS updated_at FROM asset_name`);
-    const concepts = await client.query(`SELECT slug, title, summary, topic_slug, path, domain, body, topic_position,
-      extract(epoch from archived_at)::double precision AS archived_at FROM concept`);
-
     // ==== courses ====
     // The tables readCourses joins to build a Course (readers/courses.ts):
     // the collection tree, the checklist rows, the membership rows that give
@@ -730,7 +727,6 @@ async function snapshot(url, out) {
 
     const meta = db.prepare('INSERT INTO snapshot_meta (key, value) VALUES (?, ?)');
     meta.run('generator', 'catalog-snapshot.mjs');
-    meta.run('schema_version', '2');
     meta.run('schema_version', '3');
     meta.run('source', 'postgres');
     meta.run('taken_at', String(Date.now() / 1000));
