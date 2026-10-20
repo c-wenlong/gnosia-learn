@@ -427,11 +427,9 @@ private struct AssetRow: View {
 
             Spacer(minLength: 0)
 
-            if store.isFavorite(asset.id) {
-                Image(systemName: "star.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            FavoriteButton(assetID: asset.id, showsLabel: false)
+                .buttonStyle(.plain)
+                .font(.caption)
         }
         .padding(.vertical, 2)
     }

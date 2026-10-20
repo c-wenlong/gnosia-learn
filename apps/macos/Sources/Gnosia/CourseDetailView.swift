@@ -64,8 +64,10 @@ struct CourseDetailView: View {
     }
 
     /// The left column: the course's code and title, then one row per module
-    /// with its order and item count (the web rows also carry a status mark;
-    /// that is learner state, not catalog).
+    /// with its status mark — the web's moduleMark: a tick when every item
+    /// is done, a half ring when some are, an empty ring when none, minus
+    /// the lock (which needs the active path the app does not compute) — and
+    /// its item count.
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
@@ -84,11 +86,17 @@ struct CourseDetailView: View {
 
             List(selection: $selected) {
                 ForEach(Array(course.modules.enumerated()), id: \.element.id) { index, m in
-                    HStack {
+                    let done = store.itemsDone(in: m)
+                    HStack(spacing: 8) {
+                        Image(systemName: done == m.items.count && done > 0
+                              ? "checkmark.circle.fill"
+                              : done > 0 ? "circle.lefthalf.filled" : "circle")
+                            .foregroundStyle(done > 0 ? Color.accentColor : Color(.tertiaryLabelColor))
+                            .font(.callout)
                         Text("\(m.order). \(m.title)")
                             .lineLimit(2)
                         Spacer()
-                        Text("\(m.items.count)")
+                        Text(m.items.isEmpty ? "0" : "\(done)/\(m.items.count)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
