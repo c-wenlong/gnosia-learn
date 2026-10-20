@@ -18,6 +18,8 @@ import AppKit
 import SwiftUI
 
 private enum Grouping: String, CaseIterable, Identifiable {
+    /// The web library's default view: "20 Oct (7)".
+    case day = "Day"
     case tool = "Tool"
     case topic = "Topic"
     var id: String { rawValue }
@@ -68,7 +70,7 @@ private struct SectionModel: Identifiable {
 struct LibraryView: View {
     @Environment(CatalogStore.self) private var store
 
-    @State private var grouping: Grouping = .tool
+    @State private var grouping: Grouping = .day
     @State private var sort: SortOrder = .newest
     @State private var kind = ""
     /// The companion kind Others is narrowed to, or nil for all of them —
@@ -181,20 +183,48 @@ struct LibraryView: View {
     /// and a diagram all land in "other" by it.
     private static let toolOrder = ["manimkc", "remotionkc", "revideokc", "blenderkc", "video", "other"]
 
+    /// "20 Oct" — the web's day-group header date.
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "d MMM"
+        return f
+    }()
+
     private var sections: [SectionModel] {
         switch grouping {
+        case .day:
+            // One rung per calendar day of createdAt, newest first, with the
+            // count in the header the web's "(7)" way. Rows without a date
+            // sink to "Undated" at the end.
+            let calendar = Calendar.current
+            let groups = Dictionary(grouping: filtered) { asset in
+                asset.createdAt.map { calendar.startOfDay(for: $0) }
+            }
+            let keys = groups.keys.sorted { lhs, rhs in
+                switch (lhs, rhs) {
+                case let (l?, r?): return l > r
+                case (nil, _?): return false
+                case (_?, nil): return true
+                case (nil, nil): return false
+                }
+            }
+            return keys.map { day in
+                let rows = groups[day] ?? []
+                let title = day.map { "\(Self.dayFormatter.string(from: $0)) (\(rows.count))" } ?? "Undated (\(rows.count))"
+                return SectionModel(title: title, rows: rows)
+            }
         case .tool:
             let groups = Dictionary(grouping: filtered, by: { $0.generatedBy })
             var ordered: [SectionModel] = Self.toolOrder.compactMap { tool in
                 guard let rows = groups[tool], !rows.isEmpty else { return nil }
-                return SectionModel(title: tool, rows: rows)
+                return SectionModel(title: "\(tool) (\(rows.count))", rows: rows)
             }
             // A tool the fixed order does not name still gets its section
             // rather than vanishing.
             ordered += groups.keys
                 .filter { !Self.toolOrder.contains($0) }
                 .sorted()
-                .map { SectionModel(title: $0, rows: groups[$0] ?? []) }
+                .map { SectionModel(title: "\($0) (\(groups[$0]?.count ?? 0))", rows: groups[$0] ?? []) }
             return ordered
         case .topic:
             // A row with several topics files under its first, the same rule
@@ -211,8 +241,9 @@ struct LibraryView: View {
                 if lp != rp { return lp < rp }
                 return (lt?.title ?? lhs).localizedCaseInsensitiveCompare(rt?.title ?? rhs) == .orderedAscending
             }.map { slug in
+                let rows = groups[slug] ?? []
                 let title = slug.isEmpty ? "No topic" : (store.topics[slug]?.title ?? slug)
-                return SectionModel(title: title, rows: groups[slug] ?? [])
+                return SectionModel(title: "\(title) (\(rows.count))", rows: rows)
             }
         }
     }
@@ -254,7 +285,8 @@ struct LibraryView: View {
                                     }
                                 } header: {
                                     Text(section.title)
-                                        .font(.title3).bold()
+                                        .font(.callout.weight(.medium))
+                                        .foregroundStyle(G.text2)
                                         .padding(.bottom, 2)
                                 }
                             }
@@ -309,13 +341,13 @@ struct LibraryView: View {
                     } label: {
                         Text(tab.label)
                             .font(.callout)
-                            .padding(.horizontal, 11)
+                            .foregroundStyle(kind == tab.value ? G.btnText : G.text2)
+                            .padding(.horizontal, 12)
                             .padding(.vertical, 5)
                             .background(
-                                kind == tab.value ? Color.accentColor : Color.clear,
+                                kind == tab.value ? G.btnFace : .clear,
                                 in: Capsule()
                             )
-                            .foregroundStyle(kind == tab.value ? .white : .primary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -350,22 +382,35 @@ struct LibraryView: View {
     }
 }
 
-/// One card of the grid: the poster frame at 16:9 (a video's poster blob,
-/// a poster's own jpg, a tinted tile with the kind's symbol otherwise),
-/// then the title, the kind line and the owner's marks. Internal, not
-/// private: Home's rail draws the same card.
+/// One card of the grid, in the web card's shape: a white tile on the
+/// cream page, a 16:9 poster (a video's derived poster blob, a poster's
+/// own jpg, a kind tile otherwise), a kind chip, the tool·size line, the
+/// title, and a footer carrying the owner's marks — star on the right,
+/// "Not started"/watched state on the left.
 struct AssetCard: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
 
-    /// The kind's label, plus which tool made it when a tool did — "other"
-    /// and the studio's own "video" namespace say nothing, so they stay off.
+    /// The web card's middle line: the generating tool's short name, then
+    /// the blob's size — "manim · 20 MB".
     private var metaLine: String {
+        var parts: [String] = []
         switch asset.generatedBy {
-        case "other", "video": return assetKindLabel(asset.kind)
-        default: return "\(assetKindLabel(asset.kind)) · \(asset.generatedBy)"
+        case "other": break
+        case "video": parts.append("studio")
+        default: parts.append(asset.generatedBy.replacingOccurrences(of: "kc", with: ""))
         }
+        if let bytes = asset.bytes {
+            parts.append(Self.bytesFormatter.string(fromByteCount: bytes))
+        }
+        return parts.joined(separator: " · ")
     }
+
+    private static let bytesFormatter: ByteCountFormatter = {
+        let f = ByteCountFormatter()
+        f.countStyle = .file
+        return f
+    }()
 
     /// The thumbnail's URL: a video reads its derived poster's blob, a
     /// poster reads its own.
@@ -380,43 +425,76 @@ struct AssetCard: View {
         }
     }
 
+    /// The footer's standing: the web card's "Not started" / done dot.
+    private var statusLine: (symbol: String, label: String, color: Color) {
+        if let mark = store.watchMark(asset.id) {
+            if mark.done {
+                return ("checkmark.circle.fill", "Watched", G.okText)
+            }
+            return ("circle.lefthalf.filled", "In progress", G.text2)
+        }
+        return ("circle", "Not started", G.text3)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            ZStack(alignment: .topTrailing) {
-                if let url = posterURL {
-                    PosterThumbnail(url: url, maxPixel: 480)
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Image(systemName: assetKindSymbol(asset.kind))
-                        .font(.title2)
-                        .foregroundStyle(kindTint(asset.kind).opacity(0.85))
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                        .background(kindTint(asset.kind).opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            if let url = posterURL {
+                PosterThumbnail(url: url, maxPixel: 480, cornerRadius: 8)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Image(systemName: assetKindSymbol(asset.kind))
+                    .font(.title2)
+                    .foregroundStyle(kindTint(asset.kind).opacity(0.9))
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .background(kindTint(asset.kind).opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(assetKindLabel(asset.kind))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(G.text2)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(G.surface2, in: Capsule())
+                    if !metaLine.isEmpty {
+                        Text(metaLine)
+                            .font(.caption)
+                            .foregroundStyle(G.text3)
+                            .lineLimit(1)
+                    }
+                }
+
                 Text(store.displayTitle(for: asset))
-                    .font(.callout)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(G.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                let status = statusLine
                 HStack(spacing: 4) {
-                    Text(metaLine)
-                    if let mark = store.watchMark(asset.id) {
-                        Image(systemName: mark.done ? "checkmark.circle.fill" : "circle.lefthalf.filled")
-                            .foregroundStyle(mark.done ? .green : .secondary)
-                    }
+                    Image(systemName: status.symbol)
+                        .foregroundStyle(status.color)
+                    Text(status.label)
                     Spacer(minLength: 0)
                     FavoriteButton(assetID: asset.id, showsLabel: false)
                         .buttonStyle(.plain)
+                        .foregroundStyle(G.text3)
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .foregroundStyle(G.text3)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
         }
         .padding(8)
+        .background(G.surface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(G.border, lineWidth: 1)
+        )
         .contentShape(Rectangle())
     }
 }

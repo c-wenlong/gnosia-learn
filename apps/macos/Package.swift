@@ -23,7 +23,8 @@ let package = Package(
         .executableTarget(
             name: "Gnosia",
             dependencies: ["CSQLite3"],
-            path: "Sources/Gnosia"
+            path: "Sources/Gnosia",
+            resources: [.process("Resources")]
         ),
     ]
 )
