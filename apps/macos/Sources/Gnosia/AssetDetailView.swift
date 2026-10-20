@@ -280,7 +280,8 @@ private struct NoteDetail: View {
 /// A note's markdown as readable text: headings, bullets, fenced code and
 /// paragraphs, with inline emphasis, code and links from AttributedString's
 /// own markdown pass. Deliberately small — no wikilink or embed resolution.
-private struct MarkdownText: View {
+/// Shared by the note detail and the concept workspace.
+struct MarkdownText: View {
     let source: String
 
     private enum Block {
