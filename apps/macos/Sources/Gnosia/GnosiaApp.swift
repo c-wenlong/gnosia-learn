@@ -19,6 +19,9 @@ struct GnosiaApp: App {
     /// The writable side: learner.db. Views read the catalog store's merged
     /// marks and write through this one, then call refreshLearner().
     @State private var learner = LearnerStore()
+    /// The tutor boundary: spawns services/sidecar on demand and hands Ask
+    /// and Studio the SidecarClient that answers.
+    @State private var sidecar = SidecarManager()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -30,6 +33,7 @@ struct GnosiaApp: App {
             RootView()
                 .environment(store)
                 .environment(learner)
+                .environment(sidecar)
                 .frame(minWidth: 1240, minHeight: 720)
                 .task {
                     store.loadIfNeeded()
