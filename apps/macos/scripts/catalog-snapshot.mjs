@@ -195,10 +195,116 @@ CREATE TABLE concept (
   path           TEXT,
   domain         TEXT,
   body           TEXT,
+  tags           TEXT NOT NULL DEFAULT '[]',
+  sources        TEXT NOT NULL DEFAULT '[]',
+  authored_at    REAL,
   topic_position INTEGER NOT NULL DEFAULT 0,
-  archived_at    REAL
+  owner_id       TEXT,
+  archived_at    REAL,
+  created_at     REAL,
+  updated_at     REAL
 );
 CREATE INDEX concept_topic_idx ON concept(topic_slug);
+
+-- ==== wave-1 surfaces ====
+-- The learner half: rows Postgres holds the only copy of (packages/schema's
+-- state.ts), mirrored so the app reads the review queue, watch state and
+-- renames without a server. jsonb lands as TEXT holding the same JSON and
+-- leech as 0/1 — the file is a transport, and the app parses only what it
+-- draws.
+CREATE TABLE concept_prerequisite (
+  concept_slug      TEXT NOT NULL,
+  prerequisite_slug TEXT NOT NULL,
+  kind              TEXT NOT NULL,
+  position          INTEGER NOT NULL DEFAULT 0,
+  created_at        REAL,
+  PRIMARY KEY (concept_slug, prerequisite_slug, kind)
+);
+CREATE INDEX concept_prerequisite_req_idx ON concept_prerequisite(prerequisite_slug);
+
+CREATE TABLE mastery (
+  learner_id   TEXT NOT NULL,
+  concept_slug TEXT NOT NULL,
+  p_l          REAL NOT NULL DEFAULT 0,
+  observations INTEGER NOT NULL DEFAULT 0,
+  correct      INTEGER NOT NULL DEFAULT 0,
+  last_seen    REAL,
+  created_at   REAL,
+  updated_at   REAL,
+  PRIMARY KEY (learner_id, concept_slug)
+);
+CREATE INDEX mastery_concept_idx ON mastery(concept_slug);
+
+CREATE TABLE review (
+  learner_id    TEXT NOT NULL,
+  concept_slug  TEXT NOT NULL,
+  repetitions   INTEGER NOT NULL DEFAULT 0,
+  ease          REAL NOT NULL DEFAULT 0,
+  interval_days INTEGER NOT NULL DEFAULT 1,
+  lapses        INTEGER NOT NULL DEFAULT 0,
+  due           REAL NOT NULL,
+  last_reviewed REAL,
+  leech         INTEGER NOT NULL DEFAULT 0,
+  created_at    REAL,
+  updated_at    REAL,
+  PRIMARY KEY (learner_id, concept_slug)
+);
+CREATE INDEX review_due_idx ON review(due);
+
+CREATE TABLE progress (
+  learner_id         TEXT NOT NULL,
+  curriculum_item_id TEXT NOT NULL,
+  completed_at       REAL,
+  note               TEXT,
+  created_at         REAL,
+  updated_at         REAL,
+  PRIMARY KEY (learner_id, curriculum_item_id)
+);
+CREATE INDEX progress_item_idx ON progress(curriculum_item_id);
+
+CREATE TABLE recap (
+  learner_id         TEXT NOT NULL,
+  curriculum_item_id TEXT NOT NULL,
+  summary            TEXT NOT NULL DEFAULT '',
+  key_points         TEXT NOT NULL DEFAULT '[]',
+  misconceptions     TEXT NOT NULL DEFAULT '[]',
+  open_questions     TEXT NOT NULL DEFAULT '[]',
+  source             TEXT NOT NULL,
+  sessions           INTEGER NOT NULL DEFAULT 0,
+  created_at         REAL,
+  updated_at         REAL,
+  PRIMARY KEY (learner_id, curriculum_item_id)
+);
+
+CREATE TABLE preference (
+  learner_id TEXT NOT NULL,
+  key        TEXT NOT NULL,
+  value      TEXT NOT NULL,
+  created_at REAL,
+  updated_at REAL,
+  PRIMARY KEY (learner_id, key)
+);
+
+-- Deliberately partial: watched state and last-playback need only when (at),
+-- what kind (type) and which asset (payload's asset), so concept_slug,
+-- session_id and created_at stay in Postgres until a surface reads them.
+CREATE TABLE event (
+  id         INTEGER PRIMARY KEY,
+  at         REAL NOT NULL,
+  learner_id TEXT NOT NULL,
+  type       TEXT NOT NULL,
+  payload    TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX event_at_idx ON event(at);
+
+CREATE TABLE asset_name (
+  learner_id TEXT NOT NULL,
+  asset_id   TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  created_at REAL,
+  updated_at REAL,
+  PRIMARY KEY (learner_id, asset_id)
+);
 
 CREATE TABLE snapshot_meta (
   key   TEXT PRIMARY KEY,
@@ -223,10 +329,14 @@ async function snapshot(url, out) {
   try {
     db = new Database(partial);
     db.exec(DDL);
-    db.pragma('user_version = 1');
+    db.pragma('user_version = 2');
 
     const write = db.transaction((rows) => {
-      const { assets, derivations, assetTopics, assetConcepts, topics, concepts } = rows;
+      const {
+        assets, derivations, assetTopics, assetConcepts, topics, concepts,
+        prerequisites, masteries, reviews, progress, recaps, preferences,
+        events, assetNames,
+      } = rows;
 
       const assetInsert = db.prepare(
         `INSERT INTO asset (id, kind, path, url, content_hash, inputs_hash, bytes,
@@ -256,13 +366,15 @@ async function snapshot(url, out) {
 
       const conceptInsert = db.prepare(
         `INSERT INTO concept (slug, title, summary, topic_slug, path, domain, body,
-           topic_position, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           tags, sources, authored_at, topic_position, owner_id, archived_at,
+           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const c of concepts) {
         conceptInsert.run(
           c.slug, c.title, c.summary, c.topic_slug, c.path, c.domain, c.body,
-          c.topic_position, c.archived_at,
+          c.tags, c.sources, c.authored_at, c.topic_position, c.owner_id,
+          c.archived_at, c.created_at, c.updated_at,
         );
       }
 
@@ -275,18 +387,136 @@ async function snapshot(url, out) {
         'INSERT OR IGNORE INTO asset_concept (asset_id, concept_slug) VALUES (?, ?)',
       );
       for (const ac of assetConcepts) assetConceptInsert.run(ac.asset_id, ac.concept_slug);
+
+      const prerequisiteInsert = db.prepare(
+        `INSERT OR IGNORE INTO concept_prerequisite
+           (concept_slug, prerequisite_slug, kind, position, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      for (const p of prerequisites) {
+        prerequisiteInsert.run(p.concept_slug, p.prerequisite_slug, p.kind, p.position, p.created_at);
+      }
+
+      const masteryInsert = db.prepare(
+        `INSERT INTO mastery (learner_id, concept_slug, p_l, observations, correct,
+           last_seen, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const m of masteries) {
+        masteryInsert.run(
+          m.learner_id, m.concept_slug, m.p_l, m.observations, m.correct,
+          m.last_seen, m.created_at, m.updated_at,
+        );
+      }
+
+      const reviewInsert = db.prepare(
+        `INSERT INTO review (learner_id, concept_slug, repetitions, ease, interval_days,
+           lapses, due, last_reviewed, leech, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const r of reviews) {
+        reviewInsert.run(
+          r.learner_id, r.concept_slug, r.repetitions, r.ease, r.interval_days,
+          r.lapses, r.due, r.last_reviewed, r.leech, r.created_at, r.updated_at,
+        );
+      }
+
+      const progressInsert = db.prepare(
+        `INSERT INTO progress (learner_id, curriculum_item_id, completed_at, note,
+           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      for (const p of progress) {
+        progressInsert.run(
+          p.learner_id, p.curriculum_item_id, p.completed_at, p.note,
+          p.created_at, p.updated_at,
+        );
+      }
+
+      const recapInsert = db.prepare(
+        `INSERT INTO recap (learner_id, curriculum_item_id, summary, key_points,
+           misconceptions, open_questions, source, sessions, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const r of recaps) {
+        recapInsert.run(
+          r.learner_id, r.curriculum_item_id, r.summary, r.key_points,
+          r.misconceptions, r.open_questions, r.source, r.sessions,
+          r.created_at, r.updated_at,
+        );
+      }
+
+      const preferenceInsert = db.prepare(
+        `INSERT INTO preference (learner_id, key, value, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      for (const p of preferences) {
+        preferenceInsert.run(p.learner_id, p.key, p.value, p.created_at, p.updated_at);
+      }
+
+      const eventInsert = db.prepare(
+        'INSERT INTO event (id, at, learner_id, type, payload) VALUES (?, ?, ?, ?, ?)',
+      );
+      for (const e of events) eventInsert.run(e.id, e.at, e.learner_id, e.type, e.payload);
+
+      const nameInsert = db.prepare(
+        `INSERT INTO asset_name (learner_id, asset_id, title, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      for (const n of assetNames) {
+        nameInsert.run(n.learner_id, n.asset_id, n.title, n.created_at, n.updated_at);
+      }
     });
 
     // Sequential, not Promise.all: pg@8 deprecates queuing a second query on
-    // a client mid-flight, and six small reads buy nothing from it anyway.
+    // a client mid-flight, and small reads buy nothing from it anyway.
+    // jsonb goes over as `::text` so the file holds the same JSON Postgres
+    // does, not the driver's parse of it; booleans as 0/1.
     const assets = await client.query(`SELECT ${ASSET_COLUMNS} FROM asset`);
     const derivations = await client.query('SELECT asset_id, source_asset_id FROM asset_derivation');
     const assetTopics = await client.query('SELECT asset_id, topic_slug FROM asset_topic');
     const assetConcepts = await client.query('SELECT asset_id, concept_slug FROM asset_concept');
     const topics = await client.query(`SELECT slug, title, domain, summary, position,
       extract(epoch from archived_at)::double precision AS archived_at FROM topic`);
-    const concepts = await client.query(`SELECT slug, title, summary, topic_slug, path, domain, body, topic_position,
-      extract(epoch from archived_at)::double precision AS archived_at FROM concept`);
+    const concepts = await client.query(`SELECT slug, title, summary, topic_slug, path, domain, body,
+      tags::text AS tags, sources::text AS sources,
+      extract(epoch from authored_at)::double precision AS authored_at,
+      topic_position, owner_id,
+      extract(epoch from archived_at)::double precision AS archived_at,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM concept`);
+    const prerequisites = await client.query(`SELECT concept_slug, prerequisite_slug, kind, position,
+      extract(epoch from created_at)::double precision AS created_at FROM concept_prerequisite`);
+    const masteries = await client.query(`SELECT learner_id, concept_slug, p_l, observations, correct,
+      extract(epoch from last_seen)::double precision AS last_seen,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM mastery`);
+    const reviews = await client.query(`SELECT learner_id, concept_slug, repetitions, ease, interval_days,
+      lapses, extract(epoch from due)::double precision AS due,
+      extract(epoch from last_reviewed)::double precision AS last_reviewed,
+      leech::integer AS leech,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM review`);
+    const progress = await client.query(`SELECT learner_id, curriculum_item_id,
+      extract(epoch from completed_at)::double precision AS completed_at, note,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM progress`);
+    const recaps = await client.query(`SELECT learner_id, curriculum_item_id, summary,
+      key_points::text AS key_points, misconceptions::text AS misconceptions,
+      open_questions::text AS open_questions, source, sessions,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM recap`);
+    const preferences = await client.query(`SELECT learner_id, key, value::text AS value,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM preference`);
+    // Ordered as readEvents orders (`at`, then `id`): replay and
+    // last-watched both read the log's order, not just its set.
+    const events = await client.query(`SELECT id,
+      extract(epoch from at)::double precision AS at,
+      learner_id, type, payload::text AS payload FROM event ORDER BY at, id`);
+    const assetNames = await client.query(`SELECT learner_id, asset_id, title,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM asset_name`);
     const rows = {
       assets: assets.rows,
       derivations: derivations.rows,
@@ -294,12 +524,20 @@ async function snapshot(url, out) {
       assetConcepts: assetConcepts.rows,
       topics: topics.rows,
       concepts: concepts.rows,
+      prerequisites: prerequisites.rows,
+      masteries: masteries.rows,
+      reviews: reviews.rows,
+      progress: progress.rows,
+      recaps: recaps.rows,
+      preferences: preferences.rows,
+      events: events.rows,
+      assetNames: assetNames.rows,
     };
     write(rows);
 
     const meta = db.prepare('INSERT INTO snapshot_meta (key, value) VALUES (?, ?)');
     meta.run('generator', 'catalog-snapshot.mjs');
-    meta.run('schema_version', '1');
+    meta.run('schema_version', '2');
     meta.run('source', 'postgres');
     meta.run('taken_at', String(Date.now() / 1000));
     // The database name, never the URL: a URL can carry a password.
