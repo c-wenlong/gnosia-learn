@@ -13,7 +13,9 @@
 //  minus what needs the knowledge base: the course's own `videos:` lists
 //  first, then each concept step's `asset_concept` links, then the module
 //  topic's videos as the Watch fallback — and a video places once. Learner
-//  state does not draw: no ticks, no mastery marks, no locks, no sessions.
+//  state draws only what learner.db can write back: the tick on each topic
+//  row and its "Mark done" in the open panel. Mastery marks, locks and
+//  sessions stay off — the app cannot write them, so it does not pretend.
 //
 
 import SwiftUI
@@ -116,8 +118,10 @@ struct ModuleView: View {
         Set(module.items.flatMap(\.concepts)).count
     }
 
-    /// "5 topics · 12 concepts · 3 assets" — moduleMeta without the done count
-    /// (which is learner state).
+    /// "5 topics · 12 concepts · 3 assets · 2 of 5 done" — moduleMeta in
+    /// course-path.ts, with the done count now that ticks are writable. The
+    /// word is "done" not "mastered": these are the learner's own ticks,
+    /// and doneWord's "mastered" is for marks mastery sets.
     private var metaLine: [String] {
         var parts = ["\(module.items.count) \(module.items.count == 1 ? "topic" : "topics")"]
         if conceptCount > 0 {
@@ -126,6 +130,9 @@ struct ModuleView: View {
         let assets = store.moduleAssetCount(topicSlug: module.topic)
         if assets > 0 {
             parts.append("\(assets) \(assets == 1 ? "asset" : "assets")")
+        }
+        if !module.items.isEmpty {
+            parts.append("\(store.itemsDone(in: module)) of \(module.items.count) done")
         }
         return parts
     }
@@ -261,14 +268,20 @@ struct ModuleView: View {
     }
 }
 
-/// One lesson of the path: the item's row (mark, title, "N concepts"), the
-/// Covers list behind its toggle, and under it the lesson's videos, its
-/// concept steps and its readings — the rows the web nests under the topic.
+/// One lesson of the path: the item's row (status mark, title, "N
+/// concepts"), the open panel with Covers and the tick — the web TopicRow's
+/// "Mark done" checkbox — and under it the lesson's videos, its concept
+/// steps and its readings.
 private struct LessonRow: View {
+    @Environment(CatalogStore.self) private var store
+    @Environment(LearnerStore.self) private var learner: LearnerStore?
     let lesson: ModulePathModel.Lesson
     let subtopics: [String]
 
     @State private var open = false
+
+    /// Ticked, on the merged read — snapshot rows plus this app's own.
+    private var done: Bool { store.isDone(lesson.item.id) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -276,36 +289,50 @@ private struct LessonRow: View {
                 withAnimation(.easeInOut(duration: 0.15)) { open.toggle() }
             } label: {
                 HStack(spacing: 10) {
-                    // The web row's status mark would sit here; without ticks
-                    // or mastery the circle is the placeholder it collapses to.
-                    Image(systemName: "circle")
-                        .foregroundStyle(.tertiary)
+                    // The web's TopicMarkIcon: a filled disc with a tick when
+                    // done, an empty ring when not. (It would also show
+                    // mastery's "learning" dot; mastery is read-only here
+                    // and the mark stays the tick's.)
+                    Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(done ? Color.accentColor : Color(.tertiaryLabelColor))
                         .frame(width: 18)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(lesson.item.title).font(.callout.bold())
-                        Text("\(lesson.item.concepts.count) \(lesson.item.concepts.count == 1 ? "concept" : "concepts")")
+                        Text(meta)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if !subtopics.isEmpty {
-                        Image(systemName: open ? "chevron.down" : "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Image(systemName: open ? "chevron.down" : "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            if open && !subtopics.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Covers")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                    ForEach(subtopics, id: \.self) { s in
-                        Text("· \(s)").font(.callout).foregroundStyle(.secondary)
+            if open {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !subtopics.isEmpty {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Covers")
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                            ForEach(subtopics, id: \.self) { s in
+                                Text("· \(s)").font(.callout).foregroundStyle(.secondary)
+                            }
+                        }
                     }
+                    Toggle(isOn: Binding(
+                        get: { done },
+                        set: { tick in
+                            learner?.setProgress(lesson.item.id, completed: tick)
+                            store.refreshLearner()
+                        }
+                    )) {
+                        Text("Mark done").font(.callout)
+                    }
+                    .toggleStyle(.checkbox)
                 }
                 .padding(.leading, 28)
                 .padding(.top, 4)
@@ -323,6 +350,14 @@ private struct LessonRow: View {
             .padding(.leading, 28)
         }
         .padding(.vertical, 4)
+    }
+
+    /// "3 concepts", "3 concepts · Done" — topicMeta in course-path.ts for a
+    /// row whose standing is the tick's (the web's "Learning" word is
+    /// mastery's, which stays off here).
+    private var meta: String {
+        let base = "\(lesson.item.concepts.count) \(lesson.item.concepts.count == 1 ? "concept" : "concepts")"
+        return done ? "\(base) · Done" : base
     }
 }
 
@@ -356,6 +391,7 @@ private struct ConceptStepRow: View {
 /// lists without a destination (the library surface owns diagrams and the
 /// rest).
 private struct AssetRow: View {
+    @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
 
     var body: some View {
@@ -375,7 +411,7 @@ private struct AssetRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
-                Text(asset.displayTitle).font(.callout).multilineTextAlignment(.leading)
+                Text(store.displayTitle(for: asset)).font(.callout).multilineTextAlignment(.leading)
                 Text(assetKindLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)

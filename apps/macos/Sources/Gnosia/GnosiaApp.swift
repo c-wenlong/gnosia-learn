@@ -16,6 +16,9 @@ import SwiftUI
 @main
 struct GnosiaApp: App {
     @State private var store = CatalogStore()
+    /// The writable side: learner.db. Views read the catalog store's merged
+    /// marks and write through this one, then call refreshLearner().
+    @State private var learner = LearnerStore()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -26,14 +29,19 @@ struct GnosiaApp: App {
         WindowGroup("Gnosia") {
             RootView()
                 .environment(store)
+                .environment(learner)
                 .frame(minWidth: 1240, minHeight: 720)
-                .task { store.loadIfNeeded() }
+                .task {
+                    store.loadIfNeeded()
+                    learner.loadIfNeeded()
+                }
         }
         .windowToolbarStyle(.unified)
 
         Settings {
             SettingsView()
                 .environment(store)
+                .environment(learner)
         }
     }
 }
