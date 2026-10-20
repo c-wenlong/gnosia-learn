@@ -429,6 +429,7 @@ erDiagram
         text path "exactly one of path/url"
         text url
         text content_hash
+        text inputs_hash "what a derived asset was made from (0031)"
         bigint bytes
         text title
         text source_repo

@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { doctor } from "../src/commands/doctor";
 import { runImportCommand } from "../src/commands/index-command";
 import { runStatus } from "../src/commands/status";
-import { posterId, unhookPosters, uploadAssets } from "../src/content/asset-upload";
+import { POSTER_PREFIX, posterId, unhookDerivations, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore, uploadBlob } from "../src/content/blob";
 import { BLOB_CONTRACT_MIGRATION, blobContractDistance, describeDistance } from "../src/content/blob-contract";
 import { latestRevisions, lockEntity } from "../src/content/revisions";
@@ -276,6 +276,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
       ["video", "present"],
       ["transcript", "present"],
       ["poster", "present"],
+      ["pdf", "present"],
     ]);
     expect(first.rowsWritten).toBe(0);
   });
@@ -289,9 +290,11 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     const manimkcWrite = moved.sources.find((s) => s.source === "manimkc");
     // The video's revision; the poster's are written through the seam beside it.
     expect(manimkcWrite?.revisions).toEqual({ asset: 1 });
-    expect(manimkcWrite?.notes).toContain("1 poster(s) unhooked from a re-rendered video; this import cuts new ones");
+    expect(manimkcWrite?.notes).toContain("1 poster(s) unhooked from a re-rendered video; this import makes new ones");
+    expect(manimkcWrite?.notes).toContain("1 PDF(s) unhooked from a re-rendered video; this import makes new ones");
     // The same import then cuts the new render's poster and hooks it back up.
     expect(manimkcWrite?.notes).toContain("1 poster(s) cut and stored, 0 linked to their video again");
+    expect(manimkcWrite?.notes).toContain("1 PDF(s) made and stored, 0 linked to their video again");
     expect((await video())?.blobKey).toBe(`local/${sha("second render")}.mp4`);
     expect(await derivedFrom(poster)).toEqual(["manimkc:out/demo/one/one.mp4"]);
     expect(await posterKey()).not.toBe(oldPoster);
@@ -361,8 +364,10 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     expect(retry.sources.find((s) => s.source === "manimkc")?.revisions).toEqual({});
     expect(retry.sources.find((s) => s.source === "manimkc")?.notes).toEqual(
       expect.arrayContaining([
-        "1 poster(s) unhooked from a re-rendered video; this import cuts new ones",
+        "1 poster(s) unhooked from a re-rendered video; this import makes new ones",
         "1 poster(s) cut and stored, 0 linked to their video again",
+        "1 PDF(s) unhooked from a re-rendered video; this import makes new ones",
+        "1 PDF(s) made and stored, 0 linked to their video again",
       ]),
     );
     expect(await derivedFrom(poster)).toEqual([id]);
@@ -402,11 +407,14 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     const other = connect({ url: scratch.url, max: 2 });
     // Settled on every path, so a failure below neither leaves it unhandled
     // nor lets it write into the scratch database during the cleanup.
-    let unhooking: Promise<{ value?: Awaited<ReturnType<typeof unhookPosters>>; error?: unknown }> | undefined;
+    let unhooking: Promise<{ value?: Awaited<ReturnType<typeof unhookDerivations>>; error?: unknown }> | undefined;
     try {
       await other.db.transaction(async (tx) => {
         await lockEntity(tx, "asset", poster);
-        unhooking = unhookPosters(scratch.db, [id], { author: "test", reason: "an import racing an upload" }).then(
+        unhooking = unhookDerivations(scratch.db, [id], POSTER_PREFIX, {
+          author: "test",
+          reason: "an import racing an upload",
+        }).then(
           (value) => ({ value }),
           (error: unknown) => ({ error }),
         );

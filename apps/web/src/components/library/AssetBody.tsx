@@ -96,6 +96,7 @@ export function AssetBody({
         watchedDay={video.watchedDay}
         favorite={video.favorite}
         downloadHref={data.downloadHref}
+        pdfHref={data.pdfHref}
         actions={video.actions}
         notes={
           <>
@@ -122,6 +123,8 @@ export function AssetBody({
   if (asset.kind === "diagram_svg") {
     return servable ? <DiagramView src={fileHref} statusHref={statusHref} title={title} heading={false} /> : unavailable;
   }
+
+  if (asset.kind === "pdf") return servable ? <PdfView src={fileHref} title={title} /> : unavailable;
 
   if (asset.kind === "link") return <LinkPanel url={asset.url} />;
 
@@ -313,6 +316,38 @@ function UnreadableFile({ path, href }: { path: string | null; href: string }) {
         </>
       )}
     </Notice>
+  );
+}
+
+/**
+ * A stored PDF opened as an asset of its own. The file route already answers
+ * `application/pdf` inline, so an `<object>` lets the browser's own viewer
+ * draw it inside the card — the same bytes the video's PDF button opens in a
+ * tab. A browser with no inline viewer (a phone's, mostly) gets the fallback
+ * inside the object instead: the link everyone would take anyway.
+ */
+function PdfView({ src, title }: { src: string; title: string }) {
+  return (
+    <Card
+      title={title}
+      action={
+        <RawLink href={src}>Open in a tab</RawLink>
+      }
+    >
+      <object
+        data={src}
+        type="application/pdf"
+        aria-label={title}
+        className="block h-[80vh] w-full rounded-lg bg-white"
+      >
+        <p className="p-4 text-[14px] text-text2">
+          This browser does not show PDFs inline.{" "}
+          <TextLink href={src} external>
+            Open it in a tab instead.
+          </TextLink>
+        </p>
+      </object>
+    </Card>
   );
 }
 

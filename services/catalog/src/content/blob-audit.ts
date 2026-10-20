@@ -6,7 +6,7 @@ import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
-import { POSTER_PREFIX } from "./asset-upload";
+import { PDF_PREFIX, POSTER_PREFIX } from "./asset-upload";
 import { markBlobPending, ownerCapLock, ownerUsage, type OwnerUsage } from "./blob";
 import {
   BlobOwnerError,
@@ -32,7 +32,7 @@ import {
  * | `stale-pending` | A `pending` row a day old with no object behind it and no asset, diagram or course cover pointing at it | the row is deleted |
  * | `pending` | Any other `pending` row: an upload that has not finished, or one the audit sent back | none; rerun the upload |
  * | `unreferenced` | A `present` row no asset, diagram, studio video or course cover points at: the old bytes of something re-rendered, or the blobs of a `video put` whose transaction was refused | none; listed so it can be seen, and still counted toward the owner's byte cap |
- * | `orphan-poster` | A poster asset derived from no video: its video was pruned, or the upload unhooked it from a re-render it could not cut a new poster for | none; the next upload with ffmpeg makes and hooks up a new one |
+ * | `orphan-poster` | A poster or PDF asset derived from no video: its video was pruned, or the upload unhooked it from a re-render it could not make a new one for | none; the next upload with ffmpeg makes and hooks up a new one |
  * | `partial` | A staged write under `<root>/.tmp` a day old: an upload a crash stopped before its rename | deleted |
  *
  * **`--fix` acts only on a root that names this database** (`<root>/.owner`,
@@ -253,27 +253,33 @@ export async function auditBlobs(
     });
   }
 
-  // 3. Posters whose video was pruned: the derivation cascaded away with it.
-  const posters = await db
+  // 3. Derived assets (posters, PDFs) whose video was pruned: the
+  // derivation cascaded away with it.
+  const derived = await db
     .select({ id: asset.id, key: asset.blobKey })
     .from(asset)
-    .where(and(eq(asset.kind, "poster"), sql`starts_with(${asset.id}, ${POSTER_PREFIX})`));
+    .where(
+      and(
+        inArray(asset.kind, ["poster", "pdf"]),
+        sql`starts_with(${asset.id}, ${POSTER_PREFIX}) or starts_with(${asset.id}, ${PDF_PREFIX})`,
+      ),
+    );
   const withSource = new Set(
-    posters.length === 0
+    derived.length === 0
       ? []
       : (
           await db
             .select({ id: assetDerivation.assetId })
             .from(assetDerivation)
-            .where(inArray(assetDerivation.assetId, posters.map((p) => p.id)))
+            .where(inArray(assetDerivation.assetId, derived.map((p) => p.id)))
         ).map((row) => row.id),
   );
-  for (const poster of posters) {
-    if (withSource.has(poster.id)) continue;
+  for (const entry of derived) {
+    if (withSource.has(entry.id)) continue;
     findings.push({
       kind: "orphan-poster",
-      key: poster.key ?? poster.id,
-      detail: `${poster.id}: derived from no video (its video was pruned, or it was unhooked from a re-render)`,
+      key: entry.key ?? entry.id,
+      detail: `${entry.id}: derived from no video (its video was pruned, or it was unhooked from a re-render)`,
     });
   }
 

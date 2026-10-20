@@ -7,7 +7,7 @@ import { eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runImportCommand } from "../src/commands/index-command";
-import { posterId, uploadAssets } from "../src/content/asset-upload";
+import { pdfId, posterId, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore } from "../src/content/blob";
 import { cliScope } from "../src/content/scope";
 import { listVideos } from "../src/content/videos";
@@ -144,11 +144,12 @@ describe.skipIf(!reachable.ok)("revideokc through catalog import", () => {
     expect(new Map(topics.map((t) => [t.assetId, t.topicSlug])).get(`revideokc:${SECOND}`)).toBe("agent-memory-and-state");
     expect(topics.filter((t) => t.topicSlug === "agent-tool-use-and-reasoning-loops")).toHaveLength(4);
     const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, `revideokc:${VIDEO}`));
-    // The three sidecars, and the poster the import cut (2026-10-05).
+    // The three sidecars, and the poster and PDF the import cut (2026-10-05, 2026-10-20).
     expect(derived.map((d) => d.assetId)).toContain(posterId(`revideokc:${VIDEO}`));
-    expect(derived).toHaveLength(4);
-    const secondPoster = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, `revideokc:${SECOND}`));
-    expect(secondPoster.map((d) => d.assetId)).toEqual([posterId(`revideokc:${SECOND}`)]);
+    expect(derived.map((d) => d.assetId)).toContain(pdfId(`revideokc:${VIDEO}`));
+    expect(derived).toHaveLength(5);
+    const secondDerived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, `revideokc:${SECOND}`));
+    expect(secondDerived.map((d) => d.assetId).sort()).toEqual([pdfId(`revideokc:${SECOND}`), posterId(`revideokc:${SECOND}`)].sort());
   });
 
   it("records the run's data root, which is where out/… resolves, and the checkout it read", async () => {
@@ -170,10 +171,12 @@ describe.skipIf(!reachable.ok)("revideokc through catalog import", () => {
       ["revideokc:out/agents/loops/loops.chapters.json", "present"],
       ["revideokc:out/agents/loops/loops.vtt", "present"],
       [posterId(`revideokc:${VIDEO}`), "present"],
+      [pdfId(`revideokc:${VIDEO}`), "present"],
       [`revideokc:${SECOND}`, "present"],
       [posterId(`revideokc:${SECOND}`), "present"],
+      [pdfId(`revideokc:${SECOND}`), "present"],
     ]);
-    // The import cut both posters, so neither run writes a row.
+    // The import cut both posters and PDFs, so neither run writes a row.
     expect(first.rowsWritten).toBe(0);
     expect((await upload()).rowsWritten).toBe(0);
   });

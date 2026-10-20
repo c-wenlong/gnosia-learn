@@ -68,7 +68,9 @@ export {
   assetBlobs,
   courseCoverBlob,
   courseCovers,
+  pdfBlob,
   posterBlob,
+  videosWithStoredPdf,
   videosWithStoredPoster,
   type AssetBlob,
   type CourseCoverBlob,
@@ -84,6 +86,7 @@ export {
   POSTER_QUALITY,
   POSTER_WIDTH,
 } from "../poster/recipe";
+export { PDF_CONTENT_TYPE } from "../pdf/recipe";
 
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
 export { bumpEpoch, ensureLearner, readAvatar, readDisplayName, withLearnerLock, writeAvatar, writeDisplayName } from "./learner";

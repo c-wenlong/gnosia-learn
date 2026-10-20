@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { BlobIntegrityError, key as blobKey, type BlobStore } from "@self-learn/blob";
@@ -21,9 +22,11 @@ import { acceptJobIn, JobError, VIDEOS_DIR, VIDEO_SLUG } from "../commands/job";
 import type { CatalogDatabase } from "../db";
 import { fileFacts } from "../index/files";
 import { VIDEO_TOOLS, type VideoToolName } from "../index/video-tool";
+import { buildVideoPdf, readSegments } from "../pdf/build";
+import { PDF_CONTENT_TYPE, PDF_EXTENSION } from "../pdf/recipe";
 import { POSTER_CONTENT_TYPE } from "../poster/recipe";
-import { POSTER_PREFIX } from "./asset-upload";
-import { uploadBlob } from "./blob";
+import { PDF_PREFIX, POSTER_PREFIX } from "./asset-upload";
+import { OwnerCapError, uploadBlob } from "./blob";
 import { BlobOwnerError } from "./blob-owner";
 import { sha256 } from "./diagram-document";
 import { latestRevisions, lockEntity } from "./revisions";
@@ -94,6 +97,7 @@ export function videoAssetIds(slug: string) {
     chapters: `${VIDEO_PREFIX}${slug}.chapters.json`,
     captions: `${VIDEO_PREFIX}${slug}.vtt`,
     poster: `${POSTER_PREFIX}${video}`,
+    pdf: `${PDF_PREFIX}${video}`,
   };
 }
 
@@ -188,6 +192,8 @@ export interface PutVideoInput {
   author: string;
   authorKind: AuthorKind;
   ownerId: string;
+  /** Absolute path to ffmpeg, or null when there is none: the video's PDF is then skipped and said so. */
+  ffmpeg?: string | null;
 }
 
 export interface VideoAssetResult {
@@ -224,7 +230,7 @@ export interface PutVideoResult {
 
 interface Planned {
   id: string;
-  kind: "video" | "transcript" | "chapters" | "captions" | "poster";
+  kind: "video" | "transcript" | "chapters" | "captions" | "poster" | "pdf";
   path: string | null;
   file: string;
   ext: string;
@@ -233,6 +239,8 @@ interface Planned {
   bytes: number;
   title: string;
   links: Record<string, Record<string, unknown>[]>;
+  /** A derived kind's fingerprint of what it was made from; only the pdf sets it. */
+  inputsHash?: string;
 }
 
 /** States a job may land a video from: its Accept, and a retried Accept whose rows already landed. */
@@ -554,6 +562,54 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
     title: `${title} (poster)`,
     links: derived,
   });
+  // The PDF, the poster's sibling (2026-10-20): the candidate's own cut and
+  // transcript, one page per narration beat. The gate has no place to write
+  // it (the poster it hands over is a file the sandbox profile allowed), so
+  // the put makes it here, trusted and outside the sandbox, as the upload
+  // command does for a tool's renders. ffmpeg missing, a build that fails,
+  // or an owner's cap refusing it is a note rather than a refusal: the video
+  // is the deliverable, and `catalog doctor` lists the gap like any video's.
+  // It is NOT part of `planned`: optional rows can't decide whether the put
+  // lands, and `landed` compares retries against the recorded outputs, not
+  // today's ffmpeg.
+  let pdfDir: string | null = null;
+  let pdfPlanned: Planned | null = null;
+  if (input.ffmpeg === null || input.ffmpeg === undefined) {
+    notes.push("no PDF: ffmpeg was not found; the next `catalog asset upload`-style rebuild can still make one");
+  } else {
+    const segments = await readSegments(sidecars === null ? null : path.join(dir, names.transcript));
+    // The transcript's blob key, computed the way `uploadBlob` will store it,
+    // is what the PDF's inputs fingerprint names — the same name a later
+    // `catalog asset upload` rebuild-check sees on the landed row.
+    const transcriptKey = sidecars === null ? null : blobKey(ownerId, sidecars.transcript.sha256, "json");
+    const made = await buildVideoPdf(input.ffmpeg, path.join(dir, names.mp4), mp4.sha256, title, segments, transcriptKey);
+    if (!made.ok) {
+      notes.push(`no PDF: ${made.reason}`);
+    } else {
+      pdfDir = await mkdtemp(path.join(os.tmpdir(), "self-learn-video-pdf-"));
+      const file = path.join(pdfDir, `video${PDF_EXTENSION}`);
+      try {
+        await writeFile(file, made.body);
+      } catch (error) {
+        await rm(pdfDir, { recursive: true, force: true });
+        pdfDir = null;
+        throw error;
+      }
+      pdfPlanned = {
+        id: ids.pdf,
+        kind: "pdf",
+        path: null,
+        file,
+        ext: "pdf",
+        mime: PDF_CONTENT_TYPE,
+        sha256: sha256(made.body),
+        bytes: made.body.length,
+        title: `${title} (PDF)`,
+        links: derived,
+        inputsHash: made.inputs,
+      };
+    }
+  }
   const keyOf = (p: Planned) => blobKey(ownerId, p.sha256, p.ext);
   const mp4Key = keyOf(planned[0] as Planned);
 
@@ -575,16 +631,20 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
         ? []
         : (await reader.execute<{ job_id: string | null }>(sql`select job_id from content_revision where id = ${latest.id}`)).rows;
     const outputs = await reader
-      .select({ assetId: assetJob.assetId, contentHash: assetJob.contentHash })
+      .select({ assetId: assetJob.assetId, contentHash: assetJob.contentHash, bytes: assetJob.bytes })
       .from(assetJob)
       .where(eq(assetJob.jobId, input.jobId));
     const byAsset = new Map(outputs.map((o) => [o.assetId, o.contentHash] as const));
+    // `planned` holds the required rows only: the PDF is optional, so the
+    // recorded outputs are compared as `planned` plus at most its pdf — a
+    // retry that cannot rebuild the PDF (no ffmpeg, a failed probe) still
+    // answers with the one the landing recorded, and vice versa.
     const own =
       recorded[0]?.job_id === input.jobId &&
       now !== undefined &&
       now.sourceHash === hash &&
       now.mp4BlobKey === mp4Key &&
-      byAsset.size === planned.length &&
+      outputs.every((o) => o.assetId === ids.pdf || planned.some((p) => p.id === o.assetId)) &&
       planned.every((p) => byAsset.get(p.id) === p.sha256);
     if (!own || now === undefined) {
       throw new VideoError(
@@ -593,7 +653,16 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
           `rewritten under its name. A change is a new job (D52 of docs/STUDIO-VIDEOS.md).`,
       );
     }
-    const assetRevisions = await latestRevisions(reader, "asset", planned.map((p) => p.id));
+    const pdfHash = byAsset.get(ids.pdf);
+    const assetRevisions = await latestRevisions(
+      reader,
+      "asset",
+      pdfHash === undefined ? planned.map((p) => p.id) : [...planned.map((p) => p.id), ids.pdf],
+    );
+    const retried = ["already landed by this job: nothing was written"];
+    if (pdfHash === undefined && pdfPlanned !== null) {
+      retried.push("this retry made a PDF the landing predates; an accepted job does not grow, so a new put adds it");
+    }
     return {
       ok: true,
       slug,
@@ -608,16 +677,31 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
       changed: false,
       retry: true,
       jobState: "accepted",
-      assets: planned.map((p) => ({ id: p.id, kind: p.kind, key: keyOf(p), sha256: p.sha256, bytes: p.bytes, uploaded: false })),
+      assets: [
+        ...planned.map((p) => ({ id: p.id, kind: p.kind, key: keyOf(p), sha256: p.sha256, bytes: p.bytes, uploaded: false })),
+        ...(pdfHash === undefined
+          ? []
+          : [
+              {
+                id: ids.pdf,
+                kind: "pdf",
+                key: blobKey(ownerId, pdfHash, "pdf"),
+                sha256: pdfHash,
+                bytes: outputs.find((o) => o.assetId === ids.pdf)?.bytes ?? 0,
+                uploaded: false,
+              },
+            ]),
+      ],
       revisions: [
         { type: "video", id: slug, revision: latest?.id ?? 0, changed: false },
         ...planned.map((p) => ({ type: "asset", id: p.id, revision: assetRevisions.get(p.id)?.id ?? 0, changed: false })),
+        ...(pdfHash === undefined
+          ? []
+          : [{ type: "asset", id: ids.pdf, revision: assetRevisions.get(ids.pdf)?.id ?? 0, changed: false }]),
       ],
-      notes: ["already landed by this job: nothing was written"],
+      notes: retried,
     };
   };
-  if (job.state === "accepted") return landed(db);
-
   // The bytes first, each confirmed against the hash the gate recorded (the
   // store checks the stream against it). A failure from here to the commit
   // leaves blobs no row points at. Nothing deletes those: `catalog blob audit`
@@ -626,6 +710,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
   // them, since the keys are the hashes.
   const assets: VideoAssetResult[] = [];
   try {
+    if (job.state === "accepted") return await landed(db);
     for (const p of planned) {
       const done = await uploadBlob(db, store, {
         ownerId,
@@ -637,16 +722,45 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
       });
       assets.push({ id: p.id, kind: p.kind, key: done.key, sha256: done.sha256, bytes: done.bytes, uploaded: done.uploaded });
     }
+    // The PDF is optional: its own cap refusal is a note and a gap `catalog
+    // doctor` lists, never a reason the whole put fails — a landing must not
+    // depend on bytes a companion needs.
+    if (pdfPlanned !== null) {
+      const p = pdfPlanned;
+      try {
+        const done = await uploadBlob(db, store, {
+          ownerId,
+          file: p.file,
+          mime: p.mime,
+          ext: p.ext,
+          sha256: p.sha256,
+          bytes: p.bytes,
+        });
+        assets.push({ id: p.id, kind: p.kind, key: done.key, sha256: done.sha256, bytes: done.bytes, uploaded: done.uploaded });
+      } catch (error) {
+        if (!(error instanceof OwnerCapError)) throw error;
+        notes.push(`no PDF: ${error.message}`);
+        pdfPlanned = null;
+      }
+    }
   } catch (error) {
     if (error instanceof BlobIntegrityError || error instanceof BlobOwnerError) throw new VideoError("blob", error.message);
     throw error;
+  } finally {
+    if (pdfDir !== null) await rm(pdfDir, { recursive: true, force: true });
   }
 
   const common = { owner: ownerId, author: input.author, authorKind: input.authorKind, reason: input.reason, jobId: input.jobId };
   // A silent cut has no sidecars: rows a narrated version of the same video
   // left are deleted with this write, so the library never plays a new cut
-  // with an old transcript.
-  const stale = sidecars === null ? [ids.transcript, ids.chapters, ids.captions] : [];
+  // with an old transcript. The PDF's rule is the same one: a put that cannot
+  // land a new one leaves the earlier cut's document under this video's name,
+  // so the row goes with the write too — a missing PDF is a listed gap, a
+  // wrong one is a lie.
+  const stale = [...(sidecars === null ? [ids.transcript, ids.chapters, ids.captions] : []), ...(pdfPlanned === null ? [ids.pdf] : [])];
+  // The rows this write lands: the required set, plus the PDF when one was
+  // made and stored. `planned` alone stays the retry comparison's `own`.
+  const allPlanned = pdfPlanned === null ? planned : [...planned, pdfPlanned];
 
   let outcome: { retry: PutVideoResult } | { written: WriteContentResult[] };
   try {
@@ -655,7 +769,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
       // then id): the stale sidecars `deleteContent` removes after
       // `writeContents` would otherwise be locked out of order. Everything
       // below is read under the locks.
-      for (const id of [...new Set([...planned.map((p) => p.id), ...stale])].sort()) await lockEntity(tx, "asset", id);
+      for (const id of [...new Set([...allPlanned.map((p) => p.id), ...stale])].sort()) await lockEntity(tx, "asset", id);
       await lockEntity(tx, "video", slug);
       // A put of the same job that committed while this one uploaded holds
       // these locks until then, so the job is read again now: accepted means
@@ -663,7 +777,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
       const [current] = await tx.select({ state: jobTable.state }).from(jobTable).where(eq(jobTable.id, input.jobId)).limit(1);
       if (current?.state === "accepted") return { retry: await landed(tx) };
       const latestVideo = (await latestRevisions(tx, "video", [slug])).get(slug);
-      const latestAssets = await latestRevisions(tx, "asset", [...planned.map((p) => p.id), ...stale]);
+      const latestAssets = await latestRevisions(tx, "asset", [...allPlanned.map((p) => p.id), ...stale]);
       const base = input.base === undefined ? (latestVideo?.id ?? null) : input.base;
       const inputs: WriteContentInput[] = [
         {
@@ -685,7 +799,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
             },
           },
         },
-        ...planned.map(
+        ...allPlanned.map(
           (p): WriteContentInput => ({
             ...common,
             type: "asset",
@@ -700,6 +814,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
                 contentHash: p.sha256,
                 bytes: p.bytes,
                 title: p.title,
+                inputsHash: p.inputsHash ?? null,
                 sourceRepo: "self-learn",
                 blobKey: keyOf(p),
                 resourceType: null,
@@ -722,9 +837,15 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
           authorKind: input.authorKind,
           reason: input.reason,
         });
-        if (gone !== null) notes.push(`${id} deleted: this cut is silent, and the transcript was the earlier one's`);
+        if (gone !== null) {
+          notes.push(
+            id === ids.pdf
+              ? `${id} deleted: no new PDF landed, so the earlier cut's document is not served for this video`
+              : `${id} deleted: this cut is silent, and the transcript was the earlier one's`,
+          );
+        }
       }
-      for (const p of planned) {
+      for (const p of allPlanned) {
         await tx
           .insert(assetJob)
           .values({ assetId: p.id, jobId: input.jobId, contentHash: p.sha256, bytes: p.bytes, writtenAt: new Date(), ownerId })
