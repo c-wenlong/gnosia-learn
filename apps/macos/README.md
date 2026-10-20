@@ -1,6 +1,6 @@
 # Gnosia
 
-The native macOS reader for the self-learn catalog: the library surface of
+The native macOS reader for the gnosia catalog: the library surface of
 `apps/web` reimplemented as a real SwiftUI app, not a webview. A work in
 progress — v1 is the video library.
 
@@ -25,24 +25,23 @@ by the snapshot script:
 # from the repo root
 npm install                        # once, puts better-sqlite3 + pg in place
 node apps/macos/scripts/catalog-snapshot.mjs
-# or: npm run snapshot --workspace @self-learn/gnosia
+# or: npm run snapshot --workspace @gnosia/macos
 ```
 
 `catalog-snapshot.mjs` reads the same Postgres every catalog command reads —
 `DATABASE_URL`, then `services/catalog/.env`, then
-`postgres://localhost:5432/self_learn` — and mirrors the parts the app draws
-into `$SELF_LEARN_HOME/catalog.db` (`~/.self-learn/catalog.db` by default).
+`postgres://localhost:5432/gnosia` — and mirrors the parts the app draws
+into `<data home>/catalog.db`.
 Re-run it whenever the catalog moves; the file is disposable.
 
 Where the app looks for the file, in order:
 
 1. `GNOSIA_CATALOG` (environment)
 2. The Settings pane's "Catalog SQLite file" field (⌘,)
-3. `$SELF_LEARN_HOME/catalog.db`
-4. `~/.self-learn/catalog.db`
+3. `$GNOSIA_HOME/catalog.db` (then `$SELF_LEARN_HOME`, then `~/.gnosia`)
 
 Blobs are found the same way the blob store lays them out:
-`$GNOSIA_BLOBS` or `$SELF_LEARN_HOME/blobs` or `~/.self-learn/blobs`, plus the
+`$GNOSIA_BLOBS` or `<data home>/blobs`, plus the
 asset's `blob_key` (`local/<sha256>.<ext>`) as the path under it.
 
 ### The mirrored schema

@@ -17,8 +17,8 @@ struct SettingsView: View {
         Form {
             TextField("Catalog SQLite file:", text: $catalogPath)
                 .textFieldStyle(.roundedBorder)
-            Text("Leave empty for the default: $SELF_LEARN_HOME/catalog.db, " +
-                 "or ~/.self-learn/catalog.db. GNOSIA_CATALOG overrides both.")
+            Text("Leave empty for the default: <data home>/catalog.db — " +
+                 "$GNOSIA_HOME, then $SELF_LEARN_HOME, then ~/.gnosia. GNOSIA_CATALOG overrides it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let takenAt = store.meta["taken_at"].flatMap(Double.init) {

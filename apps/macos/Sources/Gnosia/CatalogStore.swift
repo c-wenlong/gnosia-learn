@@ -180,26 +180,49 @@ struct CatalogTopic: Identifiable, Hashable {
 }
 
 /// The derived pieces a video carries, resolved at load: the poster jpg, the
-/// pdf document, and which sidecars exist, all from asset_derivation.
+/// pdf document, and the sidecars, all from asset_derivation.
 struct VideoCompanions: Hashable {
     var posterKey: String?
     var pdfID: String?
     var pdfKey: String?
-    var hasTranscript = false
-    var hasChapters = false
-    var hasCaptions = false
+    var transcriptKey: String?
+    var chaptersKey: String?
+    var captionsKey: String?
+
+    var hasTranscript: Bool { transcriptKey != nil }
+    var hasChapters: Bool { chaptersKey != nil }
+    var hasCaptions: Bool { captionsKey != nil }
+}
+
+/// One entry of a `<name>.chapters.json` sidecar: a section of the video with
+/// its start, as the catalog's sidecar writer lays it out.
+struct VideoChapter: Hashable {
+    let scene: String?
+    let title: String
+    let start: Double
+    let end: Double?
+}
+
+/// One segment of a `<name>.transcript.json` sidecar: a spoken line with the
+/// span it is said over.
+struct TranscriptSegment: Hashable {
+    let scene: String?
+    let start: Double
+    let end: Double?
+    let text: String
 }
 
 /// Where the two paths the app needs come from, in order.
 ///
 /// The catalog: GNOSIA_CATALOG, then the Settings pane's field (UserDefaults
-/// `catalogPath`), then $SELF_LEARN_HOME/catalog.db, then
-/// ~/.self-learn/catalog.db.
+/// `catalogPath`), then <data home>/catalog.db.
 ///
-/// The blobs: GNOSIA_BLOBS, then $SELF_LEARN_HOME/blobs, then
-/// ~/.self-learn/blobs — the same default @self-learn/blob resolves
-/// (defaultBlobRoot in packages/blob/src/fs.ts), so a blob_key
-/// `local/<sha256>.<ext>` joins the root straight into a path.
+/// The blobs: GNOSIA_BLOBS, then <data home>/blobs — the same layout
+/// @gnosia/blob resolves (defaultBlobRoot in packages/blob/src/fs.ts), so a
+/// blob_key `local/<sha256>.<ext>` joins the root straight into a path.
+///
+/// The data home: GNOSIA_HOME, then SELF_LEARN_HOME for checkouts and envs
+/// from before the rename, then ~/.gnosia.
 struct CatalogLocation {
     let catalogPath: String
     let blobRoot: URL
@@ -208,7 +231,7 @@ struct CatalogLocation {
         env: [String: String] = ProcessInfo.processInfo.environment,
         defaults: UserDefaults = .standard
     ) -> CatalogLocation {
-        let home = selfLearnHome(env: env)
+        let home = dataHome(env: env)
         let catalog = firstNonEmpty(env["GNOSIA_CATALOG"])
             ?? firstNonEmpty(defaults.string(forKey: "catalogPath"))
             ?? home.appendingPathComponent("catalog.db").path
@@ -220,12 +243,14 @@ struct CatalogLocation {
         )
     }
 
-    private static func selfLearnHome(env: [String: String]) -> URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        guard let raw = env["SELF_LEARN_HOME"], !raw.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return home.appendingPathComponent(".self-learn")
+    private static func dataHome(env: [String: String]) -> URL {
+        if let raw = env["GNOSIA_HOME"], !raw.trimmingCharacters(in: .whitespaces).isEmpty {
+            return URL(fileURLWithPath: expandHome(raw.trimmingCharacters(in: .whitespaces)))
         }
-        return URL(fileURLWithPath: expandHome(raw.trimmingCharacters(in: .whitespaces)))
+        if let raw = env["SELF_LEARN_HOME"], !raw.trimmingCharacters(in: .whitespaces).isEmpty {
+            return URL(fileURLWithPath: expandHome(raw.trimmingCharacters(in: .whitespaces)))
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gnosia")
     }
 
     private static func firstNonEmpty(_ value: String?) -> String? {
@@ -333,7 +358,7 @@ final class CatalogStore {
                 title: assetRows.text(2),
                 blobKey: assetRows.text(3),
                 bytes: assetRows.int64(4),
-                sourceRepo: assetRows.text(5) ?? "self-learn",
+                sourceRepo: assetRows.text(5) ?? "gnosia",
                 generatedBy: assetRows.text(8) ?? generatedBy(id),
                 inputsHash: assetRows.text(6),
                 createdAt: assetRows.double(7).map { Date(timeIntervalSince1970: $0) }
@@ -382,9 +407,9 @@ final class CatalogStore {
             case "pdf":
                 box.pdfID = derivationRows.text(2)
                 box.pdfKey = derivationRows.text(3)
-            case "transcript": box.hasTranscript = true
-            case "chapters": box.hasChapters = true
-            case "captions": box.hasCaptions = true
+            case "transcript": box.transcriptKey = derivationRows.text(3)
+            case "chapters": box.chaptersKey = derivationRows.text(3)
+            case "captions": box.captionsKey = derivationRows.text(3)
             default: break
             }
             companionsByVideo[videoID] = box
@@ -401,5 +426,48 @@ final class CatalogStore {
         assets = ordered
         companions = companionsByVideo
         self.meta = meta
+    }
+
+    // MARK: - Sidecars
+
+    /// The chapters a video's `.chapters.json` blob holds: `[{scene, title,
+    /// start, end}]`, the same file the web player lays on its scrub bar. An
+    /// unreadable blob is an empty list, not an error — the video still plays.
+    func chapters(for videoID: String) -> [VideoChapter] {
+        guard let key = companions[videoID]?.chaptersKey else { return [] }
+        guard
+            let data = try? Data(contentsOf: blobURL(for: key)),
+            let raw = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { return [] }
+        return raw.compactMap { entry in
+            guard let title = entry["title"] as? String, let start = entry["start"] as? Double else { return nil }
+            return VideoChapter(
+                scene: entry["scene"] as? String,
+                title: title,
+                start: start,
+                end: entry["end"] as? Double
+            )
+        }
+    }
+
+    /// The spoken lines a video's `.transcript.json` blob holds under
+    /// `segments`: `[{scene, start, end, text}]`, the list the web detail page
+    /// shows beside its player.
+    func transcript(for videoID: String) -> [TranscriptSegment] {
+        guard let key = companions[videoID]?.transcriptKey else { return [] }
+        guard
+            let data = try? Data(contentsOf: blobURL(for: key)),
+            let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let segments = raw["segments"] as? [[String: Any]]
+        else { return [] }
+        return segments.compactMap { entry in
+            guard let text = entry["text"] as? String, let start = entry["start"] as? Double else { return nil }
+            return TranscriptSegment(
+                scene: entry["scene"] as? String,
+                start: start,
+                end: entry["end"] as? Double,
+                text: text
+            )
+        }
     }
 }

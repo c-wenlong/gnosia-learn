@@ -17,8 +17,11 @@ import SwiftUI
 /// AVPlayerView under SwiftUI: a file URL in, the standard transport out.
 /// The player lives on the view, so re-selection of the same asset keeps the
 /// position and switching assets calls updateNSView with a new URL.
+/// `seekTo` is a one-shot channel: set it to a time in seconds and the player
+/// goes there, the way the web player's transcript and chapter taps seek.
 struct PlayerView: NSViewRepresentable {
     let url: URL
+    @Binding var seekTo: Double?
 
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
@@ -32,6 +35,10 @@ struct PlayerView: NSViewRepresentable {
         let current = (view.player?.currentItem?.asset as? AVURLAsset)?.url
         if current != url {
             view.player = AVPlayer(url: url)
+        }
+        if let seconds = seekTo {
+            view.player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
+            DispatchQueue.main.async { self.seekTo = nil }
         }
     }
 

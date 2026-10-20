@@ -22,6 +22,9 @@ struct VideoDetailView: View {
     let asset: CatalogAsset
 
     @State private var pane: Pane = .video
+    @State private var seekTo: Double?
+    @State private var chapters: [VideoChapter] = []
+    @State private var transcript: [TranscriptSegment] = []
 
     private var companions: VideoCompanions { store.companions(for: asset.id) }
 
@@ -44,7 +47,7 @@ struct VideoDetailView: View {
 
                 if pane == .video {
                     if exists(videoFile), let url = videoFile {
-                        PlayerView(url: url)
+                        PlayerView(url: url, seekTo: $seekTo)
                             .aspectRatio(16.0 / 9.0, contentMode: .fit)
                             .frame(maxWidth: .infinity)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -63,11 +66,74 @@ struct VideoDetailView: View {
                 }
 
                 details
+
+                if !chapters.isEmpty { chapterList }
+                if !transcript.isEmpty { transcriptList }
             }
             .padding(20)
         }
         .navigationTitle(asset.displayTitle)
         .onChange(of: asset.id) { pane = .video }
+        .task(id: asset.id) {
+            chapters = store.chapters(for: asset.id)
+            transcript = store.transcript(for: asset.id)
+        }
+    }
+
+    /// The chapter list a `.chapters.json` sidecar gives: the same taps the
+    /// web player's scrub-bar marks answer to.
+    private var chapterList: some View {
+        GroupBox("Chapters") {
+            LazyVStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(chapters.enumerated()), id: \.offset) { _, chapter in
+                    Button { seekTo = chapter.start } label: {
+                        HStack(spacing: 10) {
+                            Text(Self.timestamp(chapter.start))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 52, alignment: .trailing)
+                            Text(chapter.title).font(.callout)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+        }
+    }
+
+    /// The transcript a `.transcript.json` sidecar gives, line by line with
+    /// the moment it is said — tapping a line seeks, as the web page's does.
+    private var transcriptList: some View {
+        GroupBox("Transcript") {
+            LazyVStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(transcript.enumerated()), id: \.offset) { _, segment in
+                    Button { seekTo = segment.start } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(Self.timestamp(segment.start))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 52, alignment: .trailing)
+                            Text(segment.text).font(.callout)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+        }
+    }
+
+    /// mm:ss, or h:mm:ss past the hour — the way the sidecars count.
+    private static func timestamp(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded(.down))
+        let (minutes, secs) = (total / 60, total % 60)
+        if minutes >= 60 {
+            return String(format: "%d:%02d:%02d", minutes / 60, minutes % 60, secs)
+        }
+        return String(format: "%d:%02d", minutes, secs)
     }
 
     private var header: some View {
