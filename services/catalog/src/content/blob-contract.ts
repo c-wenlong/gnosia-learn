@@ -46,13 +46,13 @@ export async function blobContractInForce(db: CatalogDatabase): Promise<boolean>
   // `pg_constraint` was the catalog to ask; on SQLite a named CHECK is text
   // in the table's DDL in `sqlite_master`, so the check is "its name is in
   // the CREATE TABLE".
-  const { rows } = await db.execute<{ present: boolean }>(sql`
+  const { rows } = await db.execute<{ present: number }>(sql`
     select exists (
       select 1 from sqlite_master
       where type = 'table' and name = 'asset' and sql like '%asset_stored_blob_check%'
     ) as present
   `);
-  return rows[0]?.present == 1 || rows[0]?.present === true;
+  return rows[0]?.present === 1;
 }
 
 /** One sentence for a held migration, or null when nothing stands in its way. */

@@ -50,13 +50,38 @@ export async function probe(): Promise<Reachability> {
  * drizzle-sqlite/0000).
  */
 export async function clearTables(db: CatalogDatabase, tables: readonly string[]): Promise<void> {
+  // `ALTER TABLE … DISABLE TRIGGER` has no SQLite spelling: the append-only
+  // guards on the listed tables are dropped for the delete and put back from
+  // their stored DDL.
+  // `truncate … cascade` also emptied the rows that referenced these tables:
+  // children first, every table whose foreign keys can reach one of them.
+  const all = db.all<{ name: string }>(sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%'`);
+  const referencedBy = new Map<string, string[]>();
+  for (const { name } of all) {
+    for (const fk of db.all<{ table: string }>(sql.raw(`pragma foreign_key_list("${name}")`))) {
+      referencedBy.set(fk.table, [...(referencedBy.get(fk.table) ?? []), name]);
+    }
+  }
+  const clearing = new Set(tables);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [parent, children] of referencedBy) {
+      if (clearing.has(parent)) for (const child of children) if (!clearing.has(child)) (clearing.add(child), (grew = true));
+    }
+  }
+  const order = [...clearing];
+  const guards = db.all<{ name: string; sql: string }>(sql`
+    select name, sql from sqlite_master
+    where type = 'trigger' and (name like '%!_no!_update' escape '!' or name like '%!_no!_delete' escape '!')
+      and tbl_name in ${order}`);
+  const drops = guards.map((trigger) => `drop trigger "${trigger.name}"`).join("; ");
+  const puts = guards.map((trigger) => trigger.sql).join("; ");
   await db.execute(
-    "drop trigger if exists event_no_update; drop trigger if exists event_no_delete; " +
-      tables.map((table) => `delete from ${table}`).join("; ") +
-      "; create trigger event_no_update before update on event for each row begin " +
-      "select raise(abort, '23001: event is append-only: UPDATE is not allowed'); end; " +
-      "create trigger event_no_delete before delete on event for each row begin " +
-      "select raise(abort, '23001: event is append-only: DELETE is not allowed'); end;",
+    `pragma foreign_keys=off; ` +
+      (drops === "" ? "" : `${drops}; `) +
+      order.map((table) => `delete from "${table}"`).join("; ") +
+      (puts === "" ? "" : `; ${puts}`) +
+      `; pragma foreign_keys=on;`,
   );
 }
 
@@ -80,11 +105,23 @@ export async function withoutConstraint(
       sql`select sql from sqlite_master where tbl_name = ${table} and type in ('index', 'trigger') and sql is not null`,
     )
     .map((row) => row.sql);
-  const stripped = ddl.sql.replace(new RegExp(`,\s*CONSTRAINT "${constraint}" CHECK\([^;]*?\)(?=\s*[,)])`), "");
-  if (stripped === ddl.sql) throw new Error(`${table} has no constraint ${constraint}`);
+  const without = ddl.sql.replace(
+    new RegExp(String.raw`,\s*CONSTRAINT "${constraint}" CHECK\([^;]*?\)(?=\s*[,)])`),
+    "",
+  );
+  if (without === ddl.sql) throw new Error(`${table} has no constraint ${constraint}`);
+  // The rebuild needs the new table beside the old one first: retarget its
+  // `create table "x"` at `x_kept`.
+  const stripped = without.replace(/\bCREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"]?(?:main\.)?[`"\w]+/i, `CREATE TABLE "${table}_kept"`);
+  if (!stripped.includes(`"${table}_kept"`)) throw new Error(`could not retarget ${table}'s create table`);
+  // Not `rename to asset_kept` then rename back: a rename rewrites every
+  // other table's `references asset` to the new name, and the rebuild would
+  // leave the catalog pointing at a table it then drops. Build the kept one
+  // beside it, copy, drop the original, and rename the kept one — the other
+  // tables' `references asset` resolve to it by name again.
   await db.execute(
-    `pragma foreign_keys=off; alter table ${table} rename to ${table}_kept; ${stripped}; ` +
-      `insert into ${table} select * from ${table}_kept; drop table ${table}_kept; ` +
+    `pragma foreign_keys=off; ${stripped}; insert into "${table}_kept" select * from "${table}"; ` +
+      `drop table "${table}"; alter table "${table}_kept" rename to "${table}"; ` +
       extra.join("; ") +
       "; pragma foreign_keys=on;",
   );
@@ -255,16 +292,30 @@ const SQLITE_TO_SQLSTATE: Record<string, string> = {
 };
 
 export function sqlstate(error: unknown): string | undefined {
+  // Two passes: the guard's own SQLSTATE is carried in its raise() message
+  // anywhere down the cause chain, and a drizzle wrapper's `code` is
+  // SQLITE_ERROR for every one of them — so a code is only the answer when
+  // no level named one.
   let current: unknown = error;
   for (let depth = 0; depth < 5 && typeof current === "object" && current !== null; depth += 1) {
     const message = (current as { message?: unknown }).message;
-    // The trigger-carried SQLSTATE, kept at the head of the raise() message.
     if (typeof message === "string") {
-      const embedded = /^(?<code>[0-9A-Z]{5}):/.exec(message)?.groups?.["code"];
+      const embedded = /^([0-9A-Z]{5}):/.exec(message)?.[1];
       if (embedded !== undefined) return embedded;
     }
+    current = (current as { cause?: unknown }).cause;
+  }
+  current = error;
+  for (let depth = 0; depth < 5 && typeof current === "object" && current !== null; depth += 1) {
     const code = (current as { code?: unknown }).code;
-    if (typeof code === "string") return SQLITE_TO_SQLSTATE[code] ?? code;
+    if (typeof code === "string") {
+      // An extended code can lie: a plain `delete` whose RESTRICT foreign key
+      // refuses answers `SQLITE_CONSTRAINT_TRIGGER` ("trigger" because the FK
+      // action itself is one), and the message is the honest part.
+      const message = (current as { message?: unknown }).message;
+      if (typeof message === "string" && /foreign key constraint failed/i.test(message)) return "23503";
+      return SQLITE_TO_SQLSTATE[code] ?? code;
+    }
     current = (current as { cause?: unknown }).cause;
   }
   return undefined;

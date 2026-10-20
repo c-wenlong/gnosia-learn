@@ -151,8 +151,8 @@ export async function auditBlobs(
   // A studio video's cut is named by its row as well as its asset (0015), so
   // a row that holds a key is enough for the key to be in use. Asked only
   // where the table exists: the audit runs on a database behind the journal.
-  const { rows: hasVideo } = await db.execute<{ present: boolean }>(sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'video') as present`);
-  if (hasVideo[0]?.present == 1 || hasVideo[0]?.present === true) {
+  const { rows: hasVideo } = await db.execute<{ present: number }>(sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'video') as present`);
+  if (hasVideo[0]?.present === 1) {
     for (const { key } of await db.select({ key: video.mp4BlobKey }).from(video).where(isNotNull(video.mp4BlobKey))) {
       if (key !== null) referenced.add(key);
     }

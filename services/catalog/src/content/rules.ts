@@ -71,7 +71,8 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
       ["curriculum_item", "curriculum_item_module_has_item"],
     ],
     violators: sql`
-      select c.id, coalesce(c.parent_id, '') as detail
+      select c.id, coalesce(c.parent_id, '') as detail,
+        'module "' || c.id || '" has no curriculum items' as message
       from collection c
       where c.kind = 'module' and c.archived_at is null
         and not exists (
@@ -89,7 +90,8 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
       ["concept_curriculum_item", "concept_curriculum_item_item_has_concept"],
     ],
     violators: sql`
-      select i.id, coalesce(m.parent_id, m.id) as detail
+      select i.id, coalesce(m.parent_id, m.id) as detail,
+        '"' || i.id || '" names no concept' as message
       from curriculum_item i
       join collection m on m.id = i.collection_id
       where i.archived_at is null
@@ -109,7 +111,8 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
       ["collection_item", "collection_item_concept_topic"],
     ],
     violators: sql`
-      select l.curriculum_item_id as id, l.concept_slug as detail
+      select l.curriculum_item_id as id, l.concept_slug as detail,
+        'concept "' || l.concept_slug || '" is not filed under its module''s topic' as message
       from concept_curriculum_item l
       join curriculum_item i on i.id = l.curriculum_item_id
       join concept c on c.slug = l.concept_slug
@@ -160,6 +163,7 @@ export function outOfOrder(kind: "requires" | "assumes"): SQL {
       ) where rn = 1
     )
     select a.course as id, a.concept || ' before ' || b.concept as detail,
+           '"' || a.concept || '" is taught before "' || b.concept || '", which it requires' as message,
            a.concept as concept, b.concept as prerequisite
     from concept_prerequisite e
     join taught a on a.concept = e.concept_slug

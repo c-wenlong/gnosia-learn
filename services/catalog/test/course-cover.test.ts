@@ -16,7 +16,7 @@ import { renderType } from "../src/content/export";
 import { parity } from "../src/content/parity";
 import { readSnapshots } from "../src/content/snapshot";
 import { runIndex } from "../src/index/run";
-import { migratedScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlMessage, SQLSTATE, sqlstate } from "./scratch-database";
 import { SEED } from "./seed";
 import { storedBlob } from "./stored-blob";
 
@@ -118,14 +118,21 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
         error = caught;
       }
       expect(sqlstate(error)).toBe(code);
-      expect(String((error as { cause?: { constraint?: unknown } })?.cause?.constraint)).toBe(constraint);
+      // SQLite names a failed CHECK in its message but reports a foreign key
+      // nameless ("FOREIGN KEY constraint failed"), so the name assertion
+      // only applies where the engine kept one.
+      if (code === SQLSTATE.foreignKeyViolation) {
+        expect(sqlMessage(error)).toContain("FOREIGN KEY constraint failed");
+      } else {
+        expect(sqlMessage(error)).toContain(constraint);
+      }
     };
     const credit = sql`json_object('coverCredit', json_object('photographer', 'p', 'source', 'https://x.test', 'licence', 'l'))`;
 
     it("lets only a course carry a cover", async () => {
       const key = await storedBlob(scratch.db, "a module's photo", "webp");
       await refused(
-        sql`update collection set cover_blob_key = ${key}, metadata = metadata || ${credit} where id = 'cp4284-m1'`,
+        sql`update collection set cover_blob_key = ${key}, metadata = json_patch(metadata, ${credit}) where id = 'cp4284-m1'`,
         SQLSTATE.checkViolation,
         "collection_cover_course_check",
       );
@@ -135,7 +142,7 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
       const key = await storedBlob(scratch.db, "a photo with no credit", "webp");
       await refused(sql`update collection set cover_blob_key = ${key} where id = 'cp4284'`, SQLSTATE.checkViolation, "collection_cover_credit_check");
       await refused(
-        sql`update collection set metadata = metadata || ${credit} where id = 'cp4284'`,
+        sql`update collection set metadata = json_patch(metadata, ${credit}) where id = 'cp4284'`,
         SQLSTATE.checkViolation,
         "collection_cover_credit_check",
       );
@@ -143,15 +150,15 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
 
     it("names only a stored object, and keeps that object while it does", async () => {
       await refused(
-        sql`update collection set cover_blob_key = ${`local/${"0".repeat(64)}.webp`}, metadata = metadata || ${credit} where id = 'cp4284'`,
+        sql`update collection set cover_blob_key = ${`local/${"0".repeat(64)}.webp`}, metadata = json_patch(metadata, ${credit}) where id = 'cp4284'`,
         SQLSTATE.foreignKeyViolation,
         "collection_cover_blob_key_blob_object_key_fk",
       );
       const key = await storedBlob(scratch.db, "a photo held on to", "webp");
-      await scratch.db.execute(sql`update collection set cover_blob_key = ${key}, metadata = metadata || ${credit} where id = 'cp4284'`);
+      await scratch.db.execute(sql`update collection set cover_blob_key = ${key}, metadata = json_patch(metadata, ${credit}) where id = 'cp4284'`);
       await refused(sql`delete from blob_object where key = ${key}`, SQLSTATE.foreignKeyViolation, "collection_cover_blob_key_blob_object_key_fk");
       await scratch.db.execute(
-        sql`update collection set cover_blob_key = null, metadata = metadata - 'coverCredit' where id = 'cp4284'`,
+        sql`update collection set cover_blob_key = null, metadata = json_remove(metadata, '$.coverCredit') where id = 'cp4284'`,
       );
     });
 
@@ -486,7 +493,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
       before = (await revisions()) ?? 0;
       await second.db.execute(
         sql`update collection set cover_blob_key = ${moved},
-              metadata = json_set(metadata, '{coverCredit}', ${JSON.stringify(credit)})
+              metadata = json_set(metadata, '$.coverCredit', json(${JSON.stringify(credit)}))
             where id = 'cp4284'`,
       );
       landed = await rowOf();

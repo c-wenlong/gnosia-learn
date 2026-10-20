@@ -98,11 +98,11 @@ export function cacheKey(db: CatalogDatabase): object {
 export async function ownersExist(db: CatalogDatabase): Promise<boolean> {
   const key = cacheKey(db);
   if (hasOwners.has(key)) return true;
-  const { rows } = await db.execute<{ present: boolean }>(sql`
+  const { rows } = await db.execute<{ present: number }>(sql`
     select exists (
       select 1 from pragma_table_info('asset') where name = 'owner_id'
     ) as present`);
-  const present = rows[0]?.present == 1 || rows[0]?.present === true;
+  const present = rows[0]?.present === 1;
   if (present) hasOwners.set(key, true);
   return present;
 }

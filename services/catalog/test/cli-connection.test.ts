@@ -33,7 +33,10 @@ interface Ran {
 function catalog(url: string, ...args: string[]): Promise<Ran> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["--import", "tsx", ENTRY, ...args], {
-      env: { ...process.env, DATABASE_URL: url },
+      // A short busy timeout: the suite itself sets CATALOG_DB_TIMEOUT_MS
+      // high so lock holders have room, and a child probing a locked file
+      // should give up fast.
+      env: { ...process.env, DATABASE_URL: url, CATALOG_DB_TIMEOUT_MS: "500" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";

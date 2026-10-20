@@ -18,7 +18,7 @@ import { connect, type Connection } from "../src/db";
 import type { TopicsReport } from "../src/index/manimkc";
 import { applyMigrations } from "../src/migrations";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch, withoutConstraint } from "./scratch-database";
+import { clearTables, createScratchDatabase, probe, type Scratch, withoutConstraint } from "./scratch-database";
 
 /**
  * The blob store against a second writer (docs/CONTENT-MIGRATION.md, phase 1
@@ -126,7 +126,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
   });
 
   beforeEach(async () => {
-    await a.db.execute(sql`delete from asset; delete from blob_object; delete from content_revision;`);
+    await clearTables(a.db, ["asset", "blob_object", "content_revision"]);
     root = await mkdtemp(path.join(base, "blobs-"));
     store = fsStore(root);
   });
@@ -184,7 +184,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       const put = await uploadBlob(b.db, shared, { ownerId: "local", file, mime: "application/octet-stream", ext: "bin" });
       expect(await readOwner(shared.root)).toEqual({
         database: b.url,
-        port: expect.stringMatching(/^\d+$/),
+        port: "", // a file's path is its whole identity; the port field stays only for the marker's shape
       });
 
       // A cannot write there: its objects would be orphans to B's audit.

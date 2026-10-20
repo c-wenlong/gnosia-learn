@@ -542,7 +542,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
       // when nobody needs it.
       if (
         sqlstate(error) === "23505" &&
-        constraintName(error) === "job_idempotency_key_key"
+        (constraintName(error) === "job_idempotency_key_key" || constraintName(error) === "job.idempotency_key")
       ) {
         const winner = await byIdempotencyKey(db, idempotencyKey);
         if (theirs(winner)) throw keyTaken();
@@ -776,7 +776,10 @@ async function explainEnqueue(
 ): Promise<Error> {
   const code = sqlstate(error);
   const constraint = constraintName(error);
-  if (code === "23505" && constraint === "job_active_target_key") {
+  // SQLite names the column (`job.target_path`), not the index, for a UNIQUE
+  // violation; the partial `job_active_target_key` index is the only unique
+  // constraint on that column, so either spelling means the same refusal.
+  if (code === "23505" && (constraint === "job_active_target_key" || constraint === "job.target_path")) {
     const holder = await db
       .select({ id: jobTable.id, state: jobTable.state, ownerId: jobTable.ownerId })
       .from(jobTable)
@@ -797,7 +800,7 @@ async function explainEnqueue(
         `first, because this brief would be written against a file it has not landed yet.`,
     );
   }
-  if (code === "23505" && constraint === "job_idempotency_key_key") {
+  if (code === "23505" && (constraint === "job_idempotency_key_key" || constraint === "job.idempotency_key")) {
     // Only reachable when the winning row has vanished between the failed
     // insert and this lookup, which takes a concurrent delete.
     return new JobError(
@@ -815,6 +818,23 @@ async function explainEnqueue(
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_parent_job_id_job_id_fk") {
     return new JobError(`no job "${row.parentJobId}" to revise.`);
+  }
+  if (code === SQLSTATE.foreignKeyViolation && constraint === undefined) {
+    // SQLite reports a bare "FOREIGN KEY constraint failed" with no name, so
+    // find the missing referent by probing the row's own keys.
+    const missing = async (found: Promise<unknown[]>) => (await found).length === 0;
+    if (await missing(db.select({ slug: topicTable.slug }).from(topicTable).where(eq(topicTable.slug, row.topicSlug)).limit(1))) {
+      return noTopic(row.topicSlug);
+    }
+    if (row.sessionId != null && (await missing(db.select({ id: sessionTable.id }).from(sessionTable).where(eq(sessionTable.id, row.sessionId)).limit(1)))) {
+      return new JobError(`no session "${row.sessionId}". Start one before pointing a job at it.`);
+    }
+    if (row.draftId && (await missing(db.select({ id: draftTable.id }).from(draftTable).where(eq(draftTable.id, row.draftId)).limit(1)))) {
+      return noDraft(row.draftId);
+    }
+    if (row.parentJobId && (await missing(db.select({ id: jobTable.id }).from(jobTable).where(eq(jobTable.id, row.parentJobId)).limit(1)))) {
+      return new JobError(`no job "${row.parentJobId}" to revise.`);
+    }
   }
   return error as Error;
 }

@@ -289,10 +289,10 @@ async function checkCoverage(db: Db): Promise<Map<string, { concepts: number; co
  * 0022 has no lesson links, and counts every reading as unplaced.
  */
 async function readingCoverage(db: Db): Promise<Map<string, { readings: number; readingsOnLessons: number }>> {
-  const { rows: present } = await db.execute<{ present: boolean }>(
+  const { rows: present } = await db.execute<{ present: number }>(
     sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'curriculum_item_asset') as present`,
   );
-  const lessons = present[0]?.present == 1 || present[0]?.present === true;
+  const lessons = present[0]?.present === 1;
   const { rows } = await db.execute<{ course: string; readings: number; placed: number }>(sql`
     select m.parent_id as course, count(distinct r.asset_id) as readings,
       ${

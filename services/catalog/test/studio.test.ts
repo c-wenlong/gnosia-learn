@@ -416,7 +416,8 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
         .where(eq(session.id, "with-events"))
         .catch((e: unknown) => e);
       expect(sqlstate(error)).toBe("23503");
-      expect(sqlMessage(error)).toContain("event_session_id_session_id_fk");
+      // SQLite reports "FOREIGN KEY constraint failed" without naming the constraint.
+      expect(sqlMessage(error)).toContain("FOREIGN KEY constraint failed");
     });
 
     it("refuses to delete a session a job ran under", async () => {
@@ -428,7 +429,8 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
         .where(eq(session.id, "with-a-job"))
         .catch((e: unknown) => e);
       expect(sqlstate(error)).toBe("23503");
-      expect(sqlMessage(error)).toContain("job_session_id_session_id_fk");
+      // SQLite reports "FOREIGN KEY constraint failed" without naming the constraint.
+      expect(sqlMessage(error)).toContain("FOREIGN KEY constraint failed");
     });
 
   });
@@ -783,7 +785,8 @@ describe.skipIf(!reachable.ok)("accept over a landed diagram", () => {
         .where(eq(job.id, jobId))
         .catch((e: unknown) => e);
       expect(sqlstate(error)).toBe("23503");
-      expect(sqlMessage(error)).toContain("asset_job_job_id_job_id_fk");
+      // SQLite reports "FOREIGN KEY constraint failed" without naming the constraint.
+      expect(sqlMessage(error)).toContain("FOREIGN KEY constraint failed");
     });
 
     it("takes the provenance with the asset, because that row is derived", async () => {

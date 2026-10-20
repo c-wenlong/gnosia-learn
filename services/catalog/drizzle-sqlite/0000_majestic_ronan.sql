@@ -834,602 +834,602 @@ END;
 CREATE TRIGGER `learner_copy_guard_ins` BEFORE INSERT ON `learner` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `learner_copy_guard_upd` BEFORE UPDATE ON `learner` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `learner_copy_guard_del` BEFORE DELETE ON `learner` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `blob_object_copy_guard_ins` BEFORE INSERT ON `blob_object` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `blob_object_copy_guard_upd` BEFORE UPDATE ON `blob_object` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `blob_object_copy_guard_del` BEFORE DELETE ON `blob_object` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `topic_copy_guard_ins` BEFORE INSERT ON `topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `topic_copy_guard_upd` BEFORE UPDATE ON `topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `topic_copy_guard_del` BEFORE DELETE ON `topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `tag_copy_guard_ins` BEFORE INSERT ON `tag` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `tag_copy_guard_upd` BEFORE UPDATE ON `tag` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `tag_copy_guard_del` BEFORE DELETE ON `tag` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `topic_relation_copy_guard_ins` BEFORE INSERT ON `topic_relation` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `topic_relation_copy_guard_upd` BEFORE UPDATE ON `topic_relation` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `topic_relation_copy_guard_del` BEFORE DELETE ON `topic_relation` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `manimkc_topic_copy_guard_ins` BEFORE INSERT ON `manimkc_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `manimkc_topic_copy_guard_upd` BEFORE UPDATE ON `manimkc_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `manimkc_topic_copy_guard_del` BEFORE DELETE ON `manimkc_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_copy_guard_ins` BEFORE INSERT ON `concept` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_copy_guard_upd` BEFORE UPDATE ON `concept` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_copy_guard_del` BEFORE DELETE ON `concept` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_copy_guard_ins` BEFORE INSERT ON `collection` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_copy_guard_upd` BEFORE UPDATE ON `collection` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_copy_guard_del` BEFORE DELETE ON `collection` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_tag_copy_guard_ins` BEFORE INSERT ON `collection_tag` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_tag_copy_guard_upd` BEFORE UPDATE ON `collection_tag` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_tag_copy_guard_del` BEFORE DELETE ON `collection_tag` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_copy_guard_ins` BEFORE INSERT ON `curriculum_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_copy_guard_upd` BEFORE UPDATE ON `curriculum_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_copy_guard_del` BEFORE DELETE ON `curriculum_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_copy_guard_ins` BEFORE INSERT ON `asset` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_copy_guard_upd` BEFORE UPDATE ON `asset` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_copy_guard_del` BEFORE DELETE ON `asset` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `diagram_copy_guard_ins` BEFORE INSERT ON `diagram` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `diagram_copy_guard_upd` BEFORE UPDATE ON `diagram` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `diagram_copy_guard_del` BEFORE DELETE ON `diagram` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_topic_copy_guard_ins` BEFORE INSERT ON `asset_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_topic_copy_guard_upd` BEFORE UPDATE ON `asset_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_topic_copy_guard_del` BEFORE DELETE ON `asset_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_concept_copy_guard_ins` BEFORE INSERT ON `asset_concept` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_concept_copy_guard_upd` BEFORE UPDATE ON `asset_concept` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_concept_copy_guard_del` BEFORE DELETE ON `asset_concept` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_prerequisite_copy_guard_ins` BEFORE INSERT ON `concept_prerequisite` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_prerequisite_copy_guard_upd` BEFORE UPDATE ON `concept_prerequisite` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_prerequisite_copy_guard_del` BEFORE DELETE ON `concept_prerequisite` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_item_copy_guard_ins` BEFORE INSERT ON `collection_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_item_copy_guard_upd` BEFORE UPDATE ON `collection_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `collection_item_copy_guard_del` BEFORE DELETE ON `collection_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_derivation_copy_guard_ins` BEFORE INSERT ON `asset_derivation` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_derivation_copy_guard_upd` BEFORE UPDATE ON `asset_derivation` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_derivation_copy_guard_del` BEFORE DELETE ON `asset_derivation` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_topic_copy_guard_ins` BEFORE INSERT ON `curriculum_item_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_topic_copy_guard_upd` BEFORE UPDATE ON `curriculum_item_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_topic_copy_guard_del` BEFORE DELETE ON `curriculum_item_topic` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_curriculum_item_copy_guard_ins` BEFORE INSERT ON `concept_curriculum_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_curriculum_item_copy_guard_upd` BEFORE UPDATE ON `concept_curriculum_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `concept_curriculum_item_copy_guard_del` BEFORE DELETE ON `concept_curriculum_item` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_asset_copy_guard_ins` BEFORE INSERT ON `curriculum_item_asset` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_asset_copy_guard_upd` BEFORE UPDATE ON `curriculum_item_asset` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `curriculum_item_asset_copy_guard_del` BEFORE DELETE ON `curriculum_item_asset` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `video_copy_guard_ins` BEFORE INSERT ON `video` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `video_copy_guard_upd` BEFORE UPDATE ON `video` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `video_copy_guard_del` BEFORE DELETE ON `video` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `session_copy_guard_ins` BEFORE INSERT ON `session` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `session_copy_guard_upd` BEFORE UPDATE ON `session` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `session_copy_guard_del` BEFORE DELETE ON `session` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `session_log_entry_copy_guard_ins` BEFORE INSERT ON `session_log_entry` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `session_log_entry_copy_guard_upd` BEFORE UPDATE ON `session_log_entry` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `session_log_entry_copy_guard_del` BEFORE DELETE ON `session_log_entry` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `event_copy_guard_ins` BEFORE INSERT ON `event` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `event_copy_guard_upd` BEFORE UPDATE ON `event` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `event_copy_guard_del` BEFORE DELETE ON `event` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `mastery_copy_guard_ins` BEFORE INSERT ON `mastery` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `mastery_copy_guard_upd` BEFORE UPDATE ON `mastery` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `mastery_copy_guard_del` BEFORE DELETE ON `mastery` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `review_copy_guard_ins` BEFORE INSERT ON `review` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `review_copy_guard_upd` BEFORE UPDATE ON `review` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `review_copy_guard_del` BEFORE DELETE ON `review` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `progress_copy_guard_ins` BEFORE INSERT ON `progress` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `progress_copy_guard_upd` BEFORE UPDATE ON `progress` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `progress_copy_guard_del` BEFORE DELETE ON `progress` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `recap_copy_guard_ins` BEFORE INSERT ON `recap` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `recap_copy_guard_upd` BEFORE UPDATE ON `recap` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `recap_copy_guard_del` BEFORE DELETE ON `recap` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `preference_copy_guard_ins` BEFORE INSERT ON `preference` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `preference_copy_guard_upd` BEFORE UPDATE ON `preference` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `preference_copy_guard_del` BEFORE DELETE ON `preference` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `provider_key_copy_guard_ins` BEFORE INSERT ON `provider_key` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `provider_key_copy_guard_upd` BEFORE UPDATE ON `provider_key` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `provider_key_copy_guard_del` BEFORE DELETE ON `provider_key` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `custom_provider_copy_guard_ins` BEFORE INSERT ON `custom_provider` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `custom_provider_copy_guard_upd` BEFORE UPDATE ON `custom_provider` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `custom_provider_copy_guard_del` BEFORE DELETE ON `custom_provider` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `tutor_model_copy_guard_ins` BEFORE INSERT ON `tutor_model` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `tutor_model_copy_guard_upd` BEFORE UPDATE ON `tutor_model` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `tutor_model_copy_guard_del` BEFORE DELETE ON `tutor_model` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_name_copy_guard_ins` BEFORE INSERT ON `asset_name` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_name_copy_guard_upd` BEFORE UPDATE ON `asset_name` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_name_copy_guard_del` BEFORE DELETE ON `asset_name` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `draft_copy_guard_ins` BEFORE INSERT ON `draft` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `draft_copy_guard_upd` BEFORE UPDATE ON `draft` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `draft_copy_guard_del` BEFORE DELETE ON `draft` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `job_copy_guard_ins` BEFORE INSERT ON `job` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `job_copy_guard_upd` BEFORE UPDATE ON `job` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `job_copy_guard_del` BEFORE DELETE ON `job` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_job_copy_guard_ins` BEFORE INSERT ON `asset_job` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_job_copy_guard_upd` BEFORE UPDATE ON `asset_job` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `asset_job_copy_guard_del` BEFORE DELETE ON `asset_job` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `content_revision_copy_guard_ins` BEFORE INSERT ON `content_revision` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `content_revision_copy_guard_upd` BEFORE UPDATE ON `content_revision` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `content_revision_copy_guard_del` BEFORE DELETE ON `content_revision` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `index_run_copy_guard_ins` BEFORE INSERT ON `index_run` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `index_run_copy_guard_upd` BEFORE UPDATE ON `index_run` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `index_run_copy_guard_del` BEFORE DELETE ON `index_run` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `mirror_copy_guard_ins` BEFORE INSERT ON `mirror` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `mirror_copy_guard_upd` BEFORE UPDATE ON `mirror` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `mirror_copy_guard_del` BEFORE DELETE ON `mirror` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `content_source_copy_guard_ins` BEFORE INSERT ON `content_source` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `content_source_copy_guard_upd` BEFORE UPDATE ON `content_source` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpointCREATE TRIGGER `content_source_copy_guard_del` BEFORE DELETE ON `content_source` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (catalog_instance.primary_host names it).');
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpoint
 -- The write-seam guard (D4), armed only on `video`: the one content table

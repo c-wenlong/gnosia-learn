@@ -418,17 +418,10 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
           (value) => ({ value }),
           (error: unknown) => ({ error }),
         );
-        for (let tries = 0; ; tries += 1) {
-          // Only this scratch database: another suite's lock waiter on the same
-          // server must not release the recut before the unhook is waiting.
-          const { rows } = await other.db.execute<{ waiting: number }>(sql`
-            select count(*) as waiting from pg_locks
-            where locktype = 'advisory' and not granted
-              and database = (select oid from pg_database where datname = current_database())`);
-          if ((rows[0]?.waiting ?? 0) > 0) break;
-          if (tries > 200) throw new Error("the unhook never waited on the poster's lock");
-          await new Promise((resolve) => setTimeout(resolve, 25));
-        }
+        // Postgres showed the unhook's advisory-lock wait in pg_locks; SQLite
+        // exposes no waiter list, so give the contender a beat to reach its
+        // `begin immediate` before the holder writes.
+        await new Promise((resolve) => setTimeout(resolve, 100));
         const [row] = await tx.select().from(asset).where(eq(asset.id, poster));
         const posterRest: Record<string, unknown> = { ...row };
         delete posterRest["createdAt"];

@@ -12,12 +12,12 @@ import { createScratchDatabase } from "./scratch-database";
  * worker, passing tests and all. A better-sqlite3 handle has no sockets and
  * no idle clients: there is no asynchronous error to emit, so the question
  * this file still answers is simpler. When the file under a connection goes
- * away (the scratch database is dropped), the next statement fails where it
- * runs, `lastPoolError` reports nothing, and the process stands.
+ * away (the scratch database is dropped), the open handle keeps answering —
+ * POSIX holds the inode — and `lastPoolError` reports nothing either way.
  */
 
 describe("a connection whose file was dropped under it", () => {
-  it("fails the next query and reports no pool error", async () => {
+  it("keeps answering on the open handle and reports no pool error", async () => {
     const scratch = await createScratchDatabase();
 
     // A second handle on the same file, the way a second vitest worker or a
@@ -29,9 +29,9 @@ describe("a connection whose file was dropped under it", () => {
 
       await scratch.drop();
 
-      // SQLite only finds out the file is gone at the next statement; WAL
-      // deletion is what it trips on, so the failure lands here, by name.
-      await expect(bystander.db.execute(sql`select 1`)).rejects.toThrow();
+      // POSIX keeps the unlinked file alive for a handle already on it: only a
+      // reopen would find the path gone, so nothing fails and nothing is owed.
+      expect((await bystander.db.execute<{ "1": number }>(sql`select 1`)).rows).toEqual([{ "1": 1 }]);
       expect(bystander.lastPoolError()).toBeNull();
     } finally {
       await bystander.close().catch(() => undefined);
@@ -44,7 +44,7 @@ describe("a connection whose file was dropped under it", () => {
     const bystander = connect({ url: scratch.url });
     try {
       await scratch.drop();
-      await expect(bystander.db.execute(sql`select 1`)).rejects.toThrow();
+      expect((await bystander.db.execute<{ "1": number }>(sql`select 1`)).rows).toEqual([{ "1": 1 }]);
       expect(bystander.lastPoolError()).toBeNull();
     } finally {
       await bystander.close().catch(() => undefined);
