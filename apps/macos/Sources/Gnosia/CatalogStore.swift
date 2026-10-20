@@ -141,6 +141,13 @@ final class SQLiteDatabase {
         return names
     }
 
+    /// Whether the snapshot carries `table`, so a section added after the
+    /// file was written reads as empty rather than failing the whole open.
+    func hasTable(_ name: String) throws -> Bool {
+        let rows = try query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", bind: [name])
+        return rows.next()
+    }
+
     deinit { sqlite3_close(db) }
 }
 
@@ -750,6 +757,13 @@ final class CatalogStore {
         self.watchedAt = watchedAt
         self.assetNames = assetNames
         self.meta = meta
+
+        // The course tree. A snapshot from before user_version 3 has no
+        // `collection` table; the surface then reads empty rather than taking
+        // the library down with it.
+        if try db.hasTable("collection") {
+            try loadCourses(db, ordered: ordered)
+        }
     }
 
     // MARK: - Sidecars
@@ -793,5 +807,430 @@ final class CatalogStore {
                 text: text
             )
         }
+    }
+
+    // MARK: - Courses
+
+    /// Every live course in authored order (`collection.position`, then id —
+    /// the order readCourses in services/catalog returns them).
+    private(set) var courses: [CatalogCourse] = []
+    /// The theme vocabulary, `tag` rows by id, for labels in the list filter
+    /// and the related-courses card.
+    private(set) var courseTags: [String: CourseTag] = [:]
+    /// Tag ids in the file's own order, so the filter menu lists them the way
+    /// content/tags.yaml does.
+    private(set) var courseTagOrder: [String] = []
+    private var coursesBySlug: [String: CatalogCourse] = [:]
+    /// Concept slug to its note's title, for the steps a lesson draws.
+    private var conceptTitles: [String: String] = [:]
+    /// Vocabulary slug to its summary: a module's description on the web page
+    /// is its topic's summary.
+    private var topicSummaries: [String: String] = [:]
+    /// Module id to whether another live module names the same topic — the
+    /// rule that keeps a shared topic's videos off a listing module's path.
+    private var topicSharedByModule: [String: Bool] = [:]
+    private var assetsByTopicSlug: [String: [CatalogAsset]] = [:]
+    private var assetsByConceptSlug: [String: [CatalogAsset]] = [:]
+
+    /// The kinds that accompany another asset rather than open on their own —
+    /// COMPANION_KINDS in apps/web/src/lib/library.ts. They count out of a
+    /// module's asset tally, as the library's default view leaves them out.
+    private static let companionKinds: Set<String> = [
+        "transcript", "captions", "chapters", "diagram_source", "poster", "pdf",
+    ]
+
+    func course(_ slug: String) -> CatalogCourse? {
+        coursesBySlug[slug]
+    }
+
+    /// The courses sharing at least one theme tag with `course`
+    /// (getRelatedCourses in apps/web/src/data/courses).
+    func relatedCourses(to course: CatalogCourse) -> [CatalogCourse] {
+        guard !course.tags.isEmpty else { return [] }
+        let wanted = Set(course.tags)
+        return courses.filter { $0.id != course.id && $0.tags.contains(where: wanted.contains) }
+    }
+
+    /// The course's cover image: `cover_blob_key` under the blob root, as the
+    /// web's /api/courses/<slug>/cover route serves the same object.
+    func coverURL(for course: CatalogCourse) -> URL? {
+        course.coverKey.map { blobURL(for: $0) }
+    }
+
+    func conceptTitle(_ slug: String) -> String? {
+        conceptTitles[slug]
+    }
+
+    /// The module's description on the web page: its topic's `summary`.
+    func topicSummary(_ slug: String) -> String? {
+        topicSummaries[slug]
+    }
+
+    /// Whether another live module, of any course, names the same vocabulary
+    /// topic (topicShared in apps/web/src/lib/course-assets.ts).
+    func topicShared(byModule moduleID: String) -> Bool {
+        topicSharedByModule[moduleID] ?? false
+    }
+
+    /// Every asset filed under the topic (`asset_topic`), title order.
+    func assetsTagged(_ topicSlug: String) -> [CatalogAsset] {
+        assetsByTopicSlug[topicSlug] ?? []
+    }
+
+    /// The count the module's meta line prints: the topic's assets minus the
+    /// companion kinds (ModuleAssets.count in course-assets.ts).
+    func moduleAssetCount(topicSlug: String) -> Int {
+        assetsTagged(topicSlug).filter { !Self.companionKinds.contains($0.kind) }.count
+    }
+
+    /// The assets an `asset_concept` row links to the concept — what a step
+    /// on the module path can place.
+    func assetsLinked(concept slug: String) -> [CatalogAsset] {
+        assetsByConceptSlug[slug] ?? []
+    }
+
+    /// A video the course lists by id, when the id resolves to a readable
+    /// video; any other listed id resolves to nil, as the web path leaves it
+    /// off (resolve() in apps/web/src/lib/module-path.ts).
+    func listedVideo(_ id: String) -> CatalogAsset? {
+        let found = asset(id)
+        return found?.kind == "video" ? found : nil
+    }
+
+    /// The course tree out of the mirrored tables, the same seven reads
+    /// readCourses (services/catalog/src/content/readers/courses.ts) makes:
+    /// courses with their tags, modules with their topic, items with their
+    /// concepts and listed videos, and the curated links with their lessons.
+    /// Everything archived stays in the file but is filtered here, as the
+    /// web reader filters it.
+    private func loadCourses(_ db: SQLiteDatabase, ordered: [CatalogAsset]) throws {
+        var tagsById: [String: CourseTag] = [:]
+        var tagOrder: [String] = []
+        let tagRows = try db.query("SELECT id, label, description FROM tag ORDER BY position, id")
+        while tagRows.next() {
+            guard let id = tagRows.text(0), let label = tagRows.text(1) else { continue }
+            tagsById[id] = CourseTag(id: id, label: label, description: tagRows.text(2))
+            tagOrder.append(id)
+        }
+
+        var tagIdsByCourse: [String: [String]] = [:]
+        let courseTagRows = try db.query("""
+            SELECT t.collection_id, t.tag_id FROM collection_tag t
+            JOIN collection c ON c.id = t.collection_id
+            WHERE c.kind = 'course' AND c.archived_at IS NULL
+            ORDER BY t.collection_id, t.position, t.tag_id
+            """)
+        while courseTagRows.next() {
+            if let courseID = courseTagRows.text(0), let tagID = courseTagRows.text(1) {
+                tagIdsByCourse[courseID, default: []].append(tagID)
+            }
+        }
+
+        // A module's topic is its first topic_slug collection_item row; its
+        // `videos:` list is metadata.videos; both verbatim from the reader.
+        struct ModuleRow {
+            let id, parentID, slug, title: String
+            let position: Int
+            let topic: String
+            let videos: [String]
+        }
+        var modulesByCourse: [String: [ModuleRow]] = [:]
+        var naming: [String: Int] = [:]
+        let moduleRows = try db.query("""
+            SELECT c.id, c.parent_id, c.slug, c.title, c.position, c.metadata,
+                   (SELECT m.topic_slug FROM collection_item m
+                    WHERE m.collection_id = c.id AND m.topic_slug IS NOT NULL
+                    ORDER BY m.position LIMIT 1) AS topic
+            FROM collection c
+            WHERE c.kind = 'module' AND c.archived_at IS NULL
+            ORDER BY c.parent_id, c.position, c.id
+            """)
+        while moduleRows.next() {
+            guard let id = moduleRows.text(0), let parentID = moduleRows.text(1),
+                  let slug = moduleRows.text(2), let title = moduleRows.text(3) else { continue }
+            let topic = moduleRows.text(6) ?? ""
+            let videos = Self.jsonStrings(Self.jsonObject(moduleRows.text(5))["videos"])
+            modulesByCourse[parentID, default: []].append(
+                ModuleRow(id: id, parentID: parentID, slug: slug, title: title,
+                          position: Int(moduleRows.int64(4) ?? 0), topic: topic, videos: videos)
+            )
+            if !topic.isEmpty { naming[topic, default: 0] += 1 }
+        }
+
+        var itemsByModule: [String: [CourseItem]] = [:]
+        let itemRows = try db.query("""
+            SELECT id, collection_id, title, subtopics, videos FROM curriculum_item
+            WHERE archived_at IS NULL
+            ORDER BY collection_id, position, id
+            """)
+        while itemRows.next() {
+            guard let id = itemRows.text(0), let moduleID = itemRows.text(1),
+                  let title = itemRows.text(2) else { continue }
+            itemsByModule[moduleID, default: []].append(
+                CourseItem(
+                    id: id, title: title,
+                    subtopics: Self.jsonStrings(itemRows.text(3)),
+                    concepts: [], videos: Self.jsonStrings(itemRows.text(4))
+                )
+            )
+        }
+
+        // An item's concept list, in the link's authored order: a row the
+        // indexer placed (position > 0) keeps its place; an unplaced one
+        // (position 0, from before positions existed) follows them, ranked by
+        // slug — the same shape conceptsForTopic gives it.
+        var conceptsByItem: [String: [String]] = [:]
+        let linkRows = try db.query("""
+            SELECT curriculum_item_id, concept_slug FROM concept_curriculum_item
+            ORDER BY curriculum_item_id,
+                     CASE WHEN position > 0 THEN 0 ELSE 1 END, position, concept_slug
+            """)
+        while linkRows.next() {
+            if let itemID = linkRows.text(0), let slug = linkRows.text(1) {
+                conceptsByItem[itemID, default: []].append(slug)
+            }
+        }
+        for (moduleID, items) in itemsByModule {
+            itemsByModule[moduleID] = items.map { item in
+                var item = item
+                item.concepts = conceptsByItem[item.id] ?? []
+                return item
+            }
+        }
+
+        // A module's resources are the `link:` assets it holds through
+        // collection_item; a resource's lessons are its curriculum_item_asset
+        // rows that name a live item of the same module.
+        var lessonsByResource: [String: [(itemID: String, moduleID: String)]] = [:]
+        let lessonRows = try db.query("""
+            SELECT l.asset_id, l.curriculum_item_id, i.collection_id
+            FROM curriculum_item_asset l
+            JOIN curriculum_item i ON i.id = l.curriculum_item_id
+            WHERE i.archived_at IS NULL
+            ORDER BY l.asset_id, l.position, l.curriculum_item_id
+            """)
+        while lessonRows.next() {
+            guard let assetID = lessonRows.text(0), let itemID = lessonRows.text(1),
+                  let moduleID = lessonRows.text(2) else { continue }
+            lessonsByResource[assetID, default: []].append((itemID: itemID, moduleID: moduleID))
+        }
+
+        var resourcesByModule: [String: [CourseResource]] = [:]
+        let resourceRows = try db.query("""
+            SELECT m.collection_id, a.id, a.title, a.url, a.resource_type
+            FROM collection_item m
+            JOIN asset a ON a.id = m.asset_id
+            WHERE a.kind = 'link' AND a.id LIKE 'link:%'
+            ORDER BY m.collection_id, m.position, a.id
+            """)
+        while resourceRows.next() {
+            guard let moduleID = resourceRows.text(0), let assetID = resourceRows.text(1) else { continue }
+            let lessons = (lessonsByResource[assetID] ?? [])
+                .filter { $0.moduleID == moduleID }
+                .map { $0.itemID }
+            resourcesByModule[moduleID, default: []].append(
+                CourseResource(
+                    id: assetID,
+                    title: resourceRows.text(2) ?? "",
+                    url: resourceRows.text(3) ?? "",
+                    type: resourceRows.text(4) ?? "other",
+                    lessons: lessons
+                )
+            )
+        }
+
+        var summaries: [String: String] = [:]
+        let summaryRows = try db.query("SELECT slug, summary FROM topic")
+        while summaryRows.next() {
+            if let slug = summaryRows.text(0) { summaries[slug] = summaryRows.text(1) ?? "" }
+        }
+
+        var titles: [String: String] = [:]
+        let conceptRows = try db.query("SELECT slug, title FROM concept WHERE archived_at IS NULL")
+        while conceptRows.next() {
+            if let slug = conceptRows.text(0), let title = conceptRows.text(1) {
+                titles[slug] = title
+            }
+        }
+
+        var byTopic: [String: [CatalogAsset]] = [:]
+        var byConcept: [String: [CatalogAsset]] = [:]
+        for asset in ordered {
+            for slug in asset.topics { byTopic[slug, default: []].append(asset) }
+            for slug in asset.concepts { byConcept[slug, default: []].append(asset) }
+        }
+
+        let courseRows = try db.query("""
+            SELECT id, slug, title, position, metadata, cover_blob_key
+            FROM collection
+            WHERE kind = 'course' AND archived_at IS NULL
+            ORDER BY position, id
+            """)
+        var loaded: [CatalogCourse] = []
+        while courseRows.next() {
+            guard let id = courseRows.text(0), let slug = courseRows.text(1),
+                  let title = courseRows.text(2) else { continue }
+            let meta = Self.jsonObject(courseRows.text(4))
+            let modules = (modulesByCourse[id] ?? []).map { row in
+                CourseModule(
+                    id: row.id, slug: row.slug, title: row.title, order: row.position,
+                    topic: row.topic, videos: row.videos,
+                    items: itemsByModule[row.id] ?? [],
+                    resources: resourcesByModule[row.id] ?? []
+                )
+            }
+            loaded.append(
+                CatalogCourse(
+                    id: id, slug: slug,
+                    code: Self.jsonText(meta["code"]) ?? "",
+                    title: title,
+                    credits: Self.jsonInt(meta["credits"]) ?? 0,
+                    order: Int(courseRows.int64(3) ?? 0),
+                    inferred: meta["inferred"] as? Bool ?? false,
+                    prereq: Self.jsonText(meta["prereq"]),
+                    track: Self.jsonText(meta["track"]),
+                    notes: Self.jsonText(meta["notes"]),
+                    capstone: Self.jsonText(meta["capstone"]) ?? "",
+                    coverKey: courseRows.text(5),
+                    tags: tagIdsByCourse[id] ?? [],
+                    modules: modules
+                )
+            )
+        }
+
+        var shared: [String: Bool] = [:]
+        for rows in modulesByCourse.values {
+            for row in rows where !row.topic.isEmpty {
+                shared[row.id] = (naming[row.topic] ?? 0) > 1
+            }
+        }
+
+        courses = loaded
+        coursesBySlug = Dictionary(uniqueKeysWithValues: loaded.map { ($0.slug, $0) })
+        courseTags = tagsById
+        courseTagOrder = tagOrder
+        topicSummaries = summaries
+        conceptTitles = titles
+        topicSharedByModule = shared
+        assetsByTopicSlug = byTopic
+        assetsByConceptSlug = byConcept
+    }
+
+    /// A mirrored jsonb column parsed to an object; anything unreadable is `{}`.
+    private static func jsonObject(_ text: String?) -> [String: Any] {
+        guard let data = text?.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [:] }
+        return object
+    }
+
+    /// A mirrored jsonb array of strings; anything else is `[]`.
+    private static func jsonStrings(_ value: Any?) -> [String] {
+        (value as? [Any])?.compactMap { $0 as? String } ?? []
+    }
+
+    private static func jsonStrings(_ text: String?) -> [String] {
+        guard let data = text?.data(using: .utf8),
+              let array = try? JSONSerialization.jsonObject(with: data)
+        else { return [] }
+        return jsonStrings(array)
+    }
+
+    /// What the file reader keeps of an optional text key: absent, or trimmed
+    /// and non-empty (optional() in readers/courses.ts).
+    private static func jsonText(_ value: Any?) -> String? {
+        guard let text = (value as? String)?.trimmingCharacters(in: .whitespaces),
+              !text.isEmpty else { return nil }
+        return text
+    }
+
+    private static func jsonInt(_ value: Any?) -> Int? {
+        if let n = value as? Int { return n }
+        if let n = value as? Double { return Int(n) }
+        if let n = value as? NSNumber { return n.intValue }
+        return nil
+    }
+}
+
+// MARK: - Course read models
+
+/// One cross-course theme, a `tag` row; a course file's `tags:` names these.
+struct CourseTag: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let description: String?
+}
+
+/// One checklist row inside a module: a `curriculum_item` row, which the web
+/// app's content types call a Topic. Its concepts carry the link's authored
+/// order.
+struct CourseItem: Identifiable, Hashable {
+    let id: String
+    let title: String
+    var subtopics: [String]
+    var concepts: [String]
+    /// Asset ids the lesson's `videos:` lists; they resolve when drawn, not here.
+    var videos: [String]
+}
+
+/// A curated reading a module lists: the `link:` asset it holds through
+/// `collection_item`, with the lessons it goes with from
+/// `curriculum_item_asset`.
+struct CourseResource: Identifiable, Hashable {
+    /// The asset id (`link:cs4263-m2-r1`), kept whole so the store can look it up.
+    let id: String
+    let title: String
+    let url: String
+    /// The asset's `resource_type`: paper, docs, video, book, practice or other.
+    let type: String
+    /// Live item ids of the same module, in the order written.
+    var lessons: [String]
+}
+
+/// A module: a live `collection` of kind `module` under a course, with its
+/// checklist resolved.
+struct CourseModule: Identifiable, Hashable {
+    let id: String
+    let slug: String
+    let title: String
+    /// The `position` column: the module's place in the course's `order:`.
+    let order: Int
+    /// The vocabulary slug its topic `collection_item` names; "" when none.
+    let topic: String
+    /// Asset ids the module's `videos:` lists (metadata.videos).
+    var videos: [String]
+    var items: [CourseItem]
+    var resources: [CourseResource]
+}
+
+/// A course: a live `collection` of kind `course` with the metadata the cards
+/// and the rail show.
+struct CatalogCourse: Identifiable, Hashable {
+    let id: String
+    let slug: String
+    /// `metadata.code`: the printed course code ("CS4263").
+    let code: String
+    let title: String
+    let credits: Int
+    /// The `position` column: its place in the authored shortlist.
+    let order: Int
+    /// `metadata.inferred`: the syllabus was inferred from the announcement.
+    let inferred: Bool
+    let prereq: String?
+    let track: String?
+    /// `metadata.notes`: the course file's summary, the rail's "About" text.
+    let notes: String?
+    let capstone: String
+    /// `cover_blob_key`: the cover photo in the blob store.
+    let coverKey: String?
+    /// Tag ids in `collection_tag.position` order.
+    let tags: [String]
+    var modules: [CourseModule]
+
+    var itemCount: Int { modules.reduce(0) { $0 + $1.items.count } }
+    /// "7 modules · 20 topics" — courseCounts in apps/web/src/lib/course-summary.ts.
+    var countsLine: String {
+        let m = modules.count, t = itemCount
+        return "\(m) \(m == 1 ? "module" : "modules") · \(t) \(t == 1 ? "topic" : "topics")"
     }
 }
