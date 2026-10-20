@@ -167,7 +167,7 @@ struct RootView: View {
         case .courses: CoursesView()
         case .library: LibraryView()
         case .studio: StudioSurface()
-        case .ask: AskSurface()
+        case .ask: AskView()
         }
     }
 
@@ -305,15 +305,5 @@ private struct StudioSurface: View {
     }
 }
 
-/// Ask is the tutor's chat; it lands with the sidecar client. The sidebar
+/// Ask lives in AskView: the open-tutor chat over the sidecar. The sidebar
 /// row is the web's "New chat".
-private struct AskSurface: View {
-    var body: some View {
-        ContentUnavailableView(
-            "Ask",
-            systemImage: "bubble.left.and.text.bubble.right",
-            description: Text("The tutor answers through the local sidecar service once that wave lands.")
-        )
-        .navigationTitle("Ask")
-    }
-}
