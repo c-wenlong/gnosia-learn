@@ -298,7 +298,7 @@ const state = vi.hoisted(() => ({
   getCourses: vi.fn(),
   catalogDatabase: vi.fn(),
 }));
-vi.mock("@self-learn/catalog/state", () => ({
+vi.mock("@gnosia/catalog/state", () => ({
   asLastVisited: (value: unknown) => (value !== null && typeof value === "object" && "courseSlug" in value ? value : undefined),
   asRecentModules: (value: unknown) => (Array.isArray(value) ? value : undefined),
   recentActivity: state.recentActivity,

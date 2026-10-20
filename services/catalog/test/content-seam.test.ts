@@ -11,7 +11,7 @@ import {
   progress,
   recap,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -223,21 +223,21 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
     }
   }, 60_000);
 
-  it("applies to a copy of the local self_learn database", async (ctx) => {
+  it("applies to a copy of the local gnosia database", async (ctx) => {
     // The owner's real data, read only as a template. Absent, empty (CI's
-    // service creates a bare self_learn), or busy whenever a dev server holds
+    // service creates a bare gnosia), or busy whenever a dev server holds
     // it open: each skips with the reason. Nothing here connects to
-    // self_learn itself; every check and write is on the copy.
+    // gnosia itself; every check and write is on the copy.
     const admin = new pg.Client({ connectionString: maintenanceUrl() });
     await admin.connect();
-    const name = `self_learn_test_copy_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+    const name = `gnosia_test_copy_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
     try {
-      const exists = await admin.query("select 1 from pg_database where datname = 'self_learn'");
-      if (exists.rowCount === 0) ctx.skip("no self_learn database to copy");
+      const exists = await admin.query("select 1 from pg_database where datname = 'gnosia'");
+      if (exists.rowCount === 0) ctx.skip("no gnosia database to copy");
       try {
-        await admin.query(`create database "${name}" template self_learn`);
+        await admin.query(`create database "${name}" template gnosia`);
       } catch (error) {
-        ctx.skip(`could not copy self_learn: ${(error as Error).message}`);
+        ctx.skip(`could not copy gnosia: ${(error as Error).message}`);
       }
       const url = new URL(maintenanceUrl());
       url.pathname = `/${name}`;
@@ -245,12 +245,12 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
       // is the flag that says writing to a throwaway copy is intended.
       const copy = connect({ url: url.toString(), copyOk: true });
       try {
-        // A database with no catalog in it is not a local self_learn to
+        // A database with no catalog in it is not a local gnosia to
         // migrate a copy of: there is nothing for the expand migration to
         // carry over, and the counts below would have no table to read.
         const catalog = await copy.db.execute<{ topic: string | null }>(sql`select to_regclass('public.topic')::text as topic`);
         if (catalog.rows[0]?.topic == null) {
-          ctx.skip("self_learn holds no catalog (no topic table): it was never migrated, as on CI");
+          ctx.skip("gnosia holds no catalog (no topic table): it was never migrated, as on CI");
         }
         const before = await copy.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
         // Holding the contract migration (0013) back while the owner's
@@ -284,7 +284,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
 });
 
 function maintenanceUrl(): string {
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
   url.pathname = "/postgres";
   return url.toString();
 }
@@ -979,10 +979,10 @@ describe.skipIf(!reachable.ok)("the copy guard", () => {
 
   it("builds the connection options without losing the URL's own", () => {
     expect(connectionOptions("postgres://h/db", { copyOk: false })).toBeUndefined();
-    expect(connectionOptions("postgres://h/db", { copyOk: true })).toBe("-c self_learn.copy_ok=on");
+    expect(connectionOptions("postgres://h/db", { copyOk: true })).toBe("-c gnosia.copy_ok=on");
     expect(
       connectionOptions("postgres://h/db?options=-c%20search_path%3Dx", { copyOk: true }),
-    ).toBe("-c search_path=x -c self_learn.copy_ok=on");
+    ).toBe("-c search_path=x -c gnosia.copy_ok=on");
     expect(connectionOptions("postgres://h/db", { options: "-c a=b", copyOk: false })).toBe("-c a=b");
   });
 });

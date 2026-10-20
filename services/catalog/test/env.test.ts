@@ -30,7 +30,7 @@ import { repoRoot as learnRepoRoot, workDir } from "../src/learn/paths";
  * rests on; what is new here is the resolution of the value once it is read.
  */
 
-const VARIABLES = ["MANIMKC_ROOT", "TLDRAWKC_ROOT", "LEARN_ROOT", "SELF_LEARN_HOME"] as const;
+const VARIABLES = ["MANIMKC_ROOT", "TLDRAWKC_ROOT", "LEARN_ROOT", "GNOSIA_HOME"] as const;
 const original = new Map(VARIABLES.map((name) => [name, process.env[name]]));
 
 beforeAll(() => {
@@ -71,7 +71,7 @@ describe("resolveManimkcRoot and resolveTldrawkcRoot", () => {
     // The variable is set once and read by commands run from anywhere, so a
     // cwd-relative reading would name a different folder each time.
     process.env.MANIMKC_ROOT = "../shared/manimkc";
-    expect(resolveManimkcRoot("/srv/self-learn")).toBe("/srv/shared/manimkc");
+    expect(resolveManimkcRoot("/srv/gnosia")).toBe("/srv/shared/manimkc");
   });
 
   it("expands a leading tilde, which a .env file cannot do for itself", () => {
@@ -90,16 +90,16 @@ describe("resolveManimkcRoot and resolveTldrawkcRoot", () => {
 });
 
 describe("blobRoot", () => {
-  it("defaults to ~/.self-learn/blobs, and follows SELF_LEARN_HOME with a ~ expanded", () => {
-    expect(blobRoot()).toBe(path.join(homedir(), ".self-learn", "blobs"));
-    process.env["SELF_LEARN_HOME"] = "~/elsewhere";
+  it("defaults to ~/.gnosia/blobs, and follows GNOSIA_HOME with a ~ expanded", () => {
+    expect(blobRoot()).toBe(path.join(homedir(), ".gnosia", "blobs"));
+    process.env["GNOSIA_HOME"] = "~/elsewhere";
     expect(blobRoot()).toBe(path.join(homedir(), "elsewhere", "blobs"));
-    process.env["SELF_LEARN_HOME"] = "/srv/self-learn";
-    expect(blobRoot()).toBe(path.join("/srv/self-learn", "blobs"));
+    process.env["GNOSIA_HOME"] = "/srv/gnosia";
+    expect(blobRoot()).toBe(path.join("/srv/gnosia", "blobs"));
   });
 
-  it("refuses a relative SELF_LEARN_HOME rather than resolving it against wherever it runs", () => {
-    process.env["SELF_LEARN_HOME"] = "data";
+  it("refuses a relative GNOSIA_HOME rather than resolving it against wherever it runs", () => {
+    process.env["GNOSIA_HOME"] = "data";
     expect(() => blobRoot()).toThrow(/absolute/);
   });
 });
@@ -157,11 +157,11 @@ describe("the CLI paths built on them", () => {
   });
 
   it("fall back to the submodule under the repo root", () => {
-    expect(manimkcCliPath("/srv/self-learn")).toBe(
-      path.join("/srv/self-learn", "tools", "manimkc", "tools", "cli", "manimkc"),
+    expect(manimkcCliPath("/srv/gnosia")).toBe(
+      path.join("/srv/gnosia", "tools", "manimkc", "tools", "cli", "manimkc"),
     );
-    expect(canvasCliPath("/srv/self-learn")).toBe(
-      path.join("/srv/self-learn", "tools", "tldrawkc", "dist", "cli", "index.js"),
+    expect(canvasCliPath("/srv/gnosia")).toBe(
+      path.join("/srv/gnosia", "tools", "tldrawkc", "dist", "cli", "index.js"),
     );
   });
 });

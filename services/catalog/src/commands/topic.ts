@@ -1,4 +1,4 @@
-import { LOCAL_LEARNER_ID, readableOwners } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, readableOwners } from "@gnosia/schema";
 
 import { addTag, checkTagInput, editTag, TagError, type TagWriteResult } from "../content/tags";
 import {

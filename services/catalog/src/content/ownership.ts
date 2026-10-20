@@ -1,5 +1,5 @@
-import { CONTENT_TYPES as READER_TYPES, type Ownership } from "@self-learn/content";
-import { catalogInstance, contentSource, type ContentType } from "@self-learn/schema";
+import { CONTENT_TYPES as READER_TYPES, type Ownership } from "@gnosia/content";
+import { catalogInstance, contentSource, type ContentType } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

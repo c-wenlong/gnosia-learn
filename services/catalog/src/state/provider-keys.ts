@@ -1,4 +1,4 @@
-import { isProviderName, type ProviderName, providerKey } from "@self-learn/schema";
+import { isProviderName, type ProviderName, providerKey } from "@gnosia/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

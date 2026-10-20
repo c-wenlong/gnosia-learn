@@ -40,14 +40,14 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/playback", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let state: typeof import("@self-learn/catalog/state");
+  let state: typeof import("@gnosia/catalog/state");
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
     process.env.DATABASE_URL = scratch.url;
-    const [route, loaded] = await Promise.all([import("./route"), import("@self-learn/catalog/state")]);
+    const [route, loaded] = await Promise.all([import("./route"), import("@gnosia/catalog/state")]);
     POST = route.POST;
     state = loaded;
   }, 60_000);

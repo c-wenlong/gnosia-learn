@@ -1,4 +1,4 @@
-import { setProgress } from "@self-learn/catalog/state";
+import { setProgress } from "@gnosia/catalog/state";
 
 import { handler, requireBoolean, requireId } from "@/lib/learner-api";
 

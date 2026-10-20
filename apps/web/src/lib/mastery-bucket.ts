@@ -1,4 +1,4 @@
-import type { MasteryLabel } from "@self-learn/catalog/state";
+import type { MasteryLabel } from "@gnosia/catalog/state";
 
 /**
  * The three colours the redesign draws mastery in.

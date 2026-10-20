@@ -38,8 +38,8 @@ describe("splitDatabaseUrl", () => {
   });
 
   it("leaves a URL with no password exactly as it was", () => {
-    expect(splitDatabaseUrl("postgres://localhost:5432/self_learn")).toEqual({
-      url: "postgres://localhost:5432/self_learn",
+    expect(splitDatabaseUrl("postgres://localhost:5432/gnosia")).toEqual({
+      url: "postgres://localhost:5432/gnosia",
       password: "",
     });
     expect(splitDatabaseUrl("postgresql://localhost").url).toBe("postgresql://localhost");
@@ -95,11 +95,11 @@ describe("dev-env.mjs pg", () => {
 
 describe("dev-env.mjs get", () => {
   it("reads a quoted value with a trailing comment as Next does", () => {
-    const dir = appDir({ ".env.local": 'DATABASE_URL="postgres://localhost:5432/self_learn" # local database\nOWNER_PASSWORD=pw\n' });
+    const dir = appDir({ ".env.local": 'DATABASE_URL="postgres://localhost:5432/gnosia" # local database\nOWNER_PASSWORD=pw\n' });
     const ran = cli(["get", dir, "DATABASE_URL", "OWNER_PASSWORD", "AUTH_SECRET"]);
     expect(ran.code).toBe(0);
     // A key that is not set is left out, not printed empty.
-    expect(ran.out).toBe("DATABASE_URL=postgres://localhost:5432/self_learn\nOWNER_PASSWORD=pw\n");
+    expect(ran.out).toBe("DATABASE_URL=postgres://localhost:5432/gnosia\nOWNER_PASSWORD=pw\n");
   });
 
   it("lets the environment win over the files, and .env.local over .env", () => {

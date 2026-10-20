@@ -1,6 +1,6 @@
 import { dayKey } from "@/lib/days";
 import { dayLabel, editedLabel } from "@/lib/day-groups";
-import type { AssetParents } from "@self-learn/catalog/state";
+import type { AssetParents } from "@gnosia/catalog/state";
 
 import { conversationLabel, latestConversation } from "@/lib/library-source";
 import { isPlainClick } from "@/lib/plain-click";

@@ -1,4 +1,4 @@
-import { readConceptGraph, recordObservation } from "@self-learn/catalog/state";
+import { readConceptGraph, recordObservation } from "@gnosia/catalog/state";
 
 import { BadRequest, handler, optionalBoolean, requireBoolean } from "@/lib/learner-api";
 import { isConceptSlug } from "@/lib/concept-workspace-core";

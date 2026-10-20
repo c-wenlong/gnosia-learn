@@ -11,14 +11,14 @@ import {
   readableOwners,
   type IndexSource,
   type SourceRepo,
-} from "@self-learn/schema";
-import { loadCourses } from "@self-learn/content";
+} from "@gnosia/schema";
+import { loadCourses } from "@gnosia/content";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import type { BlobStore } from "@self-learn/blob";
+import type { BlobStore } from "@gnosia/blob";
 
 import { openBlobStore, uploadBlob } from "../content/blob";
 import { PDF_PREFIX, POSTER_PREFIX, unhookDerivations, uploadAssets } from "../content/asset-upload";

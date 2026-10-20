@@ -34,7 +34,7 @@ manimkc, remotionkc or revideokc gets exactly one `asset_topic` row
 
 ## What already exists
 
-Most of what a path needs is already in the catalog. Measured on `self_learn`
+Most of what a path needs is already in the catalog. Measured on `gnosia`
 on 2026-10-04:
 
 - **The order.** Every one of the 248 live course items lists its concepts in

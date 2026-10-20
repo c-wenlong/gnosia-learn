@@ -1,8 +1,8 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fileSource } from "@self-learn/content";
-import { collection, curriculumItem } from "@self-learn/schema";
+import { fileSource } from "@gnosia/content";
+import { collection, curriculumItem } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import type { PgTransactionConfig } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ import { dbSource } from "../src/content/source";
 import { runIndex } from "../src/index/run";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
-import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@gnosia/schema";
 import { writeAssetName } from "../src/state";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */

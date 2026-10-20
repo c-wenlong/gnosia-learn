@@ -54,7 +54,7 @@ import {
  * They are not re-exported here as well: two `export *` paths to the same name
  * make it ambiguous, and ESM resolves an ambiguous star-export by dropping the
  * name entirely rather than by erroring. The web app takes them from the
- * `@self-learn/schema/shared` subpath instead, which is drizzle-free and
+ * `@gnosia/schema/shared` subpath instead, which is drizzle-free and
  * therefore safe in a client component.
  */
 

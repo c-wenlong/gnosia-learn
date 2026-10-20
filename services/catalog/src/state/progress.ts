@@ -1,7 +1,7 @@
-import { curriculumItem, LOCAL_LEARNER_ID, progress } from "@self-learn/schema";
+import { curriculumItem, LOCAL_LEARNER_ID, progress } from "@gnosia/schema";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
-import { PREFERENCE_KEYS } from "@self-learn/schema";
+import { PREFERENCE_KEYS } from "@gnosia/schema";
 
 import { ownedBy, type Owners, readableFor } from "../content/scope";
 import type { CatalogDatabase } from "../db";

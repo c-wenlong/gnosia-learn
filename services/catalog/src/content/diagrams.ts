@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { key as blobKey, type BlobStore } from "@self-learn/blob";
+import { key as blobKey, type BlobStore } from "@gnosia/blob";
 import {
   assetJob,
   blobObject,
@@ -14,7 +14,7 @@ import {
   readableOwners,
   topic,
   type AuthorKind,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -375,7 +375,7 @@ export async function putDiagram(
           contentHash: docHash,
           bytes: bytes.length,
           title,
-          sourceRepo: "self-learn",
+          sourceRepo: "gnosia",
           blobKey: null,
           resourceType: null,
           ownerId,
@@ -400,7 +400,7 @@ export async function putDiagram(
           contentHash: svg.sha256,
           bytes: svg.bytes,
           title,
-          sourceRepo: "self-learn",
+          sourceRepo: "gnosia",
           blobKey: svg.key,
           resourceType: null,
           ownerId,
@@ -561,7 +561,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
             contentHash: uploaded.sha256,
             bytes: uploaded.bytes,
             title: slug,
-            sourceRepo: "self-learn",
+            sourceRepo: "gnosia",
             blobKey: uploaded.key,
             resourceType: null,
             ownerId,

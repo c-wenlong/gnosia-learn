@@ -48,7 +48,7 @@ describe("nothing listening", () => {
     // `localhost`, not 127.0.0.1: it resolves to two addresses, and the driver
     // reports two refusals as one AggregateError with an empty message, which
     // is the shape the classifier most needs to read through.
-    url = `postgres://localhost:${await deadPort()}/self_learn`;
+    url = `postgres://localhost:${await deadPort()}/gnosia`;
   });
 
   it(`exits ${EXIT_UNREACHABLE} and says the connection was refused`, async () => {
@@ -73,7 +73,7 @@ describe("a host that does not resolve", () => {
   it(`exits ${EXIT_UNREACHABLE}`, async () => {
     // .invalid is reserved by RFC 2606 and never resolves. Without a network
     // the lookup fails as EAI_AGAIN instead, which is unreachable too.
-    const ran = await catalog("postgres://no-such-host.invalid:5432/self_learn", "status");
+    const ran = await catalog("postgres://no-such-host.invalid:5432/gnosia", "status");
     expect(ran.code).toBe(EXIT_UNREACHABLE);
     expect(ran.stderr).toMatch(/database unreachable: host (not found \(ENOTFOUND\)|lookup failed \(EAI_AGAIN\))/);
   });
@@ -102,7 +102,7 @@ describe("a live server that refuses", () => {
 describe("catalog index, the old name of catalog import", () => {
   let url: string;
   beforeAll(async () => {
-    url = `postgres://localhost:${await deadPort()}/self_learn`;
+    url = `postgres://localhost:${await deadPort()}/gnosia`;
   });
 
   it("says the new name once, on stderr, and then runs import", async () => {

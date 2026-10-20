@@ -2,7 +2,7 @@ import {
   clampKnowledgeList,
   clampSummary,
   KNOWLEDGE_LIMITS,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 import {
   emptyLearnerState,
   type KnowledgeInput,
@@ -15,7 +15,7 @@ import {
  * Pure state transitions for the learner state.
  *
  * What this module used to be: the localStorage layer. `loadState`,
- * `saveState` and `migrateState` read and wrote `self-learn:v1`, and the
+ * `saveState` and `migrateState` read and wrote `gnosia:v1`, and the
  * reducers below existed to keep that testable without a DOM.
  *
  * What it is now: only the reducers. Postgres holds the state, the provider
@@ -24,7 +24,7 @@ import {
  * optimistic half of every mutation still has to happen somewhere, and a UI
  * that waited for a round trip before ticking a checkbox would feel broken.
  *
- * The clamps come from `@self-learn/schema/shared`, which is the same
+ * The clamps come from `@gnosia/schema/shared`, which is the same
  * definition the `recap` table's CHECK constraints are generated from. Two
  * copies of `summaryChars` would eventually disagree, and the way that shows
  * up is a save the learner watches succeed and then fail.

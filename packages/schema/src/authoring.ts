@@ -101,7 +101,7 @@ export type InstanceRole = (typeof INSTANCE_ROLES)[number];
  * same reason (a revoked privilege does not bind the owner who runs psql).
  *
  * Written only by the write seam in `services/catalog/src/content/`, which
- * also sets the `self_learn.revision_id` setting the per-table guard triggers
+ * also sets the `gnosia.revision_id` setting the per-table guard triggers
  * check once a type flips (D4).
  *
  * `snapshot` is the whole entity after the write, with its owned links under
@@ -210,7 +210,7 @@ export const contentSource = pgTable(
  *
  * On a copy every write to every other table is refused by a statement trigger
  * the migration attaches, naming `primary_host`; a connection opened with
- * `self_learn.copy_ok = on` (tests and `scripts/e2e.mjs`, through
+ * `gnosia.copy_ok = on` (tests and `scripts/e2e.mjs`, through
  * `CATALOG_COPY_OK=1`) is let through. The boolean key with a CHECK is what
  * makes it a single row.
  */

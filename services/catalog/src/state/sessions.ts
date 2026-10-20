@@ -6,7 +6,7 @@ import {
   type Session,
   type SessionKind,
   type SessionState,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

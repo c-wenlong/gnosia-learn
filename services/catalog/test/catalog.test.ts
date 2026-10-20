@@ -6,14 +6,14 @@ import {
   indexRun,
   mirror,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { eq, isNull, sql } from "drizzle-orm";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { loadCourses } from "@self-learn/content";
+import { loadCourses } from "@gnosia/content";
 
 import { runDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
@@ -90,7 +90,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     // CLI takes. Pointing it at the scratch database exercises that path
     // rather than a test-only one.
     previousUrl = process.env["DATABASE_URL"];
-    const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+    const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
     url.pathname = `/${scratch.name}`;
     process.env["DATABASE_URL"] = url.toString();
     previousManimkc = process.env["MANIMKC_ROOT"];
@@ -307,7 +307,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       const saved = process.env["DATABASE_URL"];
       try {
         await applyMigrations(partial.db, { folder: await partialMigrations() });
-        const url = new URL(saved ?? "postgres://localhost:5432/self_learn");
+        const url = new URL(saved ?? "postgres://localhost:5432/gnosia");
         url.pathname = `/${partial.name}`;
         process.env["DATABASE_URL"] = url.toString();
 
@@ -590,7 +590,7 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     previousUrl = process.env["DATABASE_URL"];
-    const url = new URL(previousUrl ?? "postgres://localhost:5432/self_learn");
+    const url = new URL(previousUrl ?? "postgres://localhost:5432/gnosia");
     url.pathname = `/${scratch.name}`;
     process.env["DATABASE_URL"] = url.toString();
   }, 60_000);
@@ -691,7 +691,7 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
       id: "note:learn/concepts/x/a.md",
       kind: "note",
       path: "learn/concepts/x/a.md",
-      sourceRepo: "self-learn",
+      sourceRepo: "gnosia",
     });
     const result = (await runShow("note:learn/concepts/x/a.md")) as ShowAsset;
     expect(result.mirrors).toEqual([]);

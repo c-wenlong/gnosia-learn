@@ -35,7 +35,7 @@ function catalog(url: string, ...args: string[]): Promise<{ code: number | null;
 
 let url: string;
 beforeAll(async () => {
-  url = `postgres://localhost:${await deadPort()}/self_learn`;
+  url = `postgres://localhost:${await deadPort()}/gnosia`;
 });
 
 describe("--dry-run on a command that cannot honour it", () => {

@@ -2,8 +2,8 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { TOPIC_RELATION_KINDS as READER_KINDS } from "@self-learn/content";
-import { contentRevision, tag, TOPIC_RELATION_KINDS } from "@self-learn/schema";
+import { TOPIC_RELATION_KINDS as READER_KINDS } from "@gnosia/content";
+import { contentRevision, tag, TOPIC_RELATION_KINDS } from "@gnosia/schema";
 import { parse, stringify } from "yaml";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -50,18 +50,18 @@ function pointAt(name: string): () => void {
   const saved = {
     url: process.env["DATABASE_URL"],
     manimkc: process.env["MANIMKC_ROOT"],
-    home: process.env["SELF_LEARN_HOME"],
+    home: process.env["GNOSIA_HOME"],
   };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
   url.pathname = `/${name}`;
   process.env["DATABASE_URL"] = url.toString();
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
-  process.env["SELF_LEARN_HOME"] = path.join(tmpdir(), `self-learn-home-${name}`);
+  process.env["GNOSIA_HOME"] = path.join(tmpdir(), `gnosia-home-${name}`);
   return () => {
     for (const [key, value] of [
       ["DATABASE_URL", saved.url],
       ["MANIMKC_ROOT", saved.manimkc],
-      ["SELF_LEARN_HOME", saved.home],
+      ["GNOSIA_HOME", saved.home],
     ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;

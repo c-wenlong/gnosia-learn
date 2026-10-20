@@ -1,4 +1,4 @@
-import { PDF_CONTENT_TYPE } from "@self-learn/catalog/state";
+import { PDF_CONTENT_TYPE } from "@gnosia/catalog/state";
 import { NextResponse } from "next/server";
 
 import {

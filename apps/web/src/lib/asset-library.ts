@@ -21,7 +21,7 @@ import {
   type TopicTitles,
   type AssetWithTopics,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 
 import { openBlob, resolveAsset, servedAssets, storedPosters } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";

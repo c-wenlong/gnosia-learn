@@ -4,8 +4,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
-import { asset, blobObject } from "@self-learn/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
+import { asset, blobObject } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -72,7 +72,7 @@ describe.skipIf(!reachable.ok)("blob audit --fix, branch by branch", () => {
       contentHash: "0".repeat(64),
       bytes: 1,
       title: id,
-      sourceRepo: kind === "poster" ? "self-learn" : "manimkc",
+      sourceRepo: kind === "poster" ? "gnosia" : "manimkc",
       blobKey: key,
     });
   };

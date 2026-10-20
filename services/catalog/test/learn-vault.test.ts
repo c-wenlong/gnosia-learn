@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 
 import fsPromises from "node:fs/promises";
 
-import { concept, contentRevision, session, sessionLogEntry } from "@self-learn/schema";
+import { concept, contentRevision, session, sessionLogEntry } from "@gnosia/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -91,7 +91,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
   let scratch: Scratch;
   let fixture: Fixture;
   const vaults: string[] = [];
-  const savedHome = process.env["SELF_LEARN_HOME"];
+  const savedHome = process.env["GNOSIA_HOME"];
 
   function learn(...args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
     return execFileAsync(process.execPath, ["--import", "tsx", ENTRY, ...args], {
@@ -115,7 +115,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     return { ...(JSON.parse(result.stdout) as PushReport), code: result.code };
   }
   async function newVault(): Promise<string> {
-    const dir = await mkdtemp(path.join(tmpdir(), "self-learn-vault-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "gnosia-vault-"));
     vaults.push(dir);
     return dir;
   }
@@ -137,7 +137,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
 
   beforeAll(async () => {
     // The blob store the SVGs are pulled from, for this process and the CLI it runs.
-    process.env["SELF_LEARN_HOME"] = await newVault();
+    process.env["GNOSIA_HOME"] = await newVault();
     scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha", "beta", "gamma", "delta"] }]));
@@ -168,8 +168,8 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     await scratch?.drop();
     await fixture?.cleanup();
     for (const vault of vaults) await rm(vault, { recursive: true, force: true });
-    if (savedHome === undefined) delete process.env["SELF_LEARN_HOME"];
-    else process.env["SELF_LEARN_HOME"] = savedHome;
+    if (savedHome === undefined) delete process.env["GNOSIA_HOME"];
+    else process.env["GNOSIA_HOME"] = savedHome;
   });
 
   it("pulls into an empty folder and pushes nothing back when nothing was edited", async () => {
@@ -488,14 +488,14 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     const recorded = await manifest(vault);
     await writeFile(
       path.join(vault, ".vault.json"),
-      JSON.stringify({ ...recorded, database: "self_learn:1" }, null, 2),
+      JSON.stringify({ ...recorded, database: "gnosia:1" }, null, 2),
     );
     const rel = "concepts/fixtures/alpha.md";
     await writeFile(path.join(vault, rel), `${await read(vault, rel)}\nfrom elsewhere\n`);
     const before = await revisions();
     const result = await learn("vault", "push", "--out", vault);
     expect(result.code).toBe(1);
-    expect(result.stderr).toMatch(/was pulled from the database self_learn:1/);
+    expect(result.stderr).toMatch(/was pulled from the database gnosia:1/);
     expect(await revisions()).toBe(before);
     // A pull adopts this database, keeps the edit, and puts this database's version beside it.
     const pulled = await pull(vault);
@@ -696,7 +696,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
 
   it("refuses a vault inside another checkout of this repository", async () => {
     const other = await newVault();
-    await writeFile(path.join(other, "package.json"), JSON.stringify({ name: "self-learn", private: true }));
+    await writeFile(path.join(other, "package.json"), JSON.stringify({ name: "gnosia", private: true }));
     const result = await learn("vault", "pull", "--out", path.join(other, "learn", "vault"));
     expect(result.code).toBe(1);
     expect(result.stderr).toMatch(/is inside .*, a checkout of this repository/);
@@ -810,13 +810,13 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><title>theirs</title></svg>';
     const sha = createHash("sha256").update(svg).digest("hex");
     const key = `${other}/${sha}.svg`;
-    await mkdir(path.join(process.env["SELF_LEARN_HOME"] as string, "blobs", other), { recursive: true });
-    await writeFile(path.join(process.env["SELF_LEARN_HOME"] as string, "blobs", key), svg);
+    await mkdir(path.join(process.env["GNOSIA_HOME"] as string, "blobs", other), { recursive: true });
+    await writeFile(path.join(process.env["GNOSIA_HOME"] as string, "blobs", key), svg);
     // Another owner's rows, written around the seam as the review's seed was:
     // the write guards of the flipped types let a named repair through.
     const guarded = (write: (tx: typeof scratch.db) => Promise<void>) =>
       scratch.db.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('self_learn.revision_id', 'test-seed', true)`);
+        await tx.execute(sql`select set_config('gnosia.revision_id', 'test-seed', true)`);
         await write(tx);
       });
     await guarded(async (tx) => {
@@ -849,7 +849,7 @@ describe.skipIf(!reachable.ok)("learn vault before the flip", () => {
   it("refuses while the database does not own the notes and logs", async () => {
     const scratch = await migratedScratchDatabase();
     const fixture = await makeFixture();
-    const vault = await mkdtemp(path.join(tmpdir(), "self-learn-vault-"));
+    const vault = await mkdtemp(path.join(tmpdir(), "gnosia-vault-"));
     try {
       const result = await execFileAsync(process.execPath, ["--import", "tsx", ENTRY, "vault", "pull", "--out", vault], {
         env: { ...process.env, LEARN_ROOT: fixture.root, DATABASE_URL: scratch.url },

@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fileSource, selectSource } from "@self-learn/content";
+import { fileSource, selectSource } from "@gnosia/content";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runFlip } from "../src/commands/flip";
@@ -12,7 +12,7 @@ import { contentOwnership } from "../src/content/ownership";
 import { dbSource } from "../src/content/source";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
-import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -36,7 +36,7 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the seed", () => {
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
-    const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+    const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
     url.pathname = `/${scratch.name}`;
     process.env["DATABASE_URL"] = url.toString();
     process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");

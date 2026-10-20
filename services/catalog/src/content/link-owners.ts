@@ -1,4 +1,4 @@
-import { COMMONS_OWNER, type RevisionEntityType } from "@self-learn/schema";
+import { COMMONS_OWNER, type RevisionEntityType } from "@gnosia/schema";
 import { getTableColumns, getTableName, sql, type SQL } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 

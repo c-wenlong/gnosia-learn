@@ -19,7 +19,7 @@ import {
   topic,
   topicRelation,
   video,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 

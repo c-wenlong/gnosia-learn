@@ -1,6 +1,6 @@
 # Video tools: which one makes this video
 
-self-learn has four tools that turn a narrated script into an MP4, each a
+gnosia has four tools that turn a narrated script into an MP4, each a
 submodule under `tools/` with its own CLI and operating manual. They
 share one voice (manimkc's narration layer), one report shape (`topics
 --json`, indexed by one reader in `services/catalog/src/index/video-tool.ts`)

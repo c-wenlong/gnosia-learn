@@ -1,7 +1,7 @@
 -- Phase 2's contract migration (docs/CONTENT-MIGRATION.md, "Contract
 -- migration"): a video, a sidecar, a poster or a diagram SVG is in the blob
 -- store, and its `asset` row names the blob; and a blob key is the key
--- `@self-learn/blob` makes (packages/blob/src/key.ts), which is stricter than
+-- `@gnosia/blob` makes (packages/blob/src/key.ts), which is stricter than
 -- 0010's check.
 --
 -- drizzle-kit's own output is everything after the hand-written block,
@@ -31,7 +31,7 @@ BEGIN
 			USING HINT = 'npm run catalog -- doctor lists them.';
 	END IF;
 	IF unkeyed IS NOT NULL THEN
-		RAISE EXCEPTION 'blob_object_key_check cannot be tightened: these keys are not keys @self-learn/blob makes: %.', unkeyed
+		RAISE EXCEPTION 'blob_object_key_check cannot be tightened: these keys are not keys @gnosia/blob makes: %.', unkeyed
 			USING HINT = 'npm run catalog -- doctor lists them.';
 	END IF;
 END

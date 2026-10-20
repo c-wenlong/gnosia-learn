@@ -1,6 +1,6 @@
 # Gnosia: the brand
 
-The product was called self-learn; it is now **Gnosia**. This document is the
+The product was called gnosia; it is now **Gnosia**. This document is the
 brand: what it should feel like, the palette and why each value was chosen,
 how the mark is built, the rules for the mascot, and where each piece appears.
 The app's own token and component contract is still

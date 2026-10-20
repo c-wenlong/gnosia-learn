@@ -1,9 +1,9 @@
-import { importLegacyState, type LegacyPayload } from "@self-learn/catalog/state";
+import { importLegacyState, type LegacyPayload } from "@gnosia/catalog/state";
 
 import { BadRequest, handler } from "@/lib/learner-api";
 
 /**
- * The one-time import of a browser's `self-learn:v1` document.
+ * The one-time import of a browser's `gnosia:v1` document.
  *
  * `LearnerProvider` posts this on first mount when the key is present, and
  * removes the key when it comes back `ok`. The merge rules — the database

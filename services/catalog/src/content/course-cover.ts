@@ -1,6 +1,6 @@
-import { type BlobStore, key as blobKey } from "@self-learn/blob";
-import { isSourceUrl } from "@self-learn/content";
-import { collection, LOCAL_LEARNER_ID, type RevisionOp } from "@self-learn/schema";
+import { type BlobStore, key as blobKey } from "@gnosia/blob";
+import { isSourceUrl } from "@gnosia/content";
+import { collection, LOCAL_LEARNER_ID, type RevisionOp } from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

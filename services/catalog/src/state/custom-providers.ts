@@ -6,7 +6,7 @@ import {
   type CustomProviderId,
   customProviderId,
   isCustomProviderId,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

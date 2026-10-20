@@ -14,7 +14,7 @@ import {
   STUDIO_TABLES,
   type TableName,
   tables,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, count, eq, getTableName, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 

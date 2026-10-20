@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { learner, LOCAL_LEARNER_ID, providerKey } from "@self-learn/schema";
+import { learner, LOCAL_LEARNER_ID, providerKey } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import ts from "typescript";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -156,7 +156,7 @@ describe.skipIf(!reachable.ok)("provider keys never leave through an export", ()
   const saved = {
     url: process.env["DATABASE_URL"],
     manimkc: process.env["MANIMKC_ROOT"],
-    home: process.env["SELF_LEARN_HOME"],
+    home: process.env["GNOSIA_HOME"],
   };
 
   beforeAll(async () => {
@@ -165,14 +165,14 @@ describe.skipIf(!reachable.ok)("provider keys never leave through an export", ()
     home = await mkdtemp(path.join(tmpdir(), "catalog-byok-home-"));
     process.env["DATABASE_URL"] = scratch.url;
     process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
-    process.env["SELF_LEARN_HOME"] = home;
+    process.env["GNOSIA_HOME"] = home;
   }, 60_000);
 
   afterAll(async () => {
     for (const [key, value] of [
       ["DATABASE_URL", saved.url],
       ["MANIMKC_ROOT", saved.manimkc],
-      ["SELF_LEARN_HOME", saved.home],
+      ["GNOSIA_HOME", saved.home],
     ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -260,7 +260,7 @@ describe("the one door to provider_key", () => {
 
   it("finds a reference the way it is meant to", () => {
     expect(namesTable("// the provider_key table\nconst x = 1;")).toBe(false);
-    expect(namesTable("import { providerKey } from '@self-learn/schema';")).toBe(true);
+    expect(namesTable("import { providerKey } from '@gnosia/schema';")).toBe(true);
     expect(namesTable("db.execute(sql`select * from provider_key`)")).toBe(true);
     expect(namesTable("db.execute(sql`select ${a} from provider_key`)")).toBe(true);
     expect(namesTable('query("delete from provider_key")')).toBe(true);

@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-self-learn is not versioned or released. It is continuously deployed to Vercel
+gnosia is not versioned or released. It is continuously deployed to Vercel
 from `main`, so the only things that get fixes are the `main` branch and the
 current production deploy. There is no older line to back-port to.
 
@@ -10,7 +10,7 @@ current production deploy. There is no older line to back-port to.
 
 If you discover a security issue, please **do not** open a public GitHub issue
 describing it. Use GitHub's
-[private vulnerability reporting](https://github.com/c-wenlong/self-learn/security/advisories/new)
+[private vulnerability reporting](https://github.com/c-wenlong/gnosia/security/advisories/new)
 instead.
 
 Include:

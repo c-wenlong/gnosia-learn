@@ -7,7 +7,7 @@ import {
   type Resource,
   type ResourceType,
   type Topic,
-} from "@self-learn/content";
+} from "@gnosia/content";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../../db";

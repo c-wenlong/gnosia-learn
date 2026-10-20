@@ -3,7 +3,7 @@ import "server-only";
 import path from "node:path";
 import type { Readable } from "node:stream";
 
-import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@self-learn/blob";
+import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@gnosia/blob";
 import {
   assetBlobs,
   assetsByIds,
@@ -16,8 +16,8 @@ import {
   type AssetBlob,
   type AssetRef,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
-import type { ContentType } from "@self-learn/content";
+} from "@gnosia/catalog/state";
+import type { ContentType } from "@gnosia/content";
 
 import { ContentUnavailableError, contentSource } from "@/data/source";
 import { isRenderSource, uploadCommand, type RouteProblemCode } from "@/lib/asset-problems";

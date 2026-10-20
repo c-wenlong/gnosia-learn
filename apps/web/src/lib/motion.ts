@@ -22,7 +22,7 @@ import { parseMotionMode } from "@/lib/preferences";
  * preference, not anything that authenticates.
  */
 
-export const MOTION_COOKIE = "self-learn-motion";
+export const MOTION_COOKIE = "gnosia-motion";
 
 /** A year, as the theme cookie. */
 export const MOTION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;

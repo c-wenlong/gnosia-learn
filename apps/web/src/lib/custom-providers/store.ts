@@ -5,8 +5,8 @@ import {
   readCustomProviders,
   type StoredCustomProvider,
   updateCustomProvider,
-} from "@self-learn/catalog/state";
-import { isCustomProviderId } from "@self-learn/schema/shared";
+} from "@gnosia/catalog/state";
+import { isCustomProviderId } from "@gnosia/schema/shared";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { keySealer, type SavedKeyStatus, savedStatus } from "@/lib/provider-keys/store";

@@ -5,7 +5,7 @@ import {
   conceptPrerequisite,
   curriculumItem,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

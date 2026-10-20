@@ -9,7 +9,7 @@ import {
   job as jobTable,
   type Draft,
   type NewDraft,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { CLI_OWNER } from "../content/scope";

@@ -23,7 +23,7 @@ import {
   session as sessionTable,
   topic as topicTable,
   video as videoTable,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import { CLI_OWNER, ownersExist } from "../content/scope";
@@ -45,7 +45,7 @@ import { bytewise } from "../sql-order";
  * state IN (<the states that can reach this one>)`, so two runners cannot both
  * claim one job and a replayed finish against a row that already moved on
  * writes nothing and says it wrote nothing. The vocabulary of legal moves is
- * `JOB_TRANSITIONS` in `@self-learn/schema/shared`, which the runner and the UI
+ * `JOB_TRANSITIONS` in `@gnosia/schema/shared`, which the runner and the UI
  * read too: a second copy of a state machine is a second state machine.
  *
  * **Enqueue is idempotent through `idempotency_key`, not through the target.**

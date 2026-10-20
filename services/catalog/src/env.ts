@@ -1,4 +1,4 @@
-import { defaultBlobRoot } from "@self-learn/blob";
+import { defaultBlobRoot } from "@gnosia/blob";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -14,11 +14,11 @@ export const SERVICE_ROOT = path.resolve(
 export const REPO_ROOT = path.resolve(SERVICE_ROOT, "..", "..");
 
 /**
- * Local Postgres, the Homebrew install, database `self_learn`. Documented in
+ * Local Postgres, the Homebrew install, database `gnosia`. Documented in
  * services/catalog/.env.example. Daily development needs no configuration at
  * all; CI and the homeserver set DATABASE_URL and point at compose.yaml.
  */
-export const DEFAULT_DATABASE_URL = "postgres://localhost:5432/self_learn";
+export const DEFAULT_DATABASE_URL = "postgres://localhost:5432/gnosia";
 
 /** The manimkc submodule, relative to the repo root. Also the git path in `git submodule update --init <here>`. */
 export const MANIMKC_DIR = path.join("tools", "manimkc");
@@ -133,7 +133,7 @@ function checkoutRoot(variable: string, fallback: string, repoRoot: string): str
  * a walk up from the working directory
  * (`tools/manimkc/tools/cli/manimkc_cli/repo.py`). Reusing the name is
  * deliberate: one variable that means "the manimkc checkout" everywhere is the
- * only version of this that stays true, and a `SELF_LEARN_MANIMKC_ROOT` beside
+ * only version of this that stays true, and a `GNOSIA_MANIMKC_ROOT` beside
  * it would be a second answer to a question that already has one. Note that it
  * is *not* `$MANIMKC_HOME`, which is where manimkc's generated data lands; the
  * indexers get that from each report's `outRoot` and never from a path here.
@@ -188,11 +188,11 @@ export function resolveTldrawkcRoot(repoRoot: string = REPO_ROOT): string {
 }
 
 /** Where the laptop's blob store lives: its data root, with `blobs` under it. */
-export const SELF_LEARN_HOME_ENV = "SELF_LEARN_HOME";
+export const GNOSIA_HOME_ENV = "GNOSIA_HOME";
 
 /**
- * The `fs` blob store's root: `$SELF_LEARN_HOME/blobs`, else
- * `~/.self-learn/blobs` (`defaultBlobRoot` in `@self-learn/blob` has the rules).
+ * The `fs` blob store's root: `$GNOSIA_HOME/blobs`, else
+ * `~/.gnosia/blobs` (`defaultBlobRoot` in `@gnosia/blob` has the rules).
  *
  * One function for every process that opens the store, so the catalog CLI
  * that uploads and the web app that serves cannot resolve two roots: the

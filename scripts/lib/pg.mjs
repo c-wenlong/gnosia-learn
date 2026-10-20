@@ -1,6 +1,6 @@
 // Postgres helpers the scripts share: running the client tools, the
 // connection a DATABASE_URL names, and copying one database into another.
-// scripts/e2e.mjs and scripts/flip-rehearsal.mjs both copy `self_learn`, and
+// scripts/e2e.mjs and scripts/flip-rehearsal.mjs both copy `gnosia`, and
 // the fallback for a template with sessions open is easy to get subtly wrong
 // (a shell pipeline reports only psql's exit code), so it lives here once.
 import { spawn, spawnSync } from 'node:child_process';

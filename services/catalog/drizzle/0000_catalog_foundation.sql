@@ -10,7 +10,7 @@ CREATE TABLE "asset" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "asset_kind_check" CHECK (kind in ('video', 'transcript', 'chapters', 'captions', 'diagram_source', 'diagram_svg', 'note', 'session', 'link')),
-	CONSTRAINT "asset_source_repo_check" CHECK (source_repo in ('self-learn', 'manimkc', 'tldrawkc')),
+	CONSTRAINT "asset_source_repo_check" CHECK (source_repo in ('gnosia', 'manimkc', 'tldrawkc')),
 	CONSTRAINT "asset_location_check" CHECK (num_nonnulls(path, url) = 1),
 	CONSTRAINT "asset_bytes_check" CHECK (bytes is null or bytes >= 0)
 );

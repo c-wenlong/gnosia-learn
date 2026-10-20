@@ -1,4 +1,4 @@
-import { asThemeMode, PREFERENCE_KEYS, THEME_MODES, type ThemeMode } from "@self-learn/schema/shared";
+import { asThemeMode, PREFERENCE_KEYS, THEME_MODES, type ThemeMode } from "@gnosia/schema/shared";
 import {
   appendEvent,
   asLastVisited,
@@ -8,7 +8,7 @@ import {
   withRecentModule,
   writePreference,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 
 import { BadRequest, handler, MAX_ID_CHARS } from "@/lib/learner-api";
 import {

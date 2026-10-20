@@ -42,7 +42,7 @@ const notes = ["graphs", "constructor", "__proto__"].map((slug) => ({
   url: null,
   bytes: 10,
   title: slug,
-  sourceRepo: "self-learn",
+  sourceRepo: "gnosia",
   topics: [],
 }));
 
@@ -50,7 +50,7 @@ vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
 
 const assetParents = vi.hoisted(() => vi.fn(async (): Promise<Record<string, unknown>> => ({})));
 
-vi.mock("@self-learn/catalog/state", () => ({
+vi.mock("@gnosia/catalog/state", () => ({
   assetParents,
   listAssets: async (_db: unknown, filter: { ids?: string[]; kind?: string } = {}) =>
     filter.kind === "note"

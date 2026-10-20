@@ -6,7 +6,7 @@
  * than inline so the first ten real jobs can move them without a code read.
  */
 
-import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";
+import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";
 
 function integer(name: string, fallback: number, min: number, max: number): number {
   const raw = process.env[name]?.trim();

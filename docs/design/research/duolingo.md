@@ -2,7 +2,7 @@
 
 Scope: the path/unit map, streaks, XP/leagues/quests/hearts, lesson-end and
 in-exercise feedback, the Feather visual language, and the criticism. Done
-for the self-learn tutoring loop (Probe, Plan, Teach, Close) on desktop web,
+for the gnosia tutoring loop (Probe, Plan, Teach, Close) on desktop web,
 for an adult who chose to be here, not a child who has to be.
 
 ## What it is good at
@@ -17,7 +17,7 @@ for an adult who chose to be here, not a child who has to be.
 
 ## Patterns worth adapting
 
-- **Linear path with one active node.** Removes the "which lesson do I pick" decision that a grid or tree forces; a self-learner on a course page benefits the same way a language learner does. Asset: `path-vs-tree-before-after.png`.
+- **Linear path with one active node.** Removes the "which lesson do I pick" decision that a grid or tree forces; a gnosiaer on a course page benefits the same way a language learner does. Asset: `path-vs-tree-before-after.png`.
 - **Unit guidebook before the exercises.** A short primer at the unit boundary maps directly onto a concept note read before Teach starts; it is the one Duolingo mechanic that is pure pedagogy, no game layer at all. Asset: `guidebook-before-after.png`.
 - **Answer feedback with an optional "why."** "Correct" or "Incorrect" first, then a real grammar explanation on request, respects an adult's time without hiding the reasoning they came for. Asset: `exercise-feedback-explain-answer.png`.
 - **A session-close screen with a real number.** Total XP and percent accuracy give the Close phase something concrete to report, closer to "you got 8 of 10 right" than a generic completion toast. Asset: `lesson-complete-xp-tally.jpg`.

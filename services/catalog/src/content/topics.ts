@@ -1,6 +1,6 @@
 import { realpath as fsRealpath } from "node:fs/promises";
 
-import type { TopicEntry, TopicRelation } from "@self-learn/content";
+import type { TopicEntry, TopicRelation } from "@gnosia/content";
 import {
   type AuthorKind,
   concept,
@@ -13,7 +13,7 @@ import {
   TOPIC_RELATION_KINDS,
   topicRelation,
   type TopicRelationKind,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

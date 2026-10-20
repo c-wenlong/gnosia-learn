@@ -1,4 +1,4 @@
-import type { BlobStore } from "@self-learn/blob";
+import type { BlobStore } from "@gnosia/blob";
 import {
   COURSE_COVER_EXTENSIONS,
   COURSES_DIR,
@@ -6,7 +6,7 @@ import {
   coverFileName,
   TAGS_FILE,
   TOPICS_FILE,
-} from "@self-learn/content";
+} from "@gnosia/content";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -48,7 +48,7 @@ export class ExportError extends Error {
  * no row holds them; they are the export format's own, written here once.
  */
 export const TOPICS_HEADER = [
-  "# Shared topic vocabulary for the self-learn catalog.",
+  "# Shared topic vocabulary for the gnosia catalog.",
   "# One entry per topic. slug is permanent; everything else can change.",
   "# maps.manimkc entries are manimkc/topics/<path> with the topics/ prefix dropped.",
   "# maps.courses entries are course *module* ids (e.g. cp4284-m3), not topic-level -tN ids.",

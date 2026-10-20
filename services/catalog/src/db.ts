@@ -1,4 +1,4 @@
-import { tables } from "@self-learn/schema";
+import { tables } from "@gnosia/schema";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
 
@@ -42,7 +42,7 @@ export interface ConnectOptions {
 }
 
 /** The session setting the copy guard trigger reads (migration 0010). */
-export const COPY_OK_SETTING = "self_learn.copy_ok";
+export const COPY_OK_SETTING = "gnosia.copy_ok";
 
 /**
  * The libpq `options` for a connection: the caller's, plus the copy flag when

@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { CONTENT_TABLES, tables } from "@self-learn/schema";
+import { CONTENT_TABLES, tables } from "@gnosia/schema";
 import { getTableName } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 

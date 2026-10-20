@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, collection, contentRevision, curriculumItem, learner, progress, recap } from "@self-learn/schema";
+import { asset, collection, contentRevision, curriculumItem, learner, progress, recap } from "@gnosia/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -35,7 +35,7 @@ const reachable = await probe();
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
   url.pathname = `/${name}`;
   process.env["DATABASE_URL"] = url.toString();
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");

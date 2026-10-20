@@ -36,7 +36,7 @@ function note(day: string, i: number, title = `Note ${String(i).padStart(3, "0")
     url: null,
     bytes: 100,
     title,
-    sourceRepo: "self-learn",
+    sourceRepo: "gnosia",
     topics: [],
     createdAt: new Date(Date.parse(`${day}T20:00:00Z`) - i * 60_000).toISOString(),
     updatedAt: `${day}T20:00:00Z`,
