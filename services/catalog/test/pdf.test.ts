@@ -7,7 +7,7 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { buildVideoPdf, pdfInputs, readSegments, segmentsFromText } from "../src/pdf/build";
-import { pdfInputsOf, wrapCaption } from "../src/pdf/document";
+import { pdfInputsOf, toWinAnsi, wrapCaption } from "../src/pdf/document";
 import { ffmpegPageArgs, pagePlan, PDF_MAX_PAGES, PDF_SILENT_EVERY_SECONDS } from "../src/pdf/recipe";
 
 /**
@@ -200,6 +200,18 @@ describe("buildVideoPdf", () => {
     expect(await pdfInputsOf(made.body)).toBe(made.inputs);
     expect(await pdfInputsOf(made.body)).not.toBe(pdfInputs("aa11", "A demo", null));
     expect(await pdfInputsOf(Buffer.from("not a pdf"))).toBeNull();
+  });
+
+  it("prints a caption WinAnsi cannot carry rather than refusing the document", async () => {
+    // A transcript beat once held a non-breaking hyphen (U+2011), and
+    // standard Helvetica's refusal to encode it refused the whole PDF.
+    const f = await (async () => (await PDFDocument.create()).embedFont(StandardFonts.Helvetica))();
+    expect(toWinAnsi("a non‑breaking hyphen, an arrow →, and an emoji 🎬", f)).toBe(
+      "a non-breaking hyphen, an arrow ->, and an emoji ",
+    );
+    const segments = [{ start: 0, end: 4, text: "a non‑breaking hyphen and an emoji 🎬 →" }];
+    const made = await buildVideoPdf(ffmpeg, VIDEO, "aa11", "A démo — already fine", segments, "local/bb22.json");
+    expect(made.ok).toBe(true);
   });
 
   it("pages a silent cut on its duration's cadence", async () => {
