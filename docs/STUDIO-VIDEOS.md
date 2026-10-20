@@ -1127,8 +1127,12 @@ and three actions:
 2. Blobs through `uploadBlob`, each under the owner's key prefix, from the
    gate's copies in `candidate/` and checked against the hashes the gate
    recorded: the mp4, the transcript, chapters and captions sidecars, the
-   poster the gate cut. The catalog cuts no poster and probes nothing itself
-   here; the duration is the gate's.
+   poster the gate cut, and the PDF the put makes itself from the
+   candidate's mp4 and transcript (`services/catalog/src/pdf/`, one page
+   per narration beat, as `catalog asset upload` makes for a tool's
+   renders; ffmpeg absent, or a build that fails, is a note, not a
+   refusal). The catalog cuts no poster and probes nothing itself here;
+   the duration is the gate's.
 3. The `video` row (below): the source files and the brief, their hash, the
    mp4's blob key and duration, and the hash of the source it was rendered
    from; a `content_revision` with `entity_type 'video'` and the job id.
@@ -1137,8 +1141,9 @@ and three actions:
    `source_repo 'self-learn'`), `video:<slug>.transcript.json`,
    `video:<slug>.chapters.json`, `video:<slug>.vtt` (kinds `transcript`,
    `chapters`, `captions`), each derived from the video, and
-   `poster:video:<slug>`, derived from it too, in the `poster:` namespace the
-   blob audit and the re-render unhooking already key on. `asset_topic` for the
+   `poster:video:<slug>` and `pdf:video:<slug>`, derived from it too, in
+   the `poster:` and `pdf:` namespaces the blob audit and the re-render
+   unhooking already key on. `asset_topic` for the
    topic and `asset_concept` for each concept.
 5. `asset_job` rows for each output.
 6. The job's transition to `accepted`, with `reviewed_at`, through the same
@@ -1577,8 +1582,8 @@ OCR on a render for a check the source tree answers.
 ### D49. A studio video lands as a `video` row and blob-stored assets, never in manimkc's tree
 
 **Verdict:** `catalog video put --job`: the source and brief in `video.source`,
-the mp4, sidecars and poster as blobs, asset rows under `video:` and
-`poster:video:`. Nothing is written under `tools/manimkc/topics/` or the owner's
+the mp4, sidecars, poster and PDF as blobs, asset rows under `video:`,
+`poster:video:` and `pdf:video:`. Nothing is written under `tools/manimkc/topics/` or the owner's
 `$MANIMKC_HOME/out/`.
 
 **Why:** since the cut-over, authored content is rows and blobs, and a diagram

@@ -177,10 +177,11 @@ const NOT_CONTENT_IN = new Map<string, ReadonlySet<string>>([["collection_item",
  * and the first revision that mentions the column is the one that set it.
  *
  * `collection.cover_blob_key` came with 0016, after every course and module
- * had a history.
+ * had a history. `asset.inputs_hash` came with 0031, after every asset did.
  */
 export const OMITTED_WHEN_NULL: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["collection", new Set(["cover_blob_key"])],
+  ["asset", new Set(["inputs_hash"])],
 ]);
 
 /**

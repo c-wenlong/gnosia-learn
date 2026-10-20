@@ -123,10 +123,13 @@ export interface DoctorResult {
    * left behind. `unlinked`: poster rows derived from no video, the other
    * half of that prune. Reported, never counted.
    */
-  posters: {
-    videosWithout: { id: string; sourceRepo: string | null }[];
-    unlinked: string[];
-  };
+  posters: DerivedGaps;
+  /**
+   * PDFs, the same report for the `pdf` asset a video's pages are made into
+   * (one page per narration beat). Made beside the poster on every path that
+   * writes a video, and repaired the same way.
+   */
+  pdfs: DerivedGaps;
   /** Write-seam guards (D4), armed per table by `catalog flip`. */
   writeGuards: Record<string, boolean | null>;
   /**
@@ -145,6 +148,15 @@ export interface DoctorResult {
   caps: OwnerCaps | { error: string };
   violations: number;
   ok: boolean;
+}
+
+/**
+ * What doctor reports for one kind of derived video asset: the videos with
+ * none stored, and the rows of that kind derived from no video.
+ */
+interface DerivedGaps {
+  videosWithout: { id: string; sourceRepo: string | null }[];
+  unlinked: string[];
 }
 
 export async function runDoctor(options: { fix?: boolean } = {}): Promise<DoctorResult> {
@@ -176,6 +188,7 @@ export async function doctor(
     conceptTopicRequired: false,
     blobContract: { inForce: false, unstored: [], unkeyed: [] },
     posters: { videosWithout: [], unlinked: [] },
+    pdfs: { videosWithout: [], unlinked: [] },
     writeGuards: {},
     links: { mixed: [], unreadable: [], restamped: [] },
     caps: ownerCapsOrError(),
@@ -265,7 +278,8 @@ export async function doctor(
   ).rows;
 
   const blobContract = { inForce: await blobContractInForce(db), ...(await blobContractDistance(db)) };
-  const posters = await posterGaps(db);
+  const posters = await derivedGaps(db, "poster");
+  const pdfs = await derivedGaps(db, "pdf");
 
   const writeGuards: Record<string, boolean | null> = {};
   for (const table of WRITE_GUARDED_TABLES) {
@@ -317,6 +331,7 @@ export async function doctor(
     conceptTopicRequired: topicColumn?.nullable === "NO",
     blobContract,
     posters,
+    pdfs,
     writeGuards,
     caps: ownerCapsOrError(),
     links: { ...links, restamped },
@@ -330,19 +345,20 @@ export async function doctor(
 }
 
 /**
- * The videos without a stored poster, and the posters without a video: the
- * same join the web app's `videosWithStoredPoster` makes (a `poster` derived
+ * The videos without a stored derived asset of this kind, and the assets of
+ * that kind without a video: the same join the web app's
+ * `videosWithStoredPoster`/`videosWithStoredPdf` make (a `<kind>` derived
  * from the video, its blob `present`), across every owner, as the rest of
- * this report is. A poster another owner holds is still a poster here: the
- * question is whether one was ever cut, not who may read it.
+ * this report is. A derived row another owner holds still counts: the
+ * question is whether one was ever made, not who may read it.
  */
-async function posterGaps(db: CatalogDatabase): Promise<DoctorResult["posters"]> {
+async function derivedGaps(db: CatalogDatabase, kind: "poster" | "pdf"): Promise<DerivedGaps> {
   const without = await db.execute<{ id: string; source_repo: string | null }>(sql`
     select v.id, v.source_repo from asset v
     where v.kind = 'video'
       and not exists (
         select 1 from asset_derivation d
-        join asset p on p.id = d.asset_id and p.kind = 'poster'
+        join asset p on p.id = d.asset_id and p.kind = ${kind}
         join blob_object b on b.key = p.blob_key and b.state = 'present'
         where d.source_asset_id = v.id
       )
@@ -350,7 +366,7 @@ async function posterGaps(db: CatalogDatabase): Promise<DoctorResult["posters"]>
   `);
   const unlinked = await db.execute<{ id: string }>(sql`
     select p.id from asset p
-    where p.kind = 'poster'
+    where p.kind = ${kind}
       and not exists (select 1 from asset_derivation d where d.asset_id = p.id)
     order by p.id collate "C"
   `);
@@ -520,6 +536,15 @@ export function formatDoctor(result: DoctorResult): string {
     `posters derived from no video: ${posters.unlinked.length === 0 ? "none" : `${posters.unlinked.length} (the next import or upload of their video links them again)`}`,
   );
   for (const id of posters.unlinked.slice(0, SAMPLE)) lines.push(`  ${id}`);
+  const pdfs = result.pdfs;
+  lines.push(
+    `videos with no PDF: ${pdfs.videosWithout.length === 0 ? "none" : `${pdfs.videosWithout.length} (run catalog import again, or catalog asset upload --source <tool>; either makes them)`}`,
+  );
+  for (const row of pdfs.videosWithout.slice(0, SAMPLE)) lines.push(`  ${row.id} (${row.sourceRepo ?? "no source"})`);
+  lines.push(
+    `PDFs derived from no video: ${pdfs.unlinked.length === 0 ? "none" : `${pdfs.unlinked.length} (the next import or upload of their video links them again)`}`,
+  );
+  for (const id of pdfs.unlinked.slice(0, SAMPLE)) lines.push(`  ${id}`);
   lines.push(`blob caps: ${formatCaps(result.caps)}`);
   const armed = Object.entries(result.writeGuards).filter(([, on]) => on === true).map(([t]) => t);
   const missing = Object.entries(result.writeGuards).filter(([, on]) => on === null).map(([t]) => t);

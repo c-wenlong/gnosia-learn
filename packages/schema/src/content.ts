@@ -51,6 +51,9 @@ export const ASSET_KINDS = [
   // A still frame made from a video at upload time, stored as a blob and
   // derived from its video through `asset_derivation` (plan 0.2, Track E).
   "poster",
+  // A video's pages as a document, made at upload or `catalog video put`
+  // time the same way the poster is (one page per narration beat).
+  "pdf",
 ] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
@@ -60,7 +63,15 @@ export type AssetKind = (typeof ASSET_KINDS)[number];
  * blob (`asset_stored_blob_check`). A note, a session log and a `.tldr` are
  * rows the database renders; a link is a URL.
  */
-export const BLOB_STORED_KINDS = ["video", "transcript", "chapters", "captions", "poster", "diagram_svg"] as const satisfies readonly AssetKind[];
+export const BLOB_STORED_KINDS = [
+  "video",
+  "transcript",
+  "chapters",
+  "captions",
+  "poster",
+  "pdf",
+  "diagram_svg",
+] as const satisfies readonly AssetKind[];
 
 /**
  * A blob key as `@self-learn/blob`'s `key()` makes it (`packages/blob/src/key.ts`):
@@ -428,6 +439,13 @@ export const asset = pgTable(
     url: text("url"),
     /** sha256 of the bytes. Null for links and for anything not yet hashed. */
     contentHash: text("content_hash"),
+    /**
+     * A derived asset's word on what it was made from: the pdf's `pdfInputs`
+     * hash of its video's bytes, its title and its transcript's segments.
+     * Null for everything else. Compared against the inputs this run sees,
+     * it says stale-or-not without reading the stored document.
+     */
+    inputsHash: text("inputs_hash"),
     bytes: bigint("bytes", { mode: "number" }),
     title: text("title"),
     sourceRepo: text("source_repo").notNull(),

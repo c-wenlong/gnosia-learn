@@ -21,7 +21,7 @@ import path from "node:path";
 import type { BlobStore } from "@self-learn/blob";
 
 import { openBlobStore, uploadBlob } from "../content/blob";
-import { unhookPosters, uploadAssets } from "../content/asset-upload";
+import { PDF_PREFIX, POSTER_PREFIX, unhookDerivations, uploadAssets } from "../content/asset-upload";
 import { type CoverCredit, storedCredit } from "../content/cover-image";
 import { blobContractInForce } from "../content/blob-contract";
 import { databaseIdentity, recordRoot } from "../content/import-root";
@@ -33,7 +33,7 @@ import { readTopicEntries } from "../content/topics";
 import { CLI_OWNER } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { findFfmpeg } from "../poster/extract";
-import { videosWithStoredPoster } from "../state/blobs";
+import { videosWithStoredPdf, videosWithStoredPoster } from "../state/blobs";
 import { sqlstate } from "../state/errors";
 import { REPO_ROOT, resolveBlenderkcRoot, resolveManimkcRoot, resolveRemotionkcRoot, resolveRevideokcRoot } from "../env";
 import { blenderkcIndexer } from "./blenderkc";
@@ -590,8 +590,8 @@ export async function runIndex(
 
   const sources: SourceWrite[] = [];
   let store: BlobStore | undefined;
-  /** Videos of this run left with no stored poster, by source, with why; refused once every source has run. */
-  const posterless: string[] = [];
+  /** Videos of this run left with no stored poster or PDF, by source, with why; refused once every source has run. */
+  const derivedGaps: string[] = [];
   let ffmpeg: Promise<string | null> | undefined;
   for (const indexer of runnable) {
     const { rows, notes = [], scope, metadata, logs, blobs = [], coversRead, report } =
@@ -608,6 +608,11 @@ export async function runIndex(
       }
       notes.push(`${blobs.length} file(s) in the blob store, ${uploaded} uploaded by this run`);
     }
+    // Under the contract the import links a re-render's bytes itself, so a
+    // poster or PDF cut from a video's earlier bytes is unhooked here, and
+    // the derived step below remakes it. Every video in the run is asked,
+    // not only the ones this write changed, so a run that failed between the
+    // two is repaired.
     const options: Parameters<typeof writeSource>[5] = {
       scope,
       logs,
@@ -628,34 +633,34 @@ export async function runIndex(
     };
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);
     sources.push(write);
-    // Under the contract the import links a re-render's bytes itself, so a
-    // poster cut from a video's earlier bytes is unhooked here, and the poster
-    // step below recuts it. Every video in the run is asked, not only the ones this
-    // write changed, so a run that failed between the two is repaired.
     if (isVideoToolName(indexer.source) && context.blobsRequired === true) {
       const videos = (rows.asset ?? []).filter((row) => row.kind === "video").map((row) => row.id);
-      const { unhooked, moved } = await unhookPosters(db, videos, {
-        owner,
-        author,
-        reason: `catalog import of ${displayPath(repoRoot)}: a re-render replaced the video the poster was cut from`,
-      });
-      if (unhooked.length > 0) {
-        write.notes.push(
-          `${unhooked.length} poster(s) unhooked from a re-rendered video; this import cuts new ones`,
-        );
+      for (const [prefix, noun] of [
+        [POSTER_PREFIX, "poster"],
+        [PDF_PREFIX, "PDF"],
+      ] as const) {
+        const { unhooked, moved } = await unhookDerivations(db, videos, prefix, {
+          owner,
+          author,
+          reason: `catalog import of ${displayPath(repoRoot)}: a re-render replaced the video the ${noun} was made from`,
+        });
+        if (unhooked.length > 0) {
+          write.notes.push(`${unhooked.length} ${noun}(s) unhooked from a re-rendered video; this import makes new ones`);
+        }
+        if (moved.length > 0) {
+          // Written since this import read them, by an upload that remade
+          // them: left as that write made them, and the next import asks again.
+          write.notes.push(`${moved.length} ${noun}(s) changed while this import ran, so left as they are: ${moved.join(", ")}`);
+        }
       }
-      if (moved.length > 0) {
-        // Written since this import read them, by an upload that recut them:
-        // left as that write made them, and the next import asks again.
-        write.notes.push(`${moved.length} poster(s) changed while this import ran, so left as they are: ${moved.join(", ")}`);
-      }
-      // Every rendered video leaves the import with a poster (2026-10-05).
-      // The upload's own poster step, run over the report this read used:
-      // the files are already stored and the rows name them, so the videos
-      // and sidecars answer `present` without being read again, and only a
-      // poster that is missing, unhooked or cut from older bytes is cut and
-      // stored, in one transaction with its row. A poster row a prune left
-      // with no link to its video (the cascade) is linked again.
+      // Every rendered video leaves the import with a poster (2026-10-05)
+      // and a PDF (2026-10-20). The upload's own derived step, run over the
+      // report this read used: the files are already stored and the rows name
+      // them, so the videos and sidecars answer `present` without being read
+      // again, and only a derived file that is missing, unhooked or made from
+      // older bytes is made and stored, in one transaction with its row. A
+      // row a prune left with no link to its video (the cascade) is linked
+      // again.
       if (videos.length > 0 && report !== undefined && isVideoToolName(indexer.source)) {
         ffmpeg ??= ffmpegOption !== undefined ? Promise.resolve(ffmpegOption) : findFfmpeg();
         store ??= openBlobStore();
@@ -675,38 +680,59 @@ export async function runIndex(
             owner,
             author,
             authorKind: "import",
-            reason: `catalog import of ${displayPath(repoRoot)}: a poster for each rendered ${indexer.source} video`,
+            reason: `catalog import of ${displayPath(repoRoot)}: the poster and PDF for each rendered ${indexer.source} video`,
           });
         } catch (error) {
-          // The tool's rows are written; its posters are said with the rest,
-          // naming the videos still without one, and the sources after it
-          // still run.
+          // The tool's rows are written; its derived files are said with the
+          // rest, naming the videos still without one, and the sources after
+          // it still run.
           failed = error instanceof Error ? error.message : String(error);
         }
         if (cut !== undefined) {
           const made = cut.items.filter((i) => i.kind === "poster" && i.action === "made").length;
           const linked = cut.items.filter((i) => i.kind === "poster" && i.action === "linked").length;
           if (made + linked > 0) write.notes.push(`${made} poster(s) cut and stored, ${linked} linked to their video again`);
+          const pdfsMade = cut.items.filter((i) => i.kind === "pdf" && i.action === "made").length;
+          const pdfsLinked = cut.items.filter((i) => i.kind === "pdf" && i.action === "linked").length;
+          if (pdfsMade + pdfsLinked > 0) {
+            write.notes.push(`${pdfsMade} PDF(s) made and stored, ${pdfsLinked} linked to their video again`);
+          }
         }
         const have = await videosWithStoredPoster(db, videos, ownerScope(owner));
         const missing = videos.filter((id) => !have.has(id));
-        if (missing.length > 0 || failed !== null) {
+        const havePdf = await videosWithStoredPdf(db, videos, ownerScope(owner));
+        const missingPdf = videos.filter((id) => !havePdf.has(id));
+        if (missing.length > 0 || missingPdf.length > 0 || failed !== null) {
+          const skipped = [
+            ...new Set(
+              [cut?.postersSkipped, cut?.pdfsSkipped].filter((s): s is string => s !== null && s !== undefined),
+            ),
+          ].join("; ");
           const why =
             failed !== null
-              ? `the poster step failed: ${failed}`
-              : (cut?.postersSkipped ??
-                (cut?.items ?? [])
-                  .filter((i) => i.action === "refused")
-                  .map((i) => `${i.id}: ${i.detail ?? "refused"}`)
-                  .join("; "));
-          posterless.push(
-            missing.length === 0
-              ? // Every video still has its poster: the failure is the step's
-                // own, and saying "0 videos have no poster" would send the
-                // reader looking for a poster to repair.
-                `the ${indexer.source} poster step failed, though every video has a poster: ${failed}`
-              : `${missing.length} ${indexer.source} video(s) have no poster (${missing.join(", ")})` +
-                  (why === "" ? "" : `: ${why}`),
+              ? `the derived step failed: ${failed}`
+              : skipped !== ""
+                ? skipped
+                : (cut?.items ?? [])
+                    .filter((i) => i.action === "refused")
+                    .map((i) => `${i.id}: ${i.detail ?? "refused"}`)
+                    .join("; ");
+          derivedGaps.push(
+            missing.length === 0 && missingPdf.length === 0
+              ? // Every video still has its derived files: the failure is the
+                // step's own, and saying "0 videos have no poster" would send
+                // the reader looking for one to repair.
+                `the ${indexer.source} derived step failed, though every video has its poster and PDF: ${failed}`
+              : [
+                  missing.length === 0
+                    ? ""
+                    : `${missing.length} ${indexer.source} video(s) have no poster (${missing.join(", ")})`,
+                  missingPdf.length === 0
+                    ? ""
+                    : `${missingPdf.length} ${indexer.source} video(s) have no PDF (${missingPdf.join(", ")})`,
+                ]
+                  .filter((s) => s !== "")
+                  .join("; ") + (why === "" ? "" : `: ${why}`),
           );
         }
       }
@@ -741,13 +767,13 @@ export async function runIndex(
     }
   }
 
-  // After every source, so one video without a poster does not keep the
-  // rest of the import from landing; but the run fails, naming each, rather
-  // than leaving a grey card for someone to notice in the Library.
-  if (posterless.length > 0) {
+  // After every source, so one video without a derived file does not keep
+  // the rest of the import from landing; but the run fails, naming each,
+  // rather than leaving a grey card for someone to notice in the Library.
+  if (derivedGaps.length > 0) {
     throw new IndexError(
-      `${posterless.join(". ")}. Every other row of this import was written. Fix the cause (for ffmpeg, set ` +
-        `FFMPEG_PATH or put ffmpeg on PATH), then run the import again: it cuts what is missing.`,
+      `${derivedGaps.join(". ")}. Every other row of this import was written. Fix the cause (for ffmpeg, set ` +
+        `FFMPEG_PATH or put ffmpeg on PATH), then run the import again: it makes what is missing.`,
     );
   }
 

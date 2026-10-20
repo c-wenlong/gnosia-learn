@@ -29,9 +29,14 @@ export async function partialMigrations(count = 2): Promise<string> {
  * today's code needs the columns added after 0013 (0016's
  * `collection.cover_blob_key`, which every collection upsert names), and a
  * database stopped at 0012 has none of them.
+ *
+ * 0030 goes with 0013: it drops and rewrites `asset_stored_blob_check`, a
+ * constraint 0013 created, so it cannot apply to a database that never ran
+ * 0013. A suite that needs the `pdf` asset kind it also adds recreates
+ * `asset_kind_check` itself, as asset-upload.test.ts does.
  */
 export async function withoutBlobContract(): Promise<string> {
-  return migrationsWhere((tag) => tag !== "0013_asset_blob_contract");
+  return migrationsWhere((tag) => tag !== "0013_asset_blob_contract" && tag !== "0030_nebulous_lester");
 }
 
 /** A migrations folder holding the journal's entries `keep` accepts, in order. */

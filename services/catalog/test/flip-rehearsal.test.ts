@@ -366,15 +366,15 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       // (vitest.setup.ts), so none has a CLI to run.
       expect(skipped).toEqual(["blenderkc", "concepts", "courses", "diagrams", "remotionkc", "revideokc", "sessions", "tags", "topics"]);
       // Under the contract the import stored the render and its transcript
-      // before their rows, and cut the render's poster, so the upload has
-      // nothing left at all.
+      // before their rows, and cut the render's poster and PDF, so the
+      // upload has nothing left at all.
       expect(step("asset upload")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0, postersSkipped: null });
-      expect(step("asset upload")["counts"]).toMatchObject({ videos: 1, posters: 1 });
+      expect(step("asset upload")["counts"]).toMatchObject({ videos: 1, posters: 1, pdfs: 1 });
       expect(report.warnings).toBe(0);
       expect(step("asset upload again")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0 });
-      // The seed's diagram SVG and course cover, the render, its transcript
-      // and its poster: all five the import's.
-      expect(step("blob audit")).toMatchObject({ rows: 5, objects: 5, outstanding: 0 });
+      // The seed's diagram SVG and course cover, the render, its transcript,
+      // its poster and its PDF: all six the import's.
+      expect(step("blob audit")).toMatchObject({ rows: 6, objects: 6, outstanding: 0 });
       expect(step("doctor again")["blobContract"]).toEqual({ inForce: true, unstored: [], unkeyed: [] });
       expect(step("migrate the contract")).toMatchObject({ applied: [], head: latestTag(), held: [] });
 

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-import { AskButton, DownloadButton, FavoriteButton } from "@/components/library/AssetActions";
+import { AskButton, DownloadButton, FavoriteButton, PdfButton } from "@/components/library/AssetActions";
 import { AskPanel } from "@/components/library/AskPanel";
 import { WatchStatusContext, type WatchStatus } from "@/components/library/WatchProgress";
 import type { TranscriptCue, VideoChapter } from "@/components/media";
@@ -48,7 +48,8 @@ type SaveResult = {
  * Under the title sits a row of pill actions, as on a video site's watch
  * page: Favorite (the star, `FavoriteButton`), Ask (an unsaved chat about
  * this video, `AskPanel`, told where the player is when each question is
- * sent), Download, then whatever the page adds (`actions`).
+ * sent), Download, the PDF when `catalog asset upload` or `catalog video
+ * put` stored one (`pdfHref`), then whatever the page adds (`actions`).
  *
  * Its state belongs to one asset, so the page renders it with `key` set to
  * the asset id: a client navigation from one video to the next starts over
@@ -68,6 +69,7 @@ export function LibraryVideo({
   watchedDay,
   favorite,
   downloadHref,
+  pdfHref,
   actions,
   notes,
   tabs,
@@ -90,6 +92,8 @@ export function LibraryVideo({
   favorite: boolean;
   /** What Download fetches: the file route's `?download=1` (`assetDownloadHref`). */
   downloadHref: string;
+  /** The stored PDF's route (`assetPdfHref`), when one was made. */
+  pdfHref?: string;
   /** More actions after Favorite, Ask and Download. */
   actions?: ReactNode;
   /** Quiet lines under the facts: a sidecar that could not be read, say. */
@@ -261,6 +265,7 @@ export function LibraryVideo({
                 buttonRef={askButton}
               />
               <DownloadButton href={downloadHref} />
+              {pdfHref !== undefined && <PdfButton href={pdfHref} />}
               {actions}
             </div>
             <Collapse open={asking} id={askId}>
