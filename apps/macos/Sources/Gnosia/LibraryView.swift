@@ -394,14 +394,6 @@ struct AssetCard: View {
                         .aspectRatio(16.0 / 9.0, contentMode: .fit)
                         .background(kindTint(asset.kind).opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
                 }
-                if store.isFavorite(asset.id) {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.yellow)
-                        .padding(6)
-                        .background(.black.opacity(0.45), in: Circle())
-                        .padding(6)
-                }
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -415,6 +407,9 @@ struct AssetCard: View {
                         Image(systemName: mark.done ? "checkmark.circle.fill" : "circle.lefthalf.filled")
                             .foregroundStyle(mark.done ? .green : .secondary)
                     }
+                    Spacer(minLength: 0)
+                    FavoriteButton(assetID: asset.id, showsLabel: false)
+                        .buttonStyle(.plain)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)

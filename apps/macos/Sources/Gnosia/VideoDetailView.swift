@@ -19,12 +19,15 @@ private enum Pane: String, CaseIterable, Identifiable {
 
 struct VideoDetailView: View {
     @Environment(CatalogStore.self) private var store
+    @Environment(LearnerStore.self) private var learner: LearnerStore?
     let asset: CatalogAsset
 
     @State private var pane: Pane = .video
     @State private var seekTo: Double?
     @State private var chapters: [VideoChapter] = []
     @State private var transcript: [TranscriptSegment] = []
+    /// The last position the player reported; what "Mark watched" stamps.
+    @State private var playhead: Double = 0
 
     private var companions: VideoCompanions { store.companions(for: asset.id) }
 
@@ -40,6 +43,27 @@ struct VideoDetailView: View {
         url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     }
 
+    /// Where the player opens: the watch row's position, except a finished
+    /// video starts over (the web's RESUME_TAIL rule — resumeAt in
+    /// playback.ts) and a barely started one needs no resume
+    /// (RESUME_HEAD_SECONDS).
+    private var resumePoint: Double {
+        guard let mark = store.watchMark(asset.id), !mark.done, mark.seconds >= 5 else { return 0 }
+        return mark.seconds
+    }
+
+    /// The heartbeat's write: position into the `watch` row, `done` once the
+    /// playhead crosses watchedFraction of the duration — the web's coverage
+    /// rule approximated by position, since this app does not track ranges.
+    /// Done is sticky: a later partial position never un-watches.
+    private func save(position: Double, duration: Double) {
+        let done = (learner?.watchEntry(for: asset.id)?.done ?? false)
+            || position >= watchedFraction * duration
+        learner?.setWatch(asset.id, seconds: position, done: done)
+        playhead = position
+        store.refreshLearner()
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -47,7 +71,14 @@ struct VideoDetailView: View {
 
                 if pane == .video {
                     if exists(videoFile), let url = videoFile {
-                        PlayerView(url: url, seekTo: $seekTo)
+                        PlayerView(
+                            url: url,
+                            seekTo: $seekTo,
+                            resumeAt: resumePoint,
+                            onPosition: { position, duration in
+                                save(position: position, duration: duration)
+                            }
+                        )
                             .aspectRatio(16.0 / 9.0, contentMode: .fit)
                             .frame(maxWidth: .infinity)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -72,8 +103,8 @@ struct VideoDetailView: View {
             }
             .padding(20)
         }
-        .navigationTitle(asset.displayTitle)
-        .onChange(of: asset.id) { pane = .video }
+        .navigationTitle(store.displayTitle(for: asset))
+        .onChange(of: asset.id) { pane = .video; playhead = 0 }
         .task(id: asset.id) {
             chapters = store.chapters(for: asset.id)
             transcript = store.transcript(for: asset.id)
@@ -139,7 +170,7 @@ struct VideoDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(asset.displayTitle).font(.title2).bold()
+                RenameTitle(asset: asset)
                 Spacer()
                 if pdfFile != nil {
                     Picker("Pane", selection: $pane) {
@@ -157,6 +188,14 @@ struct VideoDetailView: View {
                 if companions.hasChapters { chip("chapters", systemImage: "list.bullet") }
                 if companions.hasCaptions { chip("captions", systemImage: "captions.bubble") }
             }
+
+            // The web watch page's action pills: the star and the mark.
+            HStack(spacing: 10) {
+                FavoriteButton(assetID: asset.id)
+                MarkDoneButton(asset: asset, seconds: playhead)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 

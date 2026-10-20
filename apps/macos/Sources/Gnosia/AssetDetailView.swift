@@ -45,16 +45,17 @@ struct AssetDetailView: View {
 
 // MARK: - Shared scaffolding
 
-/// The header every non-video detail opens with: the display title, the
-/// kind chip, and the learner marks the file knows (starred, watched or
-/// in progress).
+/// The header every non-video detail opens with: the display title with its
+/// rename field, the kind chip, the learner marks the file knows (starred,
+/// watched or in progress), and the actions — the star and the "Mark read"
+/// press the web asset page carries.
 private struct DetailHeader: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(store.displayTitle(for: asset)).font(.title2).bold()
+            RenameTitle(asset: asset)
             HStack(spacing: 6) {
                 chip(assetKindLabel(asset.kind), systemImage: assetKindSymbol(asset.kind))
                 if store.isFavorite(asset.id) {
@@ -62,13 +63,22 @@ private struct DetailHeader: View {
                 }
                 if let mark = store.watchMark(asset.id) {
                     chip(
-                        mark.done ? "watched" : "watched to \(Self.clock(mark.seconds))",
+                        mark.done ? verb : "\(verb) to \(Self.clock(mark.seconds))",
                         systemImage: mark.done ? "checkmark.circle" : "clock"
                     )
                 }
             }
+            HStack(spacing: 10) {
+                FavoriteButton(assetID: asset.id)
+                MarkDoneButton(asset: asset)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
+
+    /// The mark's word: the web's "watched" for a video, "read" for the rest.
+    private var verb: String { asset.kind == "video" ? "watched" : "read" }
 
     private func chip(_ text: String, systemImage: String) -> some View {
         Label(text, systemImage: systemImage)
