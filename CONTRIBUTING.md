@@ -58,10 +58,10 @@ provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
 With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
 of the app works.
 
-> **Do not clone with `--recursive`.** `tools/manimkc/`, `tools/remotionkc/`,
-> `tools/revideokc/` and `tools/blenderkc/` are private repositories, so a
-> recursive clone fails on them; `tools/tldrawkc/` is the only public one.
-> A plain clone leaves the four directories empty and the app, tests and seed
+> **Do not clone with `--recursive`.** `tools/manimkc/`, `tools/remotionkc/`
+> and `tools/revideokc/` are private repositories, so a
+> recursive clone fails on them; `tools/tldrawkc/` and `tools/blenderkc/`
+> are the public ones. A plain clone leaves the private directories empty and the app, tests and seed
 > import all work. On a machine with access,
 > `git submodule update --init tools/manimkc` fetches one (manim is a
 > submodule inside that, so add `--recursive` there), and the `AGENTS.md` in
