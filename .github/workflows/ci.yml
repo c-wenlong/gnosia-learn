@@ -15,21 +15,29 @@ on:
   pull_request:
     branches: [main, master]
     # A pull request that changes nothing a step reads does not need a
-    # fifteen-minute run. Markdown is never compiled or linted; the design
-    # folders skipped are pictures, captured research and the untracked
-    # reference symlinks, while docs/design/kit stays covered because eslint
-    # lints its scripts. A tools/ pointer bump is a gitlink the checkout
-    # below never fetches (submodules are off), so it cannot move lint,
-    # typecheck, test or build either. Everything else, including this file,
-    # still runs the full gate.
+    # fifteen-minute run. The Markdown ignored below is documentation only:
+    # seed/ stays covered because the tests import it, and
+    # services/studio/src/manual/sections/*.md stays covered because
+    # assembleManual() reads it at runtime. The design folders skipped are
+    # pictures, captured research and the untracked reference symlinks, while
+    # docs/design/kit stays covered because eslint lints its scripts. A
+    # tools/ pointer bump is a gitlink the checkout below never fetches
+    # (submodules are off), so it cannot move lint, typecheck, test or build
+    # either. Everything else, including this file, still runs the full gate.
     paths-ignore:
-      - "**.md"
+      - "*.md"
+      - "**/README.md"
+      - ".github/**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/dependabot.yml"
+      - "docs/**/*.md"
       - "docs/design/brand/**"
       - "docs/design/hifi/**"
       - "docs/design/lofi/**"
       - "docs/design/reference/**"
       - "docs/design/research/**"
       - "docs/design/self-learn-lofi.fig"
+      - "services/catalog/*.md"
       - "tools/**"
       - ".claude/**"
       - ".agents/**"
