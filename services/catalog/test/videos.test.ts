@@ -742,9 +742,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     try {
       const args = { slug, dir, jobId: queued.id, base: null, reason: "r", author: "local", authorKind: "person" as const, ownerId: "local" };
       const first = putVideo(a.db, openBlobStore(), args);
-      await waitForBlocked(scratch.db, scratch.name, 1, holder);
+      await waitForBlocked(scratch.db, scratch.url, 1, holder);
       const second = putVideo(b.db, openBlobStore(), args);
-      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await waitForBlocked(scratch.db, scratch.url, 2, holder);
       await holder.release();
       const results = await Promise.all([first, second]);
       expect(results.map((r) => r.retry)).toEqual([false, true]);
@@ -838,9 +838,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
           discardParent: parent.id,
         });
       const first = submit();
-      await waitForBlocked(scratch.db, scratch.name, 1, holder);
+      await waitForBlocked(scratch.db, scratch.url, 1, holder);
       const second = submit();
-      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await waitForBlocked(scratch.db, scratch.url, 2, holder);
       await holder.release();
       const results = await Promise.all([first, second]);
       expect(results.map((r) => r.created)).toEqual([true, false]);
@@ -873,9 +873,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
           discardParent: parent.id,
         });
       const first = submit("First change.");
-      await waitForBlocked(scratch.db, scratch.name, 1, holder);
+      await waitForBlocked(scratch.db, scratch.url, 1, holder);
       const second = submit("Second change.");
-      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await waitForBlocked(scratch.db, scratch.url, 2, holder);
       await holder.release();
       const [landed, refused] = await Promise.allSettled([first, second]);
       expect(landed?.status === "fulfilled" && landed.value.created).toBe(true);

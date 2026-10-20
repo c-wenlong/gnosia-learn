@@ -116,7 +116,7 @@ export async function assetNamesExist(db: CatalogDatabase): Promise<boolean> {
   const { rows } = await db.execute<{ present: boolean }>(
     sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'asset_name') as present`,
   );
-  const present = rows[0]?.present === true;
+  const present = rows[0]?.present == 1 || rows[0]?.present === true;
   if (present) hasNames.set(key, true);
   else if (!warnedUnnamed) {
     warnedUnnamed = true;
@@ -139,7 +139,7 @@ export async function revisionsExist(db: CatalogDatabase): Promise<boolean> {
   const { rows } = await db.execute<{ present: boolean }>(
     sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'content_revision') as present`,
   );
-  const present = rows[0]?.present === true;
+  const present = rows[0]?.present == 1 || rows[0]?.present === true;
   if (present) hasRevisions.set(key, true);
   return present;
 }
@@ -715,7 +715,10 @@ async function listScoped(
   // remember that every caller assumed the shape it produced today.
   return rows.map((row) => ({
     ...row,
-    topics: row.topics ?? [],
+    // better-sqlite3 hands a raw `sql` column back as its text, so the
+    // `json_group_array` subquery above arrives as a JSON string where pg's
+    // driver parsed its text[] itself.
+    topics: Array.isArray(row.topics) ? row.topics : JSON.parse(String(row.topics ?? "[]")),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     // A timestamp out of raw SQL is parsed by the driver, not by drizzle's

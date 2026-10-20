@@ -2,10 +2,13 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+import { describe, expect, it } from "vitest";
 
 import { EXIT_UNREACHABLE } from "../src/connection-failure";
-import { deadPort, refusingPostgres, type RefusingPostgres } from "./fake-postgres";
+
 
 /**
  * The catalog CLI's answer when it cannot use the database, end to end.
@@ -42,68 +45,66 @@ function catalog(url: string, ...args: string[]): Promise<Ran> {
   });
 }
 
-describe("nothing listening", () => {
-  let url: string;
-  beforeAll(async () => {
-    // `localhost`, not 127.0.0.1: it resolves to two addresses, and the driver
-    // reports two refusals as one AggregateError with an empty message, which
-    // is the shape the classifier most needs to read through.
-    url = `postgres://localhost:${await deadPort()}/self_learn`;
-  });
+describe("nothing openable", () => {
+  // A file used as a directory: nothing can ever live at that path, the same
+  // "nothing there" a dead port was.
+  const url = `${tmpdir()}/catalog-conn-file-${process.pid}`;
+  writeFileSync(url, "x");
+  const dead = `${url}/child.db`;
 
   it(`exits ${EXIT_UNREACHABLE} and says the connection was refused`, async () => {
-    const ran = await catalog(url, "status");
+    const ran = await catalog(dead, "status");
     expect(ran.code).toBe(EXIT_UNREACHABLE);
-    expect(ran.stderr).toContain("database unreachable: connection refused (ECONNREFUSED)");
+    expect(ran.stderr).toContain("database unreachable: a path component is not a directory (ENOTDIR)");
   });
 
   it("keeps the --json shape on stdout and puts the reason on stderr", async () => {
-    const ran = await catalog(url, "status", "--json");
+    const ran = await catalog(dead, "status", "--json");
     expect(ran.code).toBe(EXIT_UNREACHABLE);
     const body = JSON.parse(ran.stdout) as Record<string, unknown>;
     expect(Object.keys(body)).toEqual(["ok", "command", "database", "error"]);
     expect(body.ok).toBe(false);
     expect(ran.stderr.trim()).toBe(
-      "catalog status failed: database unreachable: connection refused (ECONNREFUSED)",
+      "catalog status failed: database unreachable: a path component is not a directory (ENOTDIR)",
     );
   });
 });
 
-describe("a host that does not resolve", () => {
-  it(`exits ${EXIT_UNREACHABLE}`, async () => {
-    // .invalid is reserved by RFC 2606 and never resolves. Without a network
-    // the lookup fails as EAI_AGAIN instead, which is unreachable too.
+describe("a Postgres URL", () => {
+  it("refuses it with the migration pointer, not a connection error", async () => {
     const ran = await catalog("postgres://no-such-host.invalid:5432/self_learn", "status");
-    expect(ran.code).toBe(EXIT_UNREACHABLE);
-    expect(ran.stderr).toMatch(/database unreachable: host (not found \(ENOTFOUND\)|lookup failed \(EAI_AGAIN\))/);
+    expect(ran.code).toBe(1);
+    expect(ran.stderr).toMatch(/Postgres URL/);
+    expect(ran.stderr).toContain("SQLITE-MIGRATION.md");
   });
 });
 
-describe("a live server that refuses", () => {
-  const servers: RefusingPostgres[] = [];
-  afterAll(async () => {
-    await Promise.all(servers.map((server) => server.close()));
-  });
-
-  it.each([
-    ["28P01", 'password authentication failed for user "nobody"', "authentication failed"],
-    ["3D000", 'database "does_not_exist" does not exist', "database does not exist"],
-  ])("stays exit 1 on %s, and names the cause", async (code, message, reason) => {
-    const server = await refusingPostgres(code, message);
-    servers.push(server);
-    const ran = await catalog(`postgres://nobody:wrong@127.0.0.1:${server.port}/does_not_exist`, "status");
-    expect(ran.code).toBe(1);
-    expect(ran.stderr).toContain(`database connection failed: ${reason} (${code})`);
-    // The password is never printed back.
-    expect(ran.stderr).not.toContain("wrong");
-  });
+describe("a locked database", () => {
+  it("stays exit 1: the file is there and busy, the same shape a refused pg connection had", async () => {
+    // A writer holding `begin immediate` past the child's busy timeout: the
+    // child's open succeeds, its first write does not, and that is "up but
+    // refusing", never "unreachable".
+    const file = `${tmpdir()}/catalog-conn-busy-${process.pid}.db`;
+    const Database = (await import("better-sqlite3")).default;
+    const holder = new Database(file);
+    holder.exec("create table t (id integer); begin immediate; insert into t values (1);");
+    try {
+      const ran = await catalog(file, "import", "--json");
+      expect(ran.code).toBe(1);
+      expect(ran.stderr).toContain("database connection failed: database is locked (SQLITE_BUSY)");
+    } finally {
+      holder.exec("rollback");
+      holder.close();
+    }
+  }, 15_000);
 });
 
 describe("catalog index, the old name of catalog import", () => {
   let url: string;
-  beforeAll(async () => {
-    url = `postgres://localhost:${await deadPort()}/self_learn`;
-  });
+  // An unopenable path: import reaches its first query and cannot open it.
+  const held = `${tmpdir()}/catalog-index-file-${process.pid}`;
+  writeFileSync(held, "x");
+  url = `${held}/child.db`;
 
   it("says the new name once, on stderr, and then runs import", async () => {
     // A dead port, so the import itself fails at its first query: what is

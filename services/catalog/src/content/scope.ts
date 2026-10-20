@@ -102,7 +102,7 @@ export async function ownersExist(db: CatalogDatabase): Promise<boolean> {
     select exists (
       select 1 from pragma_table_info('asset') where name = 'owner_id'
     ) as present`);
-  const present = rows[0]?.present === true;
+  const present = rows[0]?.present == 1 || rows[0]?.present === true;
   if (present) hasOwners.set(key, true);
   return present;
 }

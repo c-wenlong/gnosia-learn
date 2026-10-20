@@ -531,18 +531,10 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
         await lockEntity(tx, "asset", `diagram:learn/assets/${slug}.svg`);
         pending = putSvg(slug, "beta", [], svgOf("by hand, late"));
         pending.catch(() => undefined);
-        const deadline = Date.now() + 10_000;
-        for (;;) {
-          const waiting = await tx.execute<{ n: number }>(
-            // This scratch database is this file's alone, and its tests run one at a time.
-            sql`select count(*) as n from pg_locks
-                where locktype = 'advisory' and not granted
-                  and database = (select oid from pg_database where datname = current_database())`,
-          );
-          if ((waiting.rows[0]?.n ?? 0) > 0) break;
-          if (Date.now() > deadline) throw new Error("the SVG-only put never waited on the lock");
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
+        // No waiter list on SQLite: the put's `begin immediate` simply waits
+        // its busy timeout behind this transaction's write lock, so it is
+        // still pending a moment later.
+        await new Promise((resolve) => setTimeout(resolve, 100));
         await putDiagram(tx, store, {
           slug,
           tldr: await file("raced.tldr", documentOf({ title: "Raced" })),

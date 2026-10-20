@@ -148,7 +148,7 @@ describe.skipIf(!reachable.ok)("a copy of a database never writes into the tree 
     own = await mkdtemp(path.join(tmpdir(), "catalog-copy-own-"));
     blobHome = await mkdtemp(path.join(tmpdir(), "catalog-copy-blobs-"));
     await against(
-      primary.name,
+      primary.url,
       async () => {
         await runImportCommand({ dir: template.root });
         // The tree in the export's own bytes, so the writers find it in step.
@@ -197,7 +197,7 @@ describe.skipIf(!reachable.ok)("a copy of a database never writes into the tree 
       await writeFile(svg, '<svg xmlns="http://www.w3.org/2000/svg"/>');
       await expect(
         against(
-          copy.name,
+          copy.url,
           () =>
             putDiagram(copy.db, fsStore(path.join(blobHome, "blobs")), {
               slug: "copied",
@@ -217,18 +217,18 @@ describe.skipIf(!reachable.ok)("a copy of a database never writes into the tree 
   });
 
   it("refuses a flip on the copy until the copy has imported a tree of its own", async () => {
-    await expect(against(copy.name, () => runFlip({ type: "topics" }))).rejects.toThrow(
+    await expect(against(copy.url, () => runFlip({ type: "topics" }))).rejects.toThrow(
       /topics was last imported from .* by another database .* so parity against it would check a tree this database never read/s,
     );
   });
 
   it("records no export hash for an export into a folder that is not the copy's own root", async () => {
-    const result = await against(copy.name, () => runExport({ out: own }), { blobHome });
+    const result = await against(copy.url, () => runExport({ out: own }), { blobHome });
     expect(result.types.every((t) => !t.recorded)).toBe(true);
   });
 
   it("writes into the folder the copy was itself imported from, flipped types included, and never the template's", async () => {
-    const imported = await against(copy.name, () => runImportCommand({ dir: own }), { blobHome });
+    const imported = await against(copy.url, () => runImportCommand({ dir: own }), { blobHome });
     // tags is owned: skipped, but the folder is now where its files are.
     expect(imported.skipped.map((s) => s.source)).toContain("tags");
     const topics = await addTopic(copy.db, { slug: "gamma", title: "Gamma", domain: "testing" }, by);
@@ -296,7 +296,7 @@ describe.skipIf(!reachable.ok)("a file saved while a write-through is in flight"
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     fixture = await tree();
-    await against(scratch.name, async () => {
+    await against(scratch.url, async () => {
       await runImportCommand({ dir: fixture.root });
       await runExport({ out: fixture.root });
     });
@@ -380,7 +380,7 @@ describe.skipIf(!reachable.ok)("catalog topic map, once topics are flipped", () 
         { slug: "beta", domain: "testing", manimkc: ["two/held"] },
       ]),
     );
-    await against(scratch.name, async () => {
+    await against(scratch.url, async () => {
       await runImportCommand({ dir: fixture.root });
       await runExport({ out: fixture.root });
       await runFlip({ type: "topics" });
@@ -413,7 +413,7 @@ describe.skipIf(!reachable.ok)("catalog topic map, once topics are flipped", () 
     if (manimkc !== undefined) await rm(manimkc, { recursive: true, force: true });
   });
 
-  const index = () => against(scratch.name, () => runImportCommand({ dir: fixture.root }), { manimkc });
+  const index = () => against(scratch.url, () => runImportCommand({ dir: fixture.root }), { manimkc });
 
   it("refuses a hand edit of maps.manimkc, and the index refuses the new folder", async () => {
     await expect(index()).rejects.toThrow(/manimkc topic "one\/new" is in no topic's maps\.manimkc/);

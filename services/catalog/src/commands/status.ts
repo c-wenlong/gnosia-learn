@@ -292,7 +292,7 @@ async function readingCoverage(db: Db): Promise<Map<string, { readings: number; 
   const { rows: present } = await db.execute<{ present: boolean }>(
     sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'curriculum_item_asset') as present`,
   );
-  const lessons = present[0]?.present === true;
+  const lessons = present[0]?.present == 1 || present[0]?.present === true;
   const { rows } = await db.execute<{ course: string; readings: number; placed: number }>(sql`
     select m.parent_id as course, count(distinct r.asset_id) as readings,
       ${

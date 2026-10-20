@@ -164,13 +164,13 @@ describe.skipIf(!reachable.ok)("export, import and parity on the seed tree", () 
   });
 
   it("imports the tree, exports it, and finds zero mismatches against both", async () => {
-    await against(first.name, async () => {
+    await against(first.url, async () => {
       await runImportCommand({ dir: SEED });
       await runExport({ out });
     });
 
     for (const dir of [out, SEED]) {
-      const result = await against(first.name, () => runParity({ dir }));
+      const result = await against(first.url, () => runParity({ dir }));
       const summary = result.types.map((t) => ({
         type: t.type,
         mismatches: t.mismatches.map((m) => `${m.kind} ${m.id}: ${m.detail}`),
@@ -205,7 +205,7 @@ describe.skipIf(!reachable.ok)("export, import and parity on the seed tree", () 
   });
 
   it("reads the export back into a second database with the same content, entity by entity", async () => {
-    await against(second.name, async () => {
+    await against(second.url, async () => {
       await runImportCommand({ dir: out });
       await runExport({ out: again });
       expect((await runParity({ dir: out })).clean).toBe(true);
@@ -231,7 +231,7 @@ describe.skipIf(!reachable.ok)("export, import and parity on the seed tree", () 
   }, 240_000);
 
   it("writes zero revisions on a second import of the same tree", async () => {
-    const result = await against(first.name, () => runImportCommand({ dir: SEED }));
+    const result = await against(first.url, () => runImportCommand({ dir: SEED }));
     expect(revisionCount(result)).toBe(0);
     expect(result.totals.deleted).toBe(0);
   }, 120_000);

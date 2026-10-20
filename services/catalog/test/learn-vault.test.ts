@@ -27,7 +27,7 @@ import { pullVault, pushVault } from "../src/learn/vault";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
-import { inTransaction } from "../src/db";
+import { inTransaction, setRevisionId } from "../src/db";
 /**
  * `learn vault pull|push` (phase 2 of docs/CONTENT-MIGRATION.md, edge case
  * 4): a fixture imported into a scratch database with concepts and sessions
@@ -817,7 +817,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     // the write guards of the flipped types let a named repair through.
     const guarded = (write: (tx: typeof scratch.db) => Promise<void>) =>
       inTransaction(scratch.db, async (tx) => {
-        await tx.execute(sql`select set_config('self_learn.revision_id', 'test-seed', true)`);
+        setRevisionId(tx, 'test-seed');
         await write(tx);
       });
     await guarded(async (tx) => {

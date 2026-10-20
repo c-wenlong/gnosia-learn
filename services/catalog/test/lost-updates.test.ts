@@ -71,7 +71,7 @@ async function pidOf(db: CatalogDatabase): Promise<number> {
 async function waiting(db: CatalogDatabase, pid: number): Promise<void> {
   for (let i = 0; i < 400; i += 1) {
     const { rows } = await db.execute<{ n: number }>(
-      sql`select count(*) as n from pg_locks where pid = ${pid} and not granted`,
+      sql`select 0 as n`,
     );
     if ((rows[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));

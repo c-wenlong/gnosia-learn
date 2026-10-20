@@ -511,10 +511,8 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
     });
   });
 
-  /** A port nothing is listening on, for the "database is down" paths. */
+  /** A file used as a directory: opening it fails, for the "database is down" paths. */
   function unreachableUrl(): string {
-    const url = new URL(scratch.url);
-    url.port = "59999";
-    return url.toString();
+    return `${scratch.url}/child.db`;
   }
 });

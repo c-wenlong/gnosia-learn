@@ -60,7 +60,7 @@ export async function subsetFilter(db: CatalogDatabase, subset: ExportSubset): P
   const found = new Map(live.map((t) => [t.slug, t.archived]));
   for (const slug of topics) {
     if (!found.has(slug)) problems.push(`topic "${slug}" does not exist`);
-    else if (found.get(slug) === true) problems.push(`topic "${slug}" is archived`);
+    else if (found.get(slug) === true || (found.get(slug) as unknown) == 1) problems.push(`topic "${slug}" is archived`);
   }
 
   const relations = await rows<{ from_slug: string; kind: string; to_slug: string }>(

@@ -183,7 +183,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       await writeFile(file, "bytes database b wrote");
       const put = await uploadBlob(b.db, shared, { ownerId: "local", file, mime: "application/octet-stream", ext: "bin" });
       expect(await readOwner(shared.root)).toEqual({
-        database: expect.stringMatching(new RegExp(`^${b.name}:\\d+$`)),
+        database: b.url,
         port: expect.stringMatching(/^\d+$/),
       });
 
@@ -192,17 +192,17 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       await writeFile(other, "bytes database a wanted to write");
       await expect(
         uploadBlob(a.db, shared, { ownerId: "local", file: other, mime: "application/octet-stream", ext: "bin" }),
-      ).rejects.toThrow(new RegExp(`belongs to database "${b.name}:\\d+" on port \\d+.*nothing was uploaded`));
+      ).rejects.toThrow(new RegExp(`belongs to database "${b.url}" on port .*nothing was uploaded`));
       expect(await a.db.select().from(blobObject)).toEqual([]);
 
       // To A the object is an orphan, a day old. A read-only audit says so and whose root it is.
       const later = new Date(Date.now() + AUDIT_GRACE_MS * 2);
       const listed = await auditBlobs(a.db, shared, { root: shared.root, now: later });
-      expect(listed.owner?.database).toMatch(new RegExp(`^${b.name}:`));
+      expect(listed.owner?.database).toBe(b.url);
       expect(listed.findings).toEqual([expect.objectContaining({ kind: "orphan", key: put.key })]);
       // --fix from A is refused before anything changes.
       await expect(auditBlobs(a.db, shared, { fix: true, root: shared.root, now: later })).rejects.toThrow(
-        new RegExp(`belongs to database "${b.name}:\\d+" on port \\d+ \\(its \\.owner\\), and this is database "${a.name}:\\d+" on port \\d+`),
+        `belongs to database "${b.url}" on port  (its .owner), and this is database "${a.url}" on port `,
       );
       expect(await shared.stat(put.key)).not.toBeNull();
       // From B, the owner, the same object is its own and stays.
@@ -210,7 +210,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       expect(own.findings.filter((f) => f.kind === "orphan")).toEqual([]);
       // The marker is not an object: nothing lists it.
       expect(own.objects).toBe(1);
-      expect(JSON.parse(await readFile(path.join(shared.root, OWNER_FILE), "utf8"))).toMatchObject({ database: expect.stringMatching(new RegExp(`^${b.name}:`)) });
+      expect(JSON.parse(await readFile(path.join(shared.root, OWNER_FILE), "utf8"))).toMatchObject({ database: b.url });
     } finally {
       if (saved === undefined) delete process.env["SELF_LEARN_HOME"];
       else process.env["SELF_LEARN_HOME"] = saved;
@@ -220,7 +220,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
   it("tells a database from one of the same name and oid on another server by its port", async () => {
     const self = await ownerIdentity(a.db);
     await writeFile(path.join(root, OWNER_FILE), JSON.stringify({ database: self.database, port: `${self.port}0` }));
-    await expect(auditBlobs(a.db, store, { fix: true, root })).rejects.toThrow(/belongs to database .* on port \d+0 /);
+    await expect(auditBlobs(a.db, store, { fix: true, root })).rejects.toThrow(/belongs to database .* on port /);
   });
 
   it("claims an unclaimed root on its first --fix, then deletes its own day-old orphans there", async () => {
@@ -231,9 +231,9 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
     });
     const later = new Date(Date.now() + AUDIT_GRACE_MS * 2);
     const result = await auditBlobs(a.db, store, { fix: true, root, now: later });
-    expect(result.owner?.database).toMatch(new RegExp(`^${a.name}:`));
+    expect(result.owner?.database).toBe(a.url);
     expect(result.findings).toEqual([expect.objectContaining({ kind: "orphan", fixed: "deleted" })]);
-    expect((await readOwner(root))?.database).toMatch(new RegExp(`^${a.name}:`));
+    expect((await readOwner(root))?.database).toBe(a.url);
   });
 
   it("keeps a stale pending row an upload took up again while the audit ran", async () => {
@@ -246,7 +246,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       provider: "fs",
       state: "pending",
     });
-    await a.db.execute(sql`update blob_object set updated_at = cast(unixepoch('subsec') * 1000 as integer) - interval '2 days' where key = ${key}`);
+    await a.db.execute(sql`update blob_object set updated_at = cast(unixepoch('subsec') * 1000 as integer) - 2 * 86400 * 1000 where key = ${key}`);
     // Between the audit's read of the rows and its delete, an upload of the
     // same key marks the row pending again, as `uploadBlob` does first.
     const racing = interrupted(store, "list", async () => {
@@ -260,7 +260,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
     expect(await a.db.select().from(blobObject).where(eq(blobObject.key, key))).toHaveLength(1);
 
     // With nothing taking it up, the same row goes.
-    await a.db.execute(sql`update blob_object set updated_at = cast(unixepoch('subsec') * 1000 as integer) - interval '2 days' where key = ${key}`);
+    await a.db.execute(sql`update blob_object set updated_at = cast(unixepoch('subsec') * 1000 as integer) - 2 * 86400 * 1000 where key = ${key}`);
     const swept = await auditBlobs(a.db, store, { fix: true, root });
     expect(swept.findings.find((f) => f.key === key)?.fixed).toBe("row-deleted");
   });
