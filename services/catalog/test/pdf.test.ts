@@ -6,8 +6,8 @@ import path from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { buildVideoPdf, readSegments, segmentsFromText } from "../src/pdf/build";
-import { wrapCaption } from "../src/pdf/document";
+import { buildVideoPdf, pdfInputs, readSegments, segmentsFromText } from "../src/pdf/build";
+import { pdfInputsOf, wrapCaption } from "../src/pdf/document";
 import { ffmpegPageArgs, pagePlan, PDF_MAX_PAGES, PDF_SILENT_EVERY_SECONDS } from "../src/pdf/recipe";
 
 /**
@@ -177,20 +177,32 @@ describe("buildVideoPdf", () => {
       { start: 0, end: 4, text: "one" },
       { start: 4, end: 10, text: "two" },
     ];
-    const made = await buildVideoPdf(ffmpeg, VIDEO, "A demo", segments);
+    const made = await buildVideoPdf(ffmpeg, VIDEO, "aa11", "A demo", segments);
     expect(made.ok).toBe(true);
     if (made.ok !== true) return;
     expect(made.pages).toBe(2);
     expect(made.body.subarray(0, 5).toString("latin1")).toBe("%PDF-");
 
-    const again = await buildVideoPdf(ffmpeg, VIDEO, "A demo", segments);
+    const again = await buildVideoPdf(ffmpeg, VIDEO, "aa11", "A demo", segments);
     expect(again.ok && again.body.equals(made.body)).toBe(true);
-    const other = await buildVideoPdf(ffmpeg, VIDEO, "Another title", segments);
+    const other = await buildVideoPdf(ffmpeg, VIDEO, "aa11", "Another title", segments);
     expect(other.ok && !other.body.equals(made.body)).toBe(true);
   });
 
+  it("writes the inputs it was made from into the document, and reads them back", async () => {
+    const segments = [{ start: 0, end: 4, text: "one" }];
+    const made = await buildVideoPdf(ffmpeg, VIDEO, "aa11", "A demo", segments);
+    expect(made.ok).toBe(true);
+    if (made.ok !== true) return;
+    // The fingerprint is the document's own word on its inputs: a transcript
+    // rewritten to the same segments reads as the same document.
+    expect(await pdfInputsOf(made.body)).toBe(pdfInputs("aa11", "A demo", segments));
+    expect(await pdfInputsOf(made.body)).not.toBe(pdfInputs("aa11", "A demo", null));
+    expect(await pdfInputsOf(Buffer.from("not a pdf"))).toBeNull();
+  });
+
   it("pages a silent cut on its duration's cadence", async () => {
-    const made = await buildVideoPdf(ffmpeg, VIDEO, "Silent", null);
+    const made = await buildVideoPdf(ffmpeg, VIDEO, "aa11", "Silent", null);
     expect(made.ok).toBe(true);
     if (made.ok !== true) return;
     // Ten seconds at fifteen seconds a page: the one centred page.
@@ -198,7 +210,7 @@ describe("buildVideoPdf", () => {
   });
 
   it("says why when no frame can be cut", async () => {
-    const made = await buildVideoPdf(noFfmpeg, VIDEO, "Broken", [{ start: 0, end: 4, text: "x" }]);
+    const made = await buildVideoPdf(noFfmpeg, VIDEO, "aa11", "Broken", [{ start: 0, end: 4, text: "x" }]);
     expect(made.ok).toBe(false);
     if (made.ok) return;
     expect(made.reason).toContain("page 1");
@@ -209,12 +221,12 @@ describe("buildVideoPdf", () => {
     // dead frame cut, not a thrown failure the upload cannot continue past:
     // a clean exit with no Duration line plans no pages, and a binary that
     // cannot spawn at all comes back as the probe's reason.
-    const quiet = await buildVideoPdf(noFfmpeg, VIDEO, "Silent", null);
+    const quiet = await buildVideoPdf(noFfmpeg, VIDEO, "aa11", "Silent", null);
     expect(quiet.ok).toBe(false);
     if (quiet.ok) return;
     expect(quiet.reason).toContain("no duration to spread frames over");
 
-    const dead = await buildVideoPdf(path.join(dir, "no-such-ffmpeg"), VIDEO, "Silent", null);
+    const dead = await buildVideoPdf(path.join(dir, "no-such-ffmpeg"), VIDEO, "aa11", "Silent", null);
     expect(dead.ok).toBe(false);
     if (dead.ok) return;
     expect(dead.reason).toContain("duration could not be probed");

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { assemblePdf, type PdfPageInput } from "./document";
@@ -57,14 +58,28 @@ export async function readSegments(transcriptFile: string | null): Promise<PdfSe
 }
 
 /**
+ * What a video's PDF is made from, as one hash: the video's bytes by their
+ * content hash, the title set on its pages, and the narration segments it
+ * paged on (null for a silent cut's cadence). The document carries it in its
+ * metadata, so the stored artifact itself says which inputs it was built
+ * from and `catalog asset upload` can tell "the transcript file moved" from
+ * "the document changed": a rewrite that keeps the same segments hashes the
+ * same and recuts nothing.
+ */
+export function pdfInputs(videoContentHash: string, title: string, segments: readonly PdfSegment[] | null): string {
+  return createHash("sha256").update(JSON.stringify({ video: videoContentHash, title, segments })).digest("hex");
+}
+
+/**
  * The PDF for `videoFile`: pages from `segments` (null for a silent cut's
- * cadence), one frame each, assembled with `title` in the header. Returns
- * `ok: false` with the reason when no frame could be cut or the document
- * could not be written.
+ * cadence), one frame each, assembled with `title` in the header and the
+ * inputs fingerprint in its metadata. Returns `ok: false` with the reason
+ * when no frame could be cut or the document could not be written.
  */
 export async function buildVideoPdf(
   ffmpeg: string,
   videoFile: string,
+  videoContentHash: string,
   title: string,
   segments: readonly PdfSegment[] | null,
 ): Promise<PdfResult> {
@@ -104,7 +119,7 @@ export async function buildVideoPdf(
   }
 
   try {
-    return { ok: true, body: await assemblePdf(title, pages), pages: pages.length };
+    return { ok: true, body: await assemblePdf(title, pages, pdfInputs(videoContentHash, title, segments)), pages: pages.length };
   } catch (error) {
     return { ok: false, reason: `the document could not be written: ${error instanceof Error ? error.message : String(error)}` };
   }

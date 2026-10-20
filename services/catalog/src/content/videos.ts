@@ -576,7 +576,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
     notes.push("no PDF: ffmpeg was not found; the next `catalog asset upload`-style rebuild can still make one");
   } else {
     const segments = await readSegments(sidecars === null ? null : path.join(dir, names.transcript));
-    const made = await buildVideoPdf(input.ffmpeg, path.join(dir, names.mp4), title, segments);
+    const made = await buildVideoPdf(input.ffmpeg, path.join(dir, names.mp4), mp4.sha256, title, segments);
     if (!made.ok) {
       notes.push(`no PDF: ${made.reason}`);
     } else {

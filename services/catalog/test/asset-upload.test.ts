@@ -273,10 +273,35 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     const stored = await assetRow(pdfId(VIDEO_ID));
     expect(stored?.contentHash).not.toBe(before);
     // The new captions are in it: the same bytes building them by hand makes.
-    const expected = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), "Demo (video)", [
+    const expected = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(VIDEO), "Demo (video)", [
       { start: 0, end: 6, text: "A different narration now." },
     ]);
     expect(expected.ok && stored?.blobKey === blobKey("local", sha256(expected.body), "pdf")).toBe(true);
+  });
+
+  it("leaves the PDF alone when a rewritten transcript keeps the same segments", async () => {
+    await uploadAssets(scratch.db, options());
+    const before = (await assetRow(pdfId(VIDEO_ID)))?.blobKey;
+
+    // A reindex of a reformatted transcript: new blob key, same narration.
+    // The PDF's own fingerprint of its inputs is unchanged, so there is no
+    // recut and no new revision — and a later run without ffmpeg must not
+    // mistake it for a stale one and unhook it.
+    const moved = Buffer.from(JSON.stringify({ segments: [{ start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." }, { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." }] }, null, 2));
+    await writeFile(path.join(outRoot, TRANSCRIPT_PATH), moved);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(moved), bytes: moved.length, blobKey: null })
+      .where(eq(asset.id, TRANSCRIPT_ID));
+
+    const result = await uploadAssets(scratch.db, options());
+    expect(result.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
+    expect((await assetRow(pdfId(VIDEO_ID)))?.blobKey).toBe(before);
+
+    const quiet = await uploadAssets(scratch.db, { ...options(), ffmpeg: null });
+    expect(quiet.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
+    const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, pdfId(VIDEO_ID)));
+    expect(derived.map((d) => d.sourceAssetId)).toEqual([VIDEO_ID]);
   });
 
   it("pages the PDF from the transcript's confirmed blob, not a file that drifted since", async () => {
@@ -300,7 +325,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     // there — `present`, not refused — and the PDF is remade with it.
     expect(result.items.find((i) => i.id === TRANSCRIPT_ID)?.action).toBe("present");
     const stored = await assetRow(pdfId(VIDEO_ID));
-    const expected = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), "Demo (video)", [
+    const expected = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(moved), "Demo (video)", [
       { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
       { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
     ]);
@@ -319,7 +344,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(result.items.find((i) => i.id === TRANSCRIPT_ID)?.action).toBe("refused");
     const pdf = result.items.find((i) => i.id === pdfId(VIDEO_ID));
     expect(pdf?.action).toBe("made");
-    const silent = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), "Demo (video)", null);
+    const silent = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(VIDEO), "Demo (video)", null);
     expect(silent.ok && pdf?.key === blobKey("local", sha256(silent.body), "pdf")).toBe(true);
   });
 
@@ -589,9 +614,15 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(withFfmpeg.items.find((i) => i.id === posterId(VIDEO_ID))?.action).toBe("linked");
     expect(await derivedFrom()).toEqual([VIDEO_ID]);
     expect((await assetRow(posterId(VIDEO_ID)))?.blobKey).toBe(oldPoster);
-    // And the PDF, byte-for-byte the document the fixture makes again, is
-    // linked back rather than stored again.
-    expect(withFfmpeg.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("linked");
+    // And the PDF is made again: the new render's hash is in the document's
+    // own inputs fingerprint, so its bytes differ even though the fixture's
+    // pages would come out the same.
+    expect(withFfmpeg.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("made");
+    const recut = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(rerender), "Demo (video)", [
+      { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
+      { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
+    ]);
+    expect(recut.ok && (await assetRow(pdfId(VIDEO_ID)))?.blobKey === blobKey("local", sha256(recut.body), "pdf")).toBe(true);
     expect(
       (
         await scratch.db

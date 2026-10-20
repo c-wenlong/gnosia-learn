@@ -65,10 +65,31 @@ export interface PdfPageInput {
 }
 
 /**
- * The document: `title` in the header line of every page beside `n / N`, one
- * page per frame. Returns the PDF bytes.
+ * The document's subject line marks which inputs it was set from: the hash
+ * `pdfInputs` in `build.ts` makes of the video's bytes, its title and its
+ * transcript's segments. A stored PDF then vouches for itself: a rewrite of
+ * a transcript file that keeps the same segments fingerprints the same and
+ * recuts nothing, which no revision history can say (a write that changes
+ * nothing appends no revision).
  */
-export async function assemblePdf(title: string, pages: readonly PdfPageInput[]): Promise<Buffer> {
+const INPUTS_PREFIX = "self-learn inputs: ";
+
+/** The inputs fingerprint a stored PDF was assembled with, or null when it does not carry one. */
+export async function pdfInputsOf(body: Buffer): Promise<string | null> {
+  try {
+    const subject = (await PDFDocument.load(body)).getSubject() ?? "";
+    return subject.startsWith(INPUTS_PREFIX) ? subject.slice(INPUTS_PREFIX.length) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The document: `title` in the header line of every page beside `n / N`, one
+ * page per frame, `inputs` in the metadata naming what it was made from.
+ * Returns the PDF bytes.
+ */
+export async function assemblePdf(title: string, pages: readonly PdfPageInput[], inputs: string): Promise<Buffer> {
   // `updateMetadata: false` and no date fields: the same video makes the
   // same document byte for byte, which is the whole point of a
   // content-addressed store — a rebuilt PDF lands on the key it already
@@ -78,6 +99,7 @@ export async function assemblePdf(title: string, pages: readonly PdfPageInput[])
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   doc.setTitle(title);
   doc.setProducer("self-learn catalog");
+  doc.setSubject(`${INPUTS_PREFIX}${inputs}`);
 
   // The header never wraps: a long title is clipped on the right, not
   // wrapped over the frame.
