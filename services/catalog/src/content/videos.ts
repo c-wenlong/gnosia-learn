@@ -578,7 +578,11 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
     notes.push("no PDF: ffmpeg was not found; the next `catalog asset upload`-style rebuild can still make one");
   } else {
     const segments = await readSegments(sidecars === null ? null : path.join(dir, names.transcript));
-    const made = await buildVideoPdf(input.ffmpeg, path.join(dir, names.mp4), mp4.sha256, title, segments);
+    // The transcript's blob key, computed the way `uploadBlob` will store it,
+    // is what the PDF's inputs fingerprint names — the same name a later
+    // `catalog asset upload` rebuild-check sees on the landed row.
+    const transcriptKey = sidecars === null ? null : blobKey(ownerId, sidecars.transcript.sha256, "json");
+    const made = await buildVideoPdf(input.ffmpeg, path.join(dir, names.mp4), mp4.sha256, title, segments, transcriptKey);
     if (!made.ok) {
       notes.push(`no PDF: ${made.reason}`);
     } else {

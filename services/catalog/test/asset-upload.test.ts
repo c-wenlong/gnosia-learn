@@ -277,30 +277,34 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     const stored = await assetRow(pdfId(VIDEO_ID));
     expect(stored?.contentHash).not.toBe(before);
     // The new captions are in it: the same bytes building them by hand makes.
-    const expected = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(VIDEO), "Demo (video)", [
-      { start: 0, end: 6, text: "A different narration now." },
-    ]);
+    const expected = await buildVideoPdf(
+      ffmpeg,
+      path.join(outRoot, VIDEO_PATH),
+      sha256(VIDEO),
+      "Demo (video)",
+      [{ start: 0, end: 6, text: "A different narration now." }],
+      blobKey("local", sha256(moved), "json"),
+    );
     expect(expected.ok && stored?.blobKey === blobKey("local", sha256(expected.body), "pdf")).toBe(true);
   });
 
   it("stamps the PDF's row with the fingerprint of its inputs", async () => {
     await uploadAssets(scratch.db, options());
     expect((await assetRow(pdfId(VIDEO_ID)))?.inputsHash).toBe(
-      pdfInputs(sha256(VIDEO), "Demo (video)", [
-        { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
-        { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
-      ]),
+      pdfInputs(sha256(VIDEO), "Demo (video)", blobKey("local", sha256(TRANSCRIPT), "json")),
     );
   });
 
-  it("leaves the PDF alone when a rewritten transcript keeps the same segments", async () => {
+  it("recuts a rewritten transcript's document exactly once, then leaves it alone", async () => {
     await uploadAssets(scratch.db, options());
     const before = (await assetRow(pdfId(VIDEO_ID)))?.blobKey;
 
     // A reindex of a reformatted transcript: new blob key, same narration.
-    // The fingerprint the row carries is unchanged, so there is no recut and
-    // no new revision — and a later run without ffmpeg must not mistake it
-    // for a stale one and unhook it.
+    // The fingerprint names the transcript by its key, so this run recuts —
+    // the document's own inputs differ, its bytes differ, a new blob lands
+    // — and the row's new fingerprint settles the question for every later
+    // run: present, not a recut each time, and a run without ffmpeg does
+    // not unhook it.
     const moved = Buffer.from(JSON.stringify({ segments: [{ start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." }, { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." }] }, null, 2));
     await writeFile(path.join(outRoot, TRANSCRIPT_PATH), moved);
     await scratch.db
@@ -309,8 +313,13 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       .where(eq(asset.id, TRANSCRIPT_ID));
 
     const result = await uploadAssets(scratch.db, options());
-    expect(result.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
-    expect((await assetRow(pdfId(VIDEO_ID)))?.blobKey).toBe(before);
+    expect(result.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("made");
+    const stored = await assetRow(pdfId(VIDEO_ID));
+    expect(stored?.blobKey).not.toBe(before);
+    expect(stored?.inputsHash).toBe(pdfInputs(sha256(VIDEO), "Demo (video)", blobKey("local", sha256(moved), "json")));
+
+    const again = await uploadAssets(scratch.db, options());
+    expect(again.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
 
     const quiet = await uploadAssets(scratch.db, { ...options(), ffmpeg: null });
     expect(quiet.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
@@ -353,10 +362,17 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     // there — `present`, not refused — and the PDF is remade with it.
     expect(result.items.find((i) => i.id === TRANSCRIPT_ID)?.action).toBe("present");
     const stored = await assetRow(pdfId(VIDEO_ID));
-    const expected = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(moved), "Demo (video)", [
-      { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
-      { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
-    ]);
+    const expected = await buildVideoPdf(
+      ffmpeg,
+      path.join(outRoot, VIDEO_PATH),
+      sha256(moved),
+      "Demo (video)",
+      [
+        { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
+        { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
+      ],
+      blobKey("local", sha256(TRANSCRIPT), "json"),
+    );
     expect(expected.ok && stored?.blobKey === blobKey("local", sha256(expected.body), "pdf")).toBe(true);
   });
 
@@ -372,8 +388,40 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(result.items.find((i) => i.id === TRANSCRIPT_ID)?.action).toBe("refused");
     const pdf = result.items.find((i) => i.id === pdfId(VIDEO_ID));
     expect(pdf?.action).toBe("made");
-    const silent = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(VIDEO), "Demo (video)", null);
+    const silent = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(VIDEO), "Demo (video)", null, null);
     expect(silent.ok && pdf?.key === blobKey("local", sha256(silent.body), "pdf")).toBe(true);
+  });
+
+  it("keeps a PDF whose transcript did not move and unhooks one whose transcript changed, however the store fails", async () => {
+    await uploadAssets(scratch.db, options());
+    // A store that stats every object but cannot serve one byte — the race
+    // between `alreadyStored`'s stat and the read that follows it.
+    const flaky: BlobStore = {
+      ...store,
+      get: (key) => Promise.reject(new Error(`cannot serve ${key}`)),
+    };
+
+    // Inputs unchanged: the fingerprint comparison reads no blob, so the
+    // unservable transcript cannot make a still-valid document look stale.
+    const still = await uploadAssets(scratch.db, { ...options(), store: flaky, ffmpeg: null });
+    expect(still.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
+
+    // Inputs changed and no replacement can be read: the old document is
+    // unhooked rather than left quoting a transcript it no longer has.
+    const moved = Buffer.from(JSON.stringify({ segments: [{ start: 0, end: 9, text: "A changed narration." }] }));
+    await writeFile(path.join(outRoot, TRANSCRIPT_PATH), moved);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(moved), bytes: moved.length, blobKey: null })
+      .where(eq(asset.id, TRANSCRIPT_ID));
+    const result = await uploadAssets(scratch.db, { ...options(), store: flaky });
+    const pdf = result.items.filter((i) => i.id === pdfId(VIDEO_ID)).map((i) => i.action);
+    expect(pdf).toEqual(["refused", "detached"]);
+    expect(await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, pdfId(VIDEO_ID)))).toEqual([]);
+
+    // And a healthy run makes the new one from the new transcript.
+    const healed = await uploadAssets(scratch.db, options());
+    expect(healed.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("made");
   });
 
   it("refuses each file its owner's cap refuses, and goes on with the rest (phase 4)", async () => {
@@ -646,10 +694,17 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     // own inputs fingerprint, so its bytes differ even though the fixture's
     // pages would come out the same.
     expect(withFfmpeg.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("made");
-    const recut = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(rerender), "Demo (video)", [
-      { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
-      { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
-    ]);
+    const recut = await buildVideoPdf(
+      ffmpeg,
+      path.join(outRoot, VIDEO_PATH),
+      sha256(rerender),
+      "Demo (video)",
+      [
+        { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
+        { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
+      ],
+      blobKey("local", sha256(TRANSCRIPT), "json"),
+    );
     expect(recut.ok && (await assetRow(pdfId(VIDEO_ID)))?.blobKey === blobKey("local", sha256(recut.body), "pdf")).toBe(true);
     expect(
       (

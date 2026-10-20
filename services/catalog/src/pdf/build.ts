@@ -59,22 +59,23 @@ export async function readSegments(transcriptFile: string | null): Promise<PdfSe
 
 /**
  * What a video's PDF is made from, as one hash: the video's bytes by their
- * content hash, the title set on its pages, and the narration segments it
- * paged on (null for a silent cut's cadence). The document carries it in its
- * metadata, so the stored artifact itself says which inputs it was built
- * from and `catalog asset upload` can tell "the transcript file moved" from
- * "the document changed": a rewrite that keeps the same segments hashes the
- * same and recuts nothing.
+ * content hash, the title set on its pages, and the transcript's blob key —
+ * the name of the exact bytes it paged on (null for a silent cut). The key,
+ * not the file or the parsed segments: a rewrite of the transcript lands as
+ * different bytes under a different name, and whether the pages came out the
+ * same is a question only a rebuild answers. The document carries the hash
+ * in its metadata, so the stored artifact itself says which inputs it was
+ * built from.
  */
-export function pdfInputs(videoContentHash: string, title: string, segments: readonly PdfSegment[] | null): string {
-  return createHash("sha256").update(JSON.stringify({ video: videoContentHash, title, segments })).digest("hex");
+export function pdfInputs(videoContentHash: string, title: string, transcriptKey: string | null): string {
+  return createHash("sha256").update(JSON.stringify({ video: videoContentHash, title, transcript: transcriptKey })).digest("hex");
 }
 
 /**
  * The PDF for `videoFile`: pages from `segments` (null for a silent cut's
  * cadence), one frame each, assembled with `title` in the header and the
- * inputs fingerprint in its metadata. Returns `ok: false` with the reason
- * when no frame could be cut or the document could not be written.
+ * `pdfInputs` fingerprint in its metadata. Returns `ok: false` with the
+ * reason when no frame could be cut or the document could not be written.
  */
 export async function buildVideoPdf(
   ffmpeg: string,
@@ -82,6 +83,7 @@ export async function buildVideoPdf(
   videoContentHash: string,
   title: string,
   segments: readonly PdfSegment[] | null,
+  transcriptKey: string | null,
 ): Promise<PdfResult> {
   // The plan needs a duration only for a silent cut; probe lazily so a
   // narrated video never waits on a second ffmpeg spawn. A failed probe is
@@ -118,7 +120,7 @@ export async function buildVideoPdf(
     pages.push({ jpeg: frame.body, caption });
   }
 
-  const inputs = pdfInputs(videoContentHash, title, segments);
+  const inputs = pdfInputs(videoContentHash, title, transcriptKey);
   try {
     return { ok: true, body: await assemblePdf(title, pages, inputs), pages: pages.length, inputs };
   } catch (error) {

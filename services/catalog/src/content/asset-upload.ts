@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -869,48 +869,26 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
           .from(assetDerivation)
           .where(and(eq(assetDerivation.assetId, id), eq(assetDerivation.sourceAssetId, video.row.id)))
       ).length > 0;
-    // What the PDF is made from: the video's bytes, its title, and the
-    // narration its transcript's segments give it. The segments come from
-    // the transcript's confirmed blob — the bytes its row names — never the
-    // file: `settle` may have refused a file that changed since it was
-    // indexed, and a transcript linked in an earlier run can drift on disk
-    // afterwards. Either way the fingerprint and (if it comes to that) the
-    // build read what the catalog serves.
+    // What the PDF is made from, by names rather than contents: the video's
+    // bytes by their content hash, its title, and the transcript's confirmed
+    // blob key — the bytes its row names, never a file's claim, since a file
+    // that changed since it was indexed is refused or an old link can drift
+    // on disk afterwards. Named keys mean the comparison reads no blob at
+    // all.
     const transcript = group.sidecars.find((s) => s.row.kind === "transcript");
     const transcriptKey =
       transcript === undefined ? null : (transcriptSettled?.key ?? (await alreadyStored(transcript.row, transcript.ext)));
-    let segments: PdfSegment[] | null = null;
-    if (transcript !== undefined && transcriptKey !== null) {
-      try {
-        segments = segmentsFromText(await blobText(transcriptKey));
-      } catch (error) {
-        if (!dryRun) {
-          // A confirmed blob that cannot be read is the store failing, not
-          // the inputs changing: without the real segments the fingerprint
-          // would misjudge a still-valid document as stale. Keep it as is.
-          refuse(id, "pdf", `the transcript's stored bytes could not be read: ${error instanceof Error ? error.message : String(error)}`);
-          return null;
-        }
-        // A dry run stores nothing, so a transcript not yet uploaded has no
-        // blob to read: the file the real run would store is what it would
-        // page on.
-        try {
-          segments = segmentsFromText(await readFile(transcript.file, "utf8"));
-        } catch {
-          segments = null;
-        }
-      }
-    }
-    const expected = pdfInputs(video.row.contentHash ?? "", video.row.title ?? video.row.id, segments);
-    // The pdf row's `inputs_hash` records the fingerprint of the inputs its
-    // document was made from, so the comparison costs no read of the stored
-    // document at all — and no revision-history memory of the inputs, a
-    // memory that does not move when a rebuild lands on identical bytes (a
-    // write that changes nothing appends no revision). A transcript
-    // rewritten to the same segments fingerprints the same and recuts
-    // nothing, and a run without ffmpeg unhooks only a document that is
-    // actually out of date. A row with no fingerprint — one an older write
-    // left — reads as stale and is remade once, stamped this time.
+    const expected = pdfInputs(video.row.contentHash ?? "", video.row.title ?? video.row.id, transcriptKey);
+    // The pdf row's `inputs_hash` records that fingerprint of the inputs its
+    // document was made from, so the comparison costs no read — and no
+    // revision-history memory of the inputs, a memory that does not move when
+    // a rebuild lands on identical bytes (a write that changes nothing
+    // appends no revision). A transcript rewrite lands under a new key, so
+    // the fingerprint differs and the document is recut or unhooked even
+    // when the pages would come out the same — the difference is worth a
+    // recut to never serve a document of another transcript's captions. A
+    // row with no fingerprint — one an older write left — reads as stale and
+    // is remade once, stamped this time.
     const inputChanged = existing !== undefined && derived ? existing.inputsHash !== expected : false;
     // A video whose inputs just changed leaves its PDF picturing the old
     // render or quoting the old transcript, and nothing later would notice:
@@ -988,12 +966,27 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       refuse(id, "pdf", before);
       return detach(before);
     }
+    // The captions come from the transcript's confirmed blob — the bytes its
+    // row names — never the file, so the document quotes what the catalog
+    // serves. A blob that cannot be read after `alreadyStored` confirmed it
+    // is the store failing, not a reason to keep the old document either:
+    // `detach` unhooks it when the inputs say it is stale.
+    let segments: PdfSegment[] | null = null;
+    if (transcriptKey !== null) {
+      try {
+        segments = segmentsFromText(await blobText(transcriptKey));
+      } catch (error) {
+        refuse(id, "pdf", `the transcript's stored bytes could not be read: ${error instanceof Error ? error.message : String(error)}`);
+        return detach("its transcript's stored bytes could not be read");
+      }
+    }
     const made = await buildVideoPdf(
       options.ffmpeg,
       video.file,
       video.row.contentHash ?? "",
       video.row.title ?? video.row.id,
       segments,
+      transcriptKey,
     );
     if (!made.ok) {
       refuse(id, "pdf", `no PDF could be made from ${video.row.path}: ${made.reason}`);

@@ -67,10 +67,9 @@ export interface PdfPageInput {
 /**
  * The document's subject line marks which inputs it was set from: the hash
  * `pdfInputs` in `build.ts` makes of the video's bytes, its title and its
- * transcript's segments. A stored PDF then vouches for itself: a rewrite of
- * a transcript file that keeps the same segments fingerprints the same and
- * recuts nothing, which no revision history can say (a write that changes
- * nothing appends no revision).
+ * transcript's blob key. A stored PDF then vouches for itself, no revision
+ * history required — a memory a write that changes nothing cannot move,
+ * since it appends no revision.
  */
 const INPUTS_PREFIX = "self-learn inputs: ";
 
