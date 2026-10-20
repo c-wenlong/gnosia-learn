@@ -17,7 +17,7 @@ import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch, withoutConstraint } from "./scratch-database";
+import { clearTables, createScratchDatabase, probe, type Scratch, withoutConstraint } from "./scratch-database";
 
 import { inTransaction } from "../src/db";
 /**
@@ -179,7 +179,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(sql`delete from asset; delete from blob_object; delete from content_revision;`);
+    await clearTables(scratch.db, ["asset", "blob_object", "content_revision"]);
     blobRoot = await mkdtemp(path.join(base, "blobs-"));
     store = fsStore(blobRoot);
     await writeFixture();

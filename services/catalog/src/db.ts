@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { sql, type SQLWrapper } from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { mkdirSync } from "node:fs";
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 
 import { tables } from "@self-learn/schema";
@@ -38,6 +39,15 @@ export interface Connection {
    * written against the old shape keep type-checking until each is touched.
    */
   lastPoolError: () => Error | null;
+  /**
+   * The shape the Postgres pool's `query`/`on` gave, kept for callers that
+   * still name it. `query` is `db.execute` — one handle behind either name —
+   * and `on` subscribes nothing because there are no idle sockets to error.
+   */
+  pool: {
+    query: <T = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: T[]; rowCount: number }>;
+    on: (event: string, listener: (error: Error) => void) => void;
+  };
 }
 
 export interface ConnectOptions {
@@ -95,8 +105,14 @@ interface ConnectionFlags {
   revisionId: string | null;
   /** Transaction nesting depth, for `inTransaction`'s savepoints. */
   txDepth: number;
+  /** Tail of the top-level transaction queue (one writer on this handle). */
+  txTail: Promise<void>;
   /** The resolved file this connection opened, for `databaseIdentity`. */
   file: string;
+  /** The better-sqlite3 handle, for the busy-timeout juggling in `inTransaction`. */
+  sqlite: Database.Database;
+  /** How long `begin immediate` keeps retrying before giving up (ms). */
+  busyMs: number;
 }
 
 const FLAGS = new WeakMap<CatalogDatabase, ConnectionFlags>();
@@ -134,9 +150,9 @@ export class DeferredRuleViolation extends Error {
   readonly rule: string;
   readonly violators: readonly Record<string, unknown>[];
   constructor(rule: string, violators: readonly Record<string, unknown>[]) {
-    const shown = violators.slice(0, 5).map((row) => `${row["id"]}: ${row["detail"]}`).join("; ");
+    const shown = violators.slice(0, 5).map((row) => String(row["message"] ?? row["detail"] ?? row["id"])).join("; ");
     super(
-      `deferred rule "${rule}" refused the commit: ${violators.length} violator(s)` +
+      `23514: deferred rule "${rule}" refused the commit: ${violators.length} violator(s)` +
         (shown === "" ? "" : ` (${shown}${violators.length > 5 ? ", …" : ""})`),
     );
     this.name = "DeferredRuleViolation";
@@ -187,17 +203,75 @@ export function setRevisionId(db: CatalogDatabase, revisionId: string | null): v
  * means to write, and taking the lock at the start is what turns a later
  * `insert` into "wait your turn" instead of `SQLITE_BUSY` at commit.
  */
+/** Whether this async context already runs inside a transaction. */
+const INSIDE_TX = new AsyncLocalStorage<boolean>();
+
 export async function inTransaction<T>(
   db: CatalogDatabase,
   fn: (tx: CatalogDatabase) => Promise<T>,
 ): Promise<T> {
   const flags = FLAGS.get(db);
   if (flags === undefined) {
-    throw new Error("inTransaction on a database not opened through connect()");
+    // A handle that did not come through connect() — a stub in a test, or a
+    // bare drizzle database: run the same SQL without the bookkeeping.
+    await db.execute(sql`begin immediate`);
+    try {
+      const out = await fn(db);
+      await db.execute(sql`commit`);
+      return out;
+    } catch (error) {
+      await db.execute(sql`rollback`);
+      throw error;
+    }
   }
+  if (INSIDE_TX.getStore() !== true) {
+    // Two top-level calls on one connection were two pool clients on
+    // Postgres. Here they would nest as savepoints and read each other's
+    // uncommitted state, so they queue: each begins only once the last
+    // committed, which is the serialisation the pool gave for free.
+    const prev = flags.txTail;
+    let release!: () => void;
+    flags.txTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await prev;
+    try {
+      return await INSIDE_TX.run(true, () => runTransaction(db, flags, fn));
+    } finally {
+      release();
+    }
+  }
+  return runTransaction(db, flags, fn);
+}
+
+async function runTransaction<T>(
+  db: CatalogDatabase,
+  flags: ConnectionFlags,
+  fn: (tx: CatalogDatabase) => Promise<T>,
+): Promise<T> {
   const depth = flags.txDepth;
   const name = `catalog_sp_${depth}`;
-  db.run(sql.raw(depth === 0 ? "begin immediate" : `savepoint ${name}`));
+  if (depth === 0) {
+    // `begin immediate` under the native busy handler would park the whole
+    // event loop inside better-sqlite3 — synchronous calls block the thread —
+    // and the holder's own release could never be scheduled. Retry the begin
+    // in async steps instead: no busy wait inside the driver, no frozen loop.
+    const deadline = Date.now() + flags.busyMs;
+    for (;;) {
+      flags.sqlite.pragma("busy_timeout = 0");
+      try {
+        flags.sqlite.exec("begin immediate");
+        break;
+      } catch (error) {
+        if ((error as { code?: unknown }).code !== "SQLITE_BUSY" || Date.now() >= deadline) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      } finally {
+        flags.sqlite.pragma(`busy_timeout = ${flags.busyMs}`);
+      }
+    }
+  } else {
+    flags.sqlite.exec(`savepoint ${name}`);
+  }
   flags.txDepth = depth + 1;
   try {
     const out = await fn(db);
@@ -212,15 +286,47 @@ export async function inTransaction<T>(
         if (rows.length > 0) throw new DeferredRuleViolation(rule, rows);
       }
     }
-    db.run(sql.raw(depth === 0 ? "commit" : `release ${name}`));
+    // Raw exec, not db.run: a commit-time error must surface as the
+    // SqliteError it was, not a DrizzleError that hides its message.
+    if (depth === 0) {
+      try {
+        flags.sqlite.exec("commit");
+      } catch (commitError) {
+        // A deferred foreign key fails at commit as a nameless
+        // "FOREIGN KEY constraint failed". foreign_key_check still runs on
+        // the un-committed transaction, so name the violator Postgres's
+        // constraint name would have.
+        try {
+          const bad = flags.sqlite
+            .prepare("pragma foreign_key_check")
+            .all() as { table: string; rowid: unknown; parent: string }[];
+          if (bad.length > 0) {
+            const first = bad[0]!;
+            (commitError as Error).message +=
+              ` (${bad.length} violation(s): ${first.table} rowid ${String(first.rowid)} -> ${first.parent})`;
+          }
+        } catch {
+          // keep the bare error
+        }
+        throw commitError;
+      }
+    } else {
+      flags.sqlite.exec(`release ${name}`);
+    }
     if (depth === 0) flags.revisionId = null;
     return out;
   } catch (error) {
-    if (depth === 0) {
-      db.run(sql`rollback`);
-    } else {
-      db.run(sql.raw(`rollback to ${name}`));
-      db.run(sql.raw(`release ${name}`));
+    // A rollback can itself fail ("no transaction is active" after SQLite
+    // already aborted it); never let it mask the error that sent us here.
+    try {
+      if (depth === 0) {
+        flags.sqlite.exec("rollback");
+      } else {
+        flags.sqlite.exec(`rollback to ${name}`);
+        flags.sqlite.exec(`release ${name}`);
+      }
+    } catch {
+      // keep the original error
     }
     if (depth === 0) flags.revisionId = null;
     throw error;
@@ -237,9 +343,24 @@ export async function inTransaction<T>(
  */
 export function connect(options: ConnectOptions = {}): Connection {
   const file = databasePath(options.url);
-  if (file !== ":memory:") mkdirSync(path.dirname(file), { recursive: true });
+  if (file !== ":memory:") {
+    try {
+      mkdirSync(path.dirname(file), { recursive: true });
+    } catch (error) {
+      // mkdir says EEXIST when a component of the parent is a file; ENOENT's
+      // sibling, the "nothing can ever live here" answer ENOTDIR gives open().
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw Object.assign(new Error(`a path component is not a directory: ${path.dirname(file)}`), { code: "ENOTDIR" });
+      }
+      throw error;
+    }
+  }
+  const busyMs = options.connectionTimeoutMillis ?? Number(process.env.CATALOG_DB_TIMEOUT_MS ?? 5_000);
   const sqlite = new Database(file, {
-    timeout: options.connectionTimeoutMillis ?? 5_000,
+    // Postgres locks waited for ever; a busy timeout is the whole queue here.
+    // Tests that race writers set CATALOG_DB_TIMEOUT_MS high enough that a
+    // contender's wait outlasts the holder's work.
+    timeout: busyMs,
   });
   /**
    * Foreign keys are off by default in SQLite, unlike Postgres where they
@@ -257,7 +378,10 @@ export function connect(options: ConnectOptions = {}): Connection {
     copyOk: options.copyOk ?? copyOk(),
     revisionId: null,
     txDepth: 0,
+    txTail: Promise.resolve(),
     file,
+    sqlite,
+    busyMs,
   };
 
   /**
@@ -290,6 +414,11 @@ export function connect(options: ConnectOptions = {}): Connection {
       return String(value).replace(new RegExp(String(pattern), "g"), String(replacement));
     },
   );
+  /** `starts_with(a, b)` the asset key-prefix checks name. */
+  sqlite.function("starts_with", (a: unknown, b: unknown) => {
+    if (a === null || b === null) return null;
+    return String(a).startsWith(String(b)) ? 1 : 0;
+  });
   /** What the copy guards ask: may this connection write on a copy? */
   sqlite.function("catalog_copy_ok", () => (flags.copyOk ? 1 : 0));
   /** What the write-seam guards ask: which revision is this connection writing? */
@@ -316,9 +445,28 @@ export function connect(options: ConnectOptions = {}): Connection {
     return shared / (ta.size + tb.size - shared);
   });
 
+  // Postgres's driver parsed jsonb columns itself, so raw `sql` call sites
+  // read objects. SQLite hands every text value back as a string, and
+  // better-sqlite3 cannot say which column was declared JSON; a value that
+  // is itself well-formed JSON object or array text is the closest marker.
+  const sniffJson = <T>(rows: T[]): T[] => {
+    for (const row of rows as Record<string, unknown>[]) {
+      for (const key of Object.keys(row)) {
+        const value = row[key];
+        if (typeof value === "string" && value.length > 1 && (value[0] === "{" || value[0] === "[")) {
+          try {
+            row[key] = JSON.parse(value);
+          } catch {
+            /* not JSON: a text value that merely opens like one */
+          }
+        }
+      }
+    }
+    return rows;
+  };
+  const session = sqlite;
   const db = drizzle(sqlite, { schema: tables }) as unknown as CatalogDatabase;
   db.execute = async <T = Record<string, unknown>>(query: SQLWrapper | string) => {
-    const session = (db as unknown as { $client: Database.Database }).$client;
     const dialect = (db as unknown as { dialect: { sqlToQuery: (q: SQLWrapper) => { sql: string; params: unknown[] } } }).dialect;
     const prepared = dialect.sqlToQuery(typeof query === "string" ? sql.raw(query) : query);
     let statement;
@@ -339,24 +487,7 @@ export function connect(options: ConnectOptions = {}): Connection {
       statement.run(...(prepared.params as never[]));
       return { rows: [] as T[] };
     }
-    const rows = statement.all(...(prepared.params as never[])) as T[];
-    // Postgres's driver parsed jsonb columns itself, so raw `sql` call sites
-    // read objects. SQLite hands every text value back as a string, and
-    // better-sqlite3 cannot say which column was declared JSON; a value that
-    // is itself well-formed JSON object or array text is the closest marker.
-    for (const row of rows as Record<string, unknown>[]) {
-      for (const key of Object.keys(row)) {
-        const value = row[key];
-        if (typeof value === "string" && value.length > 1 && (value[0] === "{" || value[0] === "[")) {
-          try {
-            row[key] = JSON.parse(value);
-          } catch {
-            /* not JSON: a text value that merely opens like one */
-          }
-        }
-      }
-    }
-    return { rows };
+    return { rows: sniffJson(statement.all(...(prepared.params as never[])) as T[]) };
   };
   FLAGS.set(db, flags);
   return {
@@ -368,6 +499,29 @@ export function connect(options: ConnectOptions = {}): Connection {
       return Promise.resolve();
     },
     lastPoolError: () => null,
+    pool: {
+      // pg's `$1` placeholders become SQLite's `?`; the multi-statement and
+      // non-reader paths mirror `execute` above.
+      query: <T = Record<string, unknown>>(text: string, params: unknown[] = []) => {
+        const positional = text.replace(/\$(\d+)/g, "?");
+        try {
+          const statement = session.prepare(positional);
+          if (!statement.reader) {
+            const ran = statement.run(...(params as never[]));
+            return Promise.resolve({ rows: [] as T[], rowCount: ran.changes });
+          }
+          const rows = sniffJson(statement.all(...(params as never[])) as T[]);
+          return Promise.resolve({ rows, rowCount: rows.length });
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("more than one statement") && params.length === 0) {
+            session.exec(positional);
+            return Promise.resolve({ rows: [] as T[], rowCount: 0 });
+          }
+          return Promise.reject(error);
+        }
+      },
+      on: () => undefined,
+    },
   };
 }
 

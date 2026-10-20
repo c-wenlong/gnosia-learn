@@ -104,7 +104,7 @@ describe.skipIf(!reachable.ok)("a database behind the journal", () => {
     const body = JSON.parse(ran.stdout) as { ok: boolean; pending: string[] };
     expect(body.ok).toBe(false);
     expect(body.pending).toHaveLength(outstanding);
-    expect(body.pending[0]).toMatch(/^0010_/);
+    expect(body.pending[0]).toMatch(/^0001_/);
   }, 30_000);
 
   it("leaves status and doctor to say it themselves", async () => {

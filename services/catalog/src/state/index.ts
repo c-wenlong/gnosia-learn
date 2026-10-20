@@ -38,7 +38,7 @@
  * would either need a second export subpath or a relative reach into
  * `services/`. One door.
  */
-export { connect, withDatabase, type CatalogDatabase, type Connection } from "../db";
+export { connect, inTransaction, withDatabase, type CatalogDatabase, type Connection } from "../db";
 
 /**
  * The database half of the content reader seam (docs/CONTENT-MIGRATION.md

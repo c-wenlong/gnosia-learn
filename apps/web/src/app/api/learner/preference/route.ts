@@ -5,6 +5,7 @@ import {
   asRecentModules,
   readPreference,
   withLearnerLock,
+  inTransaction,
   withRecentModule,
   writePreference,
   type CatalogDatabase,
@@ -129,7 +130,7 @@ async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string)
       // has not yet taken migration 0025 (which allows the type) loses the
       // event and still keeps the preferences, which Recent reads as well.
       try {
-        await tx.transaction((savepoint) =>
+        await inTransaction(tx, async (savepoint) =>
           appendEvent(
             savepoint,
             { type: "visit", course: visit.courseSlug, ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }) },

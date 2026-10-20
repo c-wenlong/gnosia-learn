@@ -182,7 +182,9 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
   });
 
   it("refuses a new requires edge to a concept the course teaches later", async () => {
-    const write = scratch.db.insert(conceptPrerequisite).values({ conceptSlug: "a", prerequisiteSlug: "c", kind: "requires", position: 1 });
+    const write = inTransaction(scratch.db, (t) =>
+      t.insert(conceptPrerequisite).values({ conceptSlug: "a", prerequisiteSlug: "c", kind: "requires", position: 1 }),
+    );
     await expect(write).rejects.toSatisfy(refusedForOrder);
     expect(
       await scratch.db.select().from(conceptPrerequisite).where(eq(conceptPrerequisite.conceptSlug, "a")),
@@ -199,10 +201,11 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
   it("refuses turning an assumes edge out of order into requires", async () => {
     await scratch.db.insert(conceptPrerequisite).values({ conceptSlug: "a", prerequisiteSlug: "c", kind: "assumes", position: 1 });
     try {
-      const write = scratch.db
-        .update(conceptPrerequisite)
-        .set({ kind: "requires" })
-        .where(and(eq(conceptPrerequisite.conceptSlug, "a"), eq(conceptPrerequisite.prerequisiteSlug, "c")));
+      const write = inTransaction(scratch.db, (t) =>
+        t.update(conceptPrerequisite)
+          .set({ kind: "requires" })
+          .where(and(eq(conceptPrerequisite.conceptSlug, "a"), eq(conceptPrerequisite.prerequisiteSlug, "c"))),
+      );
       await expect(write).rejects.toSatisfy(refusedForOrder);
     } finally {
       await scratch.db

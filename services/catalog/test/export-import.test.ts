@@ -84,8 +84,11 @@ async function tempDir(label: string): Promise<string> {
 /** The newest snapshot hash of every entity, which is the database's content in one map. */
 async function latestSnapshots(scratch: Scratch): Promise<Map<string, string>> {
   const { rows } = await scratch.db.execute<{ key: string; hash: string }>(sql`
-    select distinct on (entity_type, entity_id) entity_type || ' ' || entity_id as key, snapshot_hash as hash
-    from ${contentRevision} order by entity_type, entity_id, seq desc
+    select entity_type || ' ' || entity_id as key, snapshot_hash as hash
+    from (select entity_type, entity_id, snapshot_hash,
+                 row_number() over (partition by entity_type, entity_id order by seq desc) as rn
+          from ${contentRevision})
+    where rn = 1 order by entity_type, entity_id
   `);
   return new Map(rows.map((row) => [row.key, row.hash]));
 }

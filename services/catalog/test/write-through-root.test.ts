@@ -175,7 +175,7 @@ describe.skipIf(!reachable.ok)("a copy of a database never writes into the tree 
     expect(rows[0]?.root).toBe(template.root);
     await expect(
       addTopic(copy.db, { slug: "gamma", title: "Gamma", domain: "testing" }, by),
-    ).rejects.toThrow(/topics was last imported from .* by another database \(self_learn_test_\w+:\d+\), not by this one/s);
+    ).rejects.toThrow(/topics was last imported from .* by another database \(.+self_learn_test_\w+.+\), not by this one/s);
     await expect(editTopic(copy.db, { slug: "alpha", summary: "changed on the copy" }, by)).rejects.toThrow(
       /another database/,
     );

@@ -256,7 +256,7 @@ describe("the one door to provider_key", () => {
     ].map((p) => path.join(REPO_ROOT, p)),
   );
   const ROOTS = ["apps", "services", "packages", "scripts"].map((p) => path.join(REPO_ROOT, p));
-  const SKIP = /(^|\/)(node_modules|\.next|dist|coverage|drizzle)(\/|$)/;
+  const SKIP = /(^|\/)(node_modules|\.next|dist|coverage|drizzle|drizzle-sqlite)(\/|$)/;
 
   it("finds a reference the way it is meant to", () => {
     expect(namesTable("// the provider_key table\nconst x = 1;")).toBe(false);
@@ -301,11 +301,10 @@ describe("the one door to provider_key", () => {
    */
   const GENERIC_READERS: Record<string, string> = {
     "services/catalog/src/commands/status.ts": "counts each table's rows; no row leaves",
-    "services/catalog/src/content/link-owners.ts": "reads table names only, to skip a table a database lacks",
     "scripts/lib/pg.mjs": "copies a whole database into another database (a scratch copy), which is a database dump in the threat model",
     "scripts/flip-rehearsal.mjs": "takes the pg_dump backup before flip day, a database dump in the threat model",
     "scripts/e2e.mjs": "checks pg_dump exists and copies a template database through scripts/lib/pg.mjs",
-    "services/catalog/src/content/rules.ts": "reads trigger names and states from pg_trigger joined to pg_class; no rows",
+    "services/catalog/scripts/pg-to-sqlite.mjs": "copies a Postgres database into the SQLite catalog wholesale; a database dump by design, keys included",
   };
   const GENERIC = [
     /\bObject\s*\.\s*(keys|values|entries)\s*\(\s*tables\s*\)/,

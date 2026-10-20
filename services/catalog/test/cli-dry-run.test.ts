@@ -71,7 +71,7 @@ describe("--dry-run where it is honoured", () => {
 
   it("lets course cover through to the database, which is down", async () => {
     const ran = await catalog(
-      url, "course", "cover", "cs3230", "--file", "cover.jpg", "--photographer", "P",
+      unreachable, "course", "cover", "cs3230", "--file", "cover.jpg", "--photographer", "P",
       "--source", "https://example.com", "--licence", "L", "--reason", "r", "--dry-run",
     );
     expect(ran.stderr).not.toContain("has no --dry-run");
