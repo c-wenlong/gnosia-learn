@@ -89,17 +89,17 @@ services/catalog/ Migrations, the database connection and the catalog CLI
 scripts/learn/    Pipeline CLI: bkt · graph · schedule · markdown · store · render
 seed/             A small slice of the content in the export format: a fresh clone's data
 docs/             Long-form docs, the pipeline's among them (docs/LEARN.md)
-tools/manimkc/    Submodule: narrated manim videos
-tools/remotionkc/ Submodule: narrated Remotion videos
-tools/revideokc/  Submodule: narrated Revideo videos
-tools/blenderkc/  Submodule: narrated photoreal 3D videos (Blender)
-tools/tldrawkc/   Submodule: tldraw diagrams
+tools/manimkc/    Private submodule: narrated manim videos
+tools/remotionkc/ Private submodule: narrated Remotion videos
+tools/revideokc/  Private submodule: narrated Revideo videos
+tools/blenderkc/  Private submodule: narrated photoreal 3D videos (Blender)
+tools/tldrawkc/   Submodule (public): tldraw diagrams
 .claude/          launch.json, the four skills symlinked from the submodules, and video-router
 ```
 
 Three of those are npm workspaces (`apps/*`, `packages/*`, `services/*`), so
 one `npm ci` at the root installs the lot and `npm run lint`, `typecheck` and
-`test` cover all of them from there. `tools/` is not a workspace: both
+`test` cover all of them from there. `tools/` is not a workspace: the
 submodules carry their own lockfiles and toolchains.
 
 The catalog is the join the content never had: one `topic` vocabulary every
@@ -124,12 +124,18 @@ back in layers with `ls`, `show`, `path` and `search`, every one of them
 ## Install
 
 ```bash
-git clone --recursive https://github.com/c-wenlong/self-learn   # two submodules under tools/
+git clone https://github.com/c-wenlong/self-learn
 cd self-learn
 npm ci
 cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the root
 npm run dev
 ```
+
+Do not add `--recursive`: the four video-tool submodules under `tools/`
+(manimkc, remotionkc, revideokc, blenderkc) are private repositories, so a
+recursive clone fails on them. Nothing above needs them, and CI skips them
+the same way. `tools/tldrawkc` is public; only the diagram tooling at the
+end of this section fetches it.
 
 Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required.
 
@@ -148,7 +154,9 @@ The flips run in that order, the one `scripts/lib/flip-order.mjs` keeps. `MANIMK
 
 A type that has not been flipped is refused by name rather than read from the files: the page says it could not read its content, and the server log names the `catalog flip` to run ([CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) has the flip-day details). Without Postgres the app shows a banner saying nothing you change is saved, and each page that shows content says it could not read it.
 
-Both the app and the catalog CLI default to `postgres://localhost:5432/self_learn`. If you point `DATABASE_URL` anywhere else, set the same value in `services/catalog/.env` (copy `services/catalog/.env.example`): the CLI reads that file and never `apps/web/.env.local`, so a value set in only one place migrates one database while the app connects to another. Already cloned without `--recursive`? Run `git submodule update --init --recursive` to fetch `tools/manimkc/` and the manim clone nested inside it. Pulling a clone that predates the move needs `git submodule sync --recursive` first, because both submodules changed path.
+Both the app and the catalog CLI default to `postgres://localhost:5432/self_learn`. If you point `DATABASE_URL` anywhere else, set the same value in `services/catalog/.env` (copy `services/catalog/.env.example`): the CLI reads that file and never `apps/web/.env.local`, so a value set in only one place migrates one database while the app connects to another.
+
+The four video-tool submodules are private, so a clone leaves `tools/manimkc/`, `tools/remotionkc/`, `tools/revideokc/` and `tools/blenderkc/` empty, and the app, the tests and `npm run catalog -- import seed` all work without them. On a machine with access, `git submodule update --init tools/manimkc` fetches one (add `--recursive` for manimkc, which nests a manim submodule of its own). A clone that predates the tools/ move needs `git submodule sync --recursive` first, because the submodule paths changed.
 
 The diagram tool in `tools/tldrawkc/` needs one extra step, because `npm run canvas` runs a compiled CLI that is not committed:
 

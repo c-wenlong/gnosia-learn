@@ -1,18 +1,19 @@
 # Design reference
 
-Every folder here is a symlink into the design-systems library
-(`ai-engineering/design/design-systems/systems/<slug>`). The packages hold
-captured third-party assets (fonts, screenshots, raw dumps), so they live in
-the library, not in this repo. The links only resolve on a machine that has
-that checkout.
+Every folder here is a symlink into the design-systems library, a private
+checkout that is not part of this repository. The packages hold captured
+third-party assets (fonts, screenshots, raw dumps), so they live in the
+library, not in this repo. The links are absolute, untracked (only LINKS and
+this README are committed), and resolve only on a machine that has that
+checkout. A fresh clone shows LINKS and nothing else until the script runs.
 
 ## Create or repair the links
 
-    python3 scripts/link-design-systems.py            # create missing, repoint stale
-    python3 scripts/link-design-systems.py --check    # report only, exit 1 on a problem
+    DESIGN_SYSTEMS_HOME=<library checkout> python3 scripts/link-design-systems.py            # create missing, repoint stale
+    DESIGN_SYSTEMS_HOME=<library checkout> python3 scripts/link-design-systems.py --check    # report only, exit 1 on a problem
 
-The script reads `catalog.json` in the library (`DESIGN_SYSTEMS_HOME` overrides
-the default location), repoints every existing link to the folder the catalog
+The script reads `catalog.json` in the library checkout `DESIGN_SYSTEMS_HOME`
+names, repoints every existing link to the folder the catalog
 gives for that slug, and creates a link for each slug in [LINKS](LINKS) that has
 none yet. Rerun it after the library is reorganised.
 

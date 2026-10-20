@@ -3,7 +3,8 @@
 
     python3 scripts/link-design-systems.py [--check]
 
-The library is $DESIGN_SYSTEMS_HOME, else the default path below. Its
+The library is $DESIGN_SYSTEMS_HOME. It is a private checkout outside this
+repository, so there is no default. Its
 catalog.json lists every package; an entry's `entry` field is
 `<folder>/README.md`, so the package folder is dirname(entry).
 
@@ -22,7 +23,6 @@ import json
 import os
 import sys
 
-DEFAULT_HOME = "/Users/owner/Desktop/Personal/Internal/Projects/ai-engineering/design/design-systems"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REF = os.path.join(ROOT, "docs", "design", "reference")
 LINKS_FILE = os.path.join(REF, "LINKS")
@@ -73,9 +73,12 @@ def main():
         die("usage: link-design-systems.py [--check]")
     check = "--check" in args
 
-    home = os.path.abspath(os.environ.get("DESIGN_SYSTEMS_HOME") or DEFAULT_HOME)
+    home_env = os.environ.get("DESIGN_SYSTEMS_HOME")
+    if not home_env:
+        die("set DESIGN_SYSTEMS_HOME to the design-systems library checkout")
+    home = os.path.abspath(home_env)
     if not os.path.isdir(home):
-        die(f"design-systems library not found at {home} (set DESIGN_SYSTEMS_HOME)")
+        die(f"design-systems library not found at {home}")
     folders = load_catalog(home)
 
     bad = 0
