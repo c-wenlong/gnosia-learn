@@ -4,7 +4,7 @@ import { parseEnv } from "node:util";
 
 import { defaultBlobRoot, fsStore, type BlobStore } from "@self-learn/blob";
 
-import { REPO_ROOT } from "./paths";
+import { REPO_ROOT } from "../paths";
 
 /**
  * The blob store the catalog writes diagram SVGs into, opened for reading.

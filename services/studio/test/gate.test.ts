@@ -20,20 +20,20 @@ import { topicListAnswer } from "./vocabulary";
  */
 
 const canvasMock = vi.hoisted(() => ({ canvas: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/canvas")>();
+vi.mock("../src/canvas/canvas", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/canvas/canvas")>();
   return { ...actual, canvas: canvasMock.canvas };
 });
 
 // Step 4 checks the stamp against the vocabulary, which the studio reads only
 // through `catalog topic ls`; faked, so the gate reads no database.
 const catalogMock = vi.hoisted(() => ({ topicList: vi.fn() }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 
-const { runGate } = await import("../src/gate");
+const { runGate } = await import("../src/diagram/gate");
 
 const SLUG = "studio-gate-fixture";
 const TOPIC = "vector-and-linear-algebra-basics";

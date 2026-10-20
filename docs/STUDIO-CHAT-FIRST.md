@@ -50,7 +50,7 @@ they open the chat from that diagram's own tile.
 **What does not change.** The runner is the only spawner, the drawing agent
 writes only candidates, the gate checks every element and relation, nothing
 lands until Accept, the person commits, and the brief schema in
-[`brief.ts`](../services/studio/src/brief.ts) keeps every field. Only who fills
+[`brief.ts`](../services/studio/src/diagram/brief.ts) keeps every field. Only who fills
 the brief changes.
 
 ## Concerns this addresses
@@ -180,7 +180,7 @@ that order. It adds no path from pasted text to a tool.
 The planner's proposing message ends with one fenced block tagged `brief`
 holding a JSON object. The runner takes the last such block in the reply and
 runs it through `validateBrief` from
-[`brief.ts`](../services/studio/src/brief.ts), the same function
+[`brief.ts`](../services/studio/src/diagram/brief.ts), the same function
 `POST /api/jobs` runs, against the vocabulary as it is on disk now.
 
 - **Valid**: the draft moves to `briefed`, the brief is stored on the draft,
@@ -358,7 +358,7 @@ proposing" now reads "at most one brief block per kind per message, and only
 for a kind the TAGS block names" (D61).
 
 The three blocks, each fenced with a `-----BEGIN NAME-----` line the way
-`DATA_FENCE` in [`prompt.ts`](../services/studio/src/prompt.ts) fences the
+`DATA_FENCE` in [`prompt.ts`](../services/studio/src/diagram/prompt.ts) fences the
 brief:
 
 | Block | One line per | Built from |
@@ -1830,10 +1830,10 @@ the web app. 1b builds against the API table above and lands after 1a.
       indexes and `CHECK`s; `STUDIO_TABLES` gains `draft`; `catalog draft`
       verbs to upsert and show one, mirroring `catalog job`, each taking
       `--owner`
-- [x] `services/studio/src/planner.ts`: the spawn with every flag in the
+- [x] `services/studio/src/drafts/planner.ts`: the spawn with every flag in the
       planner table, the system prompt assembly with its three blocks, the turn
       loop, the brief extraction and the one automatic retry
-- [x] `services/studio/src/drafts.ts`: the disk record, the transcript, the
+- [x] `services/studio/src/drafts/drafts.ts`: the disk record, the transcript, the
       reconcile pass for an interrupted turn, the turn cap
 - [x] Per-turn spend entries in `spendWindow`; `/api/health` counts them
 - [x] The draft routes, and `draftId` on `POST /api/jobs`
@@ -2153,7 +2153,7 @@ for the timeline.
 
 The runner half of the first two is built: `PUT /api/drafts/{id}/brief`, and
 `firstMessage` and a comma list of states on `GET /api/drafts` (see the API
-table). Pruning is `services/studio/src/prune.ts` and `catalog draft delete`:
+table). Pruning is `services/studio/src/drafts/prune.ts` and `catalog draft delete`:
 a pass at start and every `STUDIO_PRUNE_EVERY_MS` (a day), over drafts
 untouched for `STUDIO_DRAFT_TTL_MS` (seven days). The disk is asked first (a
 job the draft recorded, a job in memory, any `job.json` naming it), then the

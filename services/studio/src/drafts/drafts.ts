@@ -12,11 +12,11 @@ import {
   type DraftState,
 } from "@self-learn/schema/shared";
 
-import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
-import { byokEnv, loadByok, resolveByok } from "./byok";
-import { codexEnv, codexSignedIn, sealCodexHome } from "./codex";
-import { canvas, doctor, doctorChecks, type InspectReport } from "./canvas";
-import { conceptShow, draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "./catalog";
+import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "../diagram/brief";
+import { byokEnv, loadByok, resolveByok } from "../agent/byok";
+import { codexEnv, codexSignedIn, sealCodexHome } from "../agent/codex";
+import { canvas, doctor, doctorChecks, type InspectReport } from "../canvas/canvas";
+import { conceptShow, draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "../data/catalog";
 import {
   agentAuth,
   CODEX_BIN,
@@ -26,9 +26,9 @@ import {
   QWEN_BIN,
   studioOwner,
   VERB_TIMEOUT_MS,
-} from "./config";
-import { costFromLog, JobCostMeter, type CostSource, type SpendEntry } from "./cost";
-import { checkoutRevision, documentHashOf, ensureCheckout, isDiagramName, listDiagrams } from "./diagrams";
+} from "../config";
+import { costFromLog, JobCostMeter, type CostSource, type SpendEntry } from "../cost";
+import { checkoutRevision, documentHashOf, ensureCheckout, isDiagramName, listDiagrams } from "../canvas/diagrams";
 import {
   draftDir,
   draftJsonPath,
@@ -40,7 +40,7 @@ import {
   plannerSystemPath,
   studioHome,
   workPath,
-} from "./paths";
+} from "../paths";
 import {
   briefBlocks,
   buildSystemPrompt,
@@ -86,14 +86,14 @@ import {
   type TutorTurn,
   type VideoCorpusEntry,
 } from "./planner-prompt";
-import { JobRefused, type Runner } from "./runner";
-import type { JobRecord, JobStore } from "./store";
-import { validateVideoBrief, type ValidVideoBrief } from "./video/brief";
-import { videoKindBuilt } from "./video/config";
-import { videoAbbreviations } from "./video/narration";
-import { briefTool } from "./video/tools";
-import type { VideoRunner, VideoStore } from "./video/runner";
-import type { VideoJobRecord } from "./video/types";
+import { JobRefused, type Runner } from "../diagram/runner";
+import type { JobRecord, JobStore } from "../data/store";
+import { validateVideoBrief, type ValidVideoBrief } from "../video/brief";
+import { videoKindBuilt } from "../video/config";
+import { videoAbbreviations } from "../video/narration";
+import { briefTool } from "../video/tools";
+import type { VideoRunner, VideoStore } from "../video/runner";
+import type { VideoJobRecord } from "../video/types";
 
 /**
  * Drafts: the planner conversations, their records and their turns

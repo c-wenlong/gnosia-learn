@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { canvas, doctor } from "../canvas";
+import { canvas, doctor } from "../canvas/canvas";
 import { manualCheckDir, manualDir, manualPath } from "../paths";
 import { NPM, run, sweepByMarker, type RunResult } from "../proc";
 

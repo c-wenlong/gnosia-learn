@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { replayOf } from "../src/drafts";
+import { replayOf } from "../src/drafts/drafts";
 
 /**
  * What a fresh planner session is handed when the stored one cannot be

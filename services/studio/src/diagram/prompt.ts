@@ -1,5 +1,5 @@
 import { promptFacing, type ValidBrief } from "./brief";
-import { candidatePath, candidateSvgPath, mermaidPath, scratchDir } from "./paths";
+import { candidatePath, candidateSvgPath, mermaidPath, scratchDir } from "../paths";
 
 /** The two files a job draws, absolute: the document and its export. */
 export interface CandidateFiles {

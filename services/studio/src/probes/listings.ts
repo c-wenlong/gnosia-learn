@@ -1,6 +1,6 @@
-import { loadVocabulary, type Vocabulary } from "./brief";
-import { onCatalogWrite, videoList, type CatalogResult } from "./catalog";
-import { listDiagrams, type DiagramListing } from "./diagrams";
+import { loadVocabulary, type Vocabulary } from "../diagram/brief";
+import { onCatalogWrite, videoList, type CatalogResult } from "../data/catalog";
+import { listDiagrams, type DiagramListing } from "../canvas/diagrams";
 import { Probe, type ProbeReading } from "./probe";
 
 /**

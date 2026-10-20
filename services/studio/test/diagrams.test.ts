@@ -19,13 +19,13 @@ const catalogMock = vi.hoisted(() => ({
   diagramShow: vi.fn(),
   diagramCheckout: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/catalog")>();
+vi.mock("../src/data/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/data/catalog")>();
   return { ...actual, ...catalogMock };
 });
 
 const { checkoutOf, checkoutRevision, documentHashOf, ensureCheckout, forgetDiagramList, isDiagramName, listDiagrams, readDiagram, svgKeyOf } =
-  await import("../src/diagrams");
+  await import("../src/canvas/diagrams");
 const { workPath } = await import("../src/paths");
 
 const summary = {

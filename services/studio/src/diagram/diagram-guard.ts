@@ -2,8 +2,8 @@ import { readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import { hookProgram, writeHook } from "./bash-guard";
-import { candidatePath, candidateSvgPath, jobDir, scratchDir, SERVICE_ROOT } from "./paths";
+import { hookProgram, writeHook } from "../agent/bash-guard";
+import { candidatePath, candidateSvgPath, jobDir, scratchDir, SERVICE_ROOT } from "../paths";
 
 /**
  * The diagram agent's Bash guard: a `PreToolUse` hook in the job's permission
@@ -50,7 +50,7 @@ import { candidatePath, candidateSvgPath, jobDir, scratchDir, SERVICE_ROOT } fro
  * snippet's `fetch` reached example.com and any loopback port.
  */
 
-const CHECKER_FILE = path.join(SERVICE_ROOT, "src", "canvas-guard.cjs");
+const CHECKER_FILE = path.join(SERVICE_ROOT, "src", "diagram", "canvas-guard.cjs");
 
 /** The files and directories a job's canvas calls may name. Absolute, normalised, every spelling. */
 export interface CanvasPolicy {
@@ -141,7 +141,7 @@ export function canvasPolicy(jobId: string, slug: string): CanvasPolicy {
 /** The hook program for one job: the check's own file, then the job's policy. */
 export function diagramGuardSource(policy: CanvasPolicy): string {
   return hookProgram(
-    "The diagram agent's Bash guard: see services/studio/src/diagram-guard.ts.",
+    "The diagram agent's Bash guard: see services/studio/src/diagram/diagram-guard.ts.",
     `${readFileSync(CHECKER_FILE, "utf8")}
 const POLICY = ${JSON.stringify(policy)};
 function allowed(command) { return canvasCommandAllowed(command, POLICY); }`,

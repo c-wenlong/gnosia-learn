@@ -5,8 +5,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { codexEnv, codexSignedIn, sealCodexHome } from "../src/codex";
-import { codexEvent, codexPlannerArgv } from "../src/planner";
+import { codexEnv, codexSignedIn, sealCodexHome } from "../src/agent/codex";
+import { codexEvent, codexPlannerArgv } from "../src/drafts/planner";
 
 /**
  * The installed `codex` itself, opt-in: `STUDIO_CODEX_LIVE=1` turns this on.

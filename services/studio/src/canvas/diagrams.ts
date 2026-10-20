@@ -4,10 +4,10 @@ import path from "node:path";
 
 import { canonicalJson } from "@self-learn/schema/shared";
 
-import { diagramCheckout, diagramList, diagramShow } from "./catalog";
-import { studioOwner } from "./config";
-import { readThrough } from "./content-cache";
-import { ASSETS_DIR, workDir, workPath } from "./paths";
+import { diagramCheckout, diagramList, diagramShow } from "../data/catalog";
+import { studioOwner } from "../config";
+import { readThrough } from "../data/content-cache";
+import { ASSETS_DIR, workDir, workPath } from "../paths";
 
 /**
  * The corpus, as the browser screen reads it: `catalog diagram list --json`.

@@ -9,7 +9,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 process.env.STUDIO_KILL_GRACE_MS = "300";
 process.env.STUDIO_HOME = path.join(tmpdir(), `studio-cancel-${process.pid}`);
 
-const { AgentRun, sweepOrphans } = await import("../src/agent");
+const { AgentRun, sweepOrphans } = await import("../src/agent/agent");
 const { tmpDir } = await import("../src/paths");
 
 /**

@@ -659,9 +659,9 @@ The web app reads content synchronously at module load
       `await getCourses()` and friends, wrapped in React's `cache()` per
       request. `generateStaticParams` on the two course routes goes; every page
       is already dynamic (AGENTS.md "Every page is dynamic").
-- [x] `services/studio/src/brief.ts` (`loadVocabulary`, the studio's own
+- [x] `services/studio/src/diagram/brief.ts` (`loadVocabulary`, the studio's own
       parser) moves onto the seam, with the studio's local cache (D13) in
-      `services/studio/src/content-cache.ts`. The studio's repo-root walk
+      `services/studio/src/data/content-cache.ts`. The studio's repo-root walk
       (`services/studio/src/paths.ts:24`) stays until phase 2 removes it.
 
 After the phase 0 review: `dbSource` is composed from one reader file per
@@ -1163,7 +1163,7 @@ refused by name before anything is written.
 ### Track D: diagrams
 
 **Owns:** `services/catalog/src/content/diagrams.ts`, the studio's Accept,
-list and SVG route (`services/studio/src/review.ts`, `diagrams.ts`,
+list and SVG route (`services/studio/src/diagram/review.ts`, `diagrams.ts`,
 `api.ts:674-850`), the plugin's `diagram-maker`.
 
 - [x] `catalog diagram put --slug --tldr <file> --svg <file> [--job] --reason`
@@ -1182,7 +1182,7 @@ list and SVG route (`services/studio/src/review.ts`, `diagrams.ts`,
       from the mirror is followed by an explicit commit, with the same base
       check as notes (edge case 18).
 - [x] `catalog diagram list --json` replaces `canvas list learn/assets`
-      (`services/studio/src/diagrams.ts:146-199`): slug, title, topic,
+      (`services/studio/src/canvas/diagrams.ts:146-199`): slug, title, topic,
       concepts, shape count (counted in jsonb), freshness from the two hashes.
       The studio's own `/api/diagrams/{name}/svg` streams the blob.
 - [x] `job.target_path` keeps its value as a logical name and keeps working
@@ -1978,7 +1978,7 @@ call; the operator half is #157):
   naming a concept note (`learn/concepts/<domain>/<slug>.md`, `<slug>.md` or
   a bare slug) that is not on disk is read with `learn concept show --json`
   into the job's scratch directory, where the agent reads it
-  (`services/studio/src/source-note.ts`). The form's placeholder is a slug.
+  (`services/studio/src/diagram/source-note.ts`). The form's placeholder is a slug.
 - **`npm run e2e` builds its database from `seed/` by default.** `--copy`, or
   setting `E2E_TEMPLATE_DB`, copies `self_learn` or that database instead;
   `--seed` is still accepted.
@@ -2675,7 +2675,7 @@ archive copy of learner rows (a second truth).
 `$STUDIO_HOME/cache/<type>.json`; with the database down it reads the cache and
 the banner says "stale since" and the time. **Why:** U3 of
 TLDRAWKC-INTEGRATION.md promises browsing and drawing with Postgres down, and
-today its own YAML parser (`services/studio/src/brief.ts:155`) is how.
+today its own YAML parser (`services/studio/src/diagram/brief.ts:155`) is how.
 **Rejected:** keeping the studio on files (two truths); refusing to open
 offline (breaks U3). **Built** in phase 0 up to the banner: the cache and
 `health.vocabulary` (`stale`, `readAt`) are in `services/studio/src/` since

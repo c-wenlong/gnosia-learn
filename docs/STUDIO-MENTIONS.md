@@ -721,7 +721,7 @@ passed. The alternatives cost more:
 ### The prompt, in full
 
 As built in phase 2a (`combinedPrompt` in
-[`services/studio/src/planner-prompt.ts`](../services/studio/src/planner-prompt.ts)),
+[`services/studio/src/drafts/planner-prompt.ts`](../services/studio/src/drafts/planner-prompt.ts)),
 and held equal to the code by `services/studio/test/planner-prompt.test.ts`,
 as the diagram prompt is by `planner.test.ts`. Its storyboard rules are
 STUDIO-VIDEOS.md's word for word, held equal the same way. After it come the

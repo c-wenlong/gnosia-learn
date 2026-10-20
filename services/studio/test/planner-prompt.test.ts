@@ -12,7 +12,7 @@ import {
   readSuggest,
   stripFencedBlocks,
   type TopicChecker,
-} from "../src/planner";
+} from "../src/drafts/planner";
 import {
   buildCombinedSystemPrompt,
   changingSummary,
@@ -21,7 +21,7 @@ import {
   STORYBOARD_RULES,
   videosBlock,
   voicesBlock,
-} from "../src/planner-prompt";
+} from "../src/drafts/planner-prompt";
 import { narratedBrief } from "./video-fixture";
 import { testVocabulary } from "./vocabulary";
 
