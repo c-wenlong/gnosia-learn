@@ -3,19 +3,13 @@ import "server-only";
 import { connection } from "next/server";
 import {
   assetCounts,
-  assetDerivations,
   assetParents,
-  conceptsForAssets,
   derivationSources,
   listAssets,
-  readAssetNaming,
   readEvents,
   readPreference,
   readPreferencesWithPrefix,
-  topicTitles,
-  type AssetDerivations,
   type AssetKindCount,
-  type AssetNaming,
   type AssetParents,
   type AssetRef,
   type TopicTitles,
@@ -23,7 +17,7 @@ import {
   type CatalogDatabase,
 } from "@self-learn/catalog/state";
 
-import { openBlob, resolveAsset, servedAssets, storedPosters } from "@/lib/asset-files";
+import { resolveAsset, servedAssets, storedPosters } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
 import {
@@ -34,9 +28,26 @@ import {
   isCompanionKind,
 } from "@/lib/library";
 import { currentOwner, currentScope, type OwnerScope } from "@/lib/owner";
+import { contentSource } from "@/data/source";
+import { assetBlobStore } from "@/lib/blob-store";
 import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
 import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
 import { parseTranscript } from "@/lib/transcript";
+import type { AssetSeams } from "@self-learn/tutor/server/deps";
+import {
+  MAX_ASSET_ID_CHARS,
+  noteIndex,
+  optionalParents,
+  optionalTitles,
+  readAssetDetail as readAssetDetailCore,
+  readAssetText as readAssetTextCore,
+  readAssetTextFor as readAssetTextForCore,
+  TEXT_PREVIEW_BYTES,
+  type AssetDetail,
+} from "@self-learn/tutor/server/asset-detail";
+
+export { MAX_ASSET_ID_CHARS, noteIndex, optionalParents, TEXT_PREVIEW_BYTES };
+export type { AssetDetail };
 
 /**
  * The library's door to the catalog, shaped exactly like
@@ -85,10 +96,7 @@ import { parseTranscript } from "@/lib/transcript";
  */
 export const LIBRARY_ROW_CAP = 20_000;
 
-/** How much of a text sidecar is read for display. */
-export const TEXT_PREVIEW_BYTES = 256 * 1024;
 
-/** Everything `/library` renders from, or an honest empty. */
 export interface LibrarySnapshot {
   /** Every asset the catalog holds, sorted for display. Empty when unreachable. */
   rows: AssetWithTopics[];
@@ -99,26 +107,18 @@ export interface LibrarySnapshot {
   /** True when the catalog holds more than `LIBRARY_ROW_CAP` rows and `rows` is the first of them. */
   truncated: boolean;
   /**
-   * Titles for every topic slug the rows carry, keyed by slug.
-   *
-   * Chips render `ownValue(titles, slug) ?? slug`, so this failing to resolve one costs
-   * a readable label and nothing else. That is why it is not folded into
-   * `listAssets`: a title is presentation, the slug is the identity, and the
-   * page is correct with only the slug.
+   * Titles for every topic slug the rows carry, keyed by slug. Optional: a
+   * title is presentation, the slug is the identity.
    */
   titles: TopicTitles;
   /**
    * The concepts each row explains, from `asset_concept`, keyed by asset id.
-   * A row with none is absent. Optional in the same way as `titles`: a card
-   * with no concept chip is a correct card, so this failing costs the chips
-   * and never the rows.
+   * A row with none is absent. Optional in the same way as `titles`.
    */
   concepts: Record<string, string[]>;
   /**
-   * Where each row came from (`assetParents`): its course and module, its
-   * concepts, the studio conversation and the tutor session, for the list
-   * row's source line. A row with none is absent. Optional like `concepts`,
-   * which it is read with: a row without a source line is still a row.
+   * Where each row came from (`assetParents`), keyed by asset id. A row with
+   * none is absent. Optional like `concepts`.
    */
   parents: Record<string, AssetParents>;
 }
@@ -153,6 +153,7 @@ const EMPTY_LIBRARY: LibrarySnapshot = {
 export async function readLibrary(): Promise<LibrarySnapshot> {
   // The requesting owner's assets and the commons' (phase 4), resolved before
   // the degradation below so a request with no owner fails, not reads empty.
+  const owner = await currentOwner();
   const scope = await currentScope();
   try {
     const db = await catalogDatabase();
@@ -174,12 +175,12 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
     // The parents are one statement for the whole page (`assetParents`), and
     // the concepts a card names come out of the same answer, so this costs
     // what the concept read alone did.
+    const detailDeps = { db: Promise.resolve(db), owner, scope };
     const [titles, parents] = await Promise.all([
-      optionalTitles(db, rows),
+      optionalTitles(detailDeps, rows),
       optionalParents(
-        db,
+        detailDeps,
         rows.map((row) => row.id),
-        scope,
       ),
     ]);
     const concepts: Record<string, string[]> = {};
@@ -205,177 +206,52 @@ export async function loadLibrary(): Promise<LibrarySnapshot> {
   return readLibrary();
 }
 
-/**
- * Every topic slug across a page of rows, once each.
- *
- * A set rather than a flat map: one topic carries many assets, so a grid of
- * 135 cards asks about a handful of distinct slugs, and sending the repeats
- * would make the `IN` list an order of magnitude longer to learn the same
- * thing.
- */
-function distinctTopics(rows: AssetWithTopics[]): string[] {
-  return [...new Set(rows.flatMap((row) => row.topics))];
+
+
+
+
+
+
+/** This app's seams for the detail read, the same ones the sidecar builds around its own pool. */
+async function assetSeams(): Promise<{ db: Promise<CatalogDatabase>; owner: string; scope: OwnerScope }> {
+  const owner = await currentOwner();
+  return { db: catalogDatabase(), owner, scope: await currentScope() };
 }
 
-/** Everything `/library/[id]` renders from. */
-export interface AssetDetail {
-  /** The asset, or null when no row has that id — a 404, not a failure. */
-  asset: AssetWithTopics | null;
-  /** What it came from and what came out of it. Empty when there is no row. */
-  derivations: AssetDerivations;
-  /** Other assets filed under a topic this one is filed under, this one excluded. */
-  related: AssetWithTopics[];
-  reachable: boolean;
-  /** Titles for every slug on this page, this asset's and its neighbours'. */
-  titles: TopicTitles;
-  /**
-   * Concept-note slugs to their asset ids, for resolving `[[wikilinks]]`.
-   *
-   * A note's id is `note:learn/concepts/<domain>/<slug>.md` and a wikilink
-   * carries only the slug, so the domain folder has to come from somewhere.
-   * It comes from here: every note in one read, keyed by the basename a link
-   * would name. There are 32 of them, so the whole index costs less than
-   * asking per link would.
-   */
-  notes: Record<string, string>;
-  /** Concept slugs this asset explains, from `asset_concept`, sorted. Empty when it explains none. */
-  concepts: string[];
-  /**
-   * The learner's own name for it and the source's title, for the rename
-   * field. Null when there is no row, or the read failed: the page then shows
-   * the title without the field.
-   */
-  naming: AssetNaming | null;
-}
-
-const EMPTY_DETAIL: AssetDetail = {
-  asset: null,
-  derivations: { sources: [], derived: [] },
-  related: [],
-  reachable: false,
-  titles: {},
-  notes: {},
-  concepts: [],
-  naming: null,
-};
-
-/** How many siblings the detail page offers before it stops listing them. */
-const RELATED_CAP = 12;
-
-/**
- * There is deliberately no SQL limit on the per-topic queries below, and the
- * reason is that a limit there would cut the wrong rows.
- *
- * `listAssets` orders by `kind, id` with kind alphabetical, so a `LIMIT 60`
- * returns the first sixty of `captions, chapters, diagram_source, diagram_svg,
- * link, note, session, transcript, video` — in that order. The ranking a reader
- * cares about is applied afterwards, in `compareByKindThenId`, which puts video
- * first. On a topic large enough for the limit to bite, the sixty rows would
- * already be caption files and the videos would be gone before the sort ever
- * saw them: a related list showing the least interesting rows and silently
- * omitting the most.
- *
- * The fix is to rank first and cut second, which means the cut cannot be in
- * SQL unless the ranking is, and putting one page's kind preference into a
- * query three other callers share is worse than reading a topic's rows. The
- * read is bounded by `asset_topic` membership for a single topic — the same
- * bound `assetsForTopic` in the catalog accepts without a limit, for the same
- * reason — and the biggest topic carries eleven assets today.
- */
-
-/**
- * One asset, its derivations, and what else is filed beside it.
- *
- * **The row is looked up directly, by id.** An earlier version took it out of
- * the same capped `listAssets` the grid uses and searched the result for a
- * matching id, which is correct only while the whole catalog fits inside one
- * page: the 1001st asset by kind-and-id would have had a real row, a working
- * file, and a detail URL that answered 404. `listAssets`' `ids` option is what
- * this needs — the row *with* its topic chips, which `assetsByIds` cannot give
- * — and it resolves the asset whatever the size of the catalog.
- *
- * **Related is asked per topic, not filtered out of everything.** An asset's
- * topics come back on the row, so "what else is about this" is one query per
- * topic against `asset_topic`, which is usually one. Ranked here and cut to
- * `RELATED_CAP` afterwards, never by a SQL `LIMIT` — the note above that
- * constant is why.
- *
- * `assetDerivations` is the query that makes a video more than a file. It is
- * where the transcript, the captions and the chapter list beside a `.mp4` are
- * found, and where an exported SVG finds the `.tldr` it was drawn on.
- */
+/** One asset's detail page, through the shared read in `@self-learn/tutor/server/asset-detail`. */
 export async function readAssetDetail(id: string): Promise<AssetDetail> {
-  const scope = await currentScope();
+  return readAssetDetailCore(await assetSeams(), id);
+}
+
+/** As `readAssetText`, with this app's seams. */
+export async function readAssetText(db: CatalogDatabase, id: string, limit: number = TEXT_PREVIEW_BYTES): Promise<string | null> {
+  return readAssetTextCore(await seamsFor(), db, id, limit);
+}
+
+/**
+ * A store that refuses on use: the text reads that need one answer
+ * `blob-store-unavailable`, which is what a real `assetBlobStore()` failure
+ * already means. Constructing it lazily also keeps a test double that has no
+ * blob seam at all from failing reads it was never asked to serve.
+ */
+const unavailableStore: AssetSeams["blobStore"] = new Proxy({} as AssetSeams["blobStore"], {
+  get: () => () => {
+    throw new Error("blob store unavailable");
+  },
+});
+
+async function seamsFor(): Promise<AssetSeams> {
+  let blobStore: AssetSeams["blobStore"];
   try {
-    const db = await catalogDatabase();
-    const [asset] = await listAssets(db, { ids: [id] }, scope);
-    if (asset === undefined) {
-      return {
-        asset: null,
-        derivations: { sources: [], derived: [] },
-        related: [],
-        reachable: true,
-        titles: {},
-        notes: {},
-        concepts: [],
-        naming: null,
-      };
-    }
-
-    // Only a markdown file can contain a wikilink, so only a markdown file
-    // pays for the index. `endsWith` rather than the kind, because a session
-    // log and a concept note are different kinds and both are markdown.
-    const wantsNotes = asset.path?.endsWith(".md") ?? false;
-
-    const [derivations, perTopic] = await Promise.all([
-      assetDerivations(db, id, scope),
-      // Unlimited on purpose; see the note above `RELATED_CAP`.
-      Promise.all(asset.topics.map((slug) => listAssets(db, { topicSlug: slug }, scope))),
-    ]);
-
-    // Its own boundary too, and for the same reason as the titles above: a
-    // wikilink that does not resolve stays readable text, so losing the index
-    // costs a note its links and must not cost the page its asset.
-    const notes = wantsNotes ? await optionalNotes(db) : {};
-
-    // This asset, and its own companion files, which have their own section
-    // immediately above and would otherwise appear twice on one page.
-    const family = new Set([
-      id,
-      ...derivations.sources.map((a) => a.id),
-      ...derivations.derived.map((a) => a.id),
-    ]);
-    // Deduped by id: an asset filed under two of this one's topics comes back
-    // from two of the queries above and is still one card.
-    const merged = new Map<string, AssetWithTopics>();
-    for (const row of perTopic.flat()) {
-      if (!family.has(row.id)) merged.set(row.id, row);
-    }
-    const related = [...merged.values()].sort(compareByKindThenId).slice(0, RELATED_CAP);
-
-    // Every slug this page will draw a chip for: the asset's own, plus those
-    // of the related cards beside it. Asked once for all of them rather than
-    // once per section, so the two cannot disagree about one topic's name.
-    const [titles, concepts, naming] = await Promise.all([
-      optionalTitles(db, [asset, ...related]),
-      optionalConcepts(db, [id]),
-      optionalNaming(db, id),
-    ]);
-
-    return {
-      asset,
-      derivations,
-      related,
-      reachable: true,
-      titles,
-      notes,
-      concepts: concepts[id] ?? [],
-      naming,
-    };
-  } catch (error) {
-    warn(`asset ${id}`, error);
-    return EMPTY_DETAIL;
+    blobStore = assetBlobStore();
+  } catch {
+    blobStore = unavailableStore;
   }
+  return { scope: await currentScope(), source: contentSource(), blobStore };
+}
+
+async function readAssetTextForLocal(db: CatalogDatabase, id: string, limit: number = TEXT_PREVIEW_BYTES) {
+  return readAssetTextForCore(await seamsFor(), db, id, limit);
 }
 
 /** As `readAssetDetail`, with the marker that keeps it out of the build. */
@@ -441,96 +317,11 @@ export function unservedRows<T extends Pick<AssetWithTopics, "id" | "path">>(
   return rows.filter((row) => row.path !== null && !access.served.has(row.id));
 }
 
-/**
- * Titles for a page's rows, or none, never a thrown error.
- *
- * The chips render `ownValue(titles, slug) ?? slug`, so an empty result is a page of
- * slugs: the same page this code shipped before titles existed, and a fine
- * one. Letting this share the caller's `catch` instead would turn a label
- * failure into an empty library, hiding rows that had already been read.
- */
-async function optionalTitles(
-  db: CatalogDatabase,
-  rows: AssetWithTopics[],
-): Promise<TopicTitles> {
-  try {
-    return await topicTitles(db, distinctTopics(rows), await currentScope());
-  } catch (error) {
-    warn("topic titles", error);
-    return {};
-  }
-}
 
-/**
- * Where each of these assets came from, or nothing. See `optionalTitles` for
- * why this cannot throw: a row without its source line is still a row.
- */
-async function optionalParents(
-  db: CatalogDatabase,
-  ids: readonly string[],
-  scope: OwnerScope,
-): Promise<Record<string, AssetParents>> {
-  try {
-    return await assetParents(db, ids, scope);
-  } catch (error) {
-    warn("asset parents", error);
-    return {};
-  }
-}
 
-/** Concept links for these assets, or none. See `optionalTitles` for why this cannot throw. */
-async function optionalConcepts(
-  db: CatalogDatabase,
-  ids: readonly string[],
-): Promise<Record<string, string[]>> {
-  try {
-    return await conceptsForAssets(db, ids, await currentScope());
-  } catch (error) {
-    warn("concept links", error);
-    return {};
-  }
-}
 
-/** The rename field's data, or none. A failure costs the field, never the page. */
-async function optionalNaming(db: CatalogDatabase, id: string): Promise<AssetNaming | null> {
-  try {
-    return await readAssetNaming(db, id, await currentOwner());
-  } catch (error) {
-    warn("asset name", error);
-    return null;
-  }
-}
 
-/** The note index, or none. See `optionalTitles` for why this cannot throw. */
-async function optionalNotes(db: CatalogDatabase): Promise<Record<string, string>> {
-  try {
-    return noteIndex(await listAssets(db, { kind: "note" }, await currentScope()));
-  } catch (error) {
-    warn("note index", error);
-    return {};
-  }
-}
 
-/**
- * Note rows keyed by the slug a `[[wikilink]]` would write.
- *
- * The slug is the filename without `.md`, which is what the knowledge base
- * links by. Two notes in different domains sharing a filename would collide;
- * the first wins and the second is simply unlinkable, which is the same thing
- * that happens in Obsidian and is better than a link pointing at the wrong
- * note. Nothing in the corpus collides today.
- */
-function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
-  // A Map, then `fromEntries`: assigning `out["__proto__"]` on a plain object
-  // sets its prototype instead of a key, so a note by that name would be
-  // unlinkable, and `fromEntries` defines every key as the object's own.
-  const out = new Map<string, string>();
-  for (const row of rows) {
-    const slug = row.path?.split("/").pop()?.replace(/\.md$/, "");
-    if (slug !== undefined && slug !== "" && !out.has(slug)) out.set(slug, row.id);
-  }
-  return Object.fromEntries(out);
-}
 
 /**
  * What an `<img>` should point at for one row, or null for the placeholder.
@@ -602,63 +393,7 @@ export async function readFileProblems(
   return out;
 }
 
-/**
- * The text of one indexed asset, read on the server.
- *
- * A transcript is a separate `asset` row whose file the route serves, and the
- * components that render it take `cues` as a prop. Fetching it from the browser
- * would mean a loading state, a failure state and a second round trip for text
- * the server can read while it is already rendering; so it is read here and
- * passed down, and the panel arrives populated.
- *
- * `resolveAsset` in `@/lib/asset-files` does the resolving, which is not an
- * implementation detail being reused for convenience: it holds every rule the
- * asset route keeps (the id is a primary key and never a path, the extension
- * has to be on a closed list), so a page cannot read what the route would
- * refuse. A blob is read from the store, a note, a log or a `.tldr` from its
- * row.
- *
- * Null means "no text to show", for every reason there is: the row has no
- * file, nothing was uploaded, it is larger than the cap. The callers all
- * render the same thing for all of them (the file's metadata and a link), so
- * distinguishing them here would produce a difference nothing acts on.
- */
-export async function readAssetText(
-  db: CatalogDatabase,
-  id: string,
-  limit = TEXT_PREVIEW_BYTES,
-): Promise<string | null> {
-  return (await readAssetTextFor(db, id, limit)).text;
-}
 
-/**
- * The codes that mean "this text exists and this server cannot read it yet":
- * a sidecar never uploaded, a note whose type is not flipped. Search counts
- * those as matched by name only, and says so; a file over the cap, or a row
- * with nothing behind it, is passed over as search always has.
- */
-const NOT_READABLE_YET: ReadonlySet<RouteProblemCode> = new Set(["not-uploaded", "not-flipped"]);
-
-/** `readAssetText`, saying whether a null was one of `NOT_READABLE_YET`. */
-async function readAssetTextFor(
-  db: CatalogDatabase,
-  id: string,
-  limit: number,
-): Promise<{ text: string | null; unreadable: boolean }> {
-  try {
-    const resolved = await resolveAsset(db, id);
-    if (resolved.ok === false) return { text: null, unreadable: NOT_READABLE_YET.has(resolved.code) };
-    if (resolved.bytes > limit) return { text: null, unreadable: false };
-    if (resolved.source === "row") return { text: resolved.body.toString("utf8"), unreadable: false };
-    const read = await openBlob(resolved.key);
-    const chunks: Buffer[] = [];
-    for await (const chunk of read.body) chunks.push(chunk as Buffer);
-    return { text: Buffer.concat(chunks).toString("utf8"), unreadable: false };
-  } catch (error) {
-    warn(`asset text ${id}`, error);
-    return { text: null, unreadable: false };
-  }
-}
 
 /**
  * The kinds whose words the library search reads, beside every row's name.
@@ -718,7 +453,7 @@ export async function readSearchText(
     const [bodies, sources] = await Promise.all([
       Promise.all(
         candidates.map(async (row) => {
-          const { text: raw, unreadable } = await readAssetTextFor(db, row.id, TEXT_PREVIEW_BYTES);
+          const { text: raw, unreadable } = await readAssetTextForLocal(db, row.id, TEXT_PREVIEW_BYTES);
           return [row.id, raw === null ? null : searchableText(row.kind, raw), unreadable] as const;
         }),
       ),

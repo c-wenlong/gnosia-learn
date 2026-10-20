@@ -56,7 +56,18 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
   let store: Store;
   let credentials: Credentials;
   let settings: Settings;
-  const saved = { url: process.env.DATABASE_URL, secret: process.env.AUTH_SECRET, openrouter: process.env.OPENROUTER_API_KEY };
+  /**
+   * Every provider's server-key variable. The suite's answers depend on none
+   * being set — a developer shell carrying a real `GEMINI_API_KEY` would make
+   * "no key anywhere" untestable, so all of them are stowed, not just the one
+   * a test happens to name.
+   */
+  const PROVIDER_ENVS = ["NVIDIA_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"] as const;
+  const saved = {
+    url: process.env.DATABASE_URL,
+    secret: process.env.AUTH_SECRET,
+    keys: PROVIDER_ENVS.map((name) => [name, process.env[name]] as const),
+  };
 
   /** Every ciphertext in the table, in each form a response could carry it in. */
   async function storedForms(): Promise<string[]> {
@@ -78,7 +89,7 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
     scratch = await migratedScratchDatabase();
     process.env.DATABASE_URL = scratch.url;
     process.env.AUTH_SECRET = SECRET;
-    delete process.env.OPENROUTER_API_KEY;
+    for (const name of PROVIDER_ENVS) delete process.env[name];
     [routes, testRoute, store, credentials, settings] = await Promise.all([
       import("./route"),
       import("./test/route"),
@@ -92,7 +103,7 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
     for (const [name, value] of [
       ["DATABASE_URL", saved.url],
       ["AUTH_SECRET", saved.secret],
-      ["OPENROUTER_API_KEY", saved.openrouter],
+      ...saved.keys,
     ] as const) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -103,7 +114,7 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
   beforeEach(async () => {
     signedIn.value = true;
     process.env.AUTH_SECRET = SECRET;
-    delete process.env.OPENROUTER_API_KEY;
+    for (const name of PROVIDER_ENVS) delete process.env[name];
     await scratch.pool.query("delete from provider_key");
   });
 
