@@ -26,11 +26,13 @@ const FUTURE_SKEW_SECONDS = 60;
 export const HOME_PATH = "/home";
 
 /** The variables a deployment has to set before anyone can sign in. */
-export const OWNER_PASSWORD_VAR = "OWNER_PASSWORD";
-export const AUTH_SECRET_VAR = "AUTH_SECRET";
-
-/** Shortest secret accepted: 32 characters is what `openssl rand -base64 32` yields. */
-export const MIN_SECRET_LENGTH = 32;
+/**
+ * The deployment secrets' environment names. The constants live in
+ * `@self-learn/schema/shared` so the BYOK seal in `@self-learn/tutor` reads
+ * the same variable this session cookie is signed with.
+ */
+export { OWNER_PASSWORD_VAR, AUTH_SECRET_VAR, MIN_SECRET_LENGTH } from "@self-learn/schema/shared";
+import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, OWNER_PASSWORD_VAR } from "@self-learn/schema/shared";
 
 export interface AuthConfig {
   password: string;
